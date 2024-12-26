@@ -190,6 +190,7 @@ static const char *const onoff_atom = ATOM_STR("\x5", "onoff");
 static const char *const port_atom = ATOM_STR("\x4", "port");
 static const char *const rcvbuf_atom = ATOM_STR("\x6", "rcvbuf");
 static const char *const reuseaddr_atom = ATOM_STR("\x9", "reuseaddr");
+static const char *const type_atom = ATOM_STR("\x4", "type");
 
 #define CLOSED_FD 0
 
@@ -1065,6 +1066,95 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
 }
 
 //
+// getopt
+//
+
+static term nif_socket_getopt(Context *ctx, int argc, term argv[])
+{
+    TRACE("nif_socket_getopt\n");
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_otp_socket);
+
+    GlobalContext *global = ctx->global;
+
+    struct SocketResource *rsrc_obj;
+    if (UNLIKELY(!term_to_otp_socket(argv[0], &rsrc_obj, ctx))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
+
+#if OTP_SOCKET_BSD
+    if (rsrc_obj->fd == 0) {
+#elif OTP_SOCKET_LWIP
+    if (rsrc_obj->socket_state == SocketStateClosed) {
+#endif
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return make_error_tuple(CLOSED_ATOM, ctx);
+    }
+    term level_tuple = argv[1];
+
+    term level = term_get_tuple_element(level_tuple, 0);
+    int level_val = interop_atom_term_select_int(otp_socket_setopt_level_table, level, global);
+    switch (level_val) {
+        case OtpSocketSetoptLevelSocket: {
+            term opt = term_get_tuple_element(level_tuple, 1);
+            if (globalcontext_is_term_equal_to_atom_string(global, opt, type_atom)) {
+                enum inet_type type;
+#if OTP_SOCKET_BSD
+                int option_value;
+                socklen_t option_len = sizeof(option_value);
+                int res = getsockopt(rsrc_obj->fd, SOL_SOCKET, SO_TYPE, &option_value, &option_len);
+                if (UNLIKELY(res != 0)) {
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    return make_errno_tuple(ctx);
+                } else {
+                    switch (option_value) {
+                        case SOCK_STREAM:
+                            type = InetStreamType;
+                            break;
+                        case SOCK_DGRAM:
+                            type = InetDgramType;
+                            break;
+                        default:
+                            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                            RAISE_ERROR(BADARG_ATOM);
+                    }
+                }
+#elif OTP_SOCKET_LWIP
+                LWIP_BEGIN();
+                if (rsrc_obj->socket_state & SocketStateTCP) {
+                    type = InetStreamType;
+                } else {
+                    type = InetDgramType;
+                }
+                LWIP_END();
+#endif
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term result = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(result, 0, OK_ATOM);
+                term_put_tuple_element(result, 1, inet_type_to_atom(type, global));
+                SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                return result;
+            } else {
+                SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                RAISE_ERROR(BADARG_ATOM);
+            }
+        }
+        default: {
+            AVM_LOGE(TAG, "socket:getopt: Unsupported level");
+            SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+}
+
+//
 // setopt
 //
 
@@ -1090,7 +1180,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
     if (rsrc_obj->socket_state == SocketStateClosed) {
 #endif
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        return make_error_tuple(posix_errno_to_term(EBADF, global), ctx);
+        return make_error_tuple(CLOSED_ATOM, ctx);
     }
     term level_tuple = argv[1];
     term value = argv[2];
@@ -2573,6 +2663,10 @@ static const struct Nif socket_select_stop_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_select_stop
 };
+static const struct Nif socket_getopt_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_socket_getopt
+};
 static const struct Nif socket_setopt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_socket_setopt
@@ -2642,6 +2736,10 @@ const struct Nif *otp_socket_nif_get_nif(const char *nifname)
         if (strcmp("nif_select_stop/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &socket_select_stop_nif;
+        }
+        if (strcmp("getopt/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &socket_getopt_nif;
         }
         if (strcmp("setopt/3", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);

@@ -24,6 +24,7 @@
 
 test() ->
     ok = test_echo_server(),
+    ok = test_setopt_getopt(),
     ok.
 
 test_echo_server() ->
@@ -100,3 +101,12 @@ loop(Socket, Port, I) ->
             io:format("Error on sendto: ~p~n", [Error]),
             Error
     end.
+
+test_setopt_getopt() ->
+    {ok, Socket} = socket:open(inet, dgram, udp),
+    {ok, dgram} = socket:getopt(Socket, {socket, type}),
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:close(Socket),
+    {error, closed} = socket:getopt(Socket, {socket, type}),
+    {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok.

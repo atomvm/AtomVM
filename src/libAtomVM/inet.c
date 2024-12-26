@@ -44,6 +44,11 @@ enum inet_type inet_atom_to_type(term type, GlobalContext *global)
     return interop_atom_term_select_int(inet_type_table, type, global);
 }
 
+term inet_type_to_atom(enum inet_type type, GlobalContext *global)
+{
+    return interop_atom_term_select_atom(inet_type_table, (int) type, global);
+}
+
 static const AtomStringIntPair inet_protocol_table[] = {
     { ATOM_STR("\x2", "ip"), InetIpProtocol },
     { ATOM_STR("\x3", "tcp"), InetTcpProtocol },

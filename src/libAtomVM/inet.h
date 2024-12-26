@@ -59,6 +59,14 @@ enum inet_type
  */
 enum inet_type inet_atom_to_type(term type, GlobalContext *global);
 
+/**
+ * @brief Convert an inet type to an atom
+ * @param type the inet type
+ * @param global the global context
+ * @returns an atom representing the inet type
+ */
+term inet_type_to_atom(enum inet_type type, GlobalContext *global);
+
 enum inet_protocol
 {
     InetInvalidProtocol = 0,
