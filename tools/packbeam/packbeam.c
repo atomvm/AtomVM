@@ -53,8 +53,8 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
-static int do_pack(int argc, char **argv, int is_archive, bool include_lines);
-static int do_list(int argc, char **argv);
+static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
+static int do_list(const char *avm_path);
 
 #define program_error(...) error_with_usage(argv[0], __VA_ARGS__)
 #define packbeam_error(...) error_with_usage("PackBeam", __VA_ARGS__)
@@ -87,24 +87,24 @@ static void error_with_usage(const char *program, const char *format, ...)
 
 int main(int argc, char **argv)
 {
-    int opt;
-
-    const char *action = "pack";
-    int is_archive = 0;
+    bool list_avm = false;
+    bool is_archive = false;
     bool include_lines = false;
+
+    int opt;
     while ((opt = getopt(argc, argv, "hail")) != -1) {
         switch (opt) {
             case 'h':
                 program_error(NULL);
                 return EXIT_SUCCESS;
             case 'a':
-                is_archive = 1;
+                is_archive = true;
                 break;
             case 'i':
                 include_lines = true;
                 break;
             case 'l':
-                action = "list";
+                list_avm = true;
                 break;
             case '?': {
                 program_error("Unknown option: %c", optopt);
@@ -116,20 +116,23 @@ int main(int argc, char **argv)
     int new_argc = argc - optind;
     char **new_argv = argv + optind;
 
-    if (new_argc < 1) {
-        program_error("Missing avm file.");
-        return EXIT_FAILURE;
-    }
-
-    if (!strcmp(action, "pack")) {
-        if (new_argc < 2) {
-            program_error("Missing options for pack.");
+    if (list_avm) {
+        if (new_argc < 1) {
+            program_error("Listing needs an AVM file.");
             return EXIT_FAILURE;
         }
-        return do_pack(new_argc, new_argv, is_archive, include_lines);
-    } else {
-        return do_list(new_argc, new_argv);
+        const char *avm_file = new_argv[0];
+        return do_list(avm_file);
     }
+
+    if (new_argc < 2) {
+        program_error("Pack needs output AVM file and at least one AVM or BEAM input file(s).");
+        return EXIT_FAILURE;
+    }
+    char *output_avm_file = new_argv[0];
+    char **input_files = &new_argv[1];
+    size_t n = new_argc - 1;
+    return do_pack(output_avm_file, input_files, n, is_archive, include_lines);
 }
 
 static void assert_fread(void *buffer, size_t size, FILE *file)
@@ -202,35 +205,36 @@ static bool is_beam_file(FILE *file)
     return ret;
 }
 
-static void validate_pack_options(int argc, char **argv)
+static void validate_pack_options(char *output_file, char **input_files, size_t n)
 {
-    for (int i = 0; i < argc; ++i) {
-        const char *filename = argv[i];
+    FILE *file = fopen(output_file, "r");
+    if (file == NULL || !is_avm_file(file)) {
+        packbeam_error("Invalid AVM file: %s.", output_file);
+        exit(EXIT_FAILURE);
+    }
+    fclose(file);
+
+    for (size_t i = 0; i < n; ++i) {
+        const char *filename = input_files[i];
         FILE *file = fopen(filename, "r");
-        if (i == 0) {
-            if (file && !is_avm_file(file)) {
-                packbeam_error("Invalid AVM file: %s.", filename);
-                exit(EXIT_FAILURE);
-            }
-        } else {
-            if (!file) {
-                packbeam_error("%s does not exist.", filename);
-                exit(EXIT_FAILURE);
-            } else if (!is_avm_file(file) && !is_beam_file(file)) {
-                packbeam_error("Invalid AVM or BEAM file: %s.", filename);
-                exit(EXIT_FAILURE);
-            }
+        if (!file) {
+            packbeam_error("%s does not exist.", filename);
+            exit(EXIT_FAILURE);
+        } else if (!is_avm_file(file) && !is_beam_file(file)) {
+            packbeam_error("Invalid AVM or BEAM file: %s.", filename);
+            exit(EXIT_FAILURE);
         }
+        fclose(file);
     }
 }
 
-static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
+static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines)
 {
-    validate_pack_options(argc, argv);
+    validate_pack_options(output_avm_file, input_files, files_n);
 
-    FILE *pack = fopen(argv[0], "w");
+    FILE *pack = fopen(output_avm_file, "w");
     if (!pack) {
-        packbeam_internal_error("Cannot open output file for writing %s.", argv[0]);
+        packbeam_internal_error("Cannot open output file for writing %s.", output_avm_file);
         return EXIT_FAILURE;
     }
 
@@ -244,10 +248,11 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
     };
     assert_fwrite(pack_header, 24, pack);
 
-    for (int i = 1; i < argc; i++) {
-        FILE *file = fopen(argv[i], "r");
+    for (size_t i = 0; i < files_n; ++i) {
+        char *path = input_files[i];
+        FILE *file = fopen(path, "r");
         if (!file) {
-            packbeam_internal_error("Cannot open file %s.", argv[i]);
+            packbeam_internal_error("Cannot open file %s.", path);
             return EXIT_FAILURE;
         }
 
@@ -267,7 +272,7 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
                 return EXIT_FAILURE;
             }
         } else {
-            char *filename = basename(argv[i]);
+            char *filename = basename(path);
             pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1, include_lines);
         }
     }
@@ -385,14 +390,13 @@ static void validate_list_options(const char *filename)
     }
 }
 
-static int do_list(int argc, char **argv)
+static int do_list(const char *avm_path)
 {
-    UNUSED(argc);
-    validate_list_options(argv[0]);
+    validate_list_options(avm_path);
 
-    MappedFile *mapped_file = mapped_file_open_beam(argv[0]);
+    MappedFile *mapped_file = mapped_file_open_beam(avm_path);
     if (IS_NULL_PTR(mapped_file)) {
-        packbeam_internal_error("Cannot open AVM file %s.", argv[0]);
+        packbeam_internal_error("Cannot open AVM file %s.", avm_path);
         return EXIT_FAILURE;
     }
 
@@ -400,7 +404,7 @@ static int do_list(int argc, char **argv)
     if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
         avmpack_fold(NULL, mapped_file->mapped, print_section);
     } else {
-        packbeam_error("%s is not an AVM file.", argv[1]);
+        packbeam_error("%s is not an AVM file.", avm_path);
         ret = EXIT_FAILURE;
     }
     mapped_file_close(mapped_file);
