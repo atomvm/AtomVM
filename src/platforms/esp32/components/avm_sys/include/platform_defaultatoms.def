@@ -1,0 +1,71 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2019-2024 Davide Bettio <davide@uninstall.it>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+X(READ_ATOM, "\x4", "read")
+X(GPIO_INTERRUPT_ATOM, "\xE", "gpio_interrupt")
+X(RISING_ATOM, "\x6", "rising")
+X(FALLING_ATOM, "\x7", "falling")
+X(BOTH_ATOM, "\x4", "both")
+X(LOW_ATOM, "\x3", "low")
+X(HIGH_ATOM, "\x4", "high")
+
+X(ESP32_ATOM, "\x5", "esp32")
+
+X(PROTO_ATOM, "\x5", "proto")
+X(UDP_ATOM, "\x3", "udp")
+X(TCP_ATOM, "\x3", "tcp")
+X(SOCKET_ATOM, "\x6", "socket")
+X(FCNTL_ATOM, "\x5", "fcntl")
+X(BIND_ATOM, "\x4", "bind")
+X(GETSOCKNAME_ATOM, "\xB", "getsockname")
+X(RECVFROM_ATOM, "\x8", "recvfrom")
+X(SENDTO_ATOM, "\x6", "sendto")
+X(ADDRESS_ATOM, "\x7", "address")
+X(CONTROLLING_PROCESS_ATOM, "\x13", "controlling_process")
+X(ACTIVE_ATOM, "\x6", "active")
+X(BUFFER_ATOM, "\x6", "buffer")
+X(CONNECT_ATOM, "\x7", "connect")
+X(SEND_ATOM, "\x4", "send")
+X(TCP_CLOSED_ATOM, "\xA", "tcp_closed")
+X(RECV_ATOM, "\x4", "recv")
+X(LISTEN_ATOM, "\x6", "listen")
+X(BACKLOG_ATOM, "\x7", "backlog")
+X(ACCEPT_ATOM, "\x6", "accept")
+X(FD_ATOM, "\x2", "fd")
+
+X(INIT_ATOM, "\x4", "init")
+X(GET_PORT_ATOM, "\x8", "get_port")
+X(SOCKNAME_ATOM, "\x8", "sockname")
+X(PEERNAME_ATOM, "\x8", "peername")
+X(NOT_OWNER_ATOM, "\x9", "not_owner")
+
+//uart
+X(SPEED_ATOM, "\x5", "speed")
+X(WRITE_ATOM, "\x5", "write")
+X(DATA_BITS_ATOM, "\x9", "data_bits")
+X(STOP_BITS_ATOM, "\x9", "stop_bits")
+X(FLOW_CONTROL_ATOM, "\xC", "flow_control")
+X(PARITY_ATOM, "\x6", "parity")
+X(RX_ATOM, "\x2", "rx")
+X(TX_ATOM, "\x2", "tx")
+X(RTS_ATOM, "\x3", "rts")
+X(CTS_ATOM, "\x3", "cts")
+X(DEFAULT_ATOM, "\x7", "default")
+X(EVENT_QUEUE_LEN_ATOM, "\xF", "event_queue_len")
