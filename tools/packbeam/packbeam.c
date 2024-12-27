@@ -55,7 +55,7 @@ typedef struct FileData
     size_t size;
 } FileData;
 
-static void pad_and_align(FILE *f);
+static bool pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static bool add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
@@ -443,11 +443,25 @@ cleanup:
     return NULL;
 }
 
-static void pad_and_align(FILE *f)
+static bool pad_and_align(FILE *f)
 {
-    while ((ftell(f) % 4) != 0) {
-        fputc(0, f);
+    while (true) {
+        long pos = ftell(f);
+        if (pos == -1L) {
+            goto cleanup;
+        }
+
+        bool aligned = pos % 4 == 0;
+        if (aligned) {
+            break;
+        }
+
+        TRY(fputc(0, f) != EOF);
     }
+    return true;
+
+cleanup:
+    return false;
 }
 
 static bool add_module_header(FILE *f, const char *module_name, uint32_t flags)
