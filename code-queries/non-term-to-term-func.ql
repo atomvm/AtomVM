@@ -34,6 +34,10 @@ predicate isNotTermOrAtom(Expr expr) {
       (mi.toString().matches("%_ATOM") or mi.toString().matches("TERM_%"))
     )
   ) and
+  not (
+    expr instanceof EnumConstantAccess and
+    expr.(EnumConstantAccess).getTarget().toString().matches("%_ATOM")
+  ) and
   (
     not expr instanceof ConditionalExpr
     or
