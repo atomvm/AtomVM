@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Partial support for `erlang:fun_info/2`
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
 - Added `net:gethostname/0` on platforms with gethostname(3).
+- Added `socket:getopt/2`
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
