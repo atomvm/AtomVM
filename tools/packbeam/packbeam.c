@@ -25,10 +25,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-// TODO: Remove this when the code is refactored
-// #ifdef WITH_ZLIB
+#ifdef WITH_ZLIB
 #include <zlib.h>
-// #endif
+#endif
 
 #include "avmpack.h"
 #include "iff.c"
@@ -58,13 +57,13 @@ typedef struct FileData
 static bool pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static bool add_module_header(FILE *f, const char *module_name, uint32_t flags);
-static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
-
-static void free_file_data(FileData *data);
-static bool safe_read_file(const char *filename, FileData *data);
+static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines);
+static bool has_iff_header(uint8_t *data, size_t size);
 static bool safe_fread(void *buffer, size_t size, FILE *file);
 static bool safe_fwrite(const void *buffer, size_t size, FILE *file);
-static bool has_iff_header(uint8_t *data, size_t size);
+
+static bool safe_read_file(const char *filename, FileData *file_data);
+static void free_file_data(FileData *data);
 
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
 static int do_list(const char *avm_path);
@@ -397,7 +396,7 @@ cleanup:
 
     return false;
 }
-
+#ifdef WITH_ZLIB
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
 {
     uint8_t *outbuf = NULL;
@@ -446,6 +445,17 @@ cleanup:
 
     return NULL;
 }
+#else
+static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
+{
+    UNUSED(litT);
+    UNUSED(size);
+    UNUSED(uncompressedSize);
+    packbeam_internal_error("ZLIB not available.");
+    return NULL;
+}
+
+#endif // WITH_ZLIB
 
 static bool pad_and_align(FILE *f)
 {
