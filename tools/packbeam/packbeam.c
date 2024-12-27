@@ -162,28 +162,26 @@ static void *print_section(void *accum, const void *section_ptr, uint32_t sectio
 
 static int do_list(const char *avm_path)
 {
-    int ret = EXIT_SUCCESS;
 
     // TODO: mapped_file_open_beam prints unnecessary warnings
     MappedFile *mapped_file = mapped_file_open_beam(avm_path);
     if (mapped_file == NULL) {
         packbeam_error("Cannot open AVM file %s", avm_path);
-        ret = EXIT_FAILURE;
         goto cleanup;
     }
     if (!avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
         packbeam_error("%s is not an AVM file.", avm_path);
-        ret = EXIT_FAILURE;
         goto cleanup;
     }
 
     avmpack_fold(NULL, mapped_file->mapped, print_section);
+    return EXIT_SUCCESS;
 
 cleanup:
     if (mapped_file != NULL) {
         mapped_file_close(mapped_file);
     }
-    return ret;
+    return EXIT_FAILURE;
 }
 
 static void assert_fread(void *buffer, size_t size, FILE *file)
