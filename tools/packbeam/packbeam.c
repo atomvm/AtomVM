@@ -219,25 +219,6 @@ static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t sectio
     return accum;
 }
 
-FileData read_file_data(FILE *file)
-{
-    fseek(file, 0, SEEK_END);
-    size_t size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    uint8_t *data = malloc(size);
-    if (!data) {
-        packbeam_internal_error("Unable to allocate %zu bytes.", size);
-        exit(EXIT_FAILURE);
-    }
-    assert_fread(data, size, file);
-
-    FileData file_data = {
-        .data = data,
-        .size = size
-    };
-    return file_data;
-}
-
 static bool validate_pack_files(char *output_file, char **input_files, size_t files_n)
 {
     FileData file_data = (FileData){ .data = NULL, .size = 0 };
