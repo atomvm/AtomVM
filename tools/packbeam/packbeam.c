@@ -57,7 +57,7 @@ typedef struct FileData
 
 static void pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
-static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
+static bool add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
 static void free_file_data(FileData *data);
@@ -186,15 +186,6 @@ cleanup:
     return EXIT_FAILURE;
 }
 
-static void assert_fwrite(const void *buffer, size_t size, FILE *file)
-{
-    size_t r = fwrite(buffer, 1, size, file);
-    if (r != size) {
-        packbeam_internal_error("Unable to write, wanted to write %zu bytes, wrote %zu bytes.", size, r);
-        exit(EXIT_FAILURE);
-    }
-}
-
 static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
 {
     UNUSED(beam_ptr);
@@ -287,7 +278,7 @@ static int do_pack(char *output_avm_file, char **input_files, size_t files_n, in
         free_file_data(&file_data);
     }
 
-    add_module_header(pack, "end", END_OF_FILE);
+    TRY(add_module_header(pack, "end", END_OF_FILE));
     fclose(pack);
 
     return EXIT_SUCCESS;
@@ -310,9 +301,9 @@ static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     }
 
     if (is_entrypoint) {
-        add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG);
+        TRY(add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG));
     } else {
-        add_module_header(pack, section_name, BEAM_CODE_FLAG);
+        TRY(add_module_header(pack, section_name, BEAM_CODE_FLAG));
     }
 
     long written_beam_header_pos = ftell(pack);
@@ -446,17 +437,22 @@ static void pad_and_align(FILE *f)
     }
 }
 
-static void add_module_header(FILE *f, const char *module_name, uint32_t flags)
+static bool add_module_header(FILE *f, const char *module_name, uint32_t flags)
 {
     uint32_t size_field = 0;
     uint32_t flags_field = ENDIAN_SWAP_32(flags);
     uint32_t reserved = 0;
 
-    assert_fwrite(&size_field, sizeof(uint32_t), f);
-    assert_fwrite(&flags_field, sizeof(uint32_t), f);
-    assert_fwrite(&reserved, sizeof(uint32_t), f);
-    assert_fwrite(module_name, strlen(module_name) + 1, f);
+    TRY(safe_fwrite(&size_field, sizeof(uint32_t), f));
+    TRY(safe_fwrite(&flags_field, sizeof(uint32_t), f));
+    TRY(safe_fwrite(&reserved, sizeof(uint32_t), f));
+    TRY(safe_fwrite(module_name, strlen(module_name) + 1, f));
     pad_and_align(f);
+
+    return true;
+
+cleanup:
+    return false;
 }
 
 static bool has_iff_header(uint8_t *data, size_t size)
