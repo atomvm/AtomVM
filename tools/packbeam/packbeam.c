@@ -221,7 +221,6 @@ static bool validate_pack_files(char *output_file, char **input_files, size_t fi
         bool is_valid_avm = avmpack_is_valid(file_data.data, file_data.size);
         bool is_valid_beam = has_iff_header(file_data.data, file_data.size);
         if (!(is_valid_avm || is_valid_beam)) {
-            printf("ZZZ: %i, %i\n", is_valid_avm, is_valid_beam);
             packbeam_error("Invalid AVM or BEAM file '%s'.", filename);
             goto cleanup;
         }
