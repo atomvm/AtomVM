@@ -318,6 +318,7 @@ static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 
     unsigned long offsets[MAX_OFFS];
     unsigned long sizes[MAX_SIZES];
+    // TODO: add error handling in scan_iff
     scan_iff(data, size, offsets, sizes);
 
     if (offsets[AT8U]) {
@@ -360,6 +361,9 @@ static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     if (offsets[LITT]) {
         size_t u_size;
         deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
+        if (deflated == NULL) {
+            goto cleanup;
+        }
         TRY(safe_fwrite("LitU", 4, pack));
         uint32_t size_field = ENDIAN_SWAP_32(u_size);
         TRY(safe_fwrite(&size_field, sizeof(size_field), pack));
@@ -396,37 +400,47 @@ cleanup:
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
 {
+    uint8_t *outbuf = NULL;
+    z_stream infstream;
+
+    *uncompressedSize = 0;
+
     unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
 
-    uint8_t *outBuf = malloc(required_buf_size);
-    if (!outBuf) {
+    outbuf = malloc(required_buf_size);
+    if (outbuf == NULL) {
         packbeam_internal_error("Cannot allocate temporary buffer of size %u.", required_buf_size);
-        AVM_ABORT();
+        goto cleanup;
     }
 
-    z_stream infstream;
     infstream.zalloc = Z_NULL;
     infstream.zfree = Z_NULL;
     infstream.opaque = Z_NULL;
     infstream.avail_in = (uInt) (size - IFF_SECTION_HEADER_SIZE);
     infstream.next_in = (Bytef *) (litT + LITT_HEADER_SIZE);
     infstream.avail_out = (uInt) required_buf_size;
-    infstream.next_out = (Bytef *) outBuf;
+    infstream.next_out = (Bytef *) outbuf;
 
     int ret = inflateInit(&infstream);
     if (ret != Z_OK) {
         packbeam_internal_error("Failed inflateInit.");
-        AVM_ABORT();
+        goto cleanup;
     }
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
         packbeam_internal_error("Failed inflate.");
-        AVM_ABORT();
+        goto cleanup;
     }
     inflateEnd(&infstream);
 
     *uncompressedSize = required_buf_size;
-    return outBuf;
+    return outbuf;
+
+cleanup:
+    free(outbuf);
+    inflateEnd(&infstream);
+
+    return NULL;
 }
 
 static void pad_and_align(FILE *f)
