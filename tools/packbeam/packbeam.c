@@ -323,39 +323,39 @@ static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 
     if (offsets[AT8U]) {
         TRY(safe_fwrite(data + offsets[AT8U], sizes[AT8U] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[CODE]) {
         TRY(safe_fwrite(data + offsets[CODE], sizes[CODE] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[EXPT]) {
         TRY(safe_fwrite(data + offsets[EXPT], sizes[EXPT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[LOCT]) {
         TRY(safe_fwrite(data + offsets[LOCT], sizes[LOCT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[IMPT]) {
         TRY(safe_fwrite(data + offsets[IMPT], sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[LITU]) {
         TRY(safe_fwrite(data + offsets[LITU], sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[FUNT]) {
         TRY(safe_fwrite(data + offsets[FUNT], sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[STRT]) {
         TRY(safe_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
     if (offsets[LINT] && include_lines) {
         TRY(safe_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack));
-        pad_and_align(pack);
+        TRY(pad_and_align(pack));
     }
 
     if (offsets[LITT]) {
@@ -371,7 +371,7 @@ static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         free(deflated);
     }
 
-    pad_and_align(pack);
+    TRY(pad_and_align(pack));
 
     long end_of_module_pos = ftell(pack);
     if (end_of_module_pos == -1) {
@@ -401,6 +401,7 @@ cleanup:
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
 {
     uint8_t *outbuf = NULL;
+    bool stream_init = false;
     z_stream infstream;
 
     *uncompressedSize = 0;
@@ -426,6 +427,7 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
         packbeam_internal_error("Failed inflateInit.");
         goto cleanup;
     }
+    stream_init = true;
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
         packbeam_internal_error("Failed inflate.");
@@ -438,7 +440,9 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 
 cleanup:
     free(outbuf);
-    inflateEnd(&infstream);
+    if (stream_init) {
+        inflateEnd(&infstream);
+    }
 
     return NULL;
 }
@@ -474,7 +478,7 @@ static bool add_module_header(FILE *f, const char *module_name, uint32_t flags)
     TRY(safe_fwrite(&flags_field, sizeof(uint32_t), f));
     TRY(safe_fwrite(&reserved, sizeof(uint32_t), f));
     TRY(safe_fwrite(module_name, strlen(module_name) + 1, f));
-    pad_and_align(f);
+    TRY(pad_and_align(f));
 
     return true;
 
