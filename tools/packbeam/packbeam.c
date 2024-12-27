@@ -63,6 +63,7 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
 static void free_file_data(FileData *data);
 static bool safe_read_file(const char *filename, FileData *data);
 static bool safe_fread(void *buffer, size_t size, FILE *file);
+static bool safe_fwrite(const void *buffer, size_t size, FILE *file);
 static bool has_iff_header(uint8_t *data, size_t size);
 
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
@@ -162,9 +163,10 @@ static void *print_section(void *accum, const void *section_ptr, uint32_t sectio
 
 static int do_list(const char *avm_path)
 {
-
+    MappedFile *mapped_file = NULL;
     // TODO: mapped_file_open_beam prints unnecessary warnings
-    MappedFile *mapped_file = mapped_file_open_beam(avm_path);
+    mapped_file = mapped_file_open_beam(avm_path);
+
     if (mapped_file == NULL) {
         packbeam_error("Cannot open AVM file %s", avm_path);
         goto cleanup;
@@ -254,12 +256,16 @@ cleanup:
 
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines)
 {
-    validate_pack_files(output_avm_file, input_files, files_n);
+    FILE *pack = NULL;
+    FileData file_data = (FileData){ .data = NULL, .size = 0 };
 
-    FILE *pack = fopen(output_avm_file, "w");
-    if (!pack) {
+    TRY(validate_pack_files(output_avm_file, input_files, files_n));
+
+    // TODO: having any error corrupts output file
+    pack = fopen(output_avm_file, "w");
+    if (pack == NULL) {
         packbeam_internal_error("Cannot open output file for writing %s.", output_avm_file);
-        return EXIT_FAILURE;
+        goto cleanup;
     }
 
     const unsigned char pack_header[24] = {
@@ -270,34 +276,20 @@ static int do_pack(char *output_avm_file, char **input_files, size_t files_n, in
         0x74, 0x6f, 0x6d, 0x56,
         0x4d, 0x0a, 0x00, 0x00
     };
-    assert_fwrite(pack_header, 24, pack);
+    TRY(safe_fwrite(pack_header, 24, pack));
 
     for (size_t i = 0; i < files_n; ++i) {
         char *path = input_files[i];
-        FILE *file = fopen(path, "r");
-        if (!file) {
-            packbeam_internal_error("Cannot open file %s.", path);
-            return EXIT_FAILURE;
-        }
+        TRY(safe_read_file(path, &file_data));
 
-        fseek(file, 0, SEEK_END);
-        size_t file_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        uint8_t *file_data = malloc(file_size);
-        if (!file_data) {
-            packbeam_internal_error("Unable to allocate %zu bytes\n", file_size);
-            return EXIT_FAILURE;
-        }
-        assert_fread(file_data, file_size, file);
-        if (avmpack_is_valid(file_data, file_size)) {
-            void *result = avmpack_fold(pack, file_data, pack_beam_fun);
+        if (avmpack_is_valid(file_data.data, file_data.size)) {
+            void *result = avmpack_fold(pack, file_data.data, pack_beam_fun);
             if (result == NULL) {
                 return EXIT_FAILURE;
             }
         } else {
             char *filename = basename(path);
-            pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1, include_lines);
+            pack_beam_file(pack, file_data.data, file_data.size, filename, !is_archive && i == 1, include_lines);
         }
     }
 
@@ -305,6 +297,13 @@ static int do_pack(char *output_avm_file, char **input_files, size_t files_n, in
     fclose(pack);
 
     return EXIT_SUCCESS;
+
+cleanup:
+    if (pack != NULL) {
+        fclose(pack);
+    }
+    free_file_data(&file_data);
+    return EXIT_FAILURE;
 }
 
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
@@ -472,10 +471,21 @@ static bool safe_fread(void *buffer, size_t size, FILE *file)
     return true;
 }
 
+static bool safe_fwrite(const void *buffer, size_t size, FILE *file)
+{
+    size_t r = fwrite(buffer, 1, size, file);
+    if (r != size) {
+        packbeam_internal_error("Unable to write, wanted to write %zu bytes, wrote %zu bytes.", size, r);
+        return false;
+    }
+    return true;
+}
+
 static bool safe_read_file(const char *filename, FileData *file_data)
 {
     FILE *file = NULL;
     uint8_t *data = NULL;
+
     *file_data = (FileData){ .data = NULL, .size = 0 };
 
     file = fopen(filename, "r");
