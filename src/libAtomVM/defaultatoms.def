@@ -1,0 +1,170 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2019-2024 Davide Bettio <davide@uninstall.it>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License")
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+X(FALSE_ATOM, "\x05", "false")
+X(TRUE_ATOM, "\x04", "true")
+
+X(OK_ATOM, "\x2", "ok")
+X(ERROR_ATOM, "\x5", "error")
+
+X(UNDEFINED_ATOM, "\x9", "undefined")
+
+X(BADARG_ATOM, "\x6", "badarg")
+X(BADARITH_ATOM, "\x08", "badarith")
+X(BADARITY_ATOM, "\x08", "badarity")
+X(BADFUN_ATOM, "\x06", "badfun")
+X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
+X(FUNCTION_CLAUSE_ATOM, "\xF", "function_clause")
+X(TRY_CLAUSE_ATOM, "\xA", "try_clause")
+X(OUT_OF_MEMORY_ATOM, "\xD", "out_of_memory")
+X(OVERFLOW_ATOM, "\x8", "overflow")
+
+X(FLUSH_ATOM, "\x5", "flush")
+X(HEAP_SIZE_ATOM, "\x9", "heap_size")
+X(LATIN1_ATOM, "\x6", "latin1")
+X(MAX_HEAP_SIZE_ATOM, "\xD", "max_heap_size")
+X(MEMORY_ATOM, "\x6", "memory")
+X(MESSAGE_QUEUE_LEN_ATOM, "\x11", "message_queue_len")
+X(PUTS_ATOM, "\x4", "puts")
+X(STACK_SIZE_ATOM, "\xA", "stack_size")
+X(MIN_HEAP_SIZE_ATOM, "\xD", "min_heap_size")
+X(PROCESS_COUNT_ATOM, "\xD", "process_count")
+X(PORT_COUNT_ATOM, "\xA", "port_count")
+X(ATOM_COUNT_ATOM, "\xA", "atom_count")
+X(SYSTEM_ARCHITECTURE_ATOM, "\x13", "system_architecture")
+X(WORDSIZE_ATOM, "\x8", "wordsize")
+
+X(DECIMALS_ATOM, "\x8", "decimals")
+X(SCIENTIFIC_ATOM, "\xA", "scientific")
+X(DEFAULTATOMS_COMPACT_ATOM, "\x7", "compact")
+
+X(BADMATCH_ATOM, "\x8", "badmatch")
+X(CASE_CLAUSE_ATOM, "\xB", "case_clause")
+X(IF_CLAUSE_ATOM, "\x9", "if_clause")
+X(THROW_ATOM, "\x5", "throw")
+X(LOW_ENTROPY_ATOM, "\xB", "low_entropy")
+X(UNSUPPORTED_ATOM, "\xB", "unsupported")
+X(USED_ATOM, "\x4", "used")
+X(ALL_ATOM, "\x3", "all")
+X(START_ATOM, "\x5", "start")
+
+X(UNDEF_ATOM, "\x5", "undef")
+X(VM_ABORT_ATOM, "\x8", "vm_abort")
+
+X(LINK_ATOM, "\x4", "link")
+X(MONITOR_ATOM, "\x7", "monitor")
+X(NORMAL_ATOM, "\x6", "normal")
+X(DOWN_ATOM, "\x4", "DOWN")
+X(PROCESS_ATOM, "\x7", "process")
+X(NOCATCH_ATOM, "\x7", "nocatch")
+X(REFC_BINARY_INFO_ATOM, "\x10", "refc_binary_info")
+X(NOPROC_ATOM, "\x6", "noproc")
+X(TRAP_EXIT_ATOM, "\x9", "trap_exit")
+X(EXIT_ATOM, "\x4", "EXIT")
+
+X(BADMAP_ATOM, "\x6", "badmap")
+X(BADKEY_ATOM, "\x6", "badkey")
+X(NONE_ATOM, "\x4", "none")
+
+X(IO_REQUEST_ATOM, "\xA", "io_request")
+X(IO_REPLY_ATOM, "\x8", "io_reply")
+X(PUT_CHARS_ATOM, "\x9", "put_chars")
+
+X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
+X(ATOMVM_VERSION_ATOM, "\xE", "atomvm_version")
+
+X(SECOND_ATOM, "\x6", "second")
+X(MILLISECOND_ATOM, "\xB", "millisecond")
+X(MICROSECOND_ATOM, "\xB", "microsecond")
+
+X(INFINITY_ATOM, "\x8", "infinity")
+X(TIMEOUT_VALUE_ATOM, "\xD", "timeout_value")
+
+X(SCHEDULERS_ATOM, "\xA", "schedulers")
+X(SCHEDULERS_ONLINE_ATOM, "\x11", "schedulers_online")
+
+X(APPEND_ATOM, "\x6", "append")
+X(PRIVATE_APPEND_ATOM, "\xE", "private_append")
+X(BINARY_ATOM, "\x6", "binary")
+X(INTEGER_ATOM, "\x7", "integer")
+X(LITTLE_ATOM, "\x6", "little")
+X(NATIVE_ATOM, "\x6", "native")
+X(STRING_ATOM, "\x6", "string")
+X(UTF8_ATOM, "\x4", "utf8")
+X(UTF16_ATOM, "\x5", "utf16")
+X(UTF32_ATOM, "\x5", "utf32")
+X(BADRECORD_ATOM, "\x9", "badrecord")
+
+X(COPY_ATOM, "\x4", "copy")
+X(REUSE_ATOM, "\x5", "reuse")
+X(ENSURE_AT_LEAST_ATOM, "\xF", "ensure_at_least")
+X(ENSURE_EXACTLY_ATOM, "\xE", "ensure_exactly")
+X(SKIP_ATOM, "\x4", "skip")
+X(GET_TAIL_ATOM, "\x8", "get_tail")
+X(EQUAL_COLON_EQUAL_ATOM, "\x3", "=:=")
+X(SIGNED_ATOM, "\x6", "signed")
+
+X(MACHINE_ATOM, "\x7", "machine")
+X(AVM_FLOATSIZE_ATOM, "\xD", "avm_floatsize")
+
+X(CLOSE_ATOM, "\x5", "close")
+X(CLOSED_ATOM, "\x6", "closed")
+X(PORT_ATOM, "\x4", "port")
+
+X(INFO_ATOM, "\x4", "info")
+
+X(MODULE_ATOM, "\x6", "module")
+
+X(SELECT_ATOM, "\x6", "select")
+X(READY_INPUT_ATOM, "\xB", "ready_input")
+X(READY_OUTPUT_ATOM, "\xC", "ready_output")
+
+X(ATTRIBUTES_ATOM, "\xA", "attributes")
+X(COMPILE_ATOM, "\x7", "compile")
+X(EXPORTS_ATOM, "\x7", "exports")
+
+X(INCOMPLETE_ATOM, "\xA", "incomplete")
+
+X(KILL_ATOM, "\x4", "kill")
+X(KILLED_ATOM, "\x6", "killed")
+X(LINKS_ATOM, "\x5", "links")
+
+X(TOTAL_HEAP_SIZE_ATOM, "\xF", "total_heap_size")
+X(ATOMVM_HEAP_GROWTH_ATOM, "\x12", "atomvm_heap_growth")
+X(BOUNDED_FREE_ATOM, "\xC", "bounded_free")
+X(MINIMUM_ATOM, "\x7", "minimum")
+X(FIBONACCI_ATOM, "\x9", "fibonacci")
+
+X(CALL_ATOM, "\x5", "$call")
+X(CAST_ATOM, "\x5", "$cast")
+
+X(UNICODE_ATOM, "\x7", "unicode")
+
+X(GLOBAL_ATOM, "\x6", "global")
+X(TYPE_ATOM, "\x4", "type")
+X(NAME_ATOM, "\x4", "name")
+X(ARITY_ATOM, "\x5", "arity")
+X(EXTERNAL_ATOM, "\x8", "external")
+X(LOCAL_ATOM, "\x5", "local")
+
+X(REGISTERED_NAME_ATOM, "\xF", "registered_name")
+
+X(NONODE_AT_NOHOST_ATOM, "\xD", "nonode@nohost")
+X(NET_KERNEL_ATOM, "\xA", "net_kernel")

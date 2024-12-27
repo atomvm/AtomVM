@@ -169,6 +169,7 @@ compile_erlang(prime_smp)
 compile_erlang(test_try_case_end)
 compile_erlang(test_exception_classes)
 compile_erlang(test_recursion_and_try_catch)
+compile_erlang(test_fun_info)
 compile_erlang(test_func_info)
 compile_erlang(test_func_info2)
 compile_erlang(test_func_info3)
@@ -647,6 +648,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_try_case_end.beam
     test_exception_classes.beam
     test_recursion_and_try_catch.beam
+    test_fun_info.beam
     test_func_info.beam
     test_func_info2.beam
     test_func_info3.beam

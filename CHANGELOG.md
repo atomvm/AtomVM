@@ -15,9 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for external refs and encoded refs in external terms
 - Introduce ports to represent native processes and added support for external ports and encoded ports in external terms
 - Added `atomvm:get_creation/0`, equivalent to `erts_internal:get_creation/0`
+- Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
+- Partial support for `erlang:fun_info/2`
+- Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
+- Added `net:gethostname/0` on platforms with gethostname(3).
+- Added `socket:getopt/2`
 
 ### Fixed
 
+- ESP32: improved sntp sync speed from a cold boot.
 - Fixed `gen_server` internal messages to match OTP so it works across erlang distribution
 
 ## [0.6.6] - Unreleased
@@ -25,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added the ability to run beams from the CLI for Generic Unix platform (it was already possible with nodejs and emscripten).
+- Added support for 'erlang:--/2'.
 
 ### Fixed
 
@@ -39,6 +46,10 @@ might lead to a crash in certain situations.
 - Fixed destruction of ssl-related resources
 - Fix corruption when dealing with specific situations that involve more than 16 x registers when
 certain VM instructions are used.
+- Fixed ESP32 GPIO interrupt trigger `none`
+- Fixed an issue where a timeout would occur immediately in a race condition
+- Fixed SPI close command
+- Added missing lock on socket structure
 
 ## [0.6.5] - 2024-10-15
 

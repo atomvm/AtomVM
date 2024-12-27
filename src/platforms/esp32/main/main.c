@@ -39,8 +39,8 @@
 
 // before enabling this:
 // idf.py add-dependency esp_tinyusb
-// and enable CDC in menu config
-#ifdef USE_USB_SERIAL
+// and enable USE_USB_SERIAL in menu config
+#ifdef CONFIG_USE_USB_SERIAL
 void init_usb_serial(void);
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
@@ -70,7 +70,7 @@ void app_main()
 {
     esp32_sys_queue_init();
 
-#ifdef USE_USB_SERIAL
+#ifdef CONFIG_USE_USB_SERIAL
     init_usb_serial();
 #endif
 
@@ -151,7 +151,7 @@ void app_main()
     }
 }
 
-#ifdef USE_USB_SERIAL
+#ifdef CONFIG_USE_USB_SERIAL
 void init_usb_serial()
 {
     /* Setting TinyUSB up */

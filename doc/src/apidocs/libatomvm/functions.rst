@@ -111,6 +111,7 @@ Functions
 .. doxygenfunction:: globalcontext_get_process_nolock
 .. doxygenfunction:: globalcontext_get_process_unlock
 .. doxygenfunction:: globalcontext_get_registered_process
+.. doxygenfunction:: globalcontext_get_registered_name_process
 .. doxygenfunction:: globalcontext_init_process
 .. doxygenfunction:: globalcontext_insert_atom
 .. doxygenfunction:: globalcontext_insert_atom_maybe_copy

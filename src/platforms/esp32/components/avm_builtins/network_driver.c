@@ -335,6 +335,9 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             case IP_EVENT_STA_GOT_IP: {
                 ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
                 ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP: %s", inet_ntoa(event->ip_info.ip));
+                // we restart sntp here for faster time sync (especially evident on coldboots)
+                // the sntp_restart is no-op if sntp isn't configured
+                esp_sntp_restart();
                 send_got_ip(data, (esp_netif_ip_info_t *) &event->ip_info.ip);
                 break;
             }

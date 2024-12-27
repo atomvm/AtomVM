@@ -25,6 +25,7 @@ set(HEADER_FILES
     otp_socket_platform.h
     generic_unix_sys.h
     mapped_file.h
+    platform_defaultatoms.def
     platform_defaultatoms.h
     ../../../libAtomVM/otp_net.h
     ../../../libAtomVM/otp_socket.h
@@ -57,6 +58,7 @@ endif()
 include(DefineIfExists)
 define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} signal "signal.h" PRIVATE HAVE_SIGNAL)
 define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h" PRIVATE HAVE_SERVBYNAME)
+define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} gethostname "unistd.h" PRIVATE HAVE_GETHOSTNAME)
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)

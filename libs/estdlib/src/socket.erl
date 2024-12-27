@@ -38,6 +38,7 @@
     send/2,
     sendto/3,
     setopt/3,
+    getopt/2,
     connect/2,
     shutdown/2
 ]).
@@ -66,7 +67,9 @@
 -type in_addr() :: {0..255, 0..255, 0..255, 0..255}.
 -type port_number() :: 0..65535.
 
--type socket_option() :: {socket, reuseaddr} | {socket, linger}.
+-type socket_option() ::
+    {socket, reuseaddr | linger | type}
+    | {otp, recvbuf}.
 
 -export_type([
     socket/0,
@@ -446,8 +449,29 @@ sendto(Socket, Data, Dest) ->
 %%-----------------------------------------------------------------------------
 %% @param   Socket the socket
 %% @param   SocketOption the option
+%% @returns `{ok, Value}' if successful; `{error, Reason}', otherwise.
+%% @doc     Get a socket option.
+%%
+%%          Currently, the following options are supported:
+%%          <table>
+%%              <tr><td>`{socket, type}'</td><td>`type()'</td></tr>
+%%          </table>
+%%
+%% Example:
+%%
+%%      `{ok, stream} = socket:getopt(ListeningSocket, {socket, type})'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec getopt(Socket :: socket(), SocketOption :: socket_option()) ->
+    {ok, Value :: term()} | {error, Reason :: term()}.
+getopt(_Socket, _SocketOption) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Socket the socket
+%% @param   SocketOption the option
 %% @param   Value the option value
-%% @returns `{ok, Address}' if successful; `{error, Reason}', otherwise.
+%% @returns `ok' if successful; `{error, Reason}', otherwise.
 %% @doc     Set a socket option.
 %%
 %%          Set an option on a socket.
@@ -456,6 +480,7 @@ sendto(Socket, Data, Dest) ->
 %%          <table>
 %%              <tr><td>`{socket, reuseaddr}'</td><td>`boolean()'</td></tr>
 %%              <tr><td>`{socket, linger}'</td><td>`#{onoff => boolean(), linger => non_neg_integer()}'</td></tr>
+%%              <tr><td>`{otp, recvbuf}'</td><td>`non_neg_integer()'</td></tr>
 %%          </table>
 %%
 %% Example:
@@ -465,7 +490,7 @@ sendto(Socket, Data, Dest) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec setopt(Socket :: socket(), SocketOption :: socket_option(), Value :: term()) ->
-    ok | {error, Reason :: term()}.
+    ok | {error, any()}.
 setopt(_Socket, _SocketOption, _Value) ->
     erlang:nif_error(undefined).
 

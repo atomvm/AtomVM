@@ -280,6 +280,7 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
         case TOTAL_HEAP_SIZE_ATOM:
         case STACK_SIZE_ATOM:
         case MESSAGE_QUEUE_LEN_ATOM:
+        case REGISTERED_NAME_ATOM:
         case MEMORY_ATOM:
             ret_size = TUPLE_SIZE(2);
             break;
@@ -312,6 +313,18 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
             term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
             unsigned long value = memory_heap_youngest_size(&ctx->heap);
             term_put_tuple_element(ret, 1, term_from_int32(value));
+            break;
+        }
+
+        // registered_name for process or port..
+        case REGISTERED_NAME_ATOM: {
+            term name = globalcontext_get_registered_name_process(ctx->global, ctx->process_id);
+            if (term_is_invalid_term((name))) {
+                ret = term_nil(); // Set ret to an empty list to match erlang behaviour
+            } else {
+                term_put_tuple_element(ret, 0, REGISTERED_NAME_ATOM);
+                term_put_tuple_element(ret, 1, name);
+            }
             break;
         }
 

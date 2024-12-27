@@ -352,30 +352,6 @@ static inline bool term_is_boxed(term t)
 }
 
 /**
- * @brief Checks if a term is a movable boxed value
- *
- * @details Returns \c true if a term is a boxed value that can be safely copied with memcpy.
- * @param t the term that will checked.
- * @return \c true if check succeeds, \c false otherwise.
- */
-static inline bool term_is_movable_boxed(term t)
-{
-    /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
-        const term *boxed_value = term_to_const_term_ptr(t);
-        switch (boxed_value[0] & TERM_BOXED_TAG_MASK) {
-            case 0x10:
-                return true;
-
-            default:
-                return false;
-        }
-    } else {
-        return false;
-    }
-}
-
-/**
  * @brief Returns size of a boxed term from its header
  *
  * @details Returns the size that is stored in boxed term header most significant bits for variable size boxed terms.
@@ -1931,6 +1907,19 @@ static inline bool term_is_string(term t)
     }
     return term_is_nil(t);
 }
+
+/**
+ * @brief Gets function module name, name and arity.
+ *
+ * @details Allows to retrieve partial information by passing NULL pointers.
+ * @param fun function term.
+ * @param m module name as an atom.
+ * @param f function name as an atom.
+ * @param a function arity as an integer.
+ * @param global the \c GlobalContext used for creating function name atoms.
+ *
+ */
+void term_get_function_mfa(term fun, term *m, term *f, term *a, GlobalContext *global);
 
 static inline term term_make_function_reference(term m, term f, term a, Heap *heap)
 {

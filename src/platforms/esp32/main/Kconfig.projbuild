@@ -26,4 +26,18 @@ menu "AtomVM configuration"
         help
             Reboot the ESP32 device if the start/0 entrypoint does not return the `ok` atom.
 
+     config USE_USB_SERIAL
+         bool "Enable USB CDC Serial"
+         default n
+         select TINYUSB_CDC_ENABLED
+         help
+             Enable USB CDC Serial functionality.
+
+     config TINYUSB_CDC_ENABLED
+         bool "Enable TinyUSB CDC (requires 'idf.py add-dependency esp_tinyusb')"
+         default y
+         depends on USE_USB_SERIAL
+         help
+             Enable TinyUSB CDC functionality if USE_USB_SERIAL is enabled.
+             
 endmenu

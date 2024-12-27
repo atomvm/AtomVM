@@ -819,6 +819,50 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
     return result;
 }
 
+void term_get_function_mfa(term fun, term *m, term *f, term *a, GlobalContext *global)
+{
+    TERM_DEBUG_ASSERT(term_is_fun(fun));
+
+    const term *boxed_value = term_to_const_term_ptr(fun);
+    if (term_is_external_fun(fun)) {
+        if (m != NULL) {
+            *m = boxed_value[1];
+        }
+        if (f != NULL) {
+            *f = boxed_value[2];
+        }
+        if (a != NULL) {
+            *a = boxed_value[3];
+        }
+        return;
+    }
+
+    Module *module = (Module *) boxed_value[1];
+    if (m != NULL) {
+        *m = module_get_name(module);
+    }
+    if (f != NULL) {
+        uint32_t fun_index = term_to_int32(boxed_value[2]);
+
+        uint32_t label, arity, n_freeze;
+        module_get_fun(module, fun_index, &label, &arity, &n_freeze);
+
+        AtomString fun_name = NULL;
+        bool has_local_name = module_get_function_from_label(module, label, &fun_name, (int *) &arity, global);
+
+        *f = has_local_name ? globalcontext_make_atom(global, fun_name) : term_nil();
+    }
+    if (a != NULL) {
+        uint32_t fun_index = term_to_int32(boxed_value[2]);
+
+        uint32_t label, arity, n_freeze;
+        module_get_fun(module, fun_index, &label, &arity, &n_freeze);
+        TERM_DEBUG_ASSERT(arity <= 255);
+
+        *a = term_from_int11((int16_t) arity);
+    }
+}
+
 term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContext *glb)
 {
     term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);

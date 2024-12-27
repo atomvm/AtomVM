@@ -28,6 +28,7 @@ test() ->
     ok = test_close_by_another_process(),
     ok = test_buf_size(),
     ok = test_override_buf_size(),
+    ok = test_setopt_getopt(),
     case get_otp_version() of
         atomvm ->
             ok = test_abandon_select();
@@ -344,6 +345,15 @@ send_receive_loop(Socket, I) ->
             io:format("Error on send: ~p~n", [Reason]),
             Error
     end.
+
+test_setopt_getopt() ->
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    {ok, stream} = socket:getopt(Socket, {socket, type}),
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:close(Socket),
+    {error, closed} = socket:getopt(Socket, {socket, type}),
+    {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok.
 
 %%
 %% abandon_select test

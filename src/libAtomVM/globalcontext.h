@@ -308,6 +308,18 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx);
 bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
 
 /**
+ * @brief Get registered name for a process/port
+ *
+ * @details Gets a process or port name (atom).
+ * @param glb the global context.
+ * @param local_process_id the process local id.
+ * @returns
+ * - `{registered_name, RegisteredName}` if the process/port was registered,
+ * - `[]` if the process/port is not registered.
+ */
+term globalcontext_get_registered_name_process(GlobalContext *glb, int local_process_id);
+
+/**
  * @brief Get a registered process
  *
  * @details Returns the local process id of a previously registered process.
