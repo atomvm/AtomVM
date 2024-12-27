@@ -77,6 +77,8 @@ jobs:
           apt update
           DEBIAN_FRONTEND=noninteractive apt install -y -q \
               doxygen erlang-base erlang-dev erlang-dialyzer erlang-eunit \
+              erlang-asn1 erlang-common-test erlang-crypto erlang-edoc \
+              erlang-parsetools erlang-reltool erlang-syntax-tools erlang-tools \
               libglib2.0-0 libpixman-1-0 \
               gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
           wget --no-verbose https://github.com/erlang/rebar3/releases/download/3.18.0/rebar3
