@@ -26,6 +26,7 @@
 #include <nifs.h>
 #include <otp_net.h>
 #include <port.h>
+#include <posix_nifs.h>
 #include <term.h>
 
 #include <errno.h>
@@ -326,6 +327,38 @@ static term nif_net_getaddrinfo(Context *ctx, int argc, term argv[])
 }
 
 //
+// net:gethostname/0
+//
+#ifdef HAVE_GETHOSTNAME
+static term nif_net_gethostname(Context *ctx, int argc, term argv[])
+{
+    TRACE("nif_net_gethostname\n");
+    UNUSED(argc);
+    UNUSED(argv);
+
+    char buf[256];
+    int r = gethostname(buf, sizeof(buf));
+    if (UNLIKELY(r != 0)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return make_error_tuple(posix_errno_to_term(errno, ctx->global), ctx);
+    }
+
+    size_t len = strlen(buf);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + LIST_SIZE(len, 1), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, interop_bytes_to_list(buf, len, &ctx->heap));
+
+    return result;
+}
+#endif
+
+//
 // Nifs
 //
 
@@ -333,6 +366,12 @@ static const struct Nif net_getaddrinfo_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_net_getaddrinfo
 };
+#ifdef HAVE_GETHOSTNAME
+static const struct Nif net_gethostname_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_net_gethostname
+};
+#endif
 
 //
 // Entrypoints
@@ -346,6 +385,12 @@ const struct Nif *otp_net_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &net_getaddrinfo_nif;
         }
+#ifdef HAVE_GETHOSTNAME
+        if (strcmp("gethostname/0", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &net_gethostname_nif;
+        }
+#endif
     }
     return NULL;
 }
