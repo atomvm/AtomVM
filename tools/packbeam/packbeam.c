@@ -186,15 +186,6 @@ cleanup:
     return EXIT_FAILURE;
 }
 
-static void assert_fread(void *buffer, size_t size, FILE *file)
-{
-    size_t r = fread(buffer, sizeof(uint8_t), size, file);
-    if (r != size) {
-        packbeam_internal_error("Unable to read, wanted to read %zu bytes, read %zu bytes.", size, r);
-        exit(EXIT_FAILURE);
-    }
-}
-
 static void assert_fwrite(const void *buffer, size_t size, FILE *file)
 {
     size_t r = fwrite(buffer, 1, size, file);
