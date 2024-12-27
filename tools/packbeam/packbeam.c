@@ -58,7 +58,7 @@ typedef struct FileData
 static void pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
+static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
 static void free_file_data(FileData *data);
 static bool safe_read_file(const char *filename, FileData *data);
@@ -282,7 +282,7 @@ static int do_pack(char *output_avm_file, char **input_files, size_t files_n, in
             bool is_first = i == 0;
             bool is_entrypoint = !is_archive && is_first;
             char *filename = basename(path);
-            pack_beam_file(pack, file_data.data, file_data.size, filename, is_entrypoint, include_lines);
+            TRY(pack_beam_file(pack, file_data.data, file_data.size, filename, is_entrypoint, include_lines));
         }
         free_file_data(&file_data);
     }
@@ -300,9 +300,14 @@ cleanup:
     return EXIT_FAILURE;
 }
 
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
+static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
 {
-    size_t zero_pos = ftell(pack);
+    void *deflated = NULL;
+
+    long zero_pos = ftell(pack);
+    if (zero_pos == -1) {
+        goto cleanup;
+    }
 
     if (is_entrypoint) {
         add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG);
@@ -310,80 +315,93 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         add_module_header(pack, section_name, BEAM_CODE_FLAG);
     }
 
-    int written_beam_header_pos = ftell(pack);
+    long written_beam_header_pos = ftell(pack);
+    if (written_beam_header_pos == -1) {
+        goto cleanup;
+    }
     const unsigned char beam_header[12] = {
         0x46, 0x4f, 0x52, 0x31,
         0x00, 0x00, 0x00, 0x00,
         0x42, 0x45, 0x41, 0x4d
     };
-    assert_fwrite(beam_header, 12, pack);
+    TRY(safe_fwrite(beam_header, 12, pack));
 
     unsigned long offsets[MAX_OFFS];
     unsigned long sizes[MAX_SIZES];
     scan_iff(data, size, offsets, sizes);
 
     if (offsets[AT8U]) {
-        assert_fwrite(data + offsets[AT8U], sizes[AT8U] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[AT8U], sizes[AT8U] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[CODE]) {
-        assert_fwrite(data + offsets[CODE], sizes[CODE] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[CODE], sizes[CODE] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[EXPT]) {
-        assert_fwrite(data + offsets[EXPT], sizes[EXPT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[EXPT], sizes[EXPT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[LOCT]) {
-        assert_fwrite(data + offsets[LOCT], sizes[LOCT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[LOCT], sizes[LOCT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[IMPT]) {
-        assert_fwrite(data + offsets[IMPT], sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[IMPT], sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[LITU]) {
-        assert_fwrite(data + offsets[LITU], sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[LITU], sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[FUNT]) {
-        assert_fwrite(data + offsets[FUNT], sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[FUNT], sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[STRT]) {
-        assert_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
     if (offsets[LINT] && include_lines) {
-        assert_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack);
+        TRY(safe_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack));
         pad_and_align(pack);
     }
 
     if (offsets[LITT]) {
         size_t u_size;
-        void *deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
-        assert_fwrite("LitU", 4, pack);
+        deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
+        TRY(safe_fwrite("LitU", 4, pack));
         uint32_t size_field = ENDIAN_SWAP_32(u_size);
-        assert_fwrite(&size_field, sizeof(size_field), pack);
-        assert_fwrite(deflated, u_size, pack);
+        TRY(safe_fwrite(&size_field, sizeof(size_field), pack));
+        TRY(safe_fwrite(deflated, u_size, pack));
         free(deflated);
     }
 
     pad_and_align(pack);
 
-    size_t end_of_module_pos = ftell(pack);
+    long end_of_module_pos = ftell(pack);
+    if (end_of_module_pos == -1) {
+        goto cleanup;
+    }
 
     size_t rsize = end_of_module_pos - zero_pos;
     uint32_t size_field = ENDIAN_SWAP_32(rsize);
-    fseek(pack, zero_pos, SEEK_SET);
-    assert_fwrite(&size_field, sizeof(uint32_t), pack);
-    fseek(pack, end_of_module_pos, SEEK_SET);
+    TRY(fseek(pack, zero_pos, SEEK_SET) != -1);
+    TRY(safe_fwrite(&size_field, sizeof(uint32_t), pack));
+    TRY(fseek(pack, end_of_module_pos, SEEK_SET) != -1);
 
     int beam_written_size = end_of_module_pos - written_beam_header_pos;
     uint32_t beam_written_size_field = ENDIAN_SWAP_32(beam_written_size);
-    fseek(pack, written_beam_header_pos + 4, SEEK_SET);
-    assert_fwrite(&beam_written_size_field, sizeof(uint32_t), pack);
-    fseek(pack, end_of_module_pos, SEEK_SET);
+    TRY(fseek(pack, written_beam_header_pos + 4, SEEK_SET) != -1);
+    TRY(safe_fwrite(&beam_written_size_field, sizeof(uint32_t), pack));
+    TRY(fseek(pack, end_of_module_pos, SEEK_SET) != -1);
+
+    return true;
+
+cleanup:
+    free(deflated);
+
+    return false;
 }
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
