@@ -40,6 +40,7 @@ certain VM instructions are used.
 - Fixed ESP32 GPIO interrupt trigger `none`
 - Fixed an issue where a timeout would occur immediately in a race condition
 - Fixed SPI close command
+- Added missing lock on socket structure
 
 ## [0.6.5] - 2024-10-15
 
