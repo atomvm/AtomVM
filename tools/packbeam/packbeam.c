@@ -282,15 +282,18 @@ static int do_pack(char *output_avm_file, char **input_files, size_t files_n, in
         char *path = input_files[i];
         TRY(safe_read_file(path, &file_data));
 
-        if (avmpack_is_valid(file_data.data, file_data.size)) {
-            void *result = avmpack_fold(pack, file_data.data, pack_beam_fun);
-            if (result == NULL) {
-                return EXIT_FAILURE;
-            }
+        // TODO: redundant, we have this information in validate_pack_files
+        bool is_avm = avmpack_is_valid(file_data.data, file_data.size);
+
+        if (is_avm) {
+            TRY(avmpack_fold(pack, file_data.data, pack_beam_fun) != NULL);
         } else {
+            bool is_first = i == 0;
+            bool is_entrypoint = !is_archive && is_first;
             char *filename = basename(path);
-            pack_beam_file(pack, file_data.data, file_data.size, filename, !is_archive && i == 1, include_lines);
+            pack_beam_file(pack, file_data.data, file_data.size, filename, is_entrypoint, include_lines);
         }
+        free_file_data(&file_data);
     }
 
     add_module_header(pack, "end", END_OF_FILE);
