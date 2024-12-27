@@ -34,10 +34,12 @@
 #include "iff.c"
 #include "mapped_file.h"
 
-#define TRY(expr)     \
-    if (!(expr)) {    \
-        goto cleanup; \
-    }
+#define TRY(expr)         \
+    do {                  \
+        if (!(expr)) {    \
+            goto cleanup; \
+        }                 \
+    } while (0)
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
@@ -58,31 +60,40 @@ static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompre
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
 
+static void free_file_data(FileData *data);
+static bool safe_read_file(const char *filename, FileData *data);
+static bool safe_fread(void *buffer, size_t size, FILE *file);
+static bool has_iff_header(uint8_t *data, size_t size);
+
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
 static int do_list(const char *avm_path);
 
-#define program_error(...) error_with_usage(argv[0], __VA_ARGS__)
-#define packbeam_error(...) error_with_usage("PackBeam", __VA_ARGS__)
+#define program_error(...)                    \
+    do {                                      \
+        internal_error(argv[0], __VA_ARGS__); \
+        usage(argv[0]);                       \
+    } while (false)
+#define packbeam_error(...)                      \
+    do {                                         \
+        internal_error("PackBeam", __VA_ARGS__); \
+        usage("PackBeam");                       \
+    } while (false)
 #define packbeam_internal_error(...) internal_error("PackBeam", __VA_ARGS__)
 
 static void internal_error(const char *program, const char *format, ...)
 {
     va_list format_args;
     va_start(format_args, format);
+
     fprintf(stderr, "%s: ", program);
-    fprintf(stderr, format, format_args);
+    vfprintf(stderr, format, format_args);
     fprintf(stderr, "\n");
+
     va_end(format_args);
 }
 
-static void error_with_usage(const char *program, const char *format, ...)
+static void usage(const char *program)
 {
-    if (format != NULL) {
-        va_list format_args;
-        va_start(format_args, format);
-        internal_error(program, format, format_args);
-        va_end(format_args);
-    }
     fprintf(stderr, "\nUsage: %s [-h] [-l] <avm-file> [<options>]\n", program);
     fprintf(stderr, "    -h                                                Print this help menu.\n");
     fprintf(stderr, "    -i                                                Include file and line information.\n");
@@ -100,7 +111,7 @@ int main(int argc, char **argv)
     while ((opt = getopt(argc, argv, "hail")) != -1) {
         switch (opt) {
             case 'h':
-                program_error(NULL);
+                usage(argv[0]);
                 return EXIT_SUCCESS;
             case 'a':
                 is_archive = true;
@@ -229,48 +240,42 @@ FileData read_file_data(FILE *file)
     return file_data;
 }
 
-static bool is_avm_file(FILE *file)
+static bool validate_pack_files(char *output_file, char **input_files, size_t files_n)
 {
-    FileData file_data = read_file_data(file);
-    bool ret = avmpack_is_valid(file_data.data, file_data.size);
-    free(file_data.data);
-    return ret;
-}
+    FileData file_data = (FileData){ .data = NULL, .size = 0 };
 
-static bool is_beam_file(FILE *file)
-{
-    FileData file_data = read_file_data(file);
-    bool ret = iff_is_valid_beam(file_data.data);
-    free(file_data.data);
-    return ret;
-}
-
-static void validate_pack_options(char *output_file, char **input_files, size_t n)
-{
-    FILE *file = fopen(output_file, "r");
-    if (file == NULL || !is_avm_file(file)) {
-        packbeam_error("Invalid AVM file: %s.", output_file);
-        exit(EXIT_FAILURE);
+    TRY(safe_read_file(output_file, &file_data));
+    if (!avmpack_is_valid(file_data.data, file_data.size)) {
+        packbeam_error("Invalid AVM file '%s'.", output_file);
+        goto cleanup;
     }
-    fclose(file);
+    free_file_data(&file_data);
 
-    for (size_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < files_n; ++i) {
         const char *filename = input_files[i];
-        FILE *file = fopen(filename, "r");
-        if (!file) {
-            packbeam_error("%s does not exist.", filename);
-            exit(EXIT_FAILURE);
-        } else if (!is_avm_file(file) && !is_beam_file(file)) {
-            packbeam_error("Invalid AVM or BEAM file: %s.", filename);
-            exit(EXIT_FAILURE);
+        TRY(safe_read_file(filename, &file_data));
+
+        bool is_valid_avm = avmpack_is_valid(file_data.data, file_data.size);
+        bool is_valid_beam = has_iff_header(file_data.data, file_data.size);
+        if (!(is_valid_avm || is_valid_beam)) {
+            printf("ZZZ: %i, %i\n", is_valid_avm, is_valid_beam);
+            packbeam_error("Invalid AVM or BEAM file '%s'.", filename);
+            goto cleanup;
         }
-        fclose(file);
+
+        free_file_data(&file_data);
     }
+
+    return true;
+
+cleanup:
+    free_file_data(&file_data);
+    return false;
 }
 
 static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines)
 {
-    validate_pack_options(output_avm_file, input_files, files_n);
+    validate_pack_files(output_avm_file, input_files, files_n);
 
     FILE *pack = fopen(output_avm_file, "w");
     if (!pack) {
@@ -462,4 +467,69 @@ static void add_module_header(FILE *f, const char *module_name, uint32_t flags)
     assert_fwrite(&reserved, sizeof(uint32_t), f);
     assert_fwrite(module_name, strlen(module_name) + 1, f);
     pad_and_align(f);
+}
+
+static bool has_iff_header(uint8_t *data, size_t size)
+{
+    return size >= 4 && iff_is_valid_beam(data);
+}
+
+static void free_file_data(FileData *data)
+{
+    if (data->data != NULL) {
+        free(data->data);
+    }
+    data->data = NULL;
+    data->size = 0;
+}
+
+static bool safe_fread(void *buffer, size_t size, FILE *file)
+{
+    size_t r = fread(buffer, sizeof(uint8_t), size, file);
+    if (r != size) {
+        packbeam_internal_error("Unable to read, wanted to read %zu bytes, read %zu bytes.", size, r);
+        return false;
+    }
+    return true;
+}
+
+static bool safe_read_file(const char *filename, FileData *file_data)
+{
+    FILE *file = NULL;
+    uint8_t *data = NULL;
+    *file_data = (FileData){ .data = NULL, .size = 0 };
+
+    file = fopen(filename, "r");
+    if (file == NULL) {
+        packbeam_internal_error("Cannot open file '%s'.", filename);
+        goto cleanup;
+    }
+
+    TRY(fseek(file, 0, SEEK_END) == 0);
+    long size = ftell(file);
+    if (size == -1L) {
+        goto cleanup;
+    }
+    TRY(fseek(file, 0, SEEK_SET) == 0);
+
+    data = malloc(size);
+    if (data == NULL) {
+        goto cleanup;
+    }
+
+    TRY(safe_fread(data, size, file));
+    TRY(fclose(file) == 0);
+
+    *file_data = (FileData){
+        .data = data,
+        .size = size
+    };
+    return true;
+
+cleanup:
+    if (file != NULL) {
+        fclose(file);
+    }
+    free(data);
+    return false;
 }
