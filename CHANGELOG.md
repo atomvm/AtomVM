@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
+- Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
 
 ### Fixed
 
