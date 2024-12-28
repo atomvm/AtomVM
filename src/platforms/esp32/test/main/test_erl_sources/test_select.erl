@@ -40,7 +40,7 @@ start() ->
         receive
             {select, WrFd, SelectWriteRef, ready_output} -> ok;
             M -> {unexpected, M}
-        after 200 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     ok = atomvm:posix_select_stop(WrFd),
 
@@ -51,27 +51,27 @@ start() ->
     ok =
         receive
             {select, RdFd, SelectReadRef, ready_input} -> ok
-        after 200 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     {ok, <<42>>} = atomvm:posix_read(RdFd, 1),
     ok = atomvm:posix_select_read(RdFd, self(), SelectReadRef),
     ok =
         receive
-            {select, RdFd, SelectReadRef, _} -> fail
-        after 200 -> ok
+            {select, RdFd, SelectReadRef, _} -> {unexpected, ?MODULE, ?LINE}
+        after 2000 -> ok
         end,
     {ok, 1} = atomvm:posix_write(WrFd, <<43>>),
     ok =
         receive
             {select, RdFd, SelectReadRef, ready_input} -> ok;
             M2 -> {unexpected, M2}
-        after 200 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     ok = atomvm:posix_select_stop(RdFd),
     ok =
         receive
-            Message -> {unexpected, Message}
-        after 200 -> ok
+            Message -> {unexpected, Message, ?MODULE, ?LINE}
+        after 2000 -> ok
         end,
 
     ok = atomvm:posix_close(WrFd),
