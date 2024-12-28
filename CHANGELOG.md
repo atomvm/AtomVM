@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
 - Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
+- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
+
+### Changed
+
+- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
 
 ### Fixed
 

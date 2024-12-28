@@ -407,9 +407,9 @@ static inline bool term_is_binary(term t)
 }
 
 /**
- * @brief Checks if a term is a binary
+ * @brief Checks if a term is a refc binary
  *
- * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
+ * @details Returns \c true if a term is a ref-counted binary, otherwise \c false.
  * @param t the term that will be checked.
  * @return \c true if check succeeds, \c false otherwise.
  */
@@ -420,6 +420,25 @@ static inline bool term_is_refc_binary(term t)
         const term *boxed_value = term_to_const_term_ptr(t);
         int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         return masked_value == TERM_BOXED_REFC_BINARY;
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is a heap binary
+ *
+ * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_heap_binary(term t)
+{
+    /* boxed: 10 */
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
+        return masked_value == TERM_BOXED_HEAP_BINARY;
     }
 
     return false;
