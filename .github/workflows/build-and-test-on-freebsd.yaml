@@ -57,7 +57,7 @@ jobs:
           pkg install -y curl cmake gperf erlang elixir mbedtls
 
         run: |
-
+          set -e
           echo "%%"
           echo "%% System Info"
           echo "%%"
