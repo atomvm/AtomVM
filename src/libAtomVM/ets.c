@@ -252,15 +252,9 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
     ets_delete_tables_internal(ets, true_pred, NULL, global);
 }
 
-EtsErrorCode ets_insert(term ref, term entry, Context *ctx)
+EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessWrite);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
-    }
-
     if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        SMP_UNLOCK(ets_table);
         return EtsPermissionDenied;
     }
 
@@ -271,39 +265,66 @@ EtsErrorCode ets_insert(term ref, term entry, Context *ctx)
 
     Heap *heap = malloc(sizeof(Heap));
     if (IS_NULL_PTR(heap)) {
-        SMP_UNLOCK(ets_table);
         return EtsAllocationFailure;
     }
     size_t size = (size_t) memory_estimate_usage(entry);
     if (memory_init_heap(heap, size) != MEMORY_GC_OK) {
         free(heap);
-        SMP_UNLOCK(ets_table);
         return EtsAllocationFailure;
     }
 
     term new_entry = memory_copy_term_tree(heap, entry);
     term key = term_get_tuple_element(new_entry, (int) ets_table->keypos);
 
-    EtsErrorCode ret = EtsOk;
+    EtsErrorCode result = EtsOk;
     EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, key, new_entry, EtsHashtableAllowOverwrite, heap, ctx->global);
     if (UNLIKELY(res != EtsHashtableOk)) {
-        ret = EtsAllocationFailure;
+        result = EtsAllocationFailure;
+    }
+
+    return result;
+}
+
+EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list, Context *ctx)
+{
+    while (term_is_nonempty_list(list)) {
+        term tuple = term_get_list_head(list);
+        if (!term_is_tuple(tuple) && term_get_tuple_arity(tuple) < 1) {
+            return EtsBadEntry;
+        }
+        EtsErrorCode result = ets_table_insert(ets_table, tuple, ctx);
+        if (result != EtsOk) {
+            AVM_ABORT(); // Abort because operation might not be atomic.
+        }
+
+        list = term_get_list_tail(list);
+    }
+
+    return EtsOk;
+}
+
+EtsErrorCode ets_insert(term ref, term entry, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessWrite);
+    if (ets_table == NULL) {
+        return EtsTableNotFound;
+    }
+    EtsErrorCode result = EtsBadEntry;
+
+    if (term_is_tuple(entry) && term_get_tuple_arity(entry) > 0) {
+        result = ets_table_insert(ets_table, entry, ctx);
+    } else if (term_is_list(entry)) {
+        result = ets_table_insert_list(ets_table, entry, ctx);
     }
 
     SMP_UNLOCK(ets_table);
 
-    return ret;
+    return result;
 }
 
-EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
+EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
-    }
-
     if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
-        SMP_UNLOCK(ets_table);
         return EtsPermissionDenied;
     }
 
@@ -316,15 +337,26 @@ EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
         size_t size = (size_t) memory_estimate_usage(res);
         // allocate [object]
         if (UNLIKELY(memory_ensure_free_opt(ctx, size + CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            SMP_UNLOCK(ets_table);
             return EtsAllocationFailure;
         }
         term new_res = memory_copy_term_tree(&ctx->heap, res);
         *ret = term_list_prepend(new_res, term_nil(), &ctx->heap);
     }
-    SMP_UNLOCK(ets_table);
 
     return EtsOk;
+}
+
+EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
+    if (ets_table == NULL) {
+        return EtsTableNotFound;
+    }
+
+    EtsErrorCode result = ets_table_lookup(ets_table, key, ret, ctx);
+    SMP_UNLOCK(ets_table);
+
+    return result;
 }
 
 EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx)
