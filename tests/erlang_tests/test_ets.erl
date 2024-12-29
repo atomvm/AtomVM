@@ -31,7 +31,8 @@ start() ->
     ok = test_protected_access(),
     ok = test_public_access(),
     ok = test_lookup_element(),
-
+    ok = test_insert_list(),
+    ok = test_update_counter(),
     0.
 
 test_basic() ->
@@ -351,4 +352,29 @@ test_lookup_element() ->
     expect_failure(fun() -> ets:lookup_element(Tid, bar, 1) end),
     expect_failure(fun() -> ets:lookup_element(Tid, foo, 3) end),
     expect_failure(fun() -> ets:lookup_element(Tid, foo, 0) end),
+    ok.
+
+test_insert_list() ->
+    Tid = ets:new(test_insert_list, []),
+    true = ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}]),
+    [{patat, patat}] = ets:lookup(Tid, patat),
+    [{batat, batat}] = ets:lookup(Tid, batat),
+    ok.
+
+test_update_counter() ->
+    Tid = ets:new(test_lookup_element, []),
+    true = ets:insert(Tid, {foo, 1, 2, 3}),
+    3 = ets:update_counter(Tid, foo, 2),
+    expect_failure(fun() -> ets:update_counter(Tid, tapas, 2) end),
+    5 = ets:update_counter(Tid, tapas, 2, {batat, 3}),
+    [] = ets:lookup(Tid, batat),
+    [{tapas, 5}] = ets:lookup(Tid, tapas),
+    0 = ets:update_counter(Tid, foo, {3, -2}),
+    expect_failure(fun() -> ets:update_counter(Tid, foo, {-3, -2}) end),
+    expect_failure(fun() -> ets:update_counter(Tid, foo, {30, -2}) end),
+    expect_failure(fun() -> ets:update_counter(Tid, patatas, {3, -2}, {cow, 1}) end),
+    0 = ets:update_counter(Tid, patatas, {3, -2}, {cow, 1, 2, 3}),
+    0 = ets:update_counter(Tid, patatas, {3, -2, 0, 0}),
+    10 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
+    0 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
     ok.
