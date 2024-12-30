@@ -82,6 +82,7 @@ X(EXIT_ATOM, "\x4", "EXIT")
 X(BADMAP_ATOM, "\x6", "badmap")
 X(BADKEY_ATOM, "\x6", "badkey")
 X(NONE_ATOM, "\x4", "none")
+X(INTERNAL_ERROR_ATOM, "\xE", "internal_error")
 
 X(IO_REQUEST_ATOM, "\xA", "io_request")
 X(IO_REPLY_ATOM, "\x8", "io_reply")
