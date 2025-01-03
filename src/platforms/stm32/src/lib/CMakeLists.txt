@@ -25,6 +25,7 @@ set(HEADER_FILES
     avm_devcfg.h
     avm_log.h
     gpio_driver.h
+    platform_defaultatoms.h
     stm_sys.h
     ../../../../libAtomVM/platform_nifs.h
     ../../../../libAtomVM/portnifloader.h
@@ -33,6 +34,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpio_driver.c
+    platform_defaultatoms.c
     platform_nifs.c
     sys.c
     ../../../../libAtomVM/portnifloader.c

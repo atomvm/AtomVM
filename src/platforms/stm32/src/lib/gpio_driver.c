@@ -44,6 +44,7 @@
 
 #include "avm_log.h"
 #include "gpio_driver.h"
+#include "platform_defaultatoms.h"
 #include "stm_sys.h"
 
 #define TAG "gpio_driver"
@@ -54,16 +55,10 @@
 #define GPIO_INVALID_MODE 0xE
 #define INVALID_GPIO_OSPEED 0xE
 
-static const char *const high_atom = ATOM_STR("\x4", "high");
-static const char *const low_atom = ATOM_STR("\x3", "low");
-
 // Port driver specific  data structures and definitions
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
 
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
-
-static const char *const gpio_atom = ATOM_STR("\x4", "gpio");
-static const char *const gpio_interrupt_atom = ATOM_STR("\xE", "gpio_interrupt");
 
 #define INVALID_EXTI_TRIGGER 0xEE
 
@@ -215,23 +210,33 @@ void isr_error_handler(const char *isr_name);
 
 static bool term_is_logic_level(GlobalContext *glb, term level)
 {
-    bool result = false;
     if (level == globalcontext_existing_term_from_atom_string(glb, ATOM_STR("\x3", "low"))) {
-        result = true;
+        return true;
     }
     if (level == globalcontext_existing_term_from_atom_string(glb, ATOM_STR("\x4", "high"))) {
-        result = true;
+        return true;
     }
-    return result;
+    if (term_is_integer(level)) {
+        switch (term_to_int32(level)) {
+            case GPIOPinLow:
+                return true;
+            case GPIOPinHigh:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    return false;
 }
 
-static inline term level_to_atom(Context *ctx, uint16_t level)
+static inline term level_to_atom(uint16_t level)
 {
     term level_atom;
-    if (level != 0) {
-        level_atom = globalcontext_make_atom(ctx->global, high_atom);
+    if (level != GPIOPinLow) {
+        level_atom = HIGH_ATOM;
     } else {
-        level_atom = globalcontext_make_atom(ctx->global, low_atom);
+        level_atom = LOW_ATOM;
     }
     return level_atom;
 }
@@ -448,24 +453,17 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
     }
 
     int level;
+    if (UNLIKELY(!term_is_logic_level(ctx->global, level_term))) {
+        AVM_LOGE(TAG, "GPIO level must be 0 or 1, or an atom ('high' or 'low').");
+        return BADARG_ATOM;
+    }
     if (term_is_integer(level_term)) {
         level = term_to_int(level_term);
-        if (UNLIKELY((level != 0) && (level != 1))) {
-            return BADARG_ATOM;
-        }
     } else {
-        if (UNLIKELY(!term_is_atom(level_term))) {
-            AVM_LOGE(TAG, "GPIO level must be 0 or 1, or an atom ('high' or 'low').");
-            return BADARG_ATOM;
-        }
         level = interop_atom_term_select_int(pin_level_table, level_term, ctx->global);
-        if (UNLIKELY(level < 0)) {
-            AVM_LOGE(TAG, "GPIO level atom must be 'high' or 'low'.");
-            return BADARG_ATOM;
-        }
     }
 
-    if (level != 0) {
+    if (level != GPIOPinLow) {
         gpio_set(gpio_bank, gpio_pin_mask);
     } else {
         gpio_clear(gpio_bank, gpio_pin_mask);
@@ -505,7 +503,7 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
     uint16_t level = (pin_levels >> gpio_pin_num);
     TRACE("Read: Bank 0x%08lX Pin %u. RESULT: %u\n", gpio_bank, gpio_pin_num, level);
 
-    return level_to_atom(ctx, level);
+    return level_to_atom(level);
 }
 
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
@@ -526,8 +524,7 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts)
     ctx->native_handler = consume_gpio_mailbox;
     ctx->platform_data = gpio_data;
 
-    term reg_name_term = globalcontext_make_atom(global, gpio_atom);
-    int atom_index = term_to_atom_index(reg_name_term);
+    int atom_index = term_to_atom_index(GPIO_ATOM);
 
     if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, ctx->process_id))) {
         scheduler_terminate(ctx);
@@ -541,8 +538,7 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts)
 static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
-    term gpio_atom_term = globalcontext_make_atom(glb, gpio_atom);
-    int gpio_atom_index = term_to_atom_index(gpio_atom_term);
+    int gpio_atom_index = term_to_atom_index(GPIO_ATOM);
     if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
         AVM_LOGE(TAG, "No active GPIO driver can be found.");
         port_ensure_available(ctx, TUPLE_SIZE(2));
@@ -589,7 +585,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
 
             term int_msg = term_alloc_tuple(2, &heap);
             term gpio_tuple = term_alloc_tuple(2, &heap);
-            term_put_tuple_element(int_msg, 0, globalcontext_make_atom(ctx->global, gpio_interrupt_atom));
+            term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
             term_put_tuple_element(gpio_tuple, 0, gpio_bank);
             term_put_tuple_element(gpio_tuple, 1, term_from_int32((int32_t) gpio_pin));
             term_put_tuple_element(int_msg, 1, gpio_tuple);
@@ -795,7 +791,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         port_ensure_available(ctx, TUPLE_SIZE(2));
         return port_create_error_tuple(ctx, BADARG_ATOM);
     }
-    enum exti_trigger_type interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
+    int interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
     if (UNLIKELY(interrupt_type == INVALID_EXTI_TRIGGER)) {
         char *trigger_string = interop_atom_to_string(ctx, trigger);
         AVM_LOGE(TAG, "Interrupt type %s not supported on stm32 platform.", trigger_string);

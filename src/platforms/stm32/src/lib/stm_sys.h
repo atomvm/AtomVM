@@ -24,8 +24,6 @@
 #include <portnifloader.h>
 #include <sys.h>
 
-#define STM32_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "stm32"))
-
 /*  Only on ARMv7EM and above
  *  TODO: These definitions are back-ported from libopencm3 `master`, if they ever release a new version this section should
  *  be removed, along with the included headers and replaced with only the following inclusion:
