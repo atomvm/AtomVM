@@ -164,5 +164,7 @@ void sys_enable_flash_cache(void);
 void *_sbrk_r(struct _reent *, ptrdiff_t);
 // This function may be defined to relocate the heap.
 void local_heap_setup(uint8_t **start, uint8_t **end);
+void sys_enable_core_periph_clocks();
+bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num);
 
 #endif /* _STM_SYS_H_ */
