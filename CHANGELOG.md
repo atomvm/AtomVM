@@ -27,6 +27,7 @@ certain VM instructions are used.
 - Fixed an issue where a timeout would occur immediately in a race condition
 - Fixed SPI close command
 - Added missing lock on socket structure
+- Fixed compilation with latest debian gcc-arm-none-eabi
 
 ## [0.6.5] - 2024-10-15
 
