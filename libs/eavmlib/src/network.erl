@@ -27,7 +27,8 @@
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
     sta_rssi/0,
     sta_disconnect/0,
-    sta_connect/0, sta_connect/1
+    sta_connect/0, sta_connect/1,
+    sta_status/0
 ]).
 -export([start/1, start_link/1, stop/0]).
 -export([
@@ -169,13 +170,16 @@
 -type network_config() :: [sta_config() | ap_config() | sntp_config() | mdns_config()].
 
 -type db() :: integer().
+-type sta_status() ::
+    associated | connected | connecting | degraded | disconnected | disconnecting | inactive.
 
 -record(state, {
     config :: network_config(),
     port :: port(),
     ref :: reference(),
     sta_ip_info :: ip_info(),
-    mdns :: pid() | undefined
+    mdns :: pid() | undefined,
+    sta_state :: sta_status()
 }).
 
 %%-----------------------------------------------------------------------------
@@ -381,6 +385,24 @@ sta_rssi() ->
             end
     end.
 
+%%-----------------------------------------------------------------------------
+%% @returns ConnectionState :: sta_status().
+%%
+%% @doc Get the connection status of the sta interface.
+%%
+%% Results will be one of: `associated', `connected', `connecting', `degraded',
+%% `disconnected', `disconnecting', or `undefined'. The state `associated' indicates
+%% that the station is connected to an access point, but does not yet have an IP address.
+%% A status of `degraded' indicates that the connection has experienced at least one
+%% beacon timeout event during the current connection session. This does not necessarily
+%% mean the connection is still in a poor state, but it might be helpful diagnosing
+%% problems with networked applications.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sta_status() -> Status :: sta_status().
+sta_status() ->
+    gen_server:call(?SERVER, sta_status).
+
 %%
 %% gen_server callbacks
 %%
@@ -389,7 +411,20 @@ sta_rssi() ->
 init(Config) ->
     Port = get_port(),
     Ref = make_ref(),
-    {ok, #state{config = Config, port = Port, ref = Ref}, {continue, start_port}}.
+    Status =
+        case proplists:get_value(sta, Config) of
+            undefined ->
+                inactive;
+            STA ->
+                case proplists:get_value(managed, STA, false) of
+                    false ->
+                        connecting;
+                    true ->
+                        disconnected
+                end
+        end,
+    {ok, #state{config = Config, port = Port, ref = Ref, sta_state = Status},
+        {continue, start_port}}.
 
 %% @hidden
 handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = State) ->
@@ -404,10 +439,10 @@ handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = St
 %% @hidden
 handle_call(halt_sta, _From, #state{ref = Ref} = State) ->
     network_port ! {self(), Ref, halt_sta},
-    wait_halt_sta_reply(Ref, State);
+    wait_halt_sta_reply(Ref, State#state{sta_state = disconnecting});
 handle_call(connect, _From, #state{config = Config, ref = Ref} = State) ->
     network_port ! {self(), Ref, {connect, Config}},
-    wait_connect_reply(Ref, Config, State);
+    wait_connect_reply(Ref, Config, State#state{sta_state = connecting});
 handle_call({connect, Config}, _From, #state{config = OldConfig, ref = Ref} = State) ->
     Return =
         case update_config(OldConfig, Config) of
@@ -415,8 +450,10 @@ handle_call({connect, Config}, _From, #state{config = OldConfig, ref = Ref} = St
                 {reply, {error, Reason}, State};
             NewConfig ->
                 network_port ! {self(), Ref, {connect, NewConfig}},
-                wait_connect_reply(Ref, NewConfig, State)
+                wait_connect_reply(Ref, NewConfig, State#state{sta_state = connecting})
         end;
+handle_call(sta_status, _From, State) ->
+    {reply, State#state.sta_state, State};
 handle_call(_Msg, _From, State) ->
     {reply, {error, unknown_message}, State}.
 
@@ -427,18 +464,16 @@ handle_cast(_Msg, State) ->
 %% @hidden
 handle_info({Ref, sta_connected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_connected_callback(Config),
-    {noreply, State};
+    {noreply, State#state{sta_state = associated}};
 handle_info({Ref, sta_beacon_timeout} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_beacon_timeout_callback(Config),
-    {noreply, State};
+    {noreply, State#state{sta_state = degraded}};
 handle_info({Ref, sta_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_disconnected_callback(Config),
-    {noreply, State};
-handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State0) ->
+    {noreply, State#state{sta_state = disconnected, sta_ip_info = undefined}};
+handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_got_ip_callback(Config, IpInfo),
-    State1 = State0#state{sta_ip_info = IpInfo},
-    State2 = maybe_start_mdns(State1),
-    {noreply, State2};
+    {noreply, State#state{sta_ip_info = IpInfo, sta_state = connected}};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};
@@ -475,16 +510,16 @@ terminate(_Reason, State) ->
 wait_connect_reply(Ref, NewConfig, State) ->
     receive
         {Ref, ok} ->
-            {reply, ok, State#state{ref = Ref, config = NewConfig}};
+            {reply, ok, State#state{config = NewConfig}};
         {Ref, {error, _Reason} = ER} ->
-            {reply, ER, State}
+            {reply, ER, State#state{sta_state = disconnected}}
     end.
 
 %% @private
 wait_halt_sta_reply(Ref, State) ->
     receive
         {Ref, ok} ->
-            {reply, ok, State};
+            {reply, ok, State#state{sta_state = disconnected}};
         {Ref, {error, _Reason} = Error} ->
             {reply, Error, State}
     end.
