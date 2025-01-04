@@ -75,6 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `network:sta_connect/0,1` and `network:sta_disconnect/0` to ESP32 network driver.
 - Added option to set a custom callback for esp32 network driver
 `disconnected` events
+- Added `network:sta_status/0` to get the current connection state of the sta interface.
 
 ### Changed
 
