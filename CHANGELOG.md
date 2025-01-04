@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
 - Added `network:connect/0,1` and `network:disconnect/0` to ESP32 network driver.
+- Added `network:sta_status/0` to get the current connection state of the sta interface.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
