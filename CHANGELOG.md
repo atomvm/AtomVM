@@ -27,6 +27,7 @@ certain VM instructions are used.
 - Fixed an issue where a timeout would occur immediately in a race condition
 - Fixed SPI close command
 - Added missing lock on socket structure
+- Fix `network:stop/0` on ESP32 so the network can be started again
 
 ## [0.6.5] - 2024-10-15
 
