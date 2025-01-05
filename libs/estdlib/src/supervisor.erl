@@ -25,14 +25,18 @@
 -export([
     start_link/2,
     start_link/3,
-    start_child/2
+    start_child/2,
+    terminate_child/2,
+    restart_child/2,
+    delete_child/2
 ]).
 
 -export([
     init/1,
     handle_call/3,
     handle_cast/2,
-    handle_info/2
+    handle_info/2,
+    terminate/2
 ]).
 
 -export_type([
@@ -41,7 +45,11 @@
     sup_flags/0
 ]).
 
--type restart() :: permanent | transient | temporary.
+-type restart() ::
+    permanent
+    | transient
+    | temporary
+    | {terminating, permanent | transient | temporary, gen_server:from()}.
 -type shutdown() :: brutal_kill | timeout().
 -type child_type() :: worker | supervisor.
 
@@ -89,6 +97,15 @@ start_link(SupName, Module, Args) ->
 
 start_child(Supervisor, ChildSpec) ->
     gen_server:call(Supervisor, {start_child, ChildSpec}).
+
+terminate_child(Supervisor, ChildId) ->
+    gen_server:call(Supervisor, {terminate_child, ChildId}).
+
+restart_child(Supervisor, ChildId) ->
+    gen_server:call(Supervisor, {restart_child, ChildId}).
+
+delete_child(Supervisor, ChildId) ->
+    gen_server:call(Supervisor, {delete_child, ChildId}).
 
 init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
@@ -152,6 +169,16 @@ restart_child(Pid, Reason, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
         false ->
             {ok, State};
+        #child{restart = {terminating, temporary, From}} ->
+            gen_server:reply(From, ok),
+            NewChildren = lists:keydelete(Pid, #child.pid, State#state.children),
+            {ok, State#state{children = NewChildren}};
+        #child{restart = {terminating, Restart, From}} = Child ->
+            gen_server:reply(From, ok),
+            NewChildren = lists:keyreplace(Pid, #child.pid, State#state.children, Child#child{
+                pid = undefined, restart = Restart
+            }),
+            {ok, State#state{children = NewChildren}};
         #child{} = Child ->
             case should_restart(Reason, Child#child.restart) of
                 true ->
@@ -195,6 +222,46 @@ handle_call({start_child, ChildSpec}, _From, #state{children = Children} = State
                 {error, _Reason} = ErrorT ->
                     {reply, ErrorT, State}
             end
+    end;
+handle_call({terminate_child, ID}, From, #state{children = Children} = State) ->
+    case lists:keyfind(ID, #child.id, Children) of
+        #child{pid = undefined} ->
+            {reply, ok, State};
+        #child{restart = Restart} = Child ->
+            do_terminate(Child),
+            NewChild = Child#child{restart = {terminating, Restart, From}},
+            NewChildren = lists:keyreplace(ID, #child.id, Children, NewChild),
+            {noreply, State#state{children = NewChildren}};
+        false ->
+            {reply, {error, not_found}, State}
+    end;
+handle_call({restart_child, ID}, _From, #state{children = Children} = State) ->
+    case lists:keyfind(ID, #child.id, Children) of
+        #child{pid = undefined} = Child ->
+            case try_start(Child) of
+                {ok, NewPid, Result} ->
+                    NewChild = Child#child{pid = NewPid},
+                    NewChildren = lists:keyreplace(
+                        ID, #child.id, Children, NewChild
+                    ),
+                    {reply, Result, State#state{children = NewChildren}};
+                {error, _Reason} = ErrorT ->
+                    {reply, ErrorT, State}
+            end;
+        #child{} ->
+            {reply, {error, running}, State};
+        false ->
+            {reply, {error, not_found}, State}
+    end;
+handle_call({delete_child, ID}, _From, #state{children = Children} = State) ->
+    case lists:keyfind(ID, #child.id, Children) of
+        #child{pid = undefined} ->
+            NewChildren = lists:keydelete(ID, #child.id, Children),
+            {reply, ok, State#state{children = NewChildren}};
+        #child{} ->
+            {reply, {error, running}, State};
+        false ->
+            {reply, {error, not_found}, State}
     end.
 
 handle_cast(_Msg, State) ->
@@ -207,9 +274,49 @@ handle_info({'EXIT', Pid, Reason}, State) ->
         {shutdown, State1} ->
             {stop, shutdown, State1}
     end;
+handle_info({ensure_killed, Pid}, State) ->
+    case lists:keyfind(Pid, #child.pid, State#state.children) of
+        false ->
+            {noreply, State};
+        #child{} ->
+            exit(Pid, kill),
+            {noreply, State}
+    end;
 handle_info(_Msg, State) ->
     %TODO: log unexpected message
     {noreply, State}.
+
+%% @hidden
+terminate(_Reason, #state{children = Children} = State) ->
+    RemainingChildren = loop_terminate(Children, []),
+    loop_wait_termination(RemainingChildren),
+    {ok, State}.
+
+loop_terminate([#child{pid = undefined} | Tail], AccRemaining) ->
+    loop_terminate(Tail, AccRemaining);
+loop_terminate([#child{pid = Pid} = Child | Tail], AccRemaining) when is_pid(Pid) ->
+    do_terminate(Child),
+    loop_terminate(Tail, [Pid | AccRemaining]);
+loop_terminate([], AccRemaining) ->
+    AccRemaining.
+
+loop_wait_termination([]) ->
+    ok;
+loop_wait_termination(RemainingChildren0) ->
+    receive
+        {'EXIT', Pid, _Reason} ->
+            RemainingChildren1 = lists:delete(Pid, RemainingChildren0),
+            loop_wait_termination(RemainingChildren1);
+        {ensure_killed, Pid} ->
+            case lists:member(Pid, RemainingChildren0) of
+                true ->
+                    exit(Pid, kill),
+                    RemainingChildren1 = lists:delete(Pid, RemainingChildren0),
+                    loop_wait_termination(RemainingChildren1);
+                false ->
+                    loop_wait_termination(RemainingChildren0)
+            end
+    end.
 
 try_start(#child{start = {M, F, Args}} = Record) ->
     try
@@ -229,3 +336,11 @@ try_start(#child{start = {M, F, Args}} = Record) ->
         error:Error ->
             {error, {{'EXIT', Error}, Record}}
     end.
+
+do_terminate(#child{pid = Pid, shutdown = brutal_kill}) ->
+    exit(Pid, kill);
+do_terminate(#child{pid = Pid, shutdown = infinity}) ->
+    exit(Pid, shutdown);
+do_terminate(#child{pid = Pid, shutdown = Timeout}) when is_integer(Timeout) ->
+    exit(Pid, shutdown),
+    erlang:send_after(Timeout, self(), {ensure_killed, Pid}).
