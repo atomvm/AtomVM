@@ -677,7 +677,7 @@ static void *select_thread_loop(void *arg)
 {
     GlobalContext *glb = arg;
     struct ESP32PlatformData *platform = glb->platform_data;
-    struct pollfd *fds = malloc(0);
+    struct pollfd *fds = malloc(sizeof(struct pollfd));
     while (!platform->select_thread_exit) {
         int select_events_poll_count = platform->select_events_poll_count;
         int poll_count = 1;
