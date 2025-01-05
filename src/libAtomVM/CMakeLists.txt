@@ -33,6 +33,7 @@ set(HEADER_FILES
     defaultatoms.def
     defaultatoms.h
     dictionary.h
+    dist_nifs.h
     erl_nif.h
     erl_nif_priv.h
     ets.h
@@ -83,6 +84,7 @@ set(SOURCE_FILES
     debug.c
     defaultatoms.c
     dictionary.c
+    dist_nifs.c
     ets.c
     ets_hashtable.c
     externalterm.c

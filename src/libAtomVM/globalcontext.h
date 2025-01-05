@@ -158,6 +158,8 @@ struct GlobalContext
 
     term ATOMIC node_name;
     uint32_t ATOMIC creation;
+    ErlNifResourceType *dist_connection_resource_type;
+    struct SyncList dist_connections;
 
 #if HAVE_OPEN && HAVE_CLOSE
     ErlNifResourceType *posix_fd_resource_type;

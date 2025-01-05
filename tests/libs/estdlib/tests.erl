@@ -57,6 +57,7 @@ get_tests(_OTPVersion) ->
         test_io_lib,
         test_logger,
         test_maps,
+        test_net_kernel,
         test_proplists,
         test_queue,
         test_timer,

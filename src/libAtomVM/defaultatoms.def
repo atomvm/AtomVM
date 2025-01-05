@@ -176,3 +176,5 @@ X(ABORT_ATOM, "\x5", "abort")
 X(FAMILY_ATOM, "\x6", "family")
 X(INET_ATOM, "\x4", "inet")
 X(TIMEOUT_ATOM, "\x7", "timeout")
+
+X(DIST_DATA_ATOM, "\x9", "dist_data")

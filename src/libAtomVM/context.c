@@ -147,9 +147,6 @@ void context_destroy(Context *ctx)
     // Eventually call resource monitors handlers after the processes table was unlocked
     // The monitors were removed from the list of monitors.
     if (resource_monitor) {
-        ErlNifEnv env;
-        erl_nif_env_partial_init_from_globalcontext(&env, ctx->global);
-
         struct ListHead monitors;
         list_prepend(&resource_monitor->base.monitor_list_head, &monitors);
 
@@ -159,7 +156,7 @@ void context_destroy(Context *ctx)
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
             void *resource = term_to_term_ptr(monitor->monitor_obj);
             struct RefcBinary *refc = refc_binary_from_data(resource);
-            refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
+            refc->resource_type->down(erl_nif_env_from_context(ctx), resource, &ctx->process_id, &monitor->ref_ticks);
             free(monitor);
         }
     }

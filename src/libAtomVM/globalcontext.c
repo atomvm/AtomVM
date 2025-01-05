@@ -21,6 +21,7 @@
 #include <limits.h>
 #include <string.h>
 
+#include "dist_nifs.h"
 #include "globalcontext.h"
 
 #include "atom_table.h"
@@ -124,10 +125,13 @@ GlobalContext *globalcontext_new()
 
     glb->node_name = NONODE_AT_NOHOST_ATOM;
     glb->creation = 0;
+    synclist_init(&glb->dist_connections);
 
-#if HAVE_OPEN && HAVE_CLOSE
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    glb->dist_connection_resource_type = enif_init_resource_type(&env, "dist_connection", &dist_connection_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+
+#if HAVE_OPEN && HAVE_CLOSE
     glb->posix_fd_resource_type = enif_init_resource_type(&env, "posix_fd", &posix_fd_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(glb->posix_fd_resource_type)) {
 #ifndef AVM_NO_SMP
