@@ -28,6 +28,9 @@ certain VM instructions are used.
 - Fixed SPI close command
 - Added missing lock on socket structure
 
+### Changed
+- Updated atom initalization in esp32 network_driver.c for issue #1442
+
 ## [0.6.5] - 2024-10-15
 
 ### Added
