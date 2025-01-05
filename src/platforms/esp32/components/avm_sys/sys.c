@@ -677,12 +677,12 @@ static void *select_thread_loop(void *arg)
 {
     GlobalContext *glb = arg;
     struct ESP32PlatformData *platform = glb->platform_data;
-    struct pollfd *fds = malloc(0);
+    struct pollfd *fds = NULL;
     while (!platform->select_thread_exit) {
         int select_events_poll_count = platform->select_events_poll_count;
         int poll_count = 1;
         int fd_index;
-        if (select_events_poll_count < 0) {
+        if (fds == NULL || select_events_poll_count < 0) {
             // Means it is dirty and should be rebuilt.
             struct ListHead *select_events = synclist_wrlock(&glb->select_events);
             size_t select_events_new_count;
@@ -692,7 +692,11 @@ static void *select_thread_loop(void *arg)
                 select_events_new_count = select_events_poll_count;
             }
 
-            fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count));
+            if (fds) {
+                fds = realloc(fds, sizeof(struct pollfd) * (poll_count + select_events_new_count));
+            } else {
+                fds = malloc(sizeof(struct pollfd) * (poll_count + select_events_new_count));
+            }
 
             fds[0].fd = platform->signal_fd;
             fds[0].events = POLLIN;
