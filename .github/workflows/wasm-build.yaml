@@ -78,7 +78,7 @@ jobs:
 
   wasm_build_and_test_node:
     needs: compile_tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: emscripten/emsdk
     steps:
     - name: Checkout repo
@@ -146,7 +146,7 @@ jobs:
           src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.wasm.sha256
 
   wasm_build_web:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: emscripten/emsdk
     steps:
     - name: Checkout repo
@@ -176,7 +176,7 @@ jobs:
 
   wasm_test_web:
     needs: [compile_tests, wasm_build_web]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4

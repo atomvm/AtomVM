@@ -414,11 +414,11 @@ void scheduler_cancel_timeout(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
 
-    context_update_flags(ctx, ~(WaitingTimeout | WaitingTimeoutExpired), NoFlags);
-
     struct TimerList *tw = &glb->timer_list;
 
     SMP_SPINLOCK_LOCK(&glb->timer_spinlock);
     timer_list_remove(tw, &ctx->timer_list_head);
     SMP_SPINLOCK_UNLOCK(&glb->timer_spinlock);
+
+    context_update_flags(ctx, ~(WaitingTimeout | WaitingTimeoutExpired), NoFlags);
 }

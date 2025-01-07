@@ -68,9 +68,10 @@ AtomVM currently supports the following versions of ESP-IDF:
 | IDF SDK supported versions | AtomVM support |
 |------------------------------|----------------|
 | ESP-IDF [v5.0](https://docs.espressif.com/projects/esp-idf/en/v5.0.7/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.1](https://docs.espressif.com/projects/esp-idf/en/v5.1.4/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.2](https://docs.espressif.com/projects/esp-idf/en/v5.2.2/esp32/get-started/index.html) | ✅ |
-| ESP-IDF [v5.3](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.1](https://docs.espressif.com/projects/esp-idf/en/v5.1.5/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.2](https://docs.espressif.com/projects/esp-idf/en/v5.2.3/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.3](https://docs.espressif.com/projects/esp-idf/en/v5.3.2/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.4](https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32/get-started/index.html) | ✅ |
 
 Building the AtomVM virtual machine for ESP32 is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.  We recommend you to use the latest subminor (patch) versions for source builds. You can check the current version used for testing in the [esp32-build.yaml](https://github.com/atomvm/AtomVM/actions/workflows/esp32-build.yaml) workflow.
 

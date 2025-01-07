@@ -44,17 +44,6 @@ jobs:
           https://repo.hex.pm
           https://cdn.jsdelivr.net/hex
 
-    - name: Install arm-embedded toolchain
-      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
-      working-directory: /home/runner
-      run: |
-        set -euo pipefail
-        cd /home/runner
-        wget https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz \
-        --output-document=$RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
-        tar xJf $RUNNER_TEMP/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz
-        pwd && ls
-
     - name: Checkout and build libopencm3
       if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
       working-directory: /home/runner
@@ -71,7 +60,7 @@ jobs:
       run: sudo apt update
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf
+      run: sudo apt install -y cmake gperf gcc-arm-none-eabi
 
     - name: Checkout repo
       uses: actions/checkout@v4
