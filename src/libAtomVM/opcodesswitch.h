@@ -7042,8 +7042,8 @@ handle_error:
             }
         }
 
-        // Do not print crash dump if reason is normal.
-        if (x_regs[0] != LOWERCASE_EXIT_ATOM || x_regs[1] != NORMAL_ATOM) {
+        // Do not print crash dump if reason is normal or shutdown.
+        if (x_regs[0] != LOWERCASE_EXIT_ATOM || (x_regs[1] != NORMAL_ATOM && x_regs[1] != SHUTDOWN_ATOM)) {
             dump(ctx);
         }
 

@@ -28,6 +28,9 @@
 #ifndef _TERM_H_
 #define _TERM_H_
 
+// gcc-arm-none-eabi 13.2.1 with newlib requires this first
+#include <sys/types.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>

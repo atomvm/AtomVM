@@ -31,6 +31,8 @@ test() ->
     ok = test_start_child(),
     ok = test_start_child_ping_pong(),
     ok = test_supervisor_order(),
+    ok = test_terminate_delete_child(),
+    ok = test_terminate_timeout(),
     ok.
 
 test_basic_supervisor() ->
@@ -85,6 +87,53 @@ test_start_child() ->
     exit(SupPid, shutdown),
     ok.
 
+test_terminate_delete_child() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    {ok, Pid} = supervisor:start_child(SupPid, #{
+        id => child_start, start => {?MODULE, child_start, [start]}
+    }),
+    {error, not_found} = supervisor:terminate_child(SupPid, Pid),
+    {error, running} = supervisor:delete_child(SupPid, child_start),
+    ok = supervisor:terminate_child(SupPid, child_start),
+    ok = supervisor:delete_child(SupPid, child_start),
+    {error, not_found} = supervisor:delete_child(SupPid, child_start),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_terminate_timeout() ->
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    Self = self(),
+    {ok, Pid} = supervisor:start_child(SupPid, #{
+        id => child_start, start => {?MODULE, child_start, [{trap_exit, Self}]}, shutdown => 500
+    }),
+    ok = supervisor:terminate_child(SupPid, child_start),
+    ok =
+        receive
+            {Pid, {SupPid, shutdown}} -> ok
+        after 1000 -> timeout
+        end,
+    {ok, Pid2} = supervisor:restart_child(SupPid, child_start),
+    Pid2 ! ok,
+    ok = supervisor:terminate_child(SupPid, child_start),
+    ok =
+        receive
+            {Pid2, {SupPid, shutdown}} -> ok
+        after 1000 -> timeout
+        end,
+    ok = supervisor:delete_child(SupPid, child_start),
+    {ok, Pid3} = supervisor:start_child(SupPid, #{
+        id => child_start, start => {?MODULE, child_start, [{trap_exit, Self}]}, shutdown => 500
+    }),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok =
+        receive
+            {Pid3, {SupPid, shutdown}} -> ok
+        after 1000 -> timeout
+        end,
+    ok.
+
 child_start(ignore) ->
     ignore;
 child_start(start) ->
@@ -104,7 +153,18 @@ child_start(info) ->
 child_start(error) ->
     {error, child_error};
 child_start(fail) ->
-    fail.
+    fail;
+child_start({trap_exit, Parent}) ->
+    Pid = spawn_link(fun() ->
+        process_flag(trap_exit, true),
+        receive
+            {'EXIT', From, Reason} -> Parent ! {self(), {From, Reason}}
+        end,
+        receive
+            ok -> ok
+        end
+    end),
+    {ok, Pid}.
 
 test_ping_pong(SupPid) ->
     Pid1 = get_and_test_server(),

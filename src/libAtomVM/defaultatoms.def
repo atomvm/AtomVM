@@ -166,5 +166,7 @@ X(LOCAL_ATOM, "\x5", "local")
 
 X(REGISTERED_NAME_ATOM, "\xF", "registered_name")
 
+X(SHUTDOWN_ATOM, "\x8", "shutdown")
+
 X(NONODE_AT_NOHOST_ATOM, "\xD", "nonode@nohost")
 X(NET_KERNEL_ATOM, "\xA", "net_kernel")
