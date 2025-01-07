@@ -153,6 +153,7 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
+static term nif_ets_update_counter(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[]);
@@ -678,6 +679,12 @@ static const struct Nif ets_delete_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_delete
+};
+
+static const struct Nif ets_update_counter_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_update_counter
 };
 
 static const struct Nif atomvm_add_avm_pack_binary_nif =
@@ -3291,6 +3298,39 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
             RAISE_ERROR(MEMORY_ATOM);
         default:
             AVM_ABORT();
+    }
+}
+
+static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
+{
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term key = argv[1];
+    term operation = argv[2];
+    term default_value;
+    if (argc == 4) {
+        default_value = argv[3];
+        VALIDATE_VALUE(default_value, term_is_tuple);
+        term_put_tuple_element(default_value, 0, key);
+    } else {
+        default_value = term_invalid_term();
+    }
+    term ret;
+    EtsErrorCode result = ets_update_counter(ref, key, operation, default_value, &ret, ctx);
+    switch (result) {
+        case EtsOk:
+            return ret;
+        case EtsTableNotFound:
+        case EtsPermissionDenied:
+        case EtsBadEntry:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case EtsOverlfow:
+            RAISE_ERROR(OVERFLOW_ATOM);
+        default:
+            UNREACHABLE();
     }
 }
 
