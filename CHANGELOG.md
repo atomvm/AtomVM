@@ -27,6 +27,7 @@ certain VM instructions are used.
 - Fixed an issue where a timeout would occur immediately in a race condition
 - Fixed SPI close command
 - Added missing lock on socket structure
+- Fixed a race condition affecting multi-core MCUs where a timeout would not be properly cleared
 
 ## [0.6.5] - 2024-10-15
 
