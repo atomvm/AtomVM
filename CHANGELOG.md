@@ -29,6 +29,7 @@ certain VM instructions are used.
 - Added missing lock on socket structure
 - Fixed a race condition affecting multi-core MCUs where a timeout would not be properly cleared
 - Fixed a double free when esp32 uart driver was closed, yielding an assert abort
+- Fixed compilation with latest debian gcc-arm-none-eabi
 
 ## [0.6.5] - 2024-10-15
 
