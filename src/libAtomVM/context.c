@@ -178,9 +178,7 @@ void context_destroy(Context *ctx)
     // globalcontext_get_process_lock before accessing platform_data.
     // Here, the context can no longer be acquired with
     // globalcontext_get_process_lock, so it's safe to free the pointer.
-    if (ctx->platform_data) {
-        free(ctx->platform_data);
-    }
+    free(ctx->platform_data);
 
     free(ctx);
 }

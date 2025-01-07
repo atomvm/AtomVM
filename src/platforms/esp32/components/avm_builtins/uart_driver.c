@@ -309,7 +309,7 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
     int local_pid = term_to_local_process_id(pid);
 
     if (uart_data->reader_process_pid != term_invalid_term()) {
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2 , 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for error tuple");
             globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
             return;
@@ -326,7 +326,7 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
 
     if (count > 0) {
         int bin_size = term_binary_heap_size(count);
-        if (UNLIKELY(memory_ensure_free(ctx, bin_size + TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, bin_size + TUPLE_SIZE(2) * 2, 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
             globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
         }
@@ -387,7 +387,7 @@ static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
     free(buffer);
 
     int local_pid = term_to_local_process_id(pid);
-    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate space for return value");
         globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
@@ -406,7 +406,7 @@ static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
 
     sys_unregister_listener(glb, &uart_data->listener);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_close] Failed to allocate space for return value");
         globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
     }
@@ -419,6 +419,7 @@ static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
     }
 
     free(uart_data);
+    ctx->platform_data = NULL;
 }
 
 static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
