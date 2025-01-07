@@ -165,3 +165,5 @@ X(EXTERNAL_ATOM, "\x8", "external")
 X(LOCAL_ATOM, "\x5", "local")
 
 X(REGISTERED_NAME_ATOM, "\xF", "registered_name")
+
+X(SHUTDOWN_ATOM, "\x8", "shutdown")
