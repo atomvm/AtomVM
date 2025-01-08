@@ -57,6 +57,11 @@ set(AVM_SELECT_IN_TASK ON)
 
 project(atomvm-esp32-test)
 
+option(AVM_TEST_PERIPHERALS "Enable extra peripheral tests." OFF)
+if (AVM_TEST_PERIPHERALS)
+    message("\n** NOTICE: Including additional peripheral tests that will fail on QEMU!\n")
+endif()
+
 # esp-idf does not use compile_feature but instead sets version in
 # c_compile_options
 # Ensure project is compiled with at least C11
