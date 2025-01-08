@@ -65,5 +65,9 @@ The `WOKWI_CLI_TOKEN` needs to be set in your `Repository secrets` Settings -> A
 3. Now we run `idf.py build` and run the CI:
 
    ```shell
-   idf.py build -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' && pytest --embedded-services=idf,wokwi --wokwi-timeout=90000 --target=${IDF_TARGET} --wokwi-diagram=sim_boards/diagram.${IDF_TARGET}.json -s -W ignore::DeprecationWarning
+   idf.py build -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' -DAVM_TEST_PERIPHERALS='y' && \
+   pytest --embedded-services=idf,wokwi --wokwi-timeout=90000 --target=${IDF_TARGET} \
+   --wokwi-diagram=sim_boards/diagram.${IDF_TARGET}.json -s -W ignore::DeprecationWarning
    ```
+
+>Note: Configuring with the optional AVM_TEST_PERIPHERALS setting enabled (i.e.: `-DAVM_TEST_PERIPHERALS=ON`) will enable extra hardware peripheral tests that are normally omitted from the test suite because QEMU lacks full hardware support.

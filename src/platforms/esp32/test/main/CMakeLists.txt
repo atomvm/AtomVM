@@ -21,5 +21,9 @@
 idf_component_register(SRCS "test_main.c"
                     INCLUDE_DIRS ".")
 
+if (AVM_TEST_PERIPHERALS)
+    add_compile_definitions(TEST_PERIPHERALS)
+endif()
+
 add_subdirectory(test_erl_sources)
 target_link_libraries(${COMPONENT_LIB} esp32_test_modules)

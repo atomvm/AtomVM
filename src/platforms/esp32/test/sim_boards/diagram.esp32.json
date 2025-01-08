@@ -36,7 +36,9 @@
     ["sd1:DI", "esp:23", "magenta", ["h38.4", "v-96.09", "h-139.93", "v77.03"]],
     ["pot1:VCC", "esp:3V3", "red", ["h-19.2", "v-105.6", "h-139.39"]],
     ["pot1:GND", "esp:GND.2", "black", ["v0"]],
-    ["pot1:SIG", "esp:4", "green", ["h-38.4", "v47.2"]]
+    ["pot1:SIG", "esp:4", "green", ["h-38.4", "v47.2"]],
+    [ "esp:25", "esp:26", "blue", [ "v0", "h-12", "v9", "h10" ] ]
   ],
   "dependencies": {}
 }
+

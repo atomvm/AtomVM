@@ -18,7 +18,9 @@
     [ "esp:RX", "$serialMonitor:TX", "", [] ],
     [ "esp:GND.1", "pot1:GND", "black", [ "h0" ] ],
     [ "esp:3V3.2", "pot1:VCC", "red", [ "h-24.28", "v115.02" ] ],
-    [ "esp:11", "pot1:SIG", "green", [ "h-14.68", "v-48.18" ] ]
+    [ "esp:11", "pot1:SIG", "green", [ "h-14.68", "v-48.18" ] ],
+    [ "esp:4", "esp:5", "green", [ "h-12", "v10" ] ]
   ],
   "dependencies": {}
 }
+

@@ -124,7 +124,7 @@ jobs:
           export PATH=${PATH}:${HOME}/.cache/rebar3/bin
           . $IDF_PATH/export.sh
           idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' set-target ${{matrix.esp-idf-target}}
-          idf.py build
+          idf.py -DAVM_TEST_PERIPHERALS='y' build
 
       - name: Configure Wokwi environment
         run: |
