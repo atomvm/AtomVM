@@ -38,6 +38,15 @@ static ErlNifMonitor down_mon_two = 0;
 
 static int32_t lockable_pid = 0;
 
+// Helper to get the reference count.
+// Uses an internal API
+// Implementation should be updated shall resources be references instead of binaries.
+static uint32_t resource_ref_count(void *resource)
+{
+    struct RefcBinary *refc = refc_binary_from_data(resource);
+    return refc->ref_count;
+}
+
 static void resource_dtor(ErlNifEnv *env, void *resource)
 {
     UNUSED(env);
@@ -154,6 +163,7 @@ void test_resource_destroyed_with_global()
     scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
 
+    // This test currently writes a warning
     globalcontext_destroy(glb);
 
     assert(cb_read_resource == 42);
@@ -225,6 +235,8 @@ void test_resource_monitor()
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
+    assert(resource_ref_count(ptr) == 1);
+
     ErlNifMonitor mon;
     Context *ctx;
     int32_t pid;
@@ -239,11 +251,13 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
+    assert(resource_ref_count(ptr) == 2);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
     assert(down_pid == pid);
     assert(enif_compare_monitors(&mon, &down_mon) == 0);
+    assert(resource_ref_count(ptr) == 1);
 
     // Monitor not called if demonitored
     cb_read_resource = 0;
@@ -254,15 +268,18 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
+    assert(resource_ref_count(ptr) == 2);
 
     monitor_result = enif_demonitor_process(&env, ptr, &mon);
     assert(monitor_result == 0);
+    assert(resource_ref_count(ptr) == 1);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
     assert(down_pid == 0);
 
-    // Monitor not called if resource is deallocated
+    // Resource not deallocated until demonitored
+    assert(resource_ref_count(ptr) == 1);
     cb_read_resource = 0;
     down_pid = 0;
     down_mon = 0;
@@ -271,9 +288,15 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
+    assert(resource_ref_count(ptr) == 2);
 
     int release_result = enif_release_resource(ptr);
     assert(release_result);
+    assert(cb_read_resource == 0);
+    assert(resource_ref_count(ptr) == 1);
+
+    monitor_result = enif_demonitor_process(&env, ptr, &mon);
+    assert(monitor_result == 0);
     assert(cb_read_resource == 42);
 
     cb_read_resource = 0;
@@ -332,6 +355,9 @@ void test_resource_monitor_handler_can_lock()
     assert(enif_compare_monitors(&mon, &down_mon) == 0);
 
     scheduler_terminate(another_ctx);
+
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
 
     globalcontext_destroy(glb);
 }
@@ -419,6 +445,11 @@ void test_resource_monitor_two_resources_two_processes()
     assert(cb_read_resource_two == 0);
     assert(down_pid == pid_2);
     assert(enif_compare_monitors(&mon_3, &down_mon) == 0);
+
+    int release_result = enif_release_resource(ptr_1);
+    assert(release_result);
+    release_result = enif_release_resource(ptr_2);
+    assert(release_result);
 
     globalcontext_destroy(glb);
 }

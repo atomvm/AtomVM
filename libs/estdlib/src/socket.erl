@@ -229,29 +229,47 @@ accept(Socket) ->
 %%          be set to listen for connections.
 %%
 %%          Note that this function will block until a connection is made
-%%          from a client.  Typically, users will spawn a call to `accept'
-%%          in a separate process.
+%%          from a client, unless `nowait' or a reference is passed as `Timeout'.
+%%          Typically, users will spawn a call to `accept' in a separate process.
 %%
 %% Example:
 %%
 %%          `{ok, ConnectedSocket} = socket:accept(ListeningSocket)'
 %% @end
 %%-----------------------------------------------------------------------------
--spec accept(Socket :: socket(), Timeout :: timeout()) ->
-    {ok, Connection :: socket()} | {error, Reason :: term()}.
+-spec accept(Socket :: socket(), Timeout :: timeout() | nowait | reference()) ->
+    {ok, Connection :: socket()}
+    | {select, {select_info, accept, reference()}}
+    | {error, Reason :: term()}.
+accept(Socket, 0) ->
+    accept0_noselect(Socket);
+accept(Socket, nowait) ->
+    accept0_nowait(Socket, erlang:make_ref());
+accept(Socket, Ref) when is_reference(Ref) ->
+    accept0_nowait(Socket, Ref);
 accept(Socket, Timeout) ->
+    accept0(Socket, Timeout).
+
+accept0_noselect(Socket) ->
+    case ?MODULE:nif_accept(Socket) of
+        {error, _} = E ->
+            E;
+        {ok, _Socket} = Reply ->
+            Reply
+    end.
+
+accept0(Socket, Timeout) ->
     Ref = erlang:make_ref(),
-    ?TRACE("select read for accept.  self=~p ref=~p~n", [self(), Ref]),
     case ?MODULE:nif_select_read(Socket, Ref) of
         ok ->
             receive
                 {'$socket', Socket, select, Ref} ->
                     case ?MODULE:nif_accept(Socket) of
-                        {error, closed} = E ->
+                        {error, _} = E ->
                             ?MODULE:nif_select_stop(Socket),
                             E;
-                        R ->
-                            R
+                        {ok, _Socket} = Reply ->
+                            Reply
                     end;
                 {'$socket', Socket, abort, {Ref, closed}} ->
                     % socket was closed by another process
@@ -259,14 +277,27 @@ accept(Socket, Timeout) ->
                     % (a) SELECT_STOP being scheduled
                     % (b) flush of messages as we can have both in the
                     % queue
-                    {error, closed};
-                Other ->
-                    {error, {accept, unexpected, Other, {'$socket', Socket, select, Ref}}}
+                    {error, closed}
             after Timeout ->
                 {error, timeout}
             end;
         {error, _Reason} = Error ->
             Error
+    end.
+
+accept0_nowait(Socket, Ref) ->
+    case ?MODULE:nif_accept(Socket) of
+        {error, eagain} ->
+            case ?MODULE:nif_select_read(Socket, Ref) of
+                ok ->
+                    {select, {select_info, accept, Ref}};
+                {error, _} = SelectError ->
+                    SelectError
+            end;
+        {error, _} = RecvError ->
+            RecvError;
+        {ok, _Socket} = Reply ->
+            Reply
     end.
 
 %%-----------------------------------------------------------------------------

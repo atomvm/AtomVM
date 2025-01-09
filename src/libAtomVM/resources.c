@@ -378,6 +378,7 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
 
     struct ResourceMonitor *monitor = context_resource_monitor(target, obj);
     list_append(&resource->resource_type->monitors, &monitor->resource_list_head);
+    refc_binary_increment_refcount(resource);
     globalcontext_get_process_unlock(env->global, target);
 
     if (mon) {
@@ -405,6 +406,7 @@ int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
             list_remove(&monitor->resource_list_head);
             list_remove(&monitor->base.monitor_list_head);
             free(monitor);
+            refc_binary_decrement_refcount(resource, global);
             synclist_unlock(&global->processes_table);
             return 0;
         }
@@ -413,26 +415,6 @@ int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
     synclist_unlock(&global->processes_table);
 
     return -1;
-}
-
-void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global)
-{
-    struct ListHead *processes_table_list = synclist_wrlock(&global->processes_table);
-    UNUSED(processes_table_list);
-    term monitor_obj = ((term) resource->data) | TERM_BOXED_VALUE_TAG;
-
-    struct ListHead *item;
-    struct ListHead *tmp;
-    MUTABLE_LIST_FOR_EACH (item, tmp, &resource->resource_type->monitors) {
-        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
-        if (monitor->base.monitor_obj == monitor_obj) {
-            list_remove(&monitor->resource_list_head);
-            list_remove(&monitor->base.monitor_list_head);
-            free(monitor);
-        }
-    }
-
-    synclist_unlock(&global->processes_table);
 }
 
 int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *monitor2)
