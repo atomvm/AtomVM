@@ -3539,35 +3539,96 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     return term_invalid_term();
 }
 
+static inline term get_option_key(term option, term *maybe_value)
+{
+    *maybe_value = term_invalid_term();
+    if (LIKELY(term_is_atom(option))) {
+        return option;
+    }
+
+    bool is_tuple = term_is_tuple(option) && term_get_tuple_arity(option) == 2;
+    if (UNLIKELY(!is_tuple)) {
+        return term_invalid_term();
+    }
+    term first = term_get_tuple_element(option, 0);
+    term second = term_get_tuple_element(option, 1);
+    if (UNLIKELY(!term_is_atom(first))) {
+        return term_invalid_term();
+    }
+
+    *maybe_value = second;
+    return first;
+}
+
 static term nif_ets_new(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-
     term name = argv[0];
-    VALIDATE_VALUE(name, term_is_atom);
-
     term options = argv[1];
+    VALIDATE_VALUE(name, term_is_atom);
     VALIDATE_VALUE(options, term_is_list);
 
-    term is_named = interop_kv_get_value_default(options, ATOM_STR("\xB", "named_table"), FALSE_ATOM, ctx->global);
-    term keypos = interop_kv_get_value_default(options, ATOM_STR("\x6", "keypos"), term_from_int(1), ctx->global);
+    bool is_named = false;
+    bool private = false;
+    bool public = false;
+    bool is_duplicate_bag = false;
+    avm_int_t keypos = 1;
 
-    if (term_to_int(keypos) < 1) {
-        RAISE_ERROR(BADARG_ATOM);
+    while (term_is_nonempty_list(options)) {
+        term head = term_get_list_head(options);
+        term value;
+        term key_atom = get_option_key(head, &value);
+        VALIDATE_VALUE(key_atom, term_is_atom);
+
+        switch (key_atom) {
+            case NAMED_TABLE_ATOM: {
+                is_named = true;
+                break;
+            }
+            case PRIVATE_ATOM: {
+                private = true;
+                public = false;
+                break;
+            }
+            case PUBLIC_ATOM: {
+                private = false;
+                public = true;
+                break;
+            }
+            case SET_ATOM: {
+                is_duplicate_bag = false;
+                break;
+            }
+            case DUPLICATE_BAG_ATOM: {
+                is_duplicate_bag = true;
+                break;
+            }
+            case KEYPOS_ATOM: {
+                VALIDATE_VALUE(value, term_is_integer);
+                keypos = term_to_int(value);
+                if (UNLIKELY(keypos < 1)) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                break;
+            }
+            default:
+                RAISE_ERROR(BADARG_ATOM);
+        }
+        options = term_get_list_tail(options);
     }
-
-    term private = interop_kv_get_value(options, ATOM_STR("\x7", "private"), ctx->global);
-    term public = interop_kv_get_value(options, ATOM_STR("\x6", "public"), ctx->global);
+    VALIDATE_VALUE(options, term_is_nil);
 
     EtsAccessType access = EtsAccessProtected;
-    if (!term_is_invalid_term(private)) {
+    if (private) {
         access = EtsAccessPrivate;
-    } else if (!term_is_invalid_term(public)) {
+    } else if (public) {
         access = EtsAccessPublic;
     }
 
+    EtsTableType type = is_duplicate_bag ? EtsTableDuplicateBag : EtsTableSet;
+
     term table = term_invalid_term();
-    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
+    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named, type, access, keypos - 1, &table, ctx);
     switch (result) {
         case EtsOk:
             return table;

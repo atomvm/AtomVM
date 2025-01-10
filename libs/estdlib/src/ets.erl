@@ -43,7 +43,7 @@
 ]).
 
 -opaque table() :: atom | reference().
--type table_type() :: set.
+-type table_type() :: set | duplicate_bag.
 -type access_type() :: private | protected | public.
 -type option() :: table_type() | {keypos, non_neg_integer()} | access_type().
 -type options() :: [option()].
