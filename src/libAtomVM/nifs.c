@@ -47,6 +47,7 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "mailbox.h"
+#include "md5.h"
 #include "memory.h"
 #include "module.h"
 #include "platform_nifs.h"
@@ -177,6 +178,7 @@ static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
+static term nif_erlang_md5(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_close_avm_pack(Context *ctx, int argc, term argv[]);
@@ -707,6 +709,11 @@ static const struct Nif raise_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_raise
+};
+
+static const struct Nif md5_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_md5
 };
 
 static const struct Nif ets_new_nif =
@@ -4475,6 +4482,57 @@ static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[])
     globalcontext_get_process_unlock(ctx->global, net_kernel);
 
     return TRUE_ATOM;
+}
+
+static InteropFunctionResult md5_hash_vendored_fold_fun(term t, void *accum)
+{
+    MD5Context *ctx = (MD5Context *) accum;
+    if (term_is_integer(t)) {
+        avm_int64_t tmp = term_maybe_unbox_int64(t);
+        if (tmp < 0 || tmp > 255) {
+            return InteropBadArg;
+        }
+        uint8_t val = (uint8_t) tmp;
+        md5Update(ctx, &val, 1);
+    } else /* term_is_binary(t) */ {
+        md5Update(ctx, (uint8_t *) term_binary_data(t), term_binary_size(t));
+    }
+    return InteropOk;
+}
+
+static bool do_md5_hash_vendored(term data, unsigned char *dst)
+{
+    MD5Context ctx;
+    md5Init(&ctx);
+
+    InteropFunctionResult result = interop_chardata_fold(data, md5_hash_vendored_fold_fun, NULL, (void *) &ctx);
+    if (UNLIKELY(result != InteropOk)) {
+        return false;
+    }
+
+    md5Finalize(&ctx);
+    memcpy(dst, ctx.digest, 16);
+
+    return true;
+}
+
+#define MAX_MD_SIZE 64
+static term nif_erlang_md5(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term data = argv[0];
+
+    unsigned char digest[MAX_MD_SIZE];
+    size_t digest_len = 16;
+
+    if (UNLIKELY(!do_md5_hash_vendored(data, digest))) {
+        RAISE_ERROR(BADARG_ATOM)
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(digest_len)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
 }
 
 struct RefcBinaryAVMPack
