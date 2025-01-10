@@ -48,6 +48,8 @@ extern "C" {
 
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
 
+// spawn opt is used by distribution nifs
+term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[]);
 #ifdef __cplusplus
 }
 #endif
