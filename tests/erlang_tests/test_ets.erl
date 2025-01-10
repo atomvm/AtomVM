@@ -49,20 +49,26 @@ test_ets_new() ->
     assert_badarg(fun() -> ets:new(keypos_test, [{keypos, -1}]) end),
 
     ets:new(type_test, [set]),
-
-    % Unimplemented
-    ets:new(type_test, [ordered_set]),
-    ets:new(type_test, [bag]),
     ets:new(type_test, [duplicate_bag]),
-    ets:new(heir_test, [{heir, self(), []}]),
-    ets:new(heir_test, [{heir, none}]),
-    ets:new(write_conc_test, [{write_concurrency, true}]),
-    ets:new(read_conc_test, [{read_concurrency, true}]),
-    case otp_version() of
-        OTP when OTP >= 23 -> ets:new(decent_counters_test, [{decentralized_counters, true}]);
-        _ -> ok
+
+    % Unimplemented in AtomVM
+    Options = [
+        fun() -> ets:new(type_test, [ordered_set]) end,
+        fun() -> ets:new(type_test, [bag]) end,
+        fun() -> ets:new(heir_test, [{heir, self(), []}]) end,
+        fun() -> ets:new(heir_test, [{heir, none}]) end,
+        fun() -> ets:new(write_conc_test, [{write_concurrency, true}]) end,
+        fun() -> ets:new(read_conc_test, [{read_concurrency, true}]) end,
+        fun() -> ets:new(compressed_test, [compressed]) end
+    ],
+    Otp23Options = [
+        fun() -> ets:new(decent_counters_test, [{decentralized_counters, true}]) end | Options
+    ],
+    case vm_version() of
+        atom -> [assert_badarg(NewF) || NewF <- Otp23Options];
+        {otp, V} when V >= 23 -> [NewF() || NewF <- Otp23Options];
+        {otp, _V} -> [NewF() || NewF <- Options]
     end,
-    ets:new(compressed_test, [compressed]),
     ok.
 
 test_permissions() ->
@@ -290,32 +296,32 @@ isolated(Fun) ->
     end.
 
 assert_badarg(Fun) ->
-    try
-        Fun(),
-        erlang:error(no_throw)
+    try Fun() of
+        R -> erlang:error({no_throw, R})
     catch
         error:badarg ->
             ok;
-        OtherClass:OtherError ->
-            erlang:error({OtherClass, OtherError})
+        C:E ->
+            erlang:error({C, E})
     end.
 
 supports_v4_port_encoding() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            % small utf8 atom
-            true;
-        "BEAM" ->
-            OTP = otp_version(),
-            if
-                OTP < 24 -> false;
-                % v4 is supported but not the default
-                OTP < 26 -> true;
-                % small utf8 atom
-                true -> true
-            end
+    case vm_version() of
+        % small utf8 atom
+        atom -> true;
+        {otp, V} when V < 24 -> false;
+        % v4 is supported but not the default
+        {otp, V} when V < 26 -> true;
+        % small utf8 atom
+        {otp, _} -> true
     end.
 
-otp_version() ->
-    OTPRelease = erlang:system_info(otp_release),
-    list_to_integer(OTPRelease).
+vm_version() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            atom;
+        "BEAM" ->
+            OTPRelease = erlang:system_info(otp_release),
+            Version = list_to_integer(OTPRelease),
+            {otp, Version}
+    end.
