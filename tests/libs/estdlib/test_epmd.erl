@@ -23,6 +23,37 @@
 -export([test/0]).
 
 test() ->
+    % AtomVM's epmd only runs on AtomVM and OTP 24+
+    CanRunEpmd =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                true;
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                OTPRelease >= "24"
+        end,
+    if
+        CanRunEpmd ->
+            case stop_epmd() of
+                ok ->
+                    {ok, Pid} = epmd:start_link([]),
+                    ok = test_client(),
+                    ok = test_two_clients(),
+                    MonitorRef = monitor(process, Pid),
+                    unlink(Pid),
+                    exit(Pid, shutdown),
+                    ok =
+                        receive
+                            {'DOWN', MonitorRef, process, Pid, shutdown} -> ok
+                        after 5000 -> timeout
+                        end,
+                    ok;
+                {error, not_found} ->
+                    ok
+            end;
+        true ->
+            ok
+    end,
     case start_epmd() of
         ok ->
             ok = test_client(),
@@ -58,11 +89,50 @@ ensure_epmd("ATOM") ->
     ok = atomvm:posix_close(Fd),
     ok.
 
+stop_epmd("BEAM") ->
+    case os:cmd("epmd -kill") of
+        "Killed\n" ->
+            timer:sleep(500),
+            ok;
+        "epmd: Cannot connect to local epmd\n" ->
+            ok;
+        "Killing not allowed - " ->
+            {error, not_allowed}
+    end;
+stop_epmd("ATOM") ->
+    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "epmd -kill 2>&1"], undefined, [stdout]),
+    Result =
+        case atomvm:posix_read(Fd, 200) of
+            eof ->
+                {error, eof};
+            {ok, <<"Killed\n">>} ->
+                timer:sleep(500),
+                ok;
+            {ok, <<"epmd: Cannot connect to local epmd\n">>} ->
+                ok;
+            {ok, <<"Killing not allowed - ", _/binary>>} ->
+                {error, not_allowed}
+        end,
+    ok = atomvm:posix_close(Fd),
+    Result.
+
 start_epmd() ->
     Platform = erlang:system_info(machine),
     case has_epmd(Platform) of
         true ->
-            ok = ensure_epmd(Platform);
+            ok = ensure_epmd(Platform),
+            % on CI, epmd may be slow to accept connections
+            timer:sleep(500),
+            ok;
+        false ->
+            {error, not_found}
+    end.
+
+stop_epmd() ->
+    Platform = erlang:system_info(machine),
+    case has_epmd(Platform) of
+        true ->
+            stop_epmd(Platform);
         false ->
             {error, not_found}
     end.
