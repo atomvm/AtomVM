@@ -30,6 +30,7 @@ certain VM instructions are used.
 - Fixed a race condition affecting multi-core MCUs where a timeout would not be properly cleared
 - Fixed a double free when esp32 uart driver was closed, yielding an assert abort
 - Fixed compilation with latest debian gcc-arm-none-eabi
+- Fix `network:stop/0` on ESP32 so the network can be started again
 
 ## [0.6.5] - 2024-10-15
 
