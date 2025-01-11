@@ -25,6 +25,8 @@
 start() ->
     case verify_platform(atomvm:platform()) of
         ok ->
+            ok = start_network(),
+            ok = network:stop(),
             start_network(),
             loop(0);
         Error ->

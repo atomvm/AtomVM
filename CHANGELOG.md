@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the ability to run beams from the CLI for Generic Unix platform (it was already possible with nodejs and emscripten).
 - Added support for 'erlang:--/2'.
+- Added preliminary support for ESP32P4 (no networking support yet).
 
 ### Fixed
 
@@ -47,6 +48,7 @@ certain VM instructions are used.
 - Fixed a race condition affecting multi-core MCUs where a timeout would not be properly cleared
 - Fixed a double free when esp32 uart driver was closed, yielding an assert abort
 - Fixed compilation with latest debian gcc-arm-none-eabi
+- Fix `network:stop/0` on ESP32 so the network can be started again
 
 ## [0.6.5] - 2024-10-15
 

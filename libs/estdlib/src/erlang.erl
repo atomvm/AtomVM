@@ -267,6 +267,7 @@ process_info(_Pid, _Key) ->
 %%      <li><b>esp32_free_heap_size</b> the number of (noncontiguous) free bytes in the ESP32 heap (integer)</li>
 %%      <li><b>esp32_largest_free_block</b> the number of the largest contiguous free bytes in the ESP32 heap (integer)</li>
 %%      <li><b>esp32_minimum_free_size</b> the smallest number of free bytes in the ESP32 heap since boot (integer)</li>
+%%      <li><b>esp32_chip_info</b> Details about the model and capabilities of the ESP32 device (map)</li>
 %% </ul>
 %%
 %% Additional keys may be supported on some platforms that are not documented here.
