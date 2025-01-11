@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `supervisor:terminate_child/2`, `supervisor:restart_child/2` and `supervisor:delete_child/2`
 - Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
 - Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
+- Added `erl_epmd` client implementation to epmd using `socket` module
 
 ### Changed
 
