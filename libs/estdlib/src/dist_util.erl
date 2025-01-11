@@ -229,7 +229,27 @@ handshake_other_started(#hs_data{socket = Socket, f_recv = Recv} = HSData0) ->
     end.
 
 -spec handshake_we_started(#hs_data{}) -> no_return().
-handshake_we_started(#hs_data{}) -> ok.
+handshake_we_started(#hs_data{} = HSData0) ->
+    HSData1 = HSData0#hs_data{
+        other_started = false,
+        this_flags = ?MANDATORY_DFLAGS
+    },
+    send_name(HSData1),
+    case recv_status(HSData1) of
+        <<"ok">> -> ok;
+        <<"ok_simultaneous">> -> ok;
+        <<"nok">> -> ?shutdown({HSData1#hs_data.other_node, simultaneous});
+        <<"alive">> -> send_status(<<"true">>, HSData1);
+        Other -> ?shutdown({HSData1#hs_data.other_node, {unexpected, Other}})
+    end,
+    Cookie = net_kernel:get_cookie(HSData1#hs_data.other_node),
+    {OtherChallenge, OtherFlags, Creation} = recv_challenge(HSData1),
+    check_flags(OtherFlags, HSData1),
+    <<MyChallenge:32>> = crypto:strong_rand_bytes(4),
+    send_challenge_reply(Cookie, OtherChallenge, MyChallenge, HSData1),
+    OtherDigest = recv_challenge_ack(HSData1),
+    check_challenge(Cookie, MyChallenge, OtherDigest, HSData1),
+    connection(HSData1, Creation).
 
 % We are connected
 -spec connection(#hs_data{}, non_neg_integer()) -> no_return().
@@ -359,6 +379,20 @@ check_flags(Flags0, HSData) ->
             ?shutdown(Reason)
     end.
 
+% send name
+send_name(
+    #hs_data{socket = Socket, f_send = Send, this_node = ThisNode, this_flags = ThisFlags} = HSData
+) ->
+    Creation = atomvm:get_creation(),
+    NodeName = atom_to_binary(ThisNode, latin1),
+    NameLen = byte_size(NodeName),
+    case Send(Socket, <<$N, ThisFlags:64, Creation:32, NameLen:16, NodeName/binary>>) of
+        {error, _} = Error ->
+            ?shutdown2({HSData#hs_data.other_node, Socket}, {send_name_failed, Error});
+        ok ->
+            ok
+    end.
+
 % Ensure name is somewhat valid
 -spec check_name(binary()) -> ok.
 check_name(Name) ->
@@ -378,13 +412,13 @@ send_status(Status, #hs_data{socket = Socket, f_send = Send} = HSData) ->
             ok
     end.
 
--spec recv_status_reply(#hs_data{}) -> binary().
-recv_status_reply(#hs_data{socket = Socket, f_recv = Recv} = HSData) ->
+-spec recv_status(#hs_data{}) -> binary().
+recv_status(#hs_data{socket = Socket, f_recv = Recv} = HSData) ->
     case Recv(Socket, 0, infinity) of
         {ok, <<$s, Result/binary>>} ->
             Result;
         {ok, Other} ->
-            ?shutdown({HSData#hs_data.other_node, {unexpected, recv_status_reply, Other}});
+            ?shutdown({HSData#hs_data.other_node, {unexpected, recv_status, Other}});
         {error, Reason} ->
             ?shutdown2({HSData#hs_data.other_node, recv_error}, Reason)
     end.
@@ -403,7 +437,7 @@ mark_pending(#hs_data{kernel_pid = Kernel, this_node = ThisNode, other_node = Ot
         alive ->
             send_status(<<"alive">>, HSData),
             reset_timer(HSData#hs_data.timer),
-            case recv_status_reply(HSData) of
+            case recv_status(HSData) of
                 <<"true">> -> ok;
                 <<"false">> -> ?shutdown(OtherNode);
                 Other -> ?shutdown({OtherNode, {unexpected, Other}})
@@ -434,6 +468,28 @@ send_challenge(
             ok
     end.
 
+recv_challenge(
+    #hs_data{other_node = OtherNode, socket = Socket, f_recv = Recv} = HSData
+) ->
+    case Recv(Socket, 0, infinity) of
+        {ok, <<
+            $N, OtherFlags:64, Challenge:32, OtherCreation:32, _OtherNameLen:16, OtherName/binary
+        >>} ->
+            case atom_to_binary(OtherNode, utf8) =/= OtherName of
+                true ->
+                    ?shutdown({
+                        HSData#hs_data.other_node, {mismatch, recv_challenge, OtherNode, OtherName}
+                    });
+                false ->
+                    ok
+            end,
+            {Challenge, OtherFlags, OtherCreation};
+        {ok, Other} ->
+            ?shutdown({HSData#hs_data.other_node, {unexpected, recv_challenge, Other}});
+        {error, Reason} ->
+            ?shutdown2({HSData#hs_data.other_node, recv_error}, Reason)
+    end.
+
 -spec recv_challenge_reply(#hs_data{}) -> {non_neg_integer(), binary()}.
 recv_challenge_reply(#hs_data{socket = Socket, f_recv = Recv} = HSData) ->
     case Recv(Socket, 0, infinity) of
@@ -443,6 +499,23 @@ recv_challenge_reply(#hs_data{socket = Socket, f_recv = Recv} = HSData) ->
             ?shutdown({HSData#hs_data.other_node, {unexpected, recv_challenge_reply, Other}});
         {error, Reason} ->
             ?shutdown2({HSData#hs_data.other_node, recv_error}, Reason)
+    end.
+
+-spec send_challenge_reply(
+    Cookie :: binary(),
+    OtherChallenge :: non_neg_integer(),
+    MyChallenge :: non_neg_integer(),
+    #hs_data{}
+) -> ok.
+send_challenge_reply(
+    Cookie, OtherChallenge, MyChallenge, #hs_data{socket = Socket, f_send = Send} = HSData
+) ->
+    Digest = gen_digest(Cookie, OtherChallenge),
+    case Send(Socket, <<$r, MyChallenge:32, Digest:16/binary>>) of
+        {error, _} = Error ->
+            ?shutdown2({HSData#hs_data.other_node, Socket}, {send_challenge_reply_failed, Error});
+        ok ->
+            ok
     end.
 
 -spec check_challenge(
@@ -468,6 +541,17 @@ send_challenge_ack(Cookie, Challenge, #hs_data{socket = Socket, f_send = Send} =
             ?shutdown2({HSData#hs_data.other_node, Socket}, {send_challenge_failed, Error});
         ok ->
             ok
+    end.
+
+-spec recv_challenge_ack(#hs_data{}) -> binary().
+recv_challenge_ack(#hs_data{socket = Socket, f_recv = Recv} = HSData) ->
+    case Recv(Socket, 0, infinity) of
+        {ok, <<$a, Digest/binary>>} ->
+            Digest;
+        {ok, Other} ->
+            ?shutdown({HSData#hs_data.other_node, {unexpected, recv_challenge_ack, Other}});
+        {error, _} = Error ->
+            ?shutdown2({HSData#hs_data.other_node, Socket}, {recv_challenge_ack, Error})
     end.
 
 -spec shutdown(atom(), non_neg_integer(), term()) -> no_return().

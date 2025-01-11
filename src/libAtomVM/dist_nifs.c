@@ -167,6 +167,19 @@ static void dist_enqueue_message(term control_message, term payload, struct Dist
     }
 }
 
+static void dist_enqueue_reg_send_message(int32_t local_process_id, term remote_process_name, term payload, struct DistConnection *connection, GlobalContext *global)
+{
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(4), heap)
+    term control_message = term_alloc_tuple(4, &heap);
+    term_put_tuple_element(control_message, 0, term_from_int(OPERATION_REG_SEND));
+    term_put_tuple_element(control_message, 1, term_from_local_process_id(local_process_id));
+    term_put_tuple_element(control_message, 2, term_nil()); // unused
+    term_put_tuple_element(control_message, 3, remote_process_name);
+
+    dist_enqueue_message(control_message, payload, connection, global);
+    END_WITH_STACK_HEAP(heap, global)
+}
+
 static void dist_enqueue_send_sender_message(int32_t local_process_id, term remote_process_id, term payload, struct DistConnection *connection, GlobalContext *global)
 {
     BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3), heap)
@@ -252,27 +265,39 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
     uint32_t creation = term_maybe_unbox_int(term_get_tuple_element(argv[2], 1));
     int node_atom_index = term_to_atom_index(argv[0]);
 
+    struct DistConnection *conn_obj = NULL;
+
     // Ensure we don't already know this node.
     struct ListHead *dist_connections = synclist_wrlock(&ctx->global->dist_connections);
     struct ListHead *item;
     LIST_FOR_EACH (item, dist_connections) {
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
-        if (dist_connection->node_atom_index == node_atom_index && dist_connection->node_creation == creation) {
-            synclist_unlock(&ctx->global->dist_connections);
-            RAISE_ERROR(BADARG_ATOM);
+        if (dist_connection->node_atom_index == node_atom_index) {
+            if (dist_connection->connection_process_id == INVALID_PROCESS_ID) {
+                conn_obj = dist_connection;
+                break;
+            } else if (dist_connection->node_creation == creation) {
+                synclist_unlock(&ctx->global->dist_connections);
+                RAISE_ERROR(BADARG_ATOM);
+            }
         }
     }
 
     // Create a resource object
-    struct DistConnection *conn_obj = enif_alloc_resource(ctx->global->dist_connection_resource_type, sizeof(struct DistConnection));
-    if (IS_NULL_PTR(conn_obj)) {
-        synclist_unlock(&ctx->global->dist_connections);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    if (conn_obj == NULL) {
+        conn_obj = enif_alloc_resource(ctx->global->dist_connection_resource_type, sizeof(struct DistConnection));
+        if (IS_NULL_PTR(conn_obj)) {
+            synclist_unlock(&ctx->global->dist_connections);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        conn_obj->node_atom_index = node_atom_index;
+        synclist_init(&conn_obj->remote_monitors);
+        synclist_init(&conn_obj->pending_packets);
+        list_prepend(dist_connections, &conn_obj->head);
     }
-    conn_obj->node_atom_index = node_atom_index;
+
+    // Finish initialization if connection was created for auto connect
     conn_obj->node_creation = creation;
-    synclist_init(&conn_obj->remote_monitors);
-    synclist_init(&conn_obj->pending_packets);
 
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     conn_obj->connection_process_id = term_to_local_process_id(argv[1]);
@@ -280,7 +305,6 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
         synclist_unlock(&ctx->global->dist_connections);
         RAISE_ERROR(BADARG_ATOM);
     }
-    list_prepend(dist_connections, &conn_obj->head);
     synclist_unlock(&ctx->global->dist_connections);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -300,8 +324,11 @@ static term nif_erlang_dist_ctrl_get_data_notification(Context *ctx, int argc, t
     struct DistConnection *conn_obj = (struct DistConnection *) rsrc_obj_ptr;
 
     struct ListHead *pending_packets = synclist_wrlock(&conn_obj->pending_packets);
-    UNUSED(pending_packets); // without SMP, this would appear as a statement with no effect
-    conn_obj->selecting_process_id = ctx->process_id;
+    if (!list_is_empty(pending_packets)) {
+        globalcontext_send_message(ctx->global, ctx->process_id, DIST_DATA_ATOM);
+    } else {
+        conn_obj->selecting_process_id = ctx->process_id;
+    }
     synclist_unlock(&conn_obj->pending_packets);
 
     return OK_ATOM;
@@ -450,6 +477,19 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             synclist_unlock(&conn_obj->remote_monitors);
             break;
         }
+        case OPERATION_SEND_SENDER: {
+            if (UNLIKELY(arity != 3)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            term target = term_get_tuple_element(control, 2);
+            if (UNLIKELY(!term_is_local_pid(target))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
+            int target_process_id = term_to_local_process_id(target);
+            term payload = externalterm_to_term_with_roots(data + 1 + bytes_read, binary_len - 1 - bytes_read, ctx, ExternalTermCopy, &bytes_read, 2, argv);
+            globalcontext_send_message(ctx->global, target_process_id, payload);
+            break;
+        }
         case OPERATION_SPAWN_REQUEST: {
             if (UNLIKELY(arity != 6)) {
                 RAISE_ERROR(BADARG_ATOM);
@@ -506,21 +546,95 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-void dist_send_message(term external_pid, term payload, Context *ctx)
+term dist_send_message(term target, term payload, Context *ctx)
 {
+    if (UNLIKELY(!term_is_external_pid(target) && !term_is_tuple(target))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int node_atom_index;
+    uint32_t node_creation = 0; // required for not smart-enough gcc
+    term registered_name_atom = term_invalid_term();
+    if (term_is_external_pid(target)) {
+        node_atom_index = term_to_atom_index(term_get_external_node(target));
+        node_creation = term_get_external_node_creation(target);
+    } else {
+        if (UNLIKELY(term_get_tuple_arity(target) != 2)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        registered_name_atom = term_get_tuple_element(target, 0);
+        term node_atom = term_get_tuple_element(target, 1);
+        if (UNLIKELY(!term_is_atom(registered_name_atom) || !term_is_atom(node_atom))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        node_atom_index = term_to_atom_index(node_atom);
+    }
+
     // Search for dhandle.
-    int node_atom_index = term_to_atom_index(term_get_external_node(external_pid));
-    uint32_t node_creation = term_get_external_node_creation(external_pid);
     struct ListHead *dist_connections = synclist_rdlock(&ctx->global->dist_connections);
     struct ListHead *item;
     LIST_FOR_EACH (item, dist_connections) {
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
-        if (dist_connection->node_atom_index == node_atom_index && dist_connection->node_creation == node_creation) {
-            dist_enqueue_send_sender_message(ctx->process_id, external_pid, payload, dist_connection, ctx->global);
-            break;
+        if (dist_connection->node_atom_index == node_atom_index) {
+            if (!term_is_invalid_term(registered_name_atom)) {
+                dist_enqueue_reg_send_message(ctx->process_id, registered_name_atom, payload, dist_connection, ctx->global);
+                synclist_unlock(&ctx->global->dist_connections);
+                return payload;
+            } else if (dist_connection->node_creation == node_creation) {
+                dist_enqueue_send_sender_message(ctx->process_id, target, payload, dist_connection, ctx->global);
+                synclist_unlock(&ctx->global->dist_connections);
+                return payload;
+            } else {
+                // creation doesn't match, but we don't need to connect
+                // to a node with the proper creation
+                synclist_unlock(&ctx->global->dist_connections);
+                return payload;
+            }
         }
     }
+
+    // We're not connected to the node
+    // To ensure that signals are delivered in order, we add the entry in the
+    // list of connections now (while we're holding the lock), and we enqueue
+    // the message. Then we also trigger a connection, which, if it fails,
+    // will remove the entry and purge the pending list of messages.
+
+    // Create a resource object
+    struct DistConnection *new_conn_obj = enif_alloc_resource(ctx->global->dist_connection_resource_type, sizeof(struct DistConnection));
+    if (IS_NULL_PTR(new_conn_obj)) {
+        synclist_unlock(&ctx->global->dist_connections);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    new_conn_obj->node_atom_index = node_atom_index;
+    new_conn_obj->node_creation = 0;
+    new_conn_obj->connection_process_id = INVALID_PROCESS_ID;
+    synclist_init(&new_conn_obj->remote_monitors);
+    synclist_init(&new_conn_obj->pending_packets);
+    list_prepend(dist_connections, &new_conn_obj->head);
+
+    // Enqueue message
+    if (!term_is_external_pid(target)) {
+        dist_enqueue_reg_send_message(ctx->process_id, registered_name_atom, payload, new_conn_obj, ctx->global);
+    } else {
+        dist_enqueue_send_sender_message(ctx->process_id, target, payload, new_conn_obj, ctx->global);
+    }
+
+    // We can unlock list now
     synclist_unlock(&ctx->global->dist_connections);
+
+    // Eventually, tell kernel to connect
+    term net_kernel_proc = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
+    if (term_is_local_pid(net_kernel_proc)) {
+        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, heap)
+        term autoconnect_message = term_alloc_tuple(3, &heap);
+        term_put_tuple_element(autoconnect_message, 0, CONNECT_ATOM);
+        term_put_tuple_element(autoconnect_message, 1, term_from_atom_index(node_atom_index));
+        term_put_tuple_element(autoconnect_message, 2, term_from_resource(new_conn_obj, &heap));
+
+        globalcontext_send_message(ctx->global, term_to_local_process_id(net_kernel_proc), autoconnect_message);
+        END_WITH_STACK_HEAP(heap, ctx->global)
+    }
+    return payload;
 }
 
 void dist_spawn_reply(term req_id, term to_pid, bool link, bool monitor, term result, struct DistConnection *connection, GlobalContext *global)
