@@ -690,7 +690,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         port_send_reply(ctx, pid, ref, error);
         return;
     }
-    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_RAM)) != ESP_OK)) {
+    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to set ESP WiFi storage");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
