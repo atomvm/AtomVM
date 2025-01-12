@@ -58,6 +58,10 @@
 #include "nifs.h"
 #include "posix_nifs.h"
 
+#if HAVE_EXECVE
+extern char **environ;
+#endif
+
 term posix_errno_to_term(int err, GlobalContext *glb)
 {
 #if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
@@ -511,6 +515,9 @@ static term nif_atomvm_posix_select_stop(Context *ctx, int argc, term argv[])
 #if HAVE_EXECVE
 static void free_string_list(char **list)
 {
+    if (IS_NULL_PTR(list)) {
+        return;
+    }
     char **ptr = list;
     while (*ptr) {
         char *str = *ptr;
@@ -564,11 +571,18 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         free(path);
         RAISE_ERROR(BADARG_ATOM);
     }
-    char **envp = parse_string_list(argv[2]);
-    if (IS_NULL_PTR(envp)) {
-        free(path);
-        free_string_list(args);
-        RAISE_ERROR(BADARG_ATOM);
+    char **envp;
+    char **envp_array = NULL;
+    if (argv[2] == UNDEFINED_ATOM) {
+        envp = environ;
+    } else {
+        envp_array = parse_string_list(argv[2]);
+        if (IS_NULL_PTR(envp_array)) {
+            free(path);
+            free_string_list(args);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        envp = envp_array;
     }
 
     int pstdout[2];
@@ -576,7 +590,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
     if (r < 0) {
         free(path);
         free_string_list(args);
-        free_string_list(envp);
+        free_string_list(envp_array);
         return errno_to_error_tuple_maybe_gc(ctx);
     }
     pid_t pid;
@@ -609,7 +623,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
     if (UNLIKELY(r != 0)) {
         free(path);
         free_string_list(args);
-        free_string_list(envp);
+        free_string_list(envp_array);
         close(pstdout[0]);
         close(pstdout[1]);
         return error_tuple_maybe_gc(r, ctx);
@@ -620,7 +634,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         int err = errno;
         free(path);
         free_string_list(args);
-        free_string_list(envp);
+        free_string_list(envp_array);
         close(pstdout[0]);
         close(pstdout[1]);
         return error_tuple_maybe_gc(err, ctx);
@@ -646,7 +660,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
     close(pstdout[1]); // close write-end of the pipe
     free(path);
     free_string_list(args);
-    free_string_list(envp);
+    free_string_list(envp_array);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
