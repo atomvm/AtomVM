@@ -322,7 +322,7 @@ test_subprocess(true) ->
     ok.
 
 test_subprocess_echo() ->
-    {ok, _Pid, StdoutFd} = atomvm:subprocess("/bin/echo", ["echo"], [], [stdout]),
+    {ok, _Pid, StdoutFd} = atomvm:subprocess("/bin/echo", ["echo"], undefined, [stdout]),
     {ok, <<"\n">>} = atomvm:posix_read(StdoutFd, 10),
     eof = atomvm:posix_read(StdoutFd, 10),
     ok = atomvm:posix_close(StdoutFd),

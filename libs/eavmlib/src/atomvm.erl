@@ -347,14 +347,17 @@ get_creation() ->
 %% @param   Path    path to the command to execute
 %% @param   Args    arguments to pass to the command. First item is the name
 %%                  of the command
-%% @param   Envp    environment variables to pass to the command.
+%% @param   Envp    environment variables to pass to the command or `undefined'
+%%                  to use environ (VM environment variables)
 %% @param   Options options to run execve. Should be `[stdout]'
 %% @returns a tuple with the process id and a fd to the stdout of the process.
 %% @doc     Fork and execute a program using fork(2) and execve(2). Pipe stdout
 %%          so output of the program can be read with `atomvm:posix_read/2'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec subprocess(Path :: iodata(), Args :: [iodata()], Env :: [iodata()], Options :: [stdout]) ->
+-spec subprocess(
+    Path :: iodata(), Args :: [iodata()], Env :: [iodata()] | undefined, Options :: [stdout]
+) ->
     {ok, non_neg_integer(), posix_fd()} | {error, posix_error()}.
 subprocess(_Path, _Args, _Env, _Options) ->
     erlang:nif_error(undefined).

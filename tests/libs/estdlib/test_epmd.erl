@@ -39,7 +39,9 @@ has_command("BEAM", Command) ->
     R = os:cmd("command -v " ++ Command),
     R =/= [];
 has_command("ATOM", Command) ->
-    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "command -v " ++ Command], [], [stdout]),
+    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "command -v " ++ Command], undefined, [
+        stdout
+    ]),
     Result =
         case atomvm:posix_read(Fd, 200) of
             eof -> false;
@@ -52,7 +54,7 @@ ensure_epmd("BEAM") ->
     _ = os:cmd("epmd -daemon"),
     ok;
 ensure_epmd("ATOM") ->
-    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "epmd -daemon"], [], [stdout]),
+    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "epmd -daemon"], undefined, [stdout]),
     ok = atomvm:posix_close(Fd),
     ok.
 
