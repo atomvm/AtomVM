@@ -340,10 +340,10 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx);
  * @details Register a process with a certain name (atom) so it can be easily retrieved later.
  * @param glb the global context, each registered process will be globally available for that context.
  * @param atom_index the atom table index.
- * @param local_process_id the process local id.
+ * @param local_pid_or_port the local pid or port
  * @returns \c true if the process was registered, \c false if another process with the same name already existed
  */
-bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port);
 
 /**
  * @brief Get registered name for a process/port
@@ -363,9 +363,9 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
  * @details Returns the local process id of a previously registered process.
  * @param glb the global context.
  * @param atom_index the atom table index.
- * @returns a previously registered process local id.
+ * @returns a previously registered process local id or UNDEFINED_ATOM
  */
-int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
+term globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
  * @brief Unregister a process by name

@@ -21,22 +21,27 @@
 -module(uart).
 -export([open/1, open/2, close/1, read/1, write/2]).
 
+-spec open(integer() | list() | binary(), [tuple()]) -> port().
 open(Name, Opts) ->
     open([{peripheral, Name} | Opts]).
 
+-spec open([tuple()]) -> port().
 open(Opts) ->
     open_port({spawn, "uart"}, migrate_config(Opts)).
 
-close(Pid) ->
-    port:call(Pid, close).
+-spec close(Port :: port()) -> ok | {error, any()}.
+close(Port) ->
+    port:call(Port, close).
 
-read(Pid) ->
-    port:call(Pid, read).
+-spec read(Port :: port()) -> {ok, binary()} | {error, any()}.
+read(Port) ->
+    port:call(Port, read).
 
-write(Pid, B) ->
+-spec write(Port :: port(), B :: iolist()) -> ok | {error, any()}.
+write(Port, B) ->
     case is_iolist(B) of
         true ->
-            port:call(Pid, {write, B});
+            port:call(Port, {write, B});
         false ->
             throw(badarg)
     end.

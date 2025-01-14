@@ -68,7 +68,7 @@
         | {device_config, [{device_name(), device_config()}]}
     ].
 
--type spi() :: pid().
+-type spi() :: port().
 -type address() :: non_neg_integer().
 
 -type transaction() :: #{
@@ -244,7 +244,7 @@ write_at(SPI, DeviceName, Address, Len, Data) ->
 -spec write(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) ->
     ok | {error, Reason :: term()}.
 write(SPI, DeviceName, Transaction) when
-    is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
+    is_port(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
 ->
     port:call(SPI, {write, DeviceName, Transaction}).
 
@@ -279,7 +279,7 @@ write(SPI, DeviceName, Transaction) when
 -spec write_read(SPI :: spi(), DeviceName :: device_name(), Transaction :: transaction()) ->
     {ok, ReadData :: binary()} | {error, Reason :: term()}.
 write_read(SPI, DeviceName, Transaction) when
-    is_pid(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
+    is_port(SPI) andalso is_atom(DeviceName) andalso is_map(Transaction)
 ->
     port:call(SPI, {write_read, DeviceName, Transaction}).
 

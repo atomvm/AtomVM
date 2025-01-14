@@ -858,7 +858,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
-    bool ok = term_is_pid(controlling_process_term);
+    bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
         return;
@@ -1022,7 +1022,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
-    bool ok = term_is_pid(controlling_process_term);
+    bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
         return;
@@ -1369,7 +1369,7 @@ static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
         return;
     }
     term new_pid_term = term_get_tuple_element(gen_message->req, 1);
-    if (UNLIKELY(!term_is_pid(new_pid_term))) {
+    if (UNLIKELY(!term_is_local_pid(new_pid_term))) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
     } else {
         term return_msg;

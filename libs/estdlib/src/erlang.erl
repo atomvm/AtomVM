@@ -160,6 +160,11 @@
     | link
     | monitor.
 
+-type send_destination() ::
+    pid()
+    | port()
+    | atom().
+
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
@@ -859,17 +864,16 @@ ref_to_list(_Ref) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Name    name of the process to register
-%% @param   Pid     pid of the process to register
+%% @param   Name        name of the process to register
+%% @param   PidOrPort   pid or port of the process to register
 %% @returns `true'
 %% @doc     Register a name for a given process.
-%% Processes can be registered with several names.
-%% Unlike Erlang/OTP, ports are not distinguished from processes.
-%% Errors with `badarg' if the name is already registered.
+%% Errors with `badarg' if the name is already registered or if the process
+%% is already registered.
 %% @end
 %%-----------------------------------------------------------------------------
--spec register(Name :: atom(), Pid :: pid()) -> true.
-register(_Name, _Pid) ->
+-spec register(Name :: atom(), PidOrPort :: pid() | port()) -> true.
+register(_Name, _PidOrPort) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -890,7 +894,7 @@ unregister(_Name) ->
 %% @doc     Lookup a process by name.
 %% @end
 %%-----------------------------------------------------------------------------
--spec whereis(Name :: atom()) -> pid() | undefined.
+-spec whereis(Name :: atom()) -> pid() | port() | undefined.
 whereis(_Name) ->
     erlang:nif_error(undefined).
 
@@ -1002,13 +1006,13 @@ make_ref() ->
 %% @doc     Send a message to a given process
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(Pid :: pid(), Message :: Message) -> Message.
-send(_Pid, _Message) ->
+-spec send(Target :: send_destination(), Message :: Message) -> Message.
+send(_Target, _Message) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Type    type of monitor to create
-%% @param   Pid     pid of the object to monitor
+%% @param   Type        type of monitor to create
+%% @param   PidOrPort   pid or port of the object to monitor
 %% @returns a monitor reference
 %% @doc     Create a monitor on a process or on a port.
 %% When the process or the port terminates, the following message is sent to
@@ -1019,8 +1023,10 @@ send(_Pid, _Message) ->
 %% Unlike Erlang/OTP, monitors are only supported for processes and ports.
 %% @end
 %%-----------------------------------------------------------------------------
--spec monitor(Type :: process | port, Pid :: pid()) -> reference().
-monitor(_Type, _Pid) ->
+-spec monitor
+    (Type :: process, Pid :: pid()) -> reference();
+    (Type :: port, Port :: port()) -> reference().
+monitor(_Type, _PidOrPort) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1102,7 +1108,7 @@ exit(_Process, _Reason) ->
 %% Unlike Erlang/OTP, ports are identified by pids.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> pid().
+-spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> port().
 open_port(_PortName, _Options) ->
     erlang:nif_error(undefined).
 

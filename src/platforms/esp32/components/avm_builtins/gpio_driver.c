@@ -328,7 +328,7 @@ static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
     int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
-    if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
+    if (UNLIKELY(globalcontext_get_registered_process(glb, gpio_atom_index) == UNDEFINED_ATOM)) {
         return ERROR_ATOM;
     }
 
@@ -463,20 +463,19 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     term trigger = term_get_tuple_element(cmd, 2);
     if (term_get_tuple_arity(cmd) == 4) {
         term pid = term_get_tuple_element(cmd, 3);
-        if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
+        if (UNLIKELY(!term_is_local_pid(pid) && !term_is_atom(pid))) {
             ESP_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
             return ERROR_ATOM;
         }
-        if (term_is_pid(pid)) {
+        if (term_is_atom(pid)) {
+            int pid_atom_index = term_to_atom_index(pid);
+            pid = globalcontext_get_registered_process(ctx->global, pid_atom_index);
+        }
+        if (term_is_local_pid(pid)) {
             target_local_pid = term_to_local_process_id(pid);
         } else {
-            int pid_atom_index = term_to_atom_index(pid);
-            int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
-            if (UNLIKELY(registered_process == 0)) {
-                ESP_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
-                return ERROR_ATOM;
-            }
-            target_local_pid = registered_process;
+            ESP_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
+            return ERROR_ATOM;
         }
     } else {
         target_local_pid = target_pid;

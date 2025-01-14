@@ -411,7 +411,11 @@ static int sys_emscripten_get_target(GlobalContext *glb, const char *target_name
         return -1;
     }
     int target_atom_index = term_to_atom_index(target_atom);
-    return globalcontext_get_registered_process(glb, target_atom_index);
+    term target_pid = globalcontext_get_registered_process(glb, target_atom_index);
+    if (!term_is_local_pid_or_port(target_pid)) {
+        return 0;
+    }
+    return term_to_local_process_id(target_pid);
 }
 
 static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, const char *message, struct PromiseResource *promise)

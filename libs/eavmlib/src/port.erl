@@ -28,7 +28,7 @@
 %% The port driver should be initialized with:
 %% `open_port({spawn, "Name"}, Param)'
 %% Where Name is an atom(), and is the name of the driver. The return from `open_port/2'
-%% will be the Pid that will be required for future `port:call/2' or `port:call/3' use.
+%% will be the Port that will be required for future `port:call/2' or `port:call/3' use.
 %%
 %% Examples:
 %% ```open_port({spawn, "i2c"}, Param)'''
@@ -41,31 +41,31 @@
 -export([call/2, call/3]).
 
 %%-----------------------------------------------------------------------------
-%% @param   Port Pid to which to send messages
+%% @param   Port Port to which to send messages
 %% @param   Message the message to send
 %% @returns term() | {error, Reason}.
-%% @doc     Send a message to a given port driver pid.
+%% @doc     Send a message to a given port driver.
 %%
-%% This function is used to send a message to an open port divers pid and will
+%% This function is used to send a message to an open port drivers port and will
 %% return a term or `{error, Reason}'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Port :: pid(), Message :: term()) -> term().
+-spec call(Port :: port(), Message :: term()) -> term().
 call(Port, Message) ->
     call(Port, Message, infinity).
 
 %%-----------------------------------------------------------------------------
-%% @param   Port Pid to which to send messages
+%% @param   Port Port to which to send messages
 %% @param   Message the message to send
 %% @param   Timeout the timeout value in milliseconds
 %% @returns term() | {error, Reason}.
-%% @doc     Send a message to a given port driver pid with a timeout.
+%% @doc     Send a message to a given port driver with a timeout.
 %%
-%% This function is used to send a message to an open port divers pid and will return
+%% This function is used to send a message to an open port drivers port and will return
 %% a term or `{error, Reason}', or`{error, timeout}' if the TimeoutMs is reached first.
 %% @end
 %%-----------------------------------------------------------------------------
--spec call(Port :: pid(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
+-spec call(Port :: port(), Message :: term(), Timeout :: timeout()) -> term() | {error, timeout}.
 call(Port, Message, Timeout) ->
     MonitorRef = monitor(port, Port),
     Port ! {'$call', {self(), MonitorRef}, Message},

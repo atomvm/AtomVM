@@ -376,10 +376,10 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
                 RAISE_ERROR(BADARG_ATOM);
             }
             term to_name = term_get_tuple_element(control, 3);
-            int target_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(to_name));
-            if (target_process_id) {
+            term target_process_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(to_name));
+            if (term_is_local_pid(target_process_pid)) {
                 term payload = externalterm_to_term_with_roots(data + 1 + bytes_read, binary_len - 1 - bytes_read, ctx, ExternalTermCopy, &bytes_read, 2, argv);
-                globalcontext_send_message(ctx->global, target_process_id, payload);
+                globalcontext_send_message(ctx->global, term_to_local_process_id(target_process_pid), payload);
             }
             break;
         }
@@ -390,11 +390,12 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             term from_pid = term_get_tuple_element(control, 1);
             term target_proc = term_get_tuple_element(control, 2);
             term monitor_ref = term_get_tuple_element(control, 3);
+            if (term_is_atom(target_proc)) {
+                target_proc = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
+            }
             int target_process_id = 0;
             if (term_is_local_pid(target_proc)) {
                 target_process_id = term_to_local_process_id(target_proc);
-            } else if (term_is_atom(target_proc)) {
-                target_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
             } else {
                 RAISE_ERROR(BADARG_ATOM);
             }

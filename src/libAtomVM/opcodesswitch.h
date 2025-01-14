@@ -2407,14 +2407,16 @@ schedule_in:
                     if (UNLIKELY(term_is_external_pid(recipient_term))) {
                         dist_send_message(recipient_term, x_regs[1], ctx);
                     } else {
+                        if (term_is_atom(recipient_term)) {
+                            recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+                            if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                        }
+
                         int local_process_id;
                         if (term_is_local_pid_or_port(recipient_term)) {
                             local_process_id = term_to_local_process_id(recipient_term);
-                        } else if (term_is_atom(recipient_term)) {
-                            local_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-                            if (UNLIKELY(local_process_id == 0)) {
-                                RAISE_ERROR(BADARG_ATOM);
-                            }
                         } else {
                             RAISE_ERROR(BADARG_ATOM);
                         }
