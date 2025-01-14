@@ -23,9 +23,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// About X macro: https://en.wikipedia.org/wiki/X_macro
+#define X(name, lenstr, str) \
+    _Static_assert(*lenstr == strlen(str), "Macro length mismatch for " # name);
+#include "platform_defaultatoms.def"
+#undef X
+
 void platform_defaultatoms_init(GlobalContext *glb)
 {
-// About X macro: https://en.wikipedia.org/wiki/X_macro
 #define X(name, lenstr, str) \
     lenstr str,
 
@@ -38,10 +43,6 @@ void platform_defaultatoms_init(GlobalContext *glb)
 #undef X
 
     for (int i = 0; i < ATOM_FIRST_AVAIL_INDEX - PLATFORM_ATOMS_BASE_INDEX; i++) {
-        if (UNLIKELY((size_t) atoms[i][0] != strlen(atoms[i] + 1))) {
-            AVM_ABORT();
-        }
-
         if (UNLIKELY(globalcontext_insert_atom(glb, atoms[i]) != i + PLATFORM_ATOMS_BASE_INDEX)) {
             AVM_ABORT();
         }
