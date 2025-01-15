@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `supervisor:which_children/1` and `supervisor:count_children/1`
 - Added `monitored_by` in `process_info/2`
 - Added mock implementation for `current_stacktrace` in `process_info`
+- Added support for Elixir GenServer and Supervisor.
 
 ### Changed
 
