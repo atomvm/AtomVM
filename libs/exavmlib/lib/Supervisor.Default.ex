@@ -1,7 +1,8 @@
 #
-# This file is part of AtomVM.
+# This file is part of elixir-lang.
 #
-# Copyright 2024 Davide Bettio <davide@uninstall.it>
+# Copyright 2012-2024 Elixir Contributors
+# https://github.com/elixir-lang/elixir/blob/v1.17/lib/elixir/lib/supervisor.ex
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,19 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+# SPDX-License-Identifier: Apache-2.0
 #
 
-project(test_exavmlib)
+defmodule Supervisor.Default do
+  @compile {:autoload, false}
+  @moduledoc false
 
-include(BuildElixir)
-
-set(TEST_MODULES
-    Some.Submodule
-    GenServerTest.Stack
-    GenServerTest.CustomStack
-    SupervisorTest.Stack
-    SupervisorTest.Stack.Sup
-)
-
-pack_test(Tests Tests ${TEST_MODULES})
+  def init(args) do
+    args
+  end
+end
