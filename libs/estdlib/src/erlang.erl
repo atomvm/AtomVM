@@ -74,6 +74,7 @@
     integer_to_list/2,
     fun_to_list/1,
     pid_to_list/1,
+    port_to_list/1,
     ref_to_list/1,
     register/2,
     unregister/1,
@@ -851,6 +852,16 @@ fun_to_list(_Fun) ->
 %%-----------------------------------------------------------------------------
 -spec pid_to_list(Pid :: pid()) -> string().
 pid_to_list(_Pid) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Port     port to convert to a string
+%% @returns a string representation of the port
+%% @doc     Create a string representing a port.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec port_to_list(Port :: port()) -> string().
+port_to_list(_Port) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

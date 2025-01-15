@@ -162,6 +162,7 @@ compile_erlang(test_concat_badarg)
 compile_erlang(register_and_whereis_badarg)
 compile_erlang(test_send)
 compile_erlang(test_open_port_badargs)
+compile_erlang(test_port_to_list)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
@@ -641,6 +642,7 @@ add_custom_target(erlang_test_modules DEPENDS
     register_and_whereis_badarg.beam
     test_send.beam
     test_open_port_badargs.beam
+    test_port_to_list.beam
     echo.beam
     pingpong.beam
     prime_ext.beam
