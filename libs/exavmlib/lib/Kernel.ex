@@ -60,6 +60,10 @@ defmodule Kernel do
         :erlang.pid_to_list(t)
         |> :erlang.list_to_binary()
 
+      t when is_port(t) ->
+        :erlang.port_to_list(t)
+        |> :erlang.list_to_binary()
+
       t when is_function(t) ->
         :erlang.fun_to_list(t)
         |> :erlang.list_to_binary()
