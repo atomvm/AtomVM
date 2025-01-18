@@ -126,6 +126,16 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
     }
 }
 
+// Dispose message. Normal / signal messages are not destroyed, instead they
+// are appended to the current heap.
+void mailbox_message_dispose_unsent(Message *m, GlobalContext *global, bool from_task)
+{
+    term mso_list = m->storage[STORAGE_MSO_LIST_INDEX];
+    HeapFragment *fragment = mailbox_message_to_heap_fragment(m, m->heap_end);
+    memory_sweep_mso_list(mso_list, global, from_task);
+    memory_destroy_heap_fragment(fragment);
+}
+
 void mailbox_destroy(Mailbox *mbox, Heap *heap)
 {
     MailboxMessage *msg = mbox->outer_first;
@@ -191,13 +201,13 @@ inline void mailbox_enqueue_message(Context *c, MailboxMessage *m)
     } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&c->mailbox.outer_first, &current_first, m));
 }
 
-static void mailbox_post_message(Context *c, MailboxMessage *m)
+void mailbox_post_message(Context *c, MailboxMessage *m)
 {
     mailbox_enqueue_message(c, m);
     scheduler_signal_message(c);
 }
 #else
-static void mailbox_post_message(Context *c, MailboxMessage *m)
+void mailbox_post_message(Context *c, MailboxMessage *m)
 {
     m->next = c->mailbox.outer_first;
     c->mailbox.outer_first = m;
@@ -229,6 +239,12 @@ MailboxMessage *mailbox_message_create_from_term(enum MessageType type, term t)
 
         return &ts->base;
     }
+}
+
+Message *mailbox_message_create_normal_message_from_term(term t)
+{
+    MailboxMessage *message = mailbox_message_create_from_term(NormalMessage, t);
+    return CONTAINER_OF(message, Message, base);
 }
 
 void mailbox_send(Context *c, term t)
