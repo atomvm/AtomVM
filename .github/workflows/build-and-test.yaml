@@ -367,18 +367,21 @@ jobs:
       timeout-minutes: 15
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./tests/test-erlang -s prime_smp
         valgrind ./tests/test-erlang -s prime_smp
 
     - name: "Test: test-enif"
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./tests/test-enif
         valgrind ./tests/test-enif
 
     - name: "Test: test-mailbox"
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./tests/test-mailbox
         valgrind ./tests/test-mailbox
 
@@ -386,6 +389,7 @@ jobs:
       timeout-minutes: 10
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./tests/test-structs
         valgrind ./tests/test-structs
 
@@ -393,6 +397,7 @@ jobs:
       timeout-minutes: 5
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
         valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
@@ -400,6 +405,7 @@ jobs:
       timeout-minutes: 5
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         valgrind ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
@@ -407,6 +413,7 @@ jobs:
       timeout-minutes: 10
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         valgrind ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
@@ -414,6 +421,7 @@ jobs:
       timeout-minutes: 10
       working-directory: build
       run: |
+        ulimit -c unlimited
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
@@ -421,6 +429,7 @@ jobs:
       timeout-minutes: 10
       working-directory: build
       run: |
+        ulimit -c unlimited
         if command -v elixirc &> /dev/null
         then
           ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
@@ -430,7 +439,40 @@ jobs:
     - name: "Install and smoke test"
       working-directory: build
       run: |
+        ulimit -c unlimited
         sudo PATH=${PATH} make install
         atomvm examples/erlang/hello_world.avm
         atomvm -v
         atomvm -h
+
+    - name: "Run coredumpctl info"
+      if: ${{ failure() }}
+      run: |
+        # Wait until systemd-coredump finished
+        while ps x | grep -cE 'systemd-[c]oredump'; do
+            echo systemd-coredump is still running
+            sleep 1
+        done
+        # info works on all versions of ubuntu
+        coredumpctl info || true
+        # The following only works on recent versions of ubuntu
+        coredumpctl debug --debugger-arguments="-batch -ex 'info all-registers'" || true
+        coredumpctl debug --debugger-arguments="-batch -ex 'info threads'" || true
+        coredumpctl debug --debugger-arguments="-batch -ex 'thread apply all bt full'" || true
+        coredumpctl debug --debugger-arguments='-batch -ex "display /10i $pc"' || true
+        coredumpctl dump -o core.dump || true
+        if [ -e core.dump ]; then
+            mkdir core
+            mv core.dump core/
+            cp build/src/AtomVM core/
+            cp build/tests/test-* core/
+        fi
+
+    - name: "Upload any dumped core"
+      uses: actions/upload-artifact@v4
+      if: ${{ failure() }}
+      with:
+        name: core-${{ matrix.os }}-${{ matrix.cc }}-${{ matrix.otp }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+            core/*
+        retention-days: 5

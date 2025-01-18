@@ -32,6 +32,7 @@
 #include <otp_socket.h>
 #include <port.h>
 #include <posix_nifs.h>
+#include <refc_binary.h>
 #include <scheduler.h>
 #include <smp.h>
 #include <sys.h>
@@ -286,6 +287,8 @@ static void socket_stop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int
     if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
         enif_demonitor_process(caller_env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+        struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+        refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
     }
 
     TRACE("socket_stop called on fd=%i\n", rsrc_obj->fd);
@@ -306,42 +309,43 @@ static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNif
     TRACE("socket_down called on process_id=%i\n", (int) *pid);
 #endif
 
-    // Increment the reference count so the resource doesn't go away
-    // (enif_select will decrement the ref count)
     struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-    refc_binary_increment_refcount(rsrc_refc);
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 
-#if OTP_SOCKET_BSD
-    if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
-        // Monitor fired, so make sure we don't try to demonitor in select_stop
-        // as it could crash trying to reacquire lock on process table
-        rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-        enif_select(caller_env, rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
+    if (rsrc_obj->selecting_process_id == INVALID_PROCESS_ID) {
+        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+        return;
     }
+
+#if OTP_SOCKET_BSD
+    // Monitor fired, so make sure we don't try to demonitor in select_stop
+    // as it could crash trying to reacquire lock on process table
+    // enif_select can decrement ref count but it's at least 2 in this case (1 for monitor and 1 for select)
+    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    enif_select(caller_env, rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
 #elif OTP_SOCKET_LWIP
     // Monitor can be called when we're selecting, accepting or connecting.
-    if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
-        LWIP_BEGIN();
-        rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-        if (rsrc_obj->socket_state & SocketStateTCP) {
-            if (rsrc_obj->socket_state & SocketStateTCPListening) {
-                (void) tcp_close(rsrc_obj->tcp_pcb);
-            } else {
-                tcp_abort(rsrc_obj->tcp_pcb);
-            }
-            rsrc_obj->tcp_pcb = NULL;
-            rsrc_obj->socket_state = SocketStateClosed;
-        } else if (rsrc_obj->socket_state & SocketStateUDP) {
-            udp_remove(rsrc_obj->udp_pcb);
-            rsrc_obj->udp_pcb = NULL;
-            rsrc_obj->socket_state = SocketStateClosed;
+    LWIP_BEGIN();
+    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    if (rsrc_obj->socket_state & SocketStateTCP) {
+        if (rsrc_obj->socket_state & SocketStateTCPListening) {
+            (void) tcp_close(rsrc_obj->tcp_pcb);
+        } else {
+            tcp_abort(rsrc_obj->tcp_pcb);
         }
-        LWIP_END();
+        rsrc_obj->tcp_pcb = NULL;
+        rsrc_obj->socket_state = SocketStateClosed;
+    } else if (rsrc_obj->socket_state & SocketStateUDP) {
+        udp_remove(rsrc_obj->udp_pcb);
+        rsrc_obj->udp_pcb = NULL;
+        rsrc_obj->socket_state = SocketStateClosed;
     }
+    LWIP_END();
 #endif
 
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+
+    // We're no longer monitoring so we can decrement ref count
     refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
 }
 
@@ -949,6 +953,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
 
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
@@ -956,6 +961,8 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
         // demonitor can fail if process is gone.
         enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+        // decrement ref count as we are demonitoring
+        refc_binary_decrement_refcount(rsrc_refc, ctx->global);
     }
     // Monitor first as select is less likely to fail and it's less expensive to demonitor
     // if select fails than to stop select if monitor fails
@@ -964,6 +971,8 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
             RAISE_ERROR(NOPROC_ATOM);
         }
+        // increment ref count so the resource doesn't go away until monitor is fired
+        refc_binary_increment_refcount(rsrc_refc);
         rsrc_obj->selecting_process_id = ctx->process_id;
     }
 
@@ -980,6 +989,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
             enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
             rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
             RAISE_ERROR(BADARG_ATOM);
         }
     }
@@ -1026,6 +1036,7 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
             enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
             LWIP_END();
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
             RAISE_ERROR(BADARG_ATOM);
     }
     LWIP_END();
@@ -1048,7 +1059,12 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     }
     // Avoid the race condition with select object here.
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
-    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
+        enif_demonitor_process(erl_nif_env_from_context(ctx), rsrc_obj, &rsrc_obj->selecting_process_monitor);
+        rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+        struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+        refc_binary_decrement_refcount(rsrc_refc, ctx->global);
+    }
 #if OTP_SOCKET_BSD
     if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil()) < 0)) {
         RAISE_ERROR(BADARG_ATOM);

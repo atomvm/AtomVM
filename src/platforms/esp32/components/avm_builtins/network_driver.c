@@ -690,7 +690,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         port_send_reply(ctx, pid, ref, error);
         return;
     }
-    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_RAM)) != ESP_OK)) {
+    if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to set ESP WiFi storage");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
@@ -814,6 +814,9 @@ static void stop_network(Context *ctx)
 {
     // Stop unregister event callbacks so they dont trigger during shutdown.
     esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
+    esp_event_handler_unregister(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler);
+    esp_event_handler_unregister(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler);
 
     esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_t *ap_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -832,12 +835,6 @@ static void stop_network(Context *ctx)
 
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
-
-    // Delete network event loop
-    esp_err_t err = esp_event_loop_delete_default();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Invalid state error while deleting event loop, continuing network shutdown...");
-    }
 
     // Destroy existing netif interfaces
     if (ap_wifi_interface != NULL) {
