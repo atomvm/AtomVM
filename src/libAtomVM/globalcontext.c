@@ -231,7 +231,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
 #ifndef NDEBUG
         if (refc->resource_type) {
-            fprintf(stderr, "Warning, dangling resource of type %s, ref_count = %d\n", refc->resource_type->name, (int) refc->ref_count);
+            fprintf(stderr, "Warning, dangling resource of type %s, ref_count = %d, data = %p\n", refc->resource_type->name, (int) refc->ref_count, refc->data);
         } else {
             fprintf(stderr, "Warning, dangling refc binary, ref_count = %d\n", (int) refc->ref_count);
         }
