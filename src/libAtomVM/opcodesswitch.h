@@ -29,6 +29,7 @@
 #include "bitstring.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "dist_nifs.h"
 #include "exportedfunction.h"
 #include "nifs.h"
 #include "opcodes.h"
@@ -2403,20 +2404,24 @@ schedule_in:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term recipient_term = x_regs[0];
-                    int local_process_id;
-                    if (term_is_local_pid_or_port(recipient_term)) {
-                        local_process_id = term_to_local_process_id(recipient_term);
-                    } else if (term_is_atom(recipient_term)) {
-                        local_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-                        if (UNLIKELY(local_process_id == 0)) {
+                    if (UNLIKELY(term_is_external_pid(recipient_term))) {
+                        dist_send_message(recipient_term, x_regs[1], ctx);
+                    } else {
+                        int local_process_id;
+                        if (term_is_local_pid_or_port(recipient_term)) {
+                            local_process_id = term_to_local_process_id(recipient_term);
+                        } else if (term_is_atom(recipient_term)) {
+                            local_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+                            if (UNLIKELY(local_process_id == 0)) {
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                        } else {
                             RAISE_ERROR(BADARG_ATOM);
                         }
-                    } else {
-                        RAISE_ERROR(BADARG_ATOM);
+                        TRACE("send/0 target_pid=%i\n", local_process_id);
+                        TRACE_SEND(ctx, x_regs[0], x_regs[1]);
+                        globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
                     }
-                    TRACE("send/0 target_pid=%i\n", local_process_id);
-                    TRACE_SEND(ctx, x_regs[0], x_regs[1]);
-                    globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
 
                     x_regs[0] = x_regs[1];
                 #endif

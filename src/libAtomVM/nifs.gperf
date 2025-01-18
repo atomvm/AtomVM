@@ -131,6 +131,10 @@ erlang:group_leader/2, &group_leader_nif
 erlang:get_module_info/1, &get_module_info_nif
 erlang:get_module_info/2, &get_module_info_nif
 erlang:setnode/2, &setnode_2_nif
+erlang:setnode/3, &setnode_3_nif
+erlang:dist_ctrl_get_data_notification/1, &dist_ctrl_get_data_notification_nif
+erlang:dist_ctrl_get_data/1, &dist_ctrl_get_data_nif
+erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif

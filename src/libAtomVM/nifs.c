@@ -40,6 +40,7 @@
 #include "context.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
+#include "dist_nifs.h"
 #include "ets.h"
 #include "externalterm.h"
 #include "globalcontext.h"

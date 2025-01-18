@@ -110,7 +110,15 @@
     timestamp/0,
     universaltime/0,
     localtime/0,
-    setnode/2
+    setnode/2,
+    setnode/3,
+    get_cookie/0,
+    get_cookie/1,
+    set_cookie/1,
+    set_cookie/2,
+    dist_ctrl_get_data_notification/1,
+    dist_ctrl_get_data/1,
+    dist_ctrl_put_data/2
 ]).
 
 -export_type([
@@ -1288,3 +1296,82 @@ localtime() ->
 -spec setnode(atom(), non_neg_integer()) -> true.
 setnode(_NodeName, _Creation) ->
     erlang:nif_error(undefined).
+
+%% @hidden
+-spec setnode(node(), pid(), {non_neg_integer(), non_neg_integer()}) -> reference().
+setnode(_TargetNode, _ConnPid, _TargetFlagsCreation) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec dist_ctrl_get_data_notification(reference()) -> ok.
+dist_ctrl_get_data_notification(_DHandle) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec dist_ctrl_get_data(reference()) -> none | binary().
+dist_ctrl_get_data(_DHandle) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec dist_ctrl_put_data(reference(), binary()) -> ok.
+dist_ctrl_put_data(_DHandle, _Packet) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns The cookie used by this node
+%% @doc Return the cookie used by this node or `nocookie' if
+%% distribution was not started
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_cookie() -> nocookie | atom().
+get_cookie() ->
+    try
+        CookieBin = net_kernel:get_cookie(),
+        ?MODULE:binary_to_atom(CookieBin, latin1)
+    catch
+        exit:{Reason, _} when
+            Reason =:= noproc;
+            Reason =:= shutdown;
+            Reason =:= killed
+        ->
+            nocookie
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @returns The cookie used to connect to another node
+%% @doc Return the cookie used to connect to another node or `nocookie' if
+%% distribution was not started
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_cookie(node()) -> nocookie | atom().
+get_cookie(Node) ->
+    try
+        CookieBin = net_kernel:get_cookie(Node),
+        ?MODULE:binary_to_atom(CookieBin, latin1)
+    catch
+        exit:{Reason, _} when
+            Reason =:= noproc;
+            Reason =:= shutdown;
+            Reason =:= killed
+        ->
+            nocookie
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param Cookie the cookie to use to connect to this node
+%% @doc Set the cookie of this node. Fails if distribution was not started.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_cookie(Cookie :: atom()) -> ok.
+set_cookie(Cookie) ->
+    net_kernel:set_cookie(?MODULE:atom_to_binary(Cookie, latin1)).
+
+%%-----------------------------------------------------------------------------
+%% @param Node the node to set the cookie for
+%% @param Cookie the cookie to use to connect to Node
+%% @doc Set the cookie of a given node. Fails if distribution was not started.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_cookie(Node :: node(), Cookie :: atom()) -> ok.
+set_cookie(Node, Cookie) ->
+    net_kernel:set_cookie(Node, ?MODULE:atom_to_binary(Cookie, latin1)).

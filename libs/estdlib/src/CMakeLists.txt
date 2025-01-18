@@ -23,11 +23,13 @@ project(estdlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    application
     base64
     binary
     calendar
     code
     crypto
+    dist_util
     erl_epmd
     erts_debug
     ets
@@ -41,6 +43,9 @@ set(ERLANG_MODULES
     gen_tcp_inet
     gen_tcp_socket
     supervisor
+    kernel
+    net_kernel
+    net_kernel_sup
     inet
     io_lib
     io
@@ -54,6 +59,8 @@ set(ERLANG_MODULES
     queue
     sets
     socket
+    socket_dist
+    socket_dist_controller
     ssl
     string
     timer
