@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     avm_pubsub
     console
     emscripten
+    epmd
     esp
     esp_adc
     gpio
