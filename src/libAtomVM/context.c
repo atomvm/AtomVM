@@ -157,6 +157,7 @@ void context_destroy(Context *ctx)
             void *resource = term_to_term_ptr(monitor->monitor_obj);
             struct RefcBinary *refc = refc_binary_from_data(resource);
             refc->resource_type->down(erl_nif_env_from_context(ctx), resource, &ctx->process_id, &monitor->ref_ticks);
+            refc_binary_decrement_refcount(refc, ctx->global);
             free(monitor);
         }
     }

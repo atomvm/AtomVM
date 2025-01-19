@@ -119,14 +119,6 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
  */
 void select_event_count_and_destroy_closed(struct ListHead *select_events, size_t *read, size_t *write, size_t *either, GlobalContext *global);
 
-/**
- * @brief Destroy monitors associated with a resource.
- *
- * @param resource resource to destroy monitors for
- * @param global the global context
- */
-void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
-
 #define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
 
 /**

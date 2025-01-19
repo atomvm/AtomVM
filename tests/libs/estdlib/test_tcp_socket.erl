@@ -28,7 +28,8 @@ test() ->
     ok = test_close_by_another_process(),
     ok = test_buf_size(),
     ok = test_timeout(),
-    ok = test_nowait(),
+    ok = test_recv_nowait(),
+    ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
     case get_otp_version() of
         atomvm ->
@@ -430,12 +431,12 @@ test_timeout() ->
     ok = close_client_socket(Socket),
     ok = close_listen_socket(ListenSocket).
 
-test_nowait() ->
-    ok = test_nowait(fun receive_loop_nowait/2),
-    ok = test_nowait(fun receive_loop_nowait_ref/2),
+test_recv_nowait() ->
+    ok = test_recv_nowait(fun receive_loop_nowait/2),
+    ok = test_recv_nowait(fun receive_loop_nowait_ref/2),
     ok.
 
-test_nowait(ReceiveFun) ->
+test_recv_nowait(ReceiveFun) ->
     etest:flush_msg_queue(),
 
     Port = 44404,
@@ -459,6 +460,67 @@ test_nowait(ReceiveFun) ->
     ok = close_client_socket(Socket),
 
     ok = close_listen_socket(ListenSocket).
+
+test_accept_nowait() ->
+    OTPVersion = get_otp_version(),
+    ok = test_accept_nowait(nowait, OTPVersion),
+    ok = test_accept_nowait(make_ref(), OTPVersion),
+    ok.
+
+% actually since 22.1, but let's simplify here.
+test_accept_nowait(_NoWaitRef, Version) when Version =/= atomvm andalso Version < 23 -> ok;
+test_accept_nowait(Ref, Version) when
+    is_reference(Ref) andalso Version =/= atomvm andalso Version < 24
+->
+    ok;
+test_accept_nowait(NoWaitRef, _Version) ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+
+    ok = socket:bind(Socket, #{
+        family => inet, addr => loopback, port => Port
+    }),
+
+    ok = socket:listen(Socket),
+
+    Parent = self(),
+    {Child, MonitorRef} = spawn_opt(
+        fun() ->
+            {select, {select_info, accept, Ref}} = socket:accept(Socket, NoWaitRef),
+            Parent ! {self(), got_nowait},
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    {ok, ConnSocket} = socket:accept(Socket, 0),
+                    socket:send(ConnSocket, <<"hello">>),
+                    socket:close(ConnSocket)
+            after 5000 ->
+                exit(timeout)
+            end
+        end,
+        [link, monitor]
+    ),
+    ok =
+        receive
+            {Child, got_nowait} -> ok
+        after 5000 -> timeout
+        end,
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    {ok, <<"hello">>} = socket:recv(ClientSocket, 5),
+
+    socket:close(ClientSocket),
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, Child, normal} -> ok
+        after 5000 ->
+            timeout
+        end,
+    socket:close(Socket),
+    ok.
 
 test_setopt_getopt() ->
     {ok, Socket} = socket:open(inet, stream, tcp),

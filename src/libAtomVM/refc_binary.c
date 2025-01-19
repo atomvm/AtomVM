@@ -78,10 +78,6 @@ void refc_binary_destroy(struct RefcBinary *refc, struct GlobalContext *global)
     UNUSED(global);
 
     if (refc->resource_type) {
-        if (refc->resource_type->down) {
-            // There may be monitors associated with this resource.
-            destroy_resource_monitors(refc, global);
-        }
         if (refc->resource_type->dtor) {
             ErlNifEnv env;
             erl_nif_env_partial_init_from_globalcontext(&env, global);
