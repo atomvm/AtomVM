@@ -594,6 +594,10 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
             TRACE("Found PID (%" TERM_X_FMT ")\n", t);
             ptr++;
 
+        } else if (term_is_local_port(t)) {
+            TRACE("Found port (%" TERM_X_FMT ")\n", t);
+            ptr++;
+
         } else if ((t & 0x3) == 0x0) {
             TRACE("Found boxed header (%" TERM_X_FMT ")\n", t);
 

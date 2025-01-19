@@ -208,6 +208,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(register_and_whereis_badarg, 333),
     TEST_CASE(test_send),
     TEST_CASE_EXPECTED(test_open_port_badargs, -21),
+    TEST_CASE(test_port_to_list),
     TEST_CASE_EXPECTED(prime_ext, 1999),
     TEST_CASE_EXPECTED(test_try_case_end, 256),
     TEST_CASE(test_exception_classes),
