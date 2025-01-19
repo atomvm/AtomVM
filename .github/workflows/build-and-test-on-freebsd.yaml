@@ -54,10 +54,10 @@ jobs:
         copyback: false
 
         prepare: |
-          pkg install -y curl cmake gperf erlang elixir mbedtls
+          pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls
 
         run: |
-
+          set -e
           echo "%%"
           echo "%% System Info"
           echo "%%"
