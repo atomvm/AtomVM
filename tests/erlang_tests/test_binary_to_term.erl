@@ -628,11 +628,11 @@ test_encode_port() ->
     ExpectedSize = byte_size(Bin),
     case SupportsV4PortEncoding of
         true ->
-            true = is_port(
-                binary_to_term(
-                    <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
-                )
+            LocalPort1 = binary_to_term(
+                <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
             ),
+            true = is_port(LocalPort1),
+            "#Port<0.1>" = port_to_list(LocalPort1),
             Port1 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 0:32>>),
             Port2 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 1:32>>),
             false = Port1 =:= Port2,

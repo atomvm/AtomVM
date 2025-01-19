@@ -205,7 +205,7 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
     } else if (term_is_local_port(t)) {
         // Update also PORT_AS_CSTRING_LEN when changing this format string
         int32_t process_id = term_to_local_process_id(t);
-        return fun->print(fun, "#Port<0.%" PRIu32 ".0>", process_id);
+        return fun->print(fun, "#Port<0.%" PRIu32 ">", process_id);
 
     } else if (term_is_external_port(t)) {
         // Update also PORT_AS_CSTRING_LEN when changing this format string
