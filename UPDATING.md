@@ -11,6 +11,8 @@
 by using `term_port_from_local_process_id` instead of `term_from_local_process_id`. Sockets, from
 port socket driver, are also represented by a port and some matching code may need to be updated from
 `is_pid/1` to `is_port/1`.
+- Ports and pids can be registered. Function `globalcontext_get_registered_process` result now is
+a term that can be a `port()` or a `pid()`.
 
 ## v0.6.4 -> v0.6.5
 

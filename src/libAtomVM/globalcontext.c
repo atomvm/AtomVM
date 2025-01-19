@@ -39,6 +39,7 @@
 #include "smp.h"
 #include "synclist.h"
 #include "sys.h"
+#include "term.h"
 #include "utils.h"
 #include "valueshashtable.h"
 
@@ -56,7 +57,7 @@ struct RegisteredProcess
     struct ListHead registered_processes_list_head;
 
     int atom_index;
-    int local_process_id;
+    term local_pid_or_port;
 };
 
 GlobalContext *globalcontext_new()
@@ -509,7 +510,7 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx)
     SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
 }
 
-bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id)
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port)
 {
     struct ListHead *registered_processes_list = synclist_wrlock(&glb->registered_processes);
     struct ListHead *item;
@@ -527,7 +528,7 @@ bool globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
         AVM_ABORT();
     }
     registered_process->atom_index = atom_index;
-    registered_process->local_process_id = local_process_id;
+    registered_process->local_pid_or_port = local_pid_or_port;
 
     list_append(registered_processes_list, &registered_process->registered_processes_list_head);
     synclist_unlock(&glb->registered_processes);
@@ -561,7 +562,7 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int target_pr
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (item, tmp, registered_processes_list) {
         struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->local_process_id == target_process_id) {
+        if (term_to_local_process_id(registered_process->local_pid_or_port) == target_process_id) {
             list_remove(item);
             free(registered_process);
         }
@@ -569,14 +570,14 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int target_pr
     synclist_unlock(&glb->registered_processes);
 }
 
-int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
+term globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 {
     struct ListHead *registered_processes_list = synclist_rdlock(&glb->registered_processes);
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
         const struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
         if (registered_process->atom_index == atom_index) {
-            int result = registered_process->local_process_id;
+            term result = registered_process->local_pid_or_port;
             synclist_unlock(&glb->registered_processes);
             return result;
         }
@@ -584,7 +585,7 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 
     synclist_unlock(&glb->registered_processes);
 
-    return 0;
+    return UNDEFINED_ATOM;
 }
 
 term globalcontext_get_registered_name_process(GlobalContext *glb, int local_process_id)
@@ -594,7 +595,7 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (item, tmp, registered_processes_list) {
         struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->local_process_id == local_process_id) {
+        if (term_to_local_process_id(registered_process->local_pid_or_port) == local_process_id) {
             int result = registered_process->atom_index;
             synclist_unlock(&glb->registered_processes);
             return term_from_atom_index(result);

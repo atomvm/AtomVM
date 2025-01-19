@@ -1043,12 +1043,12 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
 
     // pid must be existing, not already registered, and not the atom undefined.
     if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid)) ||
-        globalcontext_get_registered_process(ctx->global, atom_index) != 0 ||
+        globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM ||
         reg_name_term == UNDEFINED_ATOM){
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    globalcontext_register_process(ctx->global, atom_index, pid);
+    globalcontext_register_process(ctx->global, atom_index, pid_or_port_term);
 
     return TRUE_ATOM;
 }
@@ -1079,12 +1079,7 @@ static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[])
 
     int atom_index = term_to_atom_index(reg_name_term);
 
-    int local_process_id = globalcontext_get_registered_process(ctx->global, atom_index);
-    if (local_process_id) {
-        return term_from_local_process_id(local_process_id);
-    } else {
-        return UNDEFINED_ATOM;
-    }
+    return globalcontext_get_registered_process(ctx->global, atom_index);
 }
 
 static NativeHandlerResult process_echo_mailbox(Context *ctx)
@@ -1454,12 +1449,13 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
         UNUSED(dummy);
         int atom_index = term_to_atom_index(target);
 
-        int local_process_id = globalcontext_get_registered_process(glb, atom_index);
-        if (UNLIKELY(local_process_id == 0)) {
+        term pid_or_port = globalcontext_get_registered_process(glb, atom_index);
+        if (UNLIKELY(pid_or_port == UNDEFINED_ATOM)) {
             synclist_unlock(&glb->processes_table);
             RAISE_ERROR(BADARG_ATOM);
         }
 
+        int32_t local_process_id = term_to_local_process_id(pid_or_port);
         Context *p = globalcontext_get_process_nolock(glb, local_process_id);
         if (IS_NULL_PTR(p)) {
             synclist_unlock(&glb->processes_table);
@@ -4061,12 +4057,13 @@ static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int netkernel_pid = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
-    if (UNLIKELY(netkernel_pid == 0)) {
+    term netkernel_pid = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
+    if (UNLIKELY(netkernel_pid == UNDEFINED_ATOM)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    Context *net_kernel = globalcontext_get_process_lock(ctx->global, netkernel_pid);
+    int32_t netkernel_local_process_id = term_to_local_process_id(netkernel_pid);
+    Context *net_kernel = globalcontext_get_process_lock(ctx->global, netkernel_local_process_id);
     if (IS_NULL_PTR(net_kernel)) {
         RAISE_ERROR(BADARG_ATOM);
     }

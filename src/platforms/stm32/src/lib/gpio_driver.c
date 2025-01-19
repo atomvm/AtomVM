@@ -572,7 +572,7 @@ static term gpiodriver_close(Context *ctx)
     GlobalContext *glb = ctx->global;
     term gpio_atom_term = globalcontext_make_atom(glb, gpio_atom);
     int gpio_atom_index = term_to_atom_index(gpio_atom_term);
-    if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
+    if (UNLIKELY(globalcontext_get_registered_process(glb, gpio_atom_index) == UNDEFINED_ATOM)) {
         AVM_LOGE(TAG, "No active GPIO driver can be found.");
         return error_tuple_maybe_gc(ctx, NOPROC_ATOM);
     }
@@ -814,16 +814,15 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
             AVM_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
             return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, invalid_listener_atom));
         }
-        if (term_is_pid(pid)) {
+        if (term_is_atom(pid)) {
+            int pid_atom_index = term_to_atom_index(pid);
+            pid = globalcontext_get_registered_process(ctx->global, pid_atom_index);
+        }
+        if (term_is_local_pid(pid)) {
             target_local_pid = term_to_local_process_id(pid);
         } else {
-            int pid_atom_index = term_to_atom_index(pid);
-            int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
-            if (UNLIKELY(registered_process == 0)) {
-                AVM_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
-                return create_pair(ctx, ERROR_ATOM, NOPROC_ATOM);
-            }
-            target_local_pid = registered_process;
+            AVM_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
+            return create_pair(ctx, ERROR_ATOM, NOPROC_ATOM);
         }
     } else {
         target_local_pid = target_pid;

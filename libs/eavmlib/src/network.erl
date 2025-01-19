@@ -462,20 +462,22 @@ maybe_callback1({Key, Arg} = Msg, Config) ->
     end.
 
 %% @private
+-spec get_port() -> port().
 get_port() ->
     case whereis(network_port) of
         undefined ->
             open_port();
-        Pid ->
-            Pid
+        Port ->
+            Port
     end.
 
 %% @private
+-spec open_port() -> port().
 open_port() ->
-    Pid = erlang:open_port({spawn, "network"}, []),
+    Port = erlang:open_port({spawn, "network"}, []),
     %Pid = spawn(?MODULE, simulation_loop, []),
-    erlang:register(network_port, Pid),
-    Pid.
+    erlang:register(network_port, Port),
+    Port.
 
 %% @private
 wait_for_ip(Timeout) ->

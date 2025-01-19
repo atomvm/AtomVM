@@ -66,7 +66,7 @@
     | {use_nif, boolean()}
     | {send_timeout_ms, non_neg_integer()}.
 -type params() :: [param()].
--type i2c() :: pid() | {'$i2c', term(), reference()}.
+-type i2c() :: port() | {'$i2c', term(), reference()}.
 -type address() :: non_neg_integer().
 -type register() :: non_neg_integer().
 
