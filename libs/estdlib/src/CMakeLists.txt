@@ -31,6 +31,7 @@ set(ERLANG_MODULES
     crypto
     dist_util
     erl_epmd
+    erpc
     erts_debug
     ets
     gen_event

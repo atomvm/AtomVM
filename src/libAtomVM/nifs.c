@@ -41,6 +41,7 @@
 #include "defaultatoms.h"
 #include "dictionary.h"
 #include "dist_nifs.h"
+#include "erl_nif_priv.h"
 #include "ets.h"
 #include "externalterm.h"
 #include "globalcontext.h"
@@ -134,7 +135,7 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unregister_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_setelement_3(Context *ctx, int argc, term argv[]);
-static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[]);
+// static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[]);
 static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[]);
 static term nif_erlang_whereis_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_time_1(Context *ctx, int argc, term argv[]);
@@ -1217,6 +1218,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
     term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
+    term request_term = interop_proplist_get_value(opts_term, REQUEST_ATOM);
 
     if (min_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
@@ -1298,6 +1300,34 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
         term_put_tuple_element(pid_ref_tuple, 1, ref);
 
         return pid_ref_tuple;
+    } else if (UNLIKELY(request_term != term_nil())) {
+        // Handling of spawn_request
+        // spawn_request requires that the reply is enqueued before
+        // any message from the spawned process
+
+        term dhandle = term_get_tuple_element(request_term, 0);
+        term request_ref = term_get_tuple_element(request_term, 1);
+        term request_from = term_get_tuple_element(request_term, 2);
+        term request_opts = term_get_tuple_element(request_term, 3);
+        monitor_term = interop_proplist_get_value(request_opts, MONITOR_ATOM);
+        // TODO handle link with external nodes
+        // link_term = interop_proplist_get_value(request_opts, LINK_ATOM);
+
+        void *rsrc_obj_ptr;
+        if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), dhandle, ctx->global->dist_connection_resource_type, &rsrc_obj_ptr))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        struct DistConnection *conn_obj = (struct DistConnection *) rsrc_obj_ptr;
+
+        dist_spawn_reply(request_ref, request_from, false, monitor_term != term_nil(), new_pid, conn_obj, ctx->global);
+
+        // Also setup monitor, if any.
+        if (monitor_term != term_nil()) {
+            dist_monitor(conn_obj, request_from, new_pid, request_ref, ctx);
+        }
+
+        scheduler_init_ready(new_ctx);
+        return new_pid;
     } else {
         scheduler_init_ready(new_ctx);
         return new_pid;
@@ -1355,7 +1385,7 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     return do_spawn(ctx, new_ctx, opts_term);
 }
 
-static term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
+term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 

@@ -33,6 +33,8 @@ test() ->
             ok = setup(Platform),
             ok = test_ping_from_beam(Platform),
             ok = test_fail_with_wrong_cookie(Platform),
+            ok = test_rpc_from_beam(Platform),
+            ok = test_rpc_loop_from_beam(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
@@ -108,6 +110,33 @@ test_fail_with_wrong_cookie(Platform) ->
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
     "pang" ++ _ = Result,
+    net_kernel:stop(),
+    ok.
+
+test_rpc_from_beam(Platform) ->
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    Result = execute_command(
+        Platform,
+        "erl -sname otp -setcookie AtomVM -eval \"R = rpc:call('" ++ atom_to_list(Node) ++
+            "', erlang, system_info, [machine]), erlang:display(R).\" -s init stop -noshell"
+    ),
+    true = Result =:= lists:flatten(io_lib:format("~p\r\n", [Platform])),
+    net_kernel:stop(),
+    ok.
+
+test_rpc_loop_from_beam(Platform) ->
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    Result = execute_command(
+        Platform,
+        "erl -sname otp -setcookie AtomVM -eval \"R = lists:foldl(fun(X, Acc) -> R = rpc:call('" ++
+            atom_to_list(Node) ++
+            "', erlang, system_info, [machine]), if Acc =:= R -> Acc; Acc =:= undefined -> R end end, undefined, lists:seq(1, 10)), erlang:display(R).\" -s init stop -noshell"
+    ),
+    true = Result =:= lists:flatten(io_lib:format("~p\r\n", [Platform])),
     net_kernel:stop(),
     ok.
 

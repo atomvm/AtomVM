@@ -41,7 +41,34 @@ extern const struct Nif dist_ctrl_get_data_notification_nif;
 extern const struct Nif dist_ctrl_get_data_nif;
 extern const struct Nif dist_ctrl_put_data_nif;
 
+struct DistConnection;
+
 void dist_send_message(term external_pid, term payload, Context *ctx);
+
+/**
+ * @doc Setup a monitor on a local process for a distributed process.
+ * @end
+ * @param conn_obj object of the connection
+ * @param from_pid remote pid setting up the monitor
+ * @param target_proc atom (for registered process) or pid of the local
+ * process to monitor
+ * @param monitor_ref reference used for monitor
+ * @param ctx context for memory allocation
+ */
+term dist_monitor(struct DistConnection *conn_obj, term from_pid, term target_proc, term monitor_ref, Context *ctx);
+
+/**
+ * @doc Send a spawn reply signal to a node
+ * @end
+ * @param conn_obj object of the connection
+ * @param req_id reference identifying the request
+ * @param to_pid (remote) process id identifying the caller
+ * @param link if a link was created
+ * @param monitor if a monitor was created
+ * @param result pid of the spawned process or atom for an error
+ * @param ctx context for memory allocation
+ */
+void dist_spawn_reply(term req_id, term to_pid, bool link, bool monitor, term result, struct DistConnection *connection, GlobalContext *global);
 
 #ifdef __cplusplus
 }
