@@ -37,6 +37,7 @@ test() ->
             ok = test_rpc_loop_from_beam(Platform),
             ok = test_autoconnect_fail(Platform),
             ok = test_autoconnect_to_beam(Platform),
+            ok = test_groupleader(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
@@ -156,21 +157,24 @@ test_autoconnect_to_beam(Platform) ->
     {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
     Node = node(),
     erlang:set_cookie(Node, 'AtomVM'),
-    spawn_link(fun() ->
-        execute_command(
-            Platform,
-            "erl -sname otp -setcookie AtomVM -eval \""
-            "register(beam, self()),"
-            "F = fun(G) ->"
-            " receive"
-            "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
-            "   {Caller, quit} -> Caller ! {self(), quit}"
-            "   after 5000 -> timeout"
-            " end "
-            "end, "
-            "F(F).\" -s init stop -noshell"
-        )
-    end),
+    {Pid, MonitorRef} = spawn_opt(
+        fun() ->
+            [] = execute_command(
+                Platform,
+                "erl -sname otp -setcookie AtomVM -eval \""
+                "register(beam, self()),"
+                "F = fun(G) ->"
+                " receive"
+                "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
+                "   {Caller, quit} -> Caller ! {self(), quit}"
+                "   after 5000 -> exit(timeout)"
+                " end "
+                "end, "
+                "F(F).\" -s init stop -noshell"
+            )
+        end,
+        [link, monitor]
+    ),
     % Wait sufficiently for beam to be up, without connecting to it since
     % that's part of the test
     timer:sleep(1000),
@@ -198,6 +202,79 @@ test_autoconnect_to_beam(Platform) ->
     ok =
         receive
             {OTPPid, quit} -> ok
+        after 5000 -> timeout
+        end,
+    normal =
+        receive
+            {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
+        after 5000 -> timeout
+        end,
+    net_kernel:stop(),
+    ok.
+
+test_groupleader(Platform) ->
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    register(atomvm, self()),
+    Parent = self(),
+    {Pid, MonitorRef} = spawn_opt(
+        fun() ->
+            Result = execute_command(
+                Platform,
+                "erl -sname otp -setcookie AtomVM -eval \""
+                "{atomvm, '" ++ atom_to_list(Node) ++
+                    "'} ! {beam, self()}, "
+                    "F = fun(G) ->"
+                    " receive"
+                    "   {Caller, apply, M, F, A} -> Result = apply(M, F, A), Caller ! {self(), Result}, G(G);"
+                    "   {Caller, quit} -> Caller ! {self(), quit}"
+                    "   after 5000 -> exit(timeout)"
+                    " end "
+                    "end, "
+                    "F(F).\" -s init stop -noshell"
+            ),
+            Parent ! {io_result, Result}
+        end,
+        [link, monitor]
+    ),
+    BeamMainPid =
+        receive
+            {beam, BeamMainPid0} ->
+                BeamMainPid0;
+            {io_result, Result0} ->
+                io:format("~s\n", [Result0]),
+                exit(timeout)
+        after 5000 -> exit(timeout)
+        end,
+    BeamMainPid ! {self(), apply, rpc, call, [Node, io, format, ["hello group leader"]]},
+    ok =
+        receive
+            {BeamMainPid, Result} ->
+                Result;
+            {io_result, Result1} ->
+                io:format("~s\n", [Result1]),
+                exit(timeout)
+        after 5000 -> exit(timeout)
+        end,
+    BeamMainPid ! {self(), quit},
+    ok =
+        receive
+            {BeamMainPid, quit} ->
+                ok;
+            {io_result, Result2} ->
+                io:format("~s\n", [Result2]),
+                exit(timeout)
+        after 5000 -> timeout
+        end,
+    "hello group leader" =
+        receive
+            {io_result, IOResult} -> IOResult
+        after 5000 -> timeout
+        end,
+    normal =
+        receive
+            {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
         after 5000 -> timeout
         end,
     net_kernel:stop(),

@@ -96,7 +96,8 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             break;
         }
         case KillSignal:
-        case TrapAnswerSignal: {
+        case TrapAnswerSignal:
+        case SetGroupLeaderSignal: {
             struct TermSignal *term_signal = CONTAINER_OF(m, struct TermSignal, base);
             term mso_list = term_signal->storage[STORAGE_MSO_LIST_INDEX];
             HeapFragment *fragment = mailbox_message_to_heap_fragment(term_signal, term_signal->heap_end);

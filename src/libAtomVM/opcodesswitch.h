@@ -1049,6 +1049,15 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     context_process_flush_monitor_signal(ctx, flush_signal->ref_ticks, info);   \
                     break;                                                                      \
                 }                                                                               \
+                case SetGroupLeaderSignal: {                                                    \
+                    struct TermSignal *group_leader                                             \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    if (UNLIKELY(!context_process_signal_set_group_leader(ctx, group_leader))) { \
+                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
+                        next_label = &&handle_error;                                            \
+                    }                                                                           \
+                    break;                                                                      \
+                }                                                                               \
                 case NormalMessage: {                                                           \
                     UNREACHABLE();                                                              \
                 }                                                                               \

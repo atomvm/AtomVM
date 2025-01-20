@@ -394,6 +394,15 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info);
 
 /**
+ * @brief Process set group leader signal
+ *
+ * @param ctx the context being executed
+ * @param signal the message with the group leader term
+ * @return \c true if successful, \c false in case of memory error
+ */
+bool context_process_signal_set_group_leader(Context *ctx, struct TermSignal *signal);
+
+/**
  * @brief Get process information.
  *
  * @param ctx the context being executed

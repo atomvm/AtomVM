@@ -300,6 +300,9 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
     TRACE("- Running copy GC on exit reason\n");
     ctx->exit_reason = memory_shallow_copy_term(old_root_fragment, ctx->exit_reason, &ctx->heap.heap_ptr, true);
 
+    TRACE("- Running copy GC on group leader\n");
+    ctx->group_leader = memory_shallow_copy_term(old_root_fragment, ctx->group_leader, &ctx->heap.heap_ptr, true);
+
     TRACE("- Running copy GC on provided roots\n");
     for (size_t i = 0; i < num_roots; i++) {
         roots[i] = memory_shallow_copy_term(old_root_fragment, roots[i], &ctx->heap.heap_ptr, 1);
@@ -373,6 +376,8 @@ static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t n
     }
     // ...exit_reason
     memory_scan_and_rewrite(1, &ctx->exit_reason, old_heap_root, old_end, delta, true);
+    // ...group_leader
+    memory_scan_and_rewrite(1, &ctx->group_leader, old_heap_root, old_end, delta, true);
     // ...and MSO list.
     term *mso_ptr = &ctx->heap.root->mso_list;
     while (!term_is_nil(*mso_ptr)) {

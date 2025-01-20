@@ -217,6 +217,17 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
     return true;
 }
 
+bool context_process_signal_set_group_leader(Context *ctx, struct TermSignal *signal)
+{
+    size_t leader_term_size = memory_estimate_usage(signal->signal_term);
+    ctx->group_leader = UNDEFINED_ATOM;
+    if (UNLIKELY(memory_ensure_free_opt(ctx, leader_term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        return false;
+    }
+    ctx->group_leader = memory_copy_term_tree(&ctx->heap, signal->signal_term);
+    return true;
+}
+
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
