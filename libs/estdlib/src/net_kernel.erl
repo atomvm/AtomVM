@@ -218,13 +218,17 @@ handle_call(
     case maps:find(OtherNode, Connections) of
         error ->
             {reply, ok, State0#state{
-                connections = maps:put(OtherNode, {pending, ConnPid}, Connections)
+                connections = maps:put(OtherNode, {pending, ConnPid, undefined}, Connections)
             }};
-        {ok, {pending, OtherConnPid}} when OtherNode > ThisNode ->
+        {ok, {pending, undefined, DHandle}} ->
+            {reply, ok, State0#state{
+                connections = maps:put(OtherNode, {pending, ConnPid, DHandle}, Connections)
+            }};
+        {ok, {pending, OtherConnPid, DHandle}} when OtherNode > ThisNode ->
             {reply, {ok_simultaneous, OtherConnPid}, State0#state{
-                connections = maps:update(OtherNode, {pending, ConnPid}, Connections)
+                connections = maps:update(OtherNode, {pending, ConnPid, DHandle}, Connections)
             }};
-        {ok, {pending, _OtherConnPid}} ->
+        {ok, {pending, _OtherConnPid, _DHandle}} ->
             {reply, nok, State0};
         {ok, {alive, _ConnPid, _Address}} ->
             {reply, alive, State0}
@@ -296,12 +300,29 @@ handle_info({'EXIT', Pid, _Reason}, #state{connections = Connections} = State) -
         fun(_Node, Status) ->
             case Status of
                 {alive, Pid, _Address} -> false;
-                {pending, Pid} -> false;
+                {pending, Pid, _DHandle} -> false;
                 _ -> true
             end
         end,
         Connections
     ),
+    {noreply, State#state{connections = NewConnections}};
+handle_info(
+    {connect, OtherNode, DHandle},
+    #state{connections = Connections, node = MyNode, longnames = Longnames, proto_dist = ProtoDist} =
+        State
+) ->
+    % ensure DHandle is not garbage collected until setup failed or succeeded
+    NewConnections =
+        case maps:find(OtherNode, Connections) of
+            error ->
+                ProtoDist:setup(OtherNode, normal, MyNode, Longnames, ?SETUPTIME),
+                maps:put(OtherNode, {pending, undefined, DHandle}, Connections);
+            {ok, {pending, ConnPid, _}} ->
+                maps:put(OtherNode, {pending, ConnPid, DHandle}, Connections);
+            {ok, {alive, _ConnPid, _Address}} ->
+                Connections
+        end,
     {noreply, State#state{connections = NewConnections}}.
 
 %% @hidden

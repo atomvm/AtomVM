@@ -43,7 +43,17 @@ extern const struct Nif dist_ctrl_put_data_nif;
 
 struct DistConnection;
 
-void dist_send_message(term external_pid, term payload, Context *ctx);
+/**
+ * @doc Enqueue a message to be sent to a remote process.
+ * This function may raise a badarg error following OTP if target is incorrect.
+ * @param target external pid or a tuple {atom(), node()} to refer to a remote
+ * registered process
+ * @param payload message to send
+ * @param ctx process that sends the message.
+ * @return the payload if the message was sent or term_invalid if there was
+ * a badarg error
+ */
+term dist_send_message(term target, term payload, Context *ctx);
 
 /**
  * @doc Setup a monitor on a local process for a distributed process.

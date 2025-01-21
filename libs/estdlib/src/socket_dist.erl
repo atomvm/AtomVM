@@ -145,6 +145,9 @@ do_setup(Kernel, Node, Type, MyNode, _LongOrShortNames, SetupTime) ->
                             of
                                 ok ->
                                     {ok, DistController} = socket_dist_controller:start(Sock),
+                                    true = socket_dist_controller:supervisor(
+                                        DistController, self()
+                                    ),
                                     HSData = hs_data(
                                         Kernel,
                                         MyNode,

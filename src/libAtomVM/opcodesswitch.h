@@ -2404,8 +2404,12 @@ schedule_in:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term recipient_term = x_regs[0];
-                    if (UNLIKELY(term_is_external_pid(recipient_term))) {
-                        dist_send_message(recipient_term, x_regs[1], ctx);
+                    if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
+                        term return_value = dist_send_message(recipient_term, x_regs[1], ctx);
+                        if (UNLIKELY(term_is_invalid_term(return_value))) {
+                            HANDLE_ERROR();
+                        }
+                        x_regs[0] = return_value;
                     } else {
                         if (term_is_atom(recipient_term)) {
                             recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
@@ -2423,9 +2427,8 @@ schedule_in:
                         TRACE("send/0 target_pid=%i\n", local_process_id);
                         TRACE_SEND(ctx, x_regs[0], x_regs[1]);
                         globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
+                        x_regs[0] = x_regs[1];
                     }
-
-                    x_regs[0] = x_regs[1];
                 #endif
                 break;
             }

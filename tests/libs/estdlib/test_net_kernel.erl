@@ -35,6 +35,8 @@ test() ->
             ok = test_fail_with_wrong_cookie(Platform),
             ok = test_rpc_from_beam(Platform),
             ok = test_rpc_loop_from_beam(Platform),
+            ok = test_autoconnect_fail(Platform),
+            ok = test_autoconnect_to_beam(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
@@ -140,6 +142,67 @@ test_rpc_loop_from_beam(Platform) ->
     net_kernel:stop(),
     ok.
 
+test_autoconnect_fail(Platform) ->
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    [_, Host] = string:split(atom_to_list(Node), "@"),
+    OTPNode = list_to_atom("otp@" ++ Host),
+    {beam, OTPNode} ! {self(), ping},
+    net_kernel:stop(),
+    ok.
+
+test_autoconnect_to_beam(Platform) ->
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    spawn_link(fun() ->
+        execute_command(
+            Platform,
+            "erl -sname otp -setcookie AtomVM -eval \""
+            "register(beam, self()),"
+            "F = fun(G) ->"
+            " receive"
+            "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
+            "   {Caller, quit} -> Caller ! {self(), quit}"
+            "   after 5000 -> timeout"
+            " end "
+            "end, "
+            "F(F).\" -s init stop -noshell"
+        )
+    end),
+    % Wait sufficiently for beam to be up, without connecting to it since
+    % that's part of the test
+    timer:sleep(1000),
+    [_, Host] = string:split(atom_to_list(Node), "@"),
+    OTPNode = list_to_atom("otp@" ++ Host),
+    {beam, OTPNode} ! {self(), ping},
+    {ok, OTPPid} =
+        receive
+            {OTPPid0, pong} -> {ok, OTPPid0}
+        after 5000 -> timeout
+        end,
+    OTPPid ! {self(), ping},
+    ok =
+        receive
+            {OTPPid, pong} -> ok
+        after 5000 -> timeout
+        end,
+    erlang:send({beam, OTPNode}, {self(), ping}),
+    ok =
+        receive
+            {OTPPid, pong} -> ok
+        after 5000 -> timeout
+        end,
+    erlang:send(OTPPid, {self(), quit}),
+    ok =
+        receive
+            {OTPPid, quit} -> ok
+        after 5000 -> timeout
+        end,
+    net_kernel:stop(),
+    ok.
+
 % On AtomVM, we need to start kernel.
 setup("BEAM") ->
     ok;
@@ -159,6 +222,9 @@ loop_read(Fd, Acc) ->
     case atomvm:posix_read(Fd, 10) of
         eof ->
             lists:flatten(lists:reverse(Acc));
+        {error, eintr} ->
+            % used with lldb ;-)
+            loop_read(Fd, Acc);
         {ok, Line} ->
             loop_read(Fd, [binary_to_list(Line) | Acc])
     end.

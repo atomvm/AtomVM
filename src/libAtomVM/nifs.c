@@ -1465,7 +1465,9 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
     term target = argv[0];
     GlobalContext *glb = ctx->global;
 
-    if (term_is_local_pid_or_port(target)) {
+    if (UNLIKELY(term_is_external_pid(argv[0]) || term_is_tuple(argv[0]))) {
+        return dist_send_message(argv[0], argv[1], ctx);
+    } else if (term_is_local_pid_or_port(target)) {
         int32_t local_process_id = term_to_local_process_id(target);
 
         globalcontext_send_message(glb, local_process_id, argv[1]);
