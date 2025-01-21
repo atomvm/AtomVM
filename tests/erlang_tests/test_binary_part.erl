@@ -20,67 +20,68 @@
 
 -module(test_binary_part).
 
--export([start/0, id/1, some_part/1, first_part/1, empty_part/1, compare_bin/2]).
+-export([start/0, id/1, fail_with_badarg/1, compare_bin/2, as_guard/4]).
+-define(ID(Arg), ?MODULE:id(Arg)).
 
 start() ->
-    B1 = some_part(id(<<"012Testxyz">>)),
-    B2 = first_part(id(<<"First01234">>)),
-    B3 = some_part(id(<<"XYZLast">>)),
-    B4 = empty_part(id(<<"">>)),
-    B5 = first_part(id(<<"01234">>)),
-    B6 = not_fail2(1, -1),
+    ok = test_with_binary_part_fun(?ID(fun binary:part/3)),
+    ok = test_with_binary_part_fun(?ID(fun erlang:binary_part/3)),
+    ok = test_with_binary_part_fun(
+        ?ID(fun(Bin, Pos, Len) ->
+            Pattern = binary_part(Bin, Pos, Len),
+            ?MODULE:as_guard(Bin, Pattern, Pos, Len)
+        end)
+    ),
+    0.
 
-    compare_bin(B1, <<"Test">>) + compare_bin(B2, <<"First">>) + compare_bin(B3, <<"Last">>) +
-        byte_size(B4) + compare_bin(B5, <<"01234">>) + fail1(<<":(">>) + fail1({0, 1, 2, 3, 4}) +
-        fail2(-1, 0) + fail2(0, -1) + compare_bin(<<":">>, B6) + fail2(-1, 2) + fail2(1, fail) +
-        fail2(fail, 1).
+test_with_binary_part_fun(BinaryPart) ->
+    Middle = BinaryPart(?ID(<<"012Testxyz">>), 3, 4),
+    ok = compare_bin(Middle, <<"Test">>),
+    First = BinaryPart(?ID(<<"First01234">>), 0, 5),
+    ok = compare_bin(First, <<"First">>),
+    Last = BinaryPart(?ID(<<"XYZLast">>), 3, 4),
+    ok = compare_bin(Last, <<"Last">>),
+    Empty = BinaryPart(?ID(<<"">>), 0, 0),
+    0 = byte_size(Empty),
+    All = BinaryPart(?ID(<<"01234">>), 0, 5),
+    ok = compare_bin(All, <<"01234">>),
+    NegativeCount = BinaryPart(?ID(<<"xyz">>), 1, -1),
+    ok = compare_bin(NegativeCount, <<"x">>),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"PastEnd">>), 0, 8) end),
+    BadBinary = {0, 1, 2, 3, 4},
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(BadBinary), 0, 1) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(BadBinary), 0, 0) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"PosBeforeStart">>), -1, 0) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"LenBeforeStart">>), 0, -1) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"PartiallyBeforeStart">>), -1, 2) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"BadPos">>), fail, 1) end),
+    ok = fail_with_badarg(fun() -> BinaryPart(?ID(<<"BadLen">>), 1, fail) end),
+    ok.
 
-empty_part(Bin1) ->
-    binary:part(id(Bin1), 0, 0).
-
-first_part(Bin1) ->
-    binary:part(id(Bin1), 0, 5).
-
-some_part(Bin1) ->
-    binary:part(id(Bin1), 3, 4).
+as_guard(Bin, Pattern, Pos, Len) when binary_part(Bin, Pos, Len) == Pattern ->
+    Pattern;
+as_guard(_Bin, _Pattern, _Pos, _Len) ->
+    erlang:error(badarg).
 
 id(X) ->
     X.
 
-fail1(X) ->
-    try binary:part(X, 0, 3) of
-        _Any -> 1000
+fail_with_badarg(Fun) ->
+    try Fun() of
+        Ret -> {unexpected, Ret}
     catch
-        error:badarg -> 1;
-        _:_ -> 2000
-    end.
-
-fail2(X, Y) ->
-    try binary:part(<<":((">>, X, Y) of
-        _Any -> 1000
-    catch
-        error:badarg -> 1;
-        _:_ -> 2000
-    end.
-
-not_fail2(X, Y) ->
-    try binary:part(<<":((">>, X, Y) of
-        Any -> Any
-    catch
-        error:badarg -> 1;
-        _:_ -> 2000
+        error:badarg -> ok;
+        C:E -> {unexpected, C, E}
     end.
 
 compare_bin(Bin1, Bin2) ->
     compare_bin(Bin1, Bin2, byte_size(Bin1) - 1).
 
 compare_bin(_Bin1, _Bin2, -1) ->
-    1;
+    ok;
 compare_bin(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of
-        B1 ->
-            compare_bin(Bin1, Bin2, Index - 1);
-        _Any ->
-            0
+        B1 -> compare_bin(Bin1, Bin2, Index - 1);
+        _Any -> error
     end.

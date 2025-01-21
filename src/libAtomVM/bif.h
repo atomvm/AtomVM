@@ -39,11 +39,20 @@ extern "C" {
 
 #define MAX_BIF_NAME_LEN 260
 
+struct SubBinarySlice
+{
+    avm_int_t pos;
+    avm_int_t len;
+    size_t heap_size;
+};
+
 const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity);
 
 term bif_erlang_self_0(Context *ctx);
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
+term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3);
+bool get_sub_binary_slice(term bin_term, term pos_term, term len_term, struct SubBinarySlice *slice);
 term bif_erlang_length_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 
 term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1);
