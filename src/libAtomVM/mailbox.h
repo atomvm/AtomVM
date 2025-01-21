@@ -89,6 +89,7 @@ enum MessageType
     TrapExceptionSignal,
     FlushMonitorSignal,
     FlushInfoMonitorSignal,
+    SetGroupLeaderSignal,
 };
 
 struct MailboxMessage

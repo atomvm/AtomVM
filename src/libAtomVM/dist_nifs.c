@@ -496,10 +496,10 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             }
             term roots[4];
             roots[0] = argv[0];
-            roots[1] = argv[1];
+            roots[1] = argv[1]; // dist handle, ensure it's not garbage collected until we return
             roots[2] = control;
             roots[3] = externalterm_to_term_with_roots(data + 1 + bytes_read, binary_len - 1 - bytes_read, ctx, ExternalTermCopy, &bytes_read, 3, roots);
-            if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(1, TUPLE_SIZE(2) + TUPLE_SIZE(4)), 4, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(1, TUPLE_SIZE(2) + TUPLE_SIZE(5)), 4, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
             control = roots[2];
@@ -516,15 +516,18 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             if (UNLIKELY(!term_is_pid(from))) {
                 RAISE_ERROR(BADARG_ATOM);
             }
-            // term groupleader = term_get_tuple_element(control, 3);
-            // TODO: handle groupleader which is an externalpid
+            term groupleader = term_get_tuple_element(control, 3);
+            if (UNLIKELY(!term_is_pid(groupleader))) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
             term options = term_get_tuple_element(control, 5);
 
-            term request_tuple = term_alloc_tuple(4, &ctx->heap);
+            term request_tuple = term_alloc_tuple(5, &ctx->heap);
             term_put_tuple_element(request_tuple, 0, roots[0]);
             term_put_tuple_element(request_tuple, 1, reqid);
             term_put_tuple_element(request_tuple, 2, from);
-            term_put_tuple_element(request_tuple, 3, options);
+            term_put_tuple_element(request_tuple, 3, groupleader);
+            term_put_tuple_element(request_tuple, 4, options);
             term request_opt = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(request_opt, 0, REQUEST_ATOM);
             term_put_tuple_element(request_opt, 1, request_tuple);

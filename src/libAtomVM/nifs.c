@@ -1211,7 +1211,7 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
 
 // Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
 // opts_term is [] for spawn/1,3
-static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
+static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_freeze, term opts_term)
 {
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
@@ -1219,6 +1219,13 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
     term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
     term request_term = interop_proplist_get_value(opts_term, REQUEST_ATOM);
+    term group_leader;
+
+    if (UNLIKELY(request_term != term_nil())) {
+        group_leader = term_get_tuple_element(request_term, 3);
+    } else {
+        group_leader = ctx->group_leader;
+    }
 
     if (min_heap_size_term != term_nil()) {
         if (UNLIKELY(!term_is_integer(min_heap_size_term))) {
@@ -1243,6 +1250,21 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
         }
+    }
+
+    int size = 0;
+    for (uint32_t i = 0; i < n_freeze; i++) {
+        size += memory_estimate_usage(new_ctx->x[i + arity - n_freeze]);
+    }
+    size += memory_estimate_usage(group_leader);
+    if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        //TODO: new process should be terminated, however a new pid is returned anyway
+        fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
+        AVM_ABORT();
+    }
+    new_ctx->group_leader = memory_copy_term_tree(&new_ctx->heap, group_leader);
+    for (uint32_t i = 0; i < arity; i++) {
+        new_ctx->x[i] = memory_copy_term_tree(&new_ctx->heap, new_ctx->x[i]);
     }
 
     switch (heap_growth_strategy) {
@@ -1308,7 +1330,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
         term dhandle = term_get_tuple_element(request_term, 0);
         term request_ref = term_get_tuple_element(request_term, 1);
         term request_from = term_get_tuple_element(request_term, 2);
-        term request_opts = term_get_tuple_element(request_term, 3);
+        term request_opts = term_get_tuple_element(request_term, 4);
         monitor_term = interop_proplist_get_value(request_opts, MONITOR_ATOM);
         // TODO handle link with external nodes
         // link_term = interop_proplist_get_value(request_opts, LINK_ATOM);
@@ -1344,7 +1366,6 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
-    new_ctx->group_leader = ctx->group_leader;
 
     const term *boxed_value = term_to_const_term_ptr(fun_term);
 
@@ -1365,24 +1386,15 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
 
     // TODO: new process should fail with badarity if arity != 0
 
-    int size = 0;
     for (uint32_t i = 0; i < n_freeze; i++) {
-        size += memory_estimate_usage(boxed_value[i + 3]);
-    }
-    if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        //TODO: new process should be terminated, however a new pid is returned anyway
-        fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
-        AVM_ABORT();
-    }
-    for (uint32_t i = 0; i < n_freeze; i++) {
-        new_ctx->x[i + arity - n_freeze] = memory_copy_term_tree(&new_ctx->heap, boxed_value[i + 3]);
+        new_ctx->x[i + arity - n_freeze] = boxed_value[i + 3];
     }
 
     new_ctx->saved_module = fun_module;
     new_ctx->saved_ip = fun_module->labels[label];
     new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
 
-    return do_spawn(ctx, new_ctx, opts_term);
+    return do_spawn(ctx, new_ctx, arity, n_freeze, opts_term);
 }
 
 term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
@@ -1399,7 +1411,6 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
-    new_ctx->group_leader = ctx->group_leader;
 
     AtomString module_string = globalcontext_atomstring_from_term(ctx->global, argv[0]);
     AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
@@ -1439,14 +1450,8 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         new_ctx->min_heap_size = min_heap_size;
     }
 
-    avm_int_t size = memory_estimate_usage(args_term);
-    if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        // Context was not scheduled yet, we can destroy it.
-        context_destroy(new_ctx);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     while (term_is_nonempty_list(args_term)) {
-        new_ctx->x[reg_index] = memory_copy_term_tree(&new_ctx->heap, term_get_list_head(args_term));
+        new_ctx->x[reg_index] = term_get_list_head(args_term);
         reg_index++;
 
         args_term = term_get_list_tail(args_term);
@@ -1456,7 +1461,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         }
     }
 
-    return do_spawn(ctx, new_ctx, opts_term);
+    return do_spawn(ctx, new_ctx, reg_index, reg_index, opts_term);
 }
 
 static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
@@ -4003,7 +4008,7 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
         term leader = argv[0];
         term pid = argv[1];
         VALIDATE_VALUE(pid, term_is_local_pid);
-        VALIDATE_VALUE(leader, term_is_local_pid);
+        VALIDATE_VALUE(leader, term_is_pid);
 
         int local_process_id = term_to_local_process_id(pid);
         Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
@@ -4011,7 +4016,13 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
         }
 
-        target->group_leader = leader;
+        if (term_is_local_pid(leader)) {
+            // We cannot put leader term on the heap
+            mailbox_send_term_signal(target, SetGroupLeaderSignal, leader);
+        } else {
+            target->group_leader = leader;
+        }
+
         globalcontext_get_process_unlock(ctx->global, target);
         return TRUE_ATOM;
     }
