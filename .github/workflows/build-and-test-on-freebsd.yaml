@@ -34,10 +34,17 @@ concurrency:
 
 jobs:
   build-and-test-on-freebsd:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     name: Build and test AtomVM on FreeBSD
     env:
       ATOMVM_EXAMPLE: "atomvm-example"
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        os_release: ["13.4", "14.2"]
+
     steps:
 
     - uses: actions/checkout@v4
@@ -47,17 +54,17 @@ jobs:
       uses: vmactions/freebsd-vm@v1
       timeout-minutes: 20
       with:
-        release: 13.2
+        release: ${{ matrix.os_release }}
         envs: 'ATOMVM_EXAMPLE'
         usesh: true
         sync: rsync
         copyback: false
 
         prepare: |
-          pkg install -y curl cmake gperf erlang elixir mbedtls
+          pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls
 
         run: |
-
+          set -e
           echo "%%"
           echo "%% System Info"
           echo "%%"
