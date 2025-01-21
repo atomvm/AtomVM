@@ -55,6 +55,12 @@ jobs:
     runs-on: ubuntu-24.04
     if: needs.cli_token.outputs.token_check == 'true'
     container: espressif/idf:${{ matrix.idf-version }}
+    services:
+      wokwi-ci-server:
+        image: wokwi/wokwi-ci-server
+        ports:
+          - 3000:3000
+
     strategy:
       fail-fast: false
       # focus on device diversity.
@@ -113,6 +119,10 @@ jobs:
           . $IDF_PATH/export.sh
           idf.py -DSDKCONFIG_DEFAULTS='sdkconfig.ci.wokwi' set-target ${{matrix.esp-idf-target}}
           idf.py build
+
+      - name: Configure Wokwi environment
+        run: |
+          echo "WOKWI_CLI_SERVER=ws://wokwi-ci-server:3000" >> $GITHUB_ENV
 
       - name: Run ESP32-sim tests using Wokwi CI
         working-directory: ./src/platforms/esp32/test/
