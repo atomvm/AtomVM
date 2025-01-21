@@ -108,6 +108,30 @@ term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg
     return term_from_int32(len);
 }
 
+term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3)
+{
+    VALIDATE_VALUE_BIF(fail_label, arg1, term_is_binary);
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_integer);
+    VALIDATE_VALUE_BIF(fail_label, arg3, term_is_integer);
+
+    avm_int_t pos = term_to_int(arg2);
+    avm_int_t len = term_to_int(arg3);
+    BinaryPosLen slice;
+    if (UNLIKELY(!term_normalize_binary_pos_len(arg1, pos, len, &slice))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    TERM_DEBUG_ASSERT((sizeof(ctx->x) / sizeof(ctx->x[0])) >= MAX_REG + 1);
+    ctx->x[live] = arg1;
+    size_t heap_size = term_sub_binary_heap_size(arg1, len);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    arg1 = ctx->x[live];
+
+    return term_maybe_create_sub_binary(arg1, slice.pos, slice.len, &ctx->heap, ctx->global);
+}
+
 term bif_erlang_is_atom_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     UNUSED(ctx);
