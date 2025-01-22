@@ -194,6 +194,7 @@ static const char *const port_atom = ATOM_STR("\x4", "port");
 static const char *const rcvbuf_atom = ATOM_STR("\x6", "rcvbuf");
 static const char *const reuseaddr_atom = ATOM_STR("\x9", "reuseaddr");
 static const char *const type_atom = ATOM_STR("\x4", "type");
+static const char *const add_membership_atom = ATOM_STR("\xE", "add_membership");
 
 #define CLOSED_FD 0
 
@@ -221,12 +222,14 @@ enum otp_socket_setopt_level
 {
     OtpSocketInvalidSetoptLevel = 0,
     OtpSocketSetoptLevelSocket,
-    OtpSocketSetoptLevelOTP
+    OtpSocketSetoptLevelOTP,
+    OtpSocketSetoptLevelIP
 };
 
 static const AtomStringIntPair otp_socket_setopt_level_table[] = {
     { ATOM_STR("\x6", "socket"), OtpSocketSetoptLevelSocket },
     { ATOM_STR("\x3", "otp"), OtpSocketSetoptLevelOTP },
+    { ATOM_STR("\x2", "ip"), OtpSocketSetoptLevelIP },
     SELECT_INT_DEFAULT(OtpSocketInvalidSetoptLevel)
 };
 
@@ -604,7 +607,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         }
 
         term socket_term = term_alloc_tuple(2, &ctx->heap);
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        uint64_t ref_ticks = globalcontext_get_ref_ticks(global);
         rsrc_obj->socket_ref_ticks = ref_ticks;
         term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
         term_put_tuple_element(socket_term, 0, obj);
@@ -1261,8 +1264,8 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                 return OK_ATOM;
 #endif
             } else if (globalcontext_is_term_equal_to_atom_string(global, opt, linger_atom)) {
-                term onoff = interop_kv_get_value(value, onoff_atom, ctx->global);
-                term linger = interop_kv_get_value(value, linger_atom, ctx->global);
+                term onoff = interop_kv_get_value(value, onoff_atom, global);
+                term linger = interop_kv_get_value(value, linger_atom, global);
                 VALIDATE_VALUE(linger, term_is_integer);
 
 #if OTP_SOCKET_BSD
@@ -1322,6 +1325,52 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     return make_error_tuple(globalcontext_make_atom(global, invalid_option_atom), ctx);
                 }
             }
+
+#if OTP_SOCKET_BSD
+            case OtpSocketSetoptLevelIP: {
+                term opt = term_get_tuple_element(level_tuple, 1);
+                if (globalcontext_is_term_equal_to_atom_string(global, opt, add_membership_atom)) {
+                    // socket:setopt(Socket, {ip, add_membership_atom}, Req :: ip_mreq())
+
+                    if (UNLIKELY(!term_is_map(value))) {
+                        TRACE("socket:setopt: ip add_membership_atom value must be a map");
+                        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                        return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
+                    }
+
+                    term multiaddr = interop_kv_get_value(value, ATOM_STR("\x9", "multiaddr"), global);
+                    if (UNLIKELY(!term_is_tuple(multiaddr) || term_get_tuple_arity(multiaddr) != 4)) {
+                        TRACE("socket:setopt: ip add_membership_atom multiaddr value must be an IP addr");
+                        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                        return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
+                    }
+
+                    term interface = interop_kv_get_value(value, ATOM_STR("\x9", "interface"), global);
+                    if (UNLIKELY(!term_is_tuple(interface) || term_get_tuple_arity(interface) != 4)) {
+                        TRACE("socket:setopt: ip add_membership_atom interface value must be an IP addr");
+                        SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                        return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
+                    }
+
+                    struct ip_mreq option_value;
+                    option_value.imr_multiaddr.s_addr = htonl(inet_addr4_to_uint32(multiaddr));
+                    option_value.imr_interface.s_addr = htonl(inet_addr4_to_uint32(interface));
+
+                    int res = setsockopt(rsrc_obj->fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &option_value, sizeof(option_value));
+
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    if (UNLIKELY(res != 0)) {
+                        return make_errno_tuple(ctx);
+                    } else {
+                        return OK_ATOM;
+                    }
+                } else {
+                    TRACE("socket:setopt: Unsupported ip option");
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    return make_error_tuple(globalcontext_make_atom(global, invalid_option_atom), ctx);
+                }
+            }
+#endif
 
             default: {
                 TRACE("socket:setopt: Unsupported level");
@@ -1538,9 +1587,9 @@ static term nif_socket_bind(Context *ctx, int argc, term argv[])
         ip_addr_set_loopback(false, &ip_addr);
 #endif
     } else if (term_is_map(sockaddr)) {
-        term port = interop_kv_get_value_default(sockaddr, port_atom, term_from_int(0), ctx->global);
+        term port = interop_kv_get_value_default(sockaddr, port_atom, term_from_int(0), global);
         port_u16 = term_to_int(port);
-        term addr = interop_kv_get_value(sockaddr, addr_atom, ctx->global);
+        term addr = interop_kv_get_value(sockaddr, addr_atom, global);
         if (globalcontext_is_term_equal_to_atom_string(global, addr, any_atom)) {
 #if OTP_SOCKET_BSD
             serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -1764,7 +1813,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         }
 
         term socket_term = term_alloc_tuple(2, &ctx->heap);
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        uint64_t ref_ticks = globalcontext_get_ref_ticks(global);
         conn_rsrc_obj->socket_ref_ticks = ref_ticks;
         term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
         term_put_tuple_element(socket_term, 0, new_resource);
@@ -1808,7 +1857,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         // return EAGAIN
         LWIP_END();
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        return make_error_tuple(posix_errno_to_term(EAGAIN, ctx->global), ctx);
+        return make_error_tuple(posix_errno_to_term(EAGAIN, global), ctx);
     }
     LWIP_END();
     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -2285,12 +2334,12 @@ static ssize_t do_socket_send(struct SocketResource *rsrc_obj, const uint8_t *bu
     } else {
         sent_data = send(rsrc_obj->fd, buf, len, 0);
     }
-    if (sent_data == 0) {
-        return SocketClosed;
-    }
     if (sent_data < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
             return SocketWouldBlock;
+        }
+        if (errno == EBADF || errno == ECONNRESET) {
+            return SocketClosed;
         }
         return SocketOtherError;
     }
@@ -2430,7 +2479,7 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 
-        term rest = term_maybe_create_sub_binary(data, sent_data, rest_len, &ctx->heap, ctx->global);
+        term rest = term_maybe_create_sub_binary(data, sent_data, rest_len, &ctx->heap, global);
         return port_create_tuple2(ctx, OK_ATOM, rest);
 
     } else if (sent_data == 0) {
@@ -2535,8 +2584,8 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
 
     SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
     term sockaddr = argv[1];
-    term port = interop_kv_get_value_default(sockaddr, port_atom, term_from_int(0), ctx->global);
-    term addr = interop_kv_get_value(sockaddr, addr_atom, ctx->global);
+    term port = interop_kv_get_value_default(sockaddr, port_atom, term_from_int(0), global);
+    term addr = interop_kv_get_value(sockaddr, addr_atom, global);
     if (term_is_invalid_term(addr)) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
         RAISE_ERROR(BADARG_ATOM);

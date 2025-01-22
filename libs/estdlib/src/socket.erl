@@ -66,10 +66,12 @@
 }.
 -type in_addr() :: {0..255, 0..255, 0..255, 0..255}.
 -type port_number() :: 0..65535.
+-type ip_mreq() :: #{multiaddr := in_addr(), interface := in_addr()}.
 
 -type socket_option() ::
     {socket, reuseaddr | linger | type}
-    | {otp, recvbuf}.
+    | {otp, recvbuf}
+    | {ip, add_membership}.
 
 -export_type([
     socket/0,
@@ -80,7 +82,8 @@
     sockaddr_in/0,
     in_addr/0,
     port_number/0,
-    socket_option/0
+    socket_option/0,
+    ip_mreq/0
 ]).
 
 -define(DEFAULT_BACKLOG, 4).
@@ -647,6 +650,7 @@ getopt(_Socket, _SocketOption) ->
 %%              <tr><td>`{socket, reuseaddr}'</td><td>`boolean()'</td></tr>
 %%              <tr><td>`{socket, linger}'</td><td>`#{onoff => boolean(), linger => non_neg_integer()}'</td></tr>
 %%              <tr><td>`{otp, recvbuf}'</td><td>`non_neg_integer()'</td></tr>
+%%              <tr><td>`{ip, add_membership}'</td><td>`ip_mreq()'</td></tr>
 %%          </table>
 %%
 %% Example:

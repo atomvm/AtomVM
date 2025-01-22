@@ -28,6 +28,24 @@ test() ->
     ok = test_timeout(),
     ok = test_nowait(),
     ok = test_setopt_getopt(),
+    % Workaround for image limitation on CI
+    % https://github.com/actions/runner-images/issues/10924
+    Platform = erlang:system_info(machine),
+    System = execute_command(Platform, "uname -s"),
+    TestMulticast =
+        case System of
+            "Darwin\n" ->
+                Version = execute_command(Platform, "uname -r"),
+                Version < "24";
+            _ ->
+                true
+        end,
+    if
+        TestMulticast ->
+            ok = test_multicast();
+        true ->
+            ok
+    end,
     ok.
 
 -define(PACKET_SIZE, 7).
@@ -290,3 +308,55 @@ test_setopt_getopt() ->
     {error, closed} = socket:getopt(Socket, {socket, type}),
     {error, closed} = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok.
+
+test_multicast() ->
+    {ok, SocketRecv} = socket:open(inet, dgram, udp),
+    SocketRecvAddr = #{
+        family => inet, addr => {0, 0, 0, 0}, port => 8042
+    },
+    ok = socket:setopt(SocketRecv, {socket, reuseaddr}, true),
+    ok = socket:bind(SocketRecv, SocketRecvAddr),
+    ok = socket:setopt(SocketRecv, {ip, add_membership}, #{
+        multiaddr => {224, 0, 0, 42}, interface => {0, 0, 0, 0}
+    }),
+
+    {ok, SocketSender} = socket:open(inet, dgram, udp),
+    ok = socket:sendto(SocketSender, <<"42">>, #{
+        family => inet, addr => {224, 0, 0, 42}, port => 8042
+    }),
+    {ok, SocketSenderAddr} = socket:sockname(SocketSender),
+    SocketSenderAddrPort = maps:get(port, SocketSenderAddr),
+
+    {ok, {SocketSenderAddrFrom, <<"42">>}} = socket:recvfrom(SocketRecv, 2, 500),
+    {error, timeout} = socket:recvfrom(SocketRecv, 2, 0),
+    SocketSenderAddrPort = maps:get(port, SocketSenderAddrFrom),
+
+    ok = socket:sendto(SocketRecv, <<"43">>, #{
+        family => inet, addr => {224, 0, 0, 42}, port => 8042
+    }),
+    {ok, {SocketRecvAddrFrom, <<"43">>}} = socket:recvfrom(SocketRecv, 2, 500),
+    {error, timeout} = socket:recvfrom(SocketRecv, 2, 0),
+    8042 = maps:get(port, SocketRecvAddrFrom),
+
+    ok = socket:close(SocketRecv),
+    ok = socket:close(SocketSender),
+    ok.
+
+execute_command("BEAM", Command) ->
+    os:cmd(Command);
+execute_command("ATOM", Command) ->
+    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", Command], undefined, [stdout]),
+    Result = loop_read(Fd, []),
+    ok = atomvm:posix_close(Fd),
+    Result.
+
+loop_read(Fd, Acc) ->
+    case atomvm:posix_read(Fd, 10) of
+        eof ->
+            lists:flatten(lists:reverse(Acc));
+        {error, eintr} ->
+            % used with lldb ;-)
+            loop_read(Fd, Acc);
+        {ok, Line} ->
+            loop_read(Fd, [binary_to_list(Line) | Acc])
+    end.
