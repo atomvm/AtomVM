@@ -1068,7 +1068,7 @@ static inline term term_from_literal_binary(const void *data, size_t size, Heap 
  */
 static inline size_t term_sub_binary_heap_size(term binary, size_t len)
 {
-    if (term_is_refc_binary(binary) && len >= SUB_BINARY_MIN) {
+    if ((term_is_refc_binary(binary) || term_is_sub_binary(binary)) && len >= SUB_BINARY_MIN) {
         return TERM_BOXED_SUB_BINARY_SIZE;
     } else {
         return term_binary_heap_size(len);
