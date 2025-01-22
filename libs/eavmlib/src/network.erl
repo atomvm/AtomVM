@@ -295,13 +295,17 @@ stop() ->
 %%-----------------------------------------------------------------------------
 -spec sta_rssi() -> {ok, Rssi :: db()} | {error, Reason :: term()}.
 sta_rssi() ->
-    Port = get_port(),
-    Ref = make_ref(),
-    Port ! {self(), Ref, rssi},
-    receive
-        {Ref, {error, Reason}} -> {error, Reason};
-        {Ref, {rssi, Rssi}} -> {ok, Rssi};
-        Other -> {error, Other}
+    case whereis(network_port) of
+        undefined ->
+            {error, network_down};
+        Port ->
+            Ref = make_ref(),
+            Port ! {self(), Ref, rssi},
+            receive
+                {Ref, {error, Reason}} -> {error, Reason};
+                {Ref, {rssi, Rssi}} -> {ok, Rssi};
+                Other -> {error, Other}
+            end
     end.
 
 %%
