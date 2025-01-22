@@ -356,6 +356,7 @@ test_lookup_element() ->
 test_insert_list() ->
     Tid = ets:new(test_insert_list, []),
     true = ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}]),
+    true = ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}]),
     [{patat, patat}] = ets:lookup(Tid, patat),
     [{batat, batat}] = ets:lookup(Tid, batat),
     true = ets:insert(Tid, []),

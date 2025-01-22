@@ -258,35 +258,33 @@ static EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Con
         return EtsPermissionDenied;
     }
 
-    if ((size_t) term_get_tuple_arity(entry) < (ets_table->keypos + 1)) {
+    size_t keypos = ets_table->keypos;
+
+    if ((size_t) term_get_tuple_arity(entry) < keypos + 1) {
         return EtsBadEntry;
     }
 
-    Heap *heap = malloc(sizeof(Heap));
-    if (IS_NULL_PTR(heap)) {
-        return EtsAllocationFailure;
-    }
-    size_t size = (size_t) memory_estimate_usage(entry);
-    if (memory_init_heap(heap, size) != MEMORY_GC_OK) {
-        free(heap);
+    struct HNode *new_node = ets_hashtable_new_node(entry, keypos);
+    if (IS_NULL_PTR(new_node)) {
         return EtsAllocationFailure;
     }
 
-    term new_entry = memory_copy_term_tree(heap, entry);
-    term key = term_get_tuple_element(new_entry, (int) ets_table->keypos);
-
-    EtsErrorCode result = EtsOk;
-    EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, key, new_entry, EtsHashtableAllowOverwrite, heap, ctx->global);
+    EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, new_node, EtsHashtableAllowOverwrite, ctx->global);
     if (UNLIKELY(res != EtsHashtableOk)) {
-        result = EtsAllocationFailure;
+        return EtsAllocationFailure;
     }
 
-    return result;
+    return EtsOk;
 }
 
 static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list, Context *ctx)
 {
+    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
+        return EtsPermissionDenied;
+    }
+
     term iter = list;
+    size_t size = 0;
 
     while (term_is_nonempty_list(iter)) {
         term tuple = term_get_list_head(iter);
@@ -294,21 +292,37 @@ static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list,
         if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) < (ets_table->keypos + 1)) {
             return EtsBadEntry;
         }
+        ++size;
     }
     if (!term_is_nil(iter)) {
         return EtsBadEntry;
     }
 
+    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    if (IS_NULL_PTR(nodes)) {
+        return EtsAllocationFailure;
+    }
+
+    size_t i = 0;
     while (term_is_nonempty_list(list)) {
         term tuple = term_get_list_head(list);
-        EtsErrorCode result = ets_table_insert(ets_table, tuple, ctx);
-        if (UNLIKELY(result != EtsOk)) {
-            AVM_ABORT(); // Abort because operation might not be atomic.
+        nodes[i] = ets_hashtable_new_node(tuple, ets_table->keypos);
+        if (IS_NULL_PTR(nodes[i])) {
+            ets_hashtable_free_node_array(nodes, i, ctx->global);
+            free(nodes);
+            return EtsAllocationFailure;
         }
-
+        ++i;
         list = term_get_list_tail(list);
     }
 
+    for (size_t i = 0; i < size; ++i) {
+
+        EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, ctx->global);
+        assert(res == EtsHashtableOk);
+    }
+
+    free(nodes);
     return EtsOk;
 }
 
