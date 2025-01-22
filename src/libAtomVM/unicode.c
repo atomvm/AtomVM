@@ -21,6 +21,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "utils.h"
+
 #include "unicode.h"
 
 // clang-format off
@@ -66,6 +68,28 @@ static inline uint32_t decode(uint32_t* state, uint32_t* codep, uint32_t byte)
 }
 
 // clang-format on
+
+enum UnicodeTransformDecodeResult unicode_utf8_decode(
+    const uint8_t *buf, size_t len, uint32_t *c, size_t *out_size)
+{
+    uint32_t codepoint = 0;
+    uint32_t state = 0;
+    size_t i = 0;
+    while (i < len) {
+        state = decode(&state, &codepoint, buf[i]);
+        i++;
+
+        if (state == UTF8_ACCEPT) {
+            *c = codepoint;
+            *out_size = i;
+            return UnicodeTransformDecodeSuccess;
+        } else if (UNLIKELY(state == UTF8_REJECT)) {
+            return UnicodeTransformDecodeFail;
+        }
+    }
+
+    return UnicodeTransformDecodeIncomplete;
+}
 
 bool unicode_is_valid_utf8_buf(const uint8_t *buf, size_t len)
 {
