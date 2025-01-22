@@ -1638,19 +1638,10 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
 
     AtomString atom;
     if (LIKELY(!encode_latin1_to_utf8)) {
-        size_t i = 0;
-        while (i < atom_string_len) {
-            uint32_t codepoint;
-            size_t codepoint_size;
-            if (UNLIKELY(bitstring_utf8_decode(
-                    (uint8_t *) atom_string + i, atom_string_len, &codepoint, &codepoint_size))
-                != UnicodeTransformDecodeSuccess) {
-                *error_reason = BADARG_ATOM;
-                return term_invalid_term();
-            }
-            i += codepoint_size;
+        if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_string, atom_string_len))) {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
         }
-
         atom = malloc(atom_string_len + 1);
         if (IS_NULL_PTR(atom)) {
             *error_reason = OUT_OF_MEMORY_ATOM;

@@ -40,6 +40,8 @@ static inline bool unicode_is_valid_codepoint(uint32_t codepoint)
     return (codepoint < 0x110000) && !((codepoint > 0xD800) && (codepoint < 0xDFFF));
 }
 
+bool unicode_is_valid_utf8_buf(const uint8_t *buf, size_t len);
+
 #ifdef __cplusplus
 }
 #endif
