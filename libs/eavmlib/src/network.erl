@@ -370,10 +370,25 @@ handle_info(Msg, State) ->
     {noreply, State}.
 
 %% @hidden
-terminate(_Reason, _State) ->
+%% Wait for port to be closed
+terminate(_Reason, State) ->
     Ref = make_ref(),
+    Port = State#state.port,
+    PortMonitor = erlang:monitor(port, Port),
     network_port ! {?SERVER, Ref, stop},
-    ok.
+    wait_for_port_close(PortMonitor, Port).
+
+wait_for_port_close(PortMonitor, Port) ->
+    receive
+        {'DOWN', PortMonitor, port, Port, _DownReason} ->
+            ok;
+        _Other ->
+            % Handle unexpected messages if necessary
+            wait_for_port_close(PortMonitor, Port)
+        % Timeout after 1 second just in case.
+    after 1000 ->
+        {error, timeout}
+    end.
 
 %%
 %% Internal operations
