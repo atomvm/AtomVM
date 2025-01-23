@@ -27,6 +27,7 @@ start() ->
         test_dir,
         test_file,
         test_http_server,
+        test_mdns,
         test_port,
         test_timer_manager,
         test_ahttp_client
