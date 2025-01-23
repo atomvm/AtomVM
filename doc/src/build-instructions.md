@@ -315,6 +315,63 @@ $ pytest --embedded-services=idf,qemu -s
 
 ESP32 tests are erlang modules located in `src/platforms/esp32/test/main/test_erl_sources/` and executed from `src/platforms/esp32/test/main/test_main.c`.
 
+### Performance and Power
+
+AtomVM comes with conservative defaults for broad compatibility with different ESP32 boards, and a reasonable performance/power/longevity tradeoff.
+
+You may want to change these settings to optimize for your specific application's performance and power needs.
+
+Factors like heat dissipation should also be considered, and the effect on overall longevity of components.
+
+#### CPU frequency
+
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Component config ---> ESP System Settings  ---> CPU frequency (160 MHz)  --->`
+
+You can increase or decrease the CPU frequency, this is a tradeoff against power usage.
+Eg. 160 MHz is the conservative default for the ESP32, but you can increase it to 240 MHz or decrease it to 80 MHz. The higher the frequency, the more power is consumed. The lower the frequency, the less power is consumed.
+
+#### Flash mode and speed
+
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Serial flasher config  ---> Flash SPI mode (DIO)  --->`
+You can change the mode of the SPI flash. QIO is the fastest mode, but not all flash chips support it.
+
+`Serial flasher config  ---> Flash SPI speed (40 MHz)  --->`
+You can change the speed of the SPI flash. The higher the speed, the faster the flash will be, at the cost of higher power usage, but not all flash chips support higher speeds.
+
+See external docs: [ESP-IDF flash modes](https://docs.espressif.com/projects/esptool/en/latest/esp32/advanced-topics/spi-flash-modes.html)
+
+#### PSRAM speed
+
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Component config ---> ESP PSRAM  ---> SPI RAM config  --->`
+
+If your board has PSRAM and it's enabled, you can configure the SPI RAM settings here.
+`Set RAM clock speed (40MHz clock speed)  --->`
+You can increase or decrease the clock speed of the PSRAM.
+
+```{warning}
+You may have to increase "Flash SPI speed" (see above) before you can increase PSRAM speed.
+```
+
+The higher the speed, the faster the PSRAM will be, at the cost of higher power usage, but not all PSRAM chips support higher speeds.
+
+#### Sleep mode - Deep sleep
+
+For low power applications, you should use the [deep sleep functionality](./programmers-guide.md#restart-and-deep-sleep) of the ESP32.
+
+This will put the ESP32 into a very low power state, and it will consume very little power.
+You can wake the ESP32 from deep sleep using a timer, or an interrupt etc.
+
+Make sure your board is suitable for low power deep sleep, some boards have voltage regulators and/or LEDs constantly draining power, also make sure sensors are powered down or in low power mode when the ESP32 is in deep sleep.
+
+For persisting small amounts of data during deep sleep, you can use the [RTC memory](./programmers-guide.md#rtc-memory) of the ESP32, which is preserved during deep sleep.
+
+#### Sleep mode - Light sleep
+
+Usage of light sleep is untested, and no support for controlling light sleep is currently implemented. Reach out if you do any experiments and measurements.
+
 ### Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.
