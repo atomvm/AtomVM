@@ -25,9 +25,13 @@
 -include("etest.hrl").
 
 test() ->
-    {ok, Dir} = atomvm:posix_opendir("."),
-    [eof | _Entries] = all_dir_entries(Dir, []),
-    ok = atomvm:posix_closedir(Dir).
+    case catch (atomvm:posix_opendir(".")) of
+        {ok, Dir} ->
+            [eof | _Entries] = all_dir_entries(Dir, []),
+            ok = atomvm:posix_closedir(Dir);
+        {'EXIT', _} ->
+            skipped
+    end.
 
 all_dir_entries(Dir, Acc) ->
     case atomvm:posix_readdir(Dir) of

@@ -188,11 +188,16 @@ do_run_test(Test) ->
             false ->
                 ok
         end,
+        Char =
+            case Result of
+                ok -> "+";
+                skipped -> "s"
+            end,
         case erlang:system_info(machine) of
             "BEAM" ->
-                io:format("+");
+                io:format(Char);
             _ ->
-                console:puts("+"),
+                console:puts(Char),
                 console:flush()
         end,
         Result
@@ -212,6 +217,8 @@ do_run_test(Test) ->
 check_results([]) ->
     ok;
 check_results([{_Test, ok} | T]) ->
+    check_results(T);
+check_results([{_Test, skipped} | T]) ->
     check_results(T);
 check_results([Failure | _T]) ->
     {fail, Failure}.
