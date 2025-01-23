@@ -144,7 +144,8 @@ typedef struct Module Module;
 enum ModuleLoadResult
 {
     MODULE_LOAD_OK = 0,
-    MODULE_ERROR_FAILED_ALLOCATION = 1
+    MODULE_ERROR_FAILED_ALLOCATION = 1,
+    MODULE_ERROR_INVALID = 2
 };
 
 #ifdef ENABLE_ADVANCED_TRACE

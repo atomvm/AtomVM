@@ -72,6 +72,13 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
     int atoms_count = READ_32_ALIGNED(table_data + 8);
+
+    enum EnsureAtomsOpt ensure_opts = EnsureAtomsNoOpts;
+    if (atoms_count < 0) {
+        ensure_opts = EnsureLongEncoding;
+        atoms_count = -atoms_count;
+    }
+
     const char *current_atom = (const char *) table_data + 12;
 
     this_module->local_atoms_to_global_table = calloc(atoms_count + 1, sizeof(int));
@@ -81,10 +88,12 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
     }
 
     long ensure_result = atom_table_ensure_atoms(
-        glb->atom_table, current_atom, atoms_count, this_module->local_atoms_to_global_table + 1);
-    if (ensure_result == ATOM_TABLE_ALLOC_FAIL) {
+        glb->atom_table, current_atom, atoms_count, this_module->local_atoms_to_global_table + 1, ensure_opts);
+    if (UNLIKELY(ensure_result == ATOM_TABLE_ALLOC_FAIL)) {
         fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
         return MODULE_ERROR_FAILED_ALLOCATION;
+    } else if (UNLIKELY(ensure_result == ATOM_TABLE_INVALID_LEN)) {
+        return MODULE_ERROR_INVALID;
     }
 
     return MODULE_LOAD_OK;
