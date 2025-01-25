@@ -107,7 +107,7 @@ jobs:
         # Required for testing big endian archs
         - arch: "s390x"
           platform: "s390x"
-          tag: "bullseye"
+          tag: "bookworm"
           cflags: "-O2"
           cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
