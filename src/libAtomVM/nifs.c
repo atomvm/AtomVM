@@ -3181,14 +3181,18 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     size_t num_segments = 1;
     const char *temp_bin_data = bin_data;
     int temp_bin_size = bin_size;
+    size_t heap_size = 0;
     do {
         const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
         if (!found) break;
         num_segments++;
+        heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
         int next_search_offset = found - temp_bin_data + pattern_size;
         temp_bin_data += next_search_offset;
         temp_bin_size -= next_search_offset;
     } while (global && temp_bin_size >= pattern_size);
+
+    heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], temp_bin_size);
 
     term result_list = term_nil();
 
@@ -3202,7 +3206,7 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     }
 
     // binary:split/2,3 always return sub binaries, except when copied binaries are as small as sub-binaries.
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(num_segments, TERM_BOXED_SUB_BINARY_SIZE), 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
