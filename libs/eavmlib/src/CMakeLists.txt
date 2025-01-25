@@ -37,6 +37,7 @@ set(ERLANG_MODULES
     json_encoder
     ledc
     logger_manager
+    mdns
     network
     network_fsm
     pico
