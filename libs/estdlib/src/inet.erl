@@ -108,6 +108,29 @@ getaddr(Name, Family) ->
                 [] -> {error, nxdomain};
                 [IPAddr | _] -> {ok, IPAddr}
             end;
+        {error, eainoname} ->
+            case string:split(Name, ".") of
+                [Name] ->
+                    % BEAM succeeds to resolve short names even if gethostbyname(2) fails.
+                    % Work around for distribution by trying to add .local suffix.
+                    case net:getaddrinfo(Name ++ ".local") of
+                        {ok, ResultsLocal} ->
+                            FilteredLocal = [
+                                Addr
+                             || #{family := F, addr := #{addr := Addr}} <- ResultsLocal,
+                                F =:= Family,
+                                Addr =:= {127, 0, 0, 1} orelse Addr =:= {0, 0, 0, 0, 0, 0, 0, 1}
+                            ],
+                            case FilteredLocal of
+                                [] -> {error, nxdomain};
+                                [LocalIPAddr | _] -> {ok, LocalIPAddr}
+                            end;
+                        _ ->
+                            {error, nxdomain}
+                    end;
+                _ ->
+                    {error, nxdomain}
+            end;
         {error, _} = Err ->
             Err
     catch

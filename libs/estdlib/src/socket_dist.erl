@@ -128,11 +128,11 @@ setup(Node, Type, MyNode, LongOrShortNames, SetupTime) ->
         dist_util:net_ticker_spawn_options()
     ).
 
-do_setup(Kernel, Node, Type, MyNode, _LongOrShortNames, SetupTime) ->
+do_setup(Kernel, Node, Type, MyNode, _LongNames, SetupTime) ->
     case string:split(atom_to_list(Node), "@") of
-        [Name, Address] ->
+        [Name, Host] ->
             Timer = dist_util:start_timer(SetupTime),
-            case inet:getaddr(Address, inet) of
+            case inet:getaddr(Host, inet) of
                 {ok, Ip} ->
                     dist_util:reset_timer(Timer),
                     ErlEpmd = net_kernel:epmd_module(),
@@ -159,17 +159,17 @@ do_setup(Kernel, Node, Type, MyNode, _LongOrShortNames, SetupTime) ->
                                         Timer
                                     ),
                                     dist_util:handshake_we_started(HSData);
-                                _ ->
-                                    ?shutdown(Node)
+                                Other1 ->
+                                    ?shutdown2(Node, {unexpected, Other1})
                             end;
-                        _ ->
-                            ?shutdown(Node)
+                        Other2 ->
+                            ?shutdown2(Node, {unexpected, Other2})
                     end;
-                _ ->
-                    ?shutdown(Node)
+                Other3 ->
+                    ?shutdown2(Node, {unexpected, Other3})
             end;
-        _ ->
-            ?shutdown(Node)
+        Other4 ->
+            ?shutdown2(Node, {unexpected, Other4})
     end.
 
 close(Listen) ->
