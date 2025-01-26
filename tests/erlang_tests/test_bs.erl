@@ -86,6 +86,7 @@ start() ->
 
     test_put_match_string(<<"foo">>, <<"bar">>),
     test_skip_bits(),
+    ok = test_bs_match_string_unaligned(),
 
     test_match_case_type(),
 
@@ -328,6 +329,14 @@ skip_bits_unsupported(Tag, Value) ->
 skip_bits(Len, Bin) ->
     <<_First:Len, Rest/binary>> = Bin,
     Rest.
+
+test_bs_match_string_unaligned() ->
+    <<0:1, _:3, 42:7, _:5, 42>> = id(<<0:3, 42, 0:5, 42>>),
+    <<0:1, _:3, 42:12, _:8, 42>> = id(<<0, 42, 0, 42>>),
+    ok = expect_error(
+        fun() -> <<0:1, _:4, 42:12, 0:7>> = id(<<0:5, 42, 0:3>>) end, {badmatch, <<1, 80>>}
+    ),
+    ok.
 
 test_match_case_type() ->
     foo = match_case_type([foo, bar]),

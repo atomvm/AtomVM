@@ -40,6 +40,7 @@ integers
 - Fixed support for setting esp32 boot_path in NVS.
 - Fixed race conditions in network:start/stop.
 - Fixed crash calling network:sta_rssi(), when network not up.
+- Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 
 ## [0.6.5] - 2024-10-15
 
