@@ -29,9 +29,16 @@
 #include <zlib.h>
 #endif
 
-#include "iff.c"
 #include "avmpack.h"
+#include "iff.c"
 #include "mapped_file.h"
+
+#define TRY(expr)         \
+    do {                  \
+        if (!(expr)) {    \
+            goto cleanup; \
+        }                 \
+    } while (0)
 
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
@@ -41,102 +48,141 @@
 #define BEAM_CODE_FLAG 2
 #define BUF_SIZE 1024
 
-typedef struct FileData {
+typedef struct FileData
+{
     uint8_t *data;
-    size_t   size;
+    size_t size;
 } FileData;
 
-static void pad_and_align(FILE *f);
+static bool pad_and_align(FILE *f);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
-static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
+static bool add_module_header(FILE *f, const char *module_name, uint32_t flags);
+static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines);
+static bool has_iff_header(uint8_t *data, size_t size);
+static bool safe_fread(void *buffer, size_t size, FILE *file);
+static bool safe_fwrite(const void *buffer, size_t size, FILE *file);
 
-static int do_pack(int argc, char **argv, int is_archive, bool include_lines);
-static int do_list(int argc, char **argv);
+static bool safe_read_file(const char *filename, FileData *file_data);
+static void free_file_data(FileData *data);
 
-static void usage3(FILE *out, const char *program, const char *msg) {
-    if (!IS_NULL_PTR(msg)) {
-        fprintf(out, "%s\n", msg);
-    }
-    fprintf(out, "Usage: %s [-h] [-l] <avm-file> [<options>]\n", program);
-    fprintf(out, "    -h                                                Print this help menu.\n");
-    fprintf(out, "    -i                                                Include file and line information.\n");
-    fprintf(out, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
-    fprintf(out, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n"
-    );
+static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines);
+static int do_list(const char *avm_path);
+
+#define program_error(...)                    \
+    do {                                      \
+        internal_error(argv[0], __VA_ARGS__); \
+        usage(argv[0]);                       \
+    } while (false)
+#define packbeam_error(...)                      \
+    do {                                         \
+        internal_error("PackBeam", __VA_ARGS__); \
+        usage("PackBeam");                       \
+    } while (false)
+#define packbeam_internal_error(...) internal_error("PackBeam", __VA_ARGS__)
+
+static void internal_error(const char *program, const char *format, ...)
+{
+    va_list format_args;
+    va_start(format_args, format);
+
+    fprintf(stderr, "%s: ", program);
+    vfprintf(stderr, format, format_args);
+    fprintf(stderr, "\n");
+
+    va_end(format_args);
 }
 
 static void usage(const char *program)
 {
-    usage3(stdout, program, NULL);
+    fprintf(stderr, "\nUsage: %s [-h] [-l] <avm-file> [<options>]\n", program);
+    fprintf(stderr, "    -h                                                Print this help menu.\n");
+    fprintf(stderr, "    -i                                                Include file and line information.\n");
+    fprintf(stderr, "    -l <input-avm-file>                               List the contents of an AVM file.\n");
+    fprintf(stderr, "    [-a] <output-avm-file> <input-beam-or-avm-file>+  Create an AVM file (archive if -a specified).\n");
 }
-
 
 int main(int argc, char **argv)
 {
-    int opt;
-
-    const char *action = "pack";
-    int is_archive = 0;
+    bool list_avm = false;
+    bool is_archive = false;
     bool include_lines = false;
+
+    int opt;
     while ((opt = getopt(argc, argv, "hail")) != -1) {
-        switch(opt) {
+        switch (opt) {
             case 'h':
                 usage(argv[0]);
                 return EXIT_SUCCESS;
             case 'a':
-                is_archive = 1;
+                is_archive = true;
                 break;
             case 'i':
                 include_lines = true;
                 break;
             case 'l':
-                action = "list";
+                list_avm = true;
                 break;
             case '?': {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Unknown option: %c", optopt);
-                usage3(stderr, argv[0], buf);
+                program_error("Unknown option: %c", optopt);
                 return EXIT_FAILURE;
             }
         }
     }
 
-    int new_argc    = argc - optind;
+    int new_argc = argc - optind;
     char **new_argv = argv + optind;
 
-    if (new_argc < 1) {
-        usage3(stderr, argv[0], "Missing avm file.\n");
-        return EXIT_FAILURE;
-    }
-
-    if (!strcmp(action, "pack")) {
-        if (new_argc < 2) {
-            usage3(stderr, argv[0], "Missing options for pack\n");
+    if (list_avm) {
+        if (new_argc < 1) {
+            program_error("Listing needs an AVM file.");
             return EXIT_FAILURE;
         }
-        return do_pack(new_argc, new_argv, is_archive, include_lines);
-    } else {
-        return do_list(new_argc, new_argv);
+        const char *avm_file = new_argv[0];
+        return do_list(avm_file);
     }
+
+    if (new_argc < 2) {
+        program_error("Pack needs output AVM file and at least one AVM or BEAM input file(s).");
+        return EXIT_FAILURE;
+    }
+    char *output_avm_file = new_argv[0];
+    char **input_files = &new_argv[1];
+    size_t n = new_argc - 1;
+    return do_pack(output_avm_file, input_files, n, is_archive, include_lines);
 }
 
-static void assert_fread(void *buffer, size_t size, FILE* file)
+static void *print_section(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
 {
-    size_t r = fread(buffer, sizeof(uint8_t), size, file);
-    if (r != size) {
-        fprintf(stderr, "Unable to read, wanted to read %zu bytes, read %zu bytes\n", size, r);
-        exit(EXIT_FAILURE);
-    }
+    UNUSED(section_ptr);
+    UNUSED(section_size);
+    UNUSED(beam_ptr);
+    printf("%s %s\n", section_name, flags & BEAM_START_FLAG ? "*" : "");
+    return accum;
 }
 
-static void assert_fwrite(const void *buffer, size_t size, FILE* file)
+static int do_list(const char *avm_path)
 {
-    size_t r = fwrite(buffer, 1, size, file);
-    if (r != size) {
-        fprintf(stderr, "Unable to write, wanted to write %zu bytes, wrote %zu bytes\n", size, r);
-        exit(EXIT_FAILURE);
+    MappedFile *mapped_file = NULL;
+    // TODO: mapped_file_open_beam prints unnecessary warnings
+    mapped_file = mapped_file_open_beam(avm_path);
+
+    if (mapped_file == NULL) {
+        packbeam_error("Cannot open AVM file %s", avm_path);
+        goto cleanup;
     }
+    if (!avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
+        packbeam_error("%s is not an AVM file.", avm_path);
+        goto cleanup;
+    }
+
+    avmpack_fold(NULL, mapped_file->mapped, print_section);
+    return EXIT_SUCCESS;
+
+cleanup:
+    if (mapped_file != NULL) {
+        mapped_file_close(mapped_file);
+    }
+    return EXIT_FAILURE;
 }
 
 static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
@@ -148,7 +194,7 @@ static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t sectio
         return NULL;
     }
 
-    FILE *pack = (FILE *)accum;
+    FILE *pack = (FILE *) accum;
     size_t r = fwrite(section_ptr, sizeof(unsigned char), section_size, pack);
     if (r != section_size) {
         return NULL;
@@ -156,83 +202,53 @@ static void *pack_beam_fun(void *accum, const void *section_ptr, uint32_t sectio
     return accum;
 }
 
-FileData read_file_data(FILE *file)
+static bool validate_pack_files(char *output_file, char **input_files, size_t files_n)
 {
-    fseek(file, 0, SEEK_END);
-    size_t size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    uint8_t *data = malloc(size);
-    if (!data) {
-        fprintf(stderr, "Unable to allocate %zu bytes\n", size);
-        exit(EXIT_FAILURE);
+    FileData file_data = (FileData){ .data = NULL, .size = 0 };
+
+    TRY(safe_read_file(output_file, &file_data));
+    if (!avmpack_is_valid(file_data.data, file_data.size)) {
+        packbeam_error("Invalid AVM file '%s'.", output_file);
+        goto cleanup;
     }
-    assert_fread(data, size, file);
+    free_file_data(&file_data);
 
-    FileData file_data = {
-        .data = data,
-        .size = size
-    };
-    return file_data;
-}
+    for (size_t i = 0; i < files_n; ++i) {
+        const char *filename = input_files[i];
+        TRY(safe_read_file(filename, &file_data));
 
-static bool is_avm_file(FILE *file)
-{
-    FileData file_data = read_file_data(file);
-    bool ret = avmpack_is_valid(file_data.data, file_data.size);
-    free(file_data.data);
-    return ret;
-}
-
-static bool is_beam_file(FILE *file)
-{
-    FileData file_data = read_file_data(file);
-    bool ret = iff_is_valid_beam(file_data.data);
-    free(file_data.data);
-    return ret;
-}
-
-static void validate_pack_options(int argc, char ** argv)
-{
-    for (int i = 0;  i < argc;  ++i) {
-        const char *filename = argv[i];
-        FILE *file = fopen(filename, "r");
-        if (i == 0) {
-            if (file && !is_avm_file(file)) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Invalid AVM file: %s", filename);
-                usage3(stderr, "PackBeam", buf);
-                exit(EXIT_FAILURE);
-            }
-        } else {
-            if (!file) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "%s does not exist", filename);
-                usage3(stderr, "PackBeam", buf);
-                exit(EXIT_FAILURE);
-            } else if (!is_avm_file(file) && !is_beam_file(file)) {
-                char buf[BUF_SIZE];
-                snprintf(buf, BUF_SIZE, "Invalid AVM or BEAM file: %s", filename);
-                usage3(stderr, "PackBeam", buf);
-                exit(EXIT_FAILURE);
-            }
+        bool is_valid_avm = avmpack_is_valid(file_data.data, file_data.size);
+        bool is_valid_beam = has_iff_header(file_data.data, file_data.size);
+        if (!(is_valid_avm || is_valid_beam)) {
+            packbeam_error("Invalid AVM or BEAM file '%s'.", filename);
+            goto cleanup;
         }
+
+        free_file_data(&file_data);
     }
+
+    return true;
+
+cleanup:
+    free_file_data(&file_data);
+    return false;
 }
 
-static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
+static int do_pack(char *output_avm_file, char **input_files, size_t files_n, int is_archive, bool include_lines)
 {
-    validate_pack_options(argc, argv);
+    FILE *pack = NULL;
+    FileData file_data = (FileData){ .data = NULL, .size = 0 };
 
-    FILE *pack = fopen(argv[0], "w");
-    if (!pack) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Cannot open output file for writing %s", argv[0]);
-        perror(buf);
-        return EXIT_FAILURE;
+    TRY(validate_pack_files(output_avm_file, input_files, files_n));
+
+    // TODO: having any error corrupts output file
+    pack = fopen(output_avm_file, "w");
+    if (pack == NULL) {
+        packbeam_internal_error("Cannot open output file for writing %s.", output_avm_file);
+        goto cleanup;
     }
 
-    const unsigned char pack_header[24] =
-    {
+    const unsigned char pack_header[24] = {
         0x23, 0x21, 0x2f, 0x75,
         0x73, 0x72, 0x2f, 0x62,
         0x69, 0x6e, 0x2f, 0x65,
@@ -240,236 +256,318 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
         0x74, 0x6f, 0x6d, 0x56,
         0x4d, 0x0a, 0x00, 0x00
     };
-    assert_fwrite(pack_header, 24, pack);
+    TRY(safe_fwrite(pack_header, 24, pack));
 
-    for (int i = 1; i < argc; i++) {
-        FILE *file = fopen(argv[i], "r");
-        if (!file) {
-            char buf[BUF_SIZE];
-            snprintf(buf, BUF_SIZE, "Cannot open file %s", argv[i]);
-            perror(buf);
-            return EXIT_FAILURE;
-        }
+    for (size_t i = 0; i < files_n; ++i) {
+        char *path = input_files[i];
+        TRY(safe_read_file(path, &file_data));
 
-        fseek(file, 0, SEEK_END);
-        size_t file_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
+        // TODO: redundant, we have this information in validate_pack_files
+        bool is_avm = avmpack_is_valid(file_data.data, file_data.size);
 
-
-        uint8_t *file_data = malloc(file_size);
-        if (!file_data) {
-            fprintf(stderr, "Unable to allocate %zu bytes\n", file_size);
-            return EXIT_FAILURE;
-        }
-        assert_fread(file_data, file_size, file);
-        if (avmpack_is_valid(file_data, file_size)) {
-            void *result = avmpack_fold(pack, file_data, pack_beam_fun);
-            if (result == NULL) {
-                return EXIT_FAILURE;
-            }
+        if (is_avm) {
+            TRY(avmpack_fold(pack, file_data.data, pack_beam_fun) != NULL);
         } else {
-            char *filename = basename(argv[i]);
-            pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1, include_lines);
+            bool is_first = i == 0;
+            bool is_entrypoint = !is_archive && is_first;
+            char *filename = basename(path);
+            TRY(pack_beam_file(pack, file_data.data, file_data.size, filename, is_entrypoint, include_lines));
         }
+        free_file_data(&file_data);
     }
 
-    add_module_header(pack, "end", END_OF_FILE);
+    TRY(add_module_header(pack, "end", END_OF_FILE));
     fclose(pack);
 
     return EXIT_SUCCESS;
+
+cleanup:
+    if (pack != NULL) {
+        fclose(pack);
+    }
+    free_file_data(&file_data);
+    return EXIT_FAILURE;
 }
 
-static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
+static bool pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *section_name, int is_entrypoint, bool include_lines)
 {
-    size_t zero_pos = ftell(pack);
+    void *deflated = NULL;
 
-    if (is_entrypoint) {
-        add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG);
-    } else {
-        add_module_header(pack, section_name, BEAM_CODE_FLAG);
+    long zero_pos = ftell(pack);
+    if (zero_pos == -1) {
+        goto cleanup;
     }
 
-    int written_beam_header_pos = ftell(pack);
-    const unsigned char beam_header[12] =
-    {
+    if (is_entrypoint) {
+        TRY(add_module_header(pack, section_name, BEAM_CODE_FLAG | BEAM_START_FLAG));
+    } else {
+        TRY(add_module_header(pack, section_name, BEAM_CODE_FLAG));
+    }
+
+    long written_beam_header_pos = ftell(pack);
+    if (written_beam_header_pos == -1) {
+        goto cleanup;
+    }
+    const unsigned char beam_header[12] = {
         0x46, 0x4f, 0x52, 0x31,
         0x00, 0x00, 0x00, 0x00,
         0x42, 0x45, 0x41, 0x4d
     };
-    assert_fwrite(beam_header, 12, pack);
+    TRY(safe_fwrite(beam_header, 12, pack));
 
     unsigned long offsets[MAX_OFFS];
     unsigned long sizes[MAX_SIZES];
+    // TODO: add error handling in scan_iff
     scan_iff(data, size, offsets, sizes);
 
     if (offsets[AT8U]) {
-        assert_fwrite(data + offsets[AT8U], sizes[AT8U] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[AT8U], sizes[AT8U] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[CODE]) {
-        assert_fwrite(data + offsets[CODE], sizes[CODE] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[CODE], sizes[CODE] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[EXPT]) {
-        assert_fwrite(data + offsets[EXPT], sizes[EXPT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[EXPT], sizes[EXPT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[LOCT]) {
-        assert_fwrite(data + offsets[LOCT], sizes[LOCT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[LOCT], sizes[LOCT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[IMPT]) {
-        assert_fwrite(data + offsets[IMPT], sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[IMPT], sizes[IMPT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[LITU]) {
-        assert_fwrite(data + offsets[LITU], sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[LITU], sizes[LITU] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[FUNT]) {
-        assert_fwrite(data + offsets[FUNT], sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[FUNT], sizes[FUNT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[STRT]) {
-        assert_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
     if (offsets[LINT] && include_lines) {
-        assert_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack);
-        pad_and_align(pack);
+        TRY(safe_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack));
+        TRY(pad_and_align(pack));
     }
 
     if (offsets[LITT]) {
         size_t u_size;
-        void *deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
-        assert_fwrite("LitU", 4, pack);
+        deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
+        if (deflated == NULL) {
+            goto cleanup;
+        }
+        TRY(safe_fwrite("LitU", 4, pack));
         uint32_t size_field = ENDIAN_SWAP_32(u_size);
-        assert_fwrite(&size_field, sizeof(size_field), pack);
-        assert_fwrite(deflated, u_size, pack);
+        TRY(safe_fwrite(&size_field, sizeof(size_field), pack));
+        TRY(safe_fwrite(deflated, u_size, pack));
         free(deflated);
     }
 
-    pad_and_align(pack);
+    TRY(pad_and_align(pack));
 
-    size_t end_of_module_pos = ftell(pack);
+    long end_of_module_pos = ftell(pack);
+    if (end_of_module_pos == -1) {
+        goto cleanup;
+    }
 
     size_t rsize = end_of_module_pos - zero_pos;
     uint32_t size_field = ENDIAN_SWAP_32(rsize);
-    fseek(pack, zero_pos, SEEK_SET);
-    assert_fwrite(&size_field, sizeof(uint32_t), pack);
-    fseek(pack, end_of_module_pos, SEEK_SET);
+    TRY(fseek(pack, zero_pos, SEEK_SET) != -1);
+    TRY(safe_fwrite(&size_field, sizeof(uint32_t), pack));
+    TRY(fseek(pack, end_of_module_pos, SEEK_SET) != -1);
 
     int beam_written_size = end_of_module_pos - written_beam_header_pos;
     uint32_t beam_written_size_field = ENDIAN_SWAP_32(beam_written_size);
-    fseek(pack, written_beam_header_pos + 4, SEEK_SET);
-    assert_fwrite(&beam_written_size_field , sizeof(uint32_t), pack);
-    fseek(pack, end_of_module_pos, SEEK_SET);
+    TRY(fseek(pack, written_beam_header_pos + 4, SEEK_SET) != -1);
+    TRY(safe_fwrite(&beam_written_size_field, sizeof(uint32_t), pack));
+    TRY(fseek(pack, end_of_module_pos, SEEK_SET) != -1);
+
+    return true;
+
+cleanup:
+    free(deflated);
+
+    return false;
 }
-
-
-static void *print_section(void *accum, const void *section_ptr, uint32_t section_size, const void *beam_ptr, uint32_t flags, const char *section_name)
-{
-    UNUSED(section_ptr);
-    UNUSED(section_size);
-    UNUSED(beam_ptr);
-    printf("%s %s\n", section_name, flags & BEAM_START_FLAG ? "*" : "");
-    return accum;
-}
-
-static void validate_list_options(const char *filename)
-{
-    FILE *file = fopen(filename, "r");
-    if (!file) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "%s does not exist", filename);
-        usage3(stderr, "PackBeam", buf);
-        exit(EXIT_FAILURE);
-    } else if (!is_avm_file(file)) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Invalid AVM file: %s", filename);
-        usage3(stderr, "PackBeam", buf);
-        exit(EXIT_FAILURE);
-    }
-}
-
-static int do_list(int argc, char **argv)
-{
-    UNUSED(argc);
-    validate_list_options(argv[0]);
-
-    MappedFile *mapped_file = mapped_file_open_beam(argv[0]);
-    if (IS_NULL_PTR(mapped_file)) {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "Cannot open AVM file %s", argv[0]);
-        perror(buf);
-        return EXIT_FAILURE;
-    }
-
-    int ret = EXIT_SUCCESS;
-    if (avmpack_is_valid(mapped_file->mapped, mapped_file->size)) {
-        avmpack_fold(NULL, mapped_file->mapped, print_section);
-    } else {
-        char buf[BUF_SIZE];
-        snprintf(buf, BUF_SIZE, "%s is not an AVM file.\n", argv[1]);
-        usage3(stderr, "PackBeam", buf);
-        ret = EXIT_FAILURE;
-    }
-    mapped_file_close(mapped_file);
-
-    return ret;
-}
-
+#ifdef WITH_ZLIB
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
 {
+    uint8_t *outbuf = NULL;
+    bool stream_init = false;
+    z_stream infstream;
+
+    *uncompressedSize = 0;
+
     unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
 
-    uint8_t *outBuf = malloc(required_buf_size);
-    if (!outBuf) {
-        fprintf(stderr, "Cannot allocate temporary buffer (size = %u)", required_buf_size);
-        AVM_ABORT();
+    outbuf = malloc(required_buf_size);
+    if (outbuf == NULL) {
+        packbeam_internal_error("Cannot allocate temporary buffer of size %u.", required_buf_size);
+        goto cleanup;
     }
 
-    z_stream infstream;
     infstream.zalloc = Z_NULL;
     infstream.zfree = Z_NULL;
     infstream.opaque = Z_NULL;
     infstream.avail_in = (uInt) (size - IFF_SECTION_HEADER_SIZE);
     infstream.next_in = (Bytef *) (litT + LITT_HEADER_SIZE);
     infstream.avail_out = (uInt) required_buf_size;
-    infstream.next_out = (Bytef *) outBuf;
+    infstream.next_out = (Bytef *) outbuf;
 
     int ret = inflateInit(&infstream);
     if (ret != Z_OK) {
-        fprintf(stderr, "Failed inflateInit\n");
-        AVM_ABORT();
+        packbeam_internal_error("Failed inflateInit.");
+        goto cleanup;
     }
+    stream_init = true;
     ret = inflate(&infstream, Z_NO_FLUSH);
     if (ret != Z_OK) {
-        fprintf(stderr, "Failed inflate\n");
-        AVM_ABORT();
+        packbeam_internal_error("Failed inflate.");
+        goto cleanup;
     }
     inflateEnd(&infstream);
 
     *uncompressedSize = required_buf_size;
-    return outBuf;
-}
+    return outbuf;
 
-static void pad_and_align(FILE *f)
-{
-    while ((ftell(f) % 4) != 0) {
-        fputc(0, f);
+cleanup:
+    free(outbuf);
+    if (stream_init) {
+        inflateEnd(&infstream);
     }
+
+    return NULL;
+}
+#else
+static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
+{
+    UNUSED(litT);
+    UNUSED(size);
+    UNUSED(uncompressedSize);
+    packbeam_internal_error("ZLIB not available.");
+    return NULL;
 }
 
-static void add_module_header(FILE *f, const char *module_name, uint32_t flags)
+#endif // WITH_ZLIB
+
+static bool pad_and_align(FILE *f)
+{
+    while (true) {
+        long pos = ftell(f);
+        if (pos == -1L) {
+            goto cleanup;
+        }
+
+        bool aligned = pos % 4 == 0;
+        if (aligned) {
+            break;
+        }
+
+        TRY(fputc(0, f) != EOF);
+    }
+    return true;
+
+cleanup:
+    return false;
+}
+
+static bool add_module_header(FILE *f, const char *module_name, uint32_t flags)
 {
     uint32_t size_field = 0;
     uint32_t flags_field = ENDIAN_SWAP_32(flags);
     uint32_t reserved = 0;
 
-    assert_fwrite(&size_field, sizeof(uint32_t), f);
-    assert_fwrite(&flags_field, sizeof(uint32_t), f);
-    assert_fwrite(&reserved, sizeof(uint32_t), f);
-    assert_fwrite(module_name, strlen(module_name) + 1, f);
-    pad_and_align(f);
+    TRY(safe_fwrite(&size_field, sizeof(uint32_t), f));
+    TRY(safe_fwrite(&flags_field, sizeof(uint32_t), f));
+    TRY(safe_fwrite(&reserved, sizeof(uint32_t), f));
+    TRY(safe_fwrite(module_name, strlen(module_name) + 1, f));
+    TRY(pad_and_align(f));
+
+    return true;
+
+cleanup:
+    return false;
+}
+
+static bool has_iff_header(uint8_t *data, size_t size)
+{
+    return size >= 4 && iff_is_valid_beam(data);
+}
+
+static void free_file_data(FileData *data)
+{
+    if (data->data != NULL) {
+        free(data->data);
+    }
+    data->data = NULL;
+    data->size = 0;
+}
+
+static bool safe_fread(void *buffer, size_t size, FILE *file)
+{
+    size_t r = fread(buffer, sizeof(uint8_t), size, file);
+    if (r != size) {
+        packbeam_internal_error("Unable to read, wanted to read %zu bytes, read %zu bytes.", size, r);
+        return false;
+    }
+    return true;
+}
+
+static bool safe_fwrite(const void *buffer, size_t size, FILE *file)
+{
+    size_t r = fwrite(buffer, 1, size, file);
+    if (r != size) {
+        packbeam_internal_error("Unable to write, wanted to write %zu bytes, wrote %zu bytes.", size, r);
+        return false;
+    }
+    return true;
+}
+
+static bool safe_read_file(const char *filename, FileData *file_data)
+{
+    FILE *file = NULL;
+    uint8_t *data = NULL;
+
+    *file_data = (FileData){ .data = NULL, .size = 0 };
+
+    file = fopen(filename, "r");
+    if (file == NULL) {
+        packbeam_internal_error("Cannot open file '%s'.", filename);
+        goto cleanup;
+    }
+
+    TRY(fseek(file, 0, SEEK_END) == 0);
+    long size = ftell(file);
+    if (size == -1L) {
+        goto cleanup;
+    }
+    TRY(fseek(file, 0, SEEK_SET) == 0);
+
+    data = malloc(size);
+    if (data == NULL) {
+        goto cleanup;
+    }
+
+    TRY(safe_fread(data, size, file));
+    TRY(fclose(file) == 0);
+
+    *file_data = (FileData){
+        .data = data,
+        .size = size
+    };
+    return true;
+
+cleanup:
+    if (file != NULL) {
+        fclose(file);
+    }
+    free(data);
+    return false;
 }
