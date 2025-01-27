@@ -60,6 +60,7 @@ extensions = [
     'sphinx.ext.graphviz'
 ]
 
+
 suppress_warnings = [
     'epub.unknown_project_files',
     'misc.highlighting_failure',
@@ -89,6 +90,8 @@ source_suffix = {
 }
 
 # -- Sphinx Extension configuration ---------------------------------------------------
+
+graphviz_output_format = 'svg'
 
 # Breathe configuration
 breathe_projects = { "libatomvm": "@CMAKE_CURRENT_BINARY_DIR@/xml/" }
