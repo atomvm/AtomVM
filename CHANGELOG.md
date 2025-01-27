@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added the ability to run beams from the CLI for Generic Unix platform (it was already possible with nodejs and emscripten).
 - Added preliminary support for ESP32P4 (no networking support yet).
+- Support for `float/1` BIF.
 
 ### Fixed
 
