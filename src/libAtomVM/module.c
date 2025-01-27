@@ -56,6 +56,7 @@
         return;                                  \
     }
 
+static bool module_are_literals_compressed(const uint8_t *litT);
 #ifdef WITH_ZLIB
     static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
@@ -294,20 +295,26 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     list_init(&mod->line_ref_offsets);
 
     if (offsets[LITT]) {
-        #ifdef WITH_ZLIB
-            mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
-            if (IS_NULL_PTR(mod->literals_data)) {
+        if (!module_are_literals_compressed(beam_file + offsets[LITT])) {
+            mod->literals_data = beam_file + offsets[LITT] + LITT_HEADER_SIZE;
+            mod->free_literals_data = 0;
+
+        } else {
+            #ifdef WITH_ZLIB
+                mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
+                if (IS_NULL_PTR(mod->literals_data)) {
+                    module_destroy(mod);
+                    return NULL;
+                }
+                mod->free_literals_data = 1;
+            #else
+                fprintf(stderr, "Error: zlib required to uncompress literals.\n");
                 module_destroy(mod);
                 return NULL;
-            }
-        #else
-            fprintf(stderr, "Error: zlib required to uncompress literals.\n");
-            module_destroy(mod);
-            return NULL;
-        #endif
+            #endif
+        }
 
         mod->literals_table = module_build_literals_table(mod->literals_data);
-        mod->free_literals_data = 1;
 
     } else if (offsets[LITU]) {
         mod->literals_data = beam_file + offsets[LITU] + IFF_SECTION_HEADER_SIZE;
@@ -338,6 +345,12 @@ COLD_FUNC void module_destroy(Module *module)
     smp_mutex_destroy(module->mutex);
 #endif
     free(module);
+}
+
+static bool module_are_literals_compressed(const uint8_t *litT)
+{
+    uint32_t required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    return (required_buf_size != 0);
 }
 
 #ifdef WITH_ZLIB
