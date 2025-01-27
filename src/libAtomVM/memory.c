@@ -99,7 +99,7 @@ static inline enum MemoryGCResult memory_heap_alloc_new_fragment(Heap *heap, siz
     term *old_end = heap->heap_end;
     term mso_list = root_fragment->mso_list;
     if (UNLIKELY(memory_init_heap(heap, size) != MEMORY_GC_OK)) {
-        TRACE("Unable to allocate memory fragment.  size=%u\n", size);
+        TRACE("Unable to allocate memory fragment.  size=%u\n", (unsigned int) size);
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
     }
     // Convert root fragment to non-root fragment.
@@ -123,7 +123,7 @@ enum MemoryGCResult memory_erl_nif_env_ensure_free(ErlNifEnv *env, size_t size)
             }
         } else {
             if (UNLIKELY(memory_init_heap(&env->heap, size) != MEMORY_GC_OK)) {
-                TRACE("Unable to allocate memory fragment.  size=%u\n", size);
+                TRACE("Unable to allocate memory fragment.  size=%u\n", (unsigned int) size);
                 return MEMORY_GC_ERROR_FAILED_ALLOCATION;
             }
         }
@@ -203,44 +203,42 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
             if (UNLIKELY(c->has_max_heap_size && (target_size > c->max_heap_size))) {
                 return MEMORY_GC_DENIED_ALLOCATION;
             }
-            if (target_size != memory_size) {
-                if (UNLIKELY(memory_gc(c, target_size, num_roots, roots) != MEMORY_GC_OK)) {
-                    // TODO: handle this more gracefully
-                    TRACE("Unable to allocate memory for GC.  target_size=%zu\n", target_size);
-                    return MEMORY_GC_ERROR_FAILED_ALLOCATION;
-                }
-                should_gc = alloc_mode == MEMORY_FORCE_SHRINK;
-                size_t new_memory_size = memory_heap_memory_size(&c->heap);
-                size_t new_target_size = new_memory_size;
-                size_t new_free_space = context_avail_free_memory(c);
-                switch (c->heap_growth_strategy) {
-                    case BoundedFreeHeapGrowth: {
-                        size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
-                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > maximum_free_space);
-                        if (should_gc) {
-                            new_target_size = (new_memory_size - new_free_space) + maximum_free_space;
-                        }
-                    } break;
-                    case MinimumHeapGrowth:
-                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > 0);
-                        if (should_gc) {
-                            new_target_size = new_memory_size - new_free_space + size;
-                        }
-                        break;
-                    case FibonacciHeapGrowth:
-                        should_gc = should_gc || (new_memory_size > FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD && new_free_space >= 3 * new_memory_size / 4);
-                        if (should_gc) {
-                            new_target_size = next_fibonacci_heap_size(new_memory_size - new_free_space + size);
-                        }
-                        break;
-                }
-                if (should_gc) {
-                    new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
-                    if (new_target_size != new_memory_size) {
-                        if (UNLIKELY(MEMORY_SHRINK(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
-                            TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, size);
-                            return MEMORY_GC_ERROR_FAILED_ALLOCATION;
-                        }
+            if (UNLIKELY(memory_gc(c, target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                // TODO: handle this more gracefully
+                TRACE("Unable to allocate memory for GC.  target_size=%zu\n", target_size);
+                return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+            }
+            should_gc = alloc_mode == MEMORY_FORCE_SHRINK;
+            size_t new_memory_size = memory_heap_memory_size(&c->heap);
+            size_t new_target_size = new_memory_size;
+            size_t new_free_space = context_avail_free_memory(c);
+            switch (c->heap_growth_strategy) {
+                case BoundedFreeHeapGrowth: {
+                    size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+                    should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > maximum_free_space);
+                    if (should_gc) {
+                        new_target_size = (new_memory_size - new_free_space) + maximum_free_space;
+                    }
+                } break;
+                case MinimumHeapGrowth:
+                    should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > 0);
+                    if (should_gc) {
+                        new_target_size = new_memory_size - new_free_space + size;
+                    }
+                    break;
+                case FibonacciHeapGrowth:
+                    should_gc = should_gc || (new_memory_size > FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD && new_free_space >= 3 * new_memory_size / 4);
+                    if (should_gc) {
+                        new_target_size = next_fibonacci_heap_size(new_memory_size - new_free_space + size);
+                    }
+                    break;
+            }
+            if (should_gc) {
+                new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
+                if (new_target_size != new_memory_size) {
+                    if (UNLIKELY(MEMORY_SHRINK(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                        TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, (unsigned int) size);
+                        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
                     }
                 }
             }
@@ -301,7 +299,7 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
 
     TRACE("- Running copy GC on provided roots\n");
     for (size_t i = 0; i < num_roots; i++) {
-        roots[i] = memory_shallow_copy_term(old_root_fragment, roots[i], &ctx->heap.heap_ptr, 1);
+        roots[i] = memory_shallow_copy_term(old_root_fragment, roots[i], &ctx->heap.heap_ptr, true);
     }
 
     term *temp_start = new_heap;
@@ -641,6 +639,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     term ref = ((term) ptr) | TERM_BOXED_VALUE_TAG;
                     if (!term_refc_binary_is_const(ref)) {
                         *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *mso_list);
+                        refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(ref));
                     }
                     break;
                 }
@@ -851,10 +850,6 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
 
         if (move) {
             memory_replace_with_moved_marker(boxed_value, new_term);
-        } else if (term_is_refc_binary(t)) { // copy, not a move; increment refcount
-            if (!term_refc_binary_is_const(t)) {
-                refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(t));
-            }
         }
 
         return new_term;
@@ -930,15 +925,16 @@ void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task)
         TERM_DEBUG_ASSERT(term_is_boxed(h))
         term *boxed_value = term_to_term_ptr(h);
         if (memory_is_moved_marker(boxed_value)) {
-            // it has been moved, so it is referenced
-        } else if (term_is_refc_binary(h) && !term_refc_binary_is_const(h)) {
+            h = memory_dereference_moved_marker(boxed_value);
+        }
+        if (term_is_refc_binary(h) && !term_refc_binary_is_const(h)) {
             // unreferenced binary; decrement reference count
 #ifdef AVM_TASK_DRIVER_ENABLED
             if (from_task) {
-                globalcontext_refc_decrement_refcount_from_task(global, (struct RefcBinary *) term_refc_binary_ptr(h));
+                globalcontext_refc_decrement_refcount_from_task(global, term_refc_binary_ptr(h));
             } else {
 #endif
-                refc_binary_decrement_refcount((struct RefcBinary *) term_refc_binary_ptr(h), global);
+                refc_binary_decrement_refcount(term_refc_binary_ptr(h), global);
 #ifdef AVM_TASK_DRIVER_ENABLED
             }
 #endif
