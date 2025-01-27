@@ -34,6 +34,9 @@ certain VM instructions are used.
 - Fix `network:stop/0` on ESP32 so the network can be started again
 - Fix a memory corruption caused by `binary:split/2,3`
 
+### Changed
+- Updated atom initalization in esp32 network_driver.c for issue #1442
+
 ## [0.6.5] - 2024-10-15
 
 ### Added
