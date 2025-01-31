@@ -37,6 +37,7 @@ certain VM instructions are used.
 - Fix bug in opcode implementation (`select_val`): when selecting a value among many others a
 shallow comparison was performed, so it was working just for plain values such as atoms and small
 integers
+- Fixed support for setting esp32 boot_path in NVS.
 
 ## [0.6.5] - 2024-10-15
 
