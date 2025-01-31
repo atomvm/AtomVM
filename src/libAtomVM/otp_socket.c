@@ -54,6 +54,9 @@
 #elif OTP_SOCKET_LWIP
 #include <lwip/tcp.h>
 #include <lwip/udp.h>
+#if LWIP_IGMP
+#include "lwip/igmp.h"
+#endif
 #else
 #error OTP Socket requires BSD Socket or lwIP
 #endif
@@ -1326,7 +1329,6 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                 }
             }
 
-#if OTP_SOCKET_BSD
             case OtpSocketSetoptLevelIP: {
                 term opt = term_get_tuple_element(level_tuple, 1);
                 if (globalcontext_is_term_equal_to_atom_string(global, opt, add_membership_atom)) {
@@ -1352,6 +1354,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
 
+#if OTP_SOCKET_BSD
                     struct ip_mreq option_value;
                     option_value.imr_multiaddr.s_addr = htonl(inet_addr4_to_uint32(multiaddr));
                     option_value.imr_interface.s_addr = htonl(inet_addr4_to_uint32(interface));
@@ -1364,13 +1367,37 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     } else {
                         return OK_ATOM;
                     }
+#elif OTP_SOCKET_LWIP
+#if LWIP_IGMP
+                    ip_addr_t interface_addr;
+                    ip_addr_set_ip4_u32(&interface_addr, htonl(inet_addr4_to_uint32(interface)));
+                    ip_addr_t multicast_addr;
+                    ip_addr_set_ip4_u32(&multicast_addr, htonl(inet_addr4_to_uint32(multiaddr)));
+                    int res = igmp_joingroup(&interface_addr, &multicast_addr);
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    if (UNLIKELY(res != 0)) {
+                        return make_lwip_err_tuple(res, ctx);
+                    } else {
+                        return OK_ATOM;
+                    }
+#else
+                    TRACE("socket:setopt: Unsupported ip option (LWIP_IGMP is not enabled)");
+                    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                    RAISE_ERROR(BADARG_ATOM);
+                    make_lwip_err_tuple
+#endif
+#else
+                TRACE("socket:setopt: Unsupported ip option");
+                SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+                RAISE_ERROR(BADARG_ATOM);
+#endif
+
                 } else {
                     TRACE("socket:setopt: Unsupported ip option");
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     return make_error_tuple(globalcontext_make_atom(global, invalid_option_atom), ctx);
                 }
             }
-#endif
 
             default: {
                 TRACE("socket:setopt: Unsupported level");
