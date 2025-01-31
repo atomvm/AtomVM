@@ -231,6 +231,11 @@ $ cd <atomvm-source-tree-root>
 $ cd src/platforms/esp32
 ```
 
+If you want to build an image with Elixir modules included you must first have a version of Elixir installed that is compatible with your OTP version, then add the following line to sdkconfig.defaults:
+```shell
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-elixir.csv"
+```
+
 Start by updating the default build configuration of local `sdkconfig` file via the `idf.py reconfigure` command:
 
 ```shell
@@ -321,11 +326,7 @@ The AtomVM Flash memory is partitioned to include areas for the above binary art
 
 The flash layout is roughly as follows (not to scale):
 
-    +-----------------+  ------------- 0x0000
-    |    secure       |
-    |     boot        | 4KB
-    |                 |
-    +-----------------+  ------------- 0x1000
+    +-----------------+  ------------- 0x0 | 0x1000 | 0x2000
     |                 |             ^
     |   boot loader   | 28KB        |
     |                 |             |
@@ -347,9 +348,9 @@ The flash layout is roughly as follows (not to scale):
     |                 |             |
     |                 |             |
     +-----------------+             |
-    |     boot.avm    | 256KB       v
-    +-----------------+  ------------- 0x210000
-    |                 |             ^
+    |     boot.avm    | 256-512KB   v
+    +-----------------+  ------------- 0x210000 for Erlang only images or
+    |                 |             ^  0x250000 for images with Elixir modules
     |                 |             |
     |     main.avm    | 1MB+        | Erlang/Elixir
     |                 |             | Application
@@ -361,14 +362,17 @@ The following table summarizes the partitions created on the ESP32 when deployin
 
 | Partition | Offset | Length | Description |
 |:----------|:-------|:-------|:------------|
-| Secure Boot | 0x00 | 4kB | Initialization vectors and other data needed for ESP32 secure boot. |
-| Bootloader | 0x1000 | 28kB | The ESP32 bootloader, as built from the IDF-SDK.  AtomVM does not define its own bootloader. |
+| Bootloader | 0x0 \| 0x1000 \| 0x2000 | 28kB | The ESP32 bootloader, as built from the IDF-SDK.  AtomVM does not define its own bootloader. The offset of the bootloader varies by chip.|
 | Partition Table | 0x8000 | 3kB | The AtomVM-defined partition table. |
 | NVS | 0x9000 | 24kB | Space for non-volatile storage. |
 | PHY_INIT | 0xF000 | 4kB | Initialization data for physical layer radio signal data. |
 | AtomVM virtual machine | 0x10000 | 1.75mB | The AtomVM virtual machine (compiled from C code). |
 | boot.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
-| main.avm | 0x210000 | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
+| main.avm | `0x210000` \| `0x250000` | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
+
+```{warning}
+There is an important difference in the partition layout between the minimal images and those build with Elixir support. To accommodate the extra Elixir modules the boot.avm partition on these images is larger, and the application offset is moved accordingly. When working with Elixir supported images it is important to always use the offset `0x250000` whether using `mix` or the `atomvm_rebar3_plugin` (possibly to test an Erlang app), otherwise part of the boot.avm partition (specifically the area where many Elixir modules are located) will be overwritten with the application, but the VM will still be trying to load from the later `0x250000` offset. This should be kept in mind reading the rest of build instructions, and [AtomVM Tooling](./atomvm-tooling.md) sections of the docs that cover the use of rebar3, for these sections an Erlang only image is assumed.
+```
 
 ### The `boot.avm` and `main.avm` partitions
 
@@ -376,7 +380,7 @@ The `boot.avm` and `main.avm` partitions are intended to store Erlang/Elixir lib
 
 The `boot.avm` partition is intended for core Erlang/Elixir libraries that are built as part of the AtomVM build.  The release image of AtomVM (see below) includes both the AtomVM virtual machine and the `boot.avm` partition, which includes the BEAM files from the `estdlib` and `eavmlib` libraries.
 
-In contrast, the `main.avm` partition is intended for user applications.  Currently, the `main.avm` partition starts at address `0x210000`, and it is to that location to which application developers should flash their application AVM files.
+In contrast, the `main.avm` partition is intended for user applications.  Currently, the `main.avm` partition starts at address `0x210000` for thin images or `0x250000` for images with Elixir modules, and it is to that location to which application developers should flash their application AVM files.
 
 The AtomVM search path for BEAM modules starts in the `main.avm` partition and falls back to `boot.avm`.  Users should not have a need to override any functionality in the `boot.avm` partition, but if necessary, a BEAM module of the same name in the `main.avm` partition will be loaded instead of the version in the `boot.avm` partition.
 
@@ -399,20 +403,31 @@ you target a different build directory when running CMake.
 
 Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000` for the esp32. The bootloader address varies for other chip variants. See the [flashing a binary image to ESP32](./getting-started-guide.md#flashing-a-binary-image-to-esp32) section of the [Getting Started Guide](./getting-started-guide.md) for a chart with the bootloader offset address of each model.
 
-The `mkimage.sh` script is run from the `src/platform/esp32` directory as follows:
+To build a thin image with only Erlang libraries `mkimage.sh` script is run from the `src/platform/esp32` directory as follows:
 
 ```shell
 $ ./build/mkimage.sh
-Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32-0.6.0
--dev+git.602e6bc.img
+Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32.img
 =============================================
 Wrote bootloader at offset 0x1000 (4096)
 Wrote partition-table at offset 0x8000 (32768)
 Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
-Wrote AtomVM Core BEAM Library at offset 0x110000 (1114112)
+Wrote AtomVM Core BEAM Library at offset 0x1D0000 (1114112)
 ```
 
-Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x210000`,
+To build a full image with Erlang and Elixir libraries the path to the previously (during the generic_unix build) built `elixir_esp32boot.avm` must be passed to the `mkimage.sh` script as follows (Note: this is still run from the AtomVM/src/platforms/esp32 directory for the relative path to work - feel free to use the absolute path to this file):
+
+```shell
+$ ./build/mkimage.sh --boot ../../../build/libs/esp32boot/elixir_esp32boot.avm
+Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32.img
+=============================================
+Wrote bootloader at offset 0x1000 (4096)
+Wrote partition-table at offset 0x8000 (32768)
+Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
+Wrote AtomVM Core BEAM Library at offset 0x1D0000 (1114112)
+```
+
+Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x210000`, (or `0x250000` for Elixir images)
 
 But first, it is a good idea to erase the flash, e.g.,
 
@@ -431,7 +446,7 @@ Hard resetting...
 
 #### Flashing Release Images
 
-After preparing a release image you can use the `flashimage.sh`, which is generated with each build that will flash the full image using the correct flash offset for the chip the build was configured for.
+After preparing a release image you can use the `flashimage.sh`, which is generated with each build that will flash the full image using the correct flash offset for the chip the build was configured for using the either the default Erlang only `partitions.cvs` table, or the `partitions-elixir.cvs` table if that was used during the configuration.
 
 ```shell
 $ ./build/flashimage.sh
@@ -440,7 +455,7 @@ $ ./build/flashimage.sh
 To perform this action manually you can use the `./build/flash.sh` tool (or `esptool.py` directly, if you prefer):
 
 ```shell
-$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.0-beta-0.img
+$ FLASH_OFFSET=0x1000 ./build/flash.sh ./build/atomvm-esp32-0.6.6.img
 esptool.py v2.8-dev
 Serial port /dev/tty.SLAB_USBtoUART
 Connecting........_
@@ -468,7 +483,8 @@ have a way to recover and re-write any such data, if you need to retain it.
 
 ### Flashing Applications
 
-Applications can be flashed using the `flash.sh` script in the esp32 build directory:
+Applications can be flashed using the `flash.sh` script in the esp32 build directory (the application offset is set
+correctly depending on the build configuration):
 
 ```shell
 $ ./build/flash.sh ../../../build/examples/erlang/esp32/blink.avm
@@ -505,12 +521,12 @@ applications for the AtomVM platform.
 
 #### Flashing the core libraries
 
-If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `atomvmlib.avm` to the avm.lib partition (offset 0x1D0000) by using the `flash.sh` script in the esp32 build directory as follows:
+If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `esp32boot.avm` (or `elixir_esp32boot.avm` when using an Elixir partition table) to the boot.avm partition (offset 0x1D0000) by using the `flash.sh` script in the esp32 build directory as follows:
 
 ```shell
-$ build/flash.sh -l ../../../build/libs/atomvmlib.avm
+$ build/flash.sh -l ../../../build/libs/esp32boot.avm
 %%
-%% Flashing ../../../build/libs/atomvmlib.avm (size=116k)
+%% Flashing ../../../build/libs/esp32boot.avm (size=116k)
 %%
 esptool.py v4.5.1
 Serial port /dev/ttyUSB0
