@@ -19,7 +19,7 @@
 %
 
 -module(uart).
--export([open/1, open/2, close/1, read/1, write/2]).
+-export([open/1, open/2, close/1, read/1, read/2, write/2]).
 
 -type peripheral() :: string() | binary().
 % The peripheral `Name' may be one of: `"UART0"' | `"UART1"' | `"UART2"' | `<<"UART0">>' | `<<"UART1">>' | `<<"UART2">>'.
@@ -103,6 +103,42 @@ close(Pid) when is_pid(Pid) ->
 -spec read(Pid :: pid()) -> {ok, Data :: iodata()} | {error, _Reason :: term()}.
 read(Pid) when is_pid(Pid) ->
     port:call(Pid, read).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid of the uart port to be read
+%% @param   Timeout millisecond to wait for data to become available
+%% @returns `{ok, Data}', or `{error, Reason}'
+%% @doc     Read data from a UART port
+%%
+%%          This function will return any data that is available within the
+%%          timeout period to the process. After the timeout has expired a new
+%%          read command may be used regardless of whether the last read was
+%%          sent a payload.
+%%          Example:
+%%          ```
+%%          Data = case uart:read(Uart, 3000) of
+%%              {ok, Bin} -> Bin;
+%%              {error, timeout} -> <<"">>;
+%%              Error -> error_handler_fun(Uart, Error)
+%%          end,
+%%          '''
+%%          Any data sent to the esp32 over uart between reads with a timeout will
+%%          be lost, so be sure this is what you want. Most applications will want
+%%          a single process to read from UART and continue to listen until a payload
+%%          is received, and likely pass the payload off for processing and
+%%          immediately begin another read.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec read(Pid :: pid(), Timeout :: pos_integer()) ->
+    {ok, Data :: iodata()} | {error, _Reason :: term()}.
+read(Pid, Timeout) when is_pid(Pid) ->
+    case port:call(Pid, read, Timeout) of
+        {error, timeout} ->
+            port:call(Pid, cancel_read),
+            {error, timeout};
+        Result ->
+            Result
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Pid of the uart port to be written to

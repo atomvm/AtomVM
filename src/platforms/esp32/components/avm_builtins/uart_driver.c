@@ -103,6 +103,7 @@ static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x4", "read"), UARTReadCmd },
     { ATOM_STR("\x5", "write"), UARTWriteCmd },
     { ATOM_STR("\x5", "close"), UARTCloseCmd },
+    { ATOM_STR("\xB", "cancel_read"), UARTCancelCmd },
     SELECT_INT_DEFAULT(UARTInvalidCmd)
 };
 
@@ -394,6 +395,23 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
     }
 }
 
+static void uart_driver_do_cancel_read(Context *ctx, GenMessage gen_message)
+{
+    struct UARTData *uart_data = ctx->platform_data;
+
+    safe_update_reader_data(uart_data, NO_READER, NO_REF);
+
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
+        globalcontext_send_message(ctx->global, term_to_local_process_id(pid), OUT_OF_MEMORY_ATOM);
+    }
+
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
 static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
 {
     GlobalContext *glb = ctx->global;
@@ -531,6 +549,11 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
                 TRACE("close\n");
                 uart_driver_do_close(ctx, gen_message);
                 is_closed = true;
+                break;
+
+            case UARTCancelCmd:
+                TRACE("cancel_read\n");
+                uart_driver_do_cancel_read(ctx, gen_message);
                 break;
 
             default:
