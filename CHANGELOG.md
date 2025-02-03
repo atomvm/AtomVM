@@ -54,6 +54,11 @@ and a race condition in otp_socket code
 - Fixed an out of memory issue by forcing GC to copy data from message fragments
 - Fixed a bug where calling repeatedly `process_info` on a stopped process could cause an out of
 memory error
+- Fixed possible concurrency problems in ESP32 UART driver
+
+### Changed
+
+- ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
 
 ## [0.6.5] - 2024-10-15
 
