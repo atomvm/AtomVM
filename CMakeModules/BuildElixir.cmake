@@ -46,7 +46,7 @@ macro(pack_archive avm_name)
     add_custom_target(
         ${avm_name} ALL
         DEPENDS ${avm_name}_beams PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} -a ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -87,7 +87,7 @@ macro(pack_runnable avm_name main)
 
     add_custom_target(
         ${avm_name} ALL
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} -a ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
