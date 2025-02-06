@@ -15,10 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
 - Added `supervisor:terminate_child/2`, `supervisor:restart_child/2` and `supervisor:delete_child/2`
+- Added test_gpio.erl to esp32 test suite.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
+- ESP32 GPIO driver now matches spec for error returns, nifs raise `Error`, port functions return `{error, Reason}`
 
 ## [0.6.6] - Unreleased
 

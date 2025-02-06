@@ -13,8 +13,10 @@
   ],
   "connections": [
     ["esp:37", "$serialMonitor:RX", "", []],
-    ["esp:38", "$serialMonitor:TX", "", []]
+    ["esp:38", "$serialMonitor:TX", "", []],
+    [ "esp:5", "esp:4", "blue", [ "v-12", "h0", "v-10", "h10" ] ]
   ],
   "serialMonitor": { "display": "terminal" },
   "dependencies": {}
 }
+
