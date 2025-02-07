@@ -24,11 +24,14 @@
 #include <math.h>
 
 #include "atom.h"
+#include "bitstring.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
+#include "interop.h"
 #include "overflow_helpers.h"
 #include "term.h"
 #include "trace.h"
+#include "unicode.h"
 #include "utils.h"
 
 //Ignore warning caused by gperf generated code
@@ -1511,4 +1514,177 @@ term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
     }
 
     RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+}
+
+static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error_reason);
+
+term bif_erlang_list_to_atom_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    UNUSED(live);
+
+    term error_reason;
+    term result = list_to_atom(ctx, arg1, true, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR_BIF(fail_label, error_reason);
+    }
+    return result;
+}
+
+term bif_erlang_list_to_existing_atom_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    UNUSED(live);
+
+    term error_reason;
+    term result = list_to_atom(ctx, arg1, false, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR_BIF(fail_label, error_reason);
+    }
+    return result;
+}
+
+static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error_reason)
+{
+    if (UNLIKELY(!term_is_list(a_list))) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    }
+
+    int ok;
+    char *atom_string = interop_list_to_utf8_string(a_list, &ok);
+    if (UNLIKELY(!ok)) {
+        *error_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    int atom_string_len = strlen(atom_string);
+    if (UNLIKELY(atom_string_len > 255)) {
+        free(atom_string);
+        *error_reason = SYSTEM_LIMIT_ATOM;
+        return term_invalid_term();
+    }
+
+    AtomString atom = malloc(atom_string_len + 1);
+    if (IS_NULL_PTR(atom)) {
+        free(atom_string);
+        *error_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    ((uint8_t *) atom)[0] = atom_string_len;
+    memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+    free(atom_string);
+
+    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
+    if (!create_new) {
+        atom_opts |= AtomTableAlreadyExisting;
+    }
+    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    free((void *) atom);
+    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
+        *error_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    return term_from_atom_index(global_atom_index);
+}
+
+term bif_erlang_binary_to_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
+{
+    UNUSED(live);
+
+    term error_reason;
+    term result = binary_to_atom(ctx, arg1, arg2, true, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR_BIF(fail_label, error_reason);
+    }
+    return result;
+}
+
+term bif_erlang_binary_to_existing_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
+{
+    UNUSED(live);
+
+    term error_reason;
+    term result = binary_to_atom(ctx, arg1, arg2, false, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR_BIF(fail_label, error_reason);
+    }
+    return result;
+}
+
+term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new, term *error_reason)
+{
+    if (UNLIKELY(!term_is_binary(a_binary))) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    }
+
+    const char *atom_string = term_binary_data(a_binary);
+    size_t atom_string_len = term_binary_size(a_binary);
+    if (UNLIKELY(atom_string_len > 255)) {
+        *error_reason = SYSTEM_LIMIT_ATOM;
+        return term_invalid_term();
+    }
+
+    bool encode_latin1_to_utf8 = false;
+    if (UNLIKELY((encoding == LATIN1_ATOM)
+            && !unicode_buf_is_ascii((const uint8_t *) atom_string, atom_string_len))) {
+        encode_latin1_to_utf8 = true;
+    } else if (UNLIKELY((encoding != LATIN1_ATOM) && (encoding != UNICODE_ATOM)
+                   && (encoding != UTF8_ATOM))) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    }
+
+    AtomString atom;
+    if (LIKELY(!encode_latin1_to_utf8)) {
+        size_t i = 0;
+        while (i < atom_string_len) {
+            uint32_t codepoint;
+            size_t codepoint_size;
+            if (UNLIKELY(bitstring_utf8_decode(
+                    (uint8_t *) atom_string + i, atom_string_len, &codepoint, &codepoint_size))
+                != UnicodeTransformDecodeSuccess) {
+                *error_reason = BADARG_ATOM;
+                return term_invalid_term();
+            }
+            i += codepoint_size;
+        }
+
+        atom = malloc(atom_string_len + 1);
+        ((uint8_t *) atom)[0] = atom_string_len;
+        memcpy(((char *) atom) + 1, atom_string, atom_string_len);
+    } else {
+        // * 2 is the worst case size
+        size_t buf_len = atom_string_len * 2;
+        atom = malloc(buf_len + 1);
+        uint8_t *atom_data = ((uint8_t *) atom) + 1;
+        size_t out_pos = 0;
+        for (size_t i = 0; i < atom_string_len; i++) {
+            size_t out_size;
+            bitstring_utf8_encode(((uint8_t) atom_string[i]), &atom_data[out_pos], &out_size);
+            out_pos += out_size;
+        }
+        if (out_pos > 255) {
+            free((void *) atom);
+            *error_reason = SYSTEM_LIMIT_ATOM;
+            return term_invalid_term();
+        }
+        ((uint8_t *) atom)[0] = out_pos;
+    }
+
+    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
+    if (!create_new) {
+        atom_opts |= AtomTableAlreadyExisting;
+    }
+    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    free((void *) atom);
+    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
+        *error_reason = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+    return term_from_atom_index(global_atom_index);
 }
