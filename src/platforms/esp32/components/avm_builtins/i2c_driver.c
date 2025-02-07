@@ -327,8 +327,14 @@ static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
     }
 
     term data_term = term_get_tuple_element(req, 1);
-    uint8_t data = term_to_int32(data_term);
-    esp_err_t result = i2c_master_write(i2c_data->cmd, (unsigned char *) term_binary_data(data), term_binary_size(data), true);
+    if (UNLIKELY(!term_is_binary(data_term))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
+    esp_err_t result = i2c_master_write(i2c_data->cmd, (const uint8_t *) term_binary_data(data_term), term_binary_size(data_term), true);
 
     if (UNLIKELY(result != ESP_OK)) {
         ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %s", esp_err_to_name(result));
