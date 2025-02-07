@@ -4522,6 +4522,10 @@ static term nif_erlang_md5(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     term data = argv[0];
 
+    if (!(term_is_binary(data) || term_is_list(data))) {
+        RAISE_ERROR(BADARG_ATOM)
+    }
+
     unsigned char digest[MAX_MD_SIZE];
     size_t digest_len = 16;
 

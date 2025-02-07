@@ -567,6 +567,8 @@ else()
     set(OTP25_OR_GREATER_TESTS)
 endif()
 
+compile_erlang(test_md5)
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -1072,6 +1074,8 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_op_bs_start_match.beam
     test_op_bs_create_bin.beam
+
+    test_md5.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
