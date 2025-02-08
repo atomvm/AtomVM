@@ -63,6 +63,8 @@ option(AVM_WAIT_FOR_USB_CONNECT "Wait for USB connection before starting" OFF)
 option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" ON)
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
+set(AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION "25" CACHE STRING "Minimum supported OTP Release for Erlang compiler")
+set(AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION "28" CACHE STRING "Maximum supported OTP Release for Erlang compiler")
 
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 
