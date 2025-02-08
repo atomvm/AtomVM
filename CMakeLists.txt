@@ -36,6 +36,8 @@ option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_BUILD_RUNTIME_ONLY "Only build the AtomVM runtime" OFF)
 option(COVERAGE "Build for code coverage" OFF)
+set(AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION "25" CACHE STRING "Minimum supported OTP Release for Erlang compiler")
+set(AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION "28" CACHE STRING "Maximum supported OTP Release for Erlang compiler")
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR

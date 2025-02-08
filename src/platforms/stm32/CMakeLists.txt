@@ -35,6 +35,8 @@ option(AVM_ENABLE_LOG_LINES "Include source and line info for all enbled levels"
 option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
+set(AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION "25" CACHE STRING "Minimum supported OTP Release for Erlang compiler")
+set(AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION "28" CACHE STRING "Maximum supported OTP Release for Erlang compiler")
 
 set(AVM_DISABLE_SMP ON FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
