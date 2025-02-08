@@ -226,15 +226,12 @@ jobs:
           elixir_version: "1.14"
           rebar3_version: "3.23.0"
 
-# TODO: enable master again
-# master will not work until we don't adapt to atom table changes
-#        # master/main version of OTP/Elixir
-#        - os: "ubuntu-24.04"
-#          cc: "cc"
-#          cxx: "c++"
-#          otp: "master"
-#          elixir_version: "main"
-#          rebar3_version: "3.24.0"
+        - os: "ubuntu-24.04"
+          cc: "cc"
+          cxx: "c++"
+          otp: "master"
+          elixir_version: "main"
+          rebar3_version: "3.24.0"
 
         # Additional default compiler builds
         - os: "ubuntu-20.04"
