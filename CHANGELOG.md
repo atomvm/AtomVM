@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `code:is_loaded/1` and `code:which/1`
 - Added several `io_lib` functions including `io_lib:fwrite/2` and `io_lib:write_atom/1`
 - Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
+- Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.

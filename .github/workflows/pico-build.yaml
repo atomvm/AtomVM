@@ -25,7 +25,9 @@ on:
       - 'src/libAtomVM/**'
 
 permissions:
+  actions: read
   contents: write
+  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -37,6 +39,7 @@ jobs:
     strategy:
       matrix:
         board: ["pico", "pico_w", "pico2"]
+        language: ["cpp"]
 
     steps:
     - name: Checkout repo
@@ -52,6 +55,16 @@ jobs:
             libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
             erlang-base erlang-dev erlang-dialyzer erlang-eunit rebar3
 
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+
     - name: Build
       shell: bash
       working-directory: ./src/platforms/rp2/
@@ -61,6 +74,9 @@ jobs:
         cd build
         cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }}
         ninja
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Install nvm and nodejs 20
       if: matrix.board != 'pico2'

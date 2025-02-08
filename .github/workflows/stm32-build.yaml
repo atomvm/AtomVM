@@ -27,6 +27,11 @@ concurrency:
 jobs:
   stm32:
     runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
     steps:
     - uses: actions/cache@v4
       id: builddeps-cache
@@ -63,6 +68,16 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: 'cpp'
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+
     - name: Build
       shell: bash
       working-directory: ./src/platforms/stm32/
@@ -73,3 +88,6 @@ jobs:
         # -DAVM_WARNINGS_ARE_ERRORS=ON
         cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/home/runner/libopencm3
         make -j
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3

@@ -30,15 +30,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
   compile_tests:
+
     runs-on: ubuntu-24.04
     container: erlang:27
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["c-cpp"]
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: Install required packages
       run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
+
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
 
     - name: Compile AtomVM and test modules
       run: |
@@ -48,6 +70,9 @@ jobs:
         cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
         # test_eavmlib does not work with wasm due to http + ssl test
         ninja AtomVM atomvmlib erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v4
@@ -80,6 +105,7 @@ jobs:
     needs: compile_tests
     runs-on: ubuntu-24.04
     container: emscripten/emsdk
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -145,12 +171,29 @@ jobs:
   wasm_build_web:
     runs-on: ubuntu-24.04
     container: emscripten/emsdk
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["javascript-typescript"]
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: "Install deps"
       run: sudo apt update -y && sudo apt install -y cmake gperf
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        build-mode: none
+        db-location: '${{ github.runner_temp }}/codeql_js_database'
 
     - name: Build wasm build for web
       shell: bash
@@ -161,6 +204,9 @@ jobs:
         cd build
         emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web
         emmake make -j
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Upload wasm build for web
       uses: actions/upload-artifact@v4
