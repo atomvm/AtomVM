@@ -34,6 +34,9 @@ certain VM instructions are used.
 - Fix `network:stop/0` on ESP32 so the network can be started again
 - Fix a memory corruption caused by `binary:split/2,3`
 - Fix deadlock in socket code
+- Fix bug in opcode implementation (`select_val`): when selecting a value among many others a
+shallow comparison was performed, so it was working just for plain values such as atoms and small
+integers
 
 ## [0.6.5] - 2024-10-15
 
