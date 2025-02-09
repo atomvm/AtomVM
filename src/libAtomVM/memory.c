@@ -167,7 +167,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
                     should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space - size > maximum_free_space);
                 } break;
                 case MinimumHeapGrowth:
-                    should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space - size > 0);
+                    should_gc = ((alloc_mode == MEMORY_CAN_SHRINK) && free_space > size);
                     break;
                 case FibonacciHeapGrowth: {
                     memory_size = memory_heap_memory_size(&c->heap);
