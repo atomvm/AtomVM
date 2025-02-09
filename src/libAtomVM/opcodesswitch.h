@@ -3107,8 +3107,14 @@ wait_timeout_trap_handler:
                     #endif
 
                     #ifdef IMPL_EXECUTE_LOOP
-                        if (!jump_to_address && (src_value == cmp_value)) {
-                            jump_to_address = mod->labels[jmp_label];
+                        if (!jump_to_address) {
+                            TermCompareResult result = term_compare(
+                                src_value, cmp_value, TermCompareExact, ctx->global);
+                            if (result == TermEquals) {
+                                jump_to_address = mod->labels[jmp_label];
+                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
                         }
                     #endif
                 }

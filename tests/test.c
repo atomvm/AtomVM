@@ -113,6 +113,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(moreintegertests, 32),
     TEST_CASE_EXPECTED(send_receive, 18),
     TEST_CASE_EXPECTED(send_to_dead_process, 20),
+    TEST_CASE(selval),
     TEST_CASE_EXPECTED(byte_size_test, 10),
     TEST_CASE_EXPECTED(tuple, 6),
     TEST_CASE_EXPECTED(len_test, 5),
