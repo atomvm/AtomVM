@@ -32,7 +32,6 @@ jobs:
       id: builddeps-cache
       with:
         path: |
-              /home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi
               /home/runner/libopencm3
         key: ${{ runner.os }}-build-deps
 
@@ -44,6 +43,12 @@ jobs:
           https://repo.hex.pm
           https://cdn.jsdelivr.net/hex
 
+    - name: "apt update"
+      run: sudo apt update
+
+    - name: "Install deps"
+      run: sudo apt install -y cmake gperf gcc-arm-none-eabi
+
     - name: Checkout and build libopencm3
       if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
       working-directory: /home/runner
@@ -51,16 +56,9 @@ jobs:
         set -euo pipefail
         cd /home/runner
         test -d libopencm3 && rm -fr libopencm3
-        export PATH=/home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
         git clone https://github.com/libopencm3/libopencm3.git -b v0.8.0
         cd libopencm3
         make
-
-    - name: "apt update"
-      run: sudo apt update
-
-    - name: "Install deps"
-      run: sudo apt install -y cmake gperf gcc-arm-none-eabi
 
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -70,7 +68,6 @@ jobs:
       working-directory: ./src/platforms/stm32/
       run: |
         set -euo pipefail
-        export PATH=/home/runner/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi/bin:${PATH}
         mkdir build
         cd build
         # -DAVM_WARNINGS_ARE_ERRORS=ON
