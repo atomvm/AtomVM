@@ -1836,9 +1836,7 @@ static ssize_t do_socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, siz
 
 ssize_t socket_recv(struct SocketResource *rsrc_obj, uint8_t *buf, size_t len, int flags, term *from, Heap *heap)
 {
-    SMP_RWLOCK_RDLOCK(rsrc_obj->socket_lock);
     ssize_t result = do_socket_recv(rsrc_obj, buf, len, flags, from, heap);
-    SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
     return result;
 }
 
