@@ -33,6 +33,8 @@ certain VM instructions are used.
 - Fixed compilation with latest debian gcc-arm-none-eabi
 - Fix `network:stop/0` on ESP32 so the network can be started again
 - Fix a memory corruption caused by `binary:split/2,3`
+- Fix error handling when calling `min` and `max` with code compiled before OTP-26: there was a
+bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
 
 ## [0.6.5] - 2024-10-15
 
