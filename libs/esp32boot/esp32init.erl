@@ -85,7 +85,7 @@ get_boot_path() ->
         undefined ->
             "/dev/partition/by-name/main.avm";
         Path ->
-            Path
+            binary_to_list(Path)
     end.
 
 get_start_module() ->
