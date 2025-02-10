@@ -129,6 +129,12 @@ jobs:
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
+      with:
+        # GCC on qemu segfaults on s390x and arm64v8 when using 24.04
+        # See also https://github.com/actions/runner-images/issues/11471
+        # qemu-v8.1.5 seem to fix the issue without downgrading Ubuntu
+        # https://github.com/docker/setup-qemu-action/issues/188
+        image: tonistiigi/binfmt:qemu-v8.1.5
 
     - name: "Build and Test: AtomVM on foreign arch"
       timeout-minutes: 15
