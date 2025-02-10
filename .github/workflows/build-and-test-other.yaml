@@ -63,7 +63,9 @@ jobs:
 
   build-and-test-other:
     needs: compile_tests
-    runs-on: ubuntu-24.04
+    # GCC on qemu segfaults on s390x and arm64v8 when using 24.04
+    # See also https://github.com/actions/runner-images/issues/11471
+    runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
