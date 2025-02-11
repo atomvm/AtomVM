@@ -29,6 +29,7 @@
     insert/2,
     lookup/2,
     lookup_element/3,
+    delete/1,
     delete/2,
     update_counter/3,
     update_counter/4
@@ -140,4 +141,13 @@ update_counter(_Table, _Key, _Params) ->
     Default :: integer()
 ) -> integer().
 update_counter(_Table, _Key, _Params, _Default) ->
+    erlang:nif_error(undefined).
+%%-----------------------------------------------------------------------------
+%% @param   Table a reference to the ets table
+%% @returns true;
+%% @doc Delete an ets table.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec delete(Table :: table()) -> true.
+delete(_Table) ->
     erlang:nif_error(undefined).
