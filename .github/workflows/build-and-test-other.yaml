@@ -63,7 +63,9 @@ jobs:
 
   build-and-test-other:
     needs: compile_tests
-    runs-on: ubuntu-24.04
+    # GCC on qemu segfaults on s390x and arm64v8 when using 24.04
+    # See also https://github.com/actions/runner-images/issues/11471
+    runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
@@ -128,7 +130,7 @@ jobs:
         path: build_tests
 
     - name: Set up QEMU
-      run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+      uses: docker/setup-qemu-action@v3
 
     - name: "Build and Test: AtomVM on foreign arch"
       timeout-minutes: 15

@@ -25,6 +25,8 @@
 start() ->
     case verify_platform(atomvm:platform()) of
         ok ->
+            % test that sta_rssi() can be safely called, when network is not started
+            {error, network_down} = network:sta_rssi(),
             ok = start_network(),
             ok = network:stop(),
             start_network(),
@@ -59,7 +61,11 @@ start_network() ->
     ],
     case network:start(Config) of
         {ok, _Pid} ->
-            io:format("Network started.~n");
+            % test that sta_rssi() can be safely called
+            % when network is just started, but may not yet be connected.
+            network:sta_rssi(),
+            io:format("Network started.~n"),
+            ok;
         Error ->
             Error
     end.

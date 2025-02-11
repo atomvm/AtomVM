@@ -52,6 +52,16 @@ certain VM instructions are used.
 - Fix `network:stop/0` on ESP32 so the network can be started again
 - Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 - Fix a memory corruption caused by `binary:split/2,3`
+- Fix deadlock in socket code
+- Fix bug in opcode implementation (`select_val`): when selecting a value among many others a
+shallow comparison was performed, so it was working just for plain values such as atoms and small
+integers
+- Fixed support for setting esp32 boot_path in NVS.
+- Fixed race conditions in network:start/stop.
+- Fixed crash calling network:sta_rssi(), when network not up.
+- Fix error handling when calling `min` and `max` with code compiled before OTP-26: there was a
+bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
+- Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 
 ## [0.6.5] - 2024-10-15
 
