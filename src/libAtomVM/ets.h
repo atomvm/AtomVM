@@ -79,6 +79,8 @@ EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx);
 EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx);
 EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx);
 EtsErrorCode ets_update_counter(term ref, term key, term value, term pos, term *ret, Context *ctx);
+EtsErrorCode ets_drop_table(term ref, term *ret, Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
