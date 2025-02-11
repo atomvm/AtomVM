@@ -42,6 +42,7 @@ integers
 - Fixed crash calling network:sta_rssi(), when network not up.
 - Fix error handling when calling `min` and `max` with code compiled before OTP-26: there was a
 bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
+- Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 
 ## [0.6.5] - 2024-10-15
 

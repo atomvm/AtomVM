@@ -4721,21 +4721,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_match_string");
 
-                    if (bits % 8 != 0) {
-                        TRACE("bs_match_string: Unsupported bits size (must be evenly divisible by 8). bits=%u\n", (unsigned) bits);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    avm_int_t bytes = bits / 8;
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
-
-                    if (bs_offset % 8 != 0) {
-                        TRACE("bs_match_string: Unsupported offset (must be evenly divisible by 8). bs_offset=%li\n", bs_offset);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    avm_int_t byte_offset = bs_offset / 8;
-
-                    TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
 
                     size_t remaining = 0;
                     const uint8_t *str = module_get_str(mod, offset, &remaining);
@@ -4743,12 +4730,48 @@ wait_timeout_trap_handler:
                         TRACE("bs_match_string: Bad offset in strings table.\n");
                         RAISE_ERROR(BADARG_ATOM);
                     }
-                    if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
-                        TRACE("bs_match_string: failed to match\n");
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
+
+                    TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
+
+                    if (bits % 8 == 0 && bs_offset % 8 == 0) {
+                        avm_int_t bytes = bits / 8;
+                        avm_int_t byte_offset = bs_offset / 8;
+
+                        if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
+                            TRACE("bs_match_string: failed to match\n");
+                            JUMP_TO_ADDRESS(mod->labels[fail]);
+                        }
                     } else {
-                        term_set_match_state_offset(src, bs_offset + bits);
+                        // Compare unaligned bits
+                        const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
+                        uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
+                        uint8_t str_bit_offset = 7;
+                        size_t remaining_bits = bits;
+                        while (remaining_bits > 0) {
+                            uint8_t str_ch = *str;
+                            uint8_t bin_ch = *bs_str;
+                            uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
+                            uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
+                            if (str_ch_bit ^ bin_ch_bit) {
+                                TRACE("bs_match_string: failed to match\n");
+                                JUMP_TO_ADDRESS(mod->labels[fail]);
+                            }
+                            if (str_bit_offset) {
+                                str_bit_offset--;
+                            } else {
+                                str_bit_offset = 7;
+                                str++;
+                            }
+                            if (bin_bit_offset) {
+                                bin_bit_offset--;
+                            } else {
+                                bin_bit_offset = 7;
+                                bs_str++;
+                            }
+                            remaining_bits--;
+                        }
                     }
+                    term_set_match_state_offset(src, bs_offset + bits);
                 #endif
                 break;
             }
