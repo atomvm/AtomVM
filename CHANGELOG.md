@@ -40,6 +40,8 @@ integers
 - Fixed support for setting esp32 boot_path in NVS.
 - Fixed race conditions in network:start/stop.
 - Fixed crash calling network:sta_rssi(), when network not up.
+- Fix error handling when calling `min` and `max` with code compiled before OTP-26: there was a
+bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
 
 ## [0.6.5] - 2024-10-15
 

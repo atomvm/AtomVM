@@ -1990,19 +1990,23 @@ schedule_in:
                             // Support compilers < OTP26 that generate CALL_EXT
                             // for min/2 and max/2
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            term return_value;
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    return_value = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
                             }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
+                            x_regs[0] = return_value;
 
                             break;
                         }
@@ -2090,19 +2094,23 @@ schedule_in:
                             ctx->e += (n_words + 1);
 
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            term return_value;
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    return_value = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
                             }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                            x_regs[0] = return_value;
 
                             DO_RETURN();
 
@@ -3541,19 +3549,23 @@ wait_timeout_trap_handler:
                             // Support compilers < OTP26 that generate CALL_EXT_ONLY
                             // for min/2 and max/2
                             const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                            term return_value;
                             switch (arity) {
                                 case 0:
-                                    x_regs[0] = bif->bif0_ptr(ctx);
+                                    return_value = bif->bif0_ptr(ctx);
                                     break;
                                 case 1:
-                                    x_regs[0] = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
                                     break;
                                 case 2:
-                                    x_regs[0] = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
                             }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                            x_regs[0] = return_value;
 
                             DO_RETURN();
 
