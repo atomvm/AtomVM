@@ -3314,15 +3314,17 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
 
 static term nif_ets_delete(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term ref = argv[0];
     VALIDATE_VALUE(ref, is_ets_table_id);
-
-    term key = argv[1];
-
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_delete(ref, key, &ret, ctx);
+    EtsErrorCode result;
+    if (argc == 2) {
+        term key = argv[1];
+        result = ets_delete(ref, key, &ret, ctx);
+    } else {
+        result = ets_drop_table(ref, &ret, ctx);
+    }
+
     switch (result) {
         case EtsOk:
             return ret;

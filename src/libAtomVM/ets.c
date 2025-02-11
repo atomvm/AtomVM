@@ -426,25 +426,55 @@ EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t pos,
     return EtsOk;
 }
 
-EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
+static EtsErrorCode ets_table_delete(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
-    }
-
     if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        SMP_UNLOCK(ets_table);
         return EtsPermissionDenied;
     }
 
     bool _res = ets_hashtable_remove(ets_table->hashtable, key, ets_table->keypos, ctx->global);
     UNUSED(_res);
 
-    SMP_UNLOCK(ets_table);
     *ret = TRUE_ATOM;
-
     return EtsOk;
+}
+
+EtsErrorCode ets_drop_table(term name_or_ref, term *ret, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(name_or_ref)
+        ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessWrite)
+        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessWrite);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsTableNotFound;
+    }
+    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
+        return EtsPermissionDenied;
+    }
+
+    struct ListHead *ets_tables_list = synclist_wrlock(&ctx->global->ets.ets_tables);
+    UNUSED(ets_tables_list);
+    list_remove(&ets_table->head);
+    SMP_UNLOCK(ets_table);
+    ets_table_destroy(ets_table, ctx->global);
+    synclist_unlock(&ctx->global->ets.ets_tables);
+
+    *ret = TRUE_ATOM;
+    return EtsOk;
+}
+
+EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(name_or_ref)
+        ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead)
+        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsTableNotFound;
+    }
+
+    EtsErrorCode res = ets_table_delete(ets_table, key, ret, ctx);
+
+    SMP_UNLOCK(ets_table);
+    return res;
 }
 
 static bool operation_to_tuple4(term operation, size_t default_pos, term *position, term *increment, term *threshold, term *set_value)
