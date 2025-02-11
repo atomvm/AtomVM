@@ -79,6 +79,7 @@ static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
 static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_timeout");
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
+static const char *const network_down_atom = ATOM_STR("\x0C", "network_down");
 
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
@@ -847,13 +848,24 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     size_t tuple_reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
 
     int sta_rssi = 0;
-    esp_err_t err = esp_wifi_sta_get_rssi(&sta_rssi);
-    if (UNLIKELY(err != ESP_OK)) {
-        term error_term = term_from_int(err);
-        ESP_LOGE(TAG, "error obtaining RSSI: [%i] %u", err, error_term);
-        // Reply: {Ref, {error, Reason}}
+    wifi_ap_record_t ap_info;
+    esp_err_t status = esp_wifi_sta_get_ap_info(&ap_info);
+    if (status == ESP_OK) {
+        esp_err_t err = esp_wifi_sta_get_rssi(&sta_rssi);
+        if (UNLIKELY(err != ESP_OK)) {
+            term error_term = term_from_int(err);
+            ESP_LOGE(TAG, "error obtaining RSSI: [%i] %u", err, error_term);
+            // Reply: {Ref, {error, Reason}}
+            port_ensure_available(ctx, tuple_reply_size);
+            term error = port_create_error_tuple(ctx, error_term);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
+    } else {
+        ESP_LOGE(TAG, "Device is not connected to any AP.");
+        // Reply: {Ref, {error, network_down}}
         port_ensure_available(ctx, tuple_reply_size);
-        term error = port_create_error_tuple(ctx, error_term);
+        term error = port_create_error_tuple(ctx, make_atom(ctx->global, network_down_atom));
         port_send_reply(ctx, pid, ref, error);
         return;
     }

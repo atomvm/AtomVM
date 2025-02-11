@@ -32,6 +32,7 @@
     init/1,
     handle_call/3,
     handle_cast/2,
+    handle_continue/2,
     handle_info/2,
     terminate/2
 ]).
@@ -270,31 +271,11 @@ wait_for_ap(ApConfig, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
 start(Config) ->
-    case gen_server:start({local, ?MODULE}, ?MODULE, Config, []) of
-        {ok, Pid} = R ->
-            case gen_server:call(Pid, start) of
-                ok ->
-                    R;
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
+    gen_server:start({local, ?MODULE}, ?MODULE, Config, []).
 
 -spec start_link(Config :: network_config()) -> {ok, pid()} | {error, Reason :: term()}.
 start_link(Config) ->
-    case gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []) of
-        {ok, Pid} = R ->
-            case gen_server:call(Pid, start) of
-                ok ->
-                    R;
-                Error ->
-                    Error
-            end;
-        Error ->
-            Error
-    end.
+    gen_server:start_link({local, ?MODULE}, ?MODULE, Config, []).
 
 %%-----------------------------------------------------------------------------
 %% @returns ok, if the network interface was stopped, or {error, Reason} if
@@ -314,13 +295,17 @@ stop() ->
 %%-----------------------------------------------------------------------------
 -spec sta_rssi() -> {ok, Rssi :: db()} | {error, Reason :: term()}.
 sta_rssi() ->
-    Port = get_port(),
-    Ref = make_ref(),
-    Port ! {self(), Ref, rssi},
-    receive
-        {Ref, {error, Reason}} -> {error, Reason};
-        {Ref, {rssi, Rssi}} -> {ok, Rssi};
-        Other -> {error, Other}
+    case whereis(network_port) of
+        undefined ->
+            {error, network_down};
+        Port ->
+            Ref = make_ref(),
+            Port ! {self(), Ref, rssi},
+            receive
+                {Ref, {error, Reason}} -> {error, Reason};
+                {Ref, {rssi, Rssi}} -> {ok, Rssi};
+                Other -> {error, Other}
+            end
     end.
 
 %%
@@ -329,27 +314,22 @@ sta_rssi() ->
 
 %% @hidden
 init(Config) ->
-    {ok, #state{config = Config}}.
-
-%% @hidden
-handle_call(start, From, #state{config = Config} = State) ->
     Port = get_port(),
     Ref = make_ref(),
-    Port ! {self(), Ref, {start, Config}},
-    wait_start_reply(Ref, From, Port, State);
-handle_call(_Msg, _From, State) ->
-    {reply, {error, unknown_message}, State}.
+    {ok, #state{config = Config, port = Port, ref = Ref}, {continue, start_port}}.
 
-%% @private
-wait_start_reply(Ref, From, Port, State) ->
+handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = State) ->
+    Port ! {self(), Ref, {start, Config}},
     receive
         {Ref, ok} ->
-            gen_server:reply(From, ok),
-            {noreply, State#state{port = Port, ref = Ref}};
-        {Ref, {error, Reason} = ER} ->
-            gen_server:reply(From, {error, Reason}),
-            {stop, {start_failed, Reason}, ER, State}
+            {noreply, State};
+        {Ref, {error, Reason}} ->
+            {stop, {start_port_failed, Reason}, State}
     end.
+
+%% @hidden
+handle_call(_Msg, _From, State) ->
+    {reply, {error, unknown_message}, State}.
 
 %% @hidden
 handle_cast(_Msg, State) ->
@@ -390,10 +370,25 @@ handle_info(Msg, State) ->
     {noreply, State}.
 
 %% @hidden
-terminate(_Reason, _State) ->
+%% Wait for port to be closed
+terminate(_Reason, State) ->
     Ref = make_ref(),
+    Port = State#state.port,
+    PortMonitor = erlang:monitor(port, Port),
     network_port ! {?SERVER, Ref, stop},
-    ok.
+    wait_for_port_close(PortMonitor, Port).
+
+wait_for_port_close(PortMonitor, Port) ->
+    receive
+        {'DOWN', PortMonitor, port, Port, _DownReason} ->
+            ok;
+        _Other ->
+            % Handle unexpected messages if necessary
+            wait_for_port_close(PortMonitor, Port)
+        % Timeout after 1 second just in case.
+    after 1000 ->
+        {error, timeout}
+    end.
 
 %%
 %% Internal operations
