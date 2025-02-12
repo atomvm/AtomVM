@@ -33,6 +33,7 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 | ✅ OTP 24 | ✅ 1.14 |
 | ✅ OTP 25 | ✅ 1.14 |
 | ✅ OTP 26 | ✅ 1.15 |
+| ✅ OTP 27 | ✅ 1.17 |
 
 ```{note}
 Versions of Elixir that are compatible with a particular OTP version may work.  This table reflects the versions that are tested.
@@ -62,6 +63,7 @@ AtomVM currently supports the following [Espressif ESP SoCs](https://www.espress
 | [ESP32h2](https://www.espressif.com/sites/default/files/documentation/esp32-h2_datasheet_en.pdf) | ✅ |
 | [ESP32s2](https://www.espressif.com/sites/default/files/documentation/esp32-s2_datasheet_en.pdf) | ✅ |
 | [ESP32s3](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf) | ✅ |
+| [ESP32p4](https://www.espressif.com/sites/default/files/documentation/esp32-p4_datasheet_en.pdf) Datasheet Pending | ✅ |
 
 AtomVM currently supports the following versions of ESP-IDF:
 
@@ -96,13 +98,13 @@ AtomVM tests this build on the latest Ubuntu github runner.
 
 ### Raspberry Pi Pico Support
 
-AtomVM supports deployment on the [Raspberry Pico RP2040](https://www.raspberrypi.com/documentation/microcontrollers/rp2040.html) architecture.
+AtomVM supports deployment on the [Raspberry Pico RP2040](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-1-family) architecture.
 
 AtomVM currently supports the following Raspberry Pico development boards:
 
 | Development Board | AtomVM support |
 |------------------------------|----------------|
-| [Raspberry Pico and Pico H](https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html#raspberry-pi-pico-and-pico-h) | ✅ |
-| [Raspberry Pico W and Pico WH](https://www.raspberrypi.com/documentation/microcontrollers/raspberry-pi-pico.html#raspberry-pi-pico-w-and-pico-wh) | ✅ |
+| [Raspberry Pico and Pico H](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-1-technical-specification) | ✅ |
+| [Raspberry Pico W and Pico WH](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#picow-technical-specification) | ✅ |
 
 Building the AtomVM virtual machine for Raspberry Pico is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.
