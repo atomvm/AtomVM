@@ -445,9 +445,29 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
     return new_index;
 }
 
-int atom_table_ensure_atoms(
-    struct AtomTable *table, const void *atoms, int count, int *translate_table)
+static inline int read_encoded_len(const uint8_t **len_bytes)
 {
+    uint8_t byte0 = (*len_bytes)[0];
+
+    if ((byte0 & 0x8) == 0) {
+        (*len_bytes)++;
+        return byte0 >> 4;
+
+    } else if ((byte0 & 0x10) == 0) {
+        uint8_t byte1 = (*len_bytes)[1];
+        (*len_bytes) += 2;
+        return ((byte0 >> 5) << 8) | byte1;
+
+    } else {
+        return -1;
+    }
+}
+
+int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
+    int *translate_table, enum EnsureAtomsOpt opt)
+{
+    bool is_long_format = (opt & EnsureLongEncoding) != 0;
+
     SMP_WRLOCK(table);
 
     int new_atoms_count = 0;
@@ -455,16 +475,41 @@ int atom_table_ensure_atoms(
     const uint8_t *current_atom = atoms;
 
     for (int i = 0; i < count; i++) {
-        struct HNode *node = get_node(table, current_atom);
+        struct HNode *node;
+        if (is_long_format) {
+            int atom_len = read_encoded_len(&current_atom);
+            if (UNLIKELY(atom_len < 0)) {
+                fprintf(stderr, "Found invalid atom len.");
+                SMP_UNLOCK(table);
+                return ATOM_TABLE_INVALID_LEN;
+            } else if (UNLIKELY(atom_len > 255)) {
+                fprintf(stderr,
+                    "Unsupported atom length %i bytes.\n"
+                    "Unlike OTP >= 28, AtomVM supports a maximum of 255 bytes"
+                    "regardeless the number of codepoints.\n"
+                    "If you are seeing this error please open an issue on GitHub:\n"
+                    "https://github.com/atomvm/AtomVM/issues\n",
+                    atom_len);
+                SMP_UNLOCK(table);
+                return ATOM_TABLE_INVALID_LEN;
+            }
+            char tmp_old_fmt[256];
+            tmp_old_fmt[0] = atom_len;
+            memcpy(tmp_old_fmt + 1, current_atom, atom_len);
+            node = get_node(table, tmp_old_fmt);
+            current_atom += atom_len;
+        } else {
+            node = get_node(table, current_atom);
+            uint8_t atom_len = current_atom[0];
+            current_atom += 1 + atom_len;
+        }
+
         if (node) {
             translate_table[i] = node->index;
         } else {
             new_atoms_count++;
             translate_table[i] = ATOM_TABLE_NOT_FOUND;
         }
-
-        uint8_t atom_len = current_atom[0];
-        current_atom += 1 + atom_len;
     }
 
     maybe_rehash(table, new_atoms_count);
@@ -473,6 +518,19 @@ int atom_table_ensure_atoms(
     int remaining_atoms = new_atoms_count;
     struct HNodeGroup *node_group = table->last_node_group;
     for (int i = 0; i < count; i++) {
+
+        const uint8_t *to_be_copied = NULL;
+        const uint8_t *next_atom = current_atom;
+        uint8_t atom_len;
+        if (is_long_format) {
+            atom_len = read_encoded_len(&next_atom);
+            to_be_copied = next_atom;
+            next_atom += atom_len;
+        } else {
+            atom_len = current_atom[0];
+            next_atom += 1 + atom_len;
+        }
+
         if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
             if (!table->last_node_group_avail) {
                 node_group = new_node_group(table, remaining_atoms);
@@ -482,7 +540,19 @@ int atom_table_ensure_atoms(
                 }
             }
 
-            unsigned long hash = sdbm_hash(current_atom, atom_string_len(current_atom));
+            if (is_long_format) {
+                uint8_t *atom_copy = malloc(atom_len + 1);
+                if (IS_NULL_PTR(atom_copy)) {
+                    // we are not going to remove atoms that have already been added up to this one
+                    SMP_UNLOCK(table);
+                    return ATOM_TABLE_ALLOC_FAIL;
+                }
+                atom_copy[0] = atom_len;
+                memcpy(atom_copy + 1, to_be_copied, atom_len);
+                current_atom = atom_copy;
+            }
+
+            unsigned long hash = sdbm_hash(current_atom, atom_len);
             unsigned long bucket_index = hash % table->capacity;
 
             translate_table[i] = insert_node(table, node_group, bucket_index, current_atom);
@@ -491,8 +561,7 @@ int atom_table_ensure_atoms(
                 break;
             }
         }
-        uint8_t atom_len = current_atom[0];
-        current_atom += 1 + atom_len;
+        current_atom = next_atom;
     }
 
     SMP_UNLOCK(table);

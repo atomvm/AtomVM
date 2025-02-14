@@ -2010,6 +2010,31 @@ schedule_in:
 
                             break;
                         }
+                        case GCBIFFunctionType: {
+                            // Support compilers < OTP28 that generate CALL_EXT
+                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                            // functions.
+                            // Regular CALL_EXTs to those functions are generated as well
+                            // even on OTP28, so it is required to allow calling them using
+                            // CALL_EXT even on OTP28: BIFs are used for try ... catch.
+                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                            term return_value;
+                            switch (arity) {
+                                case 1:
+                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                    break;
+                                case 2:
+                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
+                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
+                            x_regs[0] = return_value;
+
+                            break;
+                        }
                         default: {
                             fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
                             AVM_ABORT();
@@ -2104,6 +2129,36 @@ schedule_in:
                                     break;
                                 case 2:
                                     return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
+                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                            x_regs[0] = return_value;
+
+                            DO_RETURN();
+
+                            break;
+                        }
+                        case GCBIFFunctionType: {
+                            // Support compilers < OTP28 that generate CALL_EXT_LAST
+                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                            // functions.
+                            // Regular CALL_EXT_LASTs to those functions are generated as well
+                            // even on OTP28, so it is required to allow calling them using
+                            // CALL_EXT_LAST even on OTP28: BIFs are used for try ... catch.
+                            ctx->cp = ctx->e[n_words];
+                            ctx->e += (n_words + 1);
+
+                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                            term return_value;
+                            switch (arity) {
+                                case 1:
+                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                    break;
+                                case 2:
+                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
@@ -3559,6 +3614,33 @@ wait_timeout_trap_handler:
                                     break;
                                 case 2:
                                     return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                    break;
+                                default:
+                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                    AVM_ABORT();
+                            }
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                            x_regs[0] = return_value;
+
+                            DO_RETURN();
+
+                            break;
+                        }
+                        case GCBIFFunctionType: {
+                            // Support compilers < OTP28 that generate CALL_EXT_ONLY
+                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                            // functions.
+                            // Regular CALL_EXT_ONLYs to those functions are generated as well
+                            // even on OTP28, so it is required to allow calling them using
+                            // CALL_EXT_ONLY even on OTP28: BIFs are used for try ... catch.
+                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                            term return_value;
+                            switch (arity) {
+                                case 1:
+                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                    break;
+                                case 2:
+                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
                                     break;
                                 default:
                                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);

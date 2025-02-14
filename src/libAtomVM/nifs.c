@@ -86,9 +86,6 @@ static NativeHandlerResult process_console_mailbox(Context *ctx);
 static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx);
 static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx);
 
-static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new);
-static term list_to_atom(Context *ctx, int argc, term argv[], int create_new);
-
 static term nif_binary_at_2(Context *ctx, int argc, term argv[]);
 static term nif_binary_copy(Context *ctx, int argc, term argv[]);
 static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
@@ -99,11 +96,11 @@ static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc,
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_float_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
@@ -122,8 +119,6 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[]);
 static term nif_erlang_list_to_float_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[]);
-static term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_iolist_to_binary_1(Context *ctx, int argc, term argv[]);
@@ -271,10 +266,10 @@ static const struct Nif atom_to_list_nif =
     .nif_ptr = nif_erlang_atom_to_list_1
 };
 
-static const struct Nif binary_to_atom_nif =
+static const struct Nif binary_to_atom_1_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_binary_to_atom_2
+    .nif_ptr = nif_erlang_binary_to_atom_1
 };
 
 static const struct Nif binary_to_float_nif =
@@ -295,10 +290,10 @@ static const struct Nif binary_to_list_nif =
     .nif_ptr = nif_erlang_binary_to_list_1
 };
 
-static const struct Nif binary_to_existing_atom_nif =
+static const struct Nif binary_to_existing_atom_1_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_binary_to_existing_atom_2
+    .nif_ptr = nif_erlang_binary_to_existing_atom_1
 };
 
 static const struct Nif delete_element_nif =
@@ -371,18 +366,6 @@ static const struct Nif is_process_alive_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_is_process_alive_1
-};
-
-static const struct Nif list_to_atom_nif =
-{
-    .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_list_to_atom_1
-};
-
-static const struct Nif list_to_existing_atom_nif =
-{
-    .base.type = NIFFunctionType,
-    .nif_ptr = nif_erlang_list_to_existing_atom_1
 };
 
 static const struct Nif list_to_binary_nif =
@@ -1876,9 +1859,16 @@ static term nif_erlang_list_to_tuple_1(Context *ctx, int argc, term argv[])
     return tuple;
 }
 
-static term nif_erlang_binary_to_atom_2(Context *ctx, int argc, term argv[])
+static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[])
 {
-    return binary_to_atom(ctx, argc, argv, 1);
+    UNUSED(argc);
+
+    term error_reason;
+    term result = binary_to_atom(ctx, argv[0], UTF8_ATOM, true, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR(error_reason);
+    }
+    return result;
 }
 
 static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
@@ -2035,131 +2025,16 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[])
     return prev;
 }
 
-static term nif_erlang_binary_to_existing_atom_2(Context *ctx, int argc, term argv[])
-{
-    return binary_to_atom(ctx, argc, argv, 0);
-}
-
-static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
-{
-    term a_binary = argv[0];
-    VALIDATE_VALUE(a_binary, term_is_binary);
-
-    term encoding = (argc == 2) ? argv[1] : UTF8_ATOM;
-
-    const char *atom_string = term_binary_data(a_binary);
-    size_t atom_string_len = term_binary_size(a_binary);
-    if (UNLIKELY(atom_string_len > 255)) {
-        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
-    }
-
-    bool encode_latin1_to_utf8 = false;
-    if (UNLIKELY((encoding == LATIN1_ATOM)
-            && !unicode_buf_is_ascii((const uint8_t *) atom_string, atom_string_len))) {
-        encode_latin1_to_utf8 = true;
-    } else if (UNLIKELY((encoding != LATIN1_ATOM) && (encoding != UNICODE_ATOM)
-                   && (encoding != UTF8_ATOM))) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    AtomString atom;
-    if (LIKELY(!encode_latin1_to_utf8)) {
-        size_t i = 0;
-        while (i < atom_string_len) {
-            uint32_t codepoint;
-            size_t codepoint_size;
-            if (UNLIKELY(bitstring_utf8_decode(
-                    (uint8_t *) atom_string + i, atom_string_len, &codepoint, &codepoint_size))
-                != UnicodeTransformDecodeSuccess) {
-                RAISE_ERROR(BADARG_ATOM);
-            }
-            i += codepoint_size;
-        }
-
-        atom = malloc(atom_string_len + 1);
-        ((uint8_t *) atom)[0] = atom_string_len;
-        memcpy(((char *) atom) + 1, atom_string, atom_string_len);
-    } else {
-        // * 2 is the worst case size
-        size_t buf_len = atom_string_len * 2;
-        atom = malloc(buf_len + 1);
-        uint8_t *atom_data = ((uint8_t *) atom) + 1;
-        size_t out_pos = 0;
-        for (size_t i = 0; i < atom_string_len; i++) {
-            size_t out_size;
-            bitstring_utf8_encode(((uint8_t) atom_string[i]), &atom_data[out_pos], &out_size);
-            out_pos += out_size;
-        }
-        if (out_pos > 255) {
-            free((void *) atom);
-            RAISE_ERROR(SYSTEM_LIMIT_ATOM);
-        }
-        ((uint8_t *) atom)[0] = out_pos;
-    }
-
-    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
-    if (!create_new) {
-        atom_opts |= AtomTableAlreadyExisting;
-    }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
-    free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        RAISE_ERROR(BADARG_ATOM);
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    return term_from_atom_index(global_atom_index);
-}
-
-term nif_erlang_list_to_atom_1(Context *ctx, int argc, term argv[])
-{
-    return list_to_atom(ctx, argc, argv, 1);
-}
-
-term nif_erlang_list_to_existing_atom_1(Context *ctx, int argc, term argv[])
-{
-    return list_to_atom(ctx, argc, argv, 0);
-}
-
-term list_to_atom(Context *ctx, int argc, term argv[], int create_new)
+static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term a_list = argv[0];
-    VALIDATE_VALUE(a_list, term_is_list);
-
-    int ok;
-    char *atom_string = interop_list_to_utf8_string(a_list, &ok);
-    if (UNLIKELY(!ok)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    term error_reason;
+    term result = binary_to_atom(ctx, argv[0], UTF8_ATOM, false, &error_reason);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        RAISE_ERROR(error_reason);
     }
-    int atom_string_len = strlen(atom_string);
-    if (UNLIKELY(atom_string_len > 255)) {
-        free(atom_string);
-        RAISE_ERROR(SYSTEM_LIMIT_ATOM);
-    }
-
-    AtomString atom = malloc(atom_string_len + 1);
-    if (IS_NULL_PTR(atom)) {
-        free(atom_string);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    ((uint8_t *) atom)[0] = atom_string_len;
-    memcpy(((char *) atom) + 1, atom_string, atom_string_len);
-    free(atom_string);
-
-    enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
-    if (!create_new) {
-        atom_opts |= AtomTableAlreadyExisting;
-    }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
-    free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        RAISE_ERROR(BADARG_ATOM);
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    return term_from_atom_index(global_atom_index);
+    return result;
 }
 
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])

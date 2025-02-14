@@ -31,8 +31,15 @@ extern "C" {
 
 #define ATOM_TABLE_NOT_FOUND -1
 #define ATOM_TABLE_ALLOC_FAIL -2
+#define ATOM_TABLE_INVALID_LEN -3
 
 struct AtomTable;
+
+enum EnsureAtomsOpt
+{
+    EnsureAtomsNoOpts = 0,
+    EnsureLongEncoding = 1
+};
 
 enum AtomTableCopyOpt
 {
@@ -56,8 +63,8 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index);
 
 long atom_table_get_index(struct AtomTable *table, AtomString string);
 
-int atom_table_ensure_atoms(
-    struct AtomTable *table, const void *atoms, int count, int *translate_table);
+int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
+    int *translate_table, enum EnsureAtomsOpt opts);
 
 int atom_table_cmp_using_atom_index(
     struct AtomTable *table, int t_atom_index, int other_atom_index);
