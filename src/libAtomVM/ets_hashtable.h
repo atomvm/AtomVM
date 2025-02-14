@@ -52,9 +52,11 @@ typedef enum EtsHashtableErrorCode
 struct EtsHashTable *ets_hashtable_new();
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global);
 
-EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, term key, term entry, EtsHashtableOptions opts, Heap *heap, GlobalContext *global);
+EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
 term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
 bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
+struct HNode *ets_hashtable_new_node(term entry, int keypos);
+void ets_hashtable_free_node_array(struct HNode **allocated, size_t len, GlobalContext *global);
 
 #ifdef __cplusplus
 }

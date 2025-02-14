@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `socket:getopt/2`
 - Added `supervisor:terminate_child/2`, `supervisor:restart_child/2` and `supervisor:delete_child/2`
 - Added `esp:partition_read/3`, and documentation for `esp:partition_erase_range/2/3` and `esp:partition_write/3`
+- Added support for list insertion in 'ets:insert/2'.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
