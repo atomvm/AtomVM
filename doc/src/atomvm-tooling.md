@@ -347,11 +347,6 @@ For instructions about how to install AtomVM on the `generic_unix` platform, see
 
 The [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) plugin supports flash targets for various device types.  These targets are described in more detail below.
 
-```{attention}
-Currently, the [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) tool only supports flash targets for the ESP32 and
-STM32 platforms.
-```
-
 #### ESP32 flash task
 
 To flash AtomVM packbeam file to an ESP32 device, use the `mix.esp32.flash` target.  Users will typically specify the device port and baud rate as command-line options to this target.
@@ -401,7 +396,7 @@ You can now use a serial console program such as [minicom](https://en.wikipedia.
     I (922) AtomVM: Starting esp32init.beam...
     ---
     AtomVM init.
-    I (932) sys: Loaded BEAM partition main.avm at address 0x210000 (size=1048576 bytes)
+    I (932) sys: Loaded BEAM partition main.avm at address 0x250000 (size=1048576 bytes)
     Starting application...
     Hello World
     AtomVM finished with return value: ok
