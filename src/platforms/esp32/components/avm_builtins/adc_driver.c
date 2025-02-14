@@ -106,7 +106,7 @@ static const AtomStringIntPair attenuation_table[] = {
     { ATOM_STR("\x4", "db_0"), ADC_ATTEN_DB_0 },
     { ATOM_STR("\x6", "db_2_5"), ADC_ATTEN_DB_2_5 },
     { ATOM_STR("\x4", "db_6"), ADC_ATTEN_DB_6 },
-#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 0))
+#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 2))
     { ATOM_STR("\x5", "db_11"), ADC_ATTEN_DB_11 },
 #else
     { ATOM_STR("\x5", "db_12"), ADC_ATTEN_DB_12 },
@@ -175,7 +175,7 @@ static int approximate_millivolts(int adc_reading, adc_atten_t attenuation, adc_
         case ADC_ATTEN_DB_6:
             millivolt_max = 1750;
             break;
-#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 0))
+#if (ESP_IDF_VERSION <= ESP_IDF_VERSION_VAL(5, 1, 2))
         case ADC_ATTEN_DB_11:
             millivolt_max = 2450;
             break;
