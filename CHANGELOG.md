@@ -44,6 +44,7 @@ integers
 bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
 - Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 - Add missing out of memory handling in binary_to_atom
+- Fixed call to funs such as fun erlang:'not'/1, that make use of BIFs
 
 ## [0.6.5] - 2024-10-15
 
