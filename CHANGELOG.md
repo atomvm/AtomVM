@@ -43,6 +43,7 @@ integers
 - Fix error handling when calling `min` and `max` with code compiled before OTP-26: there was a
 bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)`
 - Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
+- Add missing out of memory handling in binary_to_atom
 
 ## [0.6.5] - 2024-10-15
 
