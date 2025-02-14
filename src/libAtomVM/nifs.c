@@ -2015,12 +2015,18 @@ static term binary_to_atom(Context *ctx, int argc, term argv[], int create_new)
         }
 
         atom = malloc(atom_string_len + 1);
+        if (IS_NULL_PTR(atom)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         ((uint8_t *) atom)[0] = atom_string_len;
         memcpy(((char *) atom) + 1, atom_string, atom_string_len);
     } else {
         // * 2 is the worst case size
         size_t buf_len = atom_string_len * 2;
         atom = malloc(buf_len + 1);
+        if (IS_NULL_PTR(atom)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         uint8_t *atom_data = ((uint8_t *) atom) + 1;
         size_t out_pos = 0;
         for (size_t i = 0; i < atom_string_len; i++) {
