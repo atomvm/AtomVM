@@ -114,6 +114,14 @@ term bif_erlang_max_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 
 term bif_erlang_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 
+term bif_erlang_list_to_atom_1(Context *ctx, uint32_t fail_label, int live, term arg1);
+term bif_erlang_list_to_existing_atom_1(Context *ctx, uint32_t fail_label, int live, term arg1);
+term bif_erlang_binary_to_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
+term bif_erlang_binary_to_existing_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
+
+// helpers:
+term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new, term *error_reason);
+
 #ifdef __cplusplus
 }
 #endif

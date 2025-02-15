@@ -41,7 +41,7 @@ struct RefcBinary *refc_binary_create_resource(size_t size, struct ResourceType 
         return NULL;
     }
     list_init(&refc->head);
-    refc->ref_count = 1;
+    refc->ref_count = 0;
     refc->size = size;
     refc->resource_type = resource_type;
 

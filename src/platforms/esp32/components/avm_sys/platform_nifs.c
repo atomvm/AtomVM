@@ -247,6 +247,47 @@ static term nif_esp_partition_erase_range(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+static term nif_esp_partition_read(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    bool valid_partition_string;
+    const esp_partition_t *partition = get_partition(argv[0], &valid_partition_string);
+    if (UNLIKELY(!valid_partition_string)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(partition)) {
+        return ERROR_ATOM;
+    }
+
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int_t offset = term_to_int(argv[1]);
+
+    VALIDATE_VALUE(argv[2], term_is_integer);
+    avm_int_t size = term_to_int(argv[2]);
+    if (UNLIKELY(size < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term binary_term = term_create_uninitialized_binary(size, &ctx->heap, ctx->global);
+    char *data = (char *) term_binary_data(binary_term);
+
+    esp_err_t res = esp_partition_read(partition, offset, data, size);
+    if (UNLIKELY(res != ESP_OK)) {
+        return ERROR_ATOM;
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, binary_term);
+
+    return result;
+}
+
 static term nif_esp_partition_write(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -827,6 +868,10 @@ static const struct Nif esp_partition_erase_range_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_partition_erase_range
 };
+static const struct Nif esp_partition_read_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_partition_read
+};
 static const struct Nif esp_partition_write_nif =
 {
     .base.type = NIFFunctionType,
@@ -964,6 +1009,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:partition_erase_range/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_partition_erase_range_nif;
+    }
+    if (strcmp("esp:partition_read/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_read_nif;
     }
     if (strcmp("esp:partition_write/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

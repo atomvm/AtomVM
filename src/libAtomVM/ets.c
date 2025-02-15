@@ -252,58 +252,104 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
     ets_delete_tables_internal(ets, true_pred, NULL, global);
 }
 
-EtsErrorCode ets_insert(term ref, term entry, Context *ctx)
+static EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessWrite);
+    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
+        return EtsPermissionDenied;
+    }
+
+    size_t keypos = ets_table->keypos;
+
+    if ((size_t) term_get_tuple_arity(entry) < keypos + 1) {
+        return EtsBadEntry;
+    }
+
+    struct HNode *new_node = ets_hashtable_new_node(entry, keypos);
+    if (IS_NULL_PTR(new_node)) {
+        return EtsAllocationFailure;
+    }
+
+    EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, new_node, EtsHashtableAllowOverwrite, ctx->global);
+    if (UNLIKELY(res != EtsHashtableOk)) {
+        return EtsAllocationFailure;
+    }
+
+    return EtsOk;
+}
+
+static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list, Context *ctx)
+{
+    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
+        return EtsPermissionDenied;
+    }
+
+    term iter = list;
+    size_t size = 0;
+
+    while (term_is_nonempty_list(iter)) {
+        term tuple = term_get_list_head(iter);
+        iter = term_get_list_tail(iter);
+        if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) < (ets_table->keypos + 1)) {
+            return EtsBadEntry;
+        }
+        ++size;
+    }
+    if (!term_is_nil(iter)) {
+        return EtsBadEntry;
+    }
+
+    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    if (IS_NULL_PTR(nodes)) {
+        return EtsAllocationFailure;
+    }
+
+    size_t i = 0;
+    while (term_is_nonempty_list(list)) {
+        term tuple = term_get_list_head(list);
+        nodes[i] = ets_hashtable_new_node(tuple, ets_table->keypos);
+        if (IS_NULL_PTR(nodes[i])) {
+            ets_hashtable_free_node_array(nodes, i, ctx->global);
+            free(nodes);
+            return EtsAllocationFailure;
+        }
+        ++i;
+        list = term_get_list_tail(list);
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+
+        EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, ctx->global);
+        assert(res == EtsHashtableOk);
+    }
+
+    free(nodes);
+    return EtsOk;
+}
+
+EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessWrite) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessWrite);
     if (ets_table == NULL) {
         return EtsTableNotFound;
     }
 
-    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        SMP_UNLOCK(ets_table);
-        return EtsPermissionDenied;
-    }
-
-    if ((size_t) term_get_tuple_arity(entry) < (ets_table->keypos + 1)) {
-        SMP_UNLOCK(ets_table);
-        return EtsBadEntry;
-    }
-
-    Heap *heap = malloc(sizeof(Heap));
-    if (IS_NULL_PTR(heap)) {
-        SMP_UNLOCK(ets_table);
-        return EtsAllocationFailure;
-    }
-    size_t size = (size_t) memory_estimate_usage(entry);
-    if (memory_init_heap(heap, size) != MEMORY_GC_OK) {
-        free(heap);
-        SMP_UNLOCK(ets_table);
-        return EtsAllocationFailure;
-    }
-
-    term new_entry = memory_copy_term_tree(heap, entry);
-    term key = term_get_tuple_element(new_entry, (int) ets_table->keypos);
-
-    EtsErrorCode ret = EtsOk;
-    EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, key, new_entry, EtsHashtableAllowOverwrite, heap, ctx->global);
-    if (UNLIKELY(res != EtsHashtableOk)) {
-        ret = EtsAllocationFailure;
+    EtsErrorCode result;
+    if (term_is_tuple(entry)) {
+        result = ets_table_insert(ets_table, entry, ctx);
+    } else if (term_is_list(entry)) {
+        result = ets_table_insert_list(ets_table, entry, ctx);
+    } else {
+        result = EtsBadEntry;
     }
 
     SMP_UNLOCK(ets_table);
 
-    return ret;
+    return result;
 }
 
-EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
+static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
-    }
-
     if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
-        SMP_UNLOCK(ets_table);
         return EtsPermissionDenied;
     }
 
@@ -316,24 +362,35 @@ EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx)
         size_t size = (size_t) memory_estimate_usage(res);
         // allocate [object]
         if (UNLIKELY(memory_ensure_free_opt(ctx, size + CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            SMP_UNLOCK(ets_table);
             return EtsAllocationFailure;
         }
         term new_res = memory_copy_term_tree(&ctx->heap, res);
         *ret = term_list_prepend(new_res, term_nil(), &ctx->heap);
     }
-    SMP_UNLOCK(ets_table);
 
     return EtsOk;
 }
 
-EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx)
+EtsErrorCode ets_lookup(term name_or_ref, term key, term *ret, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
+    if (ets_table == NULL) {
+        return EtsTableNotFound;
+    }
+
+    EtsErrorCode result = ets_table_lookup(ets_table, key, ret, ctx);
+    SMP_UNLOCK(ets_table);
+
+    return result;
+}
+
+EtsErrorCode ets_lookup_element(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
 {
     if (UNLIKELY(pos == 0)) {
         return EtsBadPosition;
     }
 
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
+    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
     if (ets_table == NULL) {
         return EtsTableNotFound;
     }
@@ -368,9 +425,9 @@ EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Conte
     return EtsOk;
 }
 
-EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx)
+EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref) ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessRead);
+    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
     if (ets_table == NULL) {
         return EtsTableNotFound;
     }

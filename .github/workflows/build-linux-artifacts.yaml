@@ -227,12 +227,15 @@ jobs:
         VERBOSE=1 make AtomVM &&
         make test-erlang &&
         make test-enif &&
+        make test-heap &&
         make test-mailbox &&
         make test-structs &&
         file ./tests/test-erlang &&
         ./tests/test-erlang -s prime_smp &&
         file ./tests/test-enif &&
         ./tests/test-enif &&
+        file ./tests/test-heap &&
+        ./tests/test-heap &&
         file ./tests/test-mailbox &&
         ./tests/test-mailbox &&
         file ./tests/test-structs &&

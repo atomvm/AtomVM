@@ -466,7 +466,7 @@ The configuration map supplied to the logger_manager may contain the following k
 | Key | Type | Default| Description |
 |-----|------|--------|-------------|
 | `log_level` | `log_level()` | `notice` | Primary log level |
-| `logger` | `logger_config()` | `{handler, default, logger_std_h, undefined}` | Log configuration |
+| `logger` | `logger_config()` | `{handler, default, logger_std_h, #{}}` | Log configuration |
 | `module_level` | `module_level()` | `undefined` | Log level specific to a set of modules |
 
 where `log_level()` is defined to be:

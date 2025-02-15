@@ -70,6 +70,9 @@ void *enif_alloc_resource(ErlNifResourceType *type, unsigned size)
     // We add it now to the list of refc binaries, so resource is destroyed at
     // the latest when globalcontext is destroyed
     synclist_append(&type->global->refc_binaries, &refc->head);
+    // OTP semantics suppose the ref count is 1 as each alloc_resource should
+    // be balanced by a release_resource.
+    refc->ref_count = 1;
     return (void *) refc_binary_get_data(refc);
 }
 
@@ -111,8 +114,6 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
     if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    struct RefcBinary *refc = refc_binary_from_data(obj);
-    refc_binary_increment_refcount(refc);
     return term_from_resource(obj, &env->heap);
 }
 
@@ -240,8 +241,6 @@ term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_
     term notification = term_alloc_tuple(4, heap);
     term_put_tuple_element(notification, 0, SELECT_ATOM);
     term_put_tuple_element(notification, 1, term_from_resource(rsrc_obj, heap));
-    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-    refc_binary_increment_refcount(rsrc_refc);
     term ref;
     if (ref_ticks == 0) {
         ref = UNDEFINED_ATOM;

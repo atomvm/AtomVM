@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
 - Added `supervisor:terminate_child/2`, `supervisor:restart_child/2` and `supervisor:delete_child/2`
+- Added support for 'erlang:--/2'.
+- Added `esp:partition_read/3`, and documentation for `esp:partition_erase_range/2/3` and `esp:partition_write/3`
+- Added support for list insertion in 'ets:insert/2'.
+- Support to OTP-28
 - Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
 - Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
 - Added `erl_epmd` client implementation to epmd using `socket` module
@@ -41,9 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added the ability to run beams from the CLI for Generic Unix platform (it was already possible with nodejs and emscripten).
-- Added support for 'erlang:--/2'.
+- Added the ability to run beams from the CLI for Generic Unix platform (it was already possible
+with nodejs and emscripten)
 - Added preliminary support for ESP32P4 (no networking support yet).
+- Added memory info in `out_of_memory` crash logs to help developers fix memory issues.
 
 ### Fixed
 
@@ -52,11 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adding missing check, passing a non numeric argument to a function expecting a floating point
 might lead to a crash in certain situations.
 - Fixed several bugs in `http_server` (#1366)
-- Fixed generic\_unix `socket_driver` to return `{gen_tcp, closed}` when socket is closed on Linux instead of `{gen_tcp, {recv, 104}}`
+- Fixed generic\_unix `socket_driver` to return `{gen_tcp, closed}` when socket is closed on Linux
+instead of `{gen_tcp, {recv, 104}}`
 - Fixed a memory leak where modules were not properly destroyed when the global context is destroyd
 - alisp: fix support to variables that are not binaries or integers.
 - Fixed destruction of ssl-related resources
-- Fix corruption when dealing with specific situations that involve more than 16 x registers when
+- Fixed corruption when dealing with specific situations that involve more than 16 x registers when
 certain VM instructions are used.
 - Fixed ESP32 GPIO interrupt trigger `none`
 - Fixed an issue where a timeout would occur immediately in a race condition
@@ -65,9 +71,22 @@ certain VM instructions are used.
 - Fixed a race condition affecting multi-core MCUs where a timeout would not be properly cleared
 - Fixed a double free when esp32 uart driver was closed, yielding an assert abort
 - Fixed compilation with latest debian gcc-arm-none-eabi
-- Fix `network:stop/0` on ESP32 so the network can be started again
-- Fix matching of binaries on unaligned boundaries for code compiled with older versions of OTP
-- Fix a memory corruption caused by `binary:split/2,3`
+- Fixed `network:stop/0` on ESP32 so the network can be started again
+- Fixed a memory corruption caused by `binary:split/2,3`
+- Fixed deadlock in socket code
+- Fixed bug in opcode implementation (`select_val`): when selecting a value among many others a
+shallow comparison was performed, so it was working just for plain values such as atoms and small
+integers
+- Fixed support for setting esp32 boot_path in NVS.
+- Fixed race conditions in network:start/stop.
+- Fixed crash calling network:sta_rssi(), when network not up.
+- Fixed error handling when calling `min` and `max` with code compiled before OTP-26: there was a
+bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and similar opcodes)
+- Fixed matching of binaries on unaligned boundaries for code compiled with older versions of OTP
+- Added missing out of memory handling in binary_to_atom
+- Fixed call to funs such as fun erlang:'not'/1, that make use of BIFs
+- Fixed potential crashes or memory leaks caused by a mistake in calculation of reference counts
+and a race condition in otp_socket code
 
 ## [0.6.5] - 2024-10-15
 

@@ -45,13 +45,13 @@
     stop/3
 ]).
 
--include("ledc.hrl").
-
 -type duty_resolution() :: non_neg_integer().
 -type duty_resolution_cfg() :: {duty_resolution, duty_resolution()}.
 -type freq_hz() :: non_neg_integer().
 -type freq_hz_cfg() :: {freq_hz, freq_hz()}.
--type speed_mode() :: ?LEDC_LOW_SPEED_MODE | ?LEDC_HIGH_SPEED_MODE.
+-type speed_mode() :: 0 | 1.
+%% Speed modes: use `0' for high speed, `1' for low speed.
+
 -type speed_mode_cfg() :: {speed_mode, speed_mode()}.
 -type timer_num() :: 0..3.
 -type timer_num_cfg() :: {timer_num, timer_num()}.

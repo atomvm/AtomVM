@@ -236,7 +236,9 @@ static term make_posix_fd_resource(Context *ctx, int fd)
     }
     fd_obj->fd = fd;
     fd_obj->selecting_process_id = INVALID_PROCESS_ID;
-    return term_from_resource(fd_obj, &ctx->heap);
+    term obj = enif_make_resource(erl_nif_env_from_context(ctx), fd_obj);
+    enif_release_resource(fd_obj);
+    return obj;
 }
 
 static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
@@ -838,7 +840,8 @@ static term nif_atomvm_posix_opendir(Context *ctx, int argc, term argv[])
                 != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term obj = term_from_resource(dir_obj, &ctx->heap);
+        term obj = enif_make_resource(erl_nif_env_from_context(ctx), dir_obj);
+        enif_release_resource(dir_obj);
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, obj);

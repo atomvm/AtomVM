@@ -148,13 +148,13 @@ Context *i2c_driver_create_port(GlobalContext *global, term opts)
     esp_err_t err = i2c_param_config(i2c_data->i2c_num, &conf);
 
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%i", err);
+        ESP_LOGE(TAG, "Failed to initialize I2C parameters.  err=%s", esp_err_to_name(err));
         goto free_and_exit;
     }
 
     err = i2c_driver_install(i2c_data->i2c_num, I2C_MODE_MASTER, 0, 0, 0);
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%i", err);
+        ESP_LOGE(TAG, "Failed to install I2C driver.  err=%s", esp_err_to_name(err));
         goto free_and_exit;
     }
 
@@ -182,7 +182,7 @@ static NativeHandlerResult i2c_driver_unref(Context *ctx)
 
     esp_err_t err = i2c_driver_delete(i2c_data->i2c_num);
     if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%i", err);
+        ESP_LOGW(TAG, "Failed to delete I2C driver.  err=%s", esp_err_to_name(err));
     }
 
     free(i2c_data);
@@ -251,7 +251,7 @@ static term i2cdriver_end_transmission(Context *ctx, term pid)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_end_transmission i2c_master_cmd_begin error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_end_transmission i2c_master_cmd_begin error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -291,7 +291,7 @@ static term i2cdriver_write_byte(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (uint8_t) data, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_write_byte: i2c_master_write_byte error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_write_byte: i2c_master_write_byte error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -327,11 +327,17 @@ static term i2cdriver_qwrite_bytes(Context *ctx, term pid, term req)
     }
 
     term data_term = term_get_tuple_element(req, 1);
-    uint8_t data = term_to_int32(data_term);
-    esp_err_t result = i2c_master_write(i2c_data->cmd, (unsigned char *) term_binary_data(data), term_binary_size(data), true);
+    if (UNLIKELY(!term_is_binary(data_term))) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return OUT_OF_MEMORY_ATOM;
+        }
+        return port_create_error_tuple(ctx, BADARG_ATOM);
+    }
+    esp_err_t result = i2c_master_write(i2c_data->cmd, (const uint8_t *) term_binary_data(data_term), term_binary_size(data_term), true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_qwrite_bytes: i2c_master_write_byte error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -399,7 +405,7 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_READ, true);
 
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_write_byte error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_write_byte error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -412,7 +418,7 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
 
     result = i2c_master_read(i2c_data->cmd, data, read_count, I2C_MASTER_LAST_NACK);
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_read error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_read error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -430,7 +436,7 @@ static term i2cdriver_read_bytes(Context *ctx, term pid, term req)
     i2c_data->transmitting_pid = term_invalid_term();
 
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_cmd_begin error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_read_bytes: i2c_master_cmd_begin error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -498,7 +504,7 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
     esp_err_t result = i2c_master_write_byte(i2c_data->cmd, (address << 1) | I2C_MASTER_WRITE, 0x01);
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write_byte error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write_byte error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
@@ -515,7 +521,7 @@ static term i2cdriver_write_bytes(Context *ctx, term pid, term req)
 
     result = i2c_master_write(i2c_data->cmd, data, data_len, 0x01);
     if (UNLIKELY(result != ESP_OK)) {
-        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write error: result was: %i.", result);
+        ESP_LOGE(TAG, "i2cdriver_write_bytes i2c_master_write error: result was: %s", esp_err_to_name(result));
 
         // {error, Reason :: atom()}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {

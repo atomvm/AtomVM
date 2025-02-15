@@ -1168,12 +1168,12 @@ static inline unsigned long term_binary_size(term t)
  * @details Returns address
  * @return offset (in words).
  */
-static inline void *term_refc_binary_ptr(term refc_binary)
+static inline struct RefcBinary *term_refc_binary_ptr(term refc_binary)
 {
     TERM_DEBUG_ASSERT(term_is_refc_binary(refc_binary));
 
     term *boxed_value = term_to_term_ptr(refc_binary);
-    return (void *) boxed_value[3];
+    return (struct RefcBinary *) boxed_value[3];
 }
 
 /**
@@ -2180,9 +2180,8 @@ static inline term term_get_sub_binary_ref(term t)
  * @details This function creates a resource (obtained from `enif_alloc_resource`)
  * on the heap which must have `TERM_BOXED_RESOURCE_SIZE` free terms.
  *
- * Unlike `enif_make_resource`, this function doesn't increment the reference
- * counter but instead makes the heap own the resource. It will be garbage
- * collected when the heap is destroyed.
+ * This function does increment the reference counter as the resource is
+ * added to the heap's mso list.
  *
  * @param resource resource obtained from `enif_alloc_resource`
  * @param heap the heap to allocate the resource in
@@ -2200,6 +2199,7 @@ static inline term term_from_resource(void *resource, Heap *heap)
     term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
     boxed_value[3] = (term) refc;
     // Add the resource to the mso list
+    refc->ref_count++;
     heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
     return ret;
 }

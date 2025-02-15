@@ -310,7 +310,9 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_from_resource(conn_obj, &ctx->heap);
+    term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_obj);
+    enif_release_resource(conn_obj);
+    return obj;
 }
 
 static term nif_erlang_dist_ctrl_get_data_notification(Context *ctx, int argc, term argv[])
@@ -632,7 +634,9 @@ term dist_send_message(term target, term payload, Context *ctx)
         term autoconnect_message = term_alloc_tuple(3, &heap);
         term_put_tuple_element(autoconnect_message, 0, CONNECT_ATOM);
         term_put_tuple_element(autoconnect_message, 1, term_from_atom_index(node_atom_index));
-        term_put_tuple_element(autoconnect_message, 2, term_from_resource(new_conn_obj, &heap));
+        term obj = enif_make_resource(erl_nif_env_from_context(ctx), new_conn_obj);
+        enif_release_resource(new_conn_obj);
+        term_put_tuple_element(autoconnect_message, 2, obj);
 
         globalcontext_send_message(ctx->global, term_to_local_process_id(net_kernel_proc), autoconnect_message);
         END_WITH_STACK_HEAP(heap, ctx->global)

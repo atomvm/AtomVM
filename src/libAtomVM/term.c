@@ -883,6 +883,7 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
             AVM_ABORT();
         }
         boxed_value[3] = (term) refc;
+        refc->ref_count = 1; // added to mso list, increment ref count
         heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
         synclist_append(&glb->refc_binaries, &refc->head);
     }

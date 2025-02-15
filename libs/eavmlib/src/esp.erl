@@ -47,7 +47,10 @@
     nvs_erase_key/1, nvs_erase_key/2,
     nvs_erase_all/0, nvs_erase_all/1,
     nvs_reformat/0,
+    partition_erase_range/2, partition_erase_range/3,
     partition_list/0,
+    partition_read/3,
+    partition_write/3,
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
     freq_hz/0,
@@ -470,6 +473,42 @@ nvs_reformat() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   partition_id The id of the partition to erase eg. "main.avm"
+%% @param   offset Starting offset in bytes where to begin erasing
+%% @returns ok on success, error on failure
+%% @doc     Erases a range in the specified partition. The range starts at the given
+%%          offset and continues to the end of the partition. This is equivalent to
+%%          calling partition_erase_range/3 with size set to the remaining partition
+%%          size from the offset.
+%%
+%%          Note: Erasing sets all bits in the erased range to 1s. This operation
+%%          is irreversible.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_erase_range(Partition_id :: binary(), Offset :: non_neg_integer()) -> ok | error.
+partition_erase_range(Partition_id, Offset) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   partition_id The id of the partition to erase eg. "main.avm"
+%% @param   offset Starting offset in bytes where to begin erasing
+%% @param   size Number of bytes to erase
+%% @returns ok on success, error on failure
+%% @doc     Erases a range of the specified size in the partition, starting at the
+%%          given offset. The size must not exceed the partition's boundaries.
+%%
+%%          Note: Erasing sets all bits in the erased range to 1s. This operation
+%%          is irreversible. Make sure the offset and size parameters are valid for
+%%          the target partition to avoid errors.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_erase_range(
+    Partition_id :: binary(), Offset :: non_neg_integer(), Size :: pos_integer()
+) -> ok | error.
+partition_erase_range(Partition_id, Offset, Size) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns List of partitions
 %% @doc     Gets the list of partitions as tuples, such as {name, type, subtype,
 %%          offset, size, props}. Type and subtype are integers as described in
@@ -478,6 +517,40 @@ nvs_reformat() ->
 %%-----------------------------------------------------------------------------
 -spec partition_list() -> [esp_partition()].
 partition_list() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   partition_id The id of the partition to read from eg. "main.avm"
+%% @param   offset Starting offset in bytes where to begin reading
+%% @param   read_size Number of bytes to read
+%% @returns {ok, data} on success, error on failure
+%% @doc     Read binary data from a specific partition at the given offset.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_read(
+    Partition_id :: binary(), Offset :: non_neg_integer(), Read_size :: non_neg_integer()
+) -> {ok, binary()} | error.
+partition_read(Partition_id, Offset, Read_size) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   partition_id The id of the partition to write to eg. "main.avm"
+%% @param   offset Starting offset in bytes where to begin writing
+%% @param   data Binary data to write to the partition
+%% @returns ok on success, error on failure
+%% @doc     Writes binary data to a specific partition at the given offset.
+%%
+%%          This function allows writing data to ESP32 flash partitions. Care must be
+%%          taken when using this function as improper writes can corrupt the partition
+%%          table or system firmware. Make sure the offset and data size do not exceed
+%%          the partition's boundaries.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_write(Partition_id :: binary(), Offset :: non_neg_integer(), Data :: binary()) ->
+    ok | error.
+partition_write(Partition_id, Offset, Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

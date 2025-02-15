@@ -47,6 +47,7 @@ typedef struct FileData {
 } FileData;
 
 static void pad_and_align(FILE *f);
+bool are_literals_compressed(const uint8_t *litT);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
@@ -338,15 +339,21 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         assert_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);
     }
-
     if (offsets[LITT]) {
-        size_t u_size;
-        void *deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
-        assert_fwrite("LitU", 4, pack);
-        uint32_t size_field = ENDIAN_SWAP_32(u_size);
-        assert_fwrite(&size_field, sizeof(size_field), pack);
-        assert_fwrite(deflated, u_size, pack);
-        free(deflated);
+        const uint8_t *litt = data + offsets[LITT];
+        size_t litt_size = sizes[LITT];
+        if (are_literals_compressed(litt)) {
+            size_t u_size;
+            void *deflated = uncompress_literals(data + offsets[LITT], litt_size, &u_size);
+            assert_fwrite("LitU", 4, pack);
+            uint32_t size_field = ENDIAN_SWAP_32(u_size);
+            assert_fwrite(&size_field, sizeof(size_field), pack);
+            assert_fwrite(deflated, u_size, pack);
+            free(deflated);
+        } else {
+            assert_fwrite(data + offsets[LITT], sizes[LITT] + IFF_SECTION_HEADER_SIZE, pack);
+            pad_and_align(pack);
+        }
     }
 
     pad_and_align(pack);
@@ -417,6 +424,12 @@ static int do_list(int argc, char **argv)
     mapped_file_close(mapped_file);
 
     return ret;
+}
+
+bool are_literals_compressed(const uint8_t *litT)
+{
+    unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    return (required_buf_size != 0);
 }
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)
