@@ -51,6 +51,7 @@ jobs:
         cc: ["gcc-9", "gcc-11", "gcc-13", "clang-10", "clang-14", "clang-18"]
         cflags: ["-O3"]
         otp: ["25", "26", "27"]
+        gleam_version: ["1.8.0"]
 
         include:
         - cc: "gcc-7"
@@ -301,6 +302,7 @@ jobs:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
         rebar3-version: ${{ matrix.rebar3_version }}
+        gleam-version: ${{ matrix.gleam_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm

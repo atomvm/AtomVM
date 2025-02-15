@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2019 Fred Dushin <fred@dushin.net>
+# Copyright 2025 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,21 +18,9 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(libs)
+find_program(GLEAM_EXECUTABLE gleam)
 
-add_subdirectory(erlang)
-add_subdirectory(emscripten)
+include(FindPackageHandleStandardArgs)
 
-find_package(Elixir)
-find_package(Gleam)
-
-if (Elixir_FOUND)
-    add_subdirectory(elixir)
-else()
-    message(WARNING "-- elixirc not found, skipping Elixir examples")
-endif()
-if (Gleam_FOUND)
-    add_subdirectory(gleam)
-else()
-    message(WARNING "-- gleam not found, skipping Gleam examples")
-endif()
+find_package_handle_standard_args(Gleam
+  REQUIRED_VARS GLEAM_EXECUTABLE)
