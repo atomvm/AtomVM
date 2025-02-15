@@ -229,14 +229,14 @@ static bool get_register_callback_parameters(Context *ctx, int argc, term argv[]
     struct EmscriptenPlatformData *platform = ctx->global->platform_data;
     struct HTMLEventUserDataResource *htmlevent_user_data_resource = enif_alloc_resource(platform->htmlevent_user_data_resource_type, resource_size);
     htmlevent_user_data_resource->target_pid = ctx->process_id;
-    // We don't need to keep resource now because caller will make a term using
-    // enif_make_resource which increments ref count
     // Monitor process so we will unregister & decrement ref count if target dies.
-    if (UNLIKELY(enif_monitor_process(erl_nif_env_from_context(ctx), htmlevent_user_data_resource, &ctx->process_id, NULL) != 0)) {
+    if (UNLIKELY(enif_monitor_process(erl_nif_env_from_context(ctx), htmlevent_user_data_resource, &ctx->process_id, &htmlevent_user_data_resource->monitor) != 0)) {
         // If we fail, caller will not make a term, so decrement resource count now to dispose it.
         enif_release_resource(htmlevent_user_data_resource);
         return false;
     }
+    // keep resource as it will be released by monitor
+    enif_keep_resource(htmlevent_user_data_resource);
     // Save target element to allow users to pass the resource for unregistration
     htmlevent_user_data_resource->target_element_str = str;
     htmlevent_user_data_resource->target_element = *target;
@@ -680,6 +680,7 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
             return term_from_emscripten_result(result, ctx);                                                                                                                             \
         }                                                                                                                                                                                \
         term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \
+        enif_release_resource(resource);                                                                                                                                                 \
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {                                                         \
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                                                                                             \
         }                                                                                                                                                                                \
@@ -700,9 +701,13 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         UNUSED(argc);                                                                                                                                                                    \
         struct EmscriptenPlatformData *platform = ctx->global->platform_data;                                                                                                            \
         struct HTMLEventUserDataResource *resource;                                                                                                                                      \
-        if (enif_get_resource(erl_nif_env_from_context(ctx), argv[0], platform->htmlevent_user_data_resource_type, (void **) &resource)) {                                               \
+        ErlNifEnv *env = erl_nif_env_from_context(ctx);                                                                                                                                  \
+        if (enif_get_resource(env, argv[0], platform->htmlevent_user_data_resource_type, (void **) &resource)) {                                                                         \
             if (!resource->unregistered) {                                                                                                                                               \
+                enif_keep_resource(resource);                                                                                                                                            \
                 sys_enqueue_emscripten_unregister_htmlevent_message(ctx->global, resource);                                                                                              \
+            } else if (LIKELY(enif_demonitor_process(env, resource, &resource->monitor) == 0)) {                                                                                         \
+                enif_release_resource(resource);                                                                                                                                         \
             }                                                                                                                                                                            \
             return OK_ATOM;                                                                                                                                                              \
         }                                                                                                                                                                                \

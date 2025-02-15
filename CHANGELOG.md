@@ -47,6 +47,8 @@ bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and
 - Fixed matching of binaries on unaligned boundaries for code compiled with older versions of OTP
 - Added missing out of memory handling in binary_to_atom
 - Fixed call to funs such as fun erlang:'not'/1, that make use of BIFs
+- Fixed potential crashes or memory leaks caused by a mistake in calculation of reference counts
+and a race condition in otp_socket code
 
 ## [0.6.5] - 2024-10-15
 

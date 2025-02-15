@@ -105,6 +105,11 @@ jobs:
           ./tests/test-enif
 
           echo "%%"
+          echo "%% Running test-heap ..."
+          echo "%%"
+          ./tests/test-heap
+
+          echo "%%"
           echo "%% Running test-mailbox ..."
           echo "%%"
           ./tests/test-mailbox
