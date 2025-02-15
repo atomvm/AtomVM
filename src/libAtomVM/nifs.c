@@ -2081,7 +2081,7 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
         for (size_t i = 0; i < encoded_len; i++) {
             size_t codepoint_size;
             uint32_t codepoint;
-            if (UNLIKELY(bitstring_utf8_decode(
+            if (UNLIKELY(unicode_utf8_decode(
                              &utf8_tmp_buf[in_pos], 2, &codepoint, &codepoint_size)
                         != UnicodeTransformDecodeSuccess
                     || (codepoint > 255))) {
@@ -2122,7 +2122,7 @@ static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context 
         for (size_t i = 0; i < u8len; i++) {
             size_t codepoint_size;
             enum UnicodeTransformDecodeResult result
-                = bitstring_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
+                = unicode_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
             if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
                     || !unicode_is_valid_codepoint(codepoints[i]))) {
                 AVM_ABORT();
