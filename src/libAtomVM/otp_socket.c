@@ -285,10 +285,11 @@ static void socket_stop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int
     struct SocketResource *rsrc_obj = (struct SocketResource *) obj;
 
     if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
-        enif_demonitor_process(caller_env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+        if (LIKELY(enif_demonitor_process(caller_env, rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+            struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+            refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
+        }
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-        struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-        refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
     }
 
     TRACE("socket_stop called on fd=%i\n", rsrc_obj->fd);
@@ -959,10 +960,11 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     if (rsrc_obj->selecting_process_id != ctx->process_id && rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
         // demonitor can fail if process is gone.
-        enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+        if (LIKELY(enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+            // decrement ref count as we are demonitoring
+            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
+        }
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-        // decrement ref count as we are demonitoring
-        refc_binary_decrement_refcount(rsrc_refc, ctx->global);
     }
     // Monitor first as select is less likely to fail and it's less expensive to demonitor
     // if select fails than to stop select if monitor fails
@@ -986,10 +988,11 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
         send_closed_notification(ctx, argv[0], ctx->process_id, rsrc_obj);
     } else {
         if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_READ, rsrc_obj, &ctx->process_id, select_ref_term) < 0)) {
-            enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+            if (LIKELY(enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+                refc_binary_decrement_refcount(rsrc_refc, ctx->global);
+            }
             rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
             RAISE_ERROR(BADARG_ATOM);
         }
     }
@@ -1033,10 +1036,11 @@ static term nif_socket_select_read(Context *ctx, int argc, term argv[])
             // noop
             break;
         default:
-            enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor);
+            if (LIKELY(enif_demonitor_process(env, rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+                refc_binary_decrement_refcount(rsrc_refc, ctx->global);
+            }
             LWIP_END();
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
             RAISE_ERROR(BADARG_ATOM);
     }
     LWIP_END();
@@ -1060,10 +1064,11 @@ static term nif_socket_select_stop(Context *ctx, int argc, term argv[])
     // Avoid the race condition with select object here.
     SMP_RWLOCK_WRLOCK(rsrc_obj->socket_lock);
     if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
-        enif_demonitor_process(erl_nif_env_from_context(ctx), rsrc_obj, &rsrc_obj->selecting_process_monitor);
+        if (LIKELY(enif_demonitor_process(erl_nif_env_from_context(ctx), rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+            struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+            refc_binary_decrement_refcount(rsrc_refc, ctx->global);
+        }
         rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
-        struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-        refc_binary_decrement_refcount(rsrc_refc, ctx->global);
     }
 #if OTP_SOCKET_BSD
     if (UNLIKELY(enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil()) < 0)) {
@@ -1645,13 +1650,14 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 //
 
 #if OTP_SOCKET_LWIP
-static term make_accepted_socket_term(struct SocketResource *conn_rsrc_obj, Heap *heap, GlobalContext *global)
+static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
-    term obj = term_from_resource(conn_rsrc_obj, heap);
+    term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
+    enif_release_resource(conn_rsrc_obj);
 
-    term socket_term = term_alloc_tuple(2, heap);
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(global);
-    term ref = term_from_ref_ticks(ref_ticks, heap);
+    term socket_term = term_alloc_tuple(2, &ctx->heap);
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+    term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
     term_put_tuple_element(socket_term, 0, obj);
     term_put_tuple_element(socket_term, 1, ref);
     return socket_term;
@@ -1764,7 +1770,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         list_remove(&first_item->list_head);
         free(first_item);
 
-        term socket_term = make_accepted_socket_term(new_resource, &ctx->heap, global);
+        term socket_term = make_accepted_socket_term(ctx, new_resource);
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, socket_term);

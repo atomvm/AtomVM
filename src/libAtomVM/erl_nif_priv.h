@@ -23,6 +23,7 @@
 
 #include "context.h"
 #include "memory.h"
+#include "resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +59,19 @@ static inline bool erl_nif_env_is_context(ErlNifEnv *env)
 static inline void erl_nif_env_partial_init_from_globalcontext(ErlNifEnv *env, GlobalContext *global)
 {
     env->global = global;
+    env->heap.root = NULL;
+    env->heap.heap_start = NULL;
+    env->heap.heap_ptr = NULL;
+    env->heap.heap_end = NULL;
+    env->stack_pointer = NULL;
+    env->x[0] = term_nil();
+    env->x[1] = term_nil();
+}
+
+static inline void erl_nif_env_partial_init_from_resource(ErlNifEnv *env, void *resource)
+{
+    struct RefcBinary *refc = refc_binary_from_data(resource);
+    env->global = refc->resource_type->global;
     env->heap.root = NULL;
     env->heap.heap_start = NULL;
     env->heap.heap_ptr = NULL;

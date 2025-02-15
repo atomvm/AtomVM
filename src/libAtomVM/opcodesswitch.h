@@ -1161,9 +1161,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         fun_arity = term_to_int(boxed_value[3]);                        \
         AtomString module_name = globalcontext_atomstring_from_term(glb, module); \
         AtomString function_name = globalcontext_atomstring_from_term(glb, index_or_function); \
-        struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity); \
-        if (!IS_NULL_PTR(nif)) {                                        \
-            term return_value = nif->nif_ptr(ctx, fun_arity, x_regs);   \
+        term return_value;                                              \
+        if (maybe_call_native(ctx, module_name, function_name, fun_arity, &return_value)) { \
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);              \
             x_regs[0] = return_value;                                   \
             if (ctx->heap.root->next) {                                 \
@@ -1353,6 +1352,8 @@ COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, 
 
 COLD_FUNC static void dump(Context *ctx)
 {
+    GlobalContext *glb = ctx->global;
+
     fprintf(stderr, "CRASH \n======\n");
 
     fprintf(stderr, "pid: ");
@@ -1378,7 +1379,7 @@ COLD_FUNC static void dump(Context *ctx)
     term_display(stderr, ctx->x[1], ctx);
     fprintf(stderr, "\nx[2]: ");
     term_display(stderr, ctx->x[2], ctx);
-    fprintf(stderr, "\n\nStack \n------\n\n");
+    fprintf(stderr, "\n\nStack \n-----\n\n");
 
     term *ct = ctx->e;
 
@@ -1403,12 +1404,12 @@ COLD_FUNC static void dump(Context *ctx)
         ct++;
     }
 
-    fprintf(stderr, "\n\nMailbox\n--------\n");
+    fprintf(stderr, "\n\nMailbox\n-------\n");
     mailbox_crashdump(ctx);
 
     fprintf(stderr, "\n\nMonitors\n--------\n");
     // Lock processes table to make sure any dying process will not modify monitors
-    struct ListHead *processes_table = synclist_rdlock(&ctx->global->processes_table);
+    struct ListHead *processes_table = synclist_rdlock(&glb->processes_table);
     UNUSED(processes_table);
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
@@ -1426,7 +1427,36 @@ COLD_FUNC static void dump(Context *ctx)
         term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
         fprintf(stderr, "\n");
     }
-    synclist_unlock(&ctx->global->processes_table);
+    synclist_unlock(&glb->processes_table);
+
+    // If crash is caused by out_of_memory, print more data about memory usage
+    if (ctx->x[0] == ERROR_ATOM && ctx->x[1] == OUT_OF_MEMORY_ATOM) {
+        fprintf(stderr, "\n\nContext memory info\n-------------------\n");
+        fprintf(stderr, "context_size = %zu\n", context_size(ctx));
+        fprintf(stderr, "context_avail_free_memory = %zu\n", context_avail_free_memory(ctx));
+        fprintf(stderr, "heap_size = %zu\n", memory_heap_youngest_size(&ctx->heap));
+        fprintf(stderr, "total_heap_size = %zu\n", memory_heap_memory_size(&ctx->heap));
+        fprintf(stderr, "stack_size = %zu\n", context_stack_size(ctx));
+        fprintf(stderr, "message_queue_len = %zu\n", context_message_queue_len(ctx));
+        fprintf(stderr, "\n\nGlobal memory info\n------------------\n");
+
+        processes_table = synclist_rdlock(&glb->processes_table);
+        size_t process_count = 0;
+        size_t ports_count = 0;
+        LIST_FOR_EACH (item, processes_table) {
+            Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
+            process_count++;
+            if (p->native_handler) {
+                ports_count++;
+            }
+        }
+        synclist_unlock(&glb->processes_table);
+
+        fprintf(stderr, "process_count = %zu\n", process_count);
+        fprintf(stderr, "ports_count = %zu\n", ports_count);
+        fprintf(stderr, "atoms_count = %d\n", atom_table_count(glb->atom_table));
+        fprintf(stderr, "refc_binary_total_size = %zu\n", refc_binary_total_size(ctx));
+    }
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
 }
 

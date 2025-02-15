@@ -122,7 +122,10 @@ static void htmlevent_user_data_down(ErlNifEnv *caller_env, void *obj, ErlNifPid
 
     struct HTMLEventUserDataResource *htmlevent_user_data_rsrc = (struct HTMLEventUserDataResource *) obj;
     if (!htmlevent_user_data_rsrc->unregistered) {
+        // resource will be released by enqueued message
         sys_enqueue_emscripten_unregister_htmlevent_message(caller_env->global, htmlevent_user_data_rsrc);
+    } else {
+        enif_release_resource(htmlevent_user_data_rsrc);
     }
 }
 
@@ -226,7 +229,6 @@ em_promise_t sys_enqueue_emscripten_call_message(GlobalContext *glb, const char 
     }
     struct EmscriptenPlatformData *platform = glb->platform_data;
     struct PromiseResource *promise_rsrc = enif_alloc_resource(platform->promise_resource_type, sizeof(struct PromiseResource));
-    enif_keep_resource(promise_rsrc);
     promise_rsrc->promise = promise;
     promise_rsrc->resolved = false;
     message->promise_rsrc = promise_rsrc;
@@ -396,8 +398,13 @@ static void sys_unregister_htmlevent_handler(struct HTMLEventUserDataResource *r
                 break;
         }
         rsrc->unregistered = true;
-        enif_release_resource(rsrc);
+        ErlNifEnv env;
+        erl_nif_env_partial_init_from_resource(&env, rsrc);
+        if (LIKELY(enif_demonitor_process(&env, rsrc, &rsrc->monitor) == 0)) {
+            enif_release_resource(rsrc);
+        }
     }
+    enif_release_resource(rsrc);
 }
 
 static int sys_emscripten_get_target(GlobalContext *glb, const char *target_name)
@@ -434,6 +441,7 @@ static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, cons
     term_put_tuple_element(payload, 0, globalcontext_make_atom(glb, is_call ? ATOM_STR("\x4", "call") : ATOM_STR("\x4", "cast")));
     if (is_call) {
         term promise_term = term_from_resource(promise, &heap);
+        enif_release_resource(promise);
         term_put_tuple_element(payload, 1, promise_term);
     }
     term bin = term_from_literal_binary(message, message_len, &heap, glb);
@@ -465,7 +473,6 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
                 emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIII, sys_promise_resolve_str_and_destroy, NULL, message_async_call->promise_rsrc->promise, EM_PROMISE_REJECT, "noproc");
                 message_async_call->promise_rsrc->resolved = true;
             }
-            enif_release_resource(message_async_call->promise_rsrc);
             free(message_async_call->target_name);
             free(message_async_call->message);
         } break;
@@ -488,9 +495,7 @@ static void sys_process_emscripten_message(GlobalContext *glb, struct Emscripten
 
         case UnregisterHTMLEvent: {
             struct EmscriptenMessageUnregisterHTMLEvent *message_unregister = (struct EmscriptenMessageUnregisterHTMLEvent *) message;
-            if (!message_unregister->rsrc->unregistered) {
-                emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_unregister_htmlevent_handler, NULL, message_unregister->rsrc);
-            }
+            emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, sys_unregister_htmlevent_handler, NULL, message_unregister->rsrc);
         } break;
 
         case Signal:

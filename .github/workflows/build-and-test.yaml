@@ -375,6 +375,13 @@ jobs:
         ./tests/test-enif
         valgrind ./tests/test-enif
 
+    - name: "Test: test-heap"
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        ./tests/test-heap
+        valgrind ./tests/test-heap
+
     - name: "Test: test-mailbox"
       working-directory: build
       run: |

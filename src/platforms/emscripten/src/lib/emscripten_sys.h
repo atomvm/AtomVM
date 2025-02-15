@@ -42,6 +42,7 @@ struct PromiseResource
 struct HTMLEventUserDataResource
 {
     int32_t target_pid;
+    ErlNifMonitor monitor;
     bool prevent_default;
     bool unregistered;
     int event;

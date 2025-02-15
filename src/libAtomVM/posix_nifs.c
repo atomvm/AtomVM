@@ -314,7 +314,8 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term obj = term_from_resource(fd_obj, &ctx->heap);
+        term obj = enif_make_resource(erl_nif_env_from_context(ctx), fd_obj);
+        enif_release_resource(fd_obj);
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, obj);
@@ -675,7 +676,8 @@ static term nif_atomvm_posix_opendir(Context *ctx, int argc, term argv[])
                 != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term obj = term_from_resource(dir_obj, &ctx->heap);
+        term obj = enif_make_resource(erl_nif_env_from_context(ctx), dir_obj);
+        enif_release_resource(dir_obj);
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, obj);
