@@ -1161,9 +1161,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         fun_arity = term_to_int(boxed_value[3]);                        \
         AtomString module_name = globalcontext_atomstring_from_term(glb, module); \
         AtomString function_name = globalcontext_atomstring_from_term(glb, index_or_function); \
-        struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, fun_arity); \
-        if (!IS_NULL_PTR(nif)) {                                        \
-            term return_value = nif->nif_ptr(ctx, fun_arity, x_regs);   \
+        term return_value;                                              \
+        if (maybe_call_native(ctx, module_name, function_name, fun_arity, &return_value)) { \
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);              \
             x_regs[0] = return_value;                                   \
             if (ctx->heap.root->next) {                                 \
