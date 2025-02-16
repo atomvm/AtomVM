@@ -494,6 +494,17 @@ term bif_erlang_add_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+term bif_erlang_add_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    UNUSED(live);
+
+    if (LIKELY(term_is_integer(arg1))) {
+        return arg1;
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+}
+
 static term sub_overflow_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     avm_int_t val1 = term_to_int(arg1);

@@ -70,6 +70,7 @@ term bif_erlang_map_size_1(Context *ctx, uint32_t fail_label, int live, term arg
 term bif_erlang_map_get_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 
 term bif_erlang_add_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
+term bif_erlang_add_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_mul_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_div_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
