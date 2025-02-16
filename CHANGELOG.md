@@ -50,6 +50,7 @@ bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and
 - Fixed call to funs such as fun erlang:'not'/1, that make use of BIFs
 - Fixed potential crashes or memory leaks caused by a mistake in calculation of reference counts
 and a race condition in otp_socket code
+- Fixed an out of memory issue by forcing GC to copy data from message fragments
 
 ## [0.6.5] - 2024-10-15
 
