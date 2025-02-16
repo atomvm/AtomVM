@@ -334,6 +334,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(negdiv, 134217728),
     TEST_CASE_EXPECTED(absovf, 134217728),
     TEST_CASE_EXPECTED(negovf, 134217728),
+    TEST_CASE(unary_plus),
 
     TEST_CASE_EXPECTED(plusone3, 134217726),
     TEST_CASE_EXPECTED(plusone4, 134217728),
