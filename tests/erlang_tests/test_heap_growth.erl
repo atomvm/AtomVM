@@ -28,6 +28,7 @@ start() ->
     ok = test_bounded_free_strategy(true),
     ok = test_minimum_strategy(),
     ok = test_fibonacci_strategy(),
+    ok = test_messages_get_gcd(),
     0.
 
 test_grow_beyond_min_heap_size() ->
@@ -214,3 +215,47 @@ allocate_until_heap_size_changes(Heap) ->
             alloc_some_heap_words(100),
             allocate_until_heap_size_changes(Heap)
     end.
+
+% This test ensures that when messages are received, they eventually get gc'd
+test_messages_get_gcd() ->
+    {Pid1, Ref1} = spawn_opt(
+        fun() ->
+            loop([])
+        end,
+        [monitor, {atomvm_heap_growth, minimum}]
+    ),
+    FinalHeapSize = loop_send(Pid1, 20),
+    Pid1 ! quit,
+    ok =
+        receive
+            {'DOWN', Ref1, process, Pid1, normal} -> ok
+        after 500 -> timeout
+        end,
+    ok =
+        if
+            FinalHeapSize < 200 -> ok;
+            true -> {heap_size_too_large, FinalHeapSize}
+        end,
+    ok.
+
+loop(State) when is_list(State) ->
+    NewData =
+        receive
+            {get_data, Pid} ->
+                Pid ! {data, State},
+                State;
+            {data, Data} ->
+                Data;
+            quit ->
+                ok
+        end,
+    loop(NewData);
+loop(_Other) ->
+    ok.
+
+loop_send(Pid, 0) ->
+    {total_heap_size, THS} = process_info(Pid, total_heap_size),
+    THS;
+loop_send(Pid, N) ->
+    Pid ! {data, alloc_some_heap_words(40)},
+    loop_send(Pid, N - 1).
