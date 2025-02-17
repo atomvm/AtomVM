@@ -51,6 +51,8 @@ bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and
 - Fixed potential crashes or memory leaks caused by a mistake in calculation of reference counts
 and a race condition in otp_socket code
 - Fixed an out of memory issue by forcing GC to copy data from message fragments
+- Fixed a bug where calling repeatedly `process_info` on a stopped process could cause an out of
+memory error
 
 ## [0.6.5] - 2024-10-15
 
