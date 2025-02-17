@@ -57,7 +57,8 @@ typedef enum EtsErrorCode
     EtsBadEntry,
     EtsAllocationFailure,
     EtsEntryNotFound,
-    EtsBadPosition
+    EtsBadPosition,
+    EtsOverlfow
 } EtsErrorCode;
 struct Ets
 {
@@ -77,7 +78,7 @@ EtsErrorCode ets_insert(term ref, term entry, Context *ctx);
 EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx);
 EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx);
 EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx);
-
+EtsErrorCode ets_update_counter(term ref, term key, term value, term pos, term *ret, Context *ctx);
 #ifdef __cplusplus
 }
 #endif
