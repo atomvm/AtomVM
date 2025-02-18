@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2019-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2025 migmatore <kazakvova201@gmail.com>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -49,6 +50,7 @@ test() ->
     ok = test_filtermap(),
     ok = test_last(),
     ok = test_mapfoldl(),
+    ok = test_append(),
     ok.
 
 test_nth() ->
@@ -319,6 +321,18 @@ test_mapfoldl() ->
     ?ASSERT_MATCH({[], 1}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [])),
     ?ASSERT_MATCH({[1, 4, 9], 4}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])),
     ?ASSERT_ERROR(lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, foo), function_clause),
+    ok.
+
+test_append() ->
+    ?ASSERT_MATCH(lists:append([]), []),
+    ?ASSERT_MATCH(lists:append([[1, 2, 3, 4]]), [1, 2, 3, 4]),
+    ?ASSERT_MATCH(lists:append([[1, 2], [3, 4]]), [1, 2, 3, 4]),
+    ?ASSERT_MATCH(lists:append([[1, 2], [a, b]]), [1, 2, a, b]),
+    ?ASSERT_MATCH(lists:append([["1", "2"], [a, b]]), ["1", "2", a, b]),
+    ?ASSERT_ERROR(lists:append(1), function_clause),
+    ?ASSERT_MATCH(lists:append("abc", "def"), "abcdef"),
+    ?ASSERT_MATCH(lists:append([1, 2], [3, 4]), [1, 2, 3, 4]),
+    ?ASSERT_ERROR(lists:append(1, 3), badarg),
     ok.
 
 id(X) -> X.
