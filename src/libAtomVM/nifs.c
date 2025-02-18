@@ -2800,7 +2800,16 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
     if (ctx == target) {
-        if (!context_get_process_info(ctx, &ret, item)) {
+        size_t term_size;
+        if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(ret);
         }

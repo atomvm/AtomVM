@@ -23,6 +23,7 @@
 #include <fenv.h>
 #include <math.h>
 
+#include "defaultatoms.h"
 #include "dictionary.h"
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
@@ -194,11 +195,22 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
 {
     Context *target = globalcontext_get_process_lock(ctx->global, signal->sender_pid);
     if (target) {
-        term ret;
-        if (context_get_process_info(ctx, &ret, signal->atom)) {
-            mailbox_send_term_signal(target, TrapAnswerSignal, ret);
+        size_t term_size;
+        if (context_get_process_info(ctx, NULL, &term_size, signal->atom, NULL)) {
+            Heap heap;
+            if (UNLIKELY(memory_init_heap(&heap, term_size) != MEMORY_GC_OK)) {
+                mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+            } else {
+                term ret;
+                if (context_get_process_info(ctx, &ret, NULL, signal->atom, &heap)) {
+                    mailbox_send_term_signal(target, TrapAnswerSignal, ret);
+                } else {
+                    mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, ret);
+                }
+                memory_destroy_heap(&heap, ctx->global);
+            }
         } else {
-            mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, ret);
+            mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, BADARG_ATOM);
         }
         globalcontext_get_process_unlock(ctx->global, target);
     } // else: sender died
@@ -262,7 +274,7 @@ size_t context_size(Context *ctx)
         + memory_heap_memory_size(&ctx->heap) * BYTES_PER_TERM;
 }
 
-bool context_get_process_info(Context *ctx, term *out, term atom_key)
+bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term atom_key, Heap *heap)
 {
     size_t ret_size;
     switch (atom_key) {
@@ -286,16 +298,19 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
             break;
         }
         default:
-            *out = BADARG_ATOM;
+            if (out != NULL) {
+                *out = BADARG_ATOM;
+            }
             return false;
     }
-
-    if (UNLIKELY(memory_ensure_free(ctx, ret_size) != MEMORY_GC_OK)) {
-        *out = OUT_OF_MEMORY_ATOM;
-        return false;
+    if (term_size != NULL) {
+        *term_size = ret_size;
+    }
+    if (out == NULL) {
+        return true;
     }
 
-    term ret = term_alloc_tuple(2, &ctx->heap);
+    term ret = term_alloc_tuple(2, heap);
     switch (atom_key) {
         // heap_size size in words of the heap of the process
         case HEAP_SIZE_ATOM: {
@@ -346,7 +361,7 @@ bool context_get_process_info(Context *ctx, term *out, term atom_key)
                 struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
                 // Links are struct Monitor entries with ref_ticks equal to 0
                 if (monitor->ref_ticks == 0) {
-                    list = term_list_prepend(monitor->monitor_obj, list, &ctx->heap);
+                    list = term_list_prepend(monitor->monitor_obj, list, heap);
                 }
             }
             term_put_tuple_element(ret, 1, list);

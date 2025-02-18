@@ -396,12 +396,14 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
  * @brief Get process information.
  *
  * @param ctx the context being executed
- * @param out the answer term
+ * @param out the answer term. Can be NULL if only the size matters.
+ * @param term_size the size of the answer term, in words.
  * @param atom_key the key representing the info to get
+ * @param heap the heap to allocate the answer to
  * @return \c true if successful, \c false in case of an error in which case
- * *out is filled with an exception atom
+ * *out is filled with an exception atom if it was not NULL
  */
-bool context_get_process_info(Context *ctx, term *out, term atom_key);
+bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term atom_key, Heap *heap);
 
 /**
  * @brief Half-link process to another process
