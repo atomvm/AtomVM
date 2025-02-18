@@ -4,6 +4,7 @@
 % Copyright 2017-2023 Fred Dushin <fred@dushin.net>
 % split/2 function Copyright Ericsson AB 1996-2023.
 % keytake/3 function Copyright Ericsson AB 1996-2024.
+% append/1, append/2 functions Copyright Ericsson AB 1996-2025.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -60,7 +61,9 @@
     split/2,
     usort/1, usort/2,
     duplicate/2,
-    sublist/2
+    sublist/2,
+    append/1,
+    append/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -758,3 +761,36 @@ sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
 sublist0([], _Len) -> [];
 sublist0(_, 0) -> [];
 sublist0([H | Tail], Len) -> [H | sublist0(Tail, Len - 1)].
+
+%%-----------------------------------------------------------------------------
+%% @param   ListOfLists a list of lists to make the general list from
+%% @returns a list made of the sublists of `ListOfLists'.
+%% @doc     Returns a list in which all the sublists of `ListOfLists' have been appended.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/34f92c2a9cbb37ef22aecf6b95613d210509015a/lib/stdlib/src/lists.erl#L222
+-spec append(ListOfLists) -> List1 when
+    ListOfLists :: [List],
+    List :: [T],
+    List1 :: [T],
+    T :: term().
+
+append([E]) -> E;
+append([H | T]) -> H ++ append(T);
+append([]) -> [].
+
+%%-----------------------------------------------------------------------------
+%% @param   List1 a list
+%% @param   List2 a list
+%% @returns a list made of the elements of `List1' and `List2'.
+%% @doc     Returns a new list `List3', which is made from the elements of `List1' followed by the elements of `List2'.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/35037ba900e15bd98e778e567079b426531d0085/lib/stdlib/src/lists.erl#L202
+-spec append(List1, List2) -> List3 when
+    List1 :: [T],
+    List2 :: [T],
+    List3 :: [T],
+    T :: term().
+
+append(L1, L2) -> L1 ++ L2.
