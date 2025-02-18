@@ -3190,7 +3190,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
         case EtsTableNameInUse:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3219,7 +3219,7 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3243,7 +3243,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3271,7 +3271,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3295,7 +3295,7 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
