@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 with nodejs and emscripten)
 - Added preliminary support for ESP32P4 (no networking support yet).
 - Added memory info in `out_of_memory` crash logs to help developers fix memory issues.
+- Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 
 ### Fixed
 
