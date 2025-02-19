@@ -104,6 +104,7 @@ struct EmscriptenPlatformData
     struct ListHead messages;
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
+    ErlNifResourceType *websocket_resource_type;
 };
 
 void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target, const char *message);

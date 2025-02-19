@@ -43,6 +43,7 @@
 #include "memory.h"
 #include "platform_defaultatoms.h"
 #include "platform_nifs.h"
+#include "websocket_nifs.h"
 
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
@@ -765,57 +766,60 @@ HTML5_REGISTER_CALLBACK(touch, EMSCRIPTEN_EVENT_TOUCHCANCEL, touchcancel);
 
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
-    if (strcmp("atomvm:platform/0", nifname) == 0) {
-        return &atomvm_platform_nif;
+    if (memcmp("atomvm:", nifname, strlen("atomvm:")) == 0) {
+        nifname += strlen("atomvm:");
+        if (strcmp("platform/0", nifname) == 0) {
+            return &atomvm_platform_nif;
+        }
+        if (strcmp("random/0", nifname) == 0) {
+            return &atomvm_random_nif;
+        }
     }
-    if (strcmp("atomvm:random/0", nifname) == 0) {
-        return &atomvm_random_nif;
+    if (memcmp("emscripten:", nifname, strlen("emscripten:")) == 0) {
+        nifname += strlen("emscripten:");
+        if (strcmp("run_script/1", nifname) == 0) {
+            return &emscripten_run_script_nif;
+        }
+        if (strcmp("run_script/2", nifname) == 0) {
+            return &emscripten_run_script_nif;
+        }
+        if (strcmp("promise_resolve/1", nifname) == 0) {
+            return &emscripten_promise_resolve_nif;
+        }
+        if (strcmp("promise_resolve/2", nifname) == 0) {
+            return &emscripten_promise_resolve_nif;
+        }
+        if (strcmp("promise_reject/1", nifname) == 0) {
+            return &emscripten_promise_reject_nif;
+        }
+        if (strcmp("promise_reject/2", nifname) == 0) {
+            return &emscripten_promise_reject_nif;
+        }
+        HTML5_GET_REGISTER_CALLBACK(keypress)
+        HTML5_GET_REGISTER_CALLBACK(keydown)
+        HTML5_GET_REGISTER_CALLBACK(keyup)
+        HTML5_GET_REGISTER_CALLBACK(click);
+        HTML5_GET_REGISTER_CALLBACK(mousedown);
+        HTML5_GET_REGISTER_CALLBACK(mouseup);
+        HTML5_GET_REGISTER_CALLBACK(dblclick);
+        HTML5_GET_REGISTER_CALLBACK(mousemove);
+        HTML5_GET_REGISTER_CALLBACK(mouseenter);
+        HTML5_GET_REGISTER_CALLBACK(mouseleave);
+        HTML5_GET_REGISTER_CALLBACK(mouseover);
+        HTML5_GET_REGISTER_CALLBACK(mouseout);
+        HTML5_GET_REGISTER_CALLBACK(wheel);
+        HTML5_GET_REGISTER_CALLBACK(resize);
+        HTML5_GET_REGISTER_CALLBACK(scroll);
+        HTML5_GET_REGISTER_CALLBACK(blur);
+        HTML5_GET_REGISTER_CALLBACK(focus);
+        HTML5_GET_REGISTER_CALLBACK(focusin);
+        HTML5_GET_REGISTER_CALLBACK(focusout);
+        HTML5_GET_REGISTER_CALLBACK(touchstart);
+        HTML5_GET_REGISTER_CALLBACK(touchend);
+        HTML5_GET_REGISTER_CALLBACK(touchmove);
+        HTML5_GET_REGISTER_CALLBACK(touchcancel);
     }
-    if (memcmp("emscripten:", nifname, strlen("emscripten:"))) {
-        return NULL;
-    }
-    nifname += strlen("emscripten:");
-    if (strcmp("run_script/1", nifname) == 0) {
-        return &emscripten_run_script_nif;
-    }
-    if (strcmp("run_script/2", nifname) == 0) {
-        return &emscripten_run_script_nif;
-    }
-    if (strcmp("promise_resolve/1", nifname) == 0) {
-        return &emscripten_promise_resolve_nif;
-    }
-    if (strcmp("promise_resolve/2", nifname) == 0) {
-        return &emscripten_promise_resolve_nif;
-    }
-    if (strcmp("promise_reject/1", nifname) == 0) {
-        return &emscripten_promise_reject_nif;
-    }
-    if (strcmp("promise_reject/2", nifname) == 0) {
-        return &emscripten_promise_reject_nif;
-    }
-    HTML5_GET_REGISTER_CALLBACK(keypress)
-    HTML5_GET_REGISTER_CALLBACK(keydown)
-    HTML5_GET_REGISTER_CALLBACK(keyup)
-    HTML5_GET_REGISTER_CALLBACK(click);
-    HTML5_GET_REGISTER_CALLBACK(mousedown);
-    HTML5_GET_REGISTER_CALLBACK(mouseup);
-    HTML5_GET_REGISTER_CALLBACK(dblclick);
-    HTML5_GET_REGISTER_CALLBACK(mousemove);
-    HTML5_GET_REGISTER_CALLBACK(mouseenter);
-    HTML5_GET_REGISTER_CALLBACK(mouseleave);
-    HTML5_GET_REGISTER_CALLBACK(mouseover);
-    HTML5_GET_REGISTER_CALLBACK(mouseout);
-    HTML5_GET_REGISTER_CALLBACK(wheel);
-    HTML5_GET_REGISTER_CALLBACK(resize);
-    HTML5_GET_REGISTER_CALLBACK(scroll);
-    HTML5_GET_REGISTER_CALLBACK(blur);
-    HTML5_GET_REGISTER_CALLBACK(focus);
-    HTML5_GET_REGISTER_CALLBACK(focusin);
-    HTML5_GET_REGISTER_CALLBACK(focusout);
-    HTML5_GET_REGISTER_CALLBACK(touchstart);
-    HTML5_GET_REGISTER_CALLBACK(touchend);
-    HTML5_GET_REGISTER_CALLBACK(touchmove);
-    HTML5_GET_REGISTER_CALLBACK(touchcancel);
 
-    return NULL;
+    const struct Nif *result = websocket_get_nif(nifname);
+    return result;
 }

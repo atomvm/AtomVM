@@ -46,6 +46,7 @@ set(ERLANG_MODULES
     timer_manager
     timestamp_util
     uart
+    websocket
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})

@@ -23,6 +23,7 @@ project (libAtomVMPlatformEmscripten)
 
 set(HEADER_FILES
     emscripten_sys.h
+    websocket_nifs.h
 )
 
 set(SOURCE_FILES
@@ -30,6 +31,7 @@ set(SOURCE_FILES
     platform_nifs.c
     smp.c
     sys.c
+    websocket_nifs.c
 )
 
 set(
