@@ -19,26 +19,143 @@
 %
 
 -module(uart).
--export([open/1, open/2, close/1, read/1, write/2]).
+-export([open/1, open/2, close/1, read/1, read/2, write/2]).
 
+-type peripheral() :: string() | binary().
+% The peripheral `Name' may be one of: `"UART0"' | `"UART1"' | `"UART2"' | `<<"UART0">>' | `<<"UART1">>' | `<<"UART2">>'.
+
+-type uart_opts() :: [
+    {tx, Tx_pin :: integer()}
+    | {rx, Rx_pin :: integer()}
+    | {rts, Rts_pin :: integer()}
+    | {cts, Cts_pin :: integer()}
+    | {speed, Speed :: pos_integer()}
+    | {data_bits, 5..8}
+    | {stop_bits, 1 | 2}
+    | {event_queue_len, Qlen :: pos_integer()}
+    | {flow_control, none | hardware | software}
+    | {parity, none | even | odd}
+    | {peripheral, peripheral()}
+    | []
+].
+
+%%-----------------------------------------------------------------------------
+%% @param   Name the uart peripheral to be opened
+%% @param   Opts uart configuration options
+%% @returns Pid of the driver.
+%% @doc     Open a connection to the UART driver
+%%
+%%          This function will open a connection to the UART driver.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec open(Name :: peripheral(), Opts :: uart_opts()) -> Pid :: pid() | {error, _Reason :: term()}.
 open(Name, Opts) ->
     open([{peripheral, Name} | Opts]).
 
+%%-----------------------------------------------------------------------------
+%% @param   Opts uart configuration options
+%% @returns Pid of the driver.
+%% @doc     Open a connection to the UART driver default port
+%%
+%%          This function will open a connection to the UART driver.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec open(Opts :: uart_opts()) -> Pid :: pid() | {error, _Reason :: term()}.
 open(Opts) ->
     open_port({spawn, "uart"}, migrate_config(Opts)).
 
-close(Pid) ->
+%%-----------------------------------------------------------------------------
+%% @param   Pid of the uart port to be closed
+%% @returns ok.
+%% @doc     Close a port connection to the UART driver
+%%
+%%          This function will close the given port connection to the UART driver.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(Pid :: pid()) -> ok | {error, _Reason :: term()}.
+close(Pid) when is_pid(Pid) ->
     port:call(Pid, close).
 
-read(Pid) ->
+%%-----------------------------------------------------------------------------
+%% @param   Pid of the uart port to be read
+%% @returns {ok, Data} or {error, Reason}
+%% @doc     Read data from a UART port
+%%
+%%          This function will return any data that is available, or return
+%%          a `{error, timeout}' tuple. The driver will sent the next available
+%%          data from the UART driver to the process that made the last read.
+%%          Example:
+%%          ```
+%%          Data = case uart:read(Uart) of
+%%              {ok, Binary} -> Binary;
+%%              {error, timeout} ->
+%%                  receive
+%%                      {ok, RecvBinary} -> RecvBinary;
+%%                      Error -> error(Error)
+%%                  end;
+%%              Error -> error(Error)
+%%          end,
+%%          '''
+%%          Any attempt by another (or the same process) to read from uart before the
+%%          next uart payload is sent by the driver will result in `{error, ealready}'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec read(Pid :: pid()) -> {ok, Data :: iodata()} | {error, _Reason :: term()}.
+read(Pid) when is_pid(Pid) ->
     port:call(Pid, read).
 
-write(Pid, B) ->
-    case is_iolist(B) of
+%%-----------------------------------------------------------------------------
+%% @param   Pid of the uart port to be read
+%% @param   Timeout millisecond to wait for data to become available
+%% @returns `{ok, Data}', or `{error, Reason}'
+%% @doc     Read data from a UART port
+%%
+%%          This function will return any data that is available within the
+%%          timeout period to the process. After the timeout has expired a new
+%%          read command may be used regardless of whether the last read was
+%%          sent a payload.
+%%          Example:
+%%          ```
+%%          Data = case uart:read(Uart, 3000) of
+%%              {ok, Bin} -> Bin;
+%%              {error, timeout} -> <<"">>;
+%%              Error -> error_handler_fun(Uart, Error)
+%%          end,
+%%          '''
+%%          Any data sent to the esp32 over uart between reads with a timeout will
+%%          be lost, so be sure this is what you want. Most applications will want
+%%          a single process to read from UART and continue to listen until a payload
+%%          is received, and likely pass the payload off for processing and
+%%          immediately begin another read.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec read(Pid :: pid(), Timeout :: pos_integer()) ->
+    {ok, Data :: iodata()} | {error, _Reason :: term()}.
+read(Pid, Timeout) when is_pid(Pid) ->
+    case port:call(Pid, read, Timeout) of
+        {error, timeout} ->
+            port:call(Pid, cancel_read),
+            {error, timeout};
+        Result ->
+            Result
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pid of the uart port to be written to
+%% @param   Data to be written to the given uart port
+%% @returns ok or {error, Reason}
+%% @doc     Write data to a UART port
+%%
+%%          This function will write the given data to the UART port.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write(Pid :: pid(), Data :: iodata()) -> ok | {error, _Reason :: term()}.
+write(Pid, Data) ->
+    case is_iolist(Data) andalso is_pid(Pid) of
         true ->
-            port:call(Pid, {write, B});
+            port:call(Pid, {write, Data});
         false ->
-            throw(badarg)
+            error(badarg)
     end.
 
 %% @private

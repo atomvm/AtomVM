@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 with nodejs and emscripten)
 - Added preliminary support for ESP32P4 (no networking support yet).
 - Added memory info in `out_of_memory` crash logs to help developers fix memory issues.
+- Added documentation and function specs for uart driver
+- Added `uart:read/2` with a timeout parameter.
 
 ### Fixed
 
@@ -53,6 +55,11 @@ and a race condition in otp_socket code
 - Fixed an out of memory issue by forcing GC to copy data from message fragments
 - Fixed a bug where calling repeatedly `process_info` on a stopped process could cause an out of
 memory error
+- Fixed possible concurrency problems in ESP32 UART driver
+
+### Changed
+
+- ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
 
 ## [0.6.5] - 2024-10-15
 
