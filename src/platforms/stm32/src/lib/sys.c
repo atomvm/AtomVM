@@ -98,15 +98,6 @@ static inline void sys_clock_gettime(struct timespec *t)
     t->tv_nsec = ((int32_t) now % 1000) * 1000000;
 }
 
-/* TODO: Needed because `defaultatoms_init` in libAtomVM/defaultatoms.c calls this function.
- * We should be able to remove this after `platform_defaulatoms.{c,h}` are removed on all platforms
- * and `defaultatoms_init` is no longer called.
- */
-void platform_defaultatoms_init(GlobalContext *glb)
-{
-    UNUSED(glb);
-}
-
 void sys_enable_core_periph_clocks()
 {
     uint32_t list[] = GPIO_CLOCK_LIST;
