@@ -52,7 +52,7 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
-static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx);
+static struct Monitor *context_monitors_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
 
 Context *context_new(GlobalContext *glb)
@@ -133,20 +133,46 @@ void context_destroy(Context *ctx)
     // Ensure process is not registered
     globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
 
+    // Process any link/unlink/monitor/demonitor signal that arrived recently
+    // Also process ProcessInfoRequestSignal so caller isn't trapped waiting
+    MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    while (signal_message) {
+        if (signal_message->type == ProcessInfoRequestSignal) {
+            struct BuiltInAtomRequestSignal *request_signal
+                = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+            context_process_process_info_request_signal(ctx, request_signal);
+        } else if (signal_message->type == MonitorSignal) {
+            struct MonitorPointerSignal *monitor_signal
+                = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
+            context_add_monitor(ctx, monitor_signal->monitor);
+        } else if (signal_message->type == UnlinkSignal) {
+            struct ImmediateSignal *immediate_signal
+                = CONTAINER_OF(signal_message, struct ImmediateSignal, base);
+            context_unlink(ctx, immediate_signal->immediate);
+        } else if (signal_message->type == DemonitorSignal) {
+            struct RefSignal *ref_signal
+                = CONTAINER_OF(signal_message, struct RefSignal, base);
+            context_demonitor(ctx, ref_signal->ref_ticks);
+        }
+        MailboxMessage *next = signal_message->next;
+        mailbox_message_dispose(signal_message, &ctx->heap);
+        signal_message = next;
+    }
+
     // When monitor message is sent, process is no longer in the table
     // and is no longer registered either.
-    struct ResourceMonitor *resource_monitor = context_monitors_handle_terminate(ctx);
+    struct Monitor *resource_monitors = context_monitors_handle_terminate(ctx);
 
     synclist_unlock(&ctx->global->processes_table);
 
     // Eventually call resource monitors handlers after the processes table was unlocked
     // The monitors were removed from the list of monitors.
-    if (resource_monitor) {
+    if (resource_monitors) {
         ErlNifEnv env;
         erl_nif_env_partial_init_from_globalcontext(&env, ctx->global);
 
         struct ListHead monitors;
-        list_prepend(&resource_monitor->base.monitor_list_head, &monitors);
+        list_prepend(&resource_monitors->monitor_list_head, &monitors);
 
         struct ListHead *item;
         struct ListHead *tmp;
@@ -154,6 +180,7 @@ void context_destroy(Context *ctx)
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
             void *resource = term_to_term_ptr(monitor->monitor_obj);
             struct RefcBinary *refc = refc_binary_from_data(resource);
+            resource_type_demonitor(refc->resource_type, monitor->ref_ticks);
             refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
             free(monitor);
         }
@@ -199,18 +226,18 @@ void context_process_process_info_request_signal(Context *ctx, struct BuiltInAto
         if (context_get_process_info(ctx, NULL, &term_size, signal->atom, NULL)) {
             Heap heap;
             if (UNLIKELY(memory_init_heap(&heap, term_size) != MEMORY_GC_OK)) {
-                mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
+                mailbox_send_immediate_signal(target, TrapExceptionSignal, OUT_OF_MEMORY_ATOM);
             } else {
                 term ret;
                 if (context_get_process_info(ctx, &ret, NULL, signal->atom, &heap)) {
                     mailbox_send_term_signal(target, TrapAnswerSignal, ret);
                 } else {
-                    mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, ret);
+                    mailbox_send_immediate_signal(target, TrapExceptionSignal, ret);
                 }
                 memory_destroy_heap(&heap, ctx->global);
             }
         } else {
-            mailbox_send_built_in_atom_signal(target, TrapExceptionSignal, BADARG_ATOM);
+            mailbox_send_immediate_signal(target, TrapExceptionSignal, BADARG_ATOM);
         }
         globalcontext_get_process_unlock(ctx->global, target);
     } // else: sender died
@@ -375,38 +402,35 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
     return true;
 }
 
-static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
+static struct Monitor *context_monitors_handle_terminate(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
     struct ListHead *item;
     struct ListHead *tmp;
-    struct ResourceMonitor *result = NULL;
+    struct Monitor *result = NULL;
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->ref_ticks && term_is_boxed(monitor->monitor_obj)) {
-            // Resource monitor
-            struct ResourceMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceMonitor, base);
-            // remove the monitor from the list of the resource
-            list_remove(&resource_monitor->resource_list_head);
-            list_init(&resource_monitor->resource_list_head);
+        if (monitor->ref_ticks && ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_RESOURCE_TAG)) {
             // remove it from the list we are iterating on
             if (result == NULL) {
-                list_init(&resource_monitor->base.monitor_list_head);
-                result = resource_monitor;
+                list_init(&monitor->monitor_list_head);
+                result = monitor;
             } else {
-                list_append(&result->base.monitor_list_head, &resource_monitor->base.monitor_list_head);
+                list_append(&result->monitor_list_head, &monitor->monitor_list_head);
             }
-        } else {
+        } else if (monitor->ref_ticks == 0 || ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_MONITORED_PID_TAG)) {
+            // term_to_local_process_id and monitor->monitor_obj >> 4 are identical here.
             int local_process_id = term_to_local_process_id(monitor->monitor_obj);
             Context *target = globalcontext_get_process_nolock(glb, local_process_id);
             if (IS_NULL_PTR(target)) {
-                // TODO: we should scan for existing monitors when a context is destroyed
-                // otherwise memory might be wasted for long living processes
+                // TODO: assess whether this can happen
                 free(monitor);
                 continue;
             }
 
-            if (monitor->ref_ticks == 0 && (ctx->exit_reason != NORMAL_ATOM || target->trap_exit)) {
+            if (monitor->ref_ticks == 0) {
+                term exited_pid = term_from_local_process_id(ctx->process_id);
+                mailbox_send_immediate_signal(target, UnlinkSignal, exited_pid);
                 if (target->trap_exit) {
                     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
                         // TODO: handle out of memory here
@@ -414,21 +438,17 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
                         globalcontext_get_process_unlock(glb, target);
                         AVM_ABORT();
                     }
-
-                    term exited_pid = term_from_local_process_id(ctx->process_id);
-                    // Process table should be locked before context_unlink is
-                    // called. This is done in calling function context_destroy.
-                    context_unlink(target, exited_pid);
                     // Prepare the message on ctx's heap which will be freed afterwards.
                     term info_tuple = term_alloc_tuple(3, &ctx->heap);
                     term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
                     term_put_tuple_element(info_tuple, 1, exited_pid);
                     term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
                     mailbox_send(target, info_tuple);
-                } else {
+                } else if (ctx->exit_reason != NORMAL_ATOM) {
                     mailbox_send_term_signal(target, KillSignal, ctx->exit_reason);
                 }
-            } else if (monitor->ref_ticks) {
+            } else {
+                mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
                 int required_terms = REF_SIZE + TUPLE_SIZE(5);
                 if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                     // TODO: handle out of memory here
@@ -454,61 +474,69 @@ static struct ResourceMonitor *context_monitors_handle_terminate(Context *ctx)
                 mailbox_send(target, info_tuple);
             }
             free(monitor);
+        } else {
+            // We are the monitoring process.
+            int local_process_id = monitor->monitor_obj >> 4;
+            Context *target = globalcontext_get_process_nolock(glb, local_process_id);
+            mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
+            free(monitor);
         }
     }
     return result;
 }
 
-int context_link(Context *ctx, term link_pid)
+struct Monitor *monitor_link_new(term link_pid)
 {
-    struct ListHead *item;
-    struct Monitor *monitor;
-    LIST_FOR_EACH (item, &ctx->monitors_head) {
-        monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if ((monitor->monitor_obj == link_pid) && (monitor->ref_ticks == 0)) {
-            return 0;
-        }
-    }
-    monitor = malloc(sizeof(struct Monitor));
-    if (IS_NULL_PTR(monitor)) {
-        return -1;
-    }
-    monitor->monitor_obj = link_pid;
-    monitor->ref_ticks = 0;
-    list_append(&ctx->monitors_head, &monitor->monitor_list_head);
-
-    return 0;
-}
-
-uint64_t context_monitor(Context *ctx, term monitor_pid)
-{
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-
     struct Monitor *monitor = malloc(sizeof(struct Monitor));
-    if (IS_NULL_PTR(monitor)) {
-        return 0;
-    }
-    monitor->monitor_obj = monitor_pid;
-    monitor->ref_ticks = ref_ticks;
-    list_append(&ctx->monitors_head, &monitor->monitor_list_head);
-
-    return ref_ticks;
-}
-
-struct ResourceMonitor *context_resource_monitor(Context *ctx, void *resource)
-{
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-
-    struct ResourceMonitor *monitor = malloc(sizeof(struct ResourceMonitor));
     if (IS_NULL_PTR(monitor)) {
         return NULL;
     }
-    // Not really boxed, but sufficient to distinguish from pids
-    monitor->base.monitor_obj = ((term) resource) | TERM_BOXED_VALUE_TAG;
-    monitor->base.ref_ticks = ref_ticks;
-    list_append(&ctx->monitors_head, &monitor->base.monitor_list_head);
+    monitor->monitor_obj = link_pid;
+    monitor->ref_ticks = 0;
 
     return monitor;
+}
+
+struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring)
+{
+    struct Monitor *monitor = malloc(sizeof(struct Monitor));
+    if (IS_NULL_PTR(monitor)) {
+        return NULL;
+    }
+    int32_t local_process_id = term_to_local_process_id(monitor_pid);
+    if (is_monitoring) {
+        monitor->monitor_obj = (local_process_id << 4) | CONTEXT_MONITOR_MONITORING_PID_TAG;
+    } else {
+        monitor->monitor_obj = (local_process_id << 4) | CONTEXT_MONITOR_MONITORED_PID_TAG;
+    }
+    monitor->ref_ticks = ref_ticks;
+
+    return monitor;
+}
+
+struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks)
+{
+    struct Monitor *monitor = malloc(sizeof(struct Monitor));
+    if (IS_NULL_PTR(monitor)) {
+        return NULL;
+    }
+    monitor->monitor_obj = ((term) resource) | CONTEXT_MONITOR_RESOURCE_TAG;
+    monitor->ref_ticks = ref_ticks;
+
+    return monitor;
+}
+
+void context_add_monitor(Context *ctx, struct Monitor *new_monitor)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *existing = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if ((existing->monitor_obj == new_monitor->monitor_obj) && (existing->ref_ticks == new_monitor->ref_ticks)) {
+            free(new_monitor);
+            return;
+        }
+    }
+    list_append(&ctx->monitors_head, &new_monitor->monitor_list_head);
 }
 
 void context_unlink(Context *ctx, term link_pid)
@@ -522,4 +550,37 @@ void context_unlink(Context *ctx, term link_pid)
             return;
         }
     }
+}
+
+void context_demonitor(Context *ctx, uint64_t ref_ticks)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if (monitor->ref_ticks == ref_ticks) {
+            list_remove(&monitor->monitor_list_head);
+            free(monitor);
+            return;
+        }
+    }
+}
+
+term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitoring)
+{
+    struct ListHead *item;
+    LIST_FOR_EACH (item, &ctx->monitors_head) {
+        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+        if (monitor->ref_ticks == ref_ticks) {
+            if ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_MONITORED_PID_TAG) {
+                *is_monitoring = false;
+                return term_from_local_process_id(monitor->monitor_obj >> 4);
+            } else if ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_MONITORING_PID_TAG) {
+                *is_monitoring = true;
+                return term_from_local_process_id(monitor->monitor_obj >> 4);
+            } else {
+                return term_invalid_term();
+            }
+        }
+    }
+    return term_invalid_term();
 }
