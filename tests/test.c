@@ -645,7 +645,9 @@ int test_module_execution(bool beam, struct Test *test)
         return 0;
     }
     fprintf(stderr, "%s:\r", test->test_module);
+    fflush(NULL);
     int result = beam ? test_beam(test) : test_atom(test);
+    fflush(NULL);
     if (result) {
         fprintf(stderr, "\x1b[2K\x1b[1;31m%s:\x1b[34GFAILED\x1b[0m\n", test->test_module);
         return 1;
