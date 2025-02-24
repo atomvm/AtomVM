@@ -24,6 +24,7 @@
 #include <math.h>
 
 #include "atom.h"
+#include "biggerint.h"
 #include "bitstring.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
@@ -691,6 +692,13 @@ static term mul_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     return make_boxed_int64(ctx, fail_label, live, res64);
 
                 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    biggerdigit_t bigres[32];
+                    memset(bigres, 0, 32);
+                    biggerint_mul_int64(val1, val2, bigres);
+                    int64_t maybe64;
+                    size_t count = biggerint_to_int64_when_fits(bigres, BIGGERINT_MUL_OUT_LEN(INT64_LEN, INT64_LEN), maybe64);
+                    print_num(bigres, count);
+                    abort();
                     TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
                     RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
                 #else
