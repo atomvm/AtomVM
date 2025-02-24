@@ -107,6 +107,10 @@ Context *context_new(GlobalContext *glb)
     ctx->trace_receive = 0;
 #endif
 
+#ifndef AVM_NO_SMP
+    ctx->scheduler_id = 0;
+#endif
+
     ctx->flags = NoFlags;
     ctx->platform_data = NULL;
 

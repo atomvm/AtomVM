@@ -1811,11 +1811,21 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
     int remaining_reductions;
 
     Context *ctx = scheduler_run(glb);
+#ifndef AVM_NO_SMP
+    // id can be reused
+    // this code is reached only once after scheduler init and
+    // running_schedulers are under lock
+    size_t scheduler_id = glb->running_schedulers - 1;
+#endif
 
 // This is where loop starts after context switching.
 schedule_in:
     TRACE("scheduling in, ctx = %p\n", ctx);
     if (ctx == NULL) return 0;
+
+#ifndef AVM_NO_SMP
+    ctx->scheduler_id = scheduler_id;
+#endif
     mod = ctx->saved_module;
     prev_mod = mod;
     code = mod->code->code;
