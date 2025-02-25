@@ -3192,7 +3192,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
     }
 
     term table = term_invalid_term();
-    EtsErrorCode result = ets_create_table(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
+    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
     switch (result) {
         case EtsOk:
             return table;
@@ -3244,7 +3244,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
     term key = argv[1];
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup(ref, key, &ret, ctx);
+    EtsErrorCode result = ets_lookup_maybe_gc(ref, key, &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
@@ -3270,7 +3270,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pos, term_is_integer);
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup_element(ref, key, term_to_int(pos), &ret, ctx);
+    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key, term_to_int(pos), &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
@@ -3326,7 +3326,7 @@ static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
         default_value = term_invalid_term();
     }
     term ret;
-    EtsErrorCode result = ets_update_counter(ref, key, operation, default_value, &ret, ctx);
+    EtsErrorCode result = ets_update_counter_maybe_gc(ref, key, operation, default_value, &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
