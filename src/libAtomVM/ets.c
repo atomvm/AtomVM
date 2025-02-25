@@ -144,7 +144,7 @@ void ets_destroy(struct Ets *ets, GlobalContext *global)
     synclist_destroy(&ets->ets_tables);
 }
 
-EtsErrorCode ets_create_table(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
+EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
 {
     if (is_named) {
         struct EtsTable *ets_table = ets_get_table_by_name(&ctx->global->ets, name, TableAccessNone);
@@ -348,7 +348,7 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
     return result;
 }
 
-static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
+static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
 {
     if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
         return EtsPermissionDenied;
@@ -362,7 +362,7 @@ static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term 
 
         size_t size = (size_t) memory_estimate_usage(res);
         // allocate [object]
-        if (UNLIKELY(memory_ensure_free_opt(ctx, size + CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, size + CONS_SIZE, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             return EtsAllocationFailure;
         }
         term new_res = memory_copy_term_tree(&ctx->heap, res);
@@ -372,20 +372,20 @@ static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term 
     return EtsOk;
 }
 
-EtsErrorCode ets_lookup(term name_or_ref, term key, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
     struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
     if (ets_table == NULL) {
         return EtsTableNotFound;
     }
 
-    EtsErrorCode result = ets_table_lookup(ets_table, key, ret, ctx);
+    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
     SMP_UNLOCK(ets_table);
 
     return result;
 }
 
-EtsErrorCode ets_lookup_element(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
 {
     if (UNLIKELY(pos == 0)) {
         return EtsBadPosition;
@@ -492,7 +492,7 @@ static bool operation_to_tuple4(term operation, size_t default_pos, term *positi
     return true;
 }
 
-EtsErrorCode ets_update_counter(term ref, term key, term operation, term default_value, term *ret, Context *ctx)
+EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, term default_value, term *ret, Context *ctx)
 {
     struct EtsTable *ets_table = term_is_atom(ref)
         ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite)
@@ -501,12 +501,20 @@ EtsErrorCode ets_update_counter(term ref, term key, term operation, term default
         return EtsTableNotFound;
     }
 
+    // do not use an invalid term as a root
+    term safe_default_value = term_is_invalid_term(default_value) ? term_nil() : default_value;
+    term roots[] = { key, operation, safe_default_value };
+
     term list;
-    EtsErrorCode result = ets_table_lookup(ets_table, key, &list, ctx);
+    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
     if (UNLIKELY(result != EtsOk)) {
         SMP_UNLOCK(ets_table);
         return result;
     }
+
+    key = roots[0];
+    operation = roots[1];
+    default_value = term_is_invalid_term(default_value) ? term_invalid_term() : roots[2];
 
     term to_insert;
     if (term_is_nil(list)) {
