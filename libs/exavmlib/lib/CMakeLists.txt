@@ -40,12 +40,20 @@ set(ELIXIR_MODULES
     Enumerable.MapSet
     Enumerable.Range
     Exception
+    GenServer
+    GenServerTest.Stack
+    GenServerTest.CustomStack
+    SupervisorTest.Stack
+    SupervisorTest.Stack.Sup
     IO
     List
     Map
     MapSet
     Module
     Keyword
+    Supervisor
+    Supervisor.Default
+    Supervisor.Spec
     Kernel
     Process
     Protocol.UndefinedError
