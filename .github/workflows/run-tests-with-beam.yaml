@@ -43,45 +43,55 @@ jobs:
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:21
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=21 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=21
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:22
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=22 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=22
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:23
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=23 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=23
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:24
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=24 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=24
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:25
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=25 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=25
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           otp: "26"
           container: erlang:26
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=26 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=26
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           otp: "27"
           container: erlang:27
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=27 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=27
 
         # This is ARM64
         - os: "macos-14"
           otp: "25"
           path_prefix: "/opt/homebrew/opt/erlang@25/bin:"
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=25 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=25
 
         - os: "macos-14"
           otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@26/bin:"
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=26 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=26
 
         - os: "macos-14"
           otp: "27"
           path_prefix: "/opt/homebrew/opt/erlang@27/bin:"
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=27 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=27
     steps:
     # Setup
     - name: "Checkout repo"

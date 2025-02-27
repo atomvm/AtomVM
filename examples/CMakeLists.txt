@@ -36,3 +36,6 @@ if (Gleam_FOUND)
 else()
     message(WARNING "-- gleam not found, skipping Gleam examples")
 endif()
+
+# Ensure erlang version is compatible with VM
+find_package(Erlang ${AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION}...${AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION} REQUIRED)
