@@ -164,6 +164,9 @@ X(ARITY_ATOM, "\x5", "arity")
 X(EXTERNAL_ATOM, "\x8", "external")
 X(LOCAL_ATOM, "\x5", "local")
 
+X(POSITIVE_ATOM, "\x8", "positive")
+X(MONOTONIC_ATOM, "\x9", "monotonic")
+
 X(REGISTERED_NAME_ATOM, "\xF", "registered_name")
 
 X(SHUTDOWN_ATOM, "\x8", "shutdown")
