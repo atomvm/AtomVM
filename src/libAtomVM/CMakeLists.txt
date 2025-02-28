@@ -27,6 +27,7 @@ set(HEADER_FILES
     atom_table.h
     avmpack.h
     bif.h
+    intn.h
     bitstring.h
     context.h
     debug.h
@@ -78,6 +79,7 @@ set(SOURCE_FILES
     atom_table.c
     avmpack.c
     bif.c
+    intn.c
     bitstring.c
     context.c
     debug.c
