@@ -2172,40 +2172,6 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
-{
-    int integer_string_len = 0;
-    bool neg = int_value < 0;
-    if (neg) {
-        integer_string_len++;
-        if (integer_string) {
-            integer_string[0] = '-';
-        }
-    }
-    avm_int64_t v = int_value;
-    do {
-        v = v / base;
-        integer_string_len++;
-    } while (v != 0);
-    if (integer_string) {
-        int ix = 1;
-        do {
-            avm_int_t digit = int_value % base;
-            if (digit < 0) {
-                digit = -digit;
-            }
-            if (digit < 10) {
-                integer_string[integer_string_len - ix] = '0' + digit;
-            } else {
-                integer_string[integer_string_len - ix] = 'A' + digit - 10;
-            }
-            int_value = int_value / base;
-            ix++;
-        } while (int_value != 0);
-    }
-    return integer_string_len;
-}
-
 static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
 {
     term value = argv[0];

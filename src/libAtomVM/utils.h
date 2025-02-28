@@ -331,4 +331,6 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 }
 #endif
 
+size_t lltoa(int64_t int_value, unsigned base, char *integer_string);
+
 #endif
