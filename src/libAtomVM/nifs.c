@@ -44,6 +44,7 @@
 #include "externalterm.h"
 #include "globalcontext.h"
 #include "interop.h"
+#include "intn.h"
 #include "mailbox.h"
 #include "memory.h"
 #include "module.h"
@@ -2238,6 +2239,7 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
 #endif
     char tmp_buf[tmp_buf_size];
     char *int_buf;
+    bool needs_free = false;
     size_t int_len;
 
     if (term_is_integer(value)) {
@@ -2262,8 +2264,14 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
                 break;
             }
 #endif
-            default:
-                abort();
+            default: {
+                size_t boxed_size = term_intn_size(value);
+                size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
+                intn_digit_t *dest_buf = (void *) term_intn_data(value);
+                int_buf = intn_to_string(dest_buf, boxed_size * digits_per_term, base);
+                int_len = strlen(int_buf);
+                needs_free = true;
+            }
         }
     }
 
@@ -2271,7 +2279,13 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
+    term ret = term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
+
+    if (needs_free) {
+        free(int_buf);
+    }
+
+    return ret;
 }
 
 static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
