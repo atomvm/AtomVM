@@ -28,6 +28,7 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -345,6 +346,18 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 
 #ifndef ASSUME
 #define ASSUME(...)
+#endif
+
+#if INTPTR_MAX <= INT32_MAX
+#define INTPTR_TO_A_BUF_LEN (32 + 1 + 1)
+#define INT64_TO_A_BUF_LEN (64 + 1 + 1)
+#elif INTPTR_MAX <= INT64_MAX
+#define INTPTR_TO_A_BUF_LEN (64 + 1 + 1)
+#endif
+
+size_t intptr_to_a_unterminated(intptr_t n, char *out_end, uintptr_t base);
+#if INT64_MAX > INTPTR_MAX
+size_t int64_to_a_unterminated(int64_t n, char *out_end, uintptr_t base);
 #endif
 
 #ifdef __cplusplus
