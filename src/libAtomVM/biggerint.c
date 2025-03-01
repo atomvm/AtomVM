@@ -408,6 +408,13 @@ size_t add_2(uint32_t a[], size_t a_len, uint32_t b[], size_t b_len, uint32_t ou
         sign_extend = (((uint64_t) sign_extend_temp) >> 32);
         longest = b;
     }
+#ifdef __GNUC__
+#if __GNUC__ >= 13
+else {
+    __attribute__((assume(i == m)));
+}
+#endif
+#endif
 
     for (; i < m; i++) {
         uint32_t longest_i = longest[i];
