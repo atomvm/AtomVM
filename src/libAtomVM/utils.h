@@ -327,6 +327,22 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
     #define UNREACHABLE(...)
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+#if __GNUC__ >= 13
+#define HAVE_ASSUME 1
+#define ASSUME(x) __attribute__((assume((x))));
+#endif
+#endif
+
+#ifndef HAVE_ASSUME
+#if defined __has_builtin
+#if __has_builtin(__builtin_assume)
+#define HAVE_ASSUME 1
+#define ASSUME(x) __builtin_assume((x));
+#endif
+#endif
+#endif
+
 #ifdef __cplusplus
 }
 #endif
