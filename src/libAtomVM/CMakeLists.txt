@@ -27,6 +27,7 @@ set(HEADER_FILES
     atom_table.h
     avmpack.h
     bif.h
+    biggerint.h
     bitstring.h
     context.h
     debug.h
@@ -78,6 +79,7 @@ set(SOURCE_FILES
     atom_table.c
     avmpack.c
     bif.c
+    biggerint.c
     bitstring.c
     context.c
     debug.c
@@ -102,6 +104,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
+    utils.c
     valueshashtable.c
 )
 
