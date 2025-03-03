@@ -85,15 +85,15 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
 
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
-    int functions_count = READ_32_ALIGNED(table_data + 8);
+    this_module->functions_count = READ_32_ALIGNED(table_data + 8);
 
-    this_module->imported_funcs = calloc(functions_count, sizeof(struct ExportedFunction *));
+    this_module->imported_funcs = calloc(this_module->functions_count, sizeof(struct ExportedFunction *));
     if (IS_NULL_PTR(this_module->imported_funcs)) {
         fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
-    for (int i = 0; i < functions_count; i++) {
+    for (int i = 0; i < this_module->functions_count; ++i) {
         int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
         int local_function_atom_index = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
         AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
@@ -312,11 +312,29 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 COLD_FUNC void module_destroy(Module *module)
 {
     free(module->labels);
+    for (int i = 0; i < module->functions_count; ++i) {
+        const struct ExportedFunction *fun = module->imported_funcs[i];
+        switch (fun->type) {
+            // Preallocated function types
+            case NIFFunctionType:
+            case BIFFunctionType:
+            case GCBIFFunctionType:
+                break;
+            default:
+                free((void *) fun);
+        }
+    }
     free(module->imported_funcs);
     free(module->literals_table);
     free(module->local_atoms_to_global_table);
     if (module->free_literals_data) {
         free(module->literals_data);
+    }
+    free(module->line_refs);
+    free(module->filenames);
+    struct ListHead *item, *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, &module->line_ref_offsets) {
+        free(GET_LIST_ENTRY(item, struct LineRefOffset, head));
     }
 #ifndef AVM_NO_SMP
     smp_mutex_destroy(module->mutex);
