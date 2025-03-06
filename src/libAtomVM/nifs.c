@@ -1166,29 +1166,41 @@ static term do_spawn(Context *ctx, Context *new_ctx, term opts_term)
             RAISE_ERROR(BADARG_ATOM);
     }
     uint64_t ref_ticks = 0;
+    term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
-        if (UNLIKELY(context_link(new_ctx, term_from_local_process_id(ctx->process_id)) < 0)) {
+        // We can call context_add_monitor directly on new process because it's not started yet
+        struct Monitor *new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
+        if (IS_NULL_PTR(new_link)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        // This is a really simple hack to get the parent - child linking
-        // I don't really like how it is implemented but it works nicely.
-        // I think it should be implemented adding a parent field to Context.
-        if (UNLIKELY(context_link(ctx, term_from_local_process_id(new_ctx->process_id)) < 0)) {
+        struct Monitor *self_link = monitor_link_new(new_pid);
+        if (IS_NULL_PTR(self_link)) {
+            free(new_link);
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        context_add_monitor(new_ctx, new_link);
+        context_add_monitor(ctx, self_link);
     }
     if (monitor_term == TRUE_ATOM) {
-        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id));
-        if (UNLIKELY(ref_ticks == 0)) {
+        // We can call context_add_monitor directly on new process because it's not started yet
+        ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
+        if (IS_NULL_PTR(new_monitor)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        struct Monitor *self_monitor = monitor_new(new_pid, ref_ticks, true);
+        if (IS_NULL_PTR(self_monitor)) {
+            free(new_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        context_add_monitor(new_ctx, new_monitor);
+        context_add_monitor(ctx, self_monitor);
     }
-
-    term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (ref_ticks) {
         int res_size = REF_SIZE + TUPLE_SIZE(2);
@@ -3530,6 +3542,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(target_pid, term_is_pid);
 
     int local_process_id = term_to_local_process_id(target_pid);
+    // Monitoring self is possible but no monitor is actually created
+    if (UNLIKELY(local_process_id == ctx->process_id)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        return ref;
+    }
+
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
         int res_size = REF_SIZE + TUPLE_SIZE(5);
@@ -3551,10 +3573,23 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    uint64_t ref_ticks = context_monitor(target, callee_pid);
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+    term monitoring_pid = term_from_local_process_id(ctx->process_id);
+    struct Monitor *self_monitor = monitor_new(target_pid, ref_ticks, true);
+    if (IS_NULL_PTR(self_monitor)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_ticks, false);
+    if (IS_NULL_PTR(other_monitor)) {
+        free(self_monitor);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
+
+    context_add_monitor(ctx, self_monitor);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3579,7 +3614,26 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(ref, term_is_reference);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
-    bool result = globalcontext_demonitor(ctx->global, ref_ticks);
+    bool is_monitoring;
+    term monitor_pid = context_get_monitor_pid(ctx, ref_ticks, &is_monitoring);
+    bool result;
+    if (UNLIKELY(term_is_invalid_term(monitor_pid))) {
+        result = false;
+    } else {
+        if (UNLIKELY(!is_monitoring)) {
+            return !info ? TRUE_ATOM : FALSE_ATOM;
+        }
+        context_demonitor(ctx, ref_ticks);
+        int local_process_id = term_to_local_process_id(monitor_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (target) {
+            mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
+            globalcontext_get_process_unlock(ctx->global, target);
+            result = true;
+        } else {
+            result = false;
+        }
+    }
     if (flush) {
         mailbox_send_ref_signal(ctx, info ? FlushInfoMonitorSignal : FlushMonitorSignal, ref_ticks);
         context_update_flags(ctx, ~NoFlags, Trap);
@@ -3603,19 +3657,24 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
         RAISE_ERROR(NOPROC_ATOM);
     }
 
+    struct Monitor *self_link = monitor_link_new(target_pid);
+    if (IS_NULL_PTR(self_link)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    if (UNLIKELY(context_link(target, callee_pid) < 0)) {
+    struct Monitor *other_link = monitor_link_new(callee_pid);
+    if (IS_NULL_PTR(other_link)) {
         globalcontext_get_process_unlock(ctx->global, target);
+        free(self_link);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(context_link(ctx, term_from_local_process_id(target->process_id)) < 0)) {
-        context_unlink(target, callee_pid);
-        globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
+    mailbox_send_monitor_signal(target, MonitorSignal, other_link);
     globalcontext_get_process_unlock(ctx->global, target);
+
+    context_add_monitor(ctx, self_link);
 
     return TRUE_ATOM;
 }
@@ -3634,10 +3693,9 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
         return TRUE_ATOM;
     }
 
-    term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    context_unlink(target, callee_pid);
     context_unlink(ctx, term_from_local_process_id(target->process_id));
+    term callee_pid = term_from_local_process_id(ctx->process_id);
+    mailbox_send_immediate_signal(target, UnlinkSignal, callee_pid);
     globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;

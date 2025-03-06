@@ -88,6 +88,14 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             struct BuiltInAtomRequestSignal *request_signal
                 = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
             context_process_process_info_request_signal(ctx, request_signal);
+        } else if (signal_message->type == MonitorSignal) {
+            struct MonitorPointerSignal *monitor_signal
+                = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
+            context_add_monitor(ctx, monitor_signal->monitor);
+        } else if (signal_message->type == DemonitorSignal) {
+            struct RefSignal *ref_signal
+                = CONTAINER_OF(signal_message, struct RefSignal, base);
+            context_demonitor(ctx, ref_signal->ref_ticks);
         }
         MailboxMessage *next = signal_message->next;
         mailbox_message_dispose(signal_message, &ctx->heap);
