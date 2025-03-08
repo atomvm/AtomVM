@@ -57,6 +57,7 @@ and a race condition in otp_socket code
 memory error
 - Fixed possible concurrency problems in ESP32 UART driver
 - Fixed concurrency and memory leak related to links and monitors
+- Fixed issues with parsing of line references for stack traces
 
 ### Changed
 
