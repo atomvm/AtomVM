@@ -31,7 +31,7 @@ static char *uintptr_to_a_n(uintptr_t n, char *out_end, uintptr_t base)
     do {
         c--;
         uintptr_t r = (q % base);
-        *c = (r < 9) ? '0' + r : 'A' + r;
+        *c = (r <= 9) ? '0' + r : 'A' + r - 10;
          q /= base;
     } while (q);
 
@@ -58,7 +58,7 @@ static char *uintptr_to_a_16(uintptr_t n, char *out_end)
     do {
         c--;
         uintptr_t r = (q & 0xF);
-        *c = (r < 9) ? '0' + r : 'A' + r;
+        *c = (r <= 9) ? '0' + r : 'A' + r - 10;
          q >>= 4;
     } while (q);
 
@@ -109,7 +109,7 @@ static char *uint64_to_a_n(uint64_t n, char *out_end, uintptr_t base)
     do {
         c--;
         uint64_t r = (q % base);
-        *c = (r < 9) ? '0' + r : 'A' + r;
+        *c = (r <= 9) ? '0' + r : 'A' + r - 10;
          q /= base;
     } while (q);
 
@@ -136,7 +136,7 @@ static char *uint64_to_a_16(uint64_t n, char *out_end)
     do {
         c--;
         uint64_t r = (q & 0xF);
-        *c = (r < 9) ? '0' + r : 'A' + r;
+        *c = (r <= 9) ? '0' + r : 'A' + r - 10;
          q >>= 4;
     } while (q);
 

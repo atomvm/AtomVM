@@ -2231,15 +2231,47 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
         }
     }
 
-    avm_int64_t int_value = term_maybe_unbox_int64(value);
-    size_t len = lltoa(int_value, base, NULL);
+#ifdef INT64_TO_A_BUF_LEN
+    int tmp_buf_size = INT64_TO_A_BUF_LEN;
+#else
+    int tmp_buf_size = INTPTR_TO_A_BUF_LEN;
+#endif
+    char tmp_buf[tmp_buf_size];
+    char *int_buf;
+    size_t int_len;
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (term_is_integer(value)) {
+        avm_int_t int_val = term_to_int(value);
+        int_len = intptr_to_a_unterminated(int_val, tmp_buf + tmp_buf_size, base);
+        int_buf = tmp_buf + tmp_buf_size - int_len;
+    } else {
+        switch (term_boxed_size(value)) {
+            case 0:
+                UNREACHABLE();
+            case 1: {
+                avm_int_t int_val = term_unbox_int(value);
+                int_len = intptr_to_a_unterminated(int_val, tmp_buf + tmp_buf_size, base);
+                int_buf = tmp_buf + tmp_buf_size - int_len;
+                break;
+            }
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2: {
+                avm_int64_t int64_val = term_unbox_int64(value);
+                int_len = int64_to_a_unterminated(int64_val, tmp_buf + tmp_buf_size, base);
+                int_buf = tmp_buf + tmp_buf_size - int_len;
+                break;
+            }
+#endif
+            default:
+                abort();
+        }
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(int_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term result = term_create_empty_binary(len, &ctx->heap, ctx->global);
-    lltoa(int_value, base, (char *) term_binary_data(result));
-    return result;
+
+    return term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
 }
 
 static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
