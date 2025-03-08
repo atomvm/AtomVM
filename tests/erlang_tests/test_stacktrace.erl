@@ -21,6 +21,8 @@
 
 -export([start/0, maybe_crash/1]).
 
+-include("test_stacktrace.hrl").
+
 start() ->
     ok = test_local_throw(),
     ok = test_local_error(),
@@ -33,6 +35,7 @@ start() ->
     ok = test_spawned_throw(),
     ok = test_catch(),
     ok = maybe_test_filelineno(),
+    ok = maybe_test_filelineno_other_file(),
     0.
 
 test_local_throw() ->
@@ -239,6 +242,35 @@ maybe_test_filelineno() ->
             throw:{File, Line}:Stacktrace ->
                 [Frame | _] = Stacktrace,
                 {?MODULE, throw_with_file_and_line, 0, AuxData} = Frame,
+                case {get_value(file, AuxData), get_value(line, AuxData)} of
+                    {undefined, undefined} ->
+                        ok;
+                    {F, L} ->
+                        Ef =
+                            case is_binary(F) of
+                                true ->
+                                    erlang:binary_to_list(F);
+                                _ ->
+                                    F
+                            end,
+                        case File == Ef andalso Line == L of
+                            true ->
+                                ok;
+                            _ ->
+                                {unexpected_file_line, F, L}
+                        end
+                end
+        end.
+
+maybe_test_filelineno_other_file() ->
+    ok =
+        try
+            throw_with_other_file_and_line(),
+            fail
+        catch
+            throw:{File, Line}:Stacktrace ->
+                [Frame | _] = Stacktrace,
+                {?MODULE, throw_with_other_file_and_line, 0, AuxData} = Frame,
                 case {get_value(file, AuxData), get_value(line, AuxData)} of
                     {undefined, undefined} ->
                         ok;

@@ -1034,9 +1034,9 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     break;                                                                      \
                 }                                                                               \
                 case TrapExceptionSignal: {                                                     \
-                    struct BuiltInAtomSignal *trap_exception                                    \
-                        = CONTAINER_OF(signal_message, struct BuiltInAtomSignal, base);         \
-                    SET_ERROR(trap_exception->atom);                                            \
+                    struct ImmediateSignal *trap_exception                                      \
+                        = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
+                    SET_ERROR(trap_exception->immediate);                                       \
                     next_label = &&handle_error;                                                \
                     break;                                                                      \
                 }                                                                               \
@@ -1046,6 +1046,24 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                         = CONTAINER_OF(signal_message, struct RefSignal, base);                 \
                     bool info = signal_message->type == FlushInfoMonitorSignal;                 \
                     context_process_flush_monitor_signal(ctx, flush_signal->ref_ticks, info);   \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkSignal: {                                                            \
+                    struct ImmediateSignal *immediate_signal                                    \
+                        = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
+                    context_unlink(ctx, immediate_signal->immediate);                           \
+                    break;                                                                      \
+                }                                                                               \
+                case MonitorSignal: {                                                           \
+                    struct MonitorPointerSignal *monitor_signal                                 \
+                        = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);      \
+                    context_add_monitor(ctx, monitor_signal->monitor);                          \
+                    break;                                                                      \
+                }                                                                               \
+                case DemonitorSignal: {                                                         \
+                    struct RefSignal *ref_signal                                                \
+                        = CONTAINER_OF(signal_message, struct RefSignal, base);                 \
+                    context_demonitor(ctx, ref_signal->ref_ticks);                              \
                     break;                                                                      \
                 }                                                                               \
                 case NormalMessage: {                                                           \
