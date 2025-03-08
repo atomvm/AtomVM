@@ -410,7 +410,7 @@ void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
  * @param filename on output the filename or NULL if it's module.erl. Can be NULL.
  * @return \c true if the line was found
  */
-bool module_find_line(Module *mod, unsigned int offset, uint16_t *line, size_t *filename_len, const uint8_t **filename);
+bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename);
 
 /**
  * @return true if the module has line information, false, otherwise.

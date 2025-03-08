@@ -20,6 +20,11 @@
 -module(test_stacktrace).
 
 -export([start/0, maybe_crash/1]).
+-export([
+    throw_with_file_and_line/0,
+    throw_with_other_file_and_line/0,
+    throw_with_other_file_and_line_large_value/0
+]).
 
 -include("test_stacktrace.hrl").
 
@@ -36,6 +41,7 @@ start() ->
     ok = test_catch(),
     ok = maybe_test_filelineno(),
     ok = maybe_test_filelineno_other_file(),
+    ok = maybe_test_filelineno_large(),
     0.
 
 test_local_throw() ->
@@ -233,15 +239,15 @@ test_catch() ->
     do_some_stuff(Result),
     Result.
 
-maybe_test_filelineno() ->
+maybe_test_filelineno(Fun) ->
     ok =
         try
-            throw_with_file_and_line(),
+            ?MODULE:Fun(),
             fail
         catch
             throw:{File, Line}:Stacktrace ->
                 [Frame | _] = Stacktrace,
-                {?MODULE, throw_with_file_and_line, 0, AuxData} = Frame,
+                {?MODULE, Fun, 0, AuxData} = Frame,
                 case {get_value(file, AuxData), get_value(line, AuxData)} of
                     {undefined, undefined} ->
                         ok;
@@ -262,34 +268,16 @@ maybe_test_filelineno() ->
                 end
         end.
 
+maybe_test_filelineno() ->
+    maybe_test_filelineno(throw_with_file_and_line).
+
 maybe_test_filelineno_other_file() ->
-    ok =
-        try
-            throw_with_other_file_and_line(),
-            fail
-        catch
-            throw:{File, Line}:Stacktrace ->
-                [Frame | _] = Stacktrace,
-                {?MODULE, throw_with_other_file_and_line, 0, AuxData} = Frame,
-                case {get_value(file, AuxData), get_value(line, AuxData)} of
-                    {undefined, undefined} ->
-                        ok;
-                    {F, L} ->
-                        Ef =
-                            case is_binary(F) of
-                                true ->
-                                    erlang:binary_to_list(F);
-                                _ ->
-                                    F
-                            end,
-                        case File == Ef andalso Line == L of
-                            true ->
-                                ok;
-                            _ ->
-                                {unexpected_file_line, F, L}
-                        end
-                end
-        end.
+    maybe_test_filelineno(throw_with_other_file_and_line).
+
+% This test actually succeeds even if large line numbers are not supported
+% because all line numbers are then disabled.
+maybe_test_filelineno_large() ->
+    maybe_test_filelineno(throw_with_other_file_and_line_large_value).
 
 get_value(_Key, []) ->
     undefined;
