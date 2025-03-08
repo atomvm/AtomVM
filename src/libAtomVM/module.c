@@ -43,13 +43,6 @@
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
 
-// TODO Constants similar to these are defined in opcodesswitch.h and should
-// be refactored so they can be used here, as well.
-#define TAG_COMPACT_INT 0x01
-#define TAG_COMPACT_ATOM 0x02
-#define TAG_EXTENDED_INT 0x09
-#define TAG_EXTENDED_ATOM 0x0A
-
 #define CHECK_FREE_SPACE(space, error)           \
     if ((size_t) ((pos + space) - data) > len) { \
         fprintf(stderr, error);                  \
@@ -449,22 +442,39 @@ static bool module_check_line_refs(Module *mod, const uint8_t **data, size_t len
         }
         uint8_t tag = *pos;
         switch (tag & 0x0F) {
-            case TAG_COMPACT_INT: {
+            case COMPACT_INTEGER: {
                 ++i;
                 ++pos;
                 break;
             }
-            case TAG_EXTENDED_INT: {
+            case COMPACT_LARGE_INTEGER: {
                 ++pos;
+                switch (tag & COMPACT_LARGE_IMM_MASK) {
+                    case COMPACT_11BITS_VALUE: {
+                        ++pos;
+                        break;
+                    }
+                    case COMPACT_NBITS_VALUE: {
+                        int sz = (tag >> 5) + 2;
+                        if (UNLIKELY(sz > 4)) {
+                            fprintf(stderr, "Invalid line_ref: expected extended int with sz <= 4 (line number <= 2^31)");
+                            return false;
+                        }
+                        pos += sz;
+                        break;
+                    }
+                    default:
+                        fprintf(stderr, "Invalid line_ref: expected extended int -- tag = %u", (unsigned int) tag);
+                        return false;
+                }
                 if ((size_t) (pos - *data) > len) {
                     fprintf(stderr, "Invalid line_ref: expected extended int.\n");
                     return false;
                 }
                 ++i;
-                ++pos;
                 break;
             }
-            case TAG_COMPACT_ATOM: {
+            case COMPACT_ATOM: {
                 uint16_t location_ix = ((tag & 0xF0) >> 4);
                 if (location_ix > mod->locations_count) {
                     fprintf(stderr, "Invalid line_ref: location_ix = %d is greater than locations_count = %d.\n", (int) location_ix, (int) mod->locations_count);
@@ -473,11 +483,16 @@ static bool module_check_line_refs(Module *mod, const uint8_t **data, size_t len
                 ++pos;
                 break;
             }
-            case TAG_EXTENDED_ATOM: {
+            case COMPACT_LARGE_ATOM: {
+                // We don't support more than 11bits (2048) locations.
+                if (UNLIKELY((tag & COMPACT_LARGE_IMM_MASK) != COMPACT_11BITS_VALUE)) {
+                    fprintf(stderr, "Invalid line_ref: location_ix is larger than 2048.\n");
+                    return false;
+                }
                 uint16_t high_order_3_bits = (tag & 0xE0);
                 ++pos;
                 if ((size_t) (pos - *data) > len) {
-                    fprintf(stderr, "Invalid line_ref: expected extended int.\n");
+                    fprintf(stderr, "Invalid line_ref: expected extended atom.\n");
                     return false;
                 }
                 uint8_t next_byte = *pos;
@@ -490,7 +505,6 @@ static bool module_check_line_refs(Module *mod, const uint8_t **data, size_t len
                 break;
             }
             default:
-                // TODO handle integer compact encodings > 2048
                 fprintf(stderr, "Unsupported line_ref tag: %u\n", tag);
                 return false;
         }
@@ -520,7 +534,7 @@ static bool module_check_locations(Module *mod, const uint8_t *data, size_t len)
     return true;
 }
 
-static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint16_t *out_line, uint16_t *out_location)
+static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint32_t *out_line, uint16_t *out_location)
 {
     // First is undefined
     if (line_ref == 0) {
@@ -535,9 +549,9 @@ static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint16_t *out_li
     while (i <= mod->line_refs_count) {
         uint8_t tag = *pos;
         switch (tag & 0x0F) {
-            case TAG_COMPACT_INT: {
+            case COMPACT_INTEGER: {
                 if (i == line_ref) {
-                    uint16_t line_idx = ((tag & 0xF0) >> 4);
+                    uint32_t line_idx = ((tag & 0xF0) >> 4);
                     *out_line = line_idx;
                     *out_location = location_ix;
                     return true;
@@ -546,32 +560,49 @@ static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint16_t *out_li
                 ++pos;
                 break;
             }
-            case TAG_EXTENDED_INT: {
+            case COMPACT_LARGE_INTEGER: {
+                uint32_t line_idx;
+                switch (tag & COMPACT_LARGE_IMM_MASK) {
+                    case COMPACT_11BITS_VALUE: {
+                        uint16_t high_order_3_bits = (tag & 0xE0);
+                        line_idx = ((high_order_3_bits << 3) | pos[1]);
+                        pos += 2;
+                        break;
+                    }
+                    case COMPACT_NBITS_VALUE: {
+                        pos++;
+                        int sz = (tag >> 5) + 2;
+                        line_idx = 0;
+                        for (int i = 0; i < sz; i++) {
+                            line_idx = line_idx * 256 + pos[i];
+                        }
+                        pos += sz;
+                        break;
+                    }
+                    default:
+                        UNREACHABLE();
+                }
                 if (i == line_ref) {
-                    uint16_t high_order_3_bits = (tag & 0xE0);
-                    uint16_t line_idx = ((high_order_3_bits << 3) | pos[1]);
                     *out_line = line_idx;
                     *out_location = location_ix;
                     return true;
                 }
-                pos += 2;
                 ++i;
                 break;
             }
-            case TAG_COMPACT_ATOM: {
+            case COMPACT_ATOM: {
                 location_ix = ((tag & 0xF0) >> 4);
                 ++pos;
                 break;
             }
-            case TAG_EXTENDED_ATOM: {
+            case COMPACT_LARGE_ATOM: {
                 uint16_t high_order_3_bits = (tag & 0xE0);
                 location_ix = ((high_order_3_bits << 3) | pos[1]);
                 pos += 2;
                 break;
             }
             default:
-                // TODO handle integer compact encodings > 2048
-                return false;
+                UNREACHABLE();
         }
     }
 
@@ -680,7 +711,7 @@ void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
     list_append(&mod->line_ref_offsets, &ref_offset->head);
 }
 
-static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint16_t *line, size_t *filename_len, const uint8_t **filename)
+static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     uint16_t location_ix;
     if (UNLIKELY(!module_get_line_ref(mod, line_ref, line, &location_ix))) {
@@ -689,7 +720,7 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint16_t *line,
     return module_get_location(mod, location_ix, filename_len, filename);
 }
 
-bool module_find_line(Module *mod, unsigned int offset, uint16_t *line, size_t *filename_len, const uint8_t **filename)
+bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     int i = 0;
     struct LineRefOffset *head = GET_LIST_ENTRY(&mod->line_ref_offsets, struct LineRefOffset, head);
