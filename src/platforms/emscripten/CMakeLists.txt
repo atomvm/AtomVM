@@ -32,6 +32,8 @@ endif ()
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
+set(AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION "25" CACHE STRING "Minimum supported OTP Release for Erlang compiler")
+set(AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION "28" CACHE STRING "Maximum supported OTP Release for Erlang compiler")
 
 set(
     PLATFORM_LIB_SUFFIX
