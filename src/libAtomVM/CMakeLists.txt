@@ -102,6 +102,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
+    utils.c
     valueshashtable.c
 )
 
