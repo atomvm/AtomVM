@@ -2198,41 +2198,10 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
-{
-    int integer_string_len = 0;
-    bool neg = int_value < 0;
-    if (neg) {
-        integer_string_len++;
-        if (integer_string) {
-            integer_string[0] = '-';
-        }
-    }
-    avm_int64_t v = int_value;
-    do {
-        v = v / base;
-        integer_string_len++;
-    } while (v != 0);
-    if (integer_string) {
-        int ix = 1;
-        do {
-            avm_int_t digit = int_value % base;
-            if (digit < 0) {
-                digit = -digit;
-            }
-            if (digit < 10) {
-                integer_string[integer_string_len - ix] = '0' + digit;
-            } else {
-                integer_string[integer_string_len - ix] = 'A' + digit - 10;
-            }
-            int_value = int_value / base;
-            ix++;
-        } while (int_value != 0);
-    }
-    return integer_string_len;
-}
-
-static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
+// The return value of this function is used just to check if it failed or not
+// using a term instead of a bool allows using VALIDATE_VALUE & RAISE_ERROR
+static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, size_t tmp_buf_size,
+    char **int_buf, size_t *int_len)
 {
     term value = argv[0];
     avm_int_t base = 10;
@@ -2245,36 +2214,83 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
         }
     }
 
-    avm_int64_t int_value = term_maybe_unbox_int64(value);
-    size_t len = lltoa(int_value, base, NULL);
+    _Static_assert(sizeof(intptr_t) >= sizeof(avm_int_t), "Cast to intptr_t is not safe");
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (term_is_integer(value)) {
+        avm_int_t int_val = term_to_int(value);
+        size_t wlen = intptr_write_to_ascii_buf(int_val, base, tmp_buf + tmp_buf_size);
+        *int_len = wlen;
+        *int_buf = tmp_buf + tmp_buf_size - wlen;
+    } else {
+        switch (term_boxed_size(value)) {
+            case 0:
+                UNREACHABLE();
+            case 1: {
+                avm_int_t int_val = term_unbox_int(value);
+                size_t wlen = intptr_write_to_ascii_buf(int_val, base, tmp_buf + tmp_buf_size);
+                *int_len = wlen;
+                *int_buf = tmp_buf + tmp_buf_size - wlen;
+                break;
+            }
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2: {
+                avm_int64_t int64_val = term_unbox_int64(value);
+                size_t wlen = int64_write_to_ascii_buf(int64_val, base, tmp_buf + tmp_buf_size);
+                *int_len = wlen;
+                *int_buf = tmp_buf + tmp_buf_size - wlen;
+                break;
+            }
+#endif
+            default:
+                abort();
+        }
+    }
+
+    // `[]` is just a dummy return value, everything valid is fine
+    return term_nil();
+}
+
+static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
+{
+#ifdef INT64_TO_A_BUF_LEN
+    size_t tmp_buf_size = INT64_WRITE_TO_ASCII_BUF_LEN;
+#else
+    size_t tmp_buf_size = INTPTR_WRITE_TO_ASCII_BUF_LEN;
+#endif
+    char tmp_buf[tmp_buf_size];
+
+    char *int_buf;
+    size_t int_len;
+    if (UNLIKELY(term_is_invalid_term(
+            integer_to_buf(ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len)))) {
+        return term_invalid_term();
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(int_len), MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term result = term_create_empty_binary(len, &ctx->heap, ctx->global);
-    lltoa(int_value, base, (char *) term_binary_data(result));
-    return result;
+
+    return term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
 }
 
 static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
 {
-    term value = argv[0];
-    unsigned base = 10;
-    VALIDATE_VALUE(value, term_is_any_integer);
-    if (argc > 1) {
-        VALIDATE_VALUE(argv[1], term_is_integer);
-        base = term_to_int(argv[1]);
-        if (UNLIKELY(base < 2 || base > 36)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
+#ifdef INT64_TO_A_BUF_LEN
+    size_t tmp_buf_size = INT64_WRITE_TO_ASCII_BUF_LEN;
+#else
+    size_t tmp_buf_size = INTPTR_WRITE_TO_ASCII_BUF_LEN;
+#endif
+    char tmp_buf[tmp_buf_size];
+
+    char *int_buf;
+    size_t int_len;
+    if (UNLIKELY(term_is_invalid_term(
+            integer_to_buf(ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len)))) {
+        return term_invalid_term();
     }
 
-    avm_int64_t int_value = term_maybe_unbox_int64(value);
-    size_t integer_string_len = lltoa(int_value, base, NULL);
-    char integer_string[integer_string_len];
-    lltoa(int_value, base, integer_string);
-
-    return make_list_from_ascii_buf((uint8_t *) integer_string, integer_string_len, ctx);
+    return make_list_from_ascii_buf((uint8_t *) int_buf, int_len, ctx);
 }
 
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
