@@ -377,6 +377,22 @@ For persisting small amounts of data during deep sleep, you can use the [RTC mem
 
 Usage of light sleep is untested, and no support for controlling light sleep is currently implemented. Reach out if you do any experiments and measurements.
 
+#### Other Build settings
+
+Various other build settings can be changed in `idf.py menuconfig` in `src/platforms/esp32`, that affect the performance and power usage of the ESP32.
+
+Of note AtomVM releases are built with the `Optimize for performance (-O2)` compiler option:
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Compiler options ---> Optimization Level () --->`
+
+See [CONFIG_COMPILER_OPTIMIZATION_PERF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-compiler-optimization)
+
+And all builds are built with the mbedTLS `Enable fixed-point multiplication optimisations` option:
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Component config ---> mbedTLS  ---> Enable fixed-point multiplication optimisations`
+
+See [MBEDTLS_ECP_FIXED_POINT_OPTIM](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-ecp-fixed-point-optim)
+
 ### Flash Layout
 
 The AtomVM Flash memory is partitioned to include areas for the above binary artifacts created from the build, as well areas for runtime information used by the ESP32 and compiled Erlang/Elixir code.
