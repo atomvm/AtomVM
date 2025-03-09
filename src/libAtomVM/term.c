@@ -22,6 +22,7 @@
 
 #include "atom.h"
 #include "atom_table.h"
+#include "intn.h"
 #include "context.h"
 #include "interop.h"
 #include "module.h"
@@ -393,8 +394,15 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             case 2:
                 return fun->print(fun, AVM_INT64_FMT, term_unbox_int64(t));
 #endif
-            default:
-                AVM_ABORT();
+            default: {
+                size_t boxed_size = term_intn_size(t);
+                intn_digit_t *dest_buf = (void *) term_intn_data(t);
+                size_t unused_s_len;
+                char *s = intn_to_string(dest_buf, boxed_size * 2, 10, &unused_s_len);
+                int print_res = fun->print(fun, "%s", s);
+                free(s);
+                return print_res;
+            }
         }
 
     } else if (term_is_float(t)) {

@@ -84,6 +84,7 @@ extern "C" {
 #define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
+#define BOXED_INTN_SIZE(term_size) ((term_size) + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
@@ -868,6 +869,26 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     } else {
         return 0;
     }
+}
+
+static inline term term_create_uninitialized_intn(size_t n, Heap *heap)
+{
+    term *boxed_int = memory_heap_alloc(heap, 1 + n);
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+
+    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline void *term_intn_data(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (void *) (boxed_value + 1);
+}
+
+static inline size_t term_intn_size(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(boxed_value[0]);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
