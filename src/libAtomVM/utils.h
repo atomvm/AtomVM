@@ -28,6 +28,7 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -325,6 +326,38 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
         __builtin_unreachable()
 #else
     #define UNREACHABLE(...)
+#endif
+
+#if defined(__GNUC__) && !defined(__clang__)
+#if __GNUC__ >= 13
+#define HAVE_ASSUME 1
+#define ASSUME(x) __attribute__((assume((x))))
+#endif
+#endif
+
+#ifndef HAVE_ASSUME
+#if defined __has_builtin
+#if __has_builtin(__builtin_assume)
+#define HAVE_ASSUME 1
+#define ASSUME(x) __builtin_assume((x))
+#endif
+#endif
+#endif
+
+#ifndef ASSUME
+#define ASSUME(...)
+#endif
+
+#if INTPTR_MAX <= INT32_MAX
+#define INTPTR_TO_A_BUF_LEN (32 + 1 + 1)
+#define INT64_TO_A_BUF_LEN (64 + 1 + 1)
+#elif INTPTR_MAX <= INT64_MAX
+#define INTPTR_TO_A_BUF_LEN (64 + 1 + 1)
+#endif
+
+size_t intptr_to_a_unterminated(intptr_t n, char *out_end, uintptr_t base);
+#if INT64_MAX > INTPTR_MAX
+size_t int64_to_a_unterminated(int64_t n, char *out_end, uintptr_t base);
 #endif
 
 #ifdef __cplusplus
