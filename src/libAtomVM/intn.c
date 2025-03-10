@@ -244,11 +244,30 @@ static size_t count16(const uint16_t *num, size_t num_len)
     return count;
 }
 
-static int nlz(unsigned x)
+static inline uint32_t nlz(uint32_t x)
 {
-    int n;
-    if (x == 0)
-        return (32);
+    // This function is used only from divmnu, that doesn't allow 32 leading zeros
+    ASSUME(x != 0);
+
+#if defined(__GNUC__)                                                                              \
+    || (defined(__has_builtin) && __has_builtin(__builtin_clz) && __has_builtin(__builtin_clzl)    \
+        && __has_builtin(__builtin_clzll))
+    if (sizeof(unsigned int) == sizeof(uint32_t)) {
+        return __builtin_clz(x);
+    } else if (sizeof(unsigned long) == sizeof(uint32_t)) {
+        return __builtin_clzl(x);
+    } else if (sizeof(unsigned long long) == sizeof(uint32_t)) {
+        return __builtin_clzll(x);
+    }
+#elif __STDC_VERSION == 202311L
+    return stdc_leading_zeros(x);
+#else
+    uint32_t n;
+    if (x == 0) {
+        // Original version was returning 32, but in our version 32 zeros are not allowed
+        UNREACHABLE();
+        // return (32);
+    }
     n = 1;
     if ((x >> 16) == 0) {
         n = n + 16;
@@ -268,6 +287,7 @@ static int nlz(unsigned x)
     }
     n = n - (x >> 31);
     return n;
+#endif
 }
 
 // this function doesn't use alloca as the original one
