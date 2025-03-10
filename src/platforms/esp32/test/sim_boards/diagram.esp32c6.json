@@ -3,7 +3,13 @@
   "author": "Uri Shaked",
   "editor": "wokwi",
   "parts": [
-    { "type": "board-esp32-c6-devkitc-1", "id": "esp", "top": 5.29, "left": 4.12, "attrs": {} },
+    {
+      "type": "board-esp32-c6-devkitc-1",
+      "id": "esp",
+      "top": 5.29,
+      "left": 4.12,
+      "attrs": { "cpuFrequency": "32" }
+    },
     {
       "type": "wokwi-slide-potentiometer",
       "id": "pot1",
@@ -14,11 +20,11 @@
     }
   ],
   "connections": [
-    [ "esp:TX", "$serialMonitor:RX", "", [] ],
-    [ "esp:RX", "$serialMonitor:TX", "", [] ],
-    [ "esp:GND.1", "pot1:GND", "black", [ "h-28.8", "v48", "h-211.2" ] ],
-    [ "esp:3V3", "pot1:VCC", "red", [ "v0", "h-38.4", "v144" ] ],
-    [ "esp:3", "pot1:SIG", "green", [ "h0" ] ]
+    ["esp:TX", "$serialMonitor:RX", "", []],
+    ["esp:RX", "$serialMonitor:TX", "", []],
+    ["esp:GND.1", "pot1:GND", "black", ["h-28.8", "v48", "h-211.2"]],
+    ["esp:3V3", "pot1:VCC", "red", ["v0", "h-38.4", "v144"]],
+    ["esp:3", "pot1:SIG", "green", ["h0"]]
   ],
   "dependencies": {}
 }
