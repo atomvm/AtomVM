@@ -134,6 +134,10 @@ struct Context
     unsigned int trace_receive : 1;
 #endif
 
+#ifndef AVM_NO_SMP
+    size_t scheduler_id;
+#endif
+
     enum ContextFlags ATOMIC flags;
 
     void *platform_data;
