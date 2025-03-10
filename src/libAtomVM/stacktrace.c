@@ -139,7 +139,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
                 prev_mod = cp_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cp_mod)) {
-                    uint16_t line;
+                    uint32_t line;
                     const uint8_t *filename;
                     size_t filename_len;
                     if (LIKELY(module_find_line(cp_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
@@ -163,7 +163,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
                 prev_mod = cl_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cl_mod)) {
-                    uint16_t line;
+                    uint32_t line;
                     const uint8_t *filename;
                     size_t filename_len;
                     if (LIKELY(module_find_line(cl_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
@@ -180,7 +180,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
     num_frames++;
     if (module_has_line_chunk(mod)) {
-        uint16_t line;
+        uint32_t line;
         const uint8_t *filename;
         size_t filename_len;
         if (LIKELY(module_find_line(mod, (unsigned int) current_offset, &line, &filename_len, &filename))) {
@@ -342,7 +342,7 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 
         term aux_data = term_nil();
         if (module_has_line_chunk(cp_mod)) {
-            uint16_t line;
+            uint32_t line;
             const uint8_t *filename;
             size_t filename_len;
             if (LIKELY(module_find_line(cp_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
