@@ -126,27 +126,30 @@ endif()
 ##
 find_package(Sphinx)
 if(SPHINX_FOUND)
+  find_package(Doxygen)
+  if(DOXYGEN_FOUND)
+    message("Doxygen found: ${DOXYGEN_BUILD_EXECUTABLE}")
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_stylesheet.rts DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_template.rtt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/libatomvm)
     add_custom_target(sphinx-html
-        ${SPHINX_BUILD_EXECUTABLE} -q -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
+        ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx HTML documentation" VERBATIM
         DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
     )
 
     add_custom_target(sphinx-pdf
-        ${SPHINX_BUILD_EXECUTABLE} -q -D exclude_patterns=apidocs/libatomvm/** -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
+        ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -D exclude_patterns=apidocs/libatomvm/** -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx PDF documentation" VERBATIM
         DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
     )
 
     add_custom_target(sphinx-epub
-        ${SPHINX_BUILD_EXECUTABLE} -q -D exclude_patterns=apidocs/libatomvm/**,LICENSES/** -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
+        ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -D exclude_patterns=apidocs/libatomvm/**,LICENSES/** -b epub -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/epub/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx EPub documentation" VERBATIM
         DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
@@ -162,6 +165,9 @@ if(SPHINX_FOUND)
         )
     endif()
 
+  else()
+    message("Unable to find Doxygen -- no Sphinx documentation will be generated")
+  endif()
 else()
     message("Unable to find Sphinx -- no Sphinx documentation will be generated")
 endif()
