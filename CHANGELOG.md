@@ -58,6 +58,8 @@ memory error
 - Fixed possible concurrency problems in ESP32 UART driver
 - Fixed concurrency and memory leak related to links and monitors
 - Fixed issues with parsing of line references for stack traces
+- Correctly set Pico-W unique hostname, use `dhcp_hostname` if present in config.
+(see issue 1094)[https://github.com/atomvm/AtomVM/issues/1094].
 
 ### Changed
 
