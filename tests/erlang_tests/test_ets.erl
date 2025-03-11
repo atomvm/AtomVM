@@ -33,6 +33,7 @@ start() ->
     ok = test_lookup_element(),
     ok = test_insert_list(),
     ok = test_update_counter(),
+    ok = test_delete_table(),
     0.
 
 test_basic() ->
@@ -385,4 +386,17 @@ test_update_counter() ->
     0 = ets:update_counter(Tid, patatas, {3, -2, 0, 0}),
     10 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
     0 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
+    ok.
+
+test_delete_table() ->
+    Tid = ets:new(test_delete_table, []),
+    true = ets:delete(Tid),
+    ok = expect_failure(
+        fun() -> ets:insert(Tid, {gnu, gnat}) end
+    ),
+    Ntid = ets:new(test_delete_table, []),
+    true = ets:delete(Ntid),
+    ok = expect_failure(fun() -> ets:delete(Ntid) end),
+    ok = expect_failure(fun() -> ets:delete(Tid) end),
+    ok = expect_failure(fun() -> ets:delete(non_existent) end),
     ok.
