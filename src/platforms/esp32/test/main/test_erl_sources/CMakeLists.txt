@@ -53,6 +53,7 @@ compile_erlang(test_ssl)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
 compile_erlang(test_tz)
+compile_erlang(test_gpio)
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
@@ -74,6 +75,7 @@ add_custom_command(
         test_time_and_processes.beam
         test_twdt.beam
         test_tz.beam
+        test_gpio.beam
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/test_esp_partition.beam"
@@ -92,6 +94,7 @@ add_custom_command(
         "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_twdt.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_tz.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_gpio.beam"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )

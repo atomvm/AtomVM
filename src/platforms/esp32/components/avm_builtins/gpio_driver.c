@@ -59,18 +59,9 @@ static const struct Nif *gpio_nif_get_nif(const char *nifname);
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static void gpio_driver_init(GlobalContext *global);
-#endif
-
-#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
 static NativeHandlerResult consume_gpio_mailbox(Context *ctx);
 static void gpio_isr_handler(void *arg);
-
 static Context *gpio_driver_create_port(GlobalContext *global, term opts);
-#endif
-
-#ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
-static const char *const gpio_atom = "\x4" "gpio";
-static const char *const gpio_driver_atom = "\xB" "gpio_driver";
 #endif
 
 static const AtomStringIntPair pin_mode_table[] = {
@@ -99,6 +90,16 @@ static const AtomStringIntPair pin_level_table[] = {
     { ATOM_STR("\x3", "low"), GPIOPinLow },
     { ATOM_STR("\x4", "high"), GPIOPinHigh },
     SELECT_INT_DEFAULT(GPIOPinInvalid)
+};
+
+static const AtomStringIntPair int_trigger_table[] = {
+    { ATOM_STR("\x4", "none"), GPIO_INTR_DISABLE },
+    { ATOM_STR("\x6", "rising"), GPIO_INTR_POSEDGE },
+    { ATOM_STR("\x7", "falling"), GPIO_INTR_NEGEDGE },
+    { ATOM_STR("\x4", "both"), GPIO_INTR_ANYEDGE },
+    { ATOM_STR("\x3", "low"), GPIO_INTR_LOW_LEVEL },
+    { ATOM_STR("\x4", "high"), GPIO_INTR_HIGH_LEVEL },
+    SELECT_INT_DEFAULT(GPIO_INTR_MAX)
 };
 
 enum gpio_cmd
@@ -139,7 +140,29 @@ struct GPIOData
     struct ListHead gpio_listeners;
 };
 
-/* TODO: Change error returns to {error, Reason} (See: https://github.com/atomvm/AtomVM/issues/894) */
+static bool term_is_logic_level(term level)
+{
+    bool result = false;
+    if (level == LOW_ATOM) {
+        result = true;
+    }
+    if (level == HIGH_ATOM) {
+        result = true;
+    }
+    if (term_is_integer(level)) {
+        switch (term_to_int(level)) {
+            case 0:
+                result = true;
+                break;
+            case 1:
+                result = true;
+                break;
+            default:
+                result = false;
+        }
+    }
+    return result;
+}
 
 static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode_term)
 {
@@ -147,21 +170,21 @@ static inline term gpio_set_pin_mode(Context *ctx, term gpio_num_term, term mode
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     avm_int_t mode = interop_atom_term_select_int(pin_mode_table, mode_term, ctx->global);
     if (UNLIKELY(mode < 0)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
     esp_err_t result = gpio_set_direction(gpio_num, (gpio_mode_t) mode);
 
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     return OK_ATOM;
@@ -178,21 +201,21 @@ static inline term set_pin_pull_mode(Context *ctx, term gpio_num_term, term pull
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     avm_int_t pull_mode = get_pull_mode(ctx, pull);
     if (UNLIKELY(pull_mode < 0)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     esp_err_t result = gpio_set_pull_mode(gpio_num, (gpio_pull_mode_t) pull_mode);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
     return OK_ATOM;
 }
@@ -203,16 +226,16 @@ static inline term hold_en(term gpio_num_term)
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     esp_err_t result = gpio_hold_en(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
     return OK_ATOM;
 }
@@ -223,16 +246,16 @@ static inline term hold_dis(term gpio_num_term)
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     esp_err_t result = gpio_hold_dis(gpio_num);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
     return OK_ATOM;
 }
@@ -243,45 +266,42 @@ static inline term gpio_digital_write(Context *ctx, term gpio_num_term, term lev
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     int level;
+    if (UNLIKELY(!term_is_logic_level(level_term))) {
+        return BADARG_ATOM;
+    }
     if (term_is_integer(level_term)) {
         level = term_to_int32(level_term);
-        if (UNLIKELY((level != 0) && (level != 1))) {
-            return ERROR_ATOM;
-        }
     } else {
         level = interop_atom_term_select_int(pin_level_table, level_term, ctx->global);
-        if (UNLIKELY(level < 0)) {
-            return ERROR_ATOM;
-        }
     }
 
     esp_err_t result = gpio_set_level(gpio_num, level);
     if (UNLIKELY(result != ESP_OK)) {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     return OK_ATOM;
 }
 
-static inline term gpio_digital_read(term gpio_num_term)
+static inline term gpio_digital_read(Context *ctx, term gpio_num_term)
 {
     gpio_num_t gpio_num;
     if (LIKELY(term_is_integer(gpio_num_term))) {
         avm_int_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            return BADARG_ATOM;
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        return BADARG_ATOM;
     }
 
     avm_int_t level = gpio_get_level(gpio_num);
@@ -293,8 +313,12 @@ static inline term gpio_digital_read(term gpio_num_term)
 
 void gpio_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, gpio_driver_atom);
-    gpio_driver = term_from_atom_index(index);
+    int index = globalcontext_insert_atom(global, ATOM_STR("\xB", "gpio_driver"));
+    if (UNLIKELY(index < 0 )){
+        ESP_LOGE(TAG, "Failed to initialize gpio_driver");
+    } else {
+        gpio_driver = term_from_atom_index(index);
+    }
 }
 
 Context *gpio_driver_create_port(GlobalContext *global, term opts)
@@ -312,12 +336,18 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     ctx->native_handler = consume_gpio_mailbox;
     ctx->platform_data = gpio_data;
 
-    term reg_name_term = globalcontext_make_atom(global, gpio_atom);
-    int atom_index = term_to_atom_index(reg_name_term);
-
-    if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, ctx->process_id))) {
+    int gpio_atom_index = globalcontext_insert_atom(global, ATOM_STR("\x4", "gpio"));
+    if (UNLIKELY(gpio_atom_index < 0)) {
+        ESP_LOGE(TAG, "Failed to create 'gpio' atom to register the driver!");
+        free(gpio_data);
         scheduler_terminate(ctx);
+        return NULL;
+    }
+
+    if (UNLIKELY(!globalcontext_register_process(ctx->global, gpio_atom_index, ctx->process_id))) {
         ESP_LOGE(TAG, "Only a single GPIO driver can be opened.");
+        free(gpio_data);
+        scheduler_terminate(ctx);
         return NULL;
     }
 
@@ -327,9 +357,10 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
 static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
-    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
+    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, ATOM_STR("\x4", "gpio"), AtomTableNoOpts);
     if (UNLIKELY(!globalcontext_get_registered_process(glb, gpio_atom_index))) {
-        return ERROR_ATOM;
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, NOPROC_ATOM);
     }
 
     struct GPIOData *gpio_data = ctx->platform_data;
@@ -386,7 +417,12 @@ static term gpiodriver_set_level(Context *ctx, term cmd)
     term gpio_num = term_get_tuple_element(cmd, 1);
     term level = term_get_tuple_element(cmd, 2);
 
-    return gpio_digital_write(ctx, gpio_num, level);
+    term result = gpio_digital_write(ctx, gpio_num, level);
+    if (UNLIKELY(result != OK_ATOM)) {
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, result);
+    }
+    return result;
 }
 
 static term gpiodriver_set_direction(Context *ctx, term cmd)
@@ -394,13 +430,23 @@ static term gpiodriver_set_direction(Context *ctx, term cmd)
     term gpio_num = term_get_tuple_element(cmd, 1);
     term direction = term_get_tuple_element(cmd, 2);
 
-    return gpio_set_pin_mode(ctx, gpio_num, direction);
+    term result = gpio_set_pin_mode(ctx, gpio_num, direction);
+    if (UNLIKELY(result != OK_ATOM)) {
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, result);
+    }
+    return result;
 }
 
-static term gpiodriver_read(term cmd)
+static term gpiodriver_read(Context *ctx, term cmd)
 {
     term gpio_num = term_get_tuple_element(cmd, 1);
-    return gpio_digital_read(gpio_num);
+    term result = gpio_digital_read(ctx, gpio_num);
+    if (UNLIKELY(!term_is_logic_level(result))) {
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, result);
+    }
+    return result;
 }
 
 static bool gpiodriver_is_gpio_attached(struct GPIOData *gpio_data, int gpio_num)
@@ -438,7 +484,8 @@ static term unregister_interrupt_listener(Context *ctx, gpio_num_t gpio_num)
         }
     }
 
-    return ERROR_ATOM;
+    port_ensure_available(ctx, TUPLE_SIZE(2));
+    return port_create_error_tuple(ctx, BADARG_ATOM);
 }
 
 static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
@@ -453,11 +500,13 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     if (LIKELY(term_is_integer(gpio_num_term))) {
         int32_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     term trigger = term_get_tuple_element(cmd, 2);
@@ -465,7 +514,8 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         term pid = term_get_tuple_element(cmd, 3);
         if (UNLIKELY(!term_is_pid(pid) && !term_is_atom(pid))) {
             ESP_LOGE(TAG, "Invalid listener parameter, must be a pid() or registered process!");
-            return ERROR_ATOM;
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         if (term_is_pid(pid)) {
             target_local_pid = term_to_local_process_id(pid);
@@ -474,7 +524,8 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
             int32_t registered_process = (int32_t) globalcontext_get_registered_process(ctx->global, pid_atom_index);
             if (UNLIKELY(registered_process == 0)) {
                 ESP_LOGE(TAG, "Invalid listener parameter, atom() is not a registered process name!");
-                return ERROR_ATOM;
+                port_ensure_available(ctx, TUPLE_SIZE(2));
+                return port_create_error_tuple(ctx, BADARG_ATOM);
             }
             target_local_pid = registered_process;
         }
@@ -482,41 +533,17 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         target_local_pid = target_pid;
     }
 
-
-    /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
-    gpio_int_type_t interrupt_type;
-    switch (trigger) {
-        case NONE_ATOM:
-            interrupt_type = GPIO_INTR_DISABLE;
-            break;
-
-        case RISING_ATOM:
-            interrupt_type = GPIO_INTR_POSEDGE;
-            break;
-
-        case FALLING_ATOM:
-            interrupt_type = GPIO_INTR_NEGEDGE;
-            break;
-
-        case BOTH_ATOM:
-            interrupt_type = GPIO_INTR_ANYEDGE;
-            break;
-
-        case LOW_ATOM:
-            interrupt_type = GPIO_INTR_LOW_LEVEL;
-            break;
-
-        case HIGH_ATOM:
-            interrupt_type = GPIO_INTR_HIGH_LEVEL;
-            break;
-
-        default:
-            return ERROR_ATOM;
+    gpio_int_type_t interrupt_type = interop_atom_term_select_int(int_trigger_table, trigger, ctx->global);
+    if(UNLIKELY(interrupt_type == GPIO_INTR_MAX)) {
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     if (trigger != NONE_ATOM) {
         if (UNLIKELY(gpiodriver_is_gpio_attached(gpio_data, gpio_num))) {
-            return ERROR_ATOM;
+            ESP_LOGE(TAG, "Pin %i already attached to interrupt", gpio_num);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
 
         TRACE("going to install interrupt for %i.\n", gpio_num);
@@ -529,7 +556,8 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         struct GPIOListenerData *data = malloc(sizeof(struct GPIOListenerData));
         if (IS_NULL_PTR(data)) {
             ESP_LOGE(TAG, "gpiodriver_set_int: Failed to ensure free heap space.");
-            AVM_ABORT();
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
         }
         list_append(&gpio_data->gpio_listeners, &data->gpio_listener_list_head);
         data->gpio = gpio_num;
@@ -538,16 +566,29 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         data->listener.sender = data;
         data->listener.handler = gpio_interrupt_callback;
 
-        gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
-        gpio_set_intr_type(gpio_num, interrupt_type);
-
-        esp_err_t ret = gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
+        // These inputs have already been validated, so any errors indicate a bad state or internal error.
+        esp_err_t ret = gpio_set_direction(gpio_num, GPIO_MODE_INPUT);
         if (UNLIKELY(ret != ESP_OK)) {
-            return ERROR_ATOM;
+            ESP_LOGE(TAG, "Internal error setting direction on pin %i", gpio_num);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, INTERNAL_ERROR_ATOM);
+        }
+        ret = gpio_set_intr_type(gpio_num, interrupt_type);
+        if (UNLIKELY(ret != ESP_OK)) {
+            ESP_LOGE(TAG, "Internal error setting interrupt type %i on pin %i", (int) interrupt_type, gpio_num);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, INTERNAL_ERROR_ATOM);
+        }
+        ret = gpio_isr_handler_add(gpio_num, gpio_isr_handler, data);
+        if (UNLIKELY(ret != ESP_OK)) {
+            ESP_LOGE(TAG, "Internal error adding isr handler for pin %i", gpio_num);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, INTERNAL_ERROR_ATOM);
         }
     } else {
         if (UNLIKELY(!gpiodriver_is_gpio_attached(gpio_data, gpio_num))) {
-            return ERROR_ATOM;
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         gpio_set_intr_type(gpio_num, interrupt_type);
         return unregister_interrupt_listener(ctx, gpio_num);
@@ -563,12 +604,15 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
     if (LIKELY(term_is_integer(gpio_num_term))) {
         int32_t pin_int = term_to_int32(gpio_num_term);
         if (UNLIKELY((pin_int < 0) || (pin_int >= GPIO_NUM_MAX))) {
-            return ERROR_ATOM;
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            return port_create_error_tuple(ctx, BADARG_ATOM);
         }
         gpio_num = (gpio_num_t) pin_int;
     } else {
-        return ERROR_ATOM;
+        port_ensure_available(ctx, TUPLE_SIZE(2));
+        return port_create_error_tuple(ctx, BADARG_ATOM);
     }
+
 
     return unregister_interrupt_listener(ctx, gpio_num);
 }
@@ -609,7 +653,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
             break;
 
         case GPIOReadCmd:
-            ret = gpiodriver_read(gen_message.req);
+            ret = gpiodriver_read(ctx, gen_message.req);
             break;
 
         case GPIOSetIntCmd:
@@ -626,7 +670,8 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
 
         default:
             ESP_LOGW(TAG, "Unrecognized command");
-            ret = ERROR_ATOM;
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            ret = port_create_error_tuple(ctx, BADARG_ATOM);
     }
 
     term ret_msg;
@@ -656,6 +701,7 @@ REGISTER_PORT_DRIVER(gpio, gpio_driver_init, NULL, gpio_driver_create_port)
 //
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_NIFS
+
 
 static term nif_gpio_init(Context *ctx, int argc, term argv[])
 {
@@ -688,20 +734,28 @@ static term nif_gpio_init(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-/* TODO: in the case of {error, Return} we should RAISE_ERROR(Reason) */
-
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return gpio_set_pin_mode(ctx, argv[0], argv[1]);
+    term result = gpio_set_pin_mode(ctx, argv[0], argv[1]);
+    if (UNLIKELY(result != OK_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static term nif_gpio_set_pin_pull(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    return set_pin_pull_mode(ctx, argv[0], argv[1]);
+    term result = set_pin_pull_mode(ctx, argv[0], argv[1]);
+    if (UNLIKELY(result != OK_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static term nif_gpio_hold_en(Context *ctx, int argc, term argv[])
@@ -709,7 +763,12 @@ static term nif_gpio_hold_en(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
 
-    return hold_en(argv[0]);
+    term result = hold_en(argv[0]);
+    if (UNLIKELY(result != OK_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 static term nif_gpio_hold_dis(Context *ctx, int argc, term argv[])
@@ -717,7 +776,12 @@ static term nif_gpio_hold_dis(Context *ctx, int argc, term argv[])
     UNUSED(ctx);
     UNUSED(argc);
 
-    return hold_dis(argv[0]);
+    term result = hold_dis(argv[0]);
+    if (UNLIKELY(result != OK_ATOM)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
 }
 
 #if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 2) && SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP) || (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 2) && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP)
@@ -744,12 +808,21 @@ static term nif_gpio_deep_sleep_hold_dis(Context *ctx, int argc, term argv[])
 
 static term nif_gpio_digital_write(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_write(ctx, argv[0], argv[1]);
+    term result = gpio_digital_write(ctx, argv[0], argv[1]);
+    if (UNLIKELY(result != OK_ATOM)) {
+        RAISE_ERROR(result);
+    }
+    return result;
 }
 
 static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
 {
-    return gpio_digital_read(argv[0]);
+    term result = gpio_digital_read(ctx, argv[0]);
+    if (LIKELY(term_is_logic_level(result))) {
+        return result;
+    } else {
+        RAISE_ERROR(result);
+    }
 }
 
 static const struct Nif gpio_init_nif =

@@ -603,6 +603,15 @@ TEST_CASE("test_twdt", "[test_run]")
 }
 #endif
 
+// test_gpio may only be used by Wokwi Sim and real hardware
+#ifdef TEST_PERIPHERALS
+TEST_CASE("test_gpio", "[test_run]")
+{
+    term ret_value = avm_test_case("test_gpio.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 void app_main(void)
 {
     UNITY_BEGIN();
