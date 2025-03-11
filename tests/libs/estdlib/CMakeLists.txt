@@ -50,6 +50,7 @@ set(ERLANG_MODULES
     test_lists_subtraction
     test_tcp_socket
     test_udp_socket
+    test_bif_bin_arith_ops
     notify_init_server
     ping_pong_server
 )
