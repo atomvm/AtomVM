@@ -731,7 +731,7 @@ unique([X, Y | Tail], Fun) ->
         false ->
             [X | unique([Y | Tail], Fun)]
     end.
-    
+
 %%-----------------------------------------------------------------------------
 %% @param   Pred the predicate to check against elements in List1
 %% @param   List1

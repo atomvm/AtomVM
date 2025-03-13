@@ -22,12 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for `ets:update_counter/3` and `ets:update_counter/4`.
 - Added `erlang:+/1`
 - Added `lists:append/1` and `lists:append/2`
-- Support for zero count in `lists:duplicate/2`.
 - Added `lists:dropwhile/2`.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
+- Support for zero count in `lists:duplicate/2`.
 
 ## [0.6.6] - Unreleased
 
