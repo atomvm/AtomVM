@@ -78,6 +78,7 @@ erlang:ceil/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_er
 erlang:floor/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_floor_1}
 erlang:round/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_round_1}
 erlang:trunc/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_trunc_1}
+erlang:float/1, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif1_ptr = bif_erlang_float_1}
 erlang:bor/2, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif2_ptr = bif_erlang_bor_2}
 erlang:band/2, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif2_ptr = bif_erlang_band_2}
 erlang:bxor/2, {.gcbif.base.type = GCBIFFunctionType, .gcbif.gcbif2_ptr = bif_erlang_bxor_2}

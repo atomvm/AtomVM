@@ -82,6 +82,7 @@ term bif_erlang_ceil_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_floor_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_round_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_trunc_1(Context *ctx, uint32_t fail_label, int live, term arg1);
+term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 
 term bif_erlang_bor_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
