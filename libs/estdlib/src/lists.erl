@@ -60,6 +60,7 @@
     sort/1, sort/2,
     split/2,
     usort/1, usort/2,
+    dropwhile/2,
     duplicate/2,
     sublist/2,
     append/1,
@@ -730,6 +731,32 @@ unique([X, Y | Tail], Fun) ->
         false ->
             [X | unique([Y | Tail], Fun)]
     end.
+    
+%%-----------------------------------------------------------------------------
+%% @param   Pred the predicate to check against elements in List1
+%% @param   List1
+%% @returns List List1 tail at the point predicate returned false for a element
+%% @doc     Drops elements Elem from List1 while Pred(Elem) returns true and returns
+%%          the remaining list. The Pred function must return a boolean.
+%% @end
+%%-----------------------------------------------------------------------------
+% Attribution: https://github.com/erlang/otp/blob/05737d130706c7189a8e6750d9c2252d2cc7987e/lib/stdlib/src/lists.erl#L2403
+-spec dropwhile(Pred, List1) -> List2 when
+    Pred :: fun((Elem :: T) -> boolean()),
+    List1 :: [T],
+    List2 :: [T],
+    T :: term().
+
+dropwhile(Pred, List) when is_function(Pred, 1) ->
+    dropwhile_1(Pred, List).
+
+dropwhile_1(Pred, [Hd | Tail] = Rest) ->
+    case Pred(Hd) of
+        true -> dropwhile_1(Pred, Tail);
+        false -> Rest
+    end;
+dropwhile_1(_Pred, []) ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   Elem the element to duplicate
@@ -739,7 +766,7 @@ unique([X, Y | Tail], Fun) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec duplicate(integer(), Elem) -> [Elem].
-duplicate(Count, Elem) when is_integer(Count) andalso Count > 0 ->
+duplicate(Count, Elem) when is_integer(Count) andalso Count >= 0 ->
     duplicate(Count, Elem, []).
 
 duplicate(0, _Elem, Acc) -> Acc;

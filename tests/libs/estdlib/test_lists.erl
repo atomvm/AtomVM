@@ -47,6 +47,8 @@ test() ->
     ok = test_sort(),
     ok = test_split(),
     ok = test_usort(),
+    ok = test_dropwhile(),
+    ok = test_duplicate(),
     ok = test_filtermap(),
     ok = test_last(),
     ok = test_mapfoldl(),
@@ -293,6 +295,23 @@ test_usort() ->
     ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
 
+    ok.
+    
+test_dropwhile() ->
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> true end, []), []),
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> false end, []), []),
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> false end, [1]), [1]),
+    ?ASSERT_MATCH(lists:dropwhile(fun(X) -> X == 1 end, [1, 1, 1, 2, 3]), [2, 3]),
+    ?ASSERT_ERROR(lists:dropwhile([], []), function_clause),
+    ?ASSERT_ERROR(lists:dropwhile(fun(X) -> X == 1 end, [1 | 1]), function_clause),
+    ok.
+
+test_duplicate() ->
+    ?ASSERT_MATCH(lists:duplicate(0, x), []),
+    ?ASSERT_MATCH(lists:duplicate(1, x), [x]),
+    ?ASSERT_MATCH(lists:duplicate(3, []), [[], [], []]),
+    ?ASSERT_ERROR(lists:duplicate(-1, x), function_clause),
+    ?ASSERT_ERROR(lists:duplicate(x, x), function_clause),
     ok.
 
 test_filtermap() ->
