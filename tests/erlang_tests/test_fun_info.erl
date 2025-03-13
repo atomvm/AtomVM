@@ -19,26 +19,33 @@
 %
 
 -module(test_fun_info).
+
 -export([start/0, get_fun/1]).
 
--define(SUCCESS, (0)).
--define(ERROR, (1)).
+-define(SUCCESS, 0).
+-define(ERROR, 1).
 
 start() ->
     try test_funs() of
-        ok -> ?SUCCESS
+        ok ->
+            ?SUCCESS
     catch
         _:E:S ->
             erlang:display({E, S}),
             ?ERROR
     end.
 
-f(_X, _Y, _Z) -> ok.
+f(_X, _Y, _Z) ->
+    ok.
 
-get_fun(local) -> fun(B) -> not B end;
-get_fun(local_ref) -> fun f/3;
-get_fun(external_ref) -> fun erlang:apply/2;
-get_fun(not_existing_ref) -> fun erlang:undef/8.
+get_fun(local) ->
+    fun(B) -> not B end;
+get_fun(local_ref) ->
+    fun f/3;
+get_fun(external_ref) ->
+    fun erlang:apply/2;
+get_fun(not_existing_ref) ->
+    fun erlang:undef/8.
 
 test_funs() ->
     LocalFun = ?MODULE:get_fun(local),
@@ -52,6 +59,8 @@ test_funs() ->
     true = atom_contains(LocalFunName, "get_fun"),
     {arity, 1} = erlang:fun_info(LocalFun, arity),
     {type, local} = erlang:fun_info(LocalFun, type),
+    % TODO: implement env: env is mocked here and always return []
+    {env, []} = erlang:fun_info(LocalFun, env),
 
     {module, test_fun_info} = erlang:fun_info(LocalFunRef, module),
     {name, LocalFunRefName} = erlang:fun_info(LocalFunRef, name),
@@ -62,16 +71,21 @@ test_funs() ->
     true = Format1 or Format2 or Format3,
     {arity, 3} = erlang:fun_info(LocalFunRef, arity),
     {type, local} = erlang:fun_info(LocalFunRef, type),
+    % TODO: implement env: env is mocked here and always return []
+    {env, []} = erlang:fun_info(LocalFunRef, env),
 
     {module, erlang} = erlang:fun_info(ExternalFunRef, module),
     {name, apply} = erlang:fun_info(ExternalFunRef, name),
     {arity, 2} = erlang:fun_info(ExternalFunRef, arity),
     {type, external} = erlang:fun_info(ExternalFunRef, type),
+    {env, []} = erlang:fun_info(ExternalFunRef, env),
 
     {module, erlang} = erlang:fun_info(NotExistingFunRef, module),
     {name, undef} = erlang:fun_info(NotExistingFunRef, name),
     {arity, 8} = erlang:fun_info(NotExistingFunRef, arity),
     {type, external} = erlang:fun_info(NotExistingFunRef, type),
+    % TODO: implement env: env is mocked here and always return []
+    {env, []} = erlang:fun_info(NotExistingFunRef, env),
 
     ok.
 
@@ -79,8 +93,10 @@ atom_contains(Atom, Pattern) when is_atom(Atom) ->
     atom_contains(atom_to_list(Atom), Pattern);
 atom_contains([_C | Rest] = String, Pattern) ->
     case prefix_match(String, Pattern) of
-        true -> true;
-        false -> atom_contains(Rest, Pattern)
+        true ->
+            true;
+        false ->
+            atom_contains(Rest, Pattern)
     end;
 atom_contains([], _Pattern) ->
     false.
