@@ -1696,7 +1696,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
         if (UNLIKELY(ctx->trace_calls)) {
             AtomString module_name;
             AtomString function_name;
-            module_get_imported_function_module_and_name(mod, index, &module_name, &function_name);
+            module_get_imported_function_module_and_name(mod, index, &module_name, &function_name, ctx->global);
             trace_apply(ctx, call_type, module_name, function_name, arity);
         }
     }
