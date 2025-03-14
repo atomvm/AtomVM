@@ -82,6 +82,8 @@
     spawn/3,
     spawn_link/1,
     spawn_link/3,
+    spawn_monitor/1,
+    spawn_monitor/3,
     spawn_opt/2,
     spawn_opt/4,
     link/1,
@@ -928,6 +930,29 @@ spawn_link(Function) ->
 -spec spawn_link(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
 spawn_link(Module, Function, Args) ->
     erlang:spawn_opt(Module, Function, Args, [link]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Function    function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process and monitor it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_monitor(Function :: function()) -> pid().
+spawn_monitor(Function) ->
+    erlang:spawn_opt(Function, [monitor]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module of the function to create a process from
+%% @param   Function    name of the function to create a process from
+%% @param   Args        arguments to pass to the function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process by calling exported Function from Module with Args
+%%          and monitor it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_monitor(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
+spawn_monitor(Module, Function, Args) ->
+    erlang:spawn_opt(Module, Function, Args, [monitor]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
