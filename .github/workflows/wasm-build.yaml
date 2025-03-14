@@ -47,7 +47,7 @@ jobs:
         cd build
         cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
         # test_eavmlib does not work with wasm due to http + ssl test
-        ninja AtomVM atomvmlib test_etest test_alisp hello_world run_script call_cast html5_events wasm_webserver
+        ninja AtomVM atomvmlib erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v4
@@ -112,9 +112,11 @@ jobs:
         node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/src/eavmlib.avm
         # Run tests that pass
         node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.js ../../../../build/tests/libs/estdlib/test_estdlib.avm
         # test_eavmlib does not work with wasm due to http + ssl test
         # node src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
         node src/AtomVM.js ../../../../build/tests/libs/etest/test_etest.avm
+        node src/AtomVM.js ../../../../build/tests/erlang_tests/test_crypto.beam
 
     - name: "Rename and write sha256sum (node)"
       if: startsWith(github.ref, 'refs/tags/')
