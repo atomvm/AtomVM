@@ -281,6 +281,8 @@ compile_erlang(test_unicode)
 compile_erlang(test_binary_part)
 compile_erlang(test_binary_split)
 
+compile_erlang(test_zlib_compress)
+
 compile_erlang(plusone)
 compile_erlang(plusone2)
 compile_erlang(minusone)
@@ -761,6 +763,8 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_binary_part.beam
     test_binary_split.beam
+
+    test_zlib_compress.beam
 
     plusone.beam
     plusone2.beam
