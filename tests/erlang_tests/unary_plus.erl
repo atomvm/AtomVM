@@ -29,11 +29,11 @@ start() ->
     0.
 
 unary_plus_int(A) ->
-    +A,
+    A = +A,
     ok.
 
 unary_plus_float(A) ->
-    +A,
+    A = +A,
     ok.
 
 unary_plus_str(A) ->
