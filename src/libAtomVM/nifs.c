@@ -3632,6 +3632,11 @@ static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[])
         case TYPE_ATOM:
             value = term_is_external_fun(fun) ? EXTERNAL_ATOM : LOCAL_ATOM;
             break;
+            
+        case ENV_ATOM:
+            // TODO: implement env: env is mocked here and always return []
+            value = term_nil();
+            break;
 
         default:
             RAISE_ERROR(BADARG_ATOM);
