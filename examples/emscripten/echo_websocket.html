@@ -1,0 +1,88 @@
+<!--
+This file is part of AtomVM.
+
+Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+-->
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8" />
+    <title>AtomVM echo websocket example</title>
+    <style type="text/css">
+    #transcript {
+        margin: 1ex 0;
+        padding: 1ex;
+        display: flex;
+        flex-direction: column;
+        width: 40em;
+        border: 1px dotted black;
+    }
+    #transcript div {
+        border-bottom-color: rgb(229, 231, 235);
+        border-radius: 8px;
+        border-radius: 8px;
+        border-style: solid;
+        border-width: 0px;
+    }
+    .client-msg {
+        margin: 1ex;
+        padding: 2ex;
+        background-color: rgb(22, 163, 74);
+        color: white;
+        align-self: flex-end;
+    }
+    .server-msg {
+        margin: 1ex;
+        padding: 2ex;
+        background-color: rgb(239, 239, 239);
+        color: black;
+        align-self: flex-start;
+    }
+    .error-msg {
+        margin: 2ex;
+        background-color: rgba(239, 68, 68);
+        color: white;
+        align-self: flex-start;
+    }
+    </style>
+  </head>
+  <body>
+    <h1>Echo websocket example</h1>
+    <p>
+      This example demonstrates use of websocket API by connecting to
+      demo API at echo.websocket.org.
+    </p>
+    <p>Websockets are supported by this browser: <span id="supported">N/A</span></p>
+    <p>Websocket ReadyState: <span id="ready-state">N/A</span></p>
+    <p>Websocket URL: <span id="url">N/A</span></p>
+    <p>Websocket Protocol: <span id="protocol">N/A</span></p>
+    <p>Websocket Extensions: <span id="extensions">N/A</span></p>
+
+    <div id="transcript"></div>
+    <input type="text" name="text" id="send-text" disabled></input>
+    <button id="send-button" disabled>Send</button>
+
+    <script>
+      // Arguments are loaded using fetch API.
+      // wasm_webserver serves under /build/ files in build subdirectory.
+      var Module = {
+        arguments: ["/build/examples/emscripten/echo_websocket.avm"],
+      };
+    </script>
+    <script async src="/AtomVM.js"></script>
+  </body>
+</html>

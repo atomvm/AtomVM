@@ -46,6 +46,7 @@
 
 #include "emscripten_sys.h"
 #include "platform_defaultatoms.h"
+#include "websocket_nifs.h"
 
 /**
  * @brief resolve a promise with an int value and destroy it
@@ -166,7 +167,12 @@ void sys_init_platform(GlobalContext *glb)
     }
     platform->htmlevent_user_data_resource_type = enif_init_resource_type(&env, "htmlevent_user_data", &htmlevent_user_data_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(platform->htmlevent_user_data_resource_type)) {
-        fprintf(stderr, "Cannot initialize promise_resource_type");
+        fprintf(stderr, "Cannot initialize htmlevent_user_data_resource_type");
+        AVM_ABORT();
+    }
+    platform->websocket_resource_type = enif_init_resource_type(&env, "websocket", &websocket_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(platform->websocket_resource_type)) {
+        fprintf(stderr, "Cannot initialize websocket_resource_type");
         AVM_ABORT();
     }
     glb->platform_data = platform;
@@ -456,7 +462,6 @@ static void sys_emscripten_send_message(GlobalContext *glb, int target_pid, cons
 
 static void sys_process_emscripten_message(GlobalContext *glb, struct EmscriptenMessageBase *message)
 {
-    UNUSED(glb);
     switch (message->message_type) {
         case Cast: {
             struct EmscriptenMessageCast *message_send = (struct EmscriptenMessageCast *) message;
