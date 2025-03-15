@@ -57,23 +57,38 @@ describe("emscripten hello world BEAM", () => {
 
 describe("emscripten run script", () => {
   it("should display three alerts and update counter", () => {
+    cy.visit("/run_script.html", {
+      onBeforeLoad(win) {
+        cy.stub(win.console, "log").as("consoleLog");
+      },
+    });
     const alert = cy.stub().as("alert");
     cy.on("window:alert", alert);
-    cy.visit("/run_script.html");
     cy.get("#demo-counter").should("contain", "unset");
-    cy.get("@alert").should(
+    cy.get("@consoleLog").should(
       "have.been.calledWith",
       "hello from Erlang in main thread",
     );
     cy.get("@alert").should(
-      "have.been.calledWithMatch",
-      "hello from Erlang in worker thread",
+      "have.been.calledWith",
+      "hello from Erlang in main thread",
+    );
+// window.console is not the console invoked by our code from worker
+// thread, or at least cypress stub doesn't work
+//  cy.get("@consoleLog").should(
+//    "have.been.calledWithMatch",
+//    "hello from Erlang in worker thread",
+//  );
+    cy.get("@consoleLog").should(
+      "have.been.calledWith",
+      "hello from Erlang in main thread async",
     );
     cy.get("@alert").should(
       "have.been.calledWith",
       "hello from Erlang in main thread async",
     );
     cy.get("#demo-counter").should("contain", "ms");
+    cy.get("@consoleLog").should("be.calledWith", "Return value: ok");
   });
 });
 
