@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `lists:append/1` and `lists:append/2`
 - Added `erlang:spawn_monitor/1`, `erlang:spawn_monitor/3`
 - Added `lists:dropwhile/2`.
+- Support for `float/1` BIF.
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.

@@ -1201,6 +1201,27 @@ term bif_erlang_trunc_1(Context *ctx, uint32_t fail_label, int live, term arg1)
     }
 }
 
+term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    if (term_is_float(arg1)) {
+        return arg1;
+    }
+
+    if (!term_is_any_integer(arg1)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    avm_float_t fresult = term_conv_to_float(arg1);
+    if (UNLIKELY(!isfinite(fresult))) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_float(fresult, &ctx->heap);
+}
+
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
 
 static inline term bitwise_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
