@@ -58,6 +58,7 @@ memory error
 - Fixed possible concurrency problems in ESP32 UART driver
 - Fixed concurrency and memory leak related to links and monitors
 - Fixed issues with parsing of line references for stack traces
+- Fixed memory corruption issue with `erlang:make_tuple/2`
 
 ### Changed
 

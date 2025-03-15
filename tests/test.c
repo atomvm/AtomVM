@@ -178,7 +178,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_insert_element, 121),
     TEST_CASE_EXPECTED(test_delete_element, 421),
     TEST_CASE_EXPECTED(test_tuple_to_list, 300),
-    TEST_CASE_EXPECTED(test_make_tuple, 4),
+    TEST_CASE(test_make_tuple),
     TEST_CASE_EXPECTED(test_make_list, 5),
     TEST_CASE_EXPECTED(test_list_gc, 2),
     TEST_CASE_EXPECTED(test_list_processes, 3),
