@@ -104,7 +104,7 @@ static int start(void)
     fprintf(stdout, "\n");
 
     int status;
-    if (ret_value == OK_ATOM) {
+    if (ret_value == OK_ATOM || ret_value == term_from_int(0)) {
         status = EXIT_SUCCESS;
     } else {
         status = EXIT_FAILURE;
