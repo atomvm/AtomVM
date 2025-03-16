@@ -71,6 +71,14 @@ Source code is organized as follows:
 
 The `src` directory is broken up into the core platform-independent AtomVM library (`libAtomVM`), and platform-dependent code for each of the supported platforms  (Generic UNIX, ESP32, and STM32).
 
+## External dependencies
+
+### `uf2tool`
+
+AtomVM depends on `uf2tool`. It is used to pack both native and Erlang/Elixir/Gleam code for RP2. uf2tool is downloaded automatically by `rebar3` from `hex` mirrors.
+
+It is possible to use a local copy of uf2tool by setting `UF2TOOL_PATH` variable to a path to a source checkout of [`uf2tool`](https://github.com/pguyot/uf2tool) when invoking CMake.
+
 ## Platform Specific Build Instructions
 
 * [Generic UNIX](#building-for-generic-unix)
