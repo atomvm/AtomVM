@@ -160,7 +160,7 @@ enum ModuleLoadResult
  * @param module_atom module name atom string.
  * @param function_atom function name atom string.
  */
-void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom);
+void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb);
 #endif
 
 /**
