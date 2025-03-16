@@ -103,6 +103,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_erase_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
 static term nif_erlang_exit(Context *ctx, int argc, term argv[]);
@@ -141,6 +142,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_get_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
@@ -309,7 +311,13 @@ static const struct Nif display_nif =
     .nif_ptr = nif_erlang_display_1
 };
 
-static const struct Nif erase_nif =
+static const struct Nif erase_0_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_erase_0
+};
+
+static const struct Nif erase_1_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_1
@@ -529,6 +537,12 @@ static const struct Nif process_info_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_info
+};
+
+static const struct Nif get_0_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_get_0
 };
 
 static const struct Nif put_nif =
@@ -3646,6 +3660,32 @@ static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[])
     return fun_info_tuple;
 }
 
+static term nif_erlang_get_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    term result = term_nil();
+    size_t size = 0;
+    struct ListHead *dictionary = &ctx->dictionary;
+    struct ListHead *item;
+    LIST_FOR_EACH (item, dictionary) {
+        size++;
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(size, TUPLE_SIZE(2))) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    LIST_FOR_EACH (item, dictionary) {
+        struct DictEntry *dict_entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        term tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(tuple, 0, dict_entry->key);
+        term_put_tuple_element(tuple, 1, dict_entry->value);
+        result = term_list_prepend(tuple, result, &ctx->heap);
+    }
+
+    return result;
+}
+
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -3657,6 +3697,19 @@ static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
     }
 
     return old;
+}
+
+static term nif_erlang_erase_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term result = nif_erlang_get_0(ctx, argc, argv);
+    if (LIKELY(!term_is_invalid_term(result))) {
+        dictionary_destroy(&ctx->dictionary);
+        list_init(&ctx->dictionary);
+    }
+
+    return result;
 }
 
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
