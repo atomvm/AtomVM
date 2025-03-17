@@ -64,8 +64,8 @@ struct HNodeGroup
 
 struct AtomTable
 {
-    int capacity;
-    int count;
+    size_t capacity;
+    size_t count;
     int last_node_group_avail;
 #ifndef AVM_NO_SMP
     RWLock *lock;
@@ -118,10 +118,10 @@ void atom_table_destroy(struct AtomTable *table)
     free(table);
 }
 
-int atom_table_count(struct AtomTable *table)
+size_t atom_table_count(struct AtomTable *table)
 {
     SMP_RDLOCK(table);
-    int count = table->count;
+    size_t count = table->count;
     SMP_UNLOCK(table);
 
     return count;
@@ -204,7 +204,7 @@ long atom_table_get_index(struct AtomTable *table, AtomString string)
 // TODO: this function needs use an efficient structure such as a skip list
 static struct HNode *get_node_using_index(struct AtomTable *table, long index)
 {
-    if (UNLIKELY(index >= table->count)) {
+    if (UNLIKELY(((size_t) index) >= table->count)) {
         return NULL;
     }
 
