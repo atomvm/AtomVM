@@ -1692,7 +1692,9 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
 static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
     term *return_value)
 {
-    const struct ExportedFunction *exported_bif = bif_registry_get_handler(module_name, function_name, arity);
+    char mfa[MAX_MFA_NAME_LEN];
+    atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_name), atom_string_data(module_name), atom_string_len(function_name), atom_string_data(function_name), arity);
+    const struct ExportedFunction *exported_bif = bif_registry_get_handler(mfa);
     if (exported_bif) {
         if (exported_bif->type == GCBIFFunctionType) {
             const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(exported_bif);
@@ -1729,7 +1731,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
         }
     }
 
-    struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
+    struct Nif *nif = (struct Nif *) nifs_get(mfa);
     if (nif) {
         *return_value = nif->nif_ptr(ctx, arity, ctx->x);
         return true;

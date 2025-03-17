@@ -61,7 +61,6 @@
 #include "unicode.h"
 #include "utils.h"
 
-#define MAX_NIF_NAME_LEN 260
 #define FLOAT_BUF_SIZE 64
 
 #define RAISE(a, b)  \
@@ -909,30 +908,11 @@ DEFINE_MATH_NIF(tanh)
 #include "nifs_hash.h"
 #pragma GCC diagnostic pop
 
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity)
+const struct Nif *nifs_get(const char *mfa)
 {
-    char nifname[MAX_NIF_NAME_LEN];
-
-    int module_name_len = atom_string_len(module);
-    memcpy(nifname, atom_string_data(module), module_name_len);
-
-    nifname[module_name_len] = ':';
-
-    int function_name_len = atom_string_len(function);
-    if (UNLIKELY((arity > 9) || (module_name_len + function_name_len + 4 > MAX_NIF_NAME_LEN))) {
-        // In AtomVM NIFs are limited to 9 parameters
-        return NULL;
-    }
-    memcpy(nifname + module_name_len + 1, atom_string_data(function), function_name_len);
-
-    //TODO: handle NIFs with more than 9 parameters
-    nifname[module_name_len + function_name_len + 1] = '/';
-    nifname[module_name_len + function_name_len + 2] = '0' + arity;
-    nifname[module_name_len + function_name_len + 3] = 0;
-
-    const NifNameAndNifPtr *nameAndPtr = nif_in_word_set(nifname, strlen(nifname));
+    const NifNameAndNifPtr *nameAndPtr = nif_in_word_set(mfa, strlen(mfa));
     if (!nameAndPtr) {
-        return platform_nifs_get_nif(nifname);
+        return platform_nifs_get_nif(mfa);
     }
 
     return nameAndPtr->nif;
@@ -3599,16 +3579,22 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(function, term_is_atom);
     VALIDATE_VALUE(arity_term, term_is_integer);
 
-    AtomString module_name = globalcontext_atomstring_from_term(ctx->global, module);
-    AtomString function_name = globalcontext_atomstring_from_term(ctx->global, function);
+    atom_index_t module_name_ix = term_to_atom_index(module);
+    AtomString module_name = atom_table_get_atom_string(ctx->global->atom_table, module_name_ix);
+    atom_index_t function_name_ix = term_to_atom_index(function);
+    AtomString function_name = atom_table_get_atom_string(ctx->global->atom_table, function_name_ix);
+
     avm_int_t arity = term_to_int(arity_term);
 
-    const struct ExportedFunction *bif = bif_registry_get_handler(module_name, function_name, arity);
+    char mfa[MAX_MFA_NAME_LEN];
+    atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_name), atom_string_data(module_name), atom_string_len(function_name), atom_string_data(function_name), arity);
+
+    const struct ExportedFunction *bif = bif_registry_get_handler(mfa);
     if (bif) {
         return TRUE_ATOM;
     }
 
-    struct Nif *nif = (struct Nif *) nifs_get(module_name, function_name, arity);
+    struct Nif *nif = (struct Nif *) nifs_get(mfa);
     if (nif) {
         return TRUE_ATOM;
     }
