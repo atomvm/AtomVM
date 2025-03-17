@@ -676,8 +676,7 @@ term interop_atom_term_select_atom(const AtomStringIntPair *table, int value, Gl
 {
     for (int i = 0; table[i].as_val != NULL; i++) {
         if (value == table[i].i_val) {
-            int global_atom_index = globalcontext_insert_atom(global, table[i].as_val);
-            return term_from_atom_index(global_atom_index);
+            return globalcontext_make_atom(global, table[i].as_val);
         }
     }
     return term_invalid_term();
