@@ -394,26 +394,19 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_i
  * @details Inserts an atom into the global atoms table and returns its id.
  * @param glb the global context.
  * @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
- * @param copy if non-zero, make a copy of the input atom_string if the atom is not already in the table.  The table
+ * @param copy if `true`, make a copy of the input atom_string if the atom is not already in the table.  The table
  * assumes "ownership" of the allocated memory.
- * @returns newly added atom id or -1 in case of failure.
+ * @returns newly added atom id or term_invalid_term() in case of failure.
  */
-static inline int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
+static inline term globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, bool copy)
 {
-    long index = atom_table_ensure_atom(
-        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts);
-    if (UNLIKELY(index) < 0) {
-        return -1;
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
+        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts, &global_atom_index);
+    if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
+        return term_invalid_term();
     }
-    return index;
-}
-
-/**
- * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
- */
-static inline int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
-{
-    return globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
+    return term_from_atom_index(global_atom_index);
 }
 
 /**
@@ -425,7 +418,7 @@ static inline int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_
  * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
  */
-bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b);
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, atom_index_t atom_index_a, AtomString atom_string_b);
 
 /**
  * @brief Compares a term with an AtomString.
@@ -442,23 +435,23 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
         return false;
     }
 
-    int atom_index_a = term_to_atom_index(atom_a);
+    atom_index_t atom_index_a = term_to_atom_index(atom_a);
     return globalcontext_is_atom_index_equal_to_atom_string(global, atom_index_a, atom_string_b);
 }
 
 /**
- * @brief Returns a term representing an atom, from the suppliend string
+ * @brief Returns a term representing an atom, from the supplied string.
  *
  * @details Converts a string to an atom.  Note that this function may have a side-effect on the
- *          global context.
+ *          global context. It doesn't copy the atom string and is meant to be called with
+ *          constant atom strings in code.
  * @param glb pointer to the global context
- * @param string an AtomString
+ * @param atom_string an AtomString
  * @return an atom term formed from the supplied atom string.
  */
-static inline term globalcontext_make_atom(GlobalContext *glb, AtomString string)
+static inline term globalcontext_make_atom(GlobalContext *glb, AtomString atom_string)
 {
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
+    return globalcontext_insert_atom_maybe_copy(glb, atom_string, false);
 }
 
 /**

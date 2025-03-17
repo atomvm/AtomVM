@@ -117,7 +117,7 @@ struct Module
 
     struct LiteralEntry *literals_table;
 
-    int *local_atoms_to_global_table;
+    atom_index_t *local_atoms_to_global_table;
 
     void *module_platform_data;
 
