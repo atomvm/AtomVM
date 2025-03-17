@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "atom.h"
 #include "memory.h"
 #include "refc_binary.h"
 #include "utils.h"
@@ -806,7 +807,7 @@ static inline term term_nil()
  * @param t the term that will be converted to atom table index. t must be a valid atom term.
  * @return a global atom table index.
  */
-static inline int term_to_atom_index(term t)
+static inline atom_index_t term_to_atom_index(term t)
 {
     return t >> 6;
 }
@@ -818,7 +819,7 @@ static inline int term_to_atom_index(term t)
  * @param atom_index global atoms table index.
  * @return a term that encapsulates the atom.
  */
-static inline term term_from_atom_index(int atom_index)
+static inline term term_from_atom_index(atom_index_t atom_index)
 {
     return TERM_FROM_ATOM_INDEX(atom_index);
 }

@@ -37,12 +37,13 @@ void platform_defaultatoms_init(GlobalContext *glb)
     };
 #undef X
 
-    for (int i = 0; i < ATOM_FIRST_AVAIL_INDEX - PLATFORM_ATOMS_BASE_INDEX; i++) {
+    for (size_t i = 0; i < ATOM_FIRST_AVAIL_INDEX - PLATFORM_ATOMS_BASE_INDEX; i++) {
         if (UNLIKELY((size_t) atoms[i][0] != strlen(atoms[i] + 1))) {
             AVM_ABORT();
         }
 
-        if (UNLIKELY(globalcontext_insert_atom(glb, atoms[i]) != i + PLATFORM_ATOMS_BASE_INDEX)) {
+        term atom_term = globalcontext_make_atom(glb, atoms[i]);
+        if (UNLIKELY(term_to_atom_index(atom_term) != i + PLATFORM_ATOMS_BASE_INDEX)) {
             AVM_ABORT();
         }
     }

@@ -50,13 +50,13 @@ struct HNode
 {
     struct HNode *next;
     AtomString key;
-    long index;
+    atom_index_t index;
 };
 
 struct HNodeGroup
 {
     struct HNodeGroup *next;
-    long first_index;
+    atom_index_t first_index;
     uint16_t len;
 
     struct HNode nodes[];
@@ -188,21 +188,8 @@ static inline struct HNode *get_node(const struct AtomTable *hash_table, AtomStr
     return get_node_with_hash(hash_table, string, hash);
 }
 
-long atom_table_get_index(struct AtomTable *table, AtomString string)
-{
-    unsigned long hash = sdbm_hash(string, atom_string_len(string));
-
-    SMP_RDLOCK(table);
-
-    struct HNode *node = get_node_with_hash(table, string, hash);
-    long result = (node != NULL) ? node->index : ATOM_TABLE_NOT_FOUND;
-
-    SMP_UNLOCK(table);
-    return result;
-}
-
 // TODO: this function needs use an efficient structure such as a skip list
-static struct HNode *get_node_using_index(struct AtomTable *table, long index)
+static struct HNode *get_node_using_index(struct AtomTable *table, atom_index_t index)
 {
     if (UNLIKELY(((size_t) index) >= table->count)) {
         return NULL;
@@ -210,7 +197,7 @@ static struct HNode *get_node_using_index(struct AtomTable *table, long index)
 
     struct HNodeGroup *node_group = table->first_node_group;
     while (node_group) {
-        long first_index = node_group->first_index;
+        atom_index_t first_index = node_group->first_index;
         if (first_index + node_group->len > index) {
             return &node_group->nodes[index - first_index];
         }
@@ -221,7 +208,7 @@ static struct HNode *get_node_using_index(struct AtomTable *table, long index)
     return NULL;
 }
 
-AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
+AtomString atom_table_get_atom_string(struct AtomTable *table, atom_index_t index)
 {
     SMP_RDLOCK(table);
 
@@ -264,7 +251,7 @@ int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, i
     return memcmp_result;
 }
 
-atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, size_t *out_len)
+atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, atom_index_t index, size_t *out_len)
 {
     SMP_RDLOCK(table);
 
@@ -334,10 +321,10 @@ static inline void insert_node_into_bucket(
     node->next = maybe_existing_node;
 }
 
-static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_group,
+static inline atom_index_t insert_node(struct AtomTable *table, struct HNodeGroup *node_group,
     unsigned long bucket_index, AtomString string)
 {
-    long new_index = table->count;
+    atom_index_t new_index = table->count;
     table->count++;
 
     struct HNode *node = &node_group->nodes[new_index - node_group->first_index];
@@ -398,7 +385,7 @@ static inline bool maybe_rehash(struct AtomTable *table, int new_entries)
     return do_rehash(table, new_capacity);
 }
 
-long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
+enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts, atom_index_t *result)
 {
     unsigned long hash = sdbm_hash(string, atom_string_len(string));
     SMP_WRLOCK(table);
@@ -407,11 +394,12 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
     struct HNode *node = get_node_from_bucket(table, bucket_index, string);
     if (node) {
         SMP_UNLOCK(table);
-        return node->index;
+        *result = node->index;
+        return AtomTableEnsureAtomOk;
     }
     if (opts & AtomTableAlreadyExisting) {
         SMP_UNLOCK(table);
-        return ATOM_TABLE_NOT_FOUND;
+        return AtomTableEnsureAtomNotFound;
     }
 
     struct HNodeGroup *node_group = table->last_node_group;
@@ -419,7 +407,7 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
         node_group = new_node_group(table, DEFAULT_SIZE);
         if (IS_NULL_PTR(node_group)) {
             SMP_UNLOCK(table);
-            return ATOM_TABLE_ALLOC_FAIL;
+            return AtomTableEnsureAtomAllocFail;
         }
     }
 
@@ -429,7 +417,7 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
         uint8_t *buf = malloc(1 + len);
         if (IS_NULL_PTR(buf)) {
             SMP_UNLOCK(table);
-            return ATOM_TABLE_ALLOC_FAIL;
+            return AtomTableEnsureAtomAllocFail;
         }
         memcpy(buf, string, 1 + len);
         maybe_copied = buf;
@@ -439,10 +427,10 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
         bucket_index = hash % table->capacity;
     }
 
-    long new_index = insert_node(table, node_group, bucket_index, maybe_copied);
+    *result = insert_node(table, node_group, bucket_index, maybe_copied);
 
     SMP_UNLOCK(table);
-    return new_index;
+    return AtomTableEnsureAtomOk;
 }
 
 static inline int read_encoded_len(const uint8_t **len_bytes)
@@ -463,8 +451,11 @@ static inline int read_encoded_len(const uint8_t **len_bytes)
     }
 }
 
-int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
-    int *translate_table, enum EnsureAtomsOpt opt)
+// -1 is not a valid atom index as we're limited to 2^20
+#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) -1)
+
+enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
+    atom_index_t *translate_table, enum EnsureAtomsOpt opt)
 {
     bool is_long_format = (opt & EnsureLongEncoding) != 0;
 
@@ -481,7 +472,7 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
             if (UNLIKELY(atom_len < 0)) {
                 fprintf(stderr, "Found invalid atom len.");
                 SMP_UNLOCK(table);
-                return ATOM_TABLE_INVALID_LEN;
+                return AtomTableEnsureAtomInvalidLen;
             } else if (UNLIKELY(atom_len > 255)) {
                 fprintf(stderr,
                     "Unsupported atom length %i bytes.\n"
@@ -491,7 +482,7 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
                     "https://github.com/atomvm/AtomVM/issues\n",
                     atom_len);
                 SMP_UNLOCK(table);
-                return ATOM_TABLE_INVALID_LEN;
+                return AtomTableEnsureAtomInvalidLen;
             }
             char tmp_old_fmt[256];
             tmp_old_fmt[0] = atom_len;
@@ -508,7 +499,7 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
             translate_table[i] = node->index;
         } else {
             new_atoms_count++;
-            translate_table[i] = ATOM_TABLE_NOT_FOUND;
+            translate_table[i] = ATOM_TABLE_NOT_FOUND_MARKER;
         }
     }
 
@@ -531,12 +522,12 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
             next_atom += 1 + atom_len;
         }
 
-        if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
+        if (translate_table[i] == ATOM_TABLE_NOT_FOUND_MARKER) {
             if (!table->last_node_group_avail) {
                 node_group = new_node_group(table, remaining_atoms);
                 if (IS_NULL_PTR(node_group)) {
                     SMP_UNLOCK(table);
-                    return ATOM_TABLE_ALLOC_FAIL;
+                    return AtomTableEnsureAtomAllocFail;
                 }
             }
 
@@ -545,7 +536,7 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
                 if (IS_NULL_PTR(atom_copy)) {
                     // we are not going to remove atoms that have already been added up to this one
                     SMP_UNLOCK(table);
-                    return ATOM_TABLE_ALLOC_FAIL;
+                    return AtomTableEnsureAtomAllocFail;
                 }
                 atom_copy[0] = atom_len;
                 memcpy(atom_copy + 1, to_be_copied, atom_len);
@@ -566,5 +557,5 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
 
     SMP_UNLOCK(table);
 
-    return 0;
+    return AtomTableEnsureAtomOk;
 }

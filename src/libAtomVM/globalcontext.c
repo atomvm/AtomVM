@@ -604,7 +604,7 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
     return term_invalid_term();
 }
 
-bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b)
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, atom_index_t atom_index_a, AtomString atom_string_b)
 {
     AtomString atom_string_a;
     atom_string_a = atom_table_get_atom_string(glb->atom_table, atom_index_a);
@@ -626,11 +626,13 @@ AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
 
 term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string)
 {
-    long atom_index = atom_table_get_index(glb->atom_table, atom_string);
-    if (UNLIKELY(atom_index == ATOM_TABLE_NOT_FOUND)) {
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
+        glb->atom_table, atom_string, AtomTableAlreadyExisting, &global_atom_index);
+    if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
         return term_invalid_term();
     }
-    return term_from_atom_index(atom_index);
+    return term_from_atom_index(global_atom_index);
 }
 
 int globalcontext_insert_module(GlobalContext *global, Module *module)
