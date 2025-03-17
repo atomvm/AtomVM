@@ -457,10 +457,10 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             }
 
             const uint8_t *atom_chars = (const uint8_t *) (external_term_buf + 3);
-            int global_atom_id;
+            term atom_term;
             if (LIKELY(unicode_buf_is_ascii(atom_chars, atom_len))) {
                 // there is a trick here: we are reusing LSB of len field as atom length
-                global_atom_id = globalcontext_insert_atom_maybe_copy(
+                atom_term = globalcontext_insert_atom_maybe_copy(
                     glb, (AtomString) (external_term_buf + 2), copy);
             } else {
                 // need to re-encode latin1 to UTF-8
@@ -477,17 +477,13 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                     bitstring_utf8_encode(atom_chars[i], curr_codepoint, &codepoint_size);
                     curr_codepoint += codepoint_size;
                 }
-                global_atom_id
+                atom_term
                     = globalcontext_insert_atom_maybe_copy(glb, (AtomString) atom_buf, true);
                 free(atom_buf);
             }
 
-            if (UNLIKELY(global_atom_id) < 0) {
-                return term_invalid_term();
-            }
-
             *eterm_size = 3 + atom_len;
-            return term_from_atom_index(global_atom_id);
+            return atom_term;
         }
 
         case SMALL_TUPLE_EXT:
@@ -641,13 +637,9 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             }
 
             // AtomString first byte is the atom length
-            int global_atom_id = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 1), copy);
-            if (UNLIKELY(global_atom_id < 0)) {
-                return term_invalid_term();
-            }
-
+            term atom_term = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 1), copy);
             *eterm_size = 2 + atom_len;
-            return term_from_atom_index(global_atom_id);
+            return atom_term;
         }
 
         default:
