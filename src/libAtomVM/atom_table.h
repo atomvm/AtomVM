@@ -24,14 +24,11 @@
 #include <stdbool.h>
 
 #include "atom.h"
+#include "utils.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define ATOM_TABLE_NOT_FOUND -1
-#define ATOM_TABLE_ALLOC_FAIL -2
-#define ATOM_TABLE_INVALID_LEN -3
 
 struct AtomTable;
 
@@ -48,6 +45,14 @@ enum AtomTableCopyOpt
     AtomTableAlreadyExisting = 2
 };
 
+enum AtomTableEnsureAtomResult
+{
+    AtomTableEnsureAtomOk = 0,
+    AtomTableEnsureAtomNotFound = -1,
+    AtomTableEnsureAtomAllocFail = -2,
+    AtomTableEnsureAtomInvalidLen = -3,
+};
+
 typedef const void *atom_ref_t;
 
 struct AtomTable *atom_table_new();
@@ -55,20 +60,18 @@ void atom_table_destroy(struct AtomTable *table);
 
 size_t atom_table_count(struct AtomTable *table);
 
-long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts);
+enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts, atom_index_t *result) MUST_CHECK;
 
 // This function is deprecated and it will be removed.
 // atom strings should be copied to caller owned buffers.
-AtomString atom_table_get_atom_string(struct AtomTable *table, long index);
+AtomString atom_table_get_atom_string(struct AtomTable *table, atom_index_t index);
 
-long atom_table_get_index(struct AtomTable *table, AtomString string);
-
-int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
-    int *translate_table, enum EnsureAtomsOpt opts);
+enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
+    atom_index_t *translate_table, enum EnsureAtomsOpt opts) MUST_CHECK;
 
 int atom_table_cmp_using_atom_index(
     struct AtomTable *table, int t_atom_index, int other_atom_index);
-atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, size_t *out_len);
+atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, atom_index_t index, size_t *out_len);
 bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom);
 void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf);
 void atom_table_write_cstring(

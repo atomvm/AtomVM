@@ -24,11 +24,8 @@ static const char *const emscripten_atom = ATOM_STR("\xA", "emscripten");
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
-    int ok = 1;
-
-    ok &= globalcontext_insert_atom(glb, emscripten_atom) == EMSCRIPTEN_ATOM_INDEX;
-
-    if (!ok) {
+    term atom_term = globalcontext_make_atom(glb, emscripten_atom);
+    if (UNLIKELY(term_to_atom_index(atom_term) != EMSCRIPTEN_ATOM_INDEX)) {
         AVM_ABORT();
     }
 }
