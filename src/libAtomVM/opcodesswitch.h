@@ -1472,7 +1472,7 @@ COLD_FUNC static void dump(Context *ctx)
 
         fprintf(stderr, "process_count = %zu\n", process_count);
         fprintf(stderr, "ports_count = %zu\n", ports_count);
-        fprintf(stderr, "atoms_count = %d\n", atom_table_count(glb->atom_table));
+        fprintf(stderr, "atoms_count = %zu\n", atom_table_count(glb->atom_table));
         fprintf(stderr, "refc_binary_total_size = %zu\n", refc_binary_total_size(ctx));
     }
     fprintf(stderr, "\n\n**End Of Crash Report**\n");
