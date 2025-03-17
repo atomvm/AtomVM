@@ -53,7 +53,7 @@ typedef const void *atom_ref_t;
 struct AtomTable *atom_table_new();
 void atom_table_destroy(struct AtomTable *table);
 
-int atom_table_count(struct AtomTable *table);
+size_t atom_table_count(struct AtomTable *table);
 
 long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts);
 
