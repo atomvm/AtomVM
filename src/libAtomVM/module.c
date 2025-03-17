@@ -21,6 +21,7 @@
 #include "module.h"
 
 #include "atom.h"
+#include "atom_table.h"
 #include "bif.h"
 #include "context.h"
 #include "externalterm.h"
@@ -81,16 +82,23 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
-    long ensure_result = atom_table_ensure_atoms(
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atoms(
         glb->atom_table, current_atom, atoms_count, this_module->local_atoms_to_global_table + 1, ensure_opts);
-    if (UNLIKELY(ensure_result == ATOM_TABLE_ALLOC_FAIL)) {
-        fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
-        return MODULE_ERROR_FAILED_ALLOCATION;
-    } else if (UNLIKELY(ensure_result == ATOM_TABLE_INVALID_LEN)) {
-        return MODULE_ERROR_INVALID;
+    switch (ensure_result) {
+        case AtomTableEnsureAtomAllocFail: {
+            fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+            return MODULE_ERROR_FAILED_ALLOCATION;
+        }
+        case AtomTableEnsureAtomInvalidLen:
+        case AtomTableEnsureAtomNotFound: {
+            return MODULE_ERROR_INVALID;
+        }
+        case AtomTableEnsureAtomOk: {
+            return MODULE_LOAD_OK;
+        }
+        default:
+            UNREACHABLE();
     }
-
-    return MODULE_LOAD_OK;
 }
 
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
