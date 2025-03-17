@@ -293,8 +293,7 @@ static inline term gpio_digital_read(term gpio_num_term)
 
 void gpio_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, gpio_driver_atom);
-    gpio_driver = term_from_atom_index(index);
+    gpio_driver = globalcontext_make_atom(global, gpio_driver_atom);
 }
 
 Context *gpio_driver_create_port(GlobalContext *global, term opts)
@@ -313,7 +312,7 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = gpio_data;
 
     term reg_name_term = globalcontext_make_atom(global, gpio_atom);
-    int atom_index = term_to_atom_index(reg_name_term);
+    atom_index_t atom_index = term_to_atom_index(reg_name_term);
 
     term local_port_id = term_port_from_local_process_id(ctx->process_id);
     if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, local_port_id))) {
@@ -328,7 +327,11 @@ Context *gpio_driver_create_port(GlobalContext *global, term opts)
 static term gpiodriver_close(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
-    int gpio_atom_index = atom_table_ensure_atom(glb->atom_table, gpio_atom, AtomTableNoOpts);
+    term gpio_atom_term = globalcontext_make_atom(glb, gpio_atom);
+    if (UNLIKELY(!term_is_invalid_term(gpio_atom_term))) {
+        return ERROR_ATOM;
+    }
+    atom_index_t gpio_atom_index = term_to_atom_index(gpio_atom_term);
     if (UNLIKELY(globalcontext_get_registered_process(glb, gpio_atom_index) == UNDEFINED_ATOM)) {
         return ERROR_ATOM;
     }

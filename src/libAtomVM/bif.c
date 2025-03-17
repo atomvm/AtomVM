@@ -31,6 +31,7 @@
 #include "overflow_helpers.h"
 #include "smp.h"
 #include "term.h"
+#include "term_typedef.h"
 #include "trace.h"
 #include "unicode.h"
 #include "utils.h"
@@ -1729,16 +1730,25 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
     if (!create_new) {
         atom_opts |= AtomTableAlreadyExisting;
     }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts, &global_atom_index);
     free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        *error_reason = BADARG_ATOM;
-        return term_invalid_term();
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        *error_reason = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+    switch (ensure_result) {
+        case AtomTableEnsureAtomNotFound:
+        case AtomTableEnsureAtomInvalidLen: {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomAllocFail: {
+            *error_reason = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomOk: {
+            return term_from_atom_index(global_atom_index);
+        }
+        default:
+            UNREACHABLE();
     }
-    return term_from_atom_index(global_atom_index);
 }
 
 term bif_erlang_binary_to_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
@@ -1829,14 +1839,23 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
     if (!create_new) {
         atom_opts |= AtomTableAlreadyExisting;
     }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts, &global_atom_index);
     free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        *error_reason = BADARG_ATOM;
-        return term_invalid_term();
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        *error_reason = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+    switch (ensure_result) {
+        case AtomTableEnsureAtomNotFound:
+        case AtomTableEnsureAtomInvalidLen: {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomAllocFail: {
+            *error_reason = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomOk: {
+            return term_from_atom_index(global_atom_index);
+        }
+        default:
+            UNREACHABLE();
     }
-    return term_from_atom_index(global_atom_index);
 }
