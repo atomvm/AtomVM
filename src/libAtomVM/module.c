@@ -117,13 +117,15 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
         AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
         AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
         uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
+        char mfa[MAX_MFA_NAME_LEN];
+        atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_atom), atom_string_data(module_atom), atom_string_len(function_atom), atom_string_data(function_atom), arity);
 
-        const struct ExportedFunction *bif = bif_registry_get_handler(module_atom, function_atom, arity);
+        const struct ExportedFunction *bif = bif_registry_get_handler(mfa);
 
         if (bif) {
             this_module->imported_funcs[i] = bif;
         } else {
-            this_module->imported_funcs[i] = &nifs_get(module_atom, function_atom, arity)->base;
+            this_module->imported_funcs[i] = &nifs_get(mfa)->base;
         }
 
         if (!this_module->imported_funcs[i]) {
@@ -435,8 +437,8 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
     if (LIKELY(found_module != NULL)) {
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity, glb);
         if (exported_label == 0) {
-            char buf[256];
-            atom_write_mfa(buf, 256, module_name_atom, function_name_atom, arity);
+            char buf[MAX_MFA_NAME_LEN];
+            atom_write_mfa(buf, sizeof(buf), atom_string_len(module_name_atom), atom_string_data(module_name_atom), atom_string_len(function_name_atom), atom_string_data(function_name_atom), arity);
             fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
             return NULL;
         }
