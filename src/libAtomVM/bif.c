@@ -59,12 +59,9 @@
         RAISE_ERROR_BIF(fail_label, BADARG_ATOM);              \
     }
 
-const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity)
+const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
 {
-    char bifname[MAX_BIF_NAME_LEN];
-
-    atom_write_mfa(bifname, MAX_BIF_NAME_LEN, module, function, arity);
-    const BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
+    const BifNameAndPtr *nameAndPtr = in_word_set(mfa, strlen(mfa));
     if (!nameAndPtr) {
         return NULL;
     }

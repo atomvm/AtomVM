@@ -99,11 +99,13 @@ static inline const void *atom_string_data(AtomString atom_str)
  *          buffer size.
  * @param   buf the buffer to write into
  * @param   buf_size the amount of room in the buffer
- * @param   module the module name
- * @param   function the function name
+ * @param   module_name_len length of the module name
+ * @param   module_data the module name
+ * @param   function_name_len length of the function name
+ * @param   function_data the function name
  * @param   arity the function arity
  */
-void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, unsigned int arity);
+void atom_write_mfa(char *buf, size_t buf_size, size_t module_name_len, const void *module_data, size_t function_name_len, const void *function_data, unsigned int arity);
 
 #ifdef __cplusplus
 }
