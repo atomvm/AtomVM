@@ -5103,9 +5103,6 @@ wait_timeout_trap_handler:
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
@@ -5157,8 +5154,10 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, bs_offset + size_val * unit);
 
                         TRIM_LIVE_REGS(live);
+                        // there is always room for a MAX_REG + 1 register, used as working register
+                        x_regs[live] = bs_bin;
                         size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                 #endif
@@ -5167,9 +5166,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                        // re-compute src
-                        DECODE_COMPACT_TERM(src, src_pc);
-                        bs_bin = term_get_match_state_binary(src);
+                        bs_bin = x_regs[live];
 
                         term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
                         WRITE_REGISTER(dreg, t);
