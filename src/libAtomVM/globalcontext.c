@@ -25,7 +25,6 @@
 #include "globalcontext.h"
 
 #include "atom_table.h"
-#include "atomshashtable.h"
 #include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
@@ -98,7 +97,7 @@ GlobalContext *globalcontext_new()
 
     glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;
-    glb->modules_table = atomshashtable_new();
+    glb->modules_table = valueshashtable_new();
     if (IS_NULL_PTR(glb->modules_table)) {
         atom_table_destroy(glb->atom_table);
         free(glb);
@@ -637,9 +636,9 @@ term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString
 
 int globalcontext_insert_module(GlobalContext *global, Module *module)
 {
+    term module_name = module_get_name(module);
     SMP_RWLOCK_WRLOCK(global->modules_lock);
-    AtomString module_name_atom = module_get_atom_string_by_id(module, 1, global);
-    if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {
+    if (!valueshashtable_insert(global->modules_table, term_to_atom_index(module_name), TO_VALUESHASHTABLE_VALUE(module))) {
         SMP_RWLOCK_UNLOCK(global->modules_lock);
         return -1;
     }
@@ -695,18 +694,15 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
     return new_module;
 }
 
-Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
+Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name_atom)
 {
-    Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
+    Module *found_module = (Module *) valueshashtable_get_value(global->modules_table, module_name_atom, TO_VALUESHASHTABLE_VALUE(NULL));
 
     if (!found_module) {
-        char *module_name = malloc(256 + 5);
+        char *module_name = atom_table_atom_to_new_cstring(global->atom_table, module_name_atom, ".beam");
         if (IS_NULL_PTR(module_name)) {
             return NULL;
         }
-
-        atom_string_to_c(module_name_atom, module_name, 256);
-        strcat(module_name, ".beam");
         Module *loaded_module = globalcontext_load_module_from_avm(global, module_name);
         if (IS_NULL_PTR(loaded_module)) {
             // Platform may implement sys_load_module_from_file

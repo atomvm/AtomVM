@@ -33,12 +33,10 @@
 
 #include "atom.h"
 #include "atom_table.h"
-#include "atomshashtable.h"
 #include "context.h"
 #include "exportedfunction.h"
 #include "globalcontext.h"
 #include "term.h"
-#include "valueshashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
