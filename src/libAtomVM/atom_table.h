@@ -60,34 +60,53 @@ void atom_table_destroy(struct AtomTable *table);
 
 size_t atom_table_count(struct AtomTable *table);
 
-enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts, atom_index_t *result) MUST_CHECK;
+atom_index_t atom_table_get_index(struct AtomTable *table, AtomString string);
+atom_index_t atom_table_get_index_from_cstring(struct AtomTable *table, const char *name);
 
-// This function is deprecated and it will be removed.
-// atom strings should be copied to caller owned buffers.
-AtomString atom_table_get_atom_string(struct AtomTable *table, atom_index_t index);
+enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, const uint8_t *atom_data, size_t atom_len, enum AtomTableCopyOpt opts, atom_index_t *result) MUST_CHECK;
 
-enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
+enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, size_t count,
     atom_index_t *translate_table, enum EnsureAtomsOpt opts) MUST_CHECK;
 
+bool atom_table_is_equal_to_atom_string(
+    struct AtomTable *table, atom_index_t t_atom_index, AtomString atom_string);
 int atom_table_cmp_using_atom_index(
-    struct AtomTable *table, int t_atom_index, int other_atom_index);
+    struct AtomTable *table, atom_index_t t_atom_index, atom_index_t other_atom_index);
+
 atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, atom_index_t index, size_t *out_len);
 bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom);
-void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf);
-void atom_table_write_cstring(
-    struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf);
 
 /**
- * @brief Allocate a new C string with malloc with the representation of
- * an atom
+ * @brief Get a pointer to the character data of a given atom.
+ *
+ * @details returned pointer is not null terminated
  *
  * @param   table atom table
  * @param   atom_index index of the atom to get the representation of
- * @param   suffix suffix to append to atom name or NULL of none
- * @return a newly allocated string with the representation of the atom or
- * NULL if allocation failed or atom index doesn't exist
+ * @param   out_len on output, size of the character data
  */
-char *atom_table_atom_to_new_cstring(struct AtomTable *table, atom_index_t atom_index, const char *suffix);
+const uint8_t *atom_table_get_atom_string(struct AtomTable *table, atom_index_t index, size_t *out_len);
+
+/**
+ * @brief Write module:function/arity to the supplied buffer.
+ *
+ * @details Write module:function/arity to the supplied buffer.  This function will abort
+ *          if the written module, function, and arity are longer than the supplied
+ *          buffer size.
+ * @param   buf the buffer to write into
+ * @param   buf_size the amount of room in the buffer
+ * @param   module the module name
+ * @param   function the function name
+ * @param   arity the function arity
+ */
+static inline void atom_table_write_mfa(struct AtomTable *table, char *buf, size_t buf_size, atom_index_t module, atom_index_t function, unsigned int arity)
+{
+    size_t module_name_len;
+    const uint8_t *module_name = atom_table_get_atom_string(table, module, &module_name_len);
+    size_t function_name_len;
+    const uint8_t *function_name = atom_table_get_atom_string(table, function, &function_name_len);
+    atom_write_mfa(buf, buf_size, module_name_len, module_name, function_name_len, function_name, arity);
+}
 
 #ifdef __cplusplus
 }

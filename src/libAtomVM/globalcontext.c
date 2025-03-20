@@ -605,29 +605,14 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
 
 bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, atom_index_t atom_index_a, AtomString atom_string_b)
 {
-    AtomString atom_string_a;
-    atom_string_a = atom_table_get_atom_string(glb->atom_table, atom_index_a);
-    return atom_are_equals(atom_string_a, atom_string_b);
-}
-
-AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
-{
-    if (!term_is_atom(t)) {
-        AVM_ABORT();
-    }
-    unsigned long atom_index = term_to_atom_index(t);
-    AtomString str = atom_table_get_atom_string(glb->atom_table, atom_index);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-    return str;
+    return atom_table_is_equal_to_atom_string(glb->atom_table, atom_index_a, atom_string_b);
 }
 
 term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string)
 {
     atom_index_t global_atom_index;
     enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
-        glb->atom_table, atom_string, AtomTableAlreadyExisting, &global_atom_index);
+        glb->atom_table, atom_string_data(atom_string), atom_string_len(atom_string), AtomTableAlreadyExisting, &global_atom_index);
     if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
         return term_invalid_term();
     }
@@ -699,25 +684,30 @@ Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name
     Module *found_module = (Module *) valueshashtable_get_value(global->modules_table, module_name_atom, TO_VALUESHASHTABLE_VALUE(NULL));
 
     if (!found_module) {
-        char *module_name = atom_table_atom_to_new_cstring(global->atom_table, module_name_atom, ".beam");
-        if (IS_NULL_PTR(module_name)) {
+        size_t module_name_len;
+        const uint8_t *module_name = atom_table_get_atom_string(global->atom_table, module_name_atom, &module_name_len);
+
+        char *module_file_name = malloc(module_name_len + 6);
+        if (IS_NULL_PTR(module_file_name)) {
             return NULL;
         }
-        Module *loaded_module = globalcontext_load_module_from_avm(global, module_name);
+        memcpy(module_file_name, module_name, module_name_len);
+        memcpy(module_file_name + module_name_len, ".beam", 6);
+        Module *loaded_module = globalcontext_load_module_from_avm(global, module_file_name);
         if (IS_NULL_PTR(loaded_module)) {
             // Platform may implement sys_load_module_from_file
-            loaded_module = sys_load_module_from_file(global, module_name);
+            loaded_module = sys_load_module_from_file(global, module_file_name);
         }
         if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
-            fprintf(stderr, "Failed load module: %s\n", module_name);
-            free(module_name);
+            fprintf(stderr, "Failed load module: %s\n", module_file_name);
+            free(module_file_name);
             if (loaded_module) {
                 module_destroy(loaded_module);
             }
             return NULL;
         }
 
-        free(module_name);
+        free(module_file_name);
 
         return loaded_module;
     }
