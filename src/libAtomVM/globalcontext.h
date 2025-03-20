@@ -40,6 +40,7 @@
 #include "synclist.h"
 #include "term.h"
 #include "timer_list.h"
+#include "valueshashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -117,7 +118,7 @@ struct GlobalContext
     int32_t last_process_id;
 
     struct AtomTable *atom_table;
-    struct AtomsHashTable *modules_table;
+    struct ValuesHashTable *modules_table;
 
 #ifndef AVM_NO_SMP
     RWLock *modules_lock;
@@ -510,7 +511,7 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
  * @param module_name_atom the module name.
  * @returns a pointer to a Module struct.
  */
-Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
+Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name_atom);
 
 /**
  * @brief Load a given module from registered AVM packs

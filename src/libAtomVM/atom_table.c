@@ -267,6 +267,30 @@ atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, atom_index_t
     return node;
 }
 
+char *atom_table_atom_to_new_cstring(struct AtomTable *table, atom_index_t atom_index, const char *suffix)
+{
+    AtomString atom_string = atom_table_get_atom_string(table, atom_index);
+    size_t atom_len = atom_string_len(atom_string);
+    const uint8_t *atom_data = atom_string_data(atom_string);
+    size_t suffix_len = 0;
+    if (suffix) {
+        suffix_len = strlen(suffix);
+    }
+
+    char *result = malloc(atom_len + suffix_len + 1);
+    if (IS_NULL_PTR(result)) {
+        return NULL;
+    }
+
+    memcpy(result, atom_data, atom_len);
+    if (suffix) {
+        memcpy(result + atom_len, suffix, suffix_len);
+    }
+    result[atom_len + suffix_len] = 0;
+
+    return result;
+}
+
 bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom)
 {
     SMP_RDLOCK(table);
