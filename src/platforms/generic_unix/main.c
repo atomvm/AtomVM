@@ -131,7 +131,7 @@ int main(int argc, char **argv)
             }
             globalcontext_insert_module(glb, mod);
             mod->module_platform_data = NULL;
-            if (IS_NULL_PTR(startup_module) && module_search_exported_function(mod, ATOM_STR("\5", "start"), 0, glb) != 0) {
+            if (IS_NULL_PTR(startup_module) && module_search_exported_function(mod, START_ATOM_INDEX, 0) != 0) {
                 startup_module = mod;
             }
 

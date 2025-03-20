@@ -172,6 +172,7 @@ start() ->
     ok = test_mutate_encodings(),
     ok = test_atom_decoding(),
     ok = test_atom_decoding_checks(),
+    ok = test_atom_encoding(),
     0.
 
 test_reverse(T, Interop) ->
@@ -334,6 +335,13 @@ get_binary(Id) ->
         % 'hello'
         latin1_as_utf8_3 ->
             <<131, 119, 5, 104, 101, 108, 108, 111>>;
+        % 'hello'
+        short_with_two_bytes_length ->
+            <<131, 118, 5:16, "hello">>;
+        % 'hello'
+        long_with_two_bytes_length ->
+            <<131, 118, 256:16,
+                "🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘"/utf8>>;
         % valid length, but truncated utf8
         invalid_utf8_1 ->
             <<131, 119, 5, 230, 188, 162, 229, 173>>;
@@ -359,14 +367,29 @@ get_binary(Id) ->
 
 get_atom(Id) ->
     case Id of
-        latin1_1 -> 'buondì';
-        latin1_2 -> 'ðñ÷aþbÿ';
-        latin1_3 -> 'hello';
-        jp_1 -> '漢字';
-        jp_2 -> 'Unicodeで使える8ビット';
-        latin1_as_utf8_1 -> 'buondì';
-        latin1_as_utf8_2 -> 'ðñ÷aþbÿ';
-        latin1_as_utf8_3 -> 'hello'
+        latin1_1 ->
+            'buondì';
+        latin1_2 ->
+            'ðñ÷aþbÿ';
+        latin1_3 ->
+            'hello';
+        jp_1 ->
+            '漢字';
+        jp_2 ->
+            'Unicodeで使える8ビット';
+        latin1_as_utf8_1 ->
+            'buondì';
+        latin1_as_utf8_2 ->
+            'ðñ÷aþbÿ';
+        latin1_as_utf8_3 ->
+            'hello';
+        short_with_two_bytes_length ->
+            'hello';
+        % literal only works with OTP >= 28
+        long_with_two_bytes_length ->
+            list_to_atom(
+                ?MODULE:id("🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘")
+            )
     end.
 
 test_atom_decoding() ->
@@ -378,6 +401,8 @@ test_atom_decoding() ->
     true = compare_pair(latin1_as_utf8_1),
     true = compare_pair(latin1_as_utf8_2),
     true = compare_pair(latin1_as_utf8_3),
+    true = compare_pair(short_with_two_bytes_length),
+    true = compare_pair(long_with_two_bytes_length),
     ok.
 
 test_atom_decoding_checks() ->
@@ -399,6 +424,13 @@ test_atom_decoding_checks() ->
     ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_3)),
     ok.
 
+test_atom_encoding() ->
+    true = compare_pair_encoding(latin1_as_utf8_1),
+    true = compare_pair_encoding(latin1_as_utf8_2),
+    true = compare_pair_encoding(latin1_as_utf8_3),
+    true = compare_pair_encoding(long_with_two_bytes_length),
+    ok.
+
 make_binterm_fun(Id) ->
     fun() ->
         Bin = ?MODULE:get_binary(Id),
@@ -409,6 +441,18 @@ compare_pair(Id) ->
     A = ?MODULE:get_atom(Id),
     B = ?MODULE:get_binary(Id),
     A == erlang:binary_to_term(B).
+
+compare_pair_encoding(Id) ->
+    A = ?MODULE:get_atom(Id),
+    B = ?MODULE:get_binary(Id),
+    A = erlang:binary_to_term(erlang:term_to_binary(A)),
+    OTPVersion = get_otp_version(),
+    if
+        OTPVersion =:= atomvm orelse OTPVersion >= 26 ->
+            B == erlang:term_to_binary(A);
+        true ->
+            true
+    end.
 
 % We don't have access to erlang module in tests.
 apply(F, []) ->
