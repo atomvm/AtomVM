@@ -1229,8 +1229,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     if (term_is_atom(index_or_function)) {                              \
         term module = boxed_value[1];                                   \
         fun_arity = term_to_int(boxed_value[3]);                        \
-        AtomString module_name = globalcontext_atomstring_from_term(glb, module); \
-        AtomString function_name = globalcontext_atomstring_from_term(glb, index_or_function); \
+        atom_index_t module_name = term_to_atom_index(module);          \
+        atom_index_t function_name = term_to_atom_index(index_or_function); \
         term return_value;                                              \
         if (maybe_call_native(ctx, module_name, function_name, fun_arity, &return_value)) { \
             PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);              \
@@ -1247,7 +1247,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 SET_ERROR(UNDEF_ATOM);                                  \
                 HANDLE_ERROR();                                         \
             }                                                           \
-            label = module_search_exported_function(fun_module, function_name, fun_arity, glb); \
+            label = module_search_exported_function(fun_module, function_name, fun_arity); \
             if (UNLIKELY(label == 0)) {                                 \
                 SET_ERROR(UNDEF_ATOM);                                  \
                 HANDLE_ERROR();                                         \
@@ -1689,11 +1689,11 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
     return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
 }
 
-static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString function_name, int arity,
+static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index_t function_name, int arity,
     term *return_value)
 {
     char mfa[MAX_MFA_NAME_LEN];
-    atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_name), atom_string_data(module_name), atom_string_len(function_name), atom_string_data(function_name), arity);
+    atom_table_write_mfa(ctx->global->atom_table, mfa, sizeof(mfa), module_name, function_name, arity);
     const struct ExportedFunction *exported_bif = bif_registry_get_handler(mfa);
     if (exported_bif) {
         if (exported_bif->type == GCBIFFunctionType) {
@@ -1866,14 +1866,14 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
     #ifdef IMPL_EXECUTE_LOOP
         TRACE("-- Executing code\n");
 
-        int function_len = strlen(function_name);
-        uint8_t *tmp_atom_name = malloc(function_len + 1);
-        tmp_atom_name[0] = function_len;
-        memcpy(tmp_atom_name + 1, function_name, function_len);
+        atom_index_t function_name_index;
+        enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) function_name, strlen(function_name), AtomTableAlreadyExisting, &function_name_index);
+        if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
+            fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
+            return 0;
+        }
 
-        int label = module_search_exported_function(mod, tmp_atom_name, arity, ctx->global);
-        free(tmp_atom_name);
-
+        int label = module_search_exported_function(mod, function_name_index, arity);
         if (UNLIKELY(!label)) {
             fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
             return 0;
@@ -5412,8 +5412,8 @@ wait_timeout_trap_handler:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                AtomString module_name = globalcontext_atomstring_from_term(glb, module);
-                AtomString function_name = globalcontext_atomstring_from_term(glb, function);
+                atom_index_t module_name = term_to_atom_index(module);
+                atom_index_t function_name = term_to_atom_index(function);
 
                 TRACE_APPLY(ctx, "apply", module_name, function_name, arity);
 
@@ -5429,7 +5429,7 @@ wait_timeout_trap_handler:
                         SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
-                    int target_label = module_search_exported_function(target_module, function_name, arity, glb);
+                    int target_label = module_search_exported_function(target_module, function_name, arity);
                     if (target_label == 0) {
                         pc = orig_pc;
                         SET_ERROR(UNDEF_ATOM);
@@ -5470,8 +5470,8 @@ wait_timeout_trap_handler:
                     RAISE_ERROR(BADARG_ATOM);
                 }
 
-                AtomString module_name = globalcontext_atomstring_from_term(glb, module);
-                AtomString function_name = globalcontext_atomstring_from_term(glb, function);
+                atom_index_t module_name = term_to_atom_index(module);
+                atom_index_t function_name = term_to_atom_index(function);
 
                 TRACE_APPLY(ctx, "apply_last", module_name, function_name, arity);
 
@@ -5487,7 +5487,7 @@ wait_timeout_trap_handler:
                         SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
                     }
-                    int target_label = module_search_exported_function(target_module, function_name, arity, glb);
+                    int target_label = module_search_exported_function(target_module, function_name, arity);
                     if (target_label == 0) {
                         SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();

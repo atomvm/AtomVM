@@ -399,11 +399,11 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_i
  * assumes "ownership" of the allocated memory.
  * @returns newly added atom id or term_invalid_term() in case of failure.
  */
-static inline term globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, bool copy)
+static inline term globalcontext_insert_atom_maybe_copy(GlobalContext *glb, const uint8_t *atom_data, size_t atom_len, bool copy)
 {
     atom_index_t global_atom_index;
     enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
-        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts, &global_atom_index);
+        glb->atom_table, atom_data, atom_len, copy ? AtomTableCopyAtom : AtomTableNoOpts, &global_atom_index);
     if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
         return term_invalid_term();
     }
@@ -452,22 +452,8 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
  */
 static inline term globalcontext_make_atom(GlobalContext *glb, AtomString atom_string)
 {
-    return globalcontext_insert_atom_maybe_copy(glb, atom_string, false);
+    return globalcontext_insert_atom_maybe_copy(glb, atom_string_data(atom_string), atom_string_len(atom_string), false);
 }
-
-/**
- * @brief   Returns the AtomString value of a term.
- *
- * @details This function fetches the AtomString value of the atom associated
- *          with the supplied term.  The input term must be an atom type.
- *          If no such atom is registered in the global table, this function
- *          returns NULL.  The caller should NOT free the data associated with
- *          the returned value.
- * @param   glb the global context
- * @param   t the atom term
- * @returns the AtomString associated with the supplied atom term.
- */
-AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t);
 
 /**
  * @brief Returns the term for an existing atom.

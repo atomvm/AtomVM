@@ -186,248 +186,248 @@ atom_index_t insert_atoms_into_atom_table(struct AtomTable *table)
     atom_index_t decimals_index;
     enum AtomTableEnsureAtomResult r;
 
-    r = atom_table_ensure_atom(table, false_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) false_atom + 1, false_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, true_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) true_atom + 1, true_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, ok_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) ok_atom + 1, ok_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, error_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) error_atom + 1, error_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, undefined_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) undefined_atom + 1, undefined_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badarg_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badarg_atom + 1, badarg_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badarith_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badarith_atom + 1, badarith_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badarity_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badarity_atom + 1, badarity_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badfun_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badfun_atom + 1, badfun_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, function_clause_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) function_clause_atom + 1, function_clause_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, try_clause_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) try_clause_atom + 1, try_clause_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, out_of_memory_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) out_of_memory_atom + 1, out_of_memory_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, overflow_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) overflow_atom + 1, overflow_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, system_limit_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) system_limit_atom + 1, system_limit_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, flush_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) flush_atom + 1, flush_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, heap_size_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) heap_size_atom + 1, heap_size_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, latin1_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) latin1_atom + 1, latin1_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, max_heap_size_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) max_heap_size_atom + 1, max_heap_size_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, memory_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) memory_atom + 1, memory_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, message_queue_len_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) message_queue_len_atom + 1, message_queue_len_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, puts_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) puts_atom + 1, puts_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, stack_size_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) stack_size_atom + 1, stack_size_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, min_heap_size_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) min_heap_size_atom + 1, min_heap_size_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, process_count_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) process_count_atom + 1, process_count_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, port_count_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) port_count_atom + 1, port_count_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, atom_count_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) atom_count_atom + 1, atom_count_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, system_architecture_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) system_architecture_atom + 1, system_architecture_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, wordsize_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) wordsize_atom + 1, wordsize_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, decimals_atom, AtomTableNoOpts, &decimals_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) decimals_atom + 1, decimals_atom[0], AtomTableNoOpts, &decimals_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, scientific_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) scientific_atom + 1, scientific_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, compact_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) compact_atom + 1, compact_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badmatch_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badmatch_atom + 1, badmatch_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, case_clause_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) case_clause_atom + 1, case_clause_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, if_clause_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) if_clause_atom + 1, if_clause_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, throw_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) throw_atom + 1, throw_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, low_entropy_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) low_entropy_atom + 1, low_entropy_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, unsupported_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) unsupported_atom + 1, unsupported_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, used_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) used_atom + 1, used_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, all_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) all_atom + 1, all_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, start_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) start_atom + 1, start_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, undef_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) undef_atom + 1, undef_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, vm_abort_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) vm_abort_atom + 1, vm_abort_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, link_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) link_atom + 1, link_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, monitor_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) monitor_atom + 1, monitor_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, normal_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) normal_atom + 1, normal_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, down_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) down_atom + 1, down_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, process_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) process_atom + 1, process_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, nocatch_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) nocatch_atom + 1, nocatch_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, refc_binary_info_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) refc_binary_info_atom + 1, refc_binary_info_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, noproc_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) noproc_atom + 1, noproc_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, trap_exit_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) trap_exit_atom + 1, trap_exit_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, exit_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) exit_atom + 1, exit_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badmap_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badmap_atom + 1, badmap_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badkey_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badkey_atom + 1, badkey_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, none_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) none_atom + 1, none_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, io_request_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) io_request_atom + 1, io_request_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, io_reply_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) io_reply_atom + 1, io_reply_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, put_chars_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) put_chars_atom + 1, put_chars_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, lowercase_exit_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) lowercase_exit_atom + 1, lowercase_exit_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, atomvm_version_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) atomvm_version_atom + 1, atomvm_version_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, second_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) second_atom + 1, second_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, millisecond_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) millisecond_atom + 1, millisecond_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, microsecond_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) microsecond_atom + 1, microsecond_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, infinity_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) infinity_atom + 1, infinity_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, timeout_value_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) timeout_value_atom + 1, timeout_value_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, schedulers_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) schedulers_atom + 1, schedulers_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, schedulers_online_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) schedulers_online_atom + 1, schedulers_online_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, append_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) append_atom + 1, append_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, private_append_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) private_append_atom + 1, private_append_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, binary_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) binary_atom + 1, binary_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, integer_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) integer_atom + 1, integer_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, little_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) little_atom + 1, little_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, native_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) native_atom + 1, native_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, string_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) string_atom + 1, string_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, utf8_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) utf8_atom + 1, utf8_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, utf16_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) utf16_atom + 1, utf16_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, utf32_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) utf32_atom + 1, utf32_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, badrecord_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) badrecord_atom + 1, badrecord_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, copy_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) copy_atom + 1, copy_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, reuse_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) reuse_atom + 1, reuse_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, ensure_at_least_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) ensure_at_least_atom + 1, ensure_at_least_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, ensure_exactly_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) ensure_exactly_atom + 1, ensure_exactly_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, skip_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) skip_atom + 1, skip_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, get_tail_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) get_tail_atom + 1, get_tail_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, equal_colon_equal_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) equal_colon_equal_atom + 1, equal_colon_equal_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, signed_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) signed_atom + 1, signed_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, machine_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) machine_atom + 1, machine_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, avm_floatsize_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) avm_floatsize_atom + 1, avm_floatsize_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, close_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) close_atom + 1, close_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, closed_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) closed_atom + 1, closed_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, port_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) port_atom + 1, port_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, info_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) info_atom + 1, info_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, module_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) module_atom + 1, module_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, select_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) select_atom + 1, select_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, ready_input_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) ready_input_atom + 1, ready_input_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, ready_output_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) ready_output_atom + 1, ready_output_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, attributes_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) attributes_atom + 1, attributes_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, compile_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) compile_atom + 1, compile_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, exports_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) exports_atom + 1, exports_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, incomplete_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) incomplete_atom + 1, incomplete_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, kill_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) kill_atom + 1, kill_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, killed_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) killed_atom + 1, killed_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, links_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) links_atom + 1, links_atom[0], AtomTableNoOpts, &global_atom_index);
 
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, total_heap_size_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) total_heap_size_atom + 1, total_heap_size_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, atomvm_heap_growth_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) atomvm_heap_growth_atom + 1, atomvm_heap_growth_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, bounded_free_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) bounded_free_atom + 1, bounded_free_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, minimum_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) minimum_atom + 1, minimum_atom[0], AtomTableNoOpts, &global_atom_index);
     assert(r == AtomTableEnsureAtomOk);
-    r = atom_table_ensure_atom(table, fibonacci_atom, AtomTableNoOpts, &global_atom_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) fibonacci_atom + 1, fibonacci_atom[0], AtomTableNoOpts, &global_atom_index);
 
     return decimals_index;
 }
@@ -438,36 +438,39 @@ void test_atom_table()
 
     enum AtomTableEnsureAtomResult r;
     atom_index_t new_index;
-    r = atom_table_ensure_atom(table, "\x4" "ciao", AtomTableAlreadyExisting, &new_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "ciao", 4, AtomTableAlreadyExisting, &new_index);
     assert(r == AtomTableEnsureAtomNotFound);
 
-    r = atom_table_ensure_atom(table, "\x3" "bar", AtomTableNoOpts, &new_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "bar", 3, AtomTableNoOpts, &new_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(new_index == 0);
 
     atom_index_t ciao_index;
-    r = atom_table_ensure_atom(table, "\x4" "ciao", AtomTableNoOpts, &ciao_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "ciao", 4, AtomTableNoOpts, &ciao_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(ciao_index == 1);
 
     atom_index_t foo_index;
-    r = atom_table_ensure_atom(table, "\x3" "foo", AtomTableNoOpts, &foo_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "foo", 3, AtomTableNoOpts, &foo_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(foo_index == 2);
 
-    r = atom_table_ensure_atom(table, "\x3" "foo", AtomTableNoOpts, &foo_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "foo", 3, AtomTableNoOpts, &foo_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(foo_index == 2);
 
-    r = atom_table_ensure_atom(table, "\x4" "ciao", AtomTableAlreadyExisting, &ciao_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "ciao", 4, AtomTableAlreadyExisting, &ciao_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(ciao_index == 1);
 
-    assert(((char *) atom_table_get_atom_string(table, 0))[0] == 3);
+    size_t atom_len_0;
+    const uint8_t *atom_data_0 = atom_table_get_atom_string(table, 0, &atom_len_0);
+    UNUSED(atom_data_0);
+    assert(atom_len_0 == 3);
 
     atom_index_t decimals_index = insert_atoms_into_atom_table(table);
 
-    r = atom_table_ensure_atom(table, "\x8" "decimals", AtomTableNoOpts, &new_index);
+    r = atom_table_ensure_atom(table, (const uint8_t *) "decimals", 8, AtomTableNoOpts, &new_index);
     assert(r == AtomTableEnsureAtomOk);
     assert(new_index == decimals_index);
 
