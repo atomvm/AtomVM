@@ -120,11 +120,11 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
     for (int i = 0; i < functions_count; i++) {
         int local_module_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 12);
         int local_function_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
-        AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
-        AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
+        atom_index_t module_atom = this_module->local_atoms_to_global_table[local_module_atom_index];
+        atom_index_t function_atom = this_module->local_atoms_to_global_table[local_function_atom_index];
         uint32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
         char mfa[MAX_MFA_NAME_LEN];
-        atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_atom), atom_string_data(module_atom), atom_string_len(function_atom), atom_string_data(function_atom), arity);
+        atom_table_write_mfa(glb->atom_table, mfa, sizeof(mfa), module_atom, function_atom, arity);
 
         const struct ExportedFunction *bif = bif_registry_get_handler(mfa);
 
@@ -168,7 +168,7 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
 }
 #endif
 
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb)
+bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity)
 {
     int best_label = -1;
     const uint8_t *export_table_data = (const uint8_t *) this_module->export_table;
@@ -180,7 +180,7 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
+            *function_name = this_module->local_atoms_to_global_table[fun_atom_index];
         }
     }
 
@@ -193,7 +193,7 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
+            *function_name = this_module->local_atoms_to_global_table[fun_atom_index];
         }
     }
     if (UNLIKELY(best_label == -1)) {
@@ -210,34 +210,38 @@ size_t module_get_exported_functions_count(Module *this_module)
     return functions_count;
 }
 
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb)
+uint32_t module_search_exported_function(Module *this_module, atom_index_t func_name, int func_arity)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_UNALIGNED(table_data + i * 12 + 12), glb);
+        int local_atom_id = READ_32_UNALIGNED(table_data + i * 12 + 12);
         int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
-        if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
-            uint32_t label = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
-            return label;
+        if (func_arity == arity) {
+            atom_index_t function_atom_ix = this_module->local_atoms_to_global_table[local_atom_id];
+            if (func_name == function_atom_ix) {
+                uint32_t label = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
+                return label;
+            }
         }
     }
 
     return 0;
 }
 
-term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *glb)
+term module_get_exported_functions(Module *this_module, Heap *heap)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
     term result_list = term_nil();
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_UNALIGNED(table_data + i * 12 + 12), glb);
+        int local_atom_id = READ_32_UNALIGNED(table_data + i * 12 + 12);
+        atom_index_t function_atom_ix = this_module->local_atoms_to_global_table[local_atom_id];
         int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
         term function_tuple = term_alloc_tuple(2, heap);
-        term_put_tuple_element(function_tuple, 0, globalcontext_existing_term_from_atom_string(glb, function_atom));
+        term_put_tuple_element(function_tuple, 0, term_from_atom_index(function_atom_ix));
         term_put_tuple_element(function_tuple, 1, term_from_int(arity));
         result_list = term_list_prepend(function_tuple, result_list, heap);
     }
@@ -465,18 +469,13 @@ term module_load_literal(Module *mod, int index, Context *ctx)
 
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
-
-    AtomString module_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index);
-    AtomString function_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->function_atom_index);
-    int arity = unresolved->arity;
-
     Module *found_module = globalcontext_get_module(glb, unresolved->module_atom_index);
 
     if (LIKELY(found_module != NULL)) {
-        int exported_label = module_search_exported_function(found_module, function_name_atom, arity, glb);
+        int exported_label = module_search_exported_function(found_module, unresolved->function_atom_index, unresolved->arity);
         if (exported_label == 0) {
             char buf[MAX_MFA_NAME_LEN];
-            atom_write_mfa(buf, sizeof(buf), atom_string_len(module_name_atom), atom_string_data(module_name_atom), atom_string_len(function_name_atom), atom_string_data(function_name_atom), arity);
+            atom_table_write_mfa(glb->atom_table, buf, MAX_MFA_NAME_LEN, unresolved->module_atom_index, unresolved->function_atom_index, unresolved->arity);
             fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
             return NULL;
         }
@@ -493,9 +492,9 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
         mod->imported_funcs[import_table_index] = &mfunc->base;
         return &mfunc->base;
     } else {
-        char buf[256];
-        atom_string_to_c(module_name_atom, buf, 256);
-        fprintf(stderr, "Warning: module %s cannot be resolved.\n", buf);
+        size_t atom_string_len;
+        const uint8_t *atom_string_data = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index, &atom_string_len);
+        fprintf(stderr, "Warning: module %.*s cannot be resolved.\n", (int) atom_string_len, atom_string_data);
         return NULL;
     }
 }

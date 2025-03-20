@@ -51,6 +51,7 @@
 #define SMALL_BIG_EXT 110
 #define EXPORT_EXT 113
 #define MAP_EXT 116
+#define ATOM_UTF8_EXT 118
 #define SMALL_ATOM_UTF8_EXT 119
 #define V4_PORT_EXT 120
 #define INVALID_TERM_SIZE -1
@@ -248,16 +249,25 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         return NEW_FLOAT_EXT_SIZE;
 
     } else if (term_is_atom(t)) {
-        int atom_index = term_to_atom_index(t);
+        atom_index_t atom_index = term_to_atom_index(t);
         size_t atom_len;
-        atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
-        if (!IS_NULL_PTR(buf)) {
-            buf[0] = SMALL_ATOM_UTF8_EXT;
-            buf[1] = atom_len;
-            atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, buf + 2);
+        const uint8_t *atom_data = atom_table_get_atom_string(glb->atom_table, atom_index, &atom_len);
+        if (UNLIKELY(atom_len >= 256)) {
+            if (!IS_NULL_PTR(buf)) {
+                buf[0] = ATOM_UTF8_EXT;
+                buf[1] = atom_len >> 8;
+                buf[2] = atom_len & 0xFF;
+                memcpy(buf + 3, atom_data, atom_len);
+            }
+            return ATOM_EXT_BASE_SIZE + atom_len;
+        } else {
+            if (!IS_NULL_PTR(buf)) {
+                buf[0] = SMALL_ATOM_UTF8_EXT;
+                buf[1] = atom_len;
+                memcpy(buf + 2, atom_data, atom_len);
+            }
+            return SMALL_ATOM_EXT_BASE_SIZE + atom_len;
         }
-        return 2 + atom_len;
-
     } else if (term_is_tuple(t)) {
         size_t arity = term_get_tuple_arity(t);
         size_t k;
@@ -523,21 +533,19 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 return term_invalid_term();
             }
 
-            const uint8_t *atom_chars = (const uint8_t *) (external_term_buf + 3);
+            const uint8_t *atom_chars = (const uint8_t *) (external_term_buf + ATOM_EXT_BASE_SIZE);
             term atom_term;
             if (LIKELY(unicode_buf_is_ascii(atom_chars, atom_len))) {
-                // there is a trick here: we are reusing LSB of len field as atom length
                 atom_term = globalcontext_insert_atom_maybe_copy(
-                    glb, (AtomString) (external_term_buf + 2), copy);
+                    glb, atom_chars, atom_len, copy);
             } else {
                 // need to re-encode latin1 to UTF-8
                 size_t required_buf_size = unicode_latin1_buf_size_as_utf8(atom_chars, atom_len);
                 if (UNLIKELY(required_buf_size > 255)) {
                     return term_invalid_term();
                 }
-                uint8_t *atom_buf = malloc(1 + required_buf_size);
-                atom_buf[0] = required_buf_size;
-                uint8_t *curr_codepoint = &atom_buf[1];
+                uint8_t *atom_buf = malloc(required_buf_size);
+                uint8_t *curr_codepoint = atom_buf;
                 for (int i = 0; i < atom_len; i++) {
                     size_t codepoint_size;
                     // latin1 encoding is always successful
@@ -545,11 +553,11 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                     curr_codepoint += codepoint_size;
                 }
                 atom_term
-                    = globalcontext_insert_atom_maybe_copy(glb, (AtomString) atom_buf, true);
+                    = globalcontext_insert_atom_maybe_copy(glb, atom_buf, required_buf_size, true);
                 free(atom_buf);
             }
 
-            *eterm_size = 3 + atom_len;
+            *eterm_size = ATOM_EXT_BASE_SIZE + atom_len;
             return atom_term;
         }
 
@@ -695,17 +703,29 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             return map;
         }
 
-        case SMALL_ATOM_UTF8_EXT: {
-            uint8_t atom_len = *(external_term_buf + 1);
-            const uint8_t *atom_chars = external_term_buf + 2;
+        case ATOM_UTF8_EXT: {
+            uint16_t atom_len = READ_16_UNALIGNED(external_term_buf + 1);
+            const uint8_t *atom_chars = external_term_buf + ATOM_EXT_BASE_SIZE;
 
             if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_chars, atom_len))) {
                 return term_invalid_term();
             }
 
-            // AtomString first byte is the atom length
-            term atom_term = globalcontext_insert_atom_maybe_copy(glb, (AtomString) (external_term_buf + 1), copy);
-            *eterm_size = 2 + atom_len;
+            term atom_term = globalcontext_insert_atom_maybe_copy(glb, atom_chars, atom_len, copy);
+            *eterm_size = ATOM_EXT_BASE_SIZE + atom_len;
+            return atom_term;
+        }
+
+        case SMALL_ATOM_UTF8_EXT: {
+            uint8_t atom_len = *(external_term_buf + 1);
+            const uint8_t *atom_chars = external_term_buf + SMALL_ATOM_EXT_BASE_SIZE;
+
+            if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_chars, atom_len))) {
+                return term_invalid_term();
+            }
+
+            term atom_term = globalcontext_insert_atom_maybe_copy(glb, atom_chars, atom_len, copy);
+            *eterm_size = SMALL_ATOM_EXT_BASE_SIZE + atom_len;
             return atom_term;
         }
 
@@ -853,6 +873,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             return term_boxed_integer_size(value);
         }
 
+        case ATOM_UTF8_EXT:
         case ATOM_EXT: {
             if (UNLIKELY(remaining < ATOM_EXT_BASE_SIZE)) {
                 return INVALID_TERM_SIZE;

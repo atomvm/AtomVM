@@ -1413,8 +1413,6 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 
     Context *new_ctx = context_new(ctx->global);
 
-    AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
-
     Module *found_module = globalcontext_get_module(ctx->global, term_to_atom_index(module_term));
     if (UNLIKELY(!found_module)) {
         return UNDEFINED_ATOM;
@@ -1425,7 +1423,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!proper)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    int label = module_search_exported_function(found_module, function_string, args_len, ctx->global);
+    int label = module_search_exported_function(found_module, term_to_atom_index(argv[1]), args_len);
     //TODO: fail here if no function has been found
     if (UNLIKELY(label == 0)) {
         AVM_ABORT();
@@ -2131,13 +2129,13 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
 
     GlobalContext *glb = ctx->global;
 
-    int atom_index = term_to_atom_index(atom_term);
+    atom_index_t atom_index = term_to_atom_index(atom_term);
     size_t atom_len;
-    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &atom_len);
+    const uint8_t *atom_data = atom_table_get_atom_string(glb->atom_table, atom_index, &atom_len);
 
     bool encode_to_latin1 = false;
     if (encoding == LATIN1_ATOM) {
-        if (UNLIKELY(!atom_table_is_atom_ref_ascii(glb->atom_table, atom_ref))) {
+        if (UNLIKELY(!unicode_buf_is_ascii(atom_data, atom_len))) {
             encode_to_latin1 = true;
         }
     } else if (UNLIKELY(encoding != UTF8_ATOM) && (encoding != UNICODE_ATOM)) {
@@ -2149,17 +2147,9 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
     }
 
     if (LIKELY(!encode_to_latin1)) {
-        term binary = term_create_uninitialized_binary(atom_len, &ctx->heap, glb);
-        atom_table_write_bytes(
-            glb->atom_table, atom_ref, atom_len, (char *) term_binary_data(binary));
-        return binary;
+        return term_from_const_binary(atom_data, atom_len, &ctx->heap, glb);
     } else {
-        uint8_t *utf8_tmp_buf = malloc(atom_len);
-        if (IS_NULL_PTR(utf8_tmp_buf)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        atom_table_write_bytes(glb->atom_table, atom_ref, atom_len, (char *) utf8_tmp_buf);
-        size_t encoded_len = unicode_buf_utf8_len(utf8_tmp_buf, atom_len);
+        size_t encoded_len = unicode_buf_utf8_len(atom_data, atom_len);
         term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
         char *binary_data = (char *) term_binary_data(binary);
         size_t in_pos = 0;
@@ -2167,16 +2157,14 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
             size_t codepoint_size;
             uint32_t codepoint;
             if (UNLIKELY(unicode_utf8_decode(
-                             &utf8_tmp_buf[in_pos], 2, &codepoint, &codepoint_size)
+                             &atom_data[in_pos], 2, &codepoint, &codepoint_size)
                         != UnicodeTransformDecodeSuccess
                     || (codepoint > 255))) {
-                free(utf8_tmp_buf);
                 RAISE_ERROR(BADARG_ATOM);
             }
             binary_data[i] = codepoint;
             in_pos += codepoint_size;
         }
-        free(utf8_tmp_buf);
         return binary;
     }
 }
@@ -2231,23 +2219,11 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
     term atom_term = argv[0];
     VALIDATE_VALUE(atom_term, term_is_atom);
 
-    int atom_index = term_to_atom_index(atom_term);
+    atom_index_t atom_index = term_to_atom_index(atom_term);
     size_t atom_len;
+    const uint8_t *atom_data = atom_table_get_atom_string(ctx->global->atom_table, atom_index, &atom_len);
 
-    atom_ref_t atom_ref
-        = atom_table_get_atom_ptr_and_len(ctx->global->atom_table, atom_index, &atom_len);
-
-    // TODO: use stack for smaller atoms
-    char *atom_buf = malloc(atom_len);
-    if (IS_NULL_PTR(atom_buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    atom_table_write_bytes(ctx->global->atom_table, atom_ref, atom_len, atom_buf);
-
-    term ret = make_list_from_utf8_buf((uint8_t *) atom_buf, atom_len, ctx);
-    free(atom_buf);
-    return ret;
+    return make_list_from_utf8_buf(atom_data, atom_len, ctx);
 }
 
 static size_t lltoa(avm_int64_t int_value, unsigned base, char *integer_string)
@@ -3579,14 +3555,12 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(arity_term, term_is_integer);
 
     atom_index_t module_name_ix = term_to_atom_index(module);
-    AtomString module_name = atom_table_get_atom_string(ctx->global->atom_table, module_name_ix);
     atom_index_t function_name_ix = term_to_atom_index(function);
-    AtomString function_name = atom_table_get_atom_string(ctx->global->atom_table, function_name_ix);
 
     avm_int_t arity = term_to_int(arity_term);
 
     char mfa[MAX_MFA_NAME_LEN];
-    atom_write_mfa(mfa, sizeof(mfa), atom_string_len(module_name), atom_string_data(module_name), atom_string_len(function_name), atom_string_data(function_name), arity);
+    atom_table_write_mfa(ctx->global->atom_table, mfa, sizeof(mfa), module_name_ix, function_name_ix, arity);
 
     const struct ExportedFunction *bif = bif_registry_get_handler(mfa);
     if (bif) {
@@ -3603,7 +3577,7 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
         return FALSE_ATOM;
     }
 
-    int target_label = module_search_exported_function(target_module, function_name, arity, ctx->global);
+    int target_label = module_search_exported_function(target_module, function_name_ix, arity);
     if (target_label == 0) {
         return FALSE_ATOM;
     }
@@ -3739,20 +3713,20 @@ static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[])
     switch (key) {
         case MODULE_ATOM: {
             term module_name;
-            term_get_function_mfa(fun, &module_name, NULL, NULL, ctx->global);
+            term_get_function_mfa(fun, &module_name, NULL, NULL);
             value = module_name;
             break;
         }
         case NAME_ATOM: {
             term function_name;
-            term_get_function_mfa(fun, NULL, &function_name, NULL, ctx->global);
+            term_get_function_mfa(fun, NULL, &function_name, NULL);
             value = function_name;
             break;
         }
 
         case ARITY_ATOM: {
             term arity;
-            term_get_function_mfa(fun, NULL, NULL, &arity, ctx->global);
+            term_get_function_mfa(fun, NULL, NULL, &arity);
             value = arity;
             break;
         }
@@ -4146,7 +4120,7 @@ static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free(ctx, info_size) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term exports = module_get_exported_functions(target_module, &ctx->heap, ctx->global);
+    term exports = module_get_exported_functions(target_module, &ctx->heap);
     if (argc == 2) {
         return exports;
     }
@@ -4488,30 +4462,22 @@ static term nif_atomvm_read_priv(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int atom_index = term_to_atom_index(app_term);
+    atom_index_t atom_index = term_to_atom_index(app_term);
     size_t app_len;
-    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &app_len);
-    char *app = malloc(app_len + 1);
-    if (IS_NULL_PTR(app)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    atom_table_write_cstring(glb->atom_table, atom_ref, app_len + 1, app);
+    const uint8_t *app_data = atom_table_get_atom_string(glb->atom_table, atom_index, &app_len);
 
     int ok;
     char *path = interop_term_to_string(path_term, &ok);
     if (UNLIKELY(!ok)) {
-        free(app);
         RAISE_ERROR(BADARG_ATOM);
     }
     if (UNLIKELY(!path)) {
-        free(app);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     int complete_path_len = app_len + strlen("/priv/") + strlen(path) + 1;
     char *complete_path = malloc(complete_path_len);
-    snprintf(complete_path, complete_path_len, "%s/priv/%s", app, path);
-    free(app);
+    snprintf(complete_path, complete_path_len, "%.*s/priv/%s", (int) app_len, app_data, path);
     free(path);
 
     const void *bin_data;
@@ -4939,14 +4905,12 @@ static void *nif_code_all_available_fold(void *accum, const void *section_ptr, u
             bool loaded;
             if (acc->avmpack_data->in_use) {
                 // Check if module is loaded
-                char atom_str[module_name_len + 1];
-                atom_str[0] = module_name_len;
-                memcpy(atom_str + 1, section_name, module_name_len);
-                term module_name_atom = globalcontext_insert_atom_maybe_copy(acc->ctx->global, (AtomString) atom_str, true);
-                if (UNLIKELY(term_is_invalid_term(module_name_atom))) {
+                atom_index_t module_name_ix;
+                enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(acc->ctx->global->atom_table, (const uint8_t *) section_name, module_name_len, AtomTableAlreadyExisting, &module_name_ix);
+                if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
                     loaded = false;
                 } else {
-                    Module *loaded_module = globalcontext_get_module(acc->ctx->global, term_to_atom_index(module_name_atom));
+                    Module *loaded_module = globalcontext_get_module(acc->ctx->global, module_name_ix);
                     loaded = loaded_module != NULL;
                 }
             } else {
@@ -5006,8 +4970,12 @@ static term nif_code_all_available(Context *ctx, int argc, term argv[])
     for (size_t ix = 0; ix < available_count - acc.acc_count; ix++) {
         Module *module = globalcontext_get_module_by_index(ctx->global, ix);
         term module_tuple = term_alloc_tuple(3, &ctx->heap);
-        AtomString module_atom_str = globalcontext_atomstring_from_term(ctx->global, module_get_name(module));
-        term_put_tuple_element(module_tuple, 0, term_from_const_binary(((const char *) module_atom_str) + 1, ((const char *) module_atom_str)[0], &ctx->heap, ctx->global));
+        term module_atom = module_get_name(module);
+        atom_index_t module_atom_ix = term_to_atom_index(module_atom);
+        size_t module_atom_len;
+        const uint8_t *data = atom_table_get_atom_string(ctx->global->atom_table, module_atom_ix, &module_atom_len);
+        term module_name_binary = term_from_const_binary(data, module_atom_len, &ctx->heap, ctx->global);
+        term_put_tuple_element(module_tuple, 0, module_name_binary);
         term_put_tuple_element(module_tuple, 1, UNDEFINED_ATOM);
         term_put_tuple_element(module_tuple, 2, TRUE_ATOM);
         acc.result = term_list_prepend(module_tuple, acc.result, &ctx->heap);
