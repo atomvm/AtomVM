@@ -35,9 +35,9 @@
 #define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
 #define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
 #else
-#define SMP_RDLOCK(htable)
-#define SMP_WRLOCK(htable)
-#define SMP_UNLOCK(htable)
+#define SMP_RDLOCK(htable) UNUSED(htable)
+#define SMP_WRLOCK(htable) UNUSED(htable)
+#define SMP_UNLOCK(htable) UNUSED(htable)
 #endif
 
 #define DEFAULT_SIZE 8
