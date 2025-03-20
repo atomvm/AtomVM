@@ -470,7 +470,7 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
     AtomString function_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->function_atom_index);
     int arity = unresolved->arity;
 
-    Module *found_module = globalcontext_get_module(glb, module_name_atom);
+    Module *found_module = globalcontext_get_module(glb, unresolved->module_atom_index);
 
     if (LIKELY(found_module != NULL)) {
         int exported_label = module_search_exported_function(found_module, function_name_atom, arity, glb);
