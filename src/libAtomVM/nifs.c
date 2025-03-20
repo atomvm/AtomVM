@@ -1413,10 +1413,9 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 
     Context *new_ctx = context_new(ctx->global);
 
-    AtomString module_string = globalcontext_atomstring_from_term(ctx->global, argv[0]);
     AtomString function_string = globalcontext_atomstring_from_term(ctx->global, argv[1]);
 
-    Module *found_module = globalcontext_get_module(ctx->global, module_string);
+    Module *found_module = globalcontext_get_module(ctx->global, term_to_atom_index(module_term));
     if (UNLIKELY(!found_module)) {
         return UNDEFINED_ATOM;
     }
@@ -3599,7 +3598,7 @@ static term nif_erlang_function_exported(Context *ctx, int argc, term argv[])
         return TRUE_ATOM;
     }
 
-    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+    Module *target_module = globalcontext_get_module(ctx->global, module_name_ix);
     if (IS_NULL_PTR(target_module)) {
         return FALSE_ATOM;
     }
@@ -4124,8 +4123,7 @@ static term nif_erlang_get_module_info(Context *ctx, int argc, term argv[])
         VALIDATE_VALUE(argv[1], term_is_atom);
     }
     term module = argv[0];
-    AtomString module_name = globalcontext_atomstring_from_term(ctx->global, module);
-    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+    Module *target_module = globalcontext_get_module(ctx->global, term_to_atom_index(module));
     if (IS_NULL_PTR(target_module)) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -4944,8 +4942,13 @@ static void *nif_code_all_available_fold(void *accum, const void *section_ptr, u
                 char atom_str[module_name_len + 1];
                 atom_str[0] = module_name_len;
                 memcpy(atom_str + 1, section_name, module_name_len);
-                Module *loaded_module = globalcontext_get_module(acc->ctx->global, (AtomString) &atom_str);
-                loaded = loaded_module != NULL;
+                term module_name_atom = globalcontext_insert_atom_maybe_copy(acc->ctx->global, (AtomString) atom_str, true);
+                if (UNLIKELY(term_is_invalid_term(module_name_atom))) {
+                    loaded = false;
+                } else {
+                    Module *loaded_module = globalcontext_get_module(acc->ctx->global, term_to_atom_index(module_name_atom));
+                    loaded = loaded_module != NULL;
+                }
             } else {
                 loaded = false;
             }
@@ -5121,8 +5124,7 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    AtomString module_string = globalcontext_atomstring_from_term(ctx->global, module_atom);
-    Module *found_module = globalcontext_get_module(ctx->global, module_string);
+    Module *found_module = globalcontext_get_module(ctx->global, term_to_atom_index(module_atom));
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

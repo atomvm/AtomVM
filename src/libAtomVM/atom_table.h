@@ -77,6 +77,18 @@ void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf
 void atom_table_write_cstring(
     struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf);
 
+/**
+ * @brief Allocate a new C string with malloc with the representation of
+ * an atom
+ *
+ * @param   table atom table
+ * @param   atom_index index of the atom to get the representation of
+ * @param   suffix suffix to append to atom name or NULL of none
+ * @return a newly allocated string with the representation of the atom or
+ * NULL if allocation failed or atom index doesn't exist
+ */
+char *atom_table_atom_to_new_cstring(struct AtomTable *table, atom_index_t atom_index, const char *suffix);
+
 #ifdef __cplusplus
 }
 #endif

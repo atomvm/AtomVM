@@ -1242,7 +1242,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             }                                                           \
             continue;                                                   \
         } else {                                                        \
-            fun_module = globalcontext_get_module(ctx->global, module_name); \
+            fun_module = globalcontext_get_module(ctx->global, term_to_atom_index(module)); \
             if (IS_NULL_PTR(fun_module)) {                              \
                 SET_ERROR(UNDEF_ATOM);                                  \
                 HANDLE_ERROR();                                         \
@@ -5423,7 +5423,7 @@ wait_timeout_trap_handler:
                     x_regs[0] = native_return;
 
                 } else {
-                    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+                    Module *target_module = globalcontext_get_module(ctx->global, term_to_atom_index(module));
                     if (IS_NULL_PTR(target_module)) {
                         pc = orig_pc;
                         SET_ERROR(UNDEF_ATOM);
@@ -5482,7 +5482,7 @@ wait_timeout_trap_handler:
                     DO_RETURN();
 
                 } else {
-                    Module *target_module = globalcontext_get_module(ctx->global, module_name);
+                    Module *target_module = globalcontext_get_module(ctx->global, term_to_atom_index(module));
                     if (IS_NULL_PTR(target_module)) {
                         SET_ERROR(UNDEF_ATOM);
                         HANDLE_ERROR();
