@@ -197,19 +197,7 @@ char *interop_list_to_utf8_string(term list, int *ok)
 char *interop_atom_to_string(Context *ctx, term atom)
 {
     GlobalContext *glb = ctx->global;
-
-    int atom_index = term_to_atom_index(atom);
-
-    size_t len;
-    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &len);
-
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-    atom_table_write_cstring(glb->atom_table, atom_ref, len + 1, str);
-
-    return str;
+    return atom_table_atom_to_new_cstring(glb->atom_table, term_to_atom_index(atom));
 }
 
 term interop_proplist_get_value(term list, term key)
