@@ -93,8 +93,8 @@ struct Nif
 struct UnresolvedFunctionCall
 {
     struct ExportedFunction base;
-    int module_atom_index;
-    int function_atom_index;
+    atom_index_t module_atom_index;
+    atom_index_t function_atom_index;
     int arity;
 };
 

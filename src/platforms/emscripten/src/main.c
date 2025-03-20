@@ -74,7 +74,7 @@ static int load_module(const char *path)
     } else if (ext && strcmp(ext, ".beam") == 0) {
         Module *module = sys_load_module_from_file(global, path);
         globalcontext_insert_module(global, module);
-        if (IS_NULL_PTR(main_module) && module_search_exported_function(module, ATOM_STR("\5", "start"), 0, global) != 0) {
+        if (IS_NULL_PTR(main_module) && module_search_exported_function(module, START_ATOM_INDEX, 0) != 0) {
             main_module = module;
         }
     } else {

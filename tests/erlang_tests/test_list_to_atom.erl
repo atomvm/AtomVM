@@ -20,9 +20,10 @@
 
 -module(test_list_to_atom).
 
--export([start/0, f/1, g/1, h/1, i/1]).
+-export([start/0, f/1, g/1, h/1, i/1, id/1]).
 
 start() ->
+    ok = test_more_than_255_bytes(),
     f(i(h(g(2)))) + f(i(h(g(10)))) + i(10).
 
 f(hello) ->
@@ -55,3 +56,30 @@ i(A) ->
         error:badarg -> 0;
         _:_ -> -1024
     end.
+
+test_more_than_255_bytes() ->
+    Suffix = duplicate("-", 252, ""),
+    Str = "アトム" ++ Suffix,
+    255 = length(Str),
+    _ = list_to_atom(id(Str)),
+    % biggest atom is 1020 bytes
+    MoonStr = "🌑🌒🌓🌔🌕🌖🌗🌘",
+    8 = length(MoonStr),
+    Moons256Str = duplicate(MoonStr, 32, ""),
+    256 = length(Moons256Str),
+    "🌑" ++ Moons255Str = Moons256Str,
+    _ = list_to_atom(id(Moons255Str)),
+
+    ok =
+        try
+            _ = list_to_atom(id(Str ++ "o")),
+            should_have_raised
+        catch
+            error:system_limit -> ok
+        end.
+
+id(X) ->
+    X.
+
+duplicate(_List, 0, Acc) -> Acc;
+duplicate(List, N, Acc) -> duplicate(List, N - 1, List ++ Acc).

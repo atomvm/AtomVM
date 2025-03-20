@@ -174,9 +174,8 @@ size_t module_get_exported_functions_count(Module *this_module);
  * @param this_module the module on which the function will be searched.
  * @param func_name function name atom string.
  * @param func_arity function arity.
- * @param glb the global context
  */
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb);
+uint32_t module_search_exported_function(Module *this_module, atom_index_t func_name, int func_arity);
 
 /**
  * @brief Determine heap size of exported functions list.
@@ -197,10 +196,9 @@ static inline size_t module_get_exported_functions_list_size(Module *this_module
  *
  * @param this_module the module to count exported functions of
  * @param heap heap to allocate tuples
- * @param global global context to fetch atoms
  * @return a list of exported functions
  */
-term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *global);
+term module_get_exported_functions(Module *this_module, Heap *heap);
 
 /***
  * @brief Destroys an existing Module
@@ -229,21 +227,6 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
  * @param ctx the target context.
  */
 term module_load_literal(Module *mod, int index, Context *ctx);
-
-/**
- * @brief Gets the AtomString for the given local atom id
- *
- * @details Gets an AtomString for the given local atom id from the global table.
- * @param mod the module that owns the atom.
- * @param local_atom_id module atom table index.
- * @param glb the global context.
- * @return the AtomString for the given module atom index.
- */
-static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id, GlobalContext *glb)
-{
-    int global_id = mod->local_atoms_to_global_table[local_atom_id];
-    return atom_table_get_atom_string(glb->atom_table, global_id);
-}
 
 /**
  * @brief Gets a term for the given local atom id
@@ -368,9 +351,8 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param label the current label used to look up the function/arity
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
- * @param glb the global context
  */
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb);
+bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity);
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.

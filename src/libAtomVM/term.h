@@ -1972,10 +1972,9 @@ static inline bool term_is_string(term t)
  * @param m module name as an atom.
  * @param f function name as an atom.
  * @param a function arity as an integer.
- * @param global the \c GlobalContext used for creating function name atoms.
  *
  */
-void term_get_function_mfa(term fun, term *m, term *f, term *a, GlobalContext *global);
+void term_get_function_mfa(term fun, term *m, term *f, term *a);
 
 static inline term term_make_function_reference(term m, term f, term a, Heap *heap)
 {

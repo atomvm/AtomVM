@@ -242,9 +242,8 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keyp
 
 static uint32_t hash_atom(term t, int32_t h, GlobalContext *global)
 {
-    AtomString atom_str = (uint8_t *) globalcontext_atomstring_from_term(global, t);
-    size_t len = atom_string_len(atom_str);
-    const uint8_t *data = (const uint8_t *) atom_string_data(atom_str);
+    size_t len;
+    const uint8_t *data = atom_table_get_atom_string(global->atom_table, term_to_atom_index(t), &len);
     for (size_t i = 0; i < len; ++i) {
         h = h * LARGE_PRIME_ATOM + data[i];
     }
