@@ -148,6 +148,50 @@ term bif_erlang_is_function_1(Context *ctx, uint32_t fail_label, term arg1)
     return term_is_function(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_function_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
+{
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_any_integer);
+
+    if (!term_is_integer(arg2)) {
+        // function takes any positive integer, including big integers
+        // but internally we use only small integers
+        return FALSE_ATOM;
+    }
+    avm_int_t arity = term_to_int(arg2);
+    if (arity < 0) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    if (!term_is_function(arg1)) {
+        return FALSE_ATOM;
+    }
+
+    // following part has been taken from opcodesswitch.h
+    // TODO: factor this out
+    const term *boxed_value = term_to_const_term_ptr(arg1);
+
+    Module *fun_module = (Module *) boxed_value[1];
+    term index_or_module = boxed_value[2];
+
+    uint32_t fun_arity;
+
+    if (term_is_atom(index_or_module)) {
+        fun_arity = term_to_int(boxed_value[3]);
+
+    } else {
+        uint32_t fun_index = term_to_int32(index_or_module);
+
+        uint32_t fun_label;
+        uint32_t fun_arity_and_freeze;
+        uint32_t fun_n_freeze;
+
+        module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
+        fun_arity = fun_arity_and_freeze - fun_n_freeze;
+    }
+
+    return (arity == ((avm_int_t) fun_arity)) ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     UNUSED(ctx);

@@ -194,6 +194,7 @@ compile_erlang(test_funs8)
 compile_erlang(test_funs9)
 compile_erlang(test_funs10)
 compile_erlang(test_funs11)
+compile_erlang(test_funs12)
 
 compile_erlang(test_make_fun3)
 
@@ -668,6 +669,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_funs9.beam
     test_funs10.beam
     test_funs11.beam
+    test_funs12.beam
 
     test_make_fun3.beam
 
