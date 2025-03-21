@@ -144,4 +144,10 @@ typedef union {
     avm_float_t f;
 } float_term_t;
 
+// Quite a low value, BEAM is 255 + 255 + 1 + strlen(max(arity))
+// This buffer is typically allocated on C stack
+// This is a hard limit for bifs and nifs. It currently is only used for
+// printing error messages for other functions.
+#define MAX_MFA_NAME_LEN 260
+
 #endif
