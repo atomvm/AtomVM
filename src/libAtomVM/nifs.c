@@ -1909,13 +1909,6 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     term bin_term = argv[0];
     VALIDATE_VALUE(bin_term, term_is_binary);
 
-    const char *bin_data = term_binary_data(bin_term);
-    int bin_data_size = term_binary_size(bin_term);
-
-    if (UNLIKELY((bin_data_size == 0) || (bin_data_size >= 24))) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
     uint8_t base = 10;
 
     if (argc == 2) {
@@ -1928,15 +1921,11 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    char null_terminated_buf[65];
-    memcpy(null_terminated_buf, bin_data, bin_data_size);
-    null_terminated_buf[bin_data_size] = '\0';
+    const char *bin_data = term_binary_data(bin_term);
+    int bin_data_size = term_binary_size(bin_term);
 
-    //TODO: handle errors
-    //TODO: do not copy buffer, implement a custom strotoll
-    char *endptr;
-    uint64_t value = strtoll(null_terminated_buf, &endptr, base);
-    if (*endptr != '\0') {
+    int64_t value;
+    if (int64_parse_ascii_buf(bin_data, bin_data_size, base, BufToInt64NoOptions, &value) != bin_data_size) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
