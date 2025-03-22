@@ -5353,17 +5353,19 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(label, pc)
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
-                unsigned int arity;
-                DECODE_INTEGER(arity, pc)
+                term arity_term;
+                DECODE_COMPACT_TERM(arity_term, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
 
-                    if (term_is_function(arg1)) {
+                    if (term_is_function(arg1) && term_is_integer(arity_term)) {
                         const term *boxed_value = term_to_const_term_ptr(arg1);
 
                         Module *fun_module = (Module *) boxed_value[1];
                         term index_or_module = boxed_value[2];
+
+                        avm_int_t arity = term_to_int(arity_term);
 
                         uint32_t fun_arity;
 
@@ -5381,7 +5383,7 @@ wait_timeout_trap_handler:
                             fun_arity = fun_arity_and_freeze - fun_n_freeze;
                         }
 
-                        if (arity != fun_arity) {
+                        if ((arity < 0) || (arity != (avm_int_t) fun_arity)) {
                             pc = mod->labels[label];
                         }
                     } else {
