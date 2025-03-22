@@ -375,6 +375,15 @@ static inline size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char
 }
 #endif
 
+typedef enum
+{
+    BufToInt64NoOptions,
+    BufToInt64RejectSign
+} buf_to_int64_options_t;
+
+int int64_parse_ascii_buf(const char buf[], size_t buf_len, unsigned int base,
+    buf_to_int64_options_t options, int64_t *out);
+
 #ifdef __cplusplus
 }
 #endif
