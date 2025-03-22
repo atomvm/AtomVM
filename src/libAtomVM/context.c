@@ -573,10 +573,10 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
         if (monitor->ref_ticks == ref_ticks) {
             if ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_MONITORED_PID_TAG) {
                 *is_monitoring = false;
-                return term_from_local_process_id(monitor->monitor_obj >> 4);
+                return term_from_local_process_id((uint32_t) (monitor->monitor_obj >> 4));
             } else if ((monitor->monitor_obj & 0x3) == CONTEXT_MONITOR_MONITORING_PID_TAG) {
                 *is_monitoring = true;
-                return term_from_local_process_id(monitor->monitor_obj >> 4);
+                return term_from_local_process_id((uint32_t) (monitor->monitor_obj >> 4));
             } else {
                 return term_invalid_term();
             }
