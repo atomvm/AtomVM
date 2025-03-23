@@ -510,6 +510,7 @@ compile_erlang(float_decode)
 compile_erlang(test_utf8_atoms)
 
 compile_erlang(twentyone_param_function)
+compile_erlang(unique)
 compile_erlang(complex_list_match_xregs)
 compile_erlang(twentyone_param_fun)
 compile_erlang(gc_safe_x_reg_write)
@@ -997,6 +998,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_utf8_atoms.beam
 
     twentyone_param_function.beam
+    unique.beam
     complex_list_match_xregs.beam
     twentyone_param_fun.beam
     gc_safe_x_reg_write.beam

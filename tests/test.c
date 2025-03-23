@@ -569,6 +569,7 @@ struct Test tests[] = {
     TEST_CASE(test_utf8_atoms),
 
     TEST_CASE(twentyone_param_function),
+    TEST_CASE(unique),
     TEST_CASE(complex_list_match_xregs),
     TEST_CASE(twentyone_param_fun),
     TEST_CASE(gc_safe_x_reg_write),
