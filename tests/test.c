@@ -234,6 +234,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_funs9, 3555),
     TEST_CASE_EXPECTED(test_funs10, 6817),
     TEST_CASE_EXPECTED(test_funs11, 817),
+    TEST_CASE(test_funs12),
     TEST_CASE(test_make_fun3),
     TEST_CASE(fun_call_bif),
 

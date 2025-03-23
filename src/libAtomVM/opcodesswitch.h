@@ -4419,9 +4419,6 @@ wait_timeout_trap_handler:
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc)
                 term flags;
                 UNUSED(flags);
@@ -4449,8 +4446,10 @@ wait_timeout_trap_handler:
 
                     size_t src_size = term_binary_size(src);
                     TRIM_LIVE_REGS(live);
+                    // there is always room for a MAX_REG + 1 register, used as working register
+                    x_regs[live] = src;
                     // TODO: further investigate extra_val
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                 #endif
@@ -4460,7 +4459,7 @@ wait_timeout_trap_handler:
                 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_append/8, fail=%u size=%li unit=%u src=0x%lx dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
-                    DECODE_COMPACT_TERM(src, src_pc)
+                    src = x_regs[live];
                     term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
                     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
@@ -5186,9 +5185,6 @@ wait_timeout_trap_handler:
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
                 term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
                 DECODE_COMPACT_TERM(src, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
@@ -5240,8 +5236,10 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, bs_offset + size_val * unit);
 
                         TRIM_LIVE_REGS(live);
+                        // there is always room for a MAX_REG + 1 register, used as working register
+                        x_regs[live] = bs_bin;
                         size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                 #endif
@@ -5250,9 +5248,7 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                        // re-compute src
-                        DECODE_COMPACT_TERM(src, src_pc);
-                        bs_bin = term_get_match_state_binary(src);
+                        bs_bin = x_regs[live];
 
                         term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
                         WRITE_REGISTER(dreg, t);
@@ -5439,17 +5435,19 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(label, pc)
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
-                unsigned int arity;
-                DECODE_INTEGER(arity, pc)
+                term arity_term;
+                DECODE_COMPACT_TERM(arity_term, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
 
-                    if (term_is_function(arg1)) {
+                    if (term_is_function(arg1) && term_is_integer(arity_term)) {
                         const term *boxed_value = term_to_const_term_ptr(arg1);
 
                         Module *fun_module = (Module *) boxed_value[1];
                         term index_or_module = boxed_value[2];
+
+                        avm_int_t arity = term_to_int(arity_term);
 
                         uint32_t fun_arity;
 
@@ -5467,7 +5465,7 @@ wait_timeout_trap_handler:
                             fun_arity = fun_arity_and_freeze - fun_n_freeze;
                         }
 
-                        if (arity != fun_arity) {
+                        if ((arity < 0) || (arity != (avm_int_t) fun_arity)) {
                             pc = mod->labels[label];
                         }
                     } else {

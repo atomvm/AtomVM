@@ -42,6 +42,7 @@ with nodejs and emscripten)
 - Added memory info in `out_of_memory` crash logs to help developers fix memory issues.
 - Added documentation and function specs for uart driver
 - Added `uart:read/2` with a timeout parameter.
+- Missing `erlang:is_function/2` BIF
 
 ### Fixed
 
@@ -87,6 +88,8 @@ memory error
 - Fixed concurrency and memory leak related to links and monitors
 - Fixed issues with parsing of line references for stack traces
 - Fixed memory corruption issue with `erlang:make_tuple/2`
+- Fix potential use after free with code generated from OTP <= 24
+- Fix `is_function/2` guard
 
 ### Changed
 
