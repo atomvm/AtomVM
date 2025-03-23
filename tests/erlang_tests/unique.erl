@@ -20,7 +20,7 @@
 
 -module(unique).
 
--export([start/0]).
+-export([start/0, id/1, check_error/3]).
 
 start() ->
     ok = unique_0(),
@@ -38,6 +38,20 @@ start() ->
     ]),
     receive_messages(N),
     0.
+
+test_invalid() ->
+    ok = ?MODULE:check_error(fun() -> erlang:unique_integer(?MODULE:id(5)) end),
+    ok = ?MODULE:check_error(fun() -> erlang:unique_integer(?MODULE:id([positive | monotonic])) end).
+
+check_error(F, A, B) ->
+    try F() of
+        Result -> {unexpected, Result}
+    catch
+        A:B -> ok
+    end.
+
+id(X) ->
+    X.
 
 unique_0() ->
     A = erlang:unique_integer(),
