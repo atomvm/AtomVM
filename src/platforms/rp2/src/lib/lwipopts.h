@@ -106,4 +106,12 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec);
 #define SNTP_SET_SYSTEM_TIME_US(sec, usec) sntp_set_system_time_us(sec, usec)
 
 #define TCP_LISTEN_BACKLOG 1
+
+// See https://github.com/atomvm/AtomVM/issues/1588
+// if we have UDP we assume we also have SNTP; lwip needs one more timer,
+// but doesn't account for it
+#if LWIP_UDP > 0
+#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+#endif
+
 #endif /* __LWIPOPTS_H__ */
