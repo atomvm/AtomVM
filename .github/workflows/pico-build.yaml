@@ -46,7 +46,7 @@ jobs:
       run: sudo apt update
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib erlang-base erlang-dialyzer
+      run: sudo apt install -y cmake doxygen gperf ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib erlang-base erlang-dialyzer
 
     - name: Build
       shell: bash
