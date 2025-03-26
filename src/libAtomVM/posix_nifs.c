@@ -362,14 +362,17 @@ static term nif_atomvm_posix_read(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(count_term, term_is_integer);
     int count = term_to_int(count_term);
 
+    size_t size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + TERM_BOXED_SUB_BINARY_SIZE + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     void *fd_obj_ptr;
+
     if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], glb->posix_fd_resource_type, &fd_obj_ptr))) {
         RAISE_ERROR(BADARG_ATOM);
     }
     struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + TERM_BOXED_SUB_BINARY_SIZE + TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     term bin_term = term_create_uninitialized_binary(count, &ctx->heap, glb);
     int res = read(fd_obj->fd, (void *) term_binary_data(bin_term), count);
     if (UNLIKELY(res < 0)) {
