@@ -46,7 +46,7 @@ extern "C" {
     ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
+const struct Nif *nifs_get(const char *mfa);
 
 #ifdef __cplusplus
 }
