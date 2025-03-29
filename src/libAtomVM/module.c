@@ -43,13 +43,6 @@
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
 
-// TODO Constants similar to these are defined in opcodesswitch.h and should
-// be refactored so they can be used here, as well.
-#define TAG_COMPACT_INT 0x01
-#define TAG_COMPACT_ATOM 0x02
-#define TAG_EXTENDED_INT 0x09
-#define TAG_EXTENDED_ATOM 0x0A
-
 #define CHECK_FREE_SPACE(space, error)           \
     if ((size_t) ((pos + space) - data) > len) { \
         fprintf(stderr, error);                  \
@@ -63,7 +56,7 @@ static bool module_are_literals_compressed(const uint8_t *litT);
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
 static void module_add_label(Module *mod, int index, const uint8_t *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
-static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filenames, uint8_t *data, size_t len);
+static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len);
 
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
@@ -291,7 +284,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         return NULL;
     }
 
-    parse_line_table(&mod->line_refs, &mod->filenames, beam_file + offsets[LINT] + 8, sizes[LINT]);
+    module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
     list_init(&mod->line_ref_offsets);
 
     if (offsets[LITT]) {
@@ -459,117 +452,225 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
     }
 }
 
-static uint16_t *parse_line_refs(uint8_t **data, size_t num_refs, size_t len)
+static bool module_check_line_refs(Module *mod, const uint8_t **data, size_t len)
 {
-    uint16_t *ref_table = malloc((num_refs + 1) * sizeof(uint16_t));
-    if (IS_NULL_PTR(ref_table)) {
-        return NULL;
-    }
-
     // assert pos >= *data
-    uint8_t *pos = *data;
-    for (size_t i = 0; i < num_refs + 1; ++i) {
+    const uint8_t *pos = *data;
+    size_t i = 0;
+    while (i < mod->line_refs_count) {
         if ((size_t) (pos - *data) > len) {
             fprintf(stderr, "Invalid line_ref: expected tag.\n");
-            free(ref_table);
-            return NULL;
+            return false;
         }
         uint8_t tag = *pos;
         switch (tag & 0x0F) {
-            case TAG_COMPACT_INT: {
-                uint16_t line_idx = ((tag & 0xF0) >> 4);
-                ref_table[i] = line_idx;
+            case COMPACT_INTEGER: {
+                ++i;
                 ++pos;
                 break;
             }
-            case TAG_COMPACT_ATOM: {
-                uint16_t line_idx = ((tag & 0xF0) >> 4);
-                ref_table[i] = line_idx;
+            case COMPACT_LARGE_INTEGER: {
+                ++pos;
+                switch (tag & COMPACT_LARGE_IMM_MASK) {
+                    case COMPACT_11BITS_VALUE: {
+                        ++pos;
+                        break;
+                    }
+                    case COMPACT_NBITS_VALUE: {
+                        int sz = (tag >> 5) + 2;
+                        if (UNLIKELY(sz > 4)) {
+                            fprintf(stderr, "Invalid line_ref: expected extended int with sz <= 4 (line number <= 2^31)");
+                            return false;
+                        }
+                        pos += sz;
+                        break;
+                    }
+                    default:
+                        fprintf(stderr, "Invalid line_ref: expected extended int -- tag = %u", (unsigned int) tag);
+                        return false;
+                }
+                if ((size_t) (pos - *data) > len) {
+                    fprintf(stderr, "Invalid line_ref: expected extended int.\n");
+                    return false;
+                }
+                ++i;
+                break;
+            }
+            case COMPACT_ATOM: {
+                uint16_t location_ix = ((tag & 0xF0) >> 4);
+                if (location_ix > mod->locations_count) {
+                    fprintf(stderr, "Invalid line_ref: location_ix = %d is greater than locations_count = %d.\n", (int) location_ix, (int) mod->locations_count);
+                    return false;
+                }
                 ++pos;
                 break;
             }
-            case TAG_EXTENDED_INT: {
+            case COMPACT_LARGE_ATOM: {
+                // We don't support more than 11bits (2048) locations.
+                if (UNLIKELY((tag & COMPACT_LARGE_IMM_MASK) != COMPACT_11BITS_VALUE)) {
+                    fprintf(stderr, "Invalid line_ref: location_ix is larger than 2048.\n");
+                    return false;
+                }
                 uint16_t high_order_3_bits = (tag & 0xE0);
                 ++pos;
                 if ((size_t) (pos - *data) > len) {
-                    fprintf(stderr, "Invalid line_ref: expected extended int.\n");
-                    free(ref_table);
-                    return NULL;
-                }
-                uint8_t next_byte = *pos;
-                uint16_t line_idx = ((high_order_3_bits << 3) | next_byte);
-                ++pos;
-                ref_table[i] = line_idx;
-                break;
-            }
-            case TAG_EXTENDED_ATOM: {
-                uint16_t file_idx = ((tag & 0xF0) >> 4);
-                ++pos;
-                if ((size_t) (pos - *data) > len) {
                     fprintf(stderr, "Invalid line_ref: expected extended atom.\n");
-                    free(ref_table);
-                    return NULL;
+                    return false;
                 }
                 uint8_t next_byte = *pos;
-                uint16_t line_idx = ((next_byte & 0xF0) >> 4);
+                uint16_t location_ix = ((high_order_3_bits << 3) | next_byte);
+                if (location_ix > mod->locations_count) {
+                    fprintf(stderr, "Invalid line_ref: location_ix = %d is greater than locations_count = %d.\n", (int) location_ix, (int) mod->locations_count);
+                    return false;
+                }
                 ++pos;
-                ref_table[file_idx - 1] = line_idx;
                 break;
             }
             default:
-                // TODO handle integer compact encodings > 2048
                 fprintf(stderr, "Unsupported line_ref tag: %u\n", tag);
-                free(ref_table);
-                return NULL;
+                return false;
         }
     }
 
     *data = pos;
-    return ref_table;
+    return true;
 }
 
-struct ModuleFilename *parse_filename_table(uint8_t **data, size_t num_filenames, size_t len)
+static bool module_check_locations(Module *mod, const uint8_t *data, size_t len)
 {
-    struct ModuleFilename *filenames = malloc(num_filenames * sizeof(struct ModuleFilename));
-    if (IS_NULL_PTR(filenames)) {
-        return NULL;
-    }
-
-    // assert pos >= *data
-    uint8_t *pos = *data;
-    for (size_t i = 0; i < num_filenames; ++i) {
-        if ((size_t) ((pos + 2) - *data) > len) {
+    const uint8_t *pos = data;
+    for (size_t i = 1; i <= mod->locations_count; i++) {
+        if ((size_t) ((pos + 2) - data) > len) {
             fprintf(stderr, "Invalid filename: expected 16-bit size.\n");
-            free(filenames);
-            return NULL;
+            return false;
         }
         uint16_t size = READ_16_UNALIGNED(pos);
-        pos +=2;
-        if ((size_t) ((pos + size) - *data) > len) {
+        pos += 2;
+        if ((size_t) ((pos + size) - data) > len) {
             fprintf(stderr, "Invalid filename: expected filename data (%u bytes).\n", size);
-            free(filenames);
-            return NULL;
+            return false;
         }
-        filenames[i].len = size;
-        filenames[i].data = pos;
         pos += size;
     }
 
-    *data = pos;
-    return filenames;
+    return true;
 }
 
-static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filenames, uint8_t *data, size_t len)
+static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint32_t *out_line, uint16_t *out_location)
 {
+    // First is undefined
+    if (line_ref == 0) {
+        *out_line = 0;
+        *out_location = 0;
+        return true;
+    }
 
-    *line_refs = NULL;
-    *filenames = NULL;
+    const uint8_t *pos = mod->line_refs_table;
+    uint16_t location_ix = 0;
+    size_t i = 1;
+    while (i <= mod->line_refs_count) {
+        uint8_t tag = *pos;
+        switch (tag & 0x0F) {
+            case COMPACT_INTEGER: {
+                if (i == line_ref) {
+                    uint32_t line_idx = ((tag & 0xF0) >> 4);
+                    *out_line = line_idx;
+                    *out_location = location_ix;
+                    return true;
+                }
+                ++i;
+                ++pos;
+                break;
+            }
+            case COMPACT_LARGE_INTEGER: {
+                uint32_t line_idx;
+                switch (tag & COMPACT_LARGE_IMM_MASK) {
+                    case COMPACT_11BITS_VALUE: {
+                        uint16_t high_order_3_bits = (tag & 0xE0);
+                        line_idx = ((high_order_3_bits << 3) | pos[1]);
+                        pos += 2;
+                        break;
+                    }
+                    case COMPACT_NBITS_VALUE: {
+                        pos++;
+                        int sz = (tag >> 5) + 2;
+                        line_idx = 0;
+                        for (int i = 0; i < sz; i++) {
+                            line_idx = line_idx * 256 + pos[i];
+                        }
+                        pos += sz;
+                        break;
+                    }
+                    default:
+                        UNREACHABLE();
+                }
+                if (i == line_ref) {
+                    *out_line = line_idx;
+                    *out_location = location_ix;
+                    return true;
+                }
+                ++i;
+                break;
+            }
+            case COMPACT_ATOM: {
+                location_ix = ((tag & 0xF0) >> 4);
+                ++pos;
+                break;
+            }
+            case COMPACT_LARGE_ATOM: {
+                uint16_t high_order_3_bits = (tag & 0xE0);
+                location_ix = ((high_order_3_bits << 3) | pos[1]);
+                pos += 2;
+                break;
+            }
+            default:
+                UNREACHABLE();
+        }
+    }
 
+    return false;
+}
+
+
+static bool module_get_location(Module *mod, uint16_t location_ix, size_t *filename_len, const uint8_t **filename)
+{
+    // 0 is module.erl
+    if (location_ix == 0) {
+        *filename_len = 0;
+        if (filename) {
+            *filename = NULL;
+        }
+        return true;
+    }
+
+    const uint8_t *pos = mod->locations_table;
+    for (size_t i = 1; i <= mod->locations_count; i++) {
+        uint16_t size = READ_16_UNALIGNED(pos);
+        pos +=2;
+        if (i == location_ix) {
+            *filename_len = size;
+            if (filename) {
+                *filename = pos;
+            }
+            return true;
+        }
+        pos += size;
+    }
+
+    return false;
+}
+
+static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len)
+{
     if (len == 0) {
+        mod->line_refs_count = 0;
+        mod->line_refs_table = NULL;
+        mod->locations_count = 0;
+        mod->locations_table = NULL;
         return;
     }
 
-    uint8_t *pos = data;
+    const uint8_t *pos = data;
 
     CHECK_FREE_SPACE(4, "Error reading Line chunk: version\n");
     uint32_t version = READ_32_UNALIGNED(pos);
@@ -590,28 +691,36 @@ static void parse_line_table(uint16_t **line_refs, struct ModuleFilename **filen
     pos += 4;
 
     CHECK_FREE_SPACE(4, "Error reading Line chunk: num_refs\n");
-    uint32_t num_refs = READ_32_UNALIGNED(pos);
+    mod->line_refs_count = READ_32_UNALIGNED(pos);
     pos += 4;
 
     CHECK_FREE_SPACE(4, "Error reading Line chunk: num_filenames\n");
-    uint32_t num_filenames = READ_32_UNALIGNED(pos);
+    mod->locations_count = READ_32_UNALIGNED(pos);
     pos += 4;
 
-    *line_refs = parse_line_refs(&pos, num_refs, len - (pos - data));
-    if (IS_NULL_PTR(*line_refs)) {
+    mod->line_refs_table = pos;
+
+    if (UNLIKELY(!module_check_line_refs(mod, &pos, len - (pos - data)))) {
+        mod->line_refs_count = 0;
+        mod->line_refs_table = NULL;
+        mod->locations_count = 0;
+        mod->locations_table = NULL;
         return;
     }
 
-    *filenames = parse_filename_table(&pos, num_filenames, len - (pos - data));
-    if (IS_NULL_PTR(*filenames)) {
-        free(*line_refs);
-        return;
+    mod->locations_table = pos;
+
+    if (UNLIKELY(!module_check_locations(mod, pos, len - (pos - data)))) {
+        mod->line_refs_count = 0;
+        mod->line_refs_table = NULL;
+        mod->locations_count = 0;
+        mod->locations_table = NULL;
     }
 }
 
 void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
 {
-    if (IS_NULL_PTR(mod->line_refs) || line_ref == 0) {
+    if (IS_NULL_PTR(mod->line_refs_table) || line_ref == 0) {
         return;
     }
     struct LineRefOffset *ref_offset = malloc(sizeof(struct LineRefOffset));
@@ -624,7 +733,16 @@ void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
     list_append(&mod->line_ref_offsets, &ref_offset->head);
 }
 
-int module_find_line(Module *mod, unsigned int offset)
+static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line, size_t *filename_len, const uint8_t **filename)
+{
+    uint16_t location_ix;
+    if (UNLIKELY(!module_get_line_ref(mod, line_ref, line, &location_ix))) {
+        return false;
+    }
+    return module_get_location(mod, location_ix, filename_len, filename);
+}
+
+bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     int i = 0;
     struct LineRefOffset *head = GET_LIST_ENTRY(&mod->line_ref_offsets, struct LineRefOffset, head);
@@ -633,25 +751,23 @@ int module_find_line(Module *mod, unsigned int offset)
         struct LineRefOffset *ref_offset = GET_LIST_ENTRY(item, struct LineRefOffset, head);
 
         if (offset == ref_offset->offset) {
-            return mod->line_refs[ref_offset->line_ref];
+            return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
         } else if (i == 0 && offset < ref_offset->offset) {
-            return -1;
+            return false;
         } else {
 
             struct LineRefOffset *prev_ref_offset = GET_LIST_ENTRY(ref_offset->head.prev, struct LineRefOffset, head);
             if (prev_ref_offset->offset <= offset && offset < ref_offset->offset) {
-                return mod->line_refs[prev_ref_offset->line_ref];
+                return module_find_line_ref(mod, prev_ref_offset->line_ref, line, filename_len, filename);
             }
 
             struct LineRefOffset *next_ref_offset = GET_LIST_ENTRY(ref_offset->head.next, struct LineRefOffset, head);
             if (next_ref_offset == head && ref_offset->offset <= offset) {
-                return mod->line_refs[ref_offset->line_ref];
+                return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
             }
         }
 
         ++i;
     }
-    // should never occur, but return is needed to squelch compiler warnings
-    AVM_ABORT();
-    return -1;
+    return false;
 }

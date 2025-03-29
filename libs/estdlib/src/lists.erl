@@ -4,6 +4,7 @@
 % Copyright 2017-2023 Fred Dushin <fred@dushin.net>
 % split/2 function Copyright Ericsson AB 1996-2023.
 % keytake/3 function Copyright Ericsson AB 1996-2024.
+% append/1, append/2 functions Copyright Ericsson AB 1996-2025.
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -59,8 +60,11 @@
     sort/1, sort/2,
     split/2,
     usort/1, usort/2,
+    dropwhile/2,
     duplicate/2,
-    sublist/2
+    sublist/2,
+    append/1,
+    append/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -729,6 +733,32 @@ unique([X, Y | Tail], Fun) ->
     end.
 
 %%-----------------------------------------------------------------------------
+%% @param   Pred the predicate to check against elements in List1
+%% @param   List1
+%% @returns List List1 tail at the point predicate returned false for a element
+%% @doc     Drops elements Elem from List1 while Pred(Elem) returns true and returns
+%%          the remaining list. The Pred function must return a boolean.
+%% @end
+%%-----------------------------------------------------------------------------
+% Attribution: https://github.com/erlang/otp/blob/05737d130706c7189a8e6750d9c2252d2cc7987e/lib/stdlib/src/lists.erl#L2403
+-spec dropwhile(Pred, List1) -> List2 when
+    Pred :: fun((Elem :: T) -> boolean()),
+    List1 :: [T],
+    List2 :: [T],
+    T :: term().
+
+dropwhile(Pred, List) when is_function(Pred, 1) ->
+    dropwhile_1(Pred, List).
+
+dropwhile_1(Pred, [Hd | Tail] = Rest) ->
+    case Pred(Hd) of
+        true -> dropwhile_1(Pred, Tail);
+        false -> Rest
+    end;
+dropwhile_1(_Pred, []) ->
+    [].
+
+%%-----------------------------------------------------------------------------
 %% @param   Elem the element to duplicate
 %% @param   Count the number of times to duplicate the element
 %% @returns a list made of Elem duplicate Count times
@@ -736,7 +766,7 @@ unique([X, Y | Tail], Fun) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec duplicate(integer(), Elem) -> [Elem].
-duplicate(Count, Elem) when is_integer(Count) andalso Count > 0 ->
+duplicate(Count, Elem) when is_integer(Count) andalso Count >= 0 ->
     duplicate(Count, Elem, []).
 
 duplicate(0, _Elem, Acc) -> Acc;
@@ -758,3 +788,36 @@ sublist(List, Len) when is_integer(Len) andalso Len >= 0 ->
 sublist0([], _Len) -> [];
 sublist0(_, 0) -> [];
 sublist0([H | Tail], Len) -> [H | sublist0(Tail, Len - 1)].
+
+%%-----------------------------------------------------------------------------
+%% @param   ListOfLists a list of lists to make the general list from
+%% @returns a list made of the sublists of `ListOfLists'.
+%% @doc     Returns a list in which all the sublists of `ListOfLists' have been appended.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/34f92c2a9cbb37ef22aecf6b95613d210509015a/lib/stdlib/src/lists.erl#L222
+-spec append(ListOfLists) -> List1 when
+    ListOfLists :: [List],
+    List :: [T],
+    List1 :: [T],
+    T :: term().
+
+append([E]) -> E;
+append([H | T]) -> H ++ append(T);
+append([]) -> [].
+
+%%-----------------------------------------------------------------------------
+%% @param   List1 a list
+%% @param   List2 a list
+%% @returns a list made of the elements of `List1' and `List2'.
+%% @doc     Returns a new list `List3', which is made from the elements of `List1' followed by the elements of `List2'.
+%% @end
+%%-----------------------------------------------------------------------------
+%% Attribution: https://github.com/erlang/otp/blob/35037ba900e15bd98e778e567079b426531d0085/lib/stdlib/src/lists.erl#L202
+-spec append(List1, List2) -> List3 when
+    List1 :: [T],
+    List2 :: [T],
+    List3 :: [T],
+    T :: term().
+
+append(L1, L2) -> L1 ++ L2.

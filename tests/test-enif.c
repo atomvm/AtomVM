@@ -251,7 +251,7 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
@@ -268,7 +268,7 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     monitor_result = enif_demonitor_process(&env, ptr, &mon);
     assert(monitor_result == 0);
@@ -278,7 +278,7 @@ void test_resource_monitor()
     assert(cb_read_resource == 0);
     assert(down_pid == 0);
 
-    // Resource not deallocated until demonitored
+    // Resource demonitored if deallocated
     assert(resource_ref_count(ptr) == 1);
     cb_read_resource = 0;
     down_pid = 0;
@@ -288,18 +288,16 @@ void test_resource_monitor()
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     int release_result = enif_release_resource(ptr);
     assert(release_result);
-    assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 1);
-
-    monitor_result = enif_demonitor_process(&env, ptr, &mon);
-    assert(monitor_result == 0);
     assert(cb_read_resource == 42);
 
     cb_read_resource = 0;
+    monitor_result = enif_demonitor_process(&env, ptr, &mon);
+    assert(monitor_result == -1);
+    assert(cb_read_resource == 0);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 0);

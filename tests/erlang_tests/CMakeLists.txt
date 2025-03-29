@@ -196,6 +196,7 @@ compile_erlang(test_funs8)
 compile_erlang(test_funs9)
 compile_erlang(test_funs10)
 compile_erlang(test_funs11)
+compile_erlang(test_funs12)
 
 compile_erlang(test_make_fun3)
 
@@ -294,6 +295,7 @@ compile_erlang(int28mulneg2)
 compile_erlang(negdiv)
 compile_erlang(absovf)
 compile_erlang(negovf)
+compile_erlang(unary_plus)
 
 compile_erlang(plusone3)
 compile_erlang(plusone4)
@@ -399,6 +401,7 @@ compile_erlang(float2bin2scientific)
 compile_erlang(float2bin2)
 compile_erlang(float2list2decimals)
 compile_erlang(float2list2scientific)
+compile_erlang(float_bif)
 compile_erlang(float2list2)
 compile_erlang(bin2float)
 compile_erlang(list2float)
@@ -509,6 +512,7 @@ compile_erlang(float_decode)
 compile_erlang(test_utf8_atoms)
 
 compile_erlang(twentyone_param_function)
+compile_erlang(unique)
 compile_erlang(complex_list_match_xregs)
 compile_erlang(twentyone_param_fun)
 compile_erlang(gc_safe_x_reg_write)
@@ -678,6 +682,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_funs9.beam
     test_funs10.beam
     test_funs11.beam
+    test_funs12.beam
 
     test_make_fun3.beam
 
@@ -776,6 +781,7 @@ add_custom_target(erlang_test_modules DEPENDS
     negdiv.beam
     absovf.beam
     negovf.beam
+    unary_plus.beam
 
     plusone3.beam
     plusone4.beam
@@ -883,6 +889,7 @@ add_custom_target(erlang_test_modules DEPENDS
     float2bin2.beam
     float2list2decimals.beam
     float2list2scientific.beam
+    float_bif.beam
     float2list2.beam
     bin2float.beam
     list2float.beam
@@ -996,6 +1003,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_utf8_atoms.beam
 
     twentyone_param_function.beam
+    unique.beam
     complex_list_match_xregs.beam
     twentyone_param_fun.beam
     gc_safe_x_reg_write.beam

@@ -51,6 +51,7 @@ jobs:
         cc: ["gcc-9", "gcc-11", "gcc-13", "clang-10", "clang-14", "clang-18"]
         cflags: ["-O3"]
         otp: ["25", "26", "27"]
+        gleam_version: ["1.8.0"]
 
         include:
         - cc: "gcc-7"
@@ -301,6 +302,7 @@ jobs:
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
         rebar3-version: ${{ matrix.rebar3_version }}
+        gleam-version: ${{ matrix.gleam_version }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -365,37 +367,37 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-erlang -s prime_smp
         ./tests/test-erlang -s prime_smp
-        valgrind ./tests/test-erlang -s prime_smp
 
     - name: "Test: test-enif"
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-enif
         ./tests/test-enif
-        valgrind ./tests/test-enif
 
     - name: "Test: test-heap"
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-heap
         ./tests/test-heap
-        valgrind ./tests/test-heap
 
     - name: "Test: test-mailbox"
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-mailbox
         ./tests/test-mailbox
-        valgrind ./tests/test-mailbox
 
     - name: "Test: test-structs"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-structs
         ./tests/test-structs
-        valgrind ./tests/test-structs
 
     - name: "Test: test_etest.avm"
       timeout-minutes: 5
@@ -410,24 +412,24 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
-        valgrind ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Test: test_eavmlib.avm"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
-        valgrind ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_alisp.avm"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-        valgrind ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "Test: Tests.avm (Elixir)"
       timeout-minutes: 10
@@ -436,8 +438,8 @@ jobs:
         ulimit -c unlimited
         if command -v elixirc &> /dev/null
         then
+          valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
           ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
-          valgrind ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
         fi
 
     - name: "Install and smoke test"

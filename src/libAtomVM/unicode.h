@@ -29,6 +29,13 @@
 extern "C" {
 #endif
 
+enum UnicodeTransformDecodeResult
+{
+    UnicodeTransformDecodeSuccess,
+    UnicodeTransformDecodeFail,
+    UnicodeTransformDecodeIncomplete
+};
+
 size_t unicode_buf_utf8_len(const uint8_t *buf, size_t buf_len);
 bool unicode_buf_is_ascii(const uint8_t *buf, size_t buf_len);
 size_t unicode_latin1_buf_size_as_utf8(const uint8_t *buf, size_t len);
@@ -39,6 +46,23 @@ static inline bool unicode_is_valid_codepoint(uint32_t codepoint)
     // 0xD800 - 0xDFFF are surrogates
     return (codepoint < 0x110000) && !((codepoint > 0xD800) && (codepoint < 0xDFFF));
 }
+
+/**
+ * @brief Decode a character from UTF-8.
+ *
+ * @param buf the buffer from which to decode the string
+ * @param len the length (in bytes) of the bytes in buf
+ * @param c int value to decode to
+ * @param out_size the size in bytes, on output (if not NULL)
+ * @return \c UnicodeTransformDecodeSuccess if decoding was successful,
+ * \c UnicodeTransformDecodeFail if character starting at buf is not a valid
+ * unicode character or \c UnicodeTransformDecodeIncomplete if character
+ * starting at buf is a valid but incomplete transformation
+ */
+enum UnicodeTransformDecodeResult unicode_utf8_decode(
+    const uint8_t *buf, size_t len, uint32_t *c, size_t *out_size);
+
+bool unicode_is_valid_utf8_buf(const uint8_t *buf, size_t len);
 
 #ifdef __cplusplus
 }

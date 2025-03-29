@@ -43,8 +43,10 @@
     min/2,
     max/2,
     memory/1,
+    get/0,
     get/1,
     put/2,
+    erase/0,
     erase/1,
     function_exported/3,
     display/1,
@@ -83,6 +85,8 @@
     spawn/3,
     spawn_link/1,
     spawn_link/3,
+    spawn_monitor/1,
+    spawn_monitor/3,
     spawn_opt/2,
     spawn_opt/4,
     link/1,
@@ -119,7 +123,9 @@
     set_cookie/2,
     dist_ctrl_get_data_notification/1,
     dist_ctrl_get_data/1,
-    dist_ctrl_put_data/2
+    dist_ctrl_put_data/2,
+    unique_integer/0,
+    unique_integer/1
 ]).
 
 -export_type([
@@ -521,6 +527,15 @@ monotonic_time(_Unit) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @returns the process directory
+%% @doc     Return all values from the process dictionary
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get() -> [{any(), any()}].
+get() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Key     key in the process dictionary
 %% @returns value associated with this key or undefined
 %% @doc     Return a value associated with a given key in the process dictionary
@@ -539,6 +554,15 @@ get(_Key) ->
 %%-----------------------------------------------------------------------------
 -spec put(Key :: any(), Value :: any()) -> any().
 put(_Key, _Value) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns the previous process dictionary.
+%% @doc     Erase all keys from the process dictionary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec erase() -> [{any(), any()}].
+erase() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -953,6 +977,29 @@ spawn_link(Function) ->
 -spec spawn_link(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
 spawn_link(Module, Function, Args) ->
     erlang:spawn_opt(Module, Function, Args, [link]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Function    function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process and monitor it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_monitor(Function :: function()) -> pid().
+spawn_monitor(Function) ->
+    erlang:spawn_opt(Function, [monitor]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module of the function to create a process from
+%% @param   Function    name of the function to create a process from
+%% @param   Args        arguments to pass to the function to create a process from
+%% @returns pid of the new process
+%% @doc     Create a new process by calling exported Function from Module with Args
+%%          and monitor it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_monitor(Module :: module(), Function :: atom(), Args :: [any()]) -> pid().
+spawn_monitor(Module, Function, Args) ->
+    erlang:spawn_opt(Module, Function, Args, [monitor]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Function    function to create a process from
@@ -1392,3 +1439,24 @@ set_cookie(Cookie) ->
 -spec set_cookie(Node :: node(), Cookie :: atom()) -> ok.
 set_cookie(Node, Cookie) ->
     net_kernel:set_cookie(Node, ?MODULE:atom_to_binary(Cookie, latin1)).
+
+%%-----------------------------------------------------------------------------
+%% @returns A unique integer
+%% @doc     Same as erlang:unique_integer([]).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unique_integer() -> integer().
+unique_integer() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options list of options.
+%% @returns a unique integer
+%% @doc     Return a unique integer. If positive is passed, returned integer is
+%%          positive. If monotonic is passed, returned integer is monotonically increasing
+%%          across all processes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unique_integer([monotonic | positive]) -> integer().
+unique_integer(_Options) ->
+    erlang:nif_error(undefined).

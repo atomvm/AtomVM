@@ -141,69 +141,6 @@ bool bitstring_utf8_encode(uint32_t c, uint8_t *buf, size_t *out_size)
     return true;
 }
 
-enum UnicodeTransformDecodeResult bitstring_utf8_decode(const uint8_t *buf, size_t len, uint32_t *c, size_t *out_size)
-{
-    if (len == 0) {
-        return UnicodeTransformDecodeFail;
-    } else if (len >= 4 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80) && ((buf[3] & 0xC0) == 0x80)) {
-        uint32_t v = 0;
-        v |= (buf[0] & 0x07) << 18;
-        v |= (buf[1] & 0x3F) << 12;
-        v |= (buf[2] & 0x3F) << 6;
-        v |= (buf[3] & 0x3F);
-        // overlong encoding or invalid codepoint
-        if (v <= 0x10000 || v > 0x10FFFF) {
-            return UnicodeTransformDecodeFail;
-        }
-        *c = v;
-        *out_size = 4;
-        return UnicodeTransformDecodeSuccess;
-    } else if (len >= 3 && (buf[0] & 0xF0) == 0xE0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80)) {
-        uint32_t v = 0;
-        v |= (buf[0] & 0x0F) << 12;
-        v |= (buf[1] & 0x3F) << 6;
-        v |= (buf[2] & 0x3F);
-        // overlong encoding or surrogate
-        if (v < 0x800 || (v >= 0xD800 && v <= 0xDFFF)) {
-            return UnicodeTransformDecodeFail;
-        }
-        *c = v;
-        *out_size = 3;
-        return UnicodeTransformDecodeSuccess;
-    } else if (len >= 2 && (buf[0] & 0xE0) == 0xC0 && ((buf[1] & 0xC0) == 0x80)) {
-        uint32_t v = 0;
-        v |= (buf[0] & 0x1F) << 6;
-        v |= (buf[1] & 0x3F);
-        // overlong encoding
-        if (v < 0x80) {
-            return UnicodeTransformDecodeFail;
-        }
-        *c = v;
-        *out_size = 2;
-        return UnicodeTransformDecodeSuccess;
-    } else if ((*buf & 0x80) == 0) {
-        uint32_t v = 0;
-        v |= (buf[0] & 0x7F);
-        *c = v;
-        *out_size = 1;
-        return UnicodeTransformDecodeSuccess;
-    } else if (len == 3 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80) && ((buf[2] & 0xC0) == 0x80)) {
-        return UnicodeTransformDecodeIncomplete;
-    } else if (len == 2 && (buf[0] & 0xF8) == 0xF0 && ((buf[1] & 0xC0) == 0x80)) {
-        return UnicodeTransformDecodeIncomplete;
-    } else if (len == 1 && (buf[0] & 0xF8) == 0xF0) {
-        return UnicodeTransformDecodeIncomplete;
-    } else if (len == 2 && (buf[0] & 0xF0) == 0xE0 && ((buf[1] & 0xC0) == 0x80)) {
-        return UnicodeTransformDecodeIncomplete;
-    } else if (len == 1 && (buf[0] & 0xF0) == 0xE0) {
-        return UnicodeTransformDecodeIncomplete;
-    } else if (len == 1 && (buf[0] & 0xE0) == 0xC0) {
-        return UnicodeTransformDecodeIncomplete;
-    }
-
-    return UnicodeTransformDecodeFail;
-}
-
 // UTF-16 encoding, when U in U+010000 to U+10FFFF:
 //
 //  U' = yyyyyyyyyyxxxxxxxxxx  // U - 0x10000

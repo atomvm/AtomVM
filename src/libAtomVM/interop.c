@@ -385,7 +385,7 @@ static enum UnicodeConversionResult interop_binary_conversion(term t, uint8_t *o
     while (input_index < len) {
         size_t char_size;
         uint32_t c;
-        enum UnicodeTransformDecodeResult decode_result = bitstring_utf8_decode(input + input_index, len - input_index, &c, &char_size);
+        enum UnicodeTransformDecodeResult decode_result = unicode_utf8_decode(input + input_index, len - input_index, &c, &char_size);
         if (UNLIKELY(decode_result != UnicodeTransformDecodeSuccess)) {
             *rest_crsr = input_index;
             *output_len = result;

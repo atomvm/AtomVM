@@ -88,6 +88,14 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             struct BuiltInAtomRequestSignal *request_signal
                 = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
             context_process_process_info_request_signal(ctx, request_signal);
+        } else if (signal_message->type == MonitorSignal) {
+            struct MonitorPointerSignal *monitor_signal
+                = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
+            context_add_monitor(ctx, monitor_signal->monitor);
+        } else if (signal_message->type == DemonitorSignal) {
+            struct RefSignal *ref_signal
+                = CONTAINER_OF(signal_message, struct RefSignal, base);
+            context_demonitor(ctx, ref_signal->ref_ticks);
         }
         MailboxMessage *next = signal_message->next;
         mailbox_message_dispose(signal_message, &ctx->heap);
@@ -297,18 +305,16 @@ static void scheduler_make_ready(Context *ctx)
     }
     list_remove(&ctx->processes_list_head);
 #ifndef AVM_NO_SMP
-    bool waiting_scheduler = global->waiting_scheduler;
-    if (!waiting_scheduler) {
+    if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
         // Start a new scheduler if none are going to take this process.
-        if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
-            if (global->running_schedulers > 0
-                && global->running_schedulers < global->online_schedulers
-                && !context_get_flags(ctx, Running)) {
-                global->running_schedulers++;
-                smp_scheduler_start(global);
-            }
-            SMP_MUTEX_UNLOCK(global->schedulers_mutex);
+        if (!global->waiting_scheduler
+            && global->running_schedulers > 0
+            && global->running_schedulers < global->online_schedulers
+            && !context_get_flags(ctx, Running)) {
+            global->running_schedulers++;
+            smp_scheduler_start(global);
         }
+        SMP_MUTEX_UNLOCK(global->schedulers_mutex);
     }
 #endif
     // Move to ready queue (from waiting or running)
@@ -318,7 +324,12 @@ static void scheduler_make_ready(Context *ctx)
     list_append(&global->ready_processes, &ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
 #ifndef AVM_NO_SMP
-    if (waiting_scheduler) {
+    if (SMP_MUTEX_TRYLOCK(global->schedulers_mutex)) {
+        if (global->waiting_scheduler) {
+            sys_signal(global);
+        }
+        SMP_MUTEX_UNLOCK(global->schedulers_mutex);
+    } else {
         sys_signal(global);
     }
 #elif defined(AVM_TASK_DRIVER_ENABLED)
@@ -402,7 +413,12 @@ void scheduler_set_timeout(Context *ctx, avm_int64_t timeout)
     SMP_SPINLOCK_UNLOCK(&glb->timer_spinlock);
 
 #ifndef AVM_NO_SMP
-    if (glb->waiting_scheduler) {
+    if (SMP_MUTEX_TRYLOCK(glb->schedulers_mutex)) {
+        if (glb->waiting_scheduler) {
+            sys_signal(glb);
+        }
+        SMP_MUTEX_UNLOCK(glb->schedulers_mutex);
+    } else {
         sys_signal(glb);
     }
 #elif defined(AVM_TASK_DRIVER_ENABLED)
