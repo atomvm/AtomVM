@@ -354,7 +354,8 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
     globalcontext_get_process_unlock(env->global, target);
 
     if (mon) {
-        *mon = ref_ticks;
+        mon->ref_ticks = ref_ticks;
+        mon->resource_type = resource_type;
     }
 
     return 0;
@@ -380,7 +381,10 @@ void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *e
     synclist_unlock(&resource_type->monitors);
 
     if (refc) {
-        resource_type->down(env, resource, &process_id, &ref_ticks);
+        ErlNifMonitor monitor;
+        monitor.ref_ticks = ref_ticks;
+        monitor.resource_type = resource_type;
+        resource_type->down(env, resource, &process_id, &monitor);
         refc_binary_decrement_refcount(refc, env->global);
     }
 }
@@ -404,9 +408,8 @@ void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ti
 int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
 {
     GlobalContext *global = env->global;
-    struct RefcBinary *resource = refc_binary_from_data(obj);
-    struct ResourceType *resource_type = resource->resource_type;
-    if (resource_type == NULL || resource_type->down == NULL) {
+    struct ResourceType *resource_type = mon->resource_type;
+    if (resource_type->down == NULL) {
         return -1;
     }
 
@@ -414,7 +417,12 @@ int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
     struct ListHead *item;
     LIST_FOR_EACH (item, monitors) {
         struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
-        if (monitor->ref_ticks == *mon) {
+        if (monitor->ref_ticks == mon->ref_ticks) {
+            struct RefcBinary *resource = refc_binary_from_data(obj);
+            if (resource->resource_type != mon->resource_type) {
+                return -1;
+            }
+
             Context *target = globalcontext_get_process_lock(global, monitor->process_id);
             if (target) {
                 mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
@@ -457,8 +465,8 @@ void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *globa
 
 int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *monitor2)
 {
-    uint64_t ref_ticks1 = *monitor1;
-    uint64_t ref_ticks2 = *monitor2;
+    uint64_t ref_ticks1 = monitor1->ref_ticks;
+    uint64_t ref_ticks2 = monitor2->ref_ticks;
     if (ref_ticks1 < ref_ticks2) {
         return -1;
     }
