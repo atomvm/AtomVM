@@ -360,6 +360,31 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
     return 0;
 }
 
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks)
+{
+    struct RefcBinary *refc = NULL;
+    struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, monitors) {
+        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
+        if (monitor->ref_ticks == ref_ticks) {
+            // Resource still exists.
+            refc = refc_binary_from_data(resource);
+            refc_binary_increment_refcount(refc);
+            list_remove(&monitor->resource_list_head);
+            free(monitor);
+            break;
+        }
+    }
+
+    synclist_unlock(&resource_type->monitors);
+
+    if (refc) {
+        resource_type->down(env, resource, &process_id, &ref_ticks);
+        refc_binary_decrement_refcount(refc, env->global);
+    }
+}
+
 void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ticks)
 {
     struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);

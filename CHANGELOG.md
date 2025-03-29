@@ -91,6 +91,8 @@ memory error
 - Fixed memory corruption issue with `erlang:make_tuple/2`
 - Fix potential use after free with code generated from OTP <= 24
 - Fix `is_function/2` guard
+- Fixed segfault when calling `lists:reverse/1` (#1600)
+- Fixed nif_atomvm_posix_read GC bug
 
 ### Changed
 

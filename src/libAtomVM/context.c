@@ -180,8 +180,7 @@ void context_destroy(Context *ctx)
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
             void *resource = term_to_term_ptr(monitor->monitor_obj);
             struct RefcBinary *refc = refc_binary_from_data(resource);
-            resource_type_demonitor(refc->resource_type, monitor->ref_ticks);
-            refc->resource_type->down(&env, resource, &ctx->process_id, &monitor->ref_ticks);
+            resource_type_fire_monitor(refc->resource_type, &env, resource, ctx->process_id, monitor->ref_ticks);
             free(monitor);
         }
     }
