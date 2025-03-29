@@ -150,6 +150,19 @@ void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *globa
 term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap);
 
 /**
+ * @brief Call down handler for a given resource and remove monitor from list.
+ * @details handler is called while holding lock on the list of monitors and
+ * if monitor is still in the list of resource monitors, thus ensuring that
+ * the resource still exists.
+ * @param resource_type type holding the list of monitors
+ * @param env environment for calling the down handler
+ * @param resource resource that monitored the process
+ * @param process_id id of the process monitored
+ * @param ref_ticks reference of the monitor
+ */
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks);
+
+/**
  * @brief Remove monitor from list of monitors.
  * @param resource_type type holding the list of monitors
  * @param ref_ticks reference of the monitor

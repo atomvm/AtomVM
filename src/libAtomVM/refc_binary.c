@@ -66,6 +66,20 @@ void refc_binary_increment_refcount(struct RefcBinary *refc)
 bool refc_binary_decrement_refcount(struct RefcBinary *refc, struct GlobalContext *global)
 {
     if (--refc->ref_count == 0) {
+        if (refc->resource_type && refc->resource_type->down) {
+            // There may be monitors associated with this resource.
+            destroy_resource_monitors(refc, global);
+            // After this point, the resource can no longer be found by
+            // resource_type_fire_monitor
+            // However, resource_type_fire_monitor may have incremented ref_count
+            // to call the monitor handler.
+            // So we check ref_count again. We're not affected by the ABA problem
+            // here as the resource cannot (should not) be monitoring while it is
+            // being destroyed, i.e. no resource monitor will be created now
+            if (UNLIKELY(refc->ref_count != 0)) {
+                return false;
+            }
+        }
         synclist_remove(&global->refc_binaries, &refc->head);
         refc_binary_destroy(refc, global);
         return true;
@@ -78,10 +92,6 @@ void refc_binary_destroy(struct RefcBinary *refc, struct GlobalContext *global)
     UNUSED(global);
 
     if (refc->resource_type) {
-        if (refc->resource_type->down) {
-            // There may be monitors associated with this resource.
-            destroy_resource_monitors(refc, global);
-        }
         if (refc->resource_type->dtor) {
             ErlNifEnv env;
             erl_nif_env_partial_init_from_globalcontext(&env, global);
