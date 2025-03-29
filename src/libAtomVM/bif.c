@@ -24,6 +24,7 @@
 #include <math.h>
 
 #include "atom.h"
+#include "intn.h"
 #include "bitstring.h"
 #include "defaultatoms.h"
 #include "dictionary.h"
@@ -57,6 +58,8 @@
     if (UNLIKELY(!verify_function((value)))) {                 \
         RAISE_ERROR_BIF(fail_label, BADARG_ATOM);              \
     }
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
@@ -688,6 +691,104 @@ term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+{
+    size_t bytes = n * sizeof(intn_digit_t);
+    size_t rounded = ((bytes + 7) >> 3) << 3;
+    *intn_data_size = rounded / sizeof(term);
+    *rounded_num_len = rounded / sizeof(intn_digit_t);
+}
+
+static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
+    const intn_digit_t bigres[], size_t bigres_len)
+{
+    size_t count = intn_count_digits(bigres, bigres_len);
+
+    if (UNLIKELY(count > INTN_MAX_IN_LEN)) {
+        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+    }
+
+    if (count > INTN_INT64_LEN) {
+        size_t intn_data_size;
+        size_t rounded_res_len;
+        intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+
+        if (UNLIKELY(
+                memory_ensure_free_with_roots(ctx, BOXED_INTN_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
+                != MEMORY_GC_OK)) {
+            RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+        }
+
+        term bigres_term = term_create_uninitialized_intn(intn_data_size, &ctx->heap);
+        intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
+        intn_sign_extend(bigres, count, rounded_res_len, dest_buf);
+
+        return bigres_term;
+    } else {
+        int64_t res64 = intn_2_digits_to_int64(bigres, count);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+        return make_maybe_boxed_int64(ctx, fail_label, live, res64);
+#else
+        return make_maybe_boxed_int(ctx, fail_label, live, res64);
+#endif
+    }
+}
+
+static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1, size_t *b1_len)
+{
+    if (term_is_boxed_integer(arg1)
+        && (term_boxed_size(arg1) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term))) {
+        *b1 = term_intn_data(arg1);
+        *b1_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
+    } else {
+        avm_int64_t i64 = term_maybe_unbox_int64(arg1);
+        int64_to_intn_2(i64, tmp_buf1);
+        *b1 = tmp_buf1;
+        *b1_len = INTN_INT64_LEN;
+    }
+}
+
+static void args_to_bigint(term arg1, term arg2, intn_digit_t *tmp_buf1, intn_digit_t *tmp_buf2,
+    intn_digit_t **b1, size_t *b1_len, intn_digit_t **b2, size_t *b2_len)
+{
+    // arg1 or arg2 may need to be "upgraded",
+    // in that case tmp_buf will hold the "upgraded" version
+    term_to_bigint(arg1, tmp_buf1, b1, b1_len);
+    term_to_bigint(arg2, tmp_buf2, b2, b2_len);
+}
+
+static term mul_int64_to_bigint(
+    Context *ctx, uint32_t fail_label, uint32_t live, int64_t val1, int64_t val2)
+{
+    size_t mul_out_len = INTN_MUL_OUT_LEN(INTN_INT64_LEN, INTN_INT64_LEN);
+    intn_digit_t mul_out[mul_out_len];
+    intn_mul_int64(val1, val2, mul_out);
+    return make_bigint(ctx, fail_label, live, mul_out, mul_out_len);
+}
+
+static term mul_maybe_bigint(
+    Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
+{
+    intn_digit_t tmp_buf1[INTN_INT64_LEN];
+    intn_digit_t tmp_buf2[INTN_INT64_LEN];
+
+    intn_digit_t *bn1;
+    size_t bn1_len;
+    intn_digit_t *bn2;
+    size_t bn2_len;
+    args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn2, &bn2_len);
+
+    size_t bigres_len = INTN_MUL_OUT_LEN(bn1_len, bn2_len);
+    if (bigres_len > INTN_MAX_RES_LEN) {
+        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+    }
+
+    intn_digit_t bigres[INTN_MAX_RES_LEN];
+    intn_mulmns(bn1, bn1_len, bn2, bn2_len, bigres);
+
+    return make_bigint(ctx, fail_label, live, bigres, bigres_len);
+}
+
 static term mul_overflow_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     avm_int_t val1 = term_to_int(arg1);
@@ -707,90 +808,72 @@ static term mul_overflow_helper(Context *ctx, uint32_t fail_label, uint32_t live
 #endif
 
     } else {
-        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+        return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
     }
 }
 
 static term mul_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
-    int use_float = 0;
-    int size = 0;
-    if (term_is_boxed_integer(arg1)) {
-        size = term_boxed_size(arg1);
-    } else if (term_is_float(arg1)) {
-        use_float = 1;
-    } else if (!term_is_integer(arg1)) {
-        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
+    if (UNLIKELY(!term_is_number(arg1) || !term_is_number(arg2))) {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
 
-    if (term_is_boxed_integer(arg2)) {
-        size |= term_boxed_size(arg2);
-    } else if (term_is_float(arg2)) {
-        use_float = 1;
-    } else if (!term_is_integer(arg2)) {
-        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
-        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
-    }
+    if (term_is_any_integer(arg1) && term_is_any_integer(arg2)) {
 
-    if (use_float) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+        size_t arg2_size = term_is_integer(arg2) ? 0 : term_boxed_size(arg2);
+        switch (MAX(arg1_size, arg2_size)) {
+            case 0:
+                UNREACHABLE();
+            case 1: {
+                avm_int_t val1 = term_maybe_unbox_int(arg1);
+                avm_int_t val2 = term_maybe_unbox_int(arg2);
+                avm_int_t res;
+
+                if (BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
+                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                        avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
+                        return make_boxed_int64(ctx, fail_label, live, res64);
+
+                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                        return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
+                    #else
+                        #error "Unsupported configuration."
+                    #endif
+                }
+
+                return make_maybe_boxed_int(ctx, fail_label, live, res);
+            }
+
+        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2: {
+                avm_int64_t val1 = term_maybe_unbox_int64(arg1);
+                avm_int64_t val2 = term_maybe_unbox_int64(arg2);
+                avm_int64_t res;
+
+                if (BUILTIN_MUL_OVERFLOW_INT64(val1, val2, &res)) {
+                    return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
+                }
+
+                return make_maybe_boxed_int64(ctx, fail_label, live, res);
+            }
+        #endif
+
+            default:
+                return mul_maybe_bigint(ctx, fail_label, live, arg1, arg2);
+        }
+    } else {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t farg2 = term_conv_to_float(arg2);
         avm_float_t fresult = farg1 * farg2;
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
         }
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK)
+                != MEMORY_GC_OK)) {
             RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
         }
         return term_from_float(fresult, &ctx->heap);
-    }
-
-    switch (size) {
-        case 0: {
-            //BUG
-            AVM_ABORT();
-        }
-
-        case 1: {
-            avm_int_t val1 = term_maybe_unbox_int(arg1);
-            avm_int_t val2 = term_maybe_unbox_int(arg2);
-            avm_int_t res;
-
-            if (BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
-                #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                    avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
-                    return make_boxed_int64(ctx, fail_label, live, res64);
-
-                #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                    TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
-                    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-                #else
-                    #error "Unsupported configuration."
-                #endif
-            }
-
-            return make_maybe_boxed_int(ctx, fail_label, live, res);
-        }
-
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        case 2:
-        case 3: {
-            avm_int64_t val1 = term_maybe_unbox_int64(arg1);
-            avm_int64_t val2 = term_maybe_unbox_int64(arg2);
-            avm_int64_t res;
-
-            if (BUILTIN_MUL_OVERFLOW_INT64(val1, val2, &res)) {
-                TRACE("overflow: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
-                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-            }
-
-            return make_maybe_boxed_int64(ctx, fail_label, live, res);
-        }
-    #endif
-
-        default:
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
     }
 }
 

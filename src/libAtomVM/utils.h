@@ -28,6 +28,7 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -326,6 +327,62 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 #else
     #define UNREACHABLE(...)
 #endif
+
+#if defined(__GNUC__) && !defined(__clang__)
+#if __GNUC__ >= 13
+#define HAVE_ASSUME 1
+#define ASSUME(x) __attribute__((assume((x))))
+#endif
+#endif
+
+#ifndef HAVE_ASSUME
+#if defined __has_builtin
+#if __has_builtin(__builtin_assume)
+#define HAVE_ASSUME 1
+#define ASSUME(x) __builtin_assume((x))
+#endif
+#endif
+#endif
+
+#ifndef ASSUME
+#define ASSUME(...)
+#endif
+
+#if INTPTR_MAX <= INT32_MAX
+#define INTPTR_WRITE_TO_ASCII_BUF_LEN (32 + 1)
+#elif INTPTR_MAX <= INT64_MAX
+#define INTPTR_WRITE_TO_ASCII_BUF_LEN (64 + 1)
+#endif
+
+#define INT32_WRITE_TO_ASCII_BUF_LEN (32 + 1)
+#define INT64_WRITE_TO_ASCII_BUF_LEN (64 + 1)
+
+size_t intptr_write_to_ascii_buf(intptr_t n, unsigned int base, char *out_end);
+
+#if INTPTR_MAX >= INT32_MAX
+static inline size_t int32_write_to_ascii_buf(int32_t n, unsigned int base, char *out_end)
+{
+    return intptr_write_to_ascii_buf(n, base, out_end);
+}
+#endif
+
+#if INT64_MAX > INTPTR_MAX
+size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char *out_end);
+#else
+static inline size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char *out_end)
+{
+    return intptr_write_to_ascii_buf(n, base, out_end);
+}
+#endif
+
+typedef enum
+{
+    BufToInt64NoOptions,
+    BufToInt64RejectSign
+} buf_to_int64_options_t;
+
+int int64_parse_ascii_buf(const char buf[], size_t buf_len, unsigned int base,
+    buf_to_int64_options_t options, int64_t *out);
 
 #ifdef __cplusplus
 }
