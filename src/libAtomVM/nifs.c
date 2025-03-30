@@ -1905,6 +1905,31 @@ static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[])
     return result;
 }
 
+static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+{
+    size_t bytes = n * sizeof(intn_digit_t);
+    size_t rounded = ((bytes + 7) >> 3) << 3;
+    *intn_data_size = rounded / sizeof(term);
+    *rounded_num_len = rounded / sizeof(intn_digit_t);
+}
+
+static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres_len)
+{
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    intn_to_term_size(bigres_len, &intn_data_size, &rounded_res_len);
+
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term bigres_term = term_create_uninitialized_intn(intn_data_size, &ctx->heap);
+    intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
+    intn_sign_extend(bigres, bigres_len, rounded_res_len, dest_buf);
+
+    return bigres_term;
+}
+
 static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
 {
     term bin_term = argv[0];
@@ -1926,11 +1951,17 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     int bin_data_size = term_binary_size(bin_term);
 
     int64_t value;
-    if (int64_parse_ascii_buf(bin_data, bin_data_size, base, BufToInt64NoOptions, &value) != bin_data_size) {
+    int parse_res
+        = int64_parse_ascii_buf(bin_data, bin_data_size, base, BufToInt64NoOptions, &value);
+    if (parse_res == bin_data_size) {
+        return make_maybe_boxed_int64(ctx, value);
+    } else if (parse_res > 0) {
+        intn_digit_t tmp_parsed[INTN_MAX_RES_LEN];
+        int parsed_digits = intn_parse(bin_data, bin_data_size, base, tmp_parsed);
+        return make_bigint(ctx, tmp_parsed, parsed_digits);
+    } else {
         RAISE_ERROR(BADARG_ATOM);
     }
-
-    return make_maybe_boxed_int64(ctx, value);
 }
 
 static bool is_valid_float_string(const char *str, int len)

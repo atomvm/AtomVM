@@ -19,10 +19,13 @@
 %
 
 -module(bigint).
--export([start/0, mul/2, shrink/0, pow/2, twice/1, fact/1, get_machine_atom/0, expect_overflow/1]).
+-export([
+    start/0, mul/2, shrink/0, pow/2, twice/1, fact/1, get_machine_atom/0, expect_overflow/1, id/1
+]).
 
 start() ->
-    test_mul().
+    test_mul() +
+        parse_bigint().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -89,6 +92,16 @@ fact(N) when N rem 2 == 0 ->
     N * fact(N - 1);
 fact(N) when N rem 2 == 1 ->
     fact(N - 1) * N.
+
+parse_bigint() ->
+    PBI = erlang:binary_to_integer(?MODULE:id(<<"1234567892244667788990000000000000000025">>)),
+    <<"1234567892244667788990000000000000000025">> = erlang:integer_to_binary(PBI),
+    NBI = erlang:binary_to_integer(?MODULE:id(<<"-9234567892244667788990000000000000000025">>)),
+    <<"-9234567892244667788990000000000000000025">> = erlang:integer_to_binary(NBI),
+    0.
+
+id(X) ->
+    X.
 
 expect_overflow(OvfFun) ->
     Machine = ?MODULE:get_machine_atom(),
