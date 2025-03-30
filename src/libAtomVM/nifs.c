@@ -44,6 +44,7 @@
 #include "externalterm.h"
 #include "globalcontext.h"
 #include "interop.h"
+#include "intn.h"
 #include "mailbox.h"
 #include "memory.h"
 #include "module.h"
@@ -2190,8 +2191,10 @@ static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[])
 // The return value of this function is used just to check if it failed or not
 // using a term instead of a bool allows using VALIDATE_VALUE & RAISE_ERROR
 static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, size_t tmp_buf_size,
-    char **int_buf, size_t *int_len)
+    char **int_buf, size_t *int_len, bool *needs_cleanup)
 {
+    *needs_cleanup = false;
+
     term value = argv[0];
     avm_int_t base = 10;
     VALIDATE_VALUE(value, term_is_any_integer);
@@ -2230,8 +2233,13 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
                 break;
             }
 #endif
-            default:
-                abort();
+            default: {
+                size_t boxed_size = term_intn_size(value);
+                size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
+                intn_digit_t *dest_buf = (void *) term_intn_data(value);
+                *int_buf = intn_to_string(dest_buf, boxed_size * digits_per_term, base, int_len);
+                *needs_cleanup = true;
+            }
         }
     }
 
@@ -2241,17 +2249,14 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
 
 static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
 {
-#ifdef INT64_TO_A_BUF_LEN
     size_t tmp_buf_size = INT64_WRITE_TO_ASCII_BUF_LEN;
-#else
-    size_t tmp_buf_size = INTPTR_WRITE_TO_ASCII_BUF_LEN;
-#endif
     char tmp_buf[tmp_buf_size];
 
     char *int_buf;
     size_t int_len;
-    if (UNLIKELY(term_is_invalid_term(
-            integer_to_buf(ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len)))) {
+    bool needs_cleanup;
+    if (UNLIKELY(term_is_invalid_term(integer_to_buf(
+            ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len, &needs_cleanup)))) {
         return term_invalid_term();
     }
 
@@ -2260,26 +2265,35 @@ static term nif_erlang_integer_to_binary_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
+    term ret = term_from_literal_binary(int_buf, int_len, &ctx->heap, ctx->global);
+
+    if (needs_cleanup) {
+        free(int_buf);
+    }
+
+    return ret;
 }
 
 static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
 {
-#ifdef INT64_TO_A_BUF_LEN
     size_t tmp_buf_size = INT64_WRITE_TO_ASCII_BUF_LEN;
-#else
-    size_t tmp_buf_size = INTPTR_WRITE_TO_ASCII_BUF_LEN;
-#endif
     char tmp_buf[tmp_buf_size];
 
     char *int_buf;
     size_t int_len;
-    if (UNLIKELY(term_is_invalid_term(
-            integer_to_buf(ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len)))) {
+    bool needs_cleanup;
+    if (UNLIKELY(term_is_invalid_term(integer_to_buf(
+            ctx, argc, argv, tmp_buf, tmp_buf_size, &int_buf, &int_len, &needs_cleanup)))) {
         return term_invalid_term();
     }
 
-    return make_list_from_ascii_buf((uint8_t *) int_buf, int_len, ctx);
+    term ret = make_list_from_ascii_buf((uint8_t *) int_buf, int_len, ctx);
+
+    if (needs_cleanup) {
+        free(int_buf);
+    }
+
+    return ret;
 }
 
 static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
