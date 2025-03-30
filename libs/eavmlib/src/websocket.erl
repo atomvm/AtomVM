@@ -66,18 +66,18 @@ is_supported() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @equiv new(URL, <<"binary,base64">>, self())
 %% @doc Open a new websocket with the given server.
 %% @end
-%% @equiv new(URL, <<"binary,base64">>, self()).
 %%-----------------------------------------------------------------------------
 -spec new(iodata()) -> websocket().
 new(URL) ->
     ?MODULE:new(URL, []).
 
 %%-----------------------------------------------------------------------------
+%% @equiv new(URL, Protocols, self())
 %% @doc Open a new websocket with the given server.
 %% @end
-%% @equiv new(URL, Protocols, self()).
 %%-----------------------------------------------------------------------------
 -spec new(iodata(), [iodata()]) -> websocket().
 new(URL, Protocols) ->
@@ -182,23 +182,23 @@ send_binary(_Websocket, _Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @equiv close(Websocket, CLOSE_STATUS_CODE_NORMAL, [])
 %% @param Websocket websocket to close
 %% @return `ok'
 %% @doc Close websocket
 %% @end
-%% @equiv close(Websocket, ?CLOSE_STATUS_CODE_NORMAL, []).
 %%-----------------------------------------------------------------------------
 -spec close(websocket()) -> ok.
 close(Websocket) ->
     ?MODULE:close(Websocket, ?CLOSE_STATUS_CODE_NORMAL).
 
 %%-----------------------------------------------------------------------------
+%% @equiv close(Websocket, StatusCode, [])
 %% @param Websocket websocket to close
 %% @param StatusCode status code to send to server
 %% @return `ok'
 %% @doc Close websocket
 %% @end
-%% @equiv close(Websocket, StatusCode, []).
 %%-----------------------------------------------------------------------------
 -spec close(websocket(), integer()) -> ok.
 close(Websocket, StatusCode) ->
