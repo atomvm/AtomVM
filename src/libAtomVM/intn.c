@@ -305,13 +305,13 @@ static int divmnu16(
     s = nlz(v[n - 1]) - 16; // 0 <= s <= 15.
     uint16_t vn[INTN_DIVMNU_MAX_IN_LEN * (sizeof(intn_digit_t) / sizeof(uint16_t))];
     for (i = n - 1; i > 0; i--)
-        vn[i] = (v[i] << s) | (v[i - 1] >> 16 - s);
+        vn[i] = (v[i] << s) | (v[i - 1] >> (16 - s));
     vn[0] = v[0] << s;
 
     uint16_t un[(INTN_DIVMNU_MAX_IN_LEN * (sizeof(intn_digit_t) / sizeof(uint16_t))) + 1];
     un[m] = u[m - 1] >> (16 - s);
     for (i = m - 1; i > 0; i--)
-        un[i] = (u[i] << s) | (u[i - 1] >> 16 - s);
+        un[i] = (u[i] << s) | (u[i - 1] >> (16 - s));
     un[0] = u[0] << s;
 
     for (j = m - n; j >= 0; j--) { // Main loop.
@@ -353,7 +353,7 @@ static int divmnu16(
     // it and pass it back.
     if (r != NULL) {
         for (i = 0; i < n; i++)
-            r[i] = (un[i] >> s) | (un[i + 1] << 16 - s);
+            r[i] = (un[i] >> s) | (un[i + 1] << (16 - s));
     }
     return 0;
 }
