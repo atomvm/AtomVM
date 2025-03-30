@@ -632,7 +632,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-        enif_release_resource(rsrc_obj);
+        enif_release_resource(rsrc_obj); // release after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -710,7 +710,7 @@ static int send_closed_notification(Context *ctx, term socket_term, int32_t sele
 #if OTP_SOCKET_LWIP
 static void finalize_close_hander(struct LWIPEvent *event)
 {
-    enif_release_resource(event->finalize_close.rsrc_obj);
+    enif_release_resource(event->finalize_close.rsrc_obj); // release after enif_keep_resource in nif_socket_close
 }
 #endif
 
@@ -1786,9 +1786,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_LWIP
 static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-    enif_release_resource(conn_rsrc_obj);
-
+    term obj = term_from_resource(conn_rsrc_obj, &ctx->heap);
     term socket_term = term_alloc_tuple(2, &ctx->heap);
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
     conn_rsrc_obj->socket_ref_ticks = ref_ticks;
@@ -1872,7 +1870,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         TRACE("nif_socket_accept: Created socket on accept fd=%i\n", rsrc_obj->fd);
 
         term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-        enif_release_resource(conn_rsrc_obj);
+        enif_release_resource(conn_rsrc_obj); // release after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &new_resource, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
