@@ -876,6 +876,26 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     }
 }
 
+static inline term term_create_uninitialized_intn(size_t n, Heap *heap)
+{
+    term *boxed_int = memory_heap_alloc(heap, 1 + n);
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+
+    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline void *term_intn_data(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (void *) (boxed_value + 1);
+}
+
+static inline size_t term_intn_size(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(boxed_value[0]);
+}
+
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
     return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);
