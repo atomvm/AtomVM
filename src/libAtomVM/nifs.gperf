@@ -131,6 +131,7 @@ ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif
 ets:lookup/2, &ets_lookup_nif
 ets:lookup_element/3, &ets_lookup_element_nif
+ets:delete/1, &ets_delete_nif
 ets:delete/2, &ets_delete_nif
 ets:update_counter/3, &ets_update_counter_nif
 ets:update_counter/4, &ets_update_counter_nif
