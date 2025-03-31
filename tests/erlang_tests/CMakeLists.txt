@@ -523,6 +523,8 @@ compile_erlang(test_raw_raise)
 
 compile_erlang(test_ets)
 
+compile_erlang(bigint)
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -1010,4 +1012,5 @@ add_custom_target(erlang_test_modules DEPENDS
     test_raw_raise.beam
 
     test_ets.beam
+    bigint.beam
 )

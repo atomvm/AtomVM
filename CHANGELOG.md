@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
 - Added support for 'ets:delete/1'.
 
+### Changed
+- `binary_to_integer/1` doesn't accept anymore binaries such as `"0xFF"` or `"  123"`
+
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
