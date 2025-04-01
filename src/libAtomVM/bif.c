@@ -181,7 +181,7 @@ term bif_erlang_is_function_1(Context *ctx, uint32_t fail_label, term arg1)
 
 term bif_erlang_is_function_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
 {
-    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_any_integer);
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_any_non_neg_integer);
 
     if (!term_is_integer(arg2)) {
         // function takes any positive integer, including big integers
@@ -189,9 +189,6 @@ term bif_erlang_is_function_2(Context *ctx, uint32_t fail_label, term arg1, term
         return FALSE_ATOM;
     }
     avm_int_t arity = term_to_int(arg2);
-    if (arity < 0) {
-        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
-    }
 
     if (!term_is_function(arg1)) {
         return FALSE_ATOM;
