@@ -166,6 +166,12 @@ typedef enum
     TermGreaterThan = 4
 } TermCompareResult;
 
+typedef enum
+{
+    TermPositiveInteger = 0,
+    TermNegativeInteger = TERM_BOXED_INTEGER_SIGN_BIT
+} term_integer_sign_t;
+
 #define TERM_MAP_NOT_FOUND -1
 #define TERM_MAP_MEMORY_ALLOC_FAIL -2
 
@@ -766,6 +772,76 @@ static inline term term_from_int64(int64_t value)
 static inline term term_from_int(avm_int_t value)
 {
     return (value << 4) | 0xF;
+}
+
+static inline bool term_is_non_neg_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v >= 0;
+    }
+    return false;
+}
+
+static inline bool term_is_pos_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v > 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v < 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_pos_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_NEGATIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline term_integer_sign_t term_boxed_integer_sign(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (term_integer_sign_t) (boxed_value[0] & TERM_BOXED_INTEGER_SIGN_BIT);
+}
+
+static inline bool term_is_any_non_neg_integer(term t)
+{
+    return term_is_non_neg_integer(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_pos_integer(term t)
+{
+    return term_is_pos_integer(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_neg_integer(term t)
+{
+    return term_is_neg_integer(t) || term_is_neg_boxed_integer(t);
 }
 
 static inline avm_int_t term_unbox_int(term boxed_int)
