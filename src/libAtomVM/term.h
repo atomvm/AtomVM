@@ -47,6 +47,8 @@
 extern "C" {
 #endif
 
+#define TERM_BOXED_INTEGER_SIGN_BIT_POS 2 // 3rd bit
+#define TERM_BOXED_INTEGER_SIGN_BIT (1 << TERM_BOXED_INTEGER_SIGN_BIT_POS)
 #define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_INTEGER_TAG 0xF
 #define TERM_CATCH_TAG 0x1B
@@ -54,7 +56,8 @@ extern "C" {
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
 #define TERM_BOXED_BIN_MATCH_STATE 0x4
-#define TERM_BOXED_POSITIVE_INTEGER 0x8
+#define TERM_BOXED_POSITIVE_INTEGER 0x8 // b1000 (b1s00)
+#define TERM_BOXED_NEGATIVE_INTEGER (TERM_BOXED_POSITIVE_INTEGER | TERM_BOXED_INTEGER_SIGN_BIT)
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
@@ -443,7 +446,8 @@ static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
+        if (((boxed_value[0] & TERM_BOXED_TAG_MASK) | TERM_BOXED_INTEGER_SIGN_BIT)
+            == TERM_BOXED_NEGATIVE_INTEGER) {
             return true;
         }
     }
@@ -819,16 +823,18 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
 
 static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
+    avm_uint_t sign = (((avm_uint_t) value) >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     boxed_int[1] = value;
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
 static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 {
+    avm_uint64_t sign = (((avm_uint64_t) large_int64) >> 63) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
