@@ -3249,9 +3249,8 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[])
     switch (result) {
         case EtsOk:
             return TRUE_ATOM;
-        case EtsTableNotFound:
+        case EtsBadAccess:
         case EtsBadEntry:
-        case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3274,8 +3273,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
     switch (result) {
         case EtsOk:
             return ret;
-        case EtsTableNotFound:
-        case EtsPermissionDenied:
+        case EtsBadAccess:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3302,8 +3300,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
             return ret;
         case EtsEntryNotFound:
         case EtsBadPosition:
-        case EtsTableNotFound:
-        case EtsPermissionDenied:
+        case EtsBadAccess:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3328,8 +3325,7 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
     switch (result) {
         case EtsOk:
             return ret;
-        case EtsTableNotFound:
-        case EtsPermissionDenied:
+        case EtsBadAccess:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3358,13 +3354,12 @@ static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
     switch (result) {
         case EtsOk:
             return ret;
-        case EtsTableNotFound:
-        case EtsPermissionDenied:
+        case EtsBadAccess:
         case EtsBadEntry:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case EtsOverlfow:
+        case EtsOverflow:
             RAISE_ERROR(OVERFLOW_ATOM);
         default:
             UNREACHABLE();
