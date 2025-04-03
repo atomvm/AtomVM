@@ -45,7 +45,7 @@ typedef enum EtsHashtableOptions
 typedef enum EtsHashtableErrorCode
 {
     EtsHashtableOk = 0,
-    EtsHashtableFailure,
+    EtsHashtableKeyAlreadyExists,
     EtsHashtableError
 } EtsHashtableErrorCode;
 
