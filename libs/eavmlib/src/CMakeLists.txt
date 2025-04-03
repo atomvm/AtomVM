@@ -37,7 +37,6 @@ set(ERLANG_MODULES
     ledc
     logger_manager
     network
-    network_fsm
     pico
     port
     spi
