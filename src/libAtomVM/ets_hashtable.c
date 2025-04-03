@@ -26,6 +26,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 
 // #define TRACE_ENABLED
 #include "trace.h"
@@ -130,7 +131,12 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     struct HNode *node = hash_table->buckets[index];
     struct HNode *last_node = NULL;
     while (node) {
-        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
+        TermCompareResult cmp = term_compare(key, node->key, TermCompareExact, global);
+        if (UNLIKELY(cmp == TermCompareMemoryAllocFail)) {
+            return EtsHashtableError;
+        }
+
+        if (cmp == TermEquals) {
             if (opts & EtsHashtableAllowOverwrite) {
                 if (IS_NULL_PTR(last_node)) {
                     new_node->next = node->next;
@@ -142,7 +148,7 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
                 ets_hashtable_free_node(node, global);
                 return EtsHashtableOk;
             } else {
-                return EtsHashtableFailure;
+                return EtsHashtableKeyAlreadyExists;
             }
         }
         last_node = node;
