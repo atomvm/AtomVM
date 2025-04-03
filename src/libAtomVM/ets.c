@@ -293,7 +293,9 @@ static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list,
         term tuple = term_get_list_head(list);
         nodes[i] = ets_hashtable_new_node(tuple, ets_table->keypos);
         if (IS_NULL_PTR(nodes[i])) {
-            ets_hashtable_free_node_array(nodes, i, ctx->global);
+            for (size_t it = 0; it < i; ++it) {
+                ets_hashtable_free_node(nodes[it], ctx->global);
+            }
             free(nodes);
             return EtsAllocationFailure;
         }
