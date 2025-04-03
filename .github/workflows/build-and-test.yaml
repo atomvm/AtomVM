@@ -412,7 +412,7 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        valgrind --track-origins=yes --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Test: test_eavmlib.avm"
