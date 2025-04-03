@@ -100,8 +100,8 @@ struct HNode *ets_hashtable_new_node(term entry, int keypos)
     }
 
     term new_entry = memory_copy_term_tree(&new_node->heap, entry);
-    TERM_DEBUG_ASSERT(term_is_tuple(new_entry));
-    TERM_DEBUG_ASSERT(term_get_tuple_arity(new_entry) >= keypos);
+    assert(term_is_tuple(new_entry));
+    assert(term_get_tuple_arity(new_entry) >= keypos);
     term key = term_get_tuple_element(new_entry, keypos);
 
     new_node->next = NULL;
@@ -130,7 +130,12 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     struct HNode *node = hash_table->buckets[index];
     struct HNode *last_node = NULL;
     while (node) {
-        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
+        TermCompareResult cmp = term_compare(key, node->key, TermCompareExact, global);
+        if (UNLIKELY(cmp == TermCompareMemoryAllocFail)) {
+            return EtsHashtableError;
+        }
+
+        if (cmp == TermEquals) {
             if (opts & EtsHashtableAllowOverwrite) {
                 if (IS_NULL_PTR(last_node)) {
                     new_node->next = node->next;
@@ -142,7 +147,7 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
                 ets_hashtable_free_node(node, global);
                 return EtsHashtableOk;
             } else {
-                return EtsHashtableFailure;
+                return EtsHashtableKeyAlreadyExists;
             }
         }
         last_node = node;
