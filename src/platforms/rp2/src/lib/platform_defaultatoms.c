@@ -24,11 +24,8 @@ static const char *const pico_atom = ATOM_STR("\x4", "pico");
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
-    int ok = 1;
-
-    ok &= globalcontext_insert_atom(glb, pico_atom) == PICO_ATOM_INDEX;
-
-    if (!ok) {
+    term atom_term = globalcontext_make_atom(glb, pico_atom);
+    if (UNLIKELY(term_to_atom_index(atom_term) != PICO_ATOM_INDEX)) {
         AVM_ABORT();
     }
 }
