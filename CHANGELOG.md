@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
 - Added support for 'ets:delete/1'.
 
+### Changed
+- `globalcontext_make_atom` might return an invalid term when memory allocation fails. Therefore
+return value must be checked (e.g. using `term_is_invalid_term()`)
+
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
