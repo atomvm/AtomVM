@@ -195,11 +195,8 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keyp
     while (node) {
         term key_to_compare = term_get_tuple_element(node->entry, keypos);
         if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
-
-            memory_destroy_heap(&node->heap, global);
             struct HNode *next_node = node->next;
-            free(node);
-
+            ets_hashtable_free_node(node, global);
             if (prev_node != NULL) {
                 prev_node->next = next_node;
             } else {
