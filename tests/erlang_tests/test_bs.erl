@@ -20,7 +20,7 @@
 
 -module(test_bs).
 
--export([start/0, id/1]).
+-export([start/0, id/1, join/2]).
 
 start() ->
     test_pack_small_ints({2, 61, 20}, <<23, 180>>),
@@ -95,6 +95,7 @@ start() ->
     ok = test_large(),
 
     ok = test_copy_bits_string(),
+    ok = test_bs_match_string_select(),
 
     0.
 
@@ -391,4 +392,42 @@ test_copy_bits_string() ->
     <<42, 0, 1, 182>> = Y1,
     ok.
 
+% With OTP27, this generates the following code:
+%    {test,bs_start_match3,{f,197},1,[{x,0}],{x,0}}.
+%    {bs_match,{f,197},
+%              {x,0},
+%              {commands,[{ensure_at_least,16,1},
+%                         {integer,1,{literal,[]},16,1,{x,1}}]}}.
+%    {bs_get_position,{x,0},{x,2},2}.
+%    {select_val,{tr,{x,1},{t_integer,{0,65535}}},
+%                {f,197},
+%                {list,[{integer,24940},
+%                       {f,196},
+%                       {integer,28271},
+%                       {f,195},
+%                       {integer,28523},
+%                       {f,193}]}}.
+%  {label,193}.
+%    {test,bs_match_string,{f,194},[{x,0},104,{string,<<"_simultaneous">>}]}.
+%    {bs_match,{f,194},{x,0},{commands,[{ensure_exactly,0}]}}.
+%    {move,{atom,ok},{x,0}}.
+%    {jump,{f,198}}.
+%
+% We ensure here (using valgrind) that bs_match_string doesn't try to compare
+% beyond heap where <<"okay">> is.
+test_bs_match_string_select() ->
+    R = <<"ok">>,
+    L = <<"ay">>,
+    Z =
+        case join(R, L) of
+            <<"ok">> -> nok_ok;
+            <<"ok_simultaneous">> -> nok_simultaneous;
+            <<"alive">> -> nok_alive;
+            _Other -> ok
+        end,
+    id(Z).
+
 id(X) -> X.
+
+join(X, Y) ->
+    <<X/binary, Y/binary>>.
