@@ -30,11 +30,11 @@
 
 static uint32_t cb_read_resource = 0;
 static int32_t down_pid = 0;
-static ErlNifMonitor down_mon = 0;
+static ErlNifMonitor down_mon = { NULL, 0 };
 
 static uint32_t cb_read_resource_two = 0;
 static int32_t down_pid_two = 0;
-static ErlNifMonitor down_mon_two = 0;
+static ErlNifMonitor down_mon_two = { NULL, 0 };
 
 static int32_t lockable_pid = 0;
 
@@ -245,13 +245,13 @@ void test_resource_monitor()
     // Monitor called on destroy
     cb_read_resource = 0;
     down_pid = 0;
-    down_mon = 0;
+    down_mon.ref_ticks = 0;
     ctx = context_new(glb);
     pid = ctx->process_id;
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
@@ -262,13 +262,13 @@ void test_resource_monitor()
     // Monitor not called if demonitored
     cb_read_resource = 0;
     down_pid = 0;
-    down_mon = 0;
+    down_mon.ref_ticks = 0;
     ctx = context_new(glb);
     pid = ctx->process_id;
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     monitor_result = enif_demonitor_process(&env, ptr, &mon);
     assert(monitor_result == 0);
@@ -278,28 +278,26 @@ void test_resource_monitor()
     assert(cb_read_resource == 0);
     assert(down_pid == 0);
 
-    // Resource not deallocated until demonitored
+    // Resource demonitored if deallocated
     assert(resource_ref_count(ptr) == 1);
     cb_read_resource = 0;
     down_pid = 0;
-    down_mon = 0;
+    down_mon.ref_ticks = 0;
     ctx = context_new(glb);
     pid = ctx->process_id;
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 2);
+    assert(resource_ref_count(ptr) == 1);
 
     int release_result = enif_release_resource(ptr);
     assert(release_result);
-    assert(cb_read_resource == 0);
-    assert(resource_ref_count(ptr) == 1);
-
-    monitor_result = enif_demonitor_process(&env, ptr, &mon);
-    assert(monitor_result == 0);
     assert(cb_read_resource == 42);
 
     cb_read_resource = 0;
+    monitor_result = enif_demonitor_process(&env, ptr, &mon);
+    assert(monitor_result == -1);
+    assert(cb_read_resource == 0);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
@@ -340,7 +338,7 @@ void test_resource_monitor_handler_can_lock()
     // Monitor called on destroy
     cb_read_resource = 0;
     down_pid = 0;
-    down_mon = 0;
+    down_mon.ref_ticks = 0;
     ctx = context_new(glb);
     another_ctx = context_new(glb);
     lockable_pid = another_ctx->process_id;
@@ -407,8 +405,8 @@ void test_resource_monitor_two_resources_two_processes()
     cb_read_resource = 0;
     down_pid = 0;
     down_pid_two = 0;
-    down_mon = 0;
-    down_mon_two = 0;
+    down_mon.ref_ticks = 0;
+    down_mon_two.ref_ticks = 0;
     ctx_1 = context_new(glb);
     ctx_2 = context_new(glb);
     pid_1 = ctx_1->process_id;
@@ -437,7 +435,7 @@ void test_resource_monitor_two_resources_two_processes()
     cb_read_resource = 0;
     cb_read_resource_two = 0;
     down_pid = 0;
-    down_mon = 0;
+    down_mon.ref_ticks = 0;
 
     // Process #2 terminates, mon_3 is fired.
     scheduler_terminate(ctx_2);

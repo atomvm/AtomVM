@@ -23,7 +23,26 @@
 -export([start/0]).
 
 start() ->
-    ok = etest:test(get_tests(get_otp_version())).
+    OTPVersion = get_otp_version(),
+    NonNetworkingTests = get_non_networking_tests(OTPVersion),
+    Networking =
+        case OTPVersion of
+            atomvm ->
+                case atomvm:platform() of
+                    emscripten ->
+                        false;
+                    _ ->
+                        true
+                end;
+            _ ->
+                true
+        end,
+    NetworkingTests =
+        if
+            Networking -> get_networking_tests(OTPVersion);
+            true -> []
+        end,
+    ok = etest:test(NonNetworkingTests ++ NetworkingTests).
 
 get_otp_version() ->
     case erlang:system_info(machine) of
@@ -33,31 +52,22 @@ get_otp_version() ->
             atomvm
     end.
 
-get_tests(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 27) orelse OTPVersion == atomvm
+% test_sets heavily relies on is_equal that is from OTP-27
+get_non_networking_tests(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 27) orelse OTPVersion =:= atomvm
 ->
-    [test_tcp_socket, test_udp_socket, test_net, test_ssl, test_sets | get_tests(undefined)];
-get_tests(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24)
-->
-    % test_sets heavily relies on is_equal that is from OTP-27
-    [test_tcp_socket, test_udp_socket, test_net, test_ssl | get_tests(undefined)];
-get_tests(_OTPVersion) ->
+    [test_sets | get_non_networking_tests(undefined)];
+get_non_networking_tests(_OTPVersion) ->
     [
         test_apply,
         test_lists,
         test_calendar,
-        test_epmd,
         test_gen_event,
         test_gen_server,
         test_gen_statem,
-        test_gen_udp,
-        test_gen_tcp,
-        test_inet,
         test_io_lib,
         test_logger,
         test_maps,
-        test_net_kernel,
         test_proplists,
         test_queue,
         test_timer,
@@ -65,3 +75,17 @@ get_tests(_OTPVersion) ->
         test_supervisor,
         test_lists_subtraction
     ].
+
+get_networking_tests(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion =:= atomvm
+->
+    [
+        test_tcp_socket,
+        test_udp_socket,
+        test_epmd,
+        test_net,
+        test_ssl
+        | get_networking_tests(undefined)
+    ];
+get_networking_tests(_OTPVersion) ->
+    [test_gen_udp, test_gen_tcp, test_inet, test_net_kernel].

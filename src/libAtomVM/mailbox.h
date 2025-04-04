@@ -90,6 +90,9 @@ enum MessageType
     FlushMonitorSignal,
     FlushInfoMonitorSignal,
     SetGroupLeaderSignal,
+    MonitorSignal,
+    UnlinkSignal,
+    DemonitorSignal,
 };
 
 struct MailboxMessage
@@ -121,11 +124,11 @@ struct TermSignal
     term storage[];
 };
 
-struct BuiltInAtomSignal
+struct ImmediateSignal
 {
     MailboxMessage base;
 
-    term atom;
+    term immediate;
 };
 
 struct BuiltInAtomRequestSignal
@@ -141,6 +144,13 @@ struct RefSignal
     MailboxMessage base;
 
     uint64_t ref_ticks;
+};
+
+struct MonitorPointerSignal
+{
+    MailboxMessage base;
+
+    struct Monitor *monitor;
 };
 
 typedef struct
@@ -211,13 +221,13 @@ void mailbox_send(Context *c, term t);
 void mailbox_send_term_signal(Context *c, enum MessageType type, term t);
 
 /**
- * @brief Sends a built-in atom signal to a certain mailbox.
+ * @brief Sends an immediate signal to a certain mailbox.
  *
  * @param c the process context.
  * @param type the type of the signal
- * @param atom the built-in atom
+ * @param immediate the immediate term to send (atom or pid)
  */
-void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term atom);
+void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immediate);
 
 /**
  * @brief Sends a built-in atom-based request signal to a certain mailbox.
@@ -238,6 +248,15 @@ void mailbox_send_built_in_atom_request_signal(
  * @param ref_ticks the ref
  */
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks);
+
+/**
+ * @brief Sends a ref immediate signal to a certain mailbox.
+ *
+ * @param c the process context.
+ * @param type the type of the signal
+ * @param monitor the monitor
+ */
+void mailbox_send_monitor_signal(Context *c, enum MessageType type, struct Monitor *monitor);
 
 /**
  * @brief Sends an empty body signal to a certain mailbox.

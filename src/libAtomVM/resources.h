@@ -27,6 +27,7 @@
 #include "list.h"
 #include "mailbox.h"
 #include "memory.h"
+#include "synclist.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,10 +53,21 @@ struct ResourceType
     struct ListHead head;
     const char *name;
     GlobalContext *global;
-    struct ListHead monitors;
+    struct SyncList monitors;
     ErlNifResourceDtor *dtor;
     ErlNifResourceStop *stop;
     ErlNifResourceDown *down;
+};
+
+/**
+ * @brief A resource monitor.
+ */
+struct ResourceMonitor
+{
+    struct ListHead resource_list_head;
+    struct RefcBinary *resource;
+    uint64_t ref_ticks;
+    int32_t process_id;
 };
 
 /**
@@ -119,6 +131,14 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
  */
 void select_event_count_and_destroy_closed(struct ListHead *select_events, size_t *read, size_t *write, size_t *either, GlobalContext *global);
 
+/**
+ * @brief Destroy monitors associated with a resource.
+ *
+ * @param resource resource to destroy monitors for
+ * @param global the global context
+ */
+void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
+
 #define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
 
 /**
@@ -130,6 +150,26 @@ void select_event_count_and_destroy_closed(struct ListHead *select_events, size_
  * available (see SELECT_EVENT_NOTIFICATION_SIZE)
  */
 term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap);
+
+/**
+ * @brief Call down handler for a given resource and remove monitor from list.
+ * @details handler is called while holding lock on the list of monitors and
+ * if monitor is still in the list of resource monitors, thus ensuring that
+ * the resource still exists.
+ * @param resource_type type holding the list of monitors
+ * @param env environment for calling the down handler
+ * @param resource resource that monitored the process
+ * @param process_id id of the process monitored
+ * @param ref_ticks reference of the monitor
+ */
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks);
+
+/**
+ * @brief Remove monitor from list of monitors.
+ * @param resource_type type holding the list of monitors
+ * @param ref_ticks reference of the monitor
+ */
+void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ticks);
 
 #ifdef __cplusplus
 }

@@ -71,6 +71,14 @@ Source code is organized as follows:
 
 The `src` directory is broken up into the core platform-independent AtomVM library (`libAtomVM`), and platform-dependent code for each of the supported platforms  (Generic UNIX, ESP32, and STM32).
 
+## External dependencies
+
+### `uf2tool`
+
+AtomVM depends on `uf2tool`. It is used to pack both native and Erlang/Elixir/Gleam code for RP2. uf2tool is downloaded automatically by `rebar3` from `hex` mirrors.
+
+It is possible to use a local copy of uf2tool by setting `UF2TOOL_PATH` variable to a path to a source checkout of [`uf2tool`](https://github.com/pguyot/uf2tool) when invoking CMake.
+
 ## Platform Specific Build Instructions
 
 * [Generic UNIX](#building-for-generic-unix)
@@ -376,6 +384,22 @@ For persisting small amounts of data during deep sleep, you can use the [RTC mem
 #### Sleep mode - Light sleep
 
 Usage of light sleep is untested, and no support for controlling light sleep is currently implemented. Reach out if you do any experiments and measurements.
+
+#### Other Build settings
+
+Various other build settings can be changed in `idf.py menuconfig` in `src/platforms/esp32`, that affect the performance and power usage of the ESP32.
+
+Of note AtomVM releases are built with the `Optimize for performance (-O2)` compiler option:
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Compiler options ---> Optimization Level () --->`
+
+See [CONFIG_COMPILER_OPTIMIZATION_PERF](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-compiler-optimization)
+
+And all builds are built with the mbedTLS `Enable fixed-point multiplication optimisations` option:
+Use `idf.py menuconfig` in `src/platforms/esp32`
+`Component config ---> mbedTLS  ---> Enable fixed-point multiplication optimisations`
+
+See [MBEDTLS_ECP_FIXED_POINT_OPTIM](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-mbedtls-ecp-fixed-point-optim)
 
 ### Flash Layout
 

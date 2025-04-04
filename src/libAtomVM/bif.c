@@ -29,6 +29,7 @@
 #include "dictionary.h"
 #include "interop.h"
 #include "overflow_helpers.h"
+#include "smp.h"
 #include "term.h"
 #include "trace.h"
 #include "unicode.h"
@@ -154,6 +155,50 @@ term bif_erlang_is_function_1(Context *ctx, uint32_t fail_label, term arg1)
     UNUSED(fail_label);
 
     return term_is_function(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term bif_erlang_is_function_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
+{
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_any_integer);
+
+    if (!term_is_integer(arg2)) {
+        // function takes any positive integer, including big integers
+        // but internally we use only small integers
+        return FALSE_ATOM;
+    }
+    avm_int_t arity = term_to_int(arg2);
+    if (arity < 0) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    if (!term_is_function(arg1)) {
+        return FALSE_ATOM;
+    }
+
+    // following part has been taken from opcodesswitch.h
+    // TODO: factor this out
+    const term *boxed_value = term_to_const_term_ptr(arg1);
+
+    Module *fun_module = (Module *) boxed_value[1];
+    term index_or_module = boxed_value[2];
+
+    uint32_t fun_arity;
+
+    if (term_is_atom(index_or_module)) {
+        fun_arity = term_to_int(boxed_value[3]);
+
+    } else {
+        uint32_t fun_index = term_to_int32(index_or_module);
+
+        uint32_t fun_label;
+        uint32_t fun_arity_and_freeze;
+        uint32_t fun_n_freeze;
+
+        module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
+        fun_arity = fun_arity_and_freeze - fun_n_freeze;
+    }
+
+    return (arity == ((avm_int_t) fun_arity)) ? TRUE_ATOM : FALSE_ATOM;
 }
 
 term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
@@ -357,6 +402,33 @@ term bif_erlang_map_get_2(Context *ctx, uint32_t fail_label, term arg1, term arg
     return term_get_map_value(arg2, pos);
 }
 
+term bif_erlang_unique_integer_0(Context *ctx)
+{
+    int64_t value = globalcontext_get_ref_ticks(ctx->global);
+    return term_make_maybe_boxed_int64(value, &ctx->heap);
+}
+
+term bif_erlang_unique_integer_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    int proper = 0;
+    if (UNLIKELY(!term_is_list(arg1))) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+    size_t _len = term_list_length(arg1, &proper);
+    UNUSED(_len);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    // List is checked only for correctness if in the future
+    // we would like to handle monotonic and positive integers separately.
+    //
+    // Right now the implementation is backed by increasing counter
+    // that always covers both options
+    int64_t value = globalcontext_get_ref_ticks(ctx->global);
+    return term_make_maybe_boxed_int64(value, &ctx->heap);
+}
+
 static inline term make_boxed_int(Context *ctx, uint32_t fail_label, uint32_t live, avm_int_t value)
 {
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, BOXED_INT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -508,6 +580,17 @@ term bif_erlang_add_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         }
     } else {
         return add_boxed_helper(ctx, fail_label, live, arg1, arg2);
+    }
+}
+
+term bif_erlang_plus_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    UNUSED(live);
+
+    if (LIKELY(term_is_number(arg1))) {
+        return arg1;
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
 }
 
@@ -1204,6 +1287,27 @@ term bif_erlang_trunc_1(Context *ctx, uint32_t fail_label, int live, term arg1)
     }
 }
 
+term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
+{
+    if (term_is_float(arg1)) {
+        return arg1;
+    }
+
+    if (!term_is_any_integer(arg1)) {
+        RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+    }
+
+    avm_float_t fresult = term_conv_to_float(arg1);
+    if (UNLIKELY(!isfinite(fresult))) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_float(fresult, &ctx->heap);
+}
+
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
 
 static inline term bitwise_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
@@ -1652,19 +1756,10 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
 
     AtomString atom;
     if (LIKELY(!encode_latin1_to_utf8)) {
-        size_t i = 0;
-        while (i < atom_string_len) {
-            uint32_t codepoint;
-            size_t codepoint_size;
-            if (UNLIKELY(bitstring_utf8_decode(
-                    (uint8_t *) atom_string + i, atom_string_len, &codepoint, &codepoint_size))
-                != UnicodeTransformDecodeSuccess) {
-                *error_reason = BADARG_ATOM;
-                return term_invalid_term();
-            }
-            i += codepoint_size;
+        if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_string, atom_string_len))) {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
         }
-
         atom = malloc(atom_string_len + 1);
         if (IS_NULL_PTR(atom)) {
             *error_reason = OUT_OF_MEMORY_ATOM;

@@ -50,7 +50,8 @@ erlang:binary_to_integer/2, &binary_to_integer_nif
 erlang:binary_to_list/1, &binary_to_list_nif
 erlang:binary_to_existing_atom/1, &binary_to_existing_atom_1_nif
 erlang:delete_element/2, &delete_element_nif
-erlang:erase/1, &erase_nif
+erlang:erase/0, &erase_0_nif
+erlang:erase/1, &erase_1_nif
 erlang:error/1, &error_nif
 erlang:error/2, &error_nif
 erlang:error/3, &error_nif
@@ -106,6 +107,7 @@ erlang:process_flag/2, &process_flag_nif
 erlang:process_flag/3, &process_flag_nif
 erlang:processes/0, &processes_nif
 erlang:process_info/2, &process_info_nif
+erlang:get/0, &get_0_nif
 erlang:put/2, &put_nif
 erlang:binary_to_term/1, &binary_to_term_nif
 erlang:binary_to_term/2, &binary_to_term_nif
@@ -137,6 +139,8 @@ ets:insert/2, &ets_insert_nif
 ets:lookup/2, &ets_lookup_nif
 ets:lookup_element/3, &ets_lookup_element_nif
 ets:delete/2, &ets_delete_nif
+ets:update_counter/3, &ets_update_counter_nif
+ets:update_counter/4, &ets_update_counter_nif
 atomvm:add_avm_pack_binary/2, &atomvm_add_avm_pack_binary_nif
 atomvm:add_avm_pack_file/2, &atomvm_add_avm_pack_file_nif
 atomvm:close_avm_pack/2, &atomvm_close_avm_pack_nif

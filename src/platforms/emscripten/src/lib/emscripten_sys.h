@@ -33,6 +33,17 @@
 #include <emscripten/fetch.h>
 #include <emscripten/promise.h>
 
+#include <mbedtls/ctr_drbg.h>
+#include <mbedtls/entropy.h>
+
+#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
+#include <mbedtls/build_info.h>
+#else
+#include <mbedtls/config.h>
+#endif
+
+#include "sys_mbedtls.h"
+
 struct PromiseResource
 {
     em_promise_t promise;
@@ -105,6 +116,18 @@ struct EmscriptenPlatformData
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
     ErlNifResourceType *websocket_resource_type;
+
+#ifndef AVM_NO_SMP
+    Mutex *entropy_mutex;
+#endif
+    mbedtls_entropy_context entropy_ctx;
+    bool entropy_is_initialized;
+
+#ifndef AVM_NO_SMP
+    Mutex *random_mutex;
+#endif
+    mbedtls_ctr_drbg_context random_ctx;
+    bool random_is_initialized;
 };
 
 void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target, const char *message);

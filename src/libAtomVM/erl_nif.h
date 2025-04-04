@@ -56,7 +56,11 @@ typedef struct ResourceType ErlNifResourceType;
 /**
  * @brief Opaque monitor type
  */
-typedef uint64_t ErlNifMonitor;
+typedef struct
+{
+    struct ResourceType *resource_type;
+    uint64_t ref_ticks;
+} ErlNifMonitor;
 
 /**
  * @brief Selectable event.

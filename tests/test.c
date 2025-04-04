@@ -178,7 +178,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_insert_element, 121),
     TEST_CASE_EXPECTED(test_delete_element, 421),
     TEST_CASE_EXPECTED(test_tuple_to_list, 300),
-    TEST_CASE_EXPECTED(test_make_tuple, 4),
+    TEST_CASE(test_make_tuple),
     TEST_CASE_EXPECTED(test_make_list, 5),
     TEST_CASE_EXPECTED(test_list_gc, 2),
     TEST_CASE_EXPECTED(test_list_processes, 3),
@@ -235,6 +235,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_funs9, 3555),
     TEST_CASE_EXPECTED(test_funs10, 6817),
     TEST_CASE_EXPECTED(test_funs11, 817),
+    TEST_CASE(test_funs12),
     TEST_CASE(test_make_fun3),
     TEST_CASE(fun_call_bif),
 
@@ -336,6 +337,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(negdiv, 134217728),
     TEST_CASE_EXPECTED(absovf, 134217728),
     TEST_CASE_EXPECTED(negovf, 134217728),
+    TEST_CASE(unary_plus),
 
     TEST_CASE_EXPECTED(plusone3, 134217726),
     TEST_CASE_EXPECTED(plusone4, 134217728),
@@ -448,6 +450,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(float2bin2decimals, 255),
     TEST_CASE_EXPECTED(float2bin2, 31),
     TEST_CASE_EXPECTED(float2list2scientific, 31),
+    TEST_CASE(float_bif),
     TEST_CASE_EXPECTED(float2list2decimals, 255),
     TEST_CASE_EXPECTED(float2list2, 31),
     TEST_CASE_EXPECTED(bin2float, 511),
@@ -568,6 +571,7 @@ struct Test tests[] = {
     TEST_CASE(test_utf8_atoms),
 
     TEST_CASE(twentyone_param_function),
+    TEST_CASE(unique),
     TEST_CASE(complex_list_match_xregs),
     TEST_CASE(twentyone_param_fun),
     TEST_CASE(gc_safe_x_reg_write),
@@ -647,7 +651,9 @@ int test_module_execution(bool beam, struct Test *test)
         return 0;
     }
     fprintf(stderr, "%s:\r", test->test_module);
+    fflush(NULL);
     int result = beam ? test_beam(test) : test_atom(test);
+    fflush(NULL);
     if (result) {
         fprintf(stderr, "\x1b[2K\x1b[1;31m%s:\x1b[34GFAILED\x1b[0m\n", test->test_module);
         return 1;

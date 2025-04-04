@@ -22,8 +22,14 @@
 -export([start/0]).
 
 start() ->
-    CounterPid = spawn(fun() -> counter_loop() end),
-    emscripten:run_script(<<"alert('hello from Erlang in main thread')">>, [main_thread]),
+    {CounterPid, CounterMonitor} = spawn_opt(fun() -> counter_loop() end, [monitor]),
+    emscripten:run_script(
+        <<
+            "console.log('hello from Erlang in main thread');"
+            "alert('hello from Erlang in main thread')"
+        >>,
+        [main_thread]
+    ),
     CounterPid ! {self(), terminate},
     receive
         {CounterPid, CounterValue, DeltaMS} ->
@@ -40,15 +46,20 @@ start() ->
                 ]
             )
     end,
-    emscripten:run_script(<<"alert('hello from Erlang in main thread async')">>, [
-        main_thread, async
-    ]),
-    emscripten:run_script(<<"alert('hello from Erlang in worker thread')">>),
+    % Ensure process terminated
+    receive
+        {'DOWN', CounterMonitor, process, CounterPid, normal} -> ok
+    end,
     emscripten:run_script(
-        <<"window.document.getElementById('demo-not').style = 'display: none';">>, [
-            main_thread
+        <<
+            "console.log('hello from Erlang in main thread async');"
+            "alert('hello from Erlang in main thread async')"
+        >>,
+        [
+            main_thread, async
         ]
-    ).
+    ),
+    emscripten:run_script(<<"console.log('hello from Erlang in worker thread')">>).
 
 counter_loop() ->
     StartTimeMS = erlang:system_time(millisecond),

@@ -28,6 +28,7 @@ start() ->
     ok = test_bounded_free_strategy(true),
     ok = test_minimum_strategy(),
     ok = test_fibonacci_strategy(),
+    ok = test_messages_get_gcd(),
     0.
 
 test_grow_beyond_min_heap_size() ->
@@ -79,24 +80,80 @@ test_bounded_free_strategy(UseDefault) ->
     ok.
 
 test_minimum_strategy() ->
+    Parent = self(),
     {Pid1, Ref1} = spawn_opt(
         fun() ->
-            {total_heap_size, X1} = process_info(self(), total_heap_size),
+            receive
+                {step, 1} -> Parent ! ok
+            end,
+            receive
+                {step, 2} -> Parent ! ok
+            end,
             % Cannot really be 0 because we allocate more than just the list.
             ok = test_growth_bounded(10),
-            {total_heap_size, X2} = process_info(self(), total_heap_size),
+            receive
+                {step, 3} -> Parent ! ok
+            end,
+            receive
+                {step, 4} -> Parent ! ok
+            end,
             % Allocate again, this is when heap will be shrunk
             Var1 = alloc_some_heap_words(10),
-            {total_heap_size, X3} = process_info(self(), total_heap_size),
-            20 = erts_debug:flat_size(Var1),
-            true = X3 < X2,
-            true = X3 - X1 - erts_debug:flat_size(Var1) =< 10
+            receive
+                {step, 5} -> Parent ! ok
+            end,
+            receive
+                {step, 6} -> Parent ! ok
+            end,
+            20 = erts_debug:flat_size(Var1)
         end,
         [monitor, {atomvm_heap_growth, minimum}]
     ),
+    % Get heap size from the outside to have no influence on the heap
+    Pid1 ! {step, 1},
     ok =
         receive
-            {'DOWN', Ref1, process, Pid1, normal} -> ok
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    {total_heap_size, X1} = process_info(Pid1, total_heap_size),
+    Pid1 ! {step, 2},
+    ok =
+        receive
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    Pid1 ! {step, 3},
+    ok =
+        receive
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    {total_heap_size, X2} = process_info(Pid1, total_heap_size),
+    Pid1 ! {step, 4},
+    ok =
+        receive
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    Pid1 ! {step, 5},
+    ok =
+        receive
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    {total_heap_size, X3} = process_info(Pid1, total_heap_size),
+    Pid1 ! {step, 6},
+    ok =
+        receive
+            ok -> ok
+        after 1000 -> timeout
+        end,
+    true = X3 < X2,
+    true = X3 - X1 - 20 =< 10,
+    normal =
+        receive
+            {'DOWN', Ref1, process, Pid1, Reason} -> Reason
         after 500 -> timeout
         end,
     ok.
@@ -214,3 +271,47 @@ allocate_until_heap_size_changes(Heap) ->
             alloc_some_heap_words(100),
             allocate_until_heap_size_changes(Heap)
     end.
+
+% This test ensures that when messages are received, they eventually get gc'd
+test_messages_get_gcd() ->
+    {Pid1, Ref1} = spawn_opt(
+        fun() ->
+            loop([])
+        end,
+        [monitor, {atomvm_heap_growth, minimum}]
+    ),
+    FinalHeapSize = loop_send(Pid1, 20),
+    Pid1 ! quit,
+    ok =
+        receive
+            {'DOWN', Ref1, process, Pid1, normal} -> ok
+        after 500 -> timeout
+        end,
+    ok =
+        if
+            FinalHeapSize < 200 -> ok;
+            true -> {heap_size_too_large, FinalHeapSize}
+        end,
+    ok.
+
+loop(State) when is_list(State) ->
+    NewData =
+        receive
+            {get_data, Pid} ->
+                Pid ! {data, State},
+                State;
+            {data, Data} ->
+                Data;
+            quit ->
+                ok
+        end,
+    loop(NewData);
+loop(_Other) ->
+    ok.
+
+loop_send(Pid, 0) ->
+    {total_heap_size, THS} = process_info(Pid, total_heap_size),
+    THS;
+loop_send(Pid, N) ->
+    Pid ! {data, alloc_some_heap_words(40)},
+    loop_send(Pid, N - 1).

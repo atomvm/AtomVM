@@ -28,17 +28,26 @@ add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
 
-if (Elixir_FOUND)
-    add_subdirectory(exavmlib/lib)
-else()
-    message("Unable to find elixirc -- skipping Elixir libs")
-endif()
+set(ATOMVM_LIBS eavmlib estdlib alisp)
+
+find_package(Elixir)
+find_package(Gleam)
 
 if (Elixir_FOUND)
-    pack_lib(atomvmlib eavmlib estdlib alisp exavmlib)
+    add_subdirectory(exavmlib/lib)
+    list(APPEND ATOMVM_LIBS exavmlib)
 else()
-    pack_lib(atomvmlib eavmlib estdlib alisp)
+    message(WARNING "Unable to find elixirc -- skipping Elixir libs")
 endif()
+
+if (Gleam_FOUND)
+    add_subdirectory(gleam_avm)
+    list(APPEND ATOMVM_LIBS gleam_avm)
+else()
+    message(WARNING "Unable to find gleam -- skipping Gleam libs")
+endif()
+
+pack_lib(atomvmlib ${ATOMVM_LIBS})
 
 if (Dialyzer_FOUND)
     add_custom_command(

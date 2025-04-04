@@ -57,7 +57,8 @@ typedef enum EtsErrorCode
     EtsBadEntry,
     EtsAllocationFailure,
     EtsEntryNotFound,
-    EtsBadPosition
+    EtsBadPosition,
+    EtsOverlfow
 } EtsErrorCode;
 struct Ets
 {
@@ -70,14 +71,14 @@ struct Ets
 void ets_init(struct Ets *ets);
 void ets_destroy(struct Ets *ets, GlobalContext *global);
 
-EtsErrorCode ets_create_table(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx);
+EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx);
 void ets_delete_owned_tables(struct Ets *ets, int32_t process_id, GlobalContext *global);
 
 EtsErrorCode ets_insert(term ref, term entry, Context *ctx);
-EtsErrorCode ets_lookup(term ref, term key, term *ret, Context *ctx);
-EtsErrorCode ets_lookup_element(term ref, term key, size_t pos, term *ret, Context *ctx);
+EtsErrorCode ets_lookup_maybe_gc(term ref, term key, term *ret, Context *ctx);
+EtsErrorCode ets_lookup_element_maybe_gc(term ref, term key, size_t pos, term *ret, Context *ctx);
 EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx);
-
+EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term value, term pos, term *ret, Context *ctx);
 #ifdef __cplusplus
 }
 #endif

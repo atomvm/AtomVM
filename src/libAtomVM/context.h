@@ -152,6 +152,10 @@ struct Context
 typedef struct Context Context;
 #endif
 
+#define CONTEXT_MONITOR_RESOURCE_TAG 0x2
+#define CONTEXT_MONITOR_MONITORED_PID_TAG 0x3
+#define CONTEXT_MONITOR_MONITORING_PID_TAG 0x1
+
 /**
  * @brief A regular monitor or a half link.
  */
@@ -159,16 +163,7 @@ struct Monitor
 {
     struct ListHead monitor_list_head;
     uint64_t ref_ticks; // 0 for links
-    term monitor_obj;
-};
-
-/**
- * @brief A resource monitor.
- */
-struct ResourceMonitor
-{
-    struct Monitor base;
-    struct ListHead resource_list_head;
+    term monitor_obj; // pid for links, CONTEXT_MONITOR_*_TAG for monitors
 };
 
 struct ExtendedRegister
@@ -406,53 +401,87 @@ bool context_process_signal_set_group_leader(Context *ctx, struct TermSignal *si
  * @brief Get process information.
  *
  * @param ctx the context being executed
- * @param out the answer term
+ * @param out the answer term. Can be NULL if only the size matters.
+ * @param term_size the size of the answer term, in words.
  * @param atom_key the key representing the info to get
+ * @param heap the heap to allocate the answer to
  * @return \c true if successful, \c false in case of an error in which case
- * *out is filled with an exception atom
+ * *out is filled with an exception atom if it was not NULL
  */
-bool context_get_process_info(Context *ctx, term *out, term atom_key);
+bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term atom_key, Heap *heap);
 
 /**
  * @brief Half-link process to another process
- * @details Caller must hold the global process lock. This creates one half of
- * the link.
  *
- * @param ctx context to link
- * @param monitor_pid process to link ctx to
- * @return 0 on success
+ * @param monitor_pid process to link to
+ * @return the allocated monitor or NULL if allocation failed
  */
-int context_link(Context *ctx, term monitor_pid);
+struct Monitor *monitor_link_new(term monitor_pid);
 
 /**
  * @brief Create a monitor on a process.
- * @details Caller must hold the global process lock.
  *
- * @param ctx context to monitor
  * @param monitor_pid monitoring process
- * @return the ref ticks
+ * @param ref_ticks reference of the monitor
+ * @param is_monitoring if ctx is the monitoring process
+ * @return the allocated monitor or NULL if allocation failed
  */
-uint64_t context_monitor(Context *ctx, term monitor_pid);
+struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring);
 
 /**
- * @brief Create a resource monitor on a process.
- * @details Caller must hold the global process lock. The returned resource
- * monitor is not added to the monitors list on the resource type.
+ * @brief Create a resource monitor.
  *
- * @param ctx context to monitor
  * @param resource resource object
- * @return the resource monitor
+ * @param ref_ticks reference associated with the monitor
+ * @param process_id process being monitored
+ * @return the allocated resource monitor or NULL if allocation failed
  */
-struct ResourceMonitor *context_resource_monitor(Context *ctx, void *resource);
+struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks);
+
 /**
- * @brief Remove a half-link from a process.
- * @details Caller must hold the global process lock. This removes one half of
- * the link.
+ * @brief Half-unlink process to another process
+ * @details Called within the process only. For the other end of the
+ * link, an UnlinkSignal is sent that calls this function.
  *
- * @param ctx context to monitor
- * @param monitor_pid process to unlink
+ * @param ctx the context being executed
+ * @param monitor_pid process to unlink from
+ * @return 0 on success
  */
 void context_unlink(Context *ctx, term monitor_pid);
+
+/**
+ * @brief Destroy a monitor on a process.
+ * @details Called within the process only. This function is called from
+ * DemonitorSignal.
+ *
+ * @param ctx the context being executed
+ * @param ref_ticks reference of the monitor to remove
+ * @return 0 on success
+ */
+void context_demonitor(Context *ctx, uint64_t ref_ticks);
+
+/**
+ * @brief Get target of a monitor.
+ *
+ * @param ctx the context being executed
+ * @param ref_ticks reference of the monitor to remove
+ * @param is_monitoring whether ctx is the monitoring process.
+ * @return pid of monitoring process, self() if process is monitoring (and not
+ * monitored) or term_invalid() if no monitor could be found.
+ */
+term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitoring);
+
+/**
+ * @brief Add a monitor on a process.
+ * @details Called within the process only. This function is called from
+ * MonitorSignal. Monitor is not added if it already exists. Monitors are
+ * identified by a reference, but links have no reference and a link can
+ * only exist once.
+ *
+ * @param ctx the context being executed
+ * @param new_monitor monitor object to add
+ */
+void context_add_monitor(Context *ctx, struct Monitor *new_monitor);
 
 #ifdef __cplusplus
 }

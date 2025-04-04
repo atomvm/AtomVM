@@ -25,6 +25,7 @@
 #include "ets_hashtable.h"
 #include "list.h"
 #include "memory.h"
+#include "overflow_helpers.h"
 #include "term.h"
 
 #ifndef AVM_NO_SMP
@@ -143,7 +144,7 @@ void ets_destroy(struct Ets *ets, GlobalContext *global)
     synclist_destroy(&ets->ets_tables);
 }
 
-EtsErrorCode ets_create_table(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
+EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
 {
     if (is_named) {
         struct EtsTable *ets_table = ets_get_table_by_name(&ctx->global->ets, name, TableAccessNone);
@@ -347,7 +348,7 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
     return result;
 }
 
-static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
+static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
 {
     if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
         return EtsPermissionDenied;
@@ -361,7 +362,7 @@ static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term 
 
         size_t size = (size_t) memory_estimate_usage(res);
         // allocate [object]
-        if (UNLIKELY(memory_ensure_free_opt(ctx, size + CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, size + CONS_SIZE, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             return EtsAllocationFailure;
         }
         term new_res = memory_copy_term_tree(&ctx->heap, res);
@@ -371,20 +372,20 @@ static EtsErrorCode ets_table_lookup(struct EtsTable *ets_table, term key, term 
     return EtsOk;
 }
 
-EtsErrorCode ets_lookup(term name_or_ref, term key, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
     struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
     if (ets_table == NULL) {
         return EtsTableNotFound;
     }
 
-    EtsErrorCode result = ets_table_lookup(ets_table, key, ret, ctx);
+    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
     SMP_UNLOCK(ets_table);
 
     return result;
 }
 
-EtsErrorCode ets_lookup_element(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
 {
     if (UNLIKELY(pos == 0)) {
         return EtsBadPosition;
@@ -444,4 +445,138 @@ EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
     *ret = TRUE_ATOM;
 
     return EtsOk;
+}
+
+static bool operation_to_tuple4(term operation, size_t default_pos, term *position, term *increment, term *threshold, term *set_value)
+{
+    if (term_is_integer(operation)) {
+        *increment = operation;
+        *position = term_from_int(default_pos);
+        *threshold = term_invalid_term();
+        *set_value = term_invalid_term();
+        return true;
+    }
+
+    if (UNLIKELY(!term_is_tuple(operation))) {
+        return false;
+    }
+    int n = term_get_tuple_arity(operation);
+    if (UNLIKELY(n != 2 && n != 4)) {
+        return false;
+    }
+
+    term pos = term_get_tuple_element(operation, 0);
+    term incr = term_get_tuple_element(operation, 1);
+    if (UNLIKELY(!term_is_integer(pos) || !term_is_integer(incr))) {
+        return false;
+    }
+
+    if (n == 2) {
+        *position = pos;
+        *increment = incr;
+        *threshold = term_invalid_term();
+        *set_value = term_invalid_term();
+        return true;
+    }
+
+    term tresh = term_get_tuple_element(operation, 2);
+    term set_val = term_get_tuple_element(operation, 3);
+    if (UNLIKELY(!term_is_integer(tresh) || !term_is_integer(set_val))) {
+        return false;
+    }
+
+    *position = pos;
+    *increment = incr;
+    *threshold = tresh;
+    *set_value = set_val;
+    return true;
+}
+
+EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, term default_value, term *ret, Context *ctx)
+{
+    struct EtsTable *ets_table = term_is_atom(ref)
+        ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite)
+        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessWrite);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsTableNotFound;
+    }
+
+    // do not use an invalid term as a root
+    term safe_default_value = term_is_invalid_term(default_value) ? term_nil() : default_value;
+    term roots[] = { key, operation, safe_default_value };
+
+    term list;
+    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
+    if (UNLIKELY(result != EtsOk)) {
+        SMP_UNLOCK(ets_table);
+        return result;
+    }
+
+    key = roots[0];
+    operation = roots[1];
+    default_value = term_is_invalid_term(default_value) ? term_invalid_term() : roots[2];
+
+    term to_insert;
+    if (term_is_nil(list)) {
+        if (term_is_invalid_term(default_value)) {
+            SMP_UNLOCK(ets_table);
+            return EtsBadEntry;
+        }
+        to_insert = default_value;
+    } else {
+        to_insert = term_get_list_head(list);
+    }
+
+    if (UNLIKELY(!term_is_tuple(to_insert))) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
+    }
+    term position_term;
+    term increment_term;
+    term threshold_term;
+    term set_value_term;
+    // +1 to position, +1 to elem after key
+    size_t default_pos = (ets_table->keypos + 1) + 1;
+
+    if (UNLIKELY(!operation_to_tuple4(operation, default_pos, &position_term, &increment_term, &threshold_term, &set_value_term))) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
+    }
+    int arity = term_get_tuple_arity(to_insert);
+    avm_int_t position = term_to_int(position_term) - 1;
+    if (UNLIKELY(arity <= position || position < 1)) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
+    }
+
+    term elem = term_get_tuple_element(to_insert, position);
+    if (UNLIKELY(!term_is_integer(elem))) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
+    }
+    avm_int_t increment = term_to_int(increment_term);
+    avm_int_t elem_value;
+    if (BUILTIN_ADD_OVERFLOW_INT(increment, term_to_int(elem), &elem_value)) {
+        SMP_UNLOCK(ets_table);
+        return EtsOverlfow;
+    }
+    if (!term_is_invalid_term(threshold_term) && !term_is_invalid_term(set_value_term)) {
+        avm_int_t threshold = term_to_int(threshold_term);
+        avm_int_t set_value = term_to_int(set_value_term);
+
+        if (increment >= 0 && elem_value > threshold) {
+            elem_value = set_value;
+        } else if (increment < 0 && elem_value < threshold) {
+            elem_value = set_value;
+        }
+    }
+
+    term final_value = term_from_int(elem_value);
+    term_put_tuple_element(to_insert, position, final_value);
+    EtsErrorCode insert_result = ets_table_insert(ets_table, to_insert, ctx);
+    if (insert_result == EtsOk) {
+        *ret = final_value;
+    }
+    SMP_UNLOCK(ets_table);
+    return insert_result;
 }

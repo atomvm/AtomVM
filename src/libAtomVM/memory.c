@@ -159,7 +159,7 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
         // Target heap size depends on:
         // - alloc_mode (MEMORY_FORCE_SHRINK takes precedence)
         // - heap growth strategy
-        bool should_gc = free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK);
+        bool should_gc = free_space < size || (alloc_mode == MEMORY_FORCE_SHRINK) || c->heap.root->next != NULL;
         size_t memory_size = 0;
         if (!should_gc) {
             switch (c->heap_growth_strategy) {

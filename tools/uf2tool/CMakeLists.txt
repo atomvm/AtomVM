@@ -21,6 +21,13 @@
 cmake_minimum_required (VERSION 3.13)
 project (UF2Tool)
 
+set(UF2TOOL_PATH "" CACHE PATH "Path to UF2Tool source tree. If unset, hex package will be used")
+
+if(NOT UF2TOOL_PATH STREQUAL "")
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/_checkouts)
+    file(CREATE_LINK ${UF2TOOL_PATH} ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/uf2tool SYMBOLIC)
+endif()
+
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
 )

@@ -20,19 +20,18 @@
 
 -module(test_make_tuple).
 
--export([start/0, f/1, g/1]).
+-export([start/0, f/1, g/2]).
 
 start() ->
-    g(f(2)) + g(f(0)).
+    {} = ?MODULE:f(0),
+    {hello, hello} = ?MODULE:f(2),
+    % There are 35 terms available on heap.
+    R = ?MODULE:g(34, ?MODULE:f(2)),
+    {R} = ?MODULE:g(1, R),
+    0.
 
 f(N) ->
     erlang:make_tuple(N, hello).
 
-g({}) ->
-    1;
-g({hello}) ->
-    2;
-g({hello, hello}) ->
-    3;
-g(_) ->
-    100.
+g(N, Elem) ->
+    erlang:make_tuple(N, Elem).
