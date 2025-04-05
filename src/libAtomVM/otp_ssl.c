@@ -236,7 +236,7 @@ static term nif_ssl_entropy_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-    enif_release_resource(rsrc_obj);
+    enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
     mbedtls_entropy_init(&rsrc_obj->context);
 
@@ -259,7 +259,7 @@ static term nif_ssl_ctr_drbg_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-    enif_release_resource(rsrc_obj);
+    enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
     mbedtls_ctr_drbg_init(&rsrc_obj->context);
 
@@ -311,7 +311,7 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-    enif_release_resource(rsrc_obj);
+    enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
     mbedtls_ssl_init(&rsrc_obj->context);
 
@@ -364,7 +364,7 @@ static term nif_ssl_config_init(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-    enif_release_resource(rsrc_obj);
+    enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
     mbedtls_ssl_config_init(&rsrc_obj->config);
 
