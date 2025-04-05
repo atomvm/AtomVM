@@ -1320,17 +1320,17 @@ setnode(_TargetNode, _ConnPid, _TargetFlagsCreation) ->
     erlang:nif_error(undefined).
 
 %% @hidden
--spec dist_ctrl_get_data_notification(reference()) -> ok.
+-spec dist_ctrl_get_data_notification(binary()) -> ok.
 dist_ctrl_get_data_notification(_DHandle) ->
     erlang:nif_error(undefined).
 
 %% @hidden
--spec dist_ctrl_get_data(reference()) -> none | binary().
+-spec dist_ctrl_get_data(binary()) -> none | binary().
 dist_ctrl_get_data(_DHandle) ->
     erlang:nif_error(undefined).
 
 %% @hidden
--spec dist_ctrl_put_data(reference(), binary()) -> ok.
+-spec dist_ctrl_put_data(binary(), binary()) -> ok.
 dist_ctrl_put_data(_DHandle, _Packet) ->
     erlang:nif_error(undefined).
 
