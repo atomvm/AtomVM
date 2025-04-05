@@ -281,8 +281,6 @@ Context *scheduler_run(GlobalContext *global)
 
 Context *scheduler_next(GlobalContext *global, Context *c)
 {
-    c->reductions += DEFAULT_REDUCTIONS_AMOUNT;
-
     // Remove c from running and append it at the end of ready list
     // c could already be in ready queue, if it received a message.
     SMP_SPINLOCK_LOCK(&global->processes_spinlock);
