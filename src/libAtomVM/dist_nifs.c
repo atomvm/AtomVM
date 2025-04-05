@@ -284,12 +284,14 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
     }
 
     // Create a resource object
+    bool allocated_resource = false;
     if (conn_obj == NULL) {
         conn_obj = enif_alloc_resource(ctx->global->dist_connection_resource_type, sizeof(struct DistConnection));
         if (IS_NULL_PTR(conn_obj)) {
             synclist_unlock(&ctx->global->dist_connections);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        allocated_resource = true;
         conn_obj->node_atom_index = node_atom_index;
         synclist_init(&conn_obj->remote_monitors);
         synclist_init(&conn_obj->pending_packets);
@@ -310,8 +312,11 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
     if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_obj);
-    enif_release_resource(conn_obj);
+    term obj = term_from_resource(conn_obj, &ctx->heap);
+    if (allocated_resource) {
+        // release after enif_alloc_resource
+        enif_release_resource(conn_obj);
+    }
     return obj;
 }
 
@@ -354,7 +359,7 @@ static term nif_erlang_dist_ctrl_get_data(Context *ctx, int argc, term argv[])
     } else {
         struct ListHead *first = list_first(pending_packets);
         struct DistributionPacket *packet = GET_LIST_ENTRY(first, struct DistributionPacket, head);
-        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(packet->size)) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, term_binary_heap_size(packet->size), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             synclist_unlock(&conn_obj->pending_packets);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -604,6 +609,13 @@ term dist_send_message(term target, term payload, Context *ctx)
     // the message. Then we also trigger a connection, which, if it fails,
     // will remove the entry and purge the pending list of messages.
 
+    // Ensure net_kernel process can be found to autoconnect
+    term net_kernel_proc = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
+    if (UNLIKELY(!term_is_local_pid(net_kernel_proc))) {
+        synclist_unlock(&ctx->global->dist_connections);
+        RAISE_ERROR(NOPROC_ATOM);
+    }
+
     // Create a resource object
     struct DistConnection *new_conn_obj = enif_alloc_resource(ctx->global->dist_connection_resource_type, sizeof(struct DistConnection));
     if (IS_NULL_PTR(new_conn_obj)) {
@@ -612,6 +624,7 @@ term dist_send_message(term target, term payload, Context *ctx)
     }
     new_conn_obj->node_atom_index = node_atom_index;
     new_conn_obj->node_creation = 0;
+    new_conn_obj->selecting_process_id = INVALID_PROCESS_ID;
     new_conn_obj->connection_process_id = INVALID_PROCESS_ID;
     synclist_init(&new_conn_obj->remote_monitors);
     synclist_init(&new_conn_obj->pending_packets);
@@ -628,19 +641,17 @@ term dist_send_message(term target, term payload, Context *ctx)
     synclist_unlock(&ctx->global->dist_connections);
 
     // Eventually, tell kernel to connect
-    term net_kernel_proc = globalcontext_get_registered_process(ctx->global, NET_KERNEL_ATOM_INDEX);
-    if (term_is_local_pid(net_kernel_proc)) {
-        BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, heap)
-        term autoconnect_message = term_alloc_tuple(3, &heap);
-        term_put_tuple_element(autoconnect_message, 0, CONNECT_ATOM);
-        term_put_tuple_element(autoconnect_message, 1, term_from_atom_index(node_atom_index));
-        term obj = enif_make_resource(erl_nif_env_from_context(ctx), new_conn_obj);
-        enif_release_resource(new_conn_obj);
-        term_put_tuple_element(autoconnect_message, 2, obj);
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, heap)
+    term autoconnect_message = term_alloc_tuple(3, &heap);
+    term_put_tuple_element(autoconnect_message, 0, CONNECT_ATOM);
+    term_put_tuple_element(autoconnect_message, 1, term_from_atom_index(node_atom_index));
+    term obj = term_from_resource(new_conn_obj, &heap);
+    enif_release_resource(new_conn_obj); // release after enif_alloc_resource
+    term_put_tuple_element(autoconnect_message, 2, obj);
 
-        globalcontext_send_message(ctx->global, term_to_local_process_id(net_kernel_proc), autoconnect_message);
-        END_WITH_STACK_HEAP(heap, ctx->global)
-    }
+    globalcontext_send_message(ctx->global, term_to_local_process_id(net_kernel_proc), autoconnect_message);
+    END_WITH_STACK_HEAP(heap, ctx->global)
+
     return payload;
 }
 
