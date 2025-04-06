@@ -773,7 +773,7 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("atomvm:random/0", nifname) == 0) {
         return &atomvm_random_nif;
     }
-    if (memcmp("crypto:", nifname, strlen("crypro:")) == 0) {
+    if (memcmp("crypto:", nifname, strlen("crypto:")) == 0) {
         return otp_crypto_nif_get_nif(nifname);
     }
     if (memcmp("emscripten:", nifname, strlen("emscripten:"))) {
