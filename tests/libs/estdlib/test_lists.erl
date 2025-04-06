@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2019-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2025 migmatore <kazakvova201@gmail.com>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -46,9 +47,12 @@ test() ->
     ok = test_sort(),
     ok = test_split(),
     ok = test_usort(),
+    ok = test_dropwhile(),
+    ok = test_duplicate(),
     ok = test_filtermap(),
     ok = test_last(),
     ok = test_mapfoldl(),
+    ok = test_append(),
     ok.
 
 test_nth() ->
@@ -97,54 +101,45 @@ test_keydelete() ->
     ?ASSERT_MATCH(lists:keydelete(a, 1, []), []),
     ?ASSERT_MATCH(lists:keydelete(a, 1, [{a, x}, b, []]), [b, []]),
     ?ASSERT_MATCH(lists:keydelete(a, 1, [b, {a, x}, []]), [b, []]),
-    ?ASSERT_MATCH(lists:keydelete(a, 1, [b, {a, x}, {a, x}, {a, x}, []]), [b, {a, x}, {a, x}, []]),
+    ?ASSERT_MATCH(
+        lists:keydelete(a, 1, [b, {a, x}, {a, x}, {a, x}, []]),
+        [b, {a, x}, {a, x}, []]
+    ),
     ok.
 
 test_keyreplace() ->
     ?ASSERT_MATCH(lists:keyreplace(a, 1, [], {foo, bar}), []),
     ?ASSERT_MATCH(lists:keyreplace(a, 1, [{a, x}, b, []], {1, 2}), [{1, 2}, b, []]),
     ?ASSERT_MATCH(lists:keyreplace(x, 2, [b, {a, x}, []], {1, 2}), [b, {1, 2}, []]),
-    ?ASSERT_MATCH(lists:keyreplace(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
-        b,
-        {1, 2},
-        {a, x},
-        {a, x},
-        []
-    ]),
-    ?ASSERT_MATCH(lists:keyreplace(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
-        b,
-        {a, x},
-        {a, x},
-        {a, x},
-        []
-    ]),
+    ?ASSERT_MATCH(
+        lists:keyreplace(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
+        [b, {1, 2}, {a, x}, {a, x}, []]
+    ),
+    ?ASSERT_MATCH(
+        lists:keyreplace(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
+        [b, {a, x}, {a, x}, {a, x}, []]
+    ),
     ok.
 
 test_keystore() ->
     ?ASSERT_MATCH(lists:keystore(a, 1, [], {foo, bar}), [{foo, bar}]),
     ?ASSERT_MATCH(lists:keystore(a, 1, [{a, x}, b, []], {1, 2}), [{1, 2}, b, []]),
     ?ASSERT_MATCH(lists:keystore(x, 2, [b, {a, x}, []], {1, 2}), [b, {1, 2}, []]),
-    ?ASSERT_MATCH(lists:keystore(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
-        b,
-        {1, 2},
-        {a, x},
-        {a, x},
-        []
-    ]),
-    ?ASSERT_MATCH(lists:keystore(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}), [
-        b,
-        {a, x},
-        {a, x},
-        {a, x},
-        [],
-        {1, 2}
-    ]),
+    ?ASSERT_MATCH(
+        lists:keystore(a, 1, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
+        [b, {1, 2}, {a, x}, {a, x}, []]
+    ),
+    ?ASSERT_MATCH(
+        lists:keystore(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
+        [b, {a, x}, {a, x}, {a, x}, [], {1, 2}]
+    ),
     ok.
 
 test_keytake() ->
     List1 = [{name, "Joe"}, {name, "Robert"}, {name, "Mike"}],
     ?ASSERT_MATCH(
-        lists:keytake("Joe", 2, List1), {value, {name, "Joe"}, [{name, "Robert"}, {name, "Mike"}]}
+        lists:keytake("Joe", 2, List1),
+        {value, {name, "Joe"}, [{name, "Robert"}, {name, "Mike"}]}
     ),
     ?ASSERT_MATCH(
         lists:keytake("Robert", 2, List1),
@@ -206,7 +201,10 @@ test_flatten() ->
     ?ASSERT_MATCH(lists:flatten([[a], [b]]), [a, b]),
     ?ASSERT_MATCH(lists:flatten([[a], [b, [c]]]), [a, b, c]),
     ?ASSERT_MATCH(lists:flatten([[a], [b, {c, [d, [e, [f]]]}]]), [a, b, {c, [d, [e, [f]]]}]),
-    ?ASSERT_MATCH(lists:flatten([[a, b, c], [d, e, f], [g, h, i]]), [a, b, c, d, e, f, g, h, i]),
+    ?ASSERT_MATCH(
+        lists:flatten([[a, b, c], [d, e, f], [g, h, i]]),
+        [a, b, c, d, e, f, g, h, i]
+    ),
     ok.
 
 test_filter() ->
@@ -241,7 +239,6 @@ test_seq() ->
     ?ASSERT_ERROR(lists:seq(-1, 1, -1)),
     ?ASSERT_ERROR(lists:seq(1, -1, 1)),
     ?ASSERT_ERROR(lists:seq(1, 2, 0)),
-
     ok.
 
 test_sort() ->
@@ -284,13 +281,32 @@ test_usort() ->
     ?ASSERT_MATCH(lists:usort([1, 3, 5, 2, 1, 4]), [1, 2, 3, 4, 5]),
     ?ASSERT_MATCH(lists:usort([1, 3, 5, 2, 5, 4]), [1, 2, 3, 4, 5]),
 
-    ?ASSERT_MATCH(lists:usort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 3, 2, 1]),
+    ?ASSERT_MATCH(
+        lists:usort(fun(A, B) -> A > B end, [1, 2, 3, 4, 3, 5]),
+        [5, 4, 3, 3, 2, 1]
+    ),
     ?ASSERT_MATCH(lists:usort(fun(A, B) -> A >= B end, [1, 2, 3, 4, 3, 5]), [5, 4, 3, 2, 1]),
 
     ?ASSERT_ERROR(lists:usort(1), function_clause),
     ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
+    ok.
 
+test_dropwhile() ->
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> true end, []), []),
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> false end, []), []),
+    ?ASSERT_MATCH(lists:dropwhile(fun(_X) -> false end, [1]), [1]),
+    ?ASSERT_MATCH(lists:dropwhile(fun(X) -> X == 1 end, [1, 1, 1, 2, 3]), [2, 3]),
+    ?ASSERT_ERROR(lists:dropwhile([], []), function_clause),
+    ?ASSERT_ERROR(lists:dropwhile(fun(X) -> X == 1 end, [1 | 1]), function_clause),
+    ok.
+
+test_duplicate() ->
+    ?ASSERT_MATCH(lists:duplicate(0, x), []),
+    ?ASSERT_MATCH(lists:duplicate(1, x), [x]),
+    ?ASSERT_MATCH(lists:duplicate(3, []), [[], [], []]),
+    ?ASSERT_ERROR(lists:duplicate(-1, x), function_clause),
+    ?ASSERT_ERROR(lists:duplicate(x, x), function_clause),
     ok.
 
 test_filtermap() ->
@@ -317,8 +333,24 @@ test_last() ->
 
 test_mapfoldl() ->
     ?ASSERT_MATCH({[], 1}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [])),
-    ?ASSERT_MATCH({[1, 4, 9], 4}, lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])),
+    ?ASSERT_MATCH(
+        {[1, 4, 9], 4},
+        lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, [1, 2, 3])
+    ),
     ?ASSERT_ERROR(lists:mapfoldl(fun(X, A) -> {X * A, A + 1} end, 1, foo), function_clause),
     ok.
 
-id(X) -> X.
+test_append() ->
+    ?ASSERT_MATCH(lists:append([]), []),
+    ?ASSERT_MATCH(lists:append([[1, 2, 3, 4]]), [1, 2, 3, 4]),
+    ?ASSERT_MATCH(lists:append([[1, 2], [3, 4]]), [1, 2, 3, 4]),
+    ?ASSERT_MATCH(lists:append([[1, 2], [a, b]]), [1, 2, a, b]),
+    ?ASSERT_MATCH(lists:append([["1", "2"], [a, b]]), ["1", "2", a, b]),
+    ?ASSERT_ERROR(lists:append(1), function_clause),
+    ?ASSERT_MATCH(lists:append("abc", "def"), "abcdef"),
+    ?ASSERT_MATCH(lists:append([1, 2], [3, 4]), [1, 2, 3, 4]),
+    ?ASSERT_ERROR(lists:append(1, 3), badarg),
+    ok.
+
+id(X) ->
+    X.

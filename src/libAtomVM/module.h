@@ -108,9 +108,11 @@ struct Module
     void *fun_table;
     void *str_table;
     size_t str_table_len;
+    size_t line_refs_count;
+    const uint8_t *line_refs_table;
+    size_t locations_count;
+    const uint8_t *locations_table;
 
-    uint16_t *line_refs;
-    struct ModuleFilename *filenames;
     struct ListHead line_ref_offsets;
 
     const struct ExportedFunction **imported_funcs;
@@ -158,7 +160,7 @@ enum ModuleLoadResult
  * @param module_atom module name atom string.
  * @param function_atom function name atom string.
  */
-void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom);
+void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb);
 #endif
 
 /**
@@ -404,16 +406,19 @@ void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
  *
  * @param mod the module
  * @param offset
- * @return the line reference
+ * @param line on output the line number or 0 for the undefined location
+ * @param filename_len on output the length of the filename or NULL if it's default "module.erl"
+ * @param filename on output the filename or NULL if it's module.erl. Can be NULL.
+ * @return \c true if the line was found
  */
-int module_find_line(Module *mod, unsigned int offset);
+bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename);
 
 /**
  * @return true if the module has line information, false, otherwise.
  */
 static inline bool module_has_line_chunk(Module *mod)
 {
-    return mod->line_refs != NULL;
+    return mod->line_refs_table != NULL;
 }
 
 #ifdef __cplusplus

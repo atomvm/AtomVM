@@ -76,34 +76,54 @@ static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label
     *l_off = *mod_offset - (mod->labels[*label] - code);
 }
 
-static bool is_module_member(Module *mod, Module **mods, unsigned long len)
+static bool location_sets_append(GlobalContext *global, Module *mod, const uint8_t *filename, size_t filename_len, size_t *total_filename_len, const void ***io_locations_set, size_t *io_locations_set_size)
 {
-    for (unsigned long i = 0; i < len; ++i) {
-        if (mods[i] == mod) {
+    const void **locations_set = *io_locations_set;
+    size_t locations_set_size = *io_locations_set_size;
+    const void *key = filename;
+    if (IS_NULL_PTR(filename)) {
+        key = mod;
+        AtomString module_name_atom_str = globalcontext_atomstring_from_term(global, module_get_name(mod));
+        filename_len = atom_string_len(module_name_atom_str) + 4; // ".erl"
+    }
+    for (size_t i = 0; i < locations_set_size; i++) {
+        if (locations_set[i] == key) {
             return true;
         }
     }
-    return false;
+    const void **new_locations_set = realloc(locations_set, (locations_set_size + 1) * sizeof(const uint8_t *));
+    if (IS_NULL_PTR(new_locations_set)) {
+        // Some versions of gcc don't know that if allocation fails, original pointer should still be freed
+#pragma GCC diagnostic push
+#if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12)
+#pragma GCC diagnostic ignored "-Wuse-after-free"
+#endif
+        free(locations_set);
+#pragma GCC diagnostic pop
+        *io_locations_set = NULL;
+        fprintf(stderr, "Unable to allocate space for locations set.  No stacktrace will be created\n");
+        return false;
+    }
+    *io_locations_set = new_locations_set;
+    new_locations_set[locations_set_size] = key;
+    *io_locations_set_size = locations_set_size + 1;
+    *total_filename_len += filename_len;
+
+    return true;
 }
 
 term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
 {
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
-    unsigned int filename_lens = 0;
+    size_t filename_lens = 0;
     Module *prev_mod = NULL;
     long prev_mod_offset = -1;
     term *ct = ctx->e;
     term *stack_base = context_stack_base(ctx);
 
-    unsigned long stack_size = context_stack_size(ctx);
-    Module **modules = malloc(stack_size * sizeof(Module *));
-    if (IS_NULL_PTR(modules)) {
-        fprintf(stderr, "Unable to allocate space for modules list.  No stacktrace will be created\n");
-        return UNDEFINED_ATOM;
-    }
-
-    size_t num_mods = 0;
+    const void **locations = NULL;
+    size_t num_locations = 0;
 
     while (ct != stack_base) {
         if (term_is_cp(*ct)) {
@@ -119,12 +139,15 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
                 prev_mod = cp_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cp_mod)) {
-                    if (!is_module_member(cp_mod, modules, num_mods)) {
-                        modules[num_mods] = cp_mod;
-                        filename_lens += cp_mod->filenames[0].len;
-                        num_mods++;
+                    uint32_t line;
+                    const uint8_t *filename;
+                    size_t filename_len;
+                    if (LIKELY(module_find_line(cp_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
+                        if (!location_sets_append(ctx->global, cp_mod, filename, filename_len, &filename_lens, &locations, &num_locations)) {
+                            return UNDEFINED_ATOM;
+                        }
+                        num_aux_terms++;
                     }
-                    num_aux_terms++;
                 }
             }
         } else if (term_is_catch_label(*ct)) {
@@ -140,12 +163,15 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
                 prev_mod = cl_mod;
                 prev_mod_offset = mod_offset;
                 if (module_has_line_chunk(cl_mod)) {
-                    if (!is_module_member(cl_mod, modules, num_mods)) {
-                        modules[num_mods] = cl_mod;
-                        filename_lens += cl_mod->filenames[0].len;
-                        num_mods++;
+                    uint32_t line;
+                    const uint8_t *filename;
+                    size_t filename_len;
+                    if (LIKELY(module_find_line(cl_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
+                        if (!location_sets_append(ctx->global, cl_mod, filename, filename_len, &filename_lens, &locations, &num_locations)) {
+                            return UNDEFINED_ATOM;
+                        }
+                        num_aux_terms++;
                     }
-                    num_aux_terms++;
                 }
             }
         }
@@ -154,14 +180,18 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
     num_frames++;
     if (module_has_line_chunk(mod)) {
-        if (!is_module_member(mod, modules, num_mods)) {
-            filename_lens += mod->filenames[0].len;
-            num_mods++;
+        uint32_t line;
+        const uint8_t *filename;
+        size_t filename_len;
+        if (LIKELY(module_find_line(mod, (unsigned int) current_offset, &line, &filename_len, &filename))) {
+            if (!location_sets_append(ctx->global, mod, filename, filename_len, &filename_lens, &locations, &num_locations)) {
+                return UNDEFINED_ATOM;
+            }
+            num_aux_terms++;
         }
-        num_aux_terms++;
     }
 
-    free(modules);
+    free(locations);
 
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
     size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
@@ -229,7 +259,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     term_put_tuple_element(stack_info, 0, term_from_int(num_frames));
     term_put_tuple_element(stack_info, 1, term_from_int(num_aux_terms));
     term_put_tuple_element(stack_info, 2, term_from_int(filename_lens));
-    term_put_tuple_element(stack_info, 3, term_from_int(num_mods));
+    term_put_tuple_element(stack_info, 3, term_from_int(num_locations));
     term_put_tuple_element(stack_info, 4, raw_stacktrace);
     term_put_tuple_element(stack_info, 5, exception_class);
 
@@ -243,14 +273,14 @@ term stacktrace_exception_class(term stack_info)
 
 struct ModulePathPair
 {
-    term module;
+    const void *key;
     term path;
 };
 
-static term find_path_created(term module_name, struct ModulePathPair *module_paths, int len)
+static term find_path_created(const void *key, struct ModulePathPair *module_paths, int len)
 {
     for (int i = 0; i < len; ++i) {
-        if (module_paths[i].module == module_name) {
+        if (module_paths[i].key == key) {
             return module_paths[i].path;
         }
     }
@@ -312,24 +342,42 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 
         term aux_data = term_nil();
         if (module_has_line_chunk(cp_mod)) {
-            term line_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(line_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "line")));
-            int line = module_find_line(cp_mod, (unsigned int) mod_offset);
-            term_put_tuple_element(line_tuple, 1, line == -1 ? UNDEFINED_ATOM : term_from_int(line));
-            aux_data = term_list_prepend(line_tuple, aux_data, &ctx->heap);
+            uint32_t line;
+            const uint8_t *filename;
+            size_t filename_len;
+            if (LIKELY(module_find_line(cp_mod, (unsigned int) mod_offset, &line, &filename_len, &filename))) {
+                term line_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(line_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "line")));
+                term_put_tuple_element(line_tuple, 1, term_from_int(line));
+                aux_data = term_list_prepend(line_tuple, aux_data, &ctx->heap);
 
-            term file_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(file_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "file")));
+                term file_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(file_tuple, 0, globalcontext_make_atom(glb, ATOM_STR("\x4", "file")));
 
-            term path = find_path_created(module_name, module_paths, module_path_idx);
-            if (term_is_invalid_term(path)) {
-                path = term_from_string((const uint8_t *) cp_mod->filenames[0].data, cp_mod->filenames[0].len, &ctx->heap);
-                module_paths[module_path_idx].module = module_name;
-                module_paths[module_path_idx].path = path;
-                module_path_idx++;
+                const void *key = IS_NULL_PTR(filename) ? (const void *) cp_mod : (const void *) filename;
+                term path = find_path_created(key, module_paths, module_path_idx);
+                if (term_is_invalid_term(path)) {
+                    if (IS_NULL_PTR(filename)) {
+                        AtomString module_name_atom_str = globalcontext_atomstring_from_term(ctx->global, module_get_name(cp_mod));
+                        uint8_t *default_filename = malloc(atom_string_len(module_name_atom_str) + 4);
+                        if (IS_NULL_PTR(default_filename)) {
+                            free(module_paths);
+                            return OUT_OF_MEMORY_ATOM;
+                        }
+                        memcpy(default_filename, atom_string_data(module_name_atom_str), atom_string_len(module_name_atom_str));
+                        memcpy(default_filename + atom_string_len(module_name_atom_str), ".erl", 4);
+                        path = term_from_string(default_filename, atom_string_len(module_name_atom_str) + 4, &ctx->heap);
+                        free(default_filename);
+                    } else {
+                        path = term_from_string(filename, filename_len, &ctx->heap);
+                    }
+                    module_paths[module_path_idx].key = key;
+                    module_paths[module_path_idx].path = path;
+                    module_path_idx++;
+                }
+                term_put_tuple_element(file_tuple, 1, path);
+                aux_data = term_list_prepend(file_tuple, aux_data, &ctx->heap);
             }
-            term_put_tuple_element(file_tuple, 1, path);
-            aux_data = term_list_prepend(file_tuple, aux_data, &ctx->heap);
         }
         term_put_tuple_element(frame_i, 3, aux_data);
 

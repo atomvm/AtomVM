@@ -45,12 +45,13 @@ start() ->
         receive
             {Pid, result, X} -> X
         end,
-    receive
-        {'DOWN', Ref, process, Pid, Reason} ->
-            assert(Reason =:= normal)
-    end,
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason
+        end,
     MessageQueueLen = process_info(Pid, message_queue_len),
-    assert(MessageQueueLen =:= undefined),
+    MessageQueueLen = undefined,
+    ok = test_process_info_memory_other(),
     0.
 
 test_message_queue_len(Pid, Self) ->
@@ -70,19 +71,43 @@ test_message_queue_len(Pid, Self) ->
     end,
     {total_heap_size, TotalHeapSize2} = process_info(Pid, total_heap_size),
     {heap_size, HeapSize2} = process_info(Pid, heap_size),
-    assert(MessageQueueLen < MessageQueueLen2),
+    true = MessageQueueLen < MessageQueueLen2,
     case erlang:system_info(machine) of
         "BEAM" ->
-            assert(Memory =< Memory2),
-            assert(HeapSize =< TotalHeapSize),
-            assert(HeapSize2 =< TotalHeapSize2),
-            assert(TotalHeapSize =< TotalHeapSize2);
+            true = Memory =< Memory2,
+            true = HeapSize =< TotalHeapSize,
+            true = HeapSize2 =< TotalHeapSize2,
+            true = TotalHeapSize =< TotalHeapSize2;
         _ ->
-            assert(Memory < Memory2),
-            assert(HeapSize =< TotalHeapSize),
-            assert(HeapSize2 =< TotalHeapSize2),
-            assert(TotalHeapSize < TotalHeapSize2)
+            true = Memory < Memory2,
+            true = HeapSize =< TotalHeapSize,
+            true = HeapSize2 =< TotalHeapSize2,
+            true = TotalHeapSize =< TotalHeapSize2
     end.
+
+test_process_info_memory_other() ->
+    {Pid, Ref} = spawn_opt(
+        fun() ->
+            receive
+                quit -> ok
+            end
+        end,
+        [monitor]
+    ),
+    {total_heap_size, THS0} = process_info(Pid, total_heap_size),
+    test_process_info_memory_other_loop(Pid, THS0, 50),
+    Pid ! quit,
+    normal =
+        receive
+            {'DOWN', Ref, process, Pid, Reason} -> Reason
+        end,
+    ok.
+
+test_process_info_memory_other_loop(_Pid, _THS0, 0) ->
+    ok;
+test_process_info_memory_other_loop(Pid, THS0, N) ->
+    {total_heap_size, THS0} = process_info(Pid, total_heap_size),
+    test_process_info_memory_other_loop(Pid, THS0, N - 1).
 
 loop(undefined, Accum) ->
     receive

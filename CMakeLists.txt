@@ -25,6 +25,7 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules)
 
 find_package(Dialyzer)
 find_package(Elixir)
+find_package(Gleam)
 
 option(AVM_DISABLE_FP "Disable floating point support." OFF)
 option(AVM_DISABLE_SMP "Disable SMP." OFF)

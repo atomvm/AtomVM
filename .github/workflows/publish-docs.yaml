@@ -129,7 +129,7 @@ jobs:
           git add "doc/${{ github.ref_name }}"
           git add .
           git diff --exit-code Production || echo "Going to commit"
-          git diff --exit-code Production || git commit -m "Update Documentation"
+          git diff --exit-code Production || git commit -m "Update Documentation for ${{ github.ref_name }}"
           git log -1
       - name: Push changes
         if: github.repository == 'atomvm/AtomVM'

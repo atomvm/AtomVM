@@ -30,19 +30,19 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
       <code>emscripten:run_script/2</code> to run Javascript from Erlang.
     </p>
 
-    <p>It displays three alerts:</p>
+    <p>It runs four Javascript scripts:</p>
     <ul>
-      <li>An alert in the main thread, synchronously</li>
-      <li>An alert in the main thread, asynchronously</li>
-      <li>An alert in the worker thread</li>
+      <li>One script from the main thread, synchronously, that prints a line to the console and displays an alert</li>
+      <li>One script from the main thread, asynchronously, that prints a line to the console and displays an alert</li>
+      <li>One script from the worker thread that prints a line to the console</li>
+      <li>One script that updates the DOM to display the time required for first script to run</li>
     </ul>
-    <p>Second alert is likely to appear after third alert.</p>
 
     <p>
       On non-SMP builds, it demonstrates the fact that Erlang continues to run
       when <code>emscripten:run_script/2</code> is called with
       <code>[main_thread]</code> as a counter is incremented while waiting for
-      first alert to complete. The value is <span id="demo-counter">unset</span>
+      first line to be printed. The value is <span id="demo-counter">unset</span>
     </p>
 
     <p>
@@ -50,9 +50,6 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
       the main thread) using JS function.
     </p>
 
-    <p>
-      Style of this text was <span id="demo-not">not</span> modified by Erlang.
-    </p>
     <script>
       // Arguments are loaded using fetch API.
       // wasm_webserver serves under /build/ files in build subdirectory.

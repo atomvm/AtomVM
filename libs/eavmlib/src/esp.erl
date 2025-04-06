@@ -486,7 +486,7 @@ nvs_reformat() ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec partition_erase_range(Partition_id :: binary(), Offset :: non_neg_integer()) -> ok | error.
-partition_erase_range(Partition_id, Offset) ->
+partition_erase_range(_Partition_id, _Offset) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -505,7 +505,7 @@ partition_erase_range(Partition_id, Offset) ->
 -spec partition_erase_range(
     Partition_id :: binary(), Offset :: non_neg_integer(), Size :: pos_integer()
 ) -> ok | error.
-partition_erase_range(Partition_id, Offset, Size) ->
+partition_erase_range(_Partition_id, _Offset, _Size) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -531,7 +531,7 @@ partition_list() ->
 -spec partition_read(
     Partition_id :: binary(), Offset :: non_neg_integer(), Read_size :: non_neg_integer()
 ) -> {ok, binary()} | error.
-partition_read(Partition_id, Offset, Read_size) ->
+partition_read(_Partition_id, _Offset, _Read_size) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -550,7 +550,7 @@ partition_read(Partition_id, Offset, Read_size) ->
 %%-----------------------------------------------------------------------------
 -spec partition_write(Partition_id :: binary(), Offset :: non_neg_integer(), Data :: binary()) ->
     ok | error.
-partition_write(Partition_id, Offset, Data) ->
+partition_write(_Partition_id, _Offset, _Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

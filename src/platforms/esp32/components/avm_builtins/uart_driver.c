@@ -21,13 +21,14 @@
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_UART_PORT_DRIVER
 
+#include <assert.h>
 #include <string.h>
 
 #include <driver/uart.h>
-
 #include <esp_log.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0)
+#include <soc/gpio_num.h>
+#endif
 
 #include "atom.h"
 #include "bif.h"
@@ -38,9 +39,10 @@
 #include "interop.h"
 #include "mailbox.h"
 #include "module.h"
-#include "port.h"
 #include "platform_defaultatoms.h"
+#include "port.h"
 #include "scheduler.h"
+#include "smp.h"
 #include "term.h"
 #include "utils.h"
 
@@ -50,13 +52,17 @@
 #include "sys.h"
 
 static Context *uart_driver_create_port(GlobalContext *global, term opts);
-
-static const char *const ealready_atom = ATOM_STR("\x8", "ealready");
-static const char *const no_proc_atom = ATOM_STR("\x7", "no_proc");
 static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx);
 
 #define TAG "uart_driver"
 #define UART_BUF_SIZE 256
+#define NO_REF 0
+#define NO_READER term_invalid_term()
+#define PIN_ERROR -2
+
+#ifndef GPIO_NUM_MAX // remove conditional after ESP_IDF v5.1 is deprecated
+#define GPIO_NUM_MAX SOC_GPIO_PIN_COUNT
+#endif
 
 struct UARTData
 {
@@ -65,6 +71,9 @@ struct UARTData
     term reader_process_pid;
     uint64_t reader_ref_ticks;
     uint8_t uart_num;
+#ifndef AVM_NO_SMP
+    Mutex *reader_lock;
+#endif
 };
 
 static const AtomStringIntPair parity_table[] = {
@@ -86,23 +95,34 @@ enum uart_cmd
     UARTInvalidCmd = 0,
     UARTReadCmd = 1,
     UARTWriteCmd = 2,
-    UARTCloseCmd = 3
+    UARTCloseCmd = 3,
+    UARTCancelCmd = 4
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x4", "read"), UARTReadCmd },
     { ATOM_STR("\x5", "write"), UARTWriteCmd },
     { ATOM_STR("\x5", "close"), UARTCloseCmd },
+    { ATOM_STR("\xB", "cancel_read"), UARTCancelCmd },
     SELECT_INT_DEFAULT(UARTInvalidCmd)
 };
+
+static void safe_update_reader_data(struct UARTData *uart_data, term pid, uint64_t ref_ticks)
+{
+    SMP_MUTEX_LOCK(uart_data->reader_lock);
+    uart_data->reader_process_pid = pid;
+    uart_data->reader_ref_ticks = ref_ticks;
+    SMP_MUTEX_UNLOCK(uart_data->reader_lock);
+}
 
 EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listener)
 {
     struct UARTData *uart_data = GET_LIST_ENTRY(listener, struct UARTData, listener);
 
     uart_event_t event;
-    if (xQueueReceive(uart_data->rxqueue, (void *) &event, (TickType_t) portMAX_DELAY)) {
+    if (xQueueReceive(uart_data->rxqueue, (void *) &event, (TickType_t) 0)) {
         switch (event.type) {
+            case UART_DATA_BREAK:
             case UART_DATA:
                 if (uart_data->reader_process_pid != term_invalid_term()) {
                     int bin_size = term_binary_heap_size(event.size);
@@ -131,40 +151,50 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     globalcontext_send_message(glb, local_pid, result_tuple);
 
                     memory_destroy_heap(&heap, glb);
-
-                    uart_data->reader_process_pid = term_invalid_term();
-                    uart_data->reader_ref_ticks = 0;
+                    safe_update_reader_data(uart_data, NO_READER, NO_REF);
                 }
                 break;
             case UART_FIFO_OVF:
+                ESP_LOGE(TAG, "FIFO overflow!");
                 break;
             case UART_BUFFER_FULL:
+                ESP_LOGW(TAG, "buffer is full!");
                 break;
             case UART_BREAK:
+                // TODO: handle single NULL char event?, or treat this like UART_DATA & UART_DATA_BREAK?
                 break;
             case UART_PARITY_ERR:
+                ESP_LOGE(TAG, "parity error detected!");
                 break;
             case UART_FRAME_ERR:
+                ESP_LOGE(TAG, "frame error detected!");
                 break;
             case UART_PATTERN_DET:
+                // MAYBE: add pattern detection for incoming uart messages
                 break;
             default:
                 break;
         }
     }
+
     return listener;
 }
 
 static int get_uart_pin_opt(term opts, term pin_name)
 {
+    _Static_assert(PIN_ERROR < UART_PIN_NO_CHANGE);
     term value = interop_proplist_get_value_default(opts, pin_name, DEFAULT_ATOM);
     if (value == DEFAULT_ATOM) {
         return UART_PIN_NO_CHANGE;
     } else if (!term_is_integer(value)) {
-        // TODO: let's return -2;
-        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        ESP_LOGE(TAG, "pin must be an integer!");
+        return PIN_ERROR;
     } else {
+        int pin_num = term_to_int(value);
+        if (UNLIKELY(pin_num < UART_PIN_NO_CHANGE || pin_num > GPIO_NUM_MAX)) {
+            ESP_LOGE(TAG, "pin number %i is out of range [default | -1..%i]", pin_num, GPIO_NUM_MAX);
+            return PIN_ERROR;
+        }
         return term_to_int(value);
     }
 }
@@ -182,22 +212,28 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     term flow_control_term = interop_proplist_get_value_default(opts, FLOW_CONTROL_ATOM, NONE_ATOM);
     term parity_term = interop_proplist_get_value_default(opts, PARITY_ATOM, NONE_ATOM);
 
-    term tx_pin = get_uart_pin_opt(opts, TX_ATOM);
-    term rx_pin = get_uart_pin_opt(opts, RX_ATOM);
-    term rts_pin = get_uart_pin_opt(opts, RTS_ATOM);
-    term cts_pin = get_uart_pin_opt(opts, CTS_ATOM);
+    int tx_pin = get_uart_pin_opt(opts, TX_ATOM);
+    int rx_pin = get_uart_pin_opt(opts, RX_ATOM);
+    int rts_pin = get_uart_pin_opt(opts, RTS_ATOM);
+    int cts_pin = get_uart_pin_opt(opts, CTS_ATOM);
+    if (UNLIKELY(tx_pin == PIN_ERROR || rx_pin == PIN_ERROR
+            || rts_pin == PIN_ERROR || cts_pin == PIN_ERROR)) {
+        // error already logged in get_uart_pin_opts
+        return NULL;
+    }
 
     term event_queue_len_term = interop_proplist_get_value_default(opts, EVENT_QUEUE_LEN_ATOM, term_from_int(16));
     if (!term_is_integer(event_queue_len_term)) {
-        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        ESP_LOGE(TAG, "event_queue_len must be an integer");
+        return NULL;
     }
     int event_queue_len = term_to_int(event_queue_len_term);
 
     int ok;
     char *uart_name = interop_term_to_string(uart_name_term, &ok);
     if (!uart_name || !ok) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "name must be character or binary string");
+        return NULL;
     }
 
     uint8_t uart_num;
@@ -206,13 +242,15 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     } else if (!strcmp(uart_name, "UART1")) {
         uart_num = UART_NUM_1;
     }
-    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
-     else if (!strcmp(uart_name, "UART2")) {
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S3)
+    else if (!strcmp(uart_name, "UART2")) {
         uart_num = UART_NUM_2;
     }
-    #endif
+#endif
     else {
-        AVM_ABORT();
+        free(uart_name);
+        ESP_LOGE(TAG, "invalid uart bus name!");
+        return NULL;
     }
     free(uart_name);
 
@@ -233,7 +271,8 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             data_bits = UART_DATA_5_BITS;
             break;
         default:
-            AVM_ABORT();
+            ESP_LOGE(TAG, "invalid data_bits!");
+            return NULL;
     }
 
     int stop_bits;
@@ -245,17 +284,20 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
             stop_bits = UART_STOP_BITS_2;
             break;
         default:
-            AVM_ABORT();
+            ESP_LOGE(TAG, "invalid stop_bits!");
+            return NULL;
     }
 
     uart_hw_flowcontrol_t flow_control = interop_atom_term_select_int(flow_control_table, flow_control_term, ctx->global);
     if (flow_control < 0) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "invalid flow_control!");
+        return NULL;
     }
 
     uart_parity_t parity = interop_atom_term_select_int(parity_table, parity_term, ctx->global);
     if (parity < 0) {
-        AVM_ABORT();
+        ESP_LOGE(TAG, "invalid parity!");
+        return NULL;
     }
 
     uart_config_t uart_config = {
@@ -272,9 +314,10 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
 
     uart_set_pin(uart_num, tx_pin, rx_pin, rts_pin, cts_pin);
 
-    struct UARTData *uart_data = malloc(sizeof(struct UARTData));
+    size_t alloc_size = sizeof(struct UARTData);
+    struct UARTData *uart_data = malloc(alloc_size);
     if (IS_NULL_PTR(uart_data)) {
-        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        fprintf(stderr, "Failed to allocate memory size %i: %s:%i.\n", (int) alloc_size, __FILE__, __LINE__);
         AVM_ABORT();
     }
     uart_data->listener.handler = uart_interrupt_callback;
@@ -286,14 +329,20 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     ctx->platform_data = uart_data;
 
     if (uart_driver_install(uart_num, UART_BUF_SIZE, 0, event_queue_len, &uart_data->rxqueue, 0) != ESP_OK) {
-        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        ESP_LOGE(TAG, "failed to install uart driver.");
+        free(uart_data);
+        return NULL;
     }
     uart_data->listener.sender = uart_data->rxqueue;
     if (xQueueAddToSet(uart_data->rxqueue, event_set) != pdPASS) {
-        fprintf(stderr, "abort() at %s:%i.\n", __FILE__, __LINE__);
-        abort();
+        ESP_LOGE(TAG, "failed to establish uart queue.");
+        free(uart_data);
+        return NULL;
     }
+
+#ifndef AVM_NO_SMP
+    uart_data->reader_lock = smp_mutex_create();
+#endif
 
     return ctx;
 }
@@ -309,13 +358,13 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
     int local_pid = term_to_local_process_id(pid);
 
     if (uart_data->reader_process_pid != term_invalid_term()) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2 , 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for error tuple");
-            globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+            globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             return;
         }
 
-        term ealready = globalcontext_make_atom(glb, ealready_atom);
+        term ealready = globalcontext_make_atom(glb, ATOM_STR("\x8", "ealready"));
         term error_tuple = port_create_error_tuple(ctx, ealready);
         port_send_reply(ctx, pid, ref, error_tuple);
         return;
@@ -328,7 +377,7 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
         int bin_size = term_binary_heap_size(count);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, bin_size + TUPLE_SIZE(2) * 2, 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
-            globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+            globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
         }
 
         term bin = term_create_uninitialized_binary(count, &ctx->heap, glb);
@@ -342,9 +391,25 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
         port_send_reply(ctx, pid, ref, ok_tuple);
 
     } else {
-        uart_data->reader_process_pid = pid;
-        uart_data->reader_ref_ticks = ref_ticks;
+        safe_update_reader_data(uart_data, pid, ref_ticks);
     }
+}
+
+static void uart_driver_do_cancel_read(Context *ctx, GenMessage gen_message)
+{
+    struct UARTData *uart_data = ctx->platform_data;
+
+    safe_update_reader_data(uart_data, NO_READER, NO_REF);
+
+    term pid = gen_message.pid;
+    term ref = gen_message.ref;
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "[uart_driver_do_read] Failed to allocate space for return value");
+        globalcontext_send_message(ctx->global, term_to_local_process_id(pid), OUT_OF_MEMORY_ATOM);
+    }
+
+    port_send_reply(ctx, pid, ref, OK_ATOM);
 }
 
 static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
@@ -389,7 +454,7 @@ static void uart_driver_do_write(Context *ctx, GenMessage gen_message)
     int local_pid = term_to_local_process_id(pid);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_write] Failed to allocate space for return value");
-        globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+        globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
     }
 
     port_send_reply(ctx, pid, ref, OK_ATOM);
@@ -402,21 +467,26 @@ static void uart_driver_do_close(Context *ctx, GenMessage gen_message)
     term pid = gen_message.pid;
     term ref = gen_message.ref;
 
-    int local_pid = term_to_local_process_id(pid);
-
     sys_unregister_listener(glb, &uart_data->listener);
+#ifndef AVM_NO_SMP
+    smp_mutex_destroy(uart_data->reader_lock);
+#endif
+
+    term result;
+    esp_err_t err = uart_driver_delete(uart_data->uart_num);
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to delete UART driver. Error: %s", esp_err_to_name(err));
+        result = ERROR_ATOM;
+    } else {
+        result = OK_ATOM;
+    }
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ref, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "[uart_driver_do_close] Failed to allocate space for return value");
-        globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+        globalcontext_send_message(glb, term_to_local_process_id(pid), OUT_OF_MEMORY_ATOM);
     }
 
-    port_send_reply(ctx, pid, ref, OK_ATOM);
-
-    esp_err_t err = uart_driver_delete(uart_data->uart_num);
-    if (UNLIKELY(err != ESP_OK)) {
-        ESP_LOGW(TAG, "Failed to delete UART driver.  err=%i\n", err);
-    }
+    port_send_reply(ctx, pid, ref, result);
 
     free(uart_data);
     ctx->platform_data = NULL;
@@ -443,13 +513,12 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
         if (is_closed) {
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
                 ESP_LOGE(TAG, "[uart_driver_consume_mailbox] Failed to allocate space for error tuple");
-                globalcontext_send_message(glb, local_pid, MEMORY_ATOM);
+                globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             }
 
-            term no_proc = globalcontext_make_atom(glb, no_proc_atom);
             term error_tuple = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
-            term_put_tuple_element(error_tuple, 1, no_proc);
+            term_put_tuple_element(error_tuple, 1, NOPROC_ATOM);
 
             term result_tuple = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
@@ -480,6 +549,11 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
                 TRACE("close\n");
                 uart_driver_do_close(ctx, gen_message);
                 is_closed = true;
+                break;
+
+            case UARTCancelCmd:
+                TRACE("cancel_read\n");
+                uart_driver_do_cancel_read(ctx, gen_message);
                 break;
 
             default:

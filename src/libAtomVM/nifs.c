@@ -106,6 +106,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_erase_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
 static term nif_erlang_exit(Context *ctx, int argc, term argv[]);
@@ -144,6 +145,7 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[]);
+static term nif_erlang_get_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_info(Context *ctx, int argc, term argv[]);
 static term nif_erlang_system_flag(Context *ctx, int argc, term argv[]);
@@ -157,6 +159,7 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup(Context *ctx, int argc, term argv[]);
 static term nif_ets_lookup_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
+static term nif_ets_update_counter(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
@@ -315,7 +318,13 @@ static const struct Nif display_nif =
     .nif_ptr = nif_erlang_display_1
 };
 
-static const struct Nif erase_nif =
+static const struct Nif erase_0_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_erase_0
+};
+
+static const struct Nif erase_1_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_1
@@ -537,6 +546,12 @@ static const struct Nif process_info_nif =
     .nif_ptr = nif_erlang_process_info
 };
 
+static const struct Nif get_0_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_get_0
+};
+
 static const struct Nif put_nif =
 {
     .base.type = NIFFunctionType,
@@ -705,6 +720,12 @@ static const struct Nif ets_delete_nif =
     .nif_ptr = nif_ets_delete
 };
 
+static const struct Nif ets_update_counter_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_update_counter
+};
+
 static const struct Nif atomvm_add_avm_pack_binary_nif =
 {
     .base.type = NIFFunctionType,
@@ -810,7 +831,7 @@ static const struct Nif unicode_characters_to_binary_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_binary
 };
-static const struct Nif erlang_lists_subtract_nif = 
+static const struct Nif erlang_lists_subtract_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_lists_subtract
@@ -1265,29 +1286,41 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             RAISE_ERROR(BADARG_ATOM);
     }
     uint64_t ref_ticks = 0;
+    term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
-        if (UNLIKELY(context_link(new_ctx, term_from_local_process_id(ctx->process_id)) < 0)) {
+        // We can call context_add_monitor directly on new process because it's not started yet
+        struct Monitor *new_link = monitor_link_new(term_from_local_process_id(ctx->process_id));
+        if (IS_NULL_PTR(new_link)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        // This is a really simple hack to get the parent - child linking
-        // I don't really like how it is implemented but it works nicely.
-        // I think it should be implemented adding a parent field to Context.
-        if (UNLIKELY(context_link(ctx, term_from_local_process_id(new_ctx->process_id)) < 0)) {
+        struct Monitor *self_link = monitor_link_new(new_pid);
+        if (IS_NULL_PTR(self_link)) {
+            free(new_link);
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        context_add_monitor(new_ctx, new_link);
+        context_add_monitor(ctx, self_link);
     }
     if (monitor_term == TRUE_ATOM) {
-        ref_ticks = context_monitor(new_ctx, term_from_local_process_id(ctx->process_id));
-        if (UNLIKELY(ref_ticks == 0)) {
+        // We can call context_add_monitor directly on new process because it's not started yet
+        ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
+        if (IS_NULL_PTR(new_monitor)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        struct Monitor *self_monitor = monitor_new(new_pid, ref_ticks, true);
+        if (IS_NULL_PTR(self_monitor)) {
+            free(new_monitor);
+            context_destroy(new_ctx);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        context_add_monitor(new_ctx, new_monitor);
+        context_add_monitor(ctx, self_monitor);
     }
-
-    term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (ref_ticks) {
         int res_size = REF_SIZE + TUPLE_SIZE(2);
@@ -1759,7 +1792,7 @@ static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, count_elem + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(count_elem), 1, argv + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term new_tuple = term_alloc_tuple(count_elem, &ctx->heap);
@@ -2149,7 +2182,7 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
         for (size_t i = 0; i < encoded_len; i++) {
             size_t codepoint_size;
             uint32_t codepoint;
-            if (UNLIKELY(bitstring_utf8_decode(
+            if (UNLIKELY(unicode_utf8_decode(
                              &utf8_tmp_buf[in_pos], 2, &codepoint, &codepoint_size)
                         != UnicodeTransformDecodeSuccess
                     || (codepoint > 255))) {
@@ -2190,7 +2223,7 @@ static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context 
         for (size_t i = 0; i < u8len; i++) {
             size_t codepoint_size;
             enum UnicodeTransformDecodeResult result
-                = bitstring_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
+                = unicode_utf8_decode(u_in, buf_len, &codepoints[i], &codepoint_size);
             if (UNLIKELY((result != UnicodeTransformDecodeSuccess)
                     || !unicode_is_valid_codepoint(codepoints[i]))) {
                 AVM_ABORT();
@@ -2799,7 +2832,16 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
     if (ctx == target) {
-        if (!context_get_process_info(ctx, &ret, item)) {
+        size_t term_size;
+        if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        if (UNLIKELY(!context_get_process_info(ctx, &ret, NULL, item, &ctx->heap))) {
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(ret);
         }
@@ -3273,14 +3315,14 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
     }
 
     term table = term_invalid_term();
-    EtsErrorCode result = ets_create_table(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
+    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named == TRUE_ATOM, EtsTableSet, access, term_to_int(keypos) - 1, &table, ctx);
     switch (result) {
         case EtsOk:
             return table;
         case EtsTableNameInUse:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3309,7 +3351,7 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3325,7 +3367,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
     term key = argv[1];
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup(ref, key, &ret, ctx);
+    EtsErrorCode result = ets_lookup_maybe_gc(ref, key, &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
@@ -3333,7 +3375,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3351,7 +3393,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(pos, term_is_integer);
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup_element(ref, key, term_to_int(pos), &ret, ctx);
+    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key, term_to_int(pos), &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
@@ -3361,7 +3403,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
     }
@@ -3369,15 +3411,17 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
 
 static term nif_ets_delete(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term ref = argv[0];
     VALIDATE_VALUE(ref, is_ets_table_id);
-
-    term key = argv[1];
-
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_delete(ref, key, &ret, ctx);
+    EtsErrorCode result;
+    if (argc == 2) {
+        term key = argv[1];
+        result = ets_delete(ref, key, &ret, ctx);
+    } else {
+        result = ets_drop_table(ref, &ret, ctx);
+    }
+
     switch (result) {
         case EtsOk:
             return ret;
@@ -3385,9 +3429,42 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
         case EtsPermissionDenied:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationFailure:
-            RAISE_ERROR(MEMORY_ATOM);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         default:
             AVM_ABORT();
+    }
+}
+
+static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
+{
+    term ref = argv[0];
+    VALIDATE_VALUE(ref, is_ets_table_id);
+
+    term key = argv[1];
+    term operation = argv[2];
+    term default_value;
+    if (argc == 4) {
+        default_value = argv[3];
+        VALIDATE_VALUE(default_value, term_is_tuple);
+        term_put_tuple_element(default_value, 0, key);
+    } else {
+        default_value = term_invalid_term();
+    }
+    term ret;
+    EtsErrorCode result = ets_update_counter_maybe_gc(ref, key, operation, default_value, &ret, ctx);
+    switch (result) {
+        case EtsOk:
+            return ret;
+        case EtsTableNotFound:
+        case EtsPermissionDenied:
+        case EtsBadEntry:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationFailure:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        case EtsOverlfow:
+            RAISE_ERROR(OVERFLOW_ATOM);
+        default:
+            UNREACHABLE();
     }
 }
 
@@ -3683,17 +3760,48 @@ static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[])
             value = term_is_external_fun(fun) ? EXTERNAL_ATOM : LOCAL_ATOM;
             break;
 
+        case ENV_ATOM:
+            // TODO: implement env: env is mocked here and always return []
+            value = term_nil();
+            break;
+
         default:
             RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 2, (term[]) { key, value }, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 2, (term[]){ key, value }, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term fun_info_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(fun_info_tuple, 0, key);
     term_put_tuple_element(fun_info_tuple, 1, value);
     return fun_info_tuple;
+}
+
+static term nif_erlang_get_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    term result = term_nil();
+    size_t size = 0;
+    struct ListHead *dictionary = &ctx->dictionary;
+    struct ListHead *item;
+    LIST_FOR_EACH (item, dictionary) {
+        size++;
+    }
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(size, TUPLE_SIZE(2))) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    LIST_FOR_EACH (item, dictionary) {
+        struct DictEntry *dict_entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+        term tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(tuple, 0, dict_entry->key);
+        term_put_tuple_element(tuple, 1, dict_entry->value);
+        result = term_list_prepend(tuple, result, &ctx->heap);
+    }
+
+    return result;
 }
 
 static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
@@ -3707,6 +3815,19 @@ static term nif_erlang_put_2(Context *ctx, int argc, term argv[])
     }
 
     return old;
+}
+
+static term nif_erlang_erase_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term result = nif_erlang_get_0(ctx, argc, argv);
+    if (LIKELY(!term_is_invalid_term(result))) {
+        dictionary_destroy(&ctx->dictionary);
+        list_init(&ctx->dictionary);
+    }
+
+    return result;
 }
 
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[])
@@ -3755,6 +3876,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
 
     int local_process_id = term_to_local_process_id(target_pid);
+    // Monitoring self is possible but no monitor is actually created
+    if (UNLIKELY(local_process_id == ctx->process_id)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        return ref;
+    }
+
     Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
     if (IS_NULL_PTR(target)) {
         int res_size = REF_SIZE + TUPLE_SIZE(5);
@@ -3776,10 +3907,23 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    uint64_t ref_ticks = context_monitor(target, callee_pid);
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+    term monitoring_pid = term_from_local_process_id(ctx->process_id);
+    struct Monitor *self_monitor = monitor_new(target_pid, ref_ticks, true);
+    if (IS_NULL_PTR(self_monitor)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_ticks, false);
+    if (IS_NULL_PTR(other_monitor)) {
+        free(self_monitor);
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
+
+    context_add_monitor(ctx, self_monitor);
 
     if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -3804,7 +3948,26 @@ static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(ref, term_is_local_reference);
     uint64_t ref_ticks = term_to_ref_ticks(ref);
 
-    bool result = globalcontext_demonitor(ctx->global, ref_ticks);
+    bool is_monitoring;
+    term monitor_pid = context_get_monitor_pid(ctx, ref_ticks, &is_monitoring);
+    bool result;
+    if (UNLIKELY(term_is_invalid_term(monitor_pid))) {
+        result = false;
+    } else {
+        if (UNLIKELY(!is_monitoring)) {
+            return !info ? TRUE_ATOM : FALSE_ATOM;
+        }
+        context_demonitor(ctx, ref_ticks);
+        int local_process_id = term_to_local_process_id(monitor_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (target) {
+            mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
+            globalcontext_get_process_unlock(ctx->global, target);
+            result = true;
+        } else {
+            result = false;
+        }
+    }
     if (flush) {
         mailbox_send_ref_signal(ctx, info ? FlushInfoMonitorSignal : FlushMonitorSignal, ref_ticks);
         context_update_flags(ctx, ~NoFlags, Trap);
@@ -3828,19 +3991,24 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
         RAISE_ERROR(NOPROC_ATOM);
     }
 
+    struct Monitor *self_link = monitor_link_new(target_pid);
+    if (IS_NULL_PTR(self_link)) {
+        globalcontext_get_process_unlock(ctx->global, target);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
     term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    if (UNLIKELY(context_link(target, callee_pid) < 0)) {
+    struct Monitor *other_link = monitor_link_new(callee_pid);
+    if (IS_NULL_PTR(other_link)) {
         globalcontext_get_process_unlock(ctx->global, target);
+        free(self_link);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(context_link(ctx, term_from_local_process_id(target->process_id)) < 0)) {
-        context_unlink(target, callee_pid);
-        globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
+    mailbox_send_monitor_signal(target, MonitorSignal, other_link);
     globalcontext_get_process_unlock(ctx->global, target);
+
+    context_add_monitor(ctx, self_link);
 
     return TRUE_ATOM;
 }
@@ -3859,10 +4027,9 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
         return TRUE_ATOM;
     }
 
-    term callee_pid = term_from_local_process_id(ctx->process_id);
-
-    context_unlink(target, callee_pid);
     context_unlink(ctx, term_from_local_process_id(target->process_id));
+    term callee_pid = term_from_local_process_id(ctx->process_id);
+    mailbox_send_immediate_signal(target, UnlinkSignal, callee_pid);
     globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;
@@ -4937,7 +5104,7 @@ static term nif_lists_reverse(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, len * CONS_SIZE, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, len * CONS_SIZE, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 

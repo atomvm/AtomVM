@@ -286,6 +286,27 @@ static void socket_dtor(ErlNifEnv *caller_env, void *obj)
 #endif
 }
 
+#if OTP_SOCKET_BSD
+static void socket_stop(ErlNifEnv *caller_env, void *obj, ErlNifEvent event, int is_direct_call)
+{
+    UNUSED(caller_env);
+    UNUSED(event);
+    UNUSED(is_direct_call);
+
+    struct SocketResource *rsrc_obj = (struct SocketResource *) obj;
+
+    if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
+        if (LIKELY(enif_demonitor_process(caller_env, rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
+            struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+            refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
+        }
+        rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    }
+
+    TRACE("socket_stop called on fd=%i\n", rsrc_obj->fd);
+}
+#endif
+
 static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNifMonitor *mon)
 {
     UNUSED(caller_env);
@@ -305,18 +326,19 @@ static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNif
 
     if (rsrc_obj->selecting_process_id == INVALID_PROCESS_ID) {
         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
-        // We're no longer monitoring so we can decrement ref count
-        refc_binary_decrement_refcount(rsrc_refc, caller_env->global);
         return;
     }
-    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
 
 #if OTP_SOCKET_BSD
-    // enif_select can decrement ref count but it's at least 2 here (1 for monitor and 1 for select)
+    // Monitor fired, so make sure we don't try to demonitor in select_stop
+    // as it could crash trying to reacquire lock on process table
+    // enif_select can decrement ref count but it's at least 2 in this case (1 for monitor and 1 for select)
+    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
     enif_select(caller_env, rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
 #elif OTP_SOCKET_LWIP
     // Monitor can be called when we're selecting, accepting or connecting.
     LWIP_BEGIN();
+    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
     if (rsrc_obj->socket_state & SocketStateTCP) {
         if (rsrc_obj->socket_state & SocketStateTCPListening) {
             (void) tcp_close(rsrc_obj->tcp_pcb);
@@ -342,7 +364,11 @@ static void socket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, ErlNif
 static const ErlNifResourceTypeInit SocketResourceTypeInit = {
     .members = 3,
     .dtor = socket_dtor,
+#if OTP_SOCKET_BSD
+    .stop = socket_stop,
+#else
     .stop = NULL,
+#endif
     .down = socket_down,
 };
 
@@ -541,6 +567,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_SMP
     rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(rsrc_obj->socket_lock)) {
+        // destroy resource object without calling dtor
         free(rsrc_obj);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -549,6 +576,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
     rsrc_obj->fd = socket(domain, type, protocol);
     if (UNLIKELY(rsrc_obj->fd == -1 || rsrc_obj->fd == CLOSED_FD)) {
         AVM_LOGE(TAG, "Failed to initialize socket.");
+        rsrc_obj->fd = CLOSED_FD;
         enif_release_resource(rsrc_obj);
         return make_errno_tuple(ctx);
     } else {
@@ -575,6 +603,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         LWIP_END();
         rsrc_obj->socket_state = SocketStateUDPIdle;
     } else {
+        rsrc_obj->socket_state = SocketStateClosed;
         enif_release_resource(rsrc_obj);
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -606,7 +635,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-        enif_release_resource(rsrc_obj);
+        enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -684,7 +713,7 @@ static int send_closed_notification(Context *ctx, term socket_term, int32_t sele
 #if OTP_SOCKET_LWIP
 static void finalize_close_hander(struct LWIPEvent *event)
 {
-    enif_release_resource(event->finalize_close.rsrc_obj);
+    enif_release_resource(event->finalize_close.rsrc_obj); // release after enif_keep_resource in nif_socket_close
 }
 #endif
 
@@ -713,10 +742,11 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
 
         // So we handle closing a socket while another process is selecting
         if (rsrc_obj->selecting_process_id != INVALID_PROCESS_ID) {
-            // Another process is selecting, therefore ref_count >= 3
+            // Save process id as socket_stop may be called by enif_select.
+            int32_t selecting_process_id = rsrc_obj->selecting_process_id;
+            // Another process is selecting, therefore ref_count >= 2
             // 1. this caller's context heap (parameter to close)
             // 2. select
-            // 3. monitor
 
             // Stop selecting.
             int stop_res = enif_select(erl_nif_env_from_context(ctx), rsrc_obj->fd, ERL_NIF_SELECT_STOP, rsrc_obj, NULL, term_nil());
@@ -731,22 +761,13 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
             // When using asynchronous API, the selecting process can be the
             // calling process. In this case we don't send any notification.
             //
-            if (rsrc_obj->selecting_process_id != ctx->process_id) {
+            if (selecting_process_id != ctx->process_id) {
                 // send a {'$socket', Socket, abort, {Ref | undefined, closed}} message to the pid
-                if (UNLIKELY(send_closed_notification(ctx, argv[0], rsrc_obj->selecting_process_id, rsrc_obj) < 0)) {
+                if (UNLIKELY(send_closed_notification(ctx, argv[0], selecting_process_id, rsrc_obj) < 0)) {
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                 }
             }
-
-            // Stop monitor
-            if (LIKELY(enif_demonitor_process(erl_nif_env_from_context(ctx), rsrc_obj, &rsrc_obj->selecting_process_monitor) == 0)) {
-                // decrement ref count as we are demonitoring
-                struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
-                refc_binary_decrement_refcount(rsrc_refc, ctx->global);
-            }
-
-            rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
 
             // Now, ref_count >= 1 only.
         }
@@ -828,6 +849,7 @@ static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newp
 #ifndef AVM_NO_SMP
     conn_rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
+        // destroy resource without calling destructor
         free(conn_rsrc_obj);
         return NULL;
     }
@@ -1770,7 +1792,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-    enif_release_resource(conn_rsrc_obj);
+    enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_allocate_resource in make_accepted_socket_resource
 
     term socket_term = term_alloc_tuple(2, &ctx->heap);
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
@@ -1855,7 +1877,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         TRACE("nif_socket_accept: Created socket on accept fd=%i\n", rsrc_obj->fd);
 
         term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-        enif_release_resource(conn_rsrc_obj);
+        enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &new_resource, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -1893,6 +1915,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             LWIP_END();
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            enif_release_resource(new_resource);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 

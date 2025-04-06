@@ -723,17 +723,8 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             uint8_t atom_len = *(external_term_buf + 1);
             const uint8_t *atom_chars = external_term_buf + 2;
 
-            size_t remaining_length = atom_len;
-            const uint8_t *curr_buf = atom_chars;
-            while (remaining_length) {
-                uint32_t out_c;
-                size_t codepoint_size;
-                enum UnicodeTransformDecodeResult result = bitstring_utf8_decode(curr_buf, remaining_length, &out_c, &codepoint_size);
-                if (UNLIKELY(result != UnicodeTransformDecodeSuccess)) {
-                    return term_invalid_term();
-                }
-                remaining_length -= codepoint_size;
-                curr_buf += codepoint_size;
+            if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_chars, atom_len))) {
+                return term_invalid_term();
             }
 
             // AtomString first byte is the atom length

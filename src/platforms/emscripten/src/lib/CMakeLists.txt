@@ -20,10 +20,12 @@
 
 cmake_minimum_required (VERSION 3.13)
 project (libAtomVMPlatformEmscripten)
+include(FetchMbedTLS)
 
 set(HEADER_FILES
     emscripten_sys.h
     websocket_nifs.h
+    "../../../../libAtomVM/otp_crypto.h"
 )
 
 set(SOURCE_FILES
@@ -32,6 +34,7 @@ set(SOURCE_FILES
     smp.c
     sys.c
     websocket_nifs.c
+    "../../../../libAtomVM/otp_crypto.c"
 )
 
 set(
@@ -43,3 +46,4 @@ add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedcrypto)

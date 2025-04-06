@@ -22,8 +22,17 @@ project(libs)
 
 add_subdirectory(erlang)
 add_subdirectory(emscripten)
+
+find_package(Elixir)
+find_package(Gleam)
+
 if (Elixir_FOUND)
     add_subdirectory(elixir)
 else()
-    message("Unable to find elixirc -- skipping Elixir examples")
+    message(WARNING "-- elixirc not found, skipping Elixir examples")
+endif()
+if (Gleam_FOUND)
+    add_subdirectory(gleam)
+else()
+    message(WARNING "-- gleam not found, skipping Gleam examples")
 endif()
