@@ -678,6 +678,7 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         resource->event = event_constant;                                                                                                                                                \
         EMSCRIPTEN_RESULT result = emscripten_set_##callback##_callback_on_thread(target, resource, use_capture, html5api_##event_type##_callback, emscripten_main_runtime_thread_id()); \
         if (result != EMSCRIPTEN_RESULT_SUCCESS && result != EMSCRIPTEN_RESULT_DEFERRED) {                                                                                               \
+            enif_release_resource(resource);                                                                                                                                             \
             return term_from_emscripten_result(result, ctx);                                                                                                                             \
         }                                                                                                                                                                                \
         term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \

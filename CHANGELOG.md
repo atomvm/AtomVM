@@ -45,6 +45,7 @@ with nodejs and emscripten)
 - Added documentation and function specs for uart driver
 - Added `uart:read/2` with a timeout parameter.
 - Missing `erlang:is_function/2` BIF
+- Added `erlang:is_record/2`
 
 ### Fixed
 

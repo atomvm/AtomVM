@@ -530,6 +530,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_SMP
     rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(rsrc_obj->socket_lock)) {
+        // destroy resource object without calling dtor
         free(rsrc_obj);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -538,6 +539,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
     rsrc_obj->fd = socket(domain, type, protocol);
     if (UNLIKELY(rsrc_obj->fd == -1 || rsrc_obj->fd == CLOSED_FD)) {
         AVM_LOGE(TAG, "Failed to initialize socket.");
+        rsrc_obj->fd = CLOSED_FD;
         enif_release_resource(rsrc_obj);
         return make_errno_tuple(ctx);
     } else {
@@ -556,6 +558,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         LWIP_END();
         rsrc_obj->socket_state = SocketStateUDPIdle;
     } else {
+        rsrc_obj->socket_state = SocketStateClosed;
         enif_release_resource(rsrc_obj);
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -587,7 +590,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
-        enif_release_resource(rsrc_obj);
+        enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -789,6 +792,7 @@ static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newp
 #ifndef AVM_NO_SMP
     conn_rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
+        // destroy resource without calling destructor
         free(conn_rsrc_obj);
         return NULL;
     }
@@ -1653,7 +1657,7 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-    enif_release_resource(conn_rsrc_obj);
+    enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_allocate_resource in make_accepted_socket_resource
 
     term socket_term = term_alloc_tuple(2, &ctx->heap);
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
@@ -1726,7 +1730,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         TRACE("nif_socket_accept: Created socket on accept fd=%i\n", rsrc_obj->fd);
 
         term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
-        enif_release_resource(conn_rsrc_obj);
+        enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &new_resource, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -1763,6 +1767,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             LWIP_END();
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
+            enif_release_resource(new_resource);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 

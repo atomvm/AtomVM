@@ -245,6 +245,18 @@ term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1)
     return term_is_tuple(arg1) ? TRUE_ATOM : FALSE_ATOM;
 }
 
+term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
+{
+    UNUSED(ctx);
+    VALIDATE_VALUE_BIF(fail_label, arg2, term_is_atom);
+    if (!term_is_tuple(arg1) || term_get_tuple_arity(arg1) == 0) {
+        return FALSE_ATOM;
+    }
+
+    term tag = term_get_tuple_element(arg1, 0);
+    return tag == arg2 ? TRUE_ATOM : FALSE_ATOM;
+}
+
 term bif_erlang_is_map_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     UNUSED(ctx);

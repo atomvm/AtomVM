@@ -150,6 +150,17 @@ ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, co
 
 /**
  * @brief Allocate a resource for given type for `size` bytes.
+ * @details following BEAM semantics, the resource is created with a refcount
+ * of 1. A call to `enif_release_resource` will decrement the refcount and
+ * destroy the resource if it is zero.
+ *
+ * Typical usage (as suggested by BEAM documentation) is to call
+ * `enif_make_resource` and then `enif_release_resource` to somewhat transfer
+ * ownership to the garbage collector. `enif_make_resource` will increment
+ * refcount to 2 and also add the resource to the MSO list of the context, so
+ * when the term is no longer referenced in the context heap, the reference
+ * counter will be decremented by gc.
+ *
  * @param type a trype created by `enif_init_resource_type`.
  * @param size the size in bytes.
  * @return a pointer or `NULL` on failure.
@@ -184,9 +195,18 @@ int enif_release_resource(void *resource);
 /**
  * @brief create a term from a resource
  * @details the term can be later passed to `enif_get_resource`.
- * The resource is typically released (by calling `enif_release_resource`)
- * just after calling this function to "transfer ownership" to Erlang code so
- * that it will be destroyed when garbage collected.
+ *
+ * The resource reference counter is incremented and it is added to the MSO
+ * list of the heap of env (which must be a context).
+ *
+ * If the resource was just allocated with `enif_alloc_resource`, the reference
+ * counter should typically be decremented by a call to `enif_release_resource`
+ * matching usage documented by BEAM.
+ *
+ * If the resource was not just allocated with `enif_alloc_resource`, to clear
+ * usage confusion, users should rather call `term_from_resource` and should
+ * not decrement the reference counter.
+ *
  * @param env current environment
  * @param obj resource
  * @return a new term representing the resource

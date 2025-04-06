@@ -4832,7 +4832,6 @@ wait_timeout_trap_handler:
             }
 #endif
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_BS_MATCH_STRING: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4853,6 +4852,8 @@ wait_timeout_trap_handler:
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
 
+                    TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
+
                     size_t remaining = 0;
                     const uint8_t *str = module_get_str(mod, offset, &remaining);
                     if (IS_NULL_PTR(str)) {
@@ -4860,51 +4861,58 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(BADARG_ATOM);
                     }
 
-                    TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
-
-                    if (bits % 8 == 0 && bs_offset % 8 == 0) {
-                        avm_int_t bytes = bits / 8;
-                        avm_int_t byte_offset = bs_offset / 8;
-
-                        if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
-                            TRACE("bs_match_string: failed to match\n");
-                            JUMP_TO_ADDRESS(mod->labels[fail]);
-                        }
+                    if (term_binary_size(bs_bin) * 8 - bs_offset < MIN(remaining * 8, bits)) {
+                        TRACE("bs_match_string: failed to match (binary is shorter)\n");
+                        JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
-                        // Compare unaligned bits
-                        const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
-                        uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
-                        uint8_t str_bit_offset = 7;
-                        size_t remaining_bits = bits;
-                        while (remaining_bits > 0) {
-                            uint8_t str_ch = *str;
-                            uint8_t bin_ch = *bs_str;
-                            uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
-                            uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
-                            if (str_ch_bit ^ bin_ch_bit) {
+                        if (bits % 8 == 0 && bs_offset % 8 == 0) {
+                            avm_int_t bytes = bits / 8;
+                            avm_int_t byte_offset = bs_offset / 8;
+
+                            if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
                                 TRACE("bs_match_string: failed to match\n");
                                 JUMP_TO_ADDRESS(mod->labels[fail]);
-                            }
-                            if (str_bit_offset) {
-                                str_bit_offset--;
                             } else {
-                                str_bit_offset = 7;
-                                str++;
+                                term_set_match_state_offset(src, bs_offset + bits);
                             }
-                            if (bin_bit_offset) {
-                                bin_bit_offset--;
-                            } else {
-                                bin_bit_offset = 7;
-                                bs_str++;
+                        } else {
+                            // Compare unaligned bits
+                            const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
+                            uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
+                            uint8_t str_bit_offset = 7;
+                            size_t remaining_bits = bits;
+                            while (remaining_bits > 0) {
+                                uint8_t str_ch = *str;
+                                uint8_t bin_ch = *bs_str;
+                                uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
+                                uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
+                                if (str_ch_bit ^ bin_ch_bit) {
+                                    TRACE("bs_match_string: failed to match\n");
+                                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                                    break;
+                                }
+                                if (str_bit_offset) {
+                                    str_bit_offset--;
+                                } else {
+                                    str_bit_offset = 7;
+                                    str++;
+                                }
+                                if (bin_bit_offset) {
+                                    bin_bit_offset--;
+                                } else {
+                                    bin_bit_offset = 7;
+                                    bs_str++;
+                                }
+                                remaining_bits--;
                             }
-                            remaining_bits--;
+                            if (remaining_bits == 0) {
+                                term_set_match_state_offset(src, bs_offset + bits);
+                            }
                         }
                     }
-                    term_set_match_state_offset(src, bs_offset + bits);
                 #endif
                 break;
             }
-#endif
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 21
             case OP_BS_SAVE2: {
