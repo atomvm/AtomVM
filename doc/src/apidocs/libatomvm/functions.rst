@@ -38,7 +38,6 @@ Functions
 .. doxygenfunction:: bitstring_utf16_size
 .. doxygenfunction:: bitstring_utf32_decode
 .. doxygenfunction:: bitstring_utf32_encode
-.. doxygenfunction:: bitstring_utf8_decode
 .. doxygenfunction:: bitstring_utf8_encode
 .. doxygenfunction:: bitstring_utf8_size
 .. doxygenfunction:: context_avail_free_memory

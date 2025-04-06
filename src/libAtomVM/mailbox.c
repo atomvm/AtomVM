@@ -110,15 +110,22 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             free(request_signal);
             break;
         }
-        case TrapExceptionSignal: {
-            struct BuiltInAtomSignal *atom_signal = CONTAINER_OF(m, struct BuiltInAtomSignal, base);
-            free(atom_signal);
+        case TrapExceptionSignal:
+        case UnlinkSignal: {
+            struct ImmediateSignal *immediate_signal = CONTAINER_OF(m, struct ImmediateSignal, base);
+            free(immediate_signal);
             break;
         }
         case FlushMonitorSignal:
-        case FlushInfoMonitorSignal: {
+        case FlushInfoMonitorSignal:
+        case DemonitorSignal: {
             struct RefSignal *ref_signal = CONTAINER_OF(m, struct RefSignal, base);
             free(ref_signal);
+            break;
+        }
+        case MonitorSignal: {
+            struct MonitorPointerSignal *monitor_signal = CONTAINER_OF(m, struct MonitorPointerSignal, base);
+            free(monitor_signal);
             break;
         }
         case GCSignal:
@@ -260,17 +267,17 @@ void mailbox_send_term_signal(Context *c, enum MessageType type, term t)
     mailbox_post_message(c, signal);
 }
 
-void mailbox_send_built_in_atom_signal(Context *c, enum MessageType type, term atom)
+void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immediate)
 {
-    struct BuiltInAtomSignal *atom_signal = malloc(sizeof(struct BuiltInAtomSignal));
-    if (IS_NULL_PTR(atom_signal)) {
+    struct ImmediateSignal *immediate_signal = malloc(sizeof(struct ImmediateSignal));
+    if (IS_NULL_PTR(immediate_signal)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    atom_signal->base.type = type;
-    atom_signal->atom = atom;
+    immediate_signal->base.type = type;
+    immediate_signal->immediate = immediate;
 
-    mailbox_post_message(c, &atom_signal->base);
+    mailbox_post_message(c, &immediate_signal->base);
 }
 
 void mailbox_send_built_in_atom_request_signal(
@@ -299,6 +306,19 @@ void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_tic
     ref_signal->ref_ticks = ref_ticks;
 
     mailbox_post_message(c, &ref_signal->base);
+}
+
+void mailbox_send_monitor_signal(Context *c, enum MessageType type, struct Monitor *monitor)
+{
+    struct MonitorPointerSignal *monitor_signal = malloc(sizeof(struct MonitorPointerSignal));
+    if (IS_NULL_PTR(monitor_signal)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return;
+    }
+    monitor_signal->base.type = type;
+    monitor_signal->monitor = monitor;
+
+    mailbox_post_message(c, &monitor_signal->base);
 }
 
 void mailbox_send_empty_body_signal(Context *c, enum MessageType type)

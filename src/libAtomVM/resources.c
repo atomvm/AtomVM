@@ -26,8 +26,10 @@
 #include "defaultatoms.h"
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
+#include "globalcontext.h"
 #include "refc_binary.h"
 #include "resources.h"
+#include "synclist.h"
 #include "sys.h"
 #include "utils.h"
 
@@ -43,7 +45,7 @@ ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, co
     result->name = strdup(name);
     result->global = env->global;
     list_init(&result->head);
-    list_init(&result->monitors);
+    synclist_init(&result->monitors);
     result->dtor = NULL;
     result->stop = NULL;
     result->down = NULL;
@@ -366,60 +368,151 @@ void select_event_count_and_destroy_closed(struct ListHead *select_events, size_
 int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid, ErlNifMonitor *mon)
 {
     struct RefcBinary *resource = refc_binary_from_data(obj);
-    if (resource->resource_type == NULL || resource->resource_type->down == NULL) {
+    struct ResourceType *resource_type = resource->resource_type;
+    if (resource_type == NULL || resource_type->down == NULL) {
+        return -1;
+    }
+
+    struct ResourceMonitor *resource_monitor = malloc(sizeof(struct ResourceMonitor));
+    if (IS_NULL_PTR(resource_monitor)) {
+        return 1;
+    }
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(env->global);
+    resource_monitor->resource = resource;
+    resource_monitor->ref_ticks = ref_ticks;
+    resource_monitor->process_id = *target_pid;
+
+    struct Monitor *monitor = monitor_resource_monitor_new(obj, ref_ticks);
+    if (IS_NULL_PTR(monitor)) {
+        free(resource_monitor);
         return -1;
     }
 
     Context *target = globalcontext_get_process_lock(env->global, *target_pid);
     if (IS_NULL_PTR(target)) {
+        free(resource_monitor);
+        free(monitor);
         return 1;
     }
 
-    struct ResourceMonitor *monitor = context_resource_monitor(target, obj);
-    list_append(&resource->resource_type->monitors, &monitor->resource_list_head);
-    refc_binary_increment_refcount(resource);
+    synclist_append(&resource_type->monitors, &resource_monitor->resource_list_head);
+    mailbox_send_monitor_signal(target, MonitorSignal, monitor);
     globalcontext_get_process_unlock(env->global, target);
 
     if (mon) {
-        *mon = monitor->base.ref_ticks;
+        mon->ref_ticks = ref_ticks;
+        mon->resource_type = resource_type;
     }
 
     return 0;
 }
 
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks)
+{
+    struct RefcBinary *refc = NULL;
+    struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, monitors) {
+        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
+        if (monitor->ref_ticks == ref_ticks) {
+            // Resource still exists.
+            refc = refc_binary_from_data(resource);
+            refc_binary_increment_refcount(refc);
+            list_remove(&monitor->resource_list_head);
+            free(monitor);
+            break;
+        }
+    }
+
+    synclist_unlock(&resource_type->monitors);
+
+    if (refc) {
+        ErlNifMonitor monitor;
+        monitor.ref_ticks = ref_ticks;
+        monitor.resource_type = resource_type;
+        resource_type->down(env, resource, &process_id, &monitor);
+        refc_binary_decrement_refcount(refc, env->global);
+    }
+}
+
+void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ticks)
+{
+    struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, monitors) {
+        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
+        if (monitor->ref_ticks == ref_ticks) {
+            list_remove(&monitor->resource_list_head);
+            free(monitor);
+            break;
+        }
+    }
+
+    synclist_unlock(&resource_type->monitors);
+}
+
 int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
 {
     GlobalContext *global = env->global;
-    struct RefcBinary *resource = refc_binary_from_data(obj);
-    if (resource->resource_type == NULL || resource->resource_type->down == NULL) {
+    struct ResourceType *resource_type = mon->resource_type;
+    if (resource_type->down == NULL) {
         return -1;
     }
 
-    struct ListHead *processes_table_list = synclist_wrlock(&global->processes_table);
-    UNUSED(processes_table_list);
-
+    struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
     struct ListHead *item;
-    LIST_FOR_EACH (item, &resource->resource_type->monitors) {
+    LIST_FOR_EACH (item, monitors) {
         struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
-        if (monitor->base.ref_ticks == *mon) {
+        if (monitor->ref_ticks == mon->ref_ticks) {
+            struct RefcBinary *resource = refc_binary_from_data(obj);
+            if (resource->resource_type != mon->resource_type) {
+                return -1;
+            }
+
+            Context *target = globalcontext_get_process_lock(global, monitor->process_id);
+            if (target) {
+                mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
+                globalcontext_get_process_unlock(global, target);
+            }
+
             list_remove(&monitor->resource_list_head);
-            list_remove(&monitor->base.monitor_list_head);
             free(monitor);
-            refc_binary_decrement_refcount(resource, global);
-            synclist_unlock(&global->processes_table);
+            synclist_unlock(&resource_type->monitors);
             return 0;
         }
     }
 
-    synclist_unlock(&global->processes_table);
+    synclist_unlock(&resource_type->monitors);
 
     return -1;
 }
 
+void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global)
+{
+    struct ResourceType *resource_type = resource->resource_type;
+    struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, monitors) {
+        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
+        if (monitor->resource == resource) {
+            Context *target = globalcontext_get_process_lock(global, monitor->process_id);
+            if (target) {
+                mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
+                globalcontext_get_process_unlock(global, target);
+            }
+            list_remove(&monitor->resource_list_head);
+            free(monitor);
+        }
+    }
+
+    synclist_unlock(&resource_type->monitors);
+}
+
 int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *monitor2)
 {
-    uint64_t ref_ticks1 = *monitor1;
-    uint64_t ref_ticks2 = *monitor2;
+    uint64_t ref_ticks1 = monitor1->ref_ticks;
+    uint64_t ref_ticks2 = monitor2->ref_ticks;
     if (ref_ticks1 < ref_ticks2) {
         return -1;
     }

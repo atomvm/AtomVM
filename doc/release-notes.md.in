@@ -99,7 +99,7 @@ AtomVM tests this build on the latest Ubuntu github runner.
 
 ### Raspberry Pi Pico Support
 
-AtomVM supports deployment on the [Raspberry Pico RP2040](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-1-family) architecture.
+AtomVM supports deployment on the [Raspberry Pico RP2](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-1-family) architecture.
 
 AtomVM currently supports the following Raspberry Pico development boards:
 
@@ -107,5 +107,6 @@ AtomVM currently supports the following Raspberry Pico development boards:
 |------------------------------|----------------|
 | [Raspberry Pico and Pico H](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-1-technical-specification) | ✅ |
 | [Raspberry Pico W and Pico WH](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#picow-technical-specification) | ✅ |
+| [Raspberry Pico 2 and Pico 2H](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html#pico-2-technical-specification) | ✅ |
 
 Building the AtomVM virtual machine for Raspberry Pico is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.

@@ -23,6 +23,7 @@
 -export([start/0, put_int/1, stringize/1, factorial/1, id/1, the_get/1, the_erase/1]).
 
 start() ->
+    ok = test_get_0_erase_0(),
     put_int(0),
     X = put_int(1),
     put_int(2),
@@ -79,4 +80,13 @@ test_put_get_erase() ->
     2 = apply(erlang, list_to_atom("get"), [{any_term}]),
     2 = apply(erlang, list_to_atom("erase"), [{any_term}]),
     undefined = erase({any_term}),
+    ok.
+
+test_get_0_erase_0() ->
+    [] = get(),
+    undefined = put({any_term}, 1),
+    [{{any_term}, 1}] = get(),
+    [{{any_term}, 1}] = erase(),
+    [] = get(),
+    [] = erase(),
     ok.

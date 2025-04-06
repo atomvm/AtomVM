@@ -60,6 +60,8 @@ extensions = [
     'sphinx.ext.graphviz'
 ]
 
+graphviz_output_format = 'svg'
+
 suppress_warnings = [
     'epub.unknown_project_files',
     'misc.highlighting_failure',
@@ -167,9 +169,11 @@ tag_list = sorted(repo.tags, key=lambda t: t.commit.committed_datetime)
 latest_tag = tag_list[-1]
 versions = list()
 release_list = list()
+omit_tag_list = [ 'v0.6.0-alpha.0', 'v0.6.0-alpha.1', 'v0.6.0-alpha.2', 'v0.6.0-beta.0', 'v0.6.0-beta.1', 'v0.6.0-rc.0' ]
 for tag in tag_list:
-    versions.append(tag.name)
-    release_list.append(tag.name)
+    if tag.name not in omit_tag_list:
+        versions.append(tag.name)
+        release_list.append(tag.name)
 
 omit_branch_list = [ 'release-0.5' ]
 branch_list = sorted(repo.branches, key=lambda t: t.commit.committed_datetime)

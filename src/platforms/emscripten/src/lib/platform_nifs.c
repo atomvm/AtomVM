@@ -25,6 +25,7 @@
 #include <interop.h>
 #include <memory.h>
 #include <nifs.h>
+#include <otp_crypto.h>
 #include <term.h>
 #include <term_typedef.h>
 
@@ -678,6 +679,7 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         resource->event = event_constant;                                                                                                                                                \
         EMSCRIPTEN_RESULT result = emscripten_set_##callback##_callback_on_thread(target, resource, use_capture, html5api_##event_type##_callback, emscripten_main_runtime_thread_id()); \
         if (result != EMSCRIPTEN_RESULT_SUCCESS && result != EMSCRIPTEN_RESULT_DEFERRED) {                                                                                               \
+            enif_release_resource(resource);                                                                                                                                             \
             return term_from_emscripten_result(result, ctx);                                                                                                                             \
         }                                                                                                                                                                                \
         term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \
@@ -774,6 +776,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         if (strcmp("random/0", nifname) == 0) {
             return &atomvm_random_nif;
         }
+    }
+    if (memcmp("crypto:", nifname, strlen("crypto:")) == 0) {
+        return otp_crypto_nif_get_nif(nifname);
     }
     if (memcmp("emscripten:", nifname, strlen("emscripten:")) == 0) {
         nifname += strlen("emscripten:");

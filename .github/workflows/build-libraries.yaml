@@ -89,8 +89,8 @@ jobs:
       timeout-minutes: 10
       working-directory: build
       run: |
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
-        valgrind ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Rename and write sha256sum"
       working-directory: build

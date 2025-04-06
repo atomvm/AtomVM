@@ -30,6 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erl_epmd` client implementation to epmd using `socket` module
 - Added support for socket asynchronous API for `recv`, `recvfrom` and `accept`.
 - Added support for UDP multicast with socket API.
+- Added support for `ets:update_counter/3` and `ets:update_counter/4`.
+- Added `erlang:+/1`
+- Added `lists:append/1` and `lists:append/2`
+- Added `erlang:spawn_monitor/1`, `erlang:spawn_monitor/3`
+- Added `lists:dropwhile/2`.
+- Support for `float/1` BIF.
+- Added `erlang:get/0` and `erlang:erase/0`.
+- Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
+- Added support for 'ets:delete/1'.
 
 ### Changed
 
@@ -40,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32: improved sntp sync speed from a cold boot.
 - Fixed `gen_server` internal messages to match OTP so it works across erlang distribution
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
+- Support for zero count in `lists:duplicate/2`.
 
 ## [0.6.6] - Unreleased
 
@@ -49,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 with nodejs and emscripten)
 - Added preliminary support for ESP32P4 (no networking support yet).
 - Added memory info in `out_of_memory` crash logs to help developers fix memory issues.
+- Added documentation and function specs for uart driver
+- Added `uart:read/2` with a timeout parameter.
+- Missing `erlang:is_function/2` BIF
+- Added `erlang:is_record/2`
 
 ### Fixed
 
@@ -87,6 +101,21 @@ bug when handling errors from BIFs used as NIFs (when called with `CALL_EXT` and
 - Fixed call to funs such as fun erlang:'not'/1, that make use of BIFs
 - Fixed potential crashes or memory leaks caused by a mistake in calculation of reference counts
 and a race condition in otp_socket code
+- Fixed an out of memory issue by forcing GC to copy data from message fragments
+- Fixed a bug where calling repeatedly `process_info` on a stopped process could cause an out of
+memory error
+- Fixed possible concurrency problems in ESP32 UART driver
+- Fixed concurrency and memory leak related to links and monitors
+- Fixed issues with parsing of line references for stack traces
+- Fixed memory corruption issue with `erlang:make_tuple/2`
+- Fix potential use after free with code generated from OTP <= 24
+- Fix `is_function/2` guard
+- Fixed segfault when calling `lists:reverse/1` (#1600)
+- Fixed nif_atomvm_posix_read GC bug
+
+### Changed
+
+- ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
 
 ## [0.6.5] - 2024-10-15
 
