@@ -270,7 +270,7 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
         term_put_tuple_element(return_term, 0, OK_ATOM);
         term_put_tuple_element(return_term, 1, mount_term);
     }
-    enif_release_resource(mount);
+    enif_release_resource(mount); // decrement refcount after either enif_alloc_resource
 
     return return_term;
 }
