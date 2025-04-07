@@ -26,6 +26,7 @@
 
 test() ->
     ok = test_split(),
+    ok = test_match(),
     ok = test_hex(),
     ok.
 
@@ -34,6 +35,38 @@ test_split() ->
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"ooz">>), [<<"foobar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>), [<<"f">>, <<"obar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>, [global]), [<<"f">>, <<>>, <<"bar">>]),
+    ok.
+
+test_match() ->
+    ?ASSERT_EXCEPTION(binary:match(<<"">>, <<"">>), error, badarg),
+    ?ASSERT_MATCH(binary:match(<<"">>, <<"a">>), nomatch),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, <<"">>), error, badarg),
+    ?ASSERT_MATCH(binary:match(<<"a">>, <<"a">>), {0, 1}),
+    ?ASSERT_MATCH(binary:match(<<"aa">>, <<"a">>), {0, 1}),
+    ?ASSERT_MATCH(binary:match(<<"aba">>, <<"ab">>), {0, 2}),
+
+    % list of patterns
+    ?ASSERT_EXCEPTION(binary:match(<<"">>, []), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, []), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, [<<"">>]), error, badarg),
+    ?ASSERT_MATCH(binary:match(<<"a">>, [<<"a">>]), {0, 1}),
+    ?ASSERT_MATCH(binary:match(<<"a">>, [<<"a">>, <<"a">>]), {0, 1}),
+    ?ASSERT_MATCH(binary:match(<<"aa">>, [<<"a">>, <<"aa">>]), {0, 2}),
+
+    % scope opt
+    ?ASSERT_MATCH(binary:match(<<"a">>, <<"a">>, [{scope, {0, 0}}]), nomatch),
+    ?ASSERT_MATCH(binary:match(<<"a">>, <<"a">>, [{scope, {1, 0}}]), nomatch),
+    ?ASSERT_MATCH(binary:match(<<"bab">>, <<"b">>, [{scope, {1, 0}}]), nomatch),
+    ?ASSERT_MATCH(binary:match(<<"bab">>, <<"b">>, [{scope, {1, 2}}]), {2, 1}),
+    % {scope, {1, -1}}: starts at 0, 1 byte long
+    ?ASSERT_MATCH(binary:match(<<"bab">>, <<"b">>, [{scope, {1, -1}}]), {0, 1}),
+
+    ?ASSERT_EXCEPTION(binary:match(not_binary, <<"a">>), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, not_binary), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, [<<"a">> | <<"a">>]), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, <<"a">>, [{scope, {0, 2}}]), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, <<"a">>, [{scope, {0, -1}}]), error, badarg),
+    ?ASSERT_EXCEPTION(binary:match(<<"a">>, <<"a">>, [{scope, {-1, 1}}]), error, badarg),
     ok.
 
 test_hex() ->

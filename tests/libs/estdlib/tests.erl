@@ -60,6 +60,7 @@ get_non_networking_tests(OTPVersion) when
 get_non_networking_tests(_OTPVersion) ->
     [
         test_apply,
+        test_binary,
         test_lists,
         test_calendar,
         test_gen_event,
