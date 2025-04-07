@@ -50,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
 - Added Process.link/1 and unlink/1 to Elixir Process.ex
 - Added `erlang:module_loaded/1`
+- Added `binary:match/2` and `binary:match/3`
 
 ### Changed
 

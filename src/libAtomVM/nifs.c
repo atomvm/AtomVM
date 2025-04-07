@@ -95,6 +95,7 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split(Context *ctx, int argc, term argv[]);
+static term nif_binary_match(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
@@ -257,6 +258,12 @@ static const struct Nif binary_split_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_split
+};
+
+static const struct Nif binary_match_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_match
 };
 
 static const struct Nif make_ref_nif =
@@ -3278,6 +3285,142 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     } while (!term_is_nil(list_cursor));
 
     return result_list;
+}
+
+static bool get_binary_scope_slice(term binary, term options, BinaryPosLen *scope_slice)
+{
+    term scope_opt = term_invalid_term();
+    while (term_is_nonempty_list(options)) {
+        term head = term_get_list_head(options);
+        // BEAM ignores improper lists so we don't check for it
+        if (LIKELY(term_is_tuple(head) && term_get_tuple_arity(head) == 2 && term_get_tuple_element(head, 0) == SCOPE_ATOM)) {
+            scope_opt = term_get_tuple_element(head, 1);
+        } else {
+            return false;
+        }
+        options = term_get_list_tail(options);
+    }
+
+    if (term_is_invalid_term(scope_opt)) {
+        size_t size = term_binary_size(binary);
+        return term_normalize_binary_pos_len(binary, 0, (avm_int_t) size, scope_slice);
+    }
+
+    if (UNLIKELY(!term_is_tuple(scope_opt) || term_get_tuple_arity(scope_opt) != 2)) {
+        return false;
+    }
+
+    term pos_term = term_get_tuple_element(scope_opt, 0);
+    term len_term = term_get_tuple_element(scope_opt, 1);
+    if (UNLIKELY(!term_is_integer(pos_term) || !term_is_integer(len_term))) {
+        return false;
+    }
+
+    avm_int_t pos = term_to_int(pos_term);
+    avm_int_t len = term_to_int(len_term);
+    return term_normalize_binary_pos_len(binary, pos, len, scope_slice);
+}
+
+static bool is_valid_pattern(term t)
+{
+    if (term_is_binary(t)) {
+        return term_binary_size(t) > 0;
+    }
+
+    if (!term_is_nonempty_list(t)) {
+        return false;
+    }
+
+    while (term_is_nonempty_list(t)) {
+        term pattern_term = term_get_list_head(t);
+        if (UNLIKELY(!term_is_binary(pattern_term))) {
+            return false;
+        }
+        if (UNLIKELY(term_binary_size(pattern_term) == 0)) {
+            return false;
+        }
+        t = term_get_list_tail(t);
+    }
+    bool proper = term_is_nil(t);
+    if (UNLIKELY(!proper)) {
+        return false;
+    }
+    return true;
+}
+
+static BinaryPosLen find_pattern_in_binary(term binary_term, BinaryPosLen scope_slice, term pattern_term)
+{
+    const char *binary = term_binary_data(binary_term) + scope_slice.pos;
+    size_t size = scope_slice.len;
+    const char *pattern = term_binary_data(pattern_term);
+    size_t pattern_size = term_binary_size(pattern_term);
+
+    BinaryPosLen pattern_slice = term_nomatch_binary_pos_len();
+    const char *sub_binary = memmem(binary, size, pattern, pattern_size);
+    if (sub_binary != NULL) {
+        pattern_slice.len = pattern_size;
+        pattern_slice.pos = (sub_binary - binary) + scope_slice.pos;
+    }
+    return pattern_slice;
+}
+
+static BinaryPosLen select_earlier_slice(BinaryPosLen old_slice, BinaryPosLen new_slice)
+{
+    if (term_is_nomatch_binary_pos_len(new_slice)) {
+        return old_slice;
+    }
+    if (term_is_nomatch_binary_pos_len(old_slice)) {
+        return new_slice;
+    }
+    if (new_slice.pos < old_slice.pos) {
+        return new_slice;
+    }
+    if (new_slice.pos == old_slice.pos && new_slice.len > old_slice.len) {
+        return new_slice;
+    }
+    return old_slice;
+}
+
+static term nif_binary_match(Context *ctx, int argc, term argv[])
+{
+    term binary_term = argv[0];
+    term pattern_or_patterns_term = argv[1];
+    term options_term = argc == 3 ? argv[2] : term_nil();
+
+    VALIDATE_VALUE(binary_term, term_is_binary);
+    VALIDATE_VALUE(options_term, term_is_list);
+    VALIDATE_VALUE(pattern_or_patterns_term, is_valid_pattern);
+
+    BinaryPosLen scope_slice;
+    if (UNLIKELY(!get_binary_scope_slice(binary_term, options_term, &scope_slice))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    BinaryPosLen match_slice = term_nomatch_binary_pos_len();
+    if (term_is_binary(pattern_or_patterns_term)) {
+        term pattern_term = pattern_or_patterns_term;
+        match_slice = find_pattern_in_binary(binary_term, scope_slice, pattern_term);
+    } else {
+        term patterns = pattern_or_patterns_term;
+        while (term_is_nonempty_list(patterns)) {
+            term pattern_term = term_get_list_head(patterns);
+            BinaryPosLen new_match_slice = find_pattern_in_binary(binary_term, scope_slice, pattern_term);
+            match_slice = select_earlier_slice(match_slice, new_match_slice);
+            patterns = term_get_list_tail(patterns);
+        }
+    }
+
+    if (term_is_nomatch_binary_pos_len(match_slice)) {
+        return NOMATCH_ATOM;
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, term_from_int(match_slice.pos));
+    term_put_tuple_element(result_tuple, 1, term_from_int(match_slice.len));
+    return result_tuple;
 }
 
 static term nif_erlang_throw(Context *ctx, int argc, term argv[])

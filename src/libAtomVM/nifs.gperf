@@ -39,6 +39,8 @@ binary:last/1, &binary_last_nif
 binary:part/3, &binary_part_nif
 binary:split/2, &binary_split_nif
 binary:split/3, &binary_split_nif
+binary:match/2, &binary_match_nif
+binary:match/3, &binary_match_nif
 calendar:system_time_to_universal_time/2, &system_time_to_universal_time_nif
 erlang:atom_to_binary/1, &atom_to_binary_nif
 erlang:atom_to_binary/2, &atom_to_binary_nif
