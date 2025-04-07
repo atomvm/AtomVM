@@ -2898,6 +2898,19 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     if (key == ATOMVM_VERSION_ATOM) {
         return term_from_literal_binary((const uint8_t *) ATOMVM_VERSION, strlen(ATOMVM_VERSION), &ctx->heap, ctx->global);
     }
+    if (key == SYSTEM_VERSION_ATOM) {
+        char system_version[256];
+        int len;
+#ifndef AVM_NO_SMP
+        len = snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [smp:%d:%d]\n", ATOMVM_VERSION, TERM_BYTES * 8, ctx->global->online_schedulers, smp_get_online_processors());
+#else
+        len = snprintf(system_version, sizeof(system_version), "AtomVM %s [%d-bit] [nosmp]\n", ATOMVM_VERSION, TERM_BYTES * 8);
+#endif
+        if (UNLIKELY(memory_ensure_free_opt(ctx, len * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return interop_bytes_to_list(system_version, len, &ctx->heap);
+    }
     if (key == REFC_BINARY_INFO_ATOM) {
         fprintf(stderr, "WARNING: The refc_binary_info system info tag is deprecated.  Use erlang:memory(binary) instead.\n");
         term ret = refc_binary_create_binary_info(ctx);
@@ -2905,6 +2918,16 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         return ret;
+    }
+    // For distribution, we report a gullible OTP version
+    if (key == OTP_RELEASE_ATOM) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, strlen(DIST_OTP_RELEASE) * CONS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return interop_bytes_to_list(DIST_OTP_RELEASE, strlen(DIST_OTP_RELEASE), &ctx->heap);
+    }
+    if (key == BREAK_IGNORED_ATOM) {
+        return TRUE_ATOM;
     }
     if (key == SCHEDULERS_ATOM) {
 #ifndef AVM_NO_SMP
