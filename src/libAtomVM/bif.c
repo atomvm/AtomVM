@@ -61,6 +61,12 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+// intn.h and term.h headers are decoupled. We check here that sign enum values are matching.
+_Static_assert(
+    (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
+_Static_assert(
+    (int) TermNegativeInteger == (int) IntNNegativeInteger, "term/intn definition mismatch");
+
 const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity)
 {
     char bifname[MAX_BIF_NAME_LEN];
@@ -695,11 +701,22 @@ static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *r
     size_t bytes = n * sizeof(intn_digit_t);
     size_t rounded = ((bytes + 7) >> 3) << 3;
     *intn_data_size = rounded / sizeof(term);
+
+    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        // we need to distinguish between "small" boxed integers, that are integers
+        // up to int64, and bigger integers.
+        // The real difference is that "small" boxed integers use 2-complement,
+        // real bigints not (and also endianess might differ).
+        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
+        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
+        rounded = *intn_data_size * sizeof(term);
+    }
+
     *rounded_num_len = rounded / sizeof(intn_digit_t);
 }
 
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
-    const intn_digit_t bigres[], size_t bigres_len)
+    const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
     size_t count = intn_count_digits(bigres, bigres_len);
 
@@ -707,7 +724,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
         RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
     }
 
-    if (count > INTN_INT64_LEN) {
+    if (!intn_fits_int64(bigres, count, sign)) {
         size_t intn_data_size;
         size_t rounded_res_len;
         intn_to_term_size(count, &intn_data_size, &rounded_res_len);
@@ -718,13 +735,14 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
             RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
         }
 
-        term bigres_term = term_create_uninitialized_intn(intn_data_size, &ctx->heap);
+        term bigres_term = term_create_uninitialized_intn(
+            intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
         intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
-        intn_sign_extend(bigres, count, rounded_res_len, dest_buf);
+        intn_copy(bigres, count, dest_buf, rounded_res_len);
 
         return bigres_term;
     } else {
-        int64_t res64 = intn_2_digits_to_int64(bigres, count);
+        int64_t res64 = intn_2_digits_to_int64(bigres, count, sign);
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
         return make_maybe_boxed_int64(ctx, fail_label, live, res64);
 #else
@@ -733,27 +751,30 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     }
 }
 
-static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1, size_t *b1_len)
+static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1, size_t *b1_len,
+    intn_integer_sign_t *b1_sign)
 {
     if (term_is_boxed_integer(arg1)
         && (term_boxed_size(arg1) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term))) {
         *b1 = term_intn_data(arg1);
         *b1_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
+        *b1_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
     } else {
         avm_int64_t i64 = term_maybe_unbox_int64(arg1);
-        int64_to_intn_2(i64, tmp_buf1);
+        int64_to_intn_2(i64, tmp_buf1, b1_sign);
         *b1 = tmp_buf1;
         *b1_len = INTN_INT64_LEN;
     }
 }
 
 static void args_to_bigint(term arg1, term arg2, intn_digit_t *tmp_buf1, intn_digit_t *tmp_buf2,
-    intn_digit_t **b1, size_t *b1_len, intn_digit_t **b2, size_t *b2_len)
+    intn_digit_t **b1, size_t *b1_len, intn_integer_sign_t *b1_sign, intn_digit_t **b2,
+    size_t *b2_len, intn_integer_sign_t *b2_sign)
 {
     // arg1 or arg2 may need to be "upgraded",
     // in that case tmp_buf will hold the "upgraded" version
-    term_to_bigint(arg1, tmp_buf1, b1, b1_len);
-    term_to_bigint(arg2, tmp_buf2, b2, b2_len);
+    term_to_bigint(arg1, tmp_buf1, b1, b1_len, b1_sign);
+    term_to_bigint(arg2, tmp_buf2, b2, b2_len, b2_sign);
 }
 
 static term mul_int64_to_bigint(
@@ -761,8 +782,10 @@ static term mul_int64_to_bigint(
 {
     size_t mul_out_len = INTN_MUL_OUT_LEN(INTN_INT64_LEN, INTN_INT64_LEN);
     intn_digit_t mul_out[mul_out_len];
-    intn_mul_int64(val1, val2, mul_out);
-    return make_bigint(ctx, fail_label, live, mul_out, mul_out_len);
+    intn_integer_sign_t out_sign;
+    intn_mul_int64(val1, val2, mul_out, &out_sign);
+
+    return make_bigint(ctx, fail_label, live, mul_out, mul_out_len, out_sign);
 }
 
 static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
@@ -772,9 +795,12 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t *bn1;
     size_t bn1_len;
+    intn_integer_sign_t bn1_sign;
     intn_digit_t *bn2;
     size_t bn2_len;
-    args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn2, &bn2_len);
+    intn_integer_sign_t bn2_sign;
+    args_to_bigint(
+        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_MUL_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -782,9 +808,10 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     }
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
-    intn_mulmns(bn1, bn1_len, bn2, bn2_len, bigres);
+    intn_mulmnu(bn1, bn1_len, bn2, bn2_len, bigres);
+    intn_integer_sign_t res_sign = intn_muldiv_sign(bn1_sign, bn2_sign);
 
-    return make_bigint(ctx, fail_label, live, bigres, bigres_len);
+    return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
 
 static term mul_overflow_helper(

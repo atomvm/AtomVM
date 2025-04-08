@@ -20,8 +20,25 @@
 
 -module(bigint).
 -export([
-    start/0, mul/2, shrink/0, pow/2, twice/1, fact/1, get_machine_atom/0, expect_overflow/1, id/1
+    start/0,
+    mul/2,
+    shrink/0,
+    pow/2,
+    twice/1,
+    fact/1,
+    get_machine_atom/0,
+    expect_badarg/1,
+    expect_overflow/1,
+    id/1
 ]).
+
+%
+% IMPORTANT NOTE
+% AtomVM supports up to 256-bit integers with an additional sign bit stored outside the numeric
+% payload, allowing for efficient representation of both signed and unsigned values without using
+% two's complement encoding. So INT_MAX = -INT_MIN, that is:
+% 16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+%
 
 start() ->
     test_mul() +
@@ -54,21 +71,34 @@ test_mul() ->
     0 = ?MODULE:mul(0, E),
     0 = ?MODULE:mul(0, H),
 
-    INT255_MIN = ?MODULE:pow(-2, 255),
-    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:twice(INT255_MIN) end),
-    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:mul(INT255_MIN, -1) end),
-    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:mul(-1, INT255_MIN) end),
+    % Note: it is not possible to reach min and max values using just multiplications
+    % since min and max are +- (2^256 - 1)
+
+    P255_MIN = ?MODULE:pow(-2, 255),
     <<"-57896044618658097711785492504343953926634992332820282019728792003956564819968">> = erlang:integer_to_binary(
-        INT255_MIN
+        P255_MIN
     ),
-    erlang:display(INT255_MIN),
+    P255_MAX_A = ?MODULE:mul(P255_MIN, -1),
+    P255_MAX_B = ?MODULE:mul(-1, P255_MIN),
+    <<"57896044618658097711785492504343953926634992332820282019728792003956564819968">> = erlang:integer_to_binary(
+        P255_MAX_A
+    ),
+    <<"57896044618658097711785492504343953926634992332820282019728792003956564819968">> = erlang:integer_to_binary(
+        P255_MAX_B
+    ),
+
+    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:twice(P255_MIN) end),
+    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:mul(P255_MIN, -2) end),
+    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:mul(2, P255_MIN) end),
+    erlang:display(P255_MIN),
 
     Fact55 = ?MODULE:fact(55),
     <<"12696403353658275925965100847566516959580321051449436762275840000000000000">> = erlang:integer_to_binary(
         Fact55
     ),
 
-    ?MODULE:mul(0, INT255_MIN) + ?MODULE:mul(INT255_MIN, 0).
+    ?MODULE:mul(0, P255_MIN) + ?MODULE:mul(P255_MIN, 0) + ?MODULE:mul(0, P255_MAX_A) +
+        ?MODULE:mul(P255_MAX_B, 0).
 
 mul(A, B) ->
     A * B.
@@ -98,6 +128,106 @@ parse_bigint() ->
     <<"1234567892244667788990000000000000000025">> = erlang:integer_to_binary(PBI),
     NBI = erlang:binary_to_integer(?MODULE:id(<<"-9234567892244667788990000000000000000025">>)),
     <<"-9234567892244667788990000000000000000025">> = erlang:integer_to_binary(NBI),
+
+    % They are 2^256 - 1 and -(2^256 - 1), that are maximum and minimum supported integers
+    % 2-complement representation is not used, so the unsigned part is identical, an additional
+    % bit is used for sign, so it is like having a 257 signed bit integer
+
+    INT_MIN_10 = erlang:binary_to_integer(
+        ?MODULE:id(
+            <<"-115792089237316195423570985008687907853269984665640564039457584007913129639935">>
+        )
+    ),
+    <<"-115792089237316195423570985008687907853269984665640564039457584007913129639935">> = erlang:integer_to_binary(
+        INT_MIN_10
+    ),
+    INT_MAX_10 = erlang:binary_to_integer(
+        ?MODULE:id(
+            <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">>
+        )
+    ),
+    <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">> = erlang:integer_to_binary(
+        INT_MAX_10
+    ),
+
+    % They are 2^256 - 1 and -(2^256 - 1), that is 64 Fs (note: not 2-complement, sign is not included)
+
+    INT_MIN_16 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        INT_MIN_16, 16
+    ),
+    INT_MAX_16 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        INT_MAX_16, 16
+    ),
+
+    % They are 2^256 - 1 and -(2^256 - 1), that is 256 ones (note: not 2-complement, sign is not included)
+    INT_MIN_2_BIN =
+        <<"-1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111">>,
+    INT_MAX_2_BIN =
+        <<"1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111">>,
+
+    INT_MIN_2 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(INT_MIN_2_BIN), 2)),
+    INT_MAX_2 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(INT_MAX_2_BIN), 2)),
+    INT_MIN_2_BIN = ?MODULE:id(erlang:integer_to_binary(?MODULE:id(INT_MIN_2), 2)),
+    INT_MAX_2_BIN = ?MODULE:id(erlang:integer_to_binary(?MODULE:id(INT_MAX_2), 2)),
+
+    % Some random patterns
+
+    Pattern1Bin = <<"-abcdeF123456789ABCDef98654311875421efcda91a2b3c4d5e6F7E6D5c4b3a7">>,
+    Pattern1BinCanonical = <<"-ABCDEF123456789ABCDEF98654311875421EFCDA91A2B3C4D5E6F7E6D5C4B3A7">>,
+    Pattern1Int = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(Pattern1Bin), 16)),
+    Pattern1BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern1Int), 16)),
+
+    Pattern2Bin =
+        <<"000000000000000000000000000000000000000001010111010101101010011110101101011111001010110000100010111010101011110101010010110101010101010000001000101101000001000100010100101101001011111100101111101010101010001011101001010101110000101000111110000110110101001010101011111011100010101010101011011101011">>,
+    Pattern2BinCanonical =
+        <<"1010111010101101010011110101101011111001010110000100010111010101011110101010010110101010101010000001000101101000001000100010100101101001011111100101111101010101010001011101001010101110000101000111110000110110101001010101011111011100010101010101011011101011">>,
+    Pattern2Int = erlang:binary_to_integer(?MODULE:id(Pattern2Bin), 2),
+    Pattern2BinCanonical = integer_to_binary(Pattern2Int, 2),
+
+    Pattern3Bin = <<"3ZE2L1OLJ3645OPTWC8GD2FQVJTR9PJJMA3Z9VEVFEML9L6IV5">>,
+    Pattern3Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern3Bin), 36)),
+    Pattern3Bin = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern3Int), 36)),
+
+    Pattern4Bin = <<"-000000000000001bcdefghijklmnopqrstuvwxyza12345689ABCDEFJHIJKLMNZ">>,
+    Pattern4BinCanonical = <<"-1BCDEFGHIJKLMNOPQRSTUVWXYZA12345689ABCDEFJHIJKLMNZ">>,
+    Pattern4Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern4Bin), 36)),
+    Pattern4BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern4Int), 36)),
+
+    Pattern5Bin =
+        <<"+000000000000BE636EFA1A9371DE7E57e4ecb7d9a921d792ab0b21b28c238C1F66AED27FB79F">>,
+    Pattern5BinCanonical = <<"BE636EFA1A9371DE7E57E4ECB7D9A921D792AB0B21B28C238C1F66AED27FB79F">>,
+    Pattern5Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern5Bin), 16)),
+    Pattern5BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern5Int), 16)),
+
+    Pattern6Bin =
+        <<"-0000054826124455256601513636909251356536763516497895406989033472580562929119750424">>,
+    Pattern6BinCanonical =
+        <<"-54826124455256601513636909251356536763516497895406989033472580562929119750424">>,
+    Pattern6Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern6Bin), 10)),
+    Pattern6BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern6Int), 10)),
+
+    Pattern7Bin =
+        <<"-00000000000000000004534215062214255345551564500256544633040136644104631464312603650553545414012036651524002336">>,
+    Pattern7BinCanonical =
+        <<"-4534215062214255345551564500256544633040136644104631464312603650553545414012036651524002336">>,
+    Pattern7Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern7Bin), 7)),
+    Pattern7BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern7Int), 7)),
+
+    expect_badarg(fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                <<"-45342150622142553455515645002565446330401366441046314643126036505535454140120366515240023z6">>
+            ),
+            7
+        )
+    end),
+
     0.
 
 id(X) ->
@@ -110,6 +240,14 @@ expect_overflow(OvfFun) ->
         {atomvm, Result} -> {unexpected_result, Result}
     catch
         error:overflow -> ok;
+        _:E -> {unexpected_error, E}
+    end.
+
+expect_badarg(BadFun) ->
+    try BadFun() of
+        Result -> {unexpected_result, Result}
+    catch
+        error:badgarg -> ok;
         _:E -> {unexpected_error, E}
     end.
 

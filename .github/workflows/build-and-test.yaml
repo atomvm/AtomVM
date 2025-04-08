@@ -380,7 +380,7 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./tests/test-erlang -s prime_smp
+        valgrind --suppressions=../tests/valgrind-suppressions.sup --error-exitcode=1 ./tests/test-erlang -s prime_smp
         ./tests/test-erlang -s prime_smp
 
     - name: "Test: test-enif"
@@ -418,14 +418,14 @@ jobs:
       run: |
         ulimit -c unlimited
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
-        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
+        valgrind --suppressions=../tests/valgrind-suppressions.sup ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_estdlib.avm"
       timeout-minutes: 5
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+        valgrind --suppressions=../tests/valgrind-suppressions.sup --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Test: test_eavmlib.avm"
@@ -433,7 +433,7 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+        valgrind --suppressions=../tests/valgrind-suppressions.sup --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_alisp.avm"
@@ -441,7 +441,7 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
+        valgrind --suppressions=../tests/valgrind-suppressions.sup --error-exitcode=1 ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "Test: Tests.avm (Elixir)"
@@ -451,7 +451,7 @@ jobs:
         ulimit -c unlimited
         if command -v elixirc >/dev/null 2>&1 && command -v elixir >/dev/null 2>&1
         then
-          valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+          valgrind --suppressions=../tests/valgrind-suppressions.sup --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
           ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
         else
           echo "Elixir not installed, skipping Elixir tests"

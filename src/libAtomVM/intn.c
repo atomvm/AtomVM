@@ -36,68 +36,16 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 /*
- * Neg
- */
-
-void intn_neg(const intn_digit_t num[], size_t num_len, intn_digit_t out[], size_t *out_len)
-{
-    size_t i;
-    uint32_t carry = 1;
-    for (i = 0; i < num_len; i++) {
-        uint64_t temp = (uint64_t) (~num[i]) + (uint64_t) carry;
-        out[i] = (uint32_t) temp;
-        carry = temp >> 32;
-    }
-    if ((carry != 0) && !(out[i - 1] >> 31)) {
-        out[i] = 0xFFFFFFFF;
-        i++;
-    }
-    *out_len = i;
-}
-
-static size_t neg_inplace(uint32_t num[], size_t num_len)
-{
-    size_t i;
-    uint32_t carry = 1;
-    for (i = 0; i < num_len; i++) {
-        uint64_t temp = (uint64_t) (~num[i]) + (uint64_t) carry;
-        num[i] = (uint32_t) temp;
-        carry = temp >> 32;
-    }
-    if ((carry != 0) && !(num[i - 1] >> 31)) {
-        num[i] = 0xFFFFFFFF;
-        return i;
-    }
-    return i - 1;
-}
-
-static bool is_negative(const uint32_t num[], size_t num_len)
-{
-    return (num[num_len - 1] >> 31) != 0;
-}
-
-void intn_abs(const intn_digit_t num[], size_t num_len, intn_digit_t out[], size_t *out_len)
-{
-    if (is_negative(num, num_len)) {
-        intn_neg(num, num_len, out, out_len);
-    } else {
-        memcpy(out, num, num_len * sizeof(uint32_t));
-        *out_len = num_len;
-    }
-}
-
-/*
  * Multiplication
  */
 
 #ifdef USE_64BIT_MUL
 
 // Code based on Hacker's Delight book
-// Compared to the original version parameters order has been changed
-// also this version uses 64 bit multiplication
-static void mulmns32(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+// Compared to the original version this version uses 32x32 bit multiplication
+static void mulmnu32(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
 {
-    uint64_t k, t, b;
+    uint64_t k, t;
 
     for (size_t i = 0; i < m; i++)
         w[i] = 0;
@@ -115,42 +63,47 @@ static void mulmns32(const uint32_t u[], size_t m, const uint32_t v[], size_t n,
         w[j + m] = k;
     }
 
-    // Now w[] has the unsigned product.  Correct by
-    // subtracting v*2**32m if u < 0, and
-    // subtracting u*2**32n if v < 0.
+    /*
+        Original code had support to signed mul in 2-complement
 
-    if ((int32_t) u[m - 1] < 0) {
-        b = 0; // Initialize borrow.
-        for (size_t j = 0; j < n; j++) {
-            uint64_t w_j_m = w[j + m];
-            uint64_t v_j = v[j];
-            t = w_j_m - v_j - b;
-            w[j + m] = t;
-            b = t >> 63;
+        // Now w[] has the unsigned product.  Correct by
+        // subtracting v*2**32m if u < 0, and
+        // subtracting u*2**32n if v < 0.
+
+        uint64_t b;
+
+        if ((int32_t) u[m - 1] < 0) {
+            b = 0; // Initialize borrow.
+            for (size_t j = 0; j < n; j++) {
+                uint64_t w_j_m = w[j + m];
+                uint64_t v_j = v[j];
+                t = w_j_m - v_j - b;
+                w[j + m] = t;
+                b = t >> 63;
+            }
         }
-    }
-    if ((int32_t) v[n - 1] < 0) {
-        b = 0;
-        for (size_t i = 0; i < m; i++) {
-            uint64_t w_i_n = w[i + n];
-            uint64_t u_i = u[i];
-            t = w_i_n - u_i - b;
-            w[i + n] = t;
-            b = t >> 63;
+        if ((int32_t) v[n - 1] < 0) {
+            b = 0;
+            for (size_t i = 0; i < m; i++) {
+                uint64_t w_i_n = w[i + n];
+                uint64_t u_i = u[i];
+                t = w_i_n - u_i - b;
+                w[i + n] = t;
+                b = t >> 63;
+            }
         }
-    }
+    */
 }
 
-void intn_mulmns(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
 {
-    mulmns32(u, m, v, n, w);
+    mulmnu32(u, m, v, n, w);
 }
 
 #else
 
 // Code based on Hacker's Delight book
-// Original code with mostly no changes, except for parameters order
-static void mulmns16(const uint16_t u[], size_t m, const uint16_t v[], size_t n, uint16_t w[])
+static void mulmnu16(const uint16_t u[], size_t m, const uint16_t v[], size_t n, uint16_t w[])
 {
     unsigned int k, t, b;
 
@@ -167,33 +120,37 @@ static void mulmns16(const uint16_t u[], size_t m, const uint16_t v[], size_t n,
         w[j + m] = k;
     }
 
-    // Now w[] has the unsigned product.  Correct by
-    // subtracting v*2**16m if u < 0, and
-    // subtracting u*2**16n if v < 0.
+    /*
+        Original code had support to signed mul in 2-complement
 
-    if ((int16_t) u[m - 1] < 0) {
-        b = 0; // Initialize borrow.
-        for (size_t j = 0; j < n; j++) {
-            t = w[j + m] - v[j] - b;
-            w[j + m] = t;
-            b = t >> 31;
+        // Now w[] has the unsigned product.  Correct by
+        // subtracting v*2**16m if u < 0, and
+        // subtracting u*2**16n if v < 0.
+
+        if ((int16_t) u[m - 1] < 0) {
+            b = 0; // Initialize borrow.
+            for (size_t j = 0; j < n; j++) {
+                t = w[j + m] - v[j] - b;
+                w[j + m] = t;
+                b = t >> 31;
+            }
         }
-    }
-    if ((int16_t) v[n - 1] < 0) {
-        b = 0;
-        for (size_t i = 0; i < m; i++) {
-            t = w[i + n] - u[i] - b;
-            w[i + n] = t;
-            b = t >> 31;
+        if ((int16_t) v[n - 1] < 0) {
+            b = 0;
+            for (size_t i = 0; i < m; i++) {
+                t = w[i + n] - u[i] - b;
+                w[i + n] = t;
+                b = t >> 31;
+            }
         }
-    }
-    return;
+        return;
+    */
 }
 
-void intn_mulmns(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    mulmns16((const uint16_t *) u, m * 2, (const uint16_t *) v, n * 2, (uint16_t *) w);
+    mulmnu16((const uint16_t *) u, m * 2, (const uint16_t *) v, n * 2, (uint16_t *) w);
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #error "Big endian not yet supported"
 #else
@@ -203,14 +160,17 @@ void intn_mulmns(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uin
 
 #endif
 
-void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out)
+void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
 {
     intn_digit_t u[2];
-    int64_to_intn_2(num1, u);
+    intn_integer_sign_t u_sign;
+    int64_to_intn_2(num1, u, &u_sign);
     intn_digit_t v[2];
-    int64_to_intn_2(num2, v);
+    intn_integer_sign_t v_sign;
+    int64_to_intn_2(num2, v, &v_sign);
 
-    intn_mulmns(u, 2, v, 2, (uint32_t *) out);
+    *out_sign = intn_muldiv_sign(u_sign, v_sign);
+    intn_mulmnu(u, 2, v, 2, (uint32_t *) out);
 }
 
 /*
@@ -219,28 +179,13 @@ void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out)
 
 static size_t count16(const uint16_t *num, size_t num_len)
 {
-    size_t count = 0;
-    if (num[num_len - 1] == ((uint16_t) -1)) {
-        for (int i = num_len - 2; i >= 0; i--) {
-            uint16_t num_i = num[i];
-            if (num_i != ((uint16_t) -1)) {
-                if (num_i >> 31) {
-                    count = i + 1;
-                } else {
-                    count = i + 2;
-                }
-                break;
-            }
-        }
-    } else {
-        for (int i = num_len - 1; i >= 0; i--) {
-            uint16_t num_i = num[i];
-            if (num_i != 0) {
-                count = i + 1;
-                break;
-            }
+    int i;
+    for (i = num_len - 1; i >= 0; i--) {
+        if (num[i] != 0) {
+            break;
         }
     }
+    size_t count = i + 1;
 
     return count;
 }
@@ -391,67 +336,10 @@ void print_num(const uint32_t num[], int len)
     fprintf(stderr, "\n");
 }
 
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-static inline void big_endian_in_place_swap_16(uint32_t u[], size_t m)
-{
-    uint16_t *dest_buf = (uint16_t *) u;
-    for (size_t i = 0; i < m * 2; i += 2) {
-        uint16_t tmp = dest_buf[i];
-        dest_buf[i] = dest_buf[i + 1];
-        dest_buf[i + 1] = tmp;
-    }
-}
-#endif
-
-void intn_divmns(const intn_digit_t u[], int m, const intn_digit_t v[], int n, intn_digit_t q[])
-{
-    uint32_t u_abs[INTN_ABS_OUT_LEN(INTN_MAX_IN_LEN)];
-    size_t m_abs;
-    bool u_neg = is_negative(u, m);
-    intn_abs(u, m, u_abs, &m_abs);
-
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    big_endian_in_place_swap_16(u_abs, m_abs);
-#endif
-
-    uint32_t v_abs[INTN_ABS_OUT_LEN(INTN_MAX_IN_LEN)];
-    size_t n_abs;
-    bool v_neg = is_negative(v, n);
-    intn_abs(v, n, v_abs, &n_abs);
-
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    big_endian_in_place_swap_16(v_abs, n_abs);
-#endif
-
-    int m_abs16 = count16((const uint16_t *) u_abs, m_abs * 2);
-    int n_abs16 = count16((const uint16_t *) v_abs, n_abs * 2);
-
-    uint16_t *q16 = (uint16_t *) q;
-
-    if (divmnu16(q16, NULL, (uint16_t *) u_abs, (uint16_t *) v_abs, m_abs16, n_abs16) != 0) {
-        abort();
-    }
-
-    int out_len16 = m_abs16 - n_abs16 + 1;
-    if (out_len16 % 2 != 0) {
-        q16[out_len16] = 0;
-        out_len16++;
-    }
-
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    big_endian_in_place_swap_16(q, out_len16 / 2);
-#endif
-
-    if (u_neg != v_neg) {
-        neg_inplace(q, out_len16 / 2);
-    }
-}
-
-size_t intn_addmns(
+size_t intn_addmnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
 {
     size_t n = MIN(a_len, b_len);
-    size_t m = MAX(a_len, b_len);
 
     ASSUME(n >= 1);
 
@@ -467,111 +355,64 @@ size_t intn_addmns(
         carry = temp >> 32;
     }
 
-    if (a_len == b_len) {
-        out[i] = (uint32_t) (((int32_t) 0) - ((int32_t) carry));
-        return i + 1;
-    }
-
-    uint32_t sign_extend;
+    size_t m;
     const uint32_t *longest;
-    if (a_len > b_len) {
-        int64_t sign_extend_temp = (int32_t) b_i;
-        sign_extend = (((uint64_t) sign_extend_temp) >> 32);
+    if (a_len >= b_len) {
+        m = a_len;
         longest = (const uint32_t *) a;
-    } else if (b_len > a_len) {
-        int64_t sign_extend_temp = (int32_t) a_i;
-        sign_extend = (((uint64_t) sign_extend_temp) >> 32);
-        longest = (const uint32_t *) b;
     } else {
-        ASSUME(i == m);
-        goto last_step;
+        m = b_len;
+        longest = (const uint32_t *) b;
     }
 
     for (; i < m; i++) {
         uint32_t longest_i = longest[i];
-        uint64_t temp = (uint64_t) longest_i + (uint64_t) sign_extend + (uint64_t) carry;
+        uint64_t temp = (uint64_t) longest_i + (uint64_t) carry;
         out[i] = (uint32_t) temp;
         carry = temp >> 32;
     }
 
-last_step:
-    out[i] = (uint32_t) (((int32_t) 0) - ((int32_t) carry));
+    if (carry) {
+        out[i] = carry;
+        i++;
+    }
 
-    return i + 1;
+    return i;
 }
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
 {
-    if (num_len <= INTN_INT64_LEN) {
-        return num_len;
-    }
-
-    size_t count = 0;
-    if (num[num_len - 1] == ((uint32_t) -1)) {
-        for (int i = num_len - 2; i >= 0; i--) {
-            uint32_t num_i = num[i];
-            if (num_i != ((uint32_t) -1)) {
-                if (num_i >> 31) {
-                    count = i + 1;
-                } else {
-                    count = i + 2;
-                }
-                break;
-            }
+    int i;
+    for (i = num_len - 1; i >= 0; i--) {
+        if (num[i] != 0) {
+            break;
         }
-    } else if (num[num_len - 1] == 0) {
-        for (int i = num_len - 1; i >= 0; i--) {
-            uint32_t num_i = num[i];
-            if (num_i != 0) {
-                if (num_i >> 31) {
-                    count = i + 2;
-                } else {
-                    count = i + 1;
-                }
-                break;
-            }
-        }
-    } else {
-        count = num_len;
     }
+    size_t count = i + 1;
 
     return count;
 }
 
-void intn_sign_extend(const intn_digit_t *num, size_t num_len, size_t extend_to, intn_digit_t *out)
+double intn_to_double(const intn_digit_t *num, size_t len, intn_integer_sign_t sign)
 {
-    int sign = (num[num_len - 1] >> 31) ? 0xFF : 0x00;
-
-    memcpy(out, num, num_len * sizeof(uint32_t));
-    memset(out + num_len, sign, (extend_to - num_len) * sizeof(uint32_t));
-}
-
-double intn_to_double(const intn_digit_t *num, size_t len)
-{
-    uint32_t num_abs[INTN_ABS_OUT_LEN(INTN_MAX_IN_LEN)];
-    size_t num_abs_len;
-    bool num_neg = is_negative(num, len);
-    intn_abs(num, len, num_abs, &num_abs_len);
-
     double acc = 0.0;
     double base = ((double) (UINT32_MAX)) + 1;
 
-    for (int i = num_abs_len - 1; i >= 0; i--) {
-        acc = acc * base + ((double) num_abs[i]);
+    for (int i = len - 1; i >= 0; i--) {
+        acc = acc * base + ((double) num[i]);
     }
 
-    return num_neg ? -acc : acc;
+    return (sign == IntNNegativeInteger) ? -acc : acc;
 }
 
-int intn_from_double(double dnum, intn_digit_t *out)
+int intn_from_double(double dnum, intn_digit_t *out, intn_integer_sign_t *out_sign)
 {
-    bool is_negative;
     double d;
     if (dnum >= 0) {
-        is_negative = false;
+        *out_sign = IntNPositiveInteger;
         d = dnum;
     } else {
-        is_negative = true;
+        *out_sign = IntNNegativeInteger;
         d = -dnum;
     }
 
@@ -594,14 +435,11 @@ int intn_from_double(double dnum, intn_digit_t *out)
         d -= integer_part;
     }
 
-    if (is_negative) {
-        digits = neg_inplace(out, digits);
-    }
-
     return digits;
 }
 
-char *intn_to_string(const intn_digit_t *num, size_t len, int base, size_t *string_len)
+char *intn_to_string(
+    const intn_digit_t *num, size_t len, intn_integer_sign_t num_sign, int base, size_t *string_len)
 {
     // First base is 2, last is 36
     // This is the maximum divisor that can fit a signed int16
@@ -626,38 +464,29 @@ char *intn_to_string(const intn_digit_t *num, size_t len, int base, size_t *stri
     uint32_t tmp_buf1[tmp_buf_size];
     uint32_t tmp_buf2[tmp_buf_size];
 
-    char *outbuf = malloc(257);
+    char *outbuf = malloc(258);
     if (IS_NULL_PTR(outbuf)) {
         return NULL;
     }
-    char *end = outbuf + 256;
+    char *end = outbuf + 257;
     *end = '\0';
 
     uint16_t *u;
     size_t m;
 
-    bool negative_integer = is_negative(num, len);
+    bool negative_integer = num_sign == IntNNegativeInteger;
 
-    if (negative_integer) {
-        size_t m_abs;
-        intn_abs(num, len, tmp_buf1, &m_abs);
-        m = m_abs;
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        big_endian_in_place_swap_16(tmp_buf1, m);
-#endif
-    } else {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        memcpy(tmp_buf1, num, len * sizeof(uint32_t));
+    memcpy(tmp_buf1, num, len * sizeof(uint32_t));
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        uint16_t *dest_buf = (uint16_t *) tmp_buf1;
-        const uint16_t *num16 = (const uint16_t *) num;
-        for (size_t i = 0; i < len * 2; i += 2) {
-            dest_buf[i] = num16[i + 1];
-            dest_buf[i + 1] = num16[i];
-        }
-#endif
-        m = len;
+    uint16_t *dest_buf = (uint16_t *) tmp_buf1;
+    const uint16_t *num16 = (const uint16_t *) num;
+    for (size_t i = 0; i < len * 2; i += 2) {
+        dest_buf[i] = num16[i + 1];
+        dest_buf[i + 1] = num16[i];
     }
+#endif
+    m = len;
     u = (uint16_t *) tmp_buf1;
 
     int m16 = count16(u, m * 2);
@@ -703,7 +532,7 @@ char *intn_to_string(const intn_digit_t *num, size_t len, int base, size_t *stri
         *end = '-';
     }
 
-    size_t str_size = 257 - (end - outbuf);
+    size_t str_size = 258 - (end - outbuf);
     memmove(outbuf, end, str_size);
 
     *string_len = str_size - 1;
@@ -730,55 +559,66 @@ static void ipow(int base, int exp, intn_digit_t *out)
     }
     out[0] = acc & 0xFFFFFFFF;
     out[1] = acc >> 32;
-    out[2] = 0;
 }
 
-int intn_parse(const char buf[], size_t buf_len, int base, intn_digit_t *out)
+int intn_parse(
+    const char buf[], size_t buf_len, int base, intn_digit_t *out, intn_integer_sign_t *out_sign)
 {
+    static const uint8_t base_max_digits[] = { 63, 40, 31, 27, 24, 22, 21, 20, 19, 18, 17, 17, 16,
+        16, 15, 15, 15, 15, 14, 14, 14, 14, 13, 13, 13, 13,
+        13, 13, 13, 12, 12, 12, 12, 12, 12 };
+
     buf_to_int64_options_t buf_to_int64_opts = BufToInt64NoOptions;
+    size_t max_digits = SIZE_MAX;
 
     size_t pos = 0;
 
     memset(out, 0, sizeof(intn_digit_t) * INTN_MAX_RES_LEN);
     size_t out_len = 2;
 
-    bool is_negative = false;
-    int parsed_digits;
+    *out_sign = IntNPositiveInteger;
     do {
         int64_t parsed_chunk = 0;
-        parsed_digits = int64_parse_ascii_buf(
-            buf + pos, buf_len - pos, base, buf_to_int64_opts, &parsed_chunk);
+        // at first iteration `parsed_digits` will be wrong since it will contain any leading zero
+        // or sign, but on first iteration we are not going use it
+        int parsed_digits = int64_parse_ascii_buf(
+            buf + pos, MIN(buf_len - pos, max_digits), base, buf_to_int64_opts, &parsed_chunk);
         if (parsed_chunk < 0) {
             parsed_chunk = -parsed_chunk;
-            is_negative = true;
+            *out_sign = IntNNegativeInteger;
         }
 
         if (UNLIKELY(parsed_digits <= 0)) {
             return -1;
         }
 
-        // 10^19 takes 64 unsigned bits, so 3 digits
-        intn_digit_t mult[3];
-        ipow(base, parsed_digits, mult);
+        intn_digit_t new_out[INTN_MAX_RES_LEN + 5];
+        size_t new_out_len;
+        if (buf_to_int64_opts == BufToInt64NoOptions) {
+            // first iteration here, just set to 0
+            memset(new_out, 0, sizeof(intn_digit_t) * INTN_MAX_RES_LEN);
+            new_out_len = 2;
+        } else {
+            // 10^19 takes 64 unsigned bits, so 3 digits
+            intn_digit_t mult[2];
+            ipow(base, parsed_digits, mult);
+            // TODO: check overflows
+            intn_mulmnu(out, out_len, mult, 2, new_out);
+            new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
+        }
 
-        intn_digit_t new_out[INTN_MAX_RES_LEN];
-        // TODO: check overflows
-        intn_mulmns(out, out_len, mult, 3, new_out);
-        size_t new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
-
+        intn_integer_sign_t ignored_sign;
         intn_digit_t parsed_as_intn[2];
-        int64_to_intn_2(parsed_chunk, parsed_as_intn);
+        int64_to_intn_2(parsed_chunk, parsed_as_intn, &ignored_sign);
 
         // TODO: check overflows
-        out_len = intn_addmns(new_out, new_out_len, parsed_as_intn, 2, out);
+        out_len = intn_addmnu(new_out, new_out_len, parsed_as_intn, 2, out);
 
         pos += parsed_digits;
         buf_to_int64_opts = BufToInt64RejectSign;
+        max_digits = base_max_digits[base - 2];
     } while (pos < buf_len);
 
-    if (is_negative) {
-        out_len = neg_inplace(out, out_len);
-    }
-
+    // let's count at the end
     return out_len;
 }
