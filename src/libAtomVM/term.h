@@ -959,10 +959,10 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     }
 }
 
-static inline term term_create_uninitialized_intn(size_t n, Heap *heap)
+static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t sign, Heap *heap)
 {
     term *boxed_int = memory_heap_alloc(heap, 1 + n);
-    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
 
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
