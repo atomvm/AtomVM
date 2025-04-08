@@ -1910,10 +1910,21 @@ static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *r
     size_t bytes = n * sizeof(intn_digit_t);
     size_t rounded = ((bytes + 7) >> 3) << 3;
     *intn_data_size = rounded / sizeof(term);
+
+    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        // we need to distinguish between "small" boxed integers, that are integers
+        // up to int64, and bigger integers.
+        // The real difference is that "small" boxed integers use 2-complement,
+        // real bigints not (and also endianess might differ).
+        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
+        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
+        rounded = *intn_data_size * sizeof(term);
+    }
+
     *rounded_num_len = rounded / sizeof(intn_digit_t);
 }
 
-static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres_len)
+static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
     size_t intn_data_size;
     size_t rounded_res_len;
@@ -1923,9 +1934,9 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term bigres_term = term_create_uninitialized_intn(intn_data_size, &ctx->heap);
+    term bigres_term = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
     intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
-    intn_sign_extend(bigres, bigres_len, rounded_res_len, dest_buf);
+    intn_copy(bigres, bigres_len, dest_buf, rounded_res_len);
 
     return bigres_term;
 }
@@ -1957,8 +1968,12 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
         return make_maybe_boxed_int64(ctx, value);
     } else if (parse_res > 0) {
         intn_digit_t tmp_parsed[INTN_MAX_RES_LEN];
-        int parsed_digits = intn_parse(bin_data, bin_data_size, base, tmp_parsed);
-        return make_bigint(ctx, tmp_parsed, parsed_digits);
+        intn_integer_sign_t parsed_sign;
+        int parsed_digits = intn_parse(bin_data, bin_data_size, base, tmp_parsed, &parsed_sign);
+        if (parsed_digits <= 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        return make_bigint(ctx, tmp_parsed, parsed_digits, parsed_sign);
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -2268,7 +2283,9 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
                 size_t boxed_size = term_intn_size(value);
                 size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
                 const intn_digit_t *intn_buf = (const intn_digit_t *) term_intn_data(value);
-                *int_buf = intn_to_string(intn_buf, boxed_size * digits_per_term, base, int_len);
+                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(value);
+                *int_buf
+                    = intn_to_string(intn_buf, boxed_size * digits_per_term, sign, base, int_len);
                 *needs_cleanup = true;
             }
         }
