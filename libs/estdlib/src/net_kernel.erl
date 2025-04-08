@@ -34,7 +34,8 @@
     start/2,
     stop/0,
     get_state/0,
-    epmd_module/0
+    epmd_module/0,
+    get_net_ticktime/0
 ]).
 
 % supervised callback
@@ -118,8 +119,23 @@ get_state() ->
             #{started => no}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @doc Get the epmd client module implementation.
+%% @end
+%% @return the module to use to connect to epmd daemon
+%%-----------------------------------------------------------------------------
+-spec epmd_module() -> module().
 epmd_module() ->
     erl_epmd.
+
+%%-----------------------------------------------------------------------------
+%% @doc Get the current net tick time
+%% @end
+%% @return the net tick time in seconds
+%%-----------------------------------------------------------------------------
+-spec get_net_ticktime() -> pos_integer().
+get_net_ticktime() ->
+    ?NET_TICK_TIME.
 
 %% @hidden
 -spec mark_pending(pid(), node(), node(), pid()) -> ok | {ok_simultaneous, pid()} | nok | alive.

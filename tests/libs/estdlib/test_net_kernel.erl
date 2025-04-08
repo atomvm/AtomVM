@@ -38,6 +38,7 @@ test() ->
             ok = test_autoconnect_fail(Platform),
             ok = test_autoconnect_to_beam(Platform),
             ok = test_groupleader(Platform),
+            ok = test_is_alive(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
@@ -278,6 +279,14 @@ test_groupleader(Platform) ->
         after 5000 -> timeout
         end,
     net_kernel:stop(),
+    ok.
+
+test_is_alive(Platform) ->
+    false = is_alive(),
+    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    true = is_alive(),
+    net_kernel:stop(),
+    false = is_alive(),
     ok.
 
 % On AtomVM, we need to start kernel.

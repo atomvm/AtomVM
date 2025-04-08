@@ -118,6 +118,7 @@
     localtime/0,
     setnode/2,
     setnode/3,
+    is_alive/0,
     get_cookie/0,
     get_cookie/1,
     set_cookie/1,
@@ -1377,6 +1378,14 @@ setnode(_NodeName, _Creation) ->
 -spec setnode(node(), pid(), {non_neg_integer(), non_neg_integer()}) -> reference().
 setnode(_TargetNode, _ConnPid, _TargetFlagsCreation) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns true if current node is part of distribution
+%% @doc     Determine if current node is part of distribution
+%% @end
+-spec is_alive() -> boolean().
+is_alive() ->
+    node() =/= nonode@nohost.
 
 %% @hidden
 -spec dist_ctrl_get_data_notification(binary()) -> ok.
