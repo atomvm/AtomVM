@@ -18,12 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(test_exavmlib)
-
-include(BuildElixir)
-
-set(TEST_MODULES
-    Some.Submodule
-)
-
-pack_test(Tests Tests ${TEST_MODULES})
+defmodule Some.Submodule do
+  def start do
+    :ok
+  end
+end
