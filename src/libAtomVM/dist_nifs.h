@@ -34,6 +34,8 @@
 extern "C" {
 #endif
 
+#define DIST_OTP_RELEASE "27"
+
 extern const ErlNifResourceTypeInit dist_connection_resource_type_init;
 
 extern const struct Nif setnode_3_nif;
