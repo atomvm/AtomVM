@@ -28,6 +28,7 @@ defmodule Tests do
 
   def start() do
     :ok = IO.puts("Running Elixir tests")
+    :ok = Some.Submodule.start()
     :ok = test_enum()
     :ok = test_exception()
     :ok = test_chars_protocol()
