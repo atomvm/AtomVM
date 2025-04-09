@@ -95,6 +95,7 @@ memory error
 - Fix `is_function/2` guard
 - Fixed segfault when calling `lists:reverse/1` (#1600)
 - Fixed nif_atomvm_posix_read GC bug
+- Fixed `erlang:is_number/1` function, now returns true also for floats
 
 ### Changed
 
