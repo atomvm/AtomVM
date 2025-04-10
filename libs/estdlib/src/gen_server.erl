@@ -440,7 +440,7 @@ call(Name, Request, TimeoutMs) when is_atom(Name) ->
     end;
 call(Pid, Request, TimeoutMs) when is_pid(Pid) ->
     MonitorRef = monitor(process, Pid),
-    Pid ! {'$call', {self(), MonitorRef}, Request},
+    Pid ! {'$gen_call', {self(), MonitorRef}, Request},
     receive
         {'DOWN', MonitorRef, process, Pid, {E, []} = _Reason} ->
             erlang:exit({E, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}});
@@ -475,7 +475,7 @@ cast(Name, Request) when is_atom(Name) ->
             cast(Pid, Request)
     end;
 cast(Pid, Request) when is_pid(Pid) ->
-    Pid ! {'$cast', Request},
+    Pid ! {'$gen_cast', Request},
     ok.
 
 %%-----------------------------------------------------------------------------
@@ -510,7 +510,7 @@ loop(Parent, #state{mod = Mod, mod_state = ModState} = State, {continue, Continu
     end;
 loop(Parent, #state{mod = Mod, mod_state = ModState} = State, Timeout) ->
     receive
-        {'$call', {_Pid, _Ref} = From, Request} ->
+        {'$gen_call', {_Pid, _Ref} = From, Request} ->
             case Mod:handle_call(Request, From, ModState) of
                 {reply, Reply, NewModState} ->
                     ok = reply(From, Reply),
@@ -535,7 +535,7 @@ loop(Parent, #state{mod = Mod, mod_state = ModState} = State, Timeout) ->
                 _ ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end;
-        {'$cast', Request} ->
+        {'$gen_cast', Request} ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
                     loop(Parent, State#state{mod_state = NewModState}, infinity);
