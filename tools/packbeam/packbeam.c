@@ -266,12 +266,14 @@ static int do_pack(int argc, char **argv, int is_archive, bool include_lines)
         if (avmpack_is_valid(file_data, file_size)) {
             void *result = avmpack_fold(pack, file_data, pack_beam_fun);
             if (result == NULL) {
+                free(file_data);
                 return EXIT_FAILURE;
             }
         } else {
             char *filename = basename(argv[i]);
             pack_beam_file(pack, file_data, file_size, filename, !is_archive && i == 1, include_lines);
         }
+        free(file_data);
     }
 
     add_module_header(pack, "end", END_OF_FILE);
