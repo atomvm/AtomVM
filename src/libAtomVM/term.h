@@ -47,6 +47,8 @@
 extern "C" {
 #endif
 
+#define TERM_BOXED_INTEGER_SIGN_BIT_POS 2 // 3rd bit
+#define TERM_BOXED_INTEGER_SIGN_BIT (1 << TERM_BOXED_INTEGER_SIGN_BIT_POS)
 #define TERM_BOXED_VALUE_TAG 0x2
 #define TERM_INTEGER_TAG 0xF
 #define TERM_CATCH_TAG 0x1B
@@ -54,7 +56,8 @@ extern "C" {
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
 #define TERM_BOXED_BIN_MATCH_STATE 0x4
-#define TERM_BOXED_POSITIVE_INTEGER 0x8
+#define TERM_BOXED_POSITIVE_INTEGER 0x8 // b1000 (b1s00)
+#define TERM_BOXED_NEGATIVE_INTEGER (TERM_BOXED_POSITIVE_INTEGER | TERM_BOXED_INTEGER_SIGN_BIT)
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
@@ -84,6 +87,7 @@ extern "C" {
 #define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
+#define BOXED_INTN_SIZE(term_size) ((term_size) + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
@@ -161,6 +165,12 @@ typedef enum
     TermLessThan = 2,
     TermGreaterThan = 4
 } TermCompareResult;
+
+typedef enum
+{
+    TermPositiveInteger = 0,
+    TermNegativeInteger = TERM_BOXED_INTEGER_SIGN_BIT
+} term_integer_sign_t;
 
 #define TERM_MAP_NOT_FOUND -1
 #define TERM_MAP_MEMORY_ALLOC_FAIL -2
@@ -442,7 +452,8 @@ static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
+        if (((boxed_value[0] & TERM_BOXED_TAG_MASK) | TERM_BOXED_INTEGER_SIGN_BIT)
+            == TERM_BOXED_NEGATIVE_INTEGER) {
             return true;
         }
     }
@@ -763,6 +774,76 @@ static inline term term_from_int(avm_int_t value)
     return (value << 4) | 0xF;
 }
 
+static inline bool term_is_non_neg_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v >= 0;
+    }
+    return false;
+}
+
+static inline bool term_is_pos_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v > 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_integer(term t)
+{
+    if (term_is_integer(t)) {
+        avm_int_t v = term_to_int(t);
+        return v < 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_pos_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_NEGATIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline term_integer_sign_t term_boxed_integer_sign(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (term_integer_sign_t) (boxed_value[0] & TERM_BOXED_INTEGER_SIGN_BIT);
+}
+
+static inline bool term_is_any_non_neg_integer(term t)
+{
+    return term_is_non_neg_integer(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_pos_integer(term t)
+{
+    return term_is_pos_integer(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_neg_integer(term t)
+{
+    return term_is_neg_integer(t) || term_is_neg_boxed_integer(t);
+}
+
 static inline avm_int_t term_unbox_int(term boxed_int)
 {
     TERM_DEBUG_ASSERT(term_is_boxed_integer(boxed_int));
@@ -818,16 +899,18 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
 
 static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
+    avm_uint_t sign = (((avm_uint_t) value) >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     boxed_int[1] = value;
     return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
 }
 
 static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 {
+    avm_uint64_t sign = (((avm_uint64_t) large_int64) >> 63) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -874,6 +957,26 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     } else {
         return 0;
     }
+}
+
+static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t sign, Heap *heap)
+{
+    term *boxed_int = memory_heap_alloc(heap, 1 + n);
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
+
+    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+}
+
+static inline void *term_intn_data(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (void *) (boxed_value + 1);
+}
+
+static inline size_t term_intn_size(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(boxed_value[0]);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
