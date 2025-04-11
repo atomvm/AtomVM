@@ -2273,7 +2273,9 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
                 size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
                 intn_digit_t *dest_buf = (void *) term_intn_data(value);
                 intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(value);
+                fprintf(stderr, "---\nboxed_size: %i, digits_per_term: %i\n", (int) boxed_size, (int) digits_per_term);
                 *int_buf = intn_to_string(dest_buf, boxed_size * digits_per_term, sign, base, int_len);
+                fprintf(stderr, "---finished intn_to_string--\n");
                 *needs_cleanup = true;
             }
         }

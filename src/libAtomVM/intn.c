@@ -477,6 +477,8 @@ char *intn_to_string(
     bool negative_integer = num_sign == IntNNegativeInteger;
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    fprintf(stderr, "len is: %i\n", (int) len);
+    print_num(num, len);
     memcpy(tmp_buf1, num, len * sizeof(uint32_t));
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     uint16_t *dest_buf = (uint16_t *) tmp_buf1;
