@@ -52,6 +52,7 @@
     all/2,
     any/2,
     flatten/1,
+    flatmap/2,
     search/2,
     filter/2,
     filtermap/2,
@@ -488,6 +489,23 @@ flatten([H | T], Accum) ->
     [H | FlattenedT].
 
 %% post: return is flattened
+
+%%-----------------------------------------------------------------------------
+%% @param   F the function to apply to elements of L
+%% @param   L the list to map
+%% @returns List of mapped elements, appended
+%% @doc     Map elements of list L by applying F, and append the results. F should
+%% return a list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec flatmap(F :: fun((Elem :: term()) -> [term()]), List :: [term()]) -> [term()].
+flatmap(F, L) when is_list(L) ->
+    flatmap_1(F, L).
+
+flatmap_1(_F, []) ->
+    [];
+flatmap_1(F, [H | T]) ->
+    F(H) ++ flatmap_1(F, T).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pred the predicate to apply to elements in List
