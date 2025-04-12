@@ -29,6 +29,7 @@ test() ->
     ok = test_split(),
     ok = test_trim(),
     ok = test_find(),
+    ok = test_length(),
     ok.
 
 test_to_upper() ->
@@ -88,6 +89,16 @@ test_find() ->
     ?ASSERT_MATCH(string:find(<<"foobar">>, "ba"), <<"bar">>),
     ?ASSERT_MATCH(string:find("foobar", <<"ba">>), "bar"),
     ?ASSERT_MATCH(string:find(<<"foobar">>, <<"ba">>), <<"bar">>),
+
+    ok.
+
+test_length() ->
+    ?ASSERT_MATCH(string:length(""), 0),
+    ?ASSERT_MATCH(string:length(<<>>), 0),
+    ?ASSERT_MATCH(string:length("foo"), 3),
+    ?ASSERT_MATCH(string:length(<<"foo">>), 3),
+    ?ASSERT_MATCH(string:length("アトム"), 3),
+    ?ASSERT_MATCH(string:length(<<"アトム"/utf8>>), 3),
 
     ok.
 

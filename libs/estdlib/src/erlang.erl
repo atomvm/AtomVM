@@ -57,6 +57,7 @@
     list_to_integer/1,
     list_to_integer/2,
     list_to_tuple/1,
+    iolist_size/1,
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
@@ -666,12 +667,23 @@ list_to_tuple(_List) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @equiv   byte_size(iolist_to_binary(IOList))
+%% @param   IOList  IO list to compute the binary size of
+%% @returns the number of bytes of IOList if it was convered to `binary()'
+%% @doc     Compute the length in bytes of the IO list or `binary()'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec iolist_size(IOList :: iodata()) -> non_neg_integer().
+iolist_size(_IOList) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   IOList  IO list to convert to binary
 %% @returns a binary with the bytes of the IO list
 %% @doc     Convert an IO list to binary.
 %% @end
 %%-----------------------------------------------------------------------------
--spec iolist_to_binary(IOList :: iolist()) -> binary().
+-spec iolist_to_binary(IOList :: iodata()) -> binary().
 iolist_to_binary(_IOList) ->
     erlang:nif_error(undefined).
 
