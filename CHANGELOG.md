@@ -39,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:get/0` and `erlang:erase/0`.
 - Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
 - Added support for 'ets:delete/1'.
+- Added `application:get_env/2`
 
 ### Changed
 

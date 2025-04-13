@@ -19,10 +19,22 @@
 %
 
 -module(application).
--export([get_env/3]).
+-export([get_env/2, get_env/3]).
 -export_type([start_type/0]).
 
 -type start_type() :: normal | {takeover, Node :: node()} | {failover, Node :: node()}.
+
+%%-----------------------------------------------------------------------------
+%% @param   Application application to get the parameter value of
+%% @param   Parameter parameter to get the value of
+%% @returns undefined
+%% @doc     Retrieve the value of the configuration parameter `Parameter' for
+%%          application `Application' or `undefined' if not found.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_env(Application :: atom(), Parameter :: atom()) -> any().
+get_env(Application, Parameter) ->
+    get_env(Application, Parameter, undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Application application to get the parameter value of
