@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for 'ets:delete/1'.
 - Added `lists:flatmap/2`
 - Added `io:fwrite/1,2,3` and `io:format/3` as well as few io functions required by remote shell
+- Added `code:is_loaded/1` and `code:which/1`
 
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.

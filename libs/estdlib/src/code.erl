@@ -29,7 +29,9 @@
     all_loaded/0,
     load_abs/1,
     load_binary/3,
-    ensure_loaded/1
+    ensure_loaded/1,
+    which/1,
+    is_loaded/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -58,7 +60,7 @@ all_loaded() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Filename    path to the beam to open, without .beams suffix
+%% @param   Filename    path to the beam to open, without .beam suffix
 %% @returns A tuple with the name of the module
 %% @doc     Load a module from a path.
 %% Error return result type is different from Erlang/OTP.
@@ -98,3 +100,35 @@ load_binary(_Module, _Filename, _Binary) ->
     Module :: atom().
 ensure_loaded(_Module) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module to test
+%% @returns Tuple `{file, preloaded}' if module is loaded or `false'
+%% @doc     Determine if a module is loaded. AtomVM works in
+%% an embedded-like mode where modules are loaded at start-up but modules
+%% can be loaded explicitely as well (especially from a binary with `load_binary/3').
+%% @end
+%%-----------------------------------------------------------------------------
+is_loaded(Module) ->
+    case ?MODULE:ensure_loaded(Module) of
+        {module, _Module} ->
+            {file, preloaded};
+        {error, _} ->
+            false
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module to test
+%% @returns `preloaded' if module is loaded or `false'
+%% @doc     Determine if a module is loaded. There currently is no way to
+%% distinguish a module that was loaded with `load_binary/3' or that was
+%% preloaded at startup.
+%% @end
+%%-----------------------------------------------------------------------------
+which(Module) ->
+    case ?MODULE:ensure_loaded(Module) of
+        {module, _Module} ->
+            preloaded;
+        {error, _} ->
+            non_existing
+    end.
