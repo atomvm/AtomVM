@@ -27,13 +27,23 @@
 -define(FLT(L), lists:flatten(L)).
 
 test() ->
-    test_format(),
-    test_latin1_char_list(),
+    ok = test_format(),
+    ok = test_latin1_char_list(),
+    ok = test_write(),
+    ok = test_write_atom(),
+    ok = test_write_string(),
+    ok = test_chars_length(),
+    ok = test_printable_list(),
     ok.
 
 test_format() ->
     ?ASSERT_MATCH(?FLT(io_lib:format("", [])), ""),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo", [])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format(<<"foo">>, [])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:format(foo, [])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:fwrite("foo", [])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:fwrite(<<"foo">>, [])), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:fwrite(foo, [])), "foo"),
     ?ASSERT_MATCH(?FLT(io_lib:format("foo~n", [])), "foo\n"),
     % atom
     ?ASSERT_MATCH(?FLT(io_lib:format("foo: ~p~n", [bar])), "foo: bar\n"),
@@ -160,7 +170,7 @@ test_format() ->
                     false -> "maybe"
                 end;
             "ATOM" ->
-                "maybe"
+                "'maybe'"
         end,
     ?ASSERT_MATCH(?FLT(io_lib:format("~p", ['maybe'])), MaybeAtomStr),
     ?ASSERT_MATCH(?FLT(io_lib:format("~w", [foo])), "foo"),
@@ -254,6 +264,54 @@ test_latin1_char_list() ->
     true = io_lib:latin1_char_list("été"),
     false = io_lib:latin1_char_list(["hello"]),
     false = io_lib:latin1_char_list([$h, $e, $l, $l | $o]),
+    ok.
+
+test_write() ->
+    ?ASSERT_MATCH(?FLT(io_lib:write(foo)), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:write(42)), "42"),
+    ?ASSERT_MATCH(?FLT(io_lib:write("*")), "[42]"),
+    ?ASSERT_MATCH(?FLT(io_lib:write(<<42>>)), "<<42>>"),
+    ok.
+
+test_write_atom() ->
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(foo)), "foo"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(bar)), "bar"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('bar')), "bar"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('if')), "'if'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('_')), "'_'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('!hello')), "'!hello'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('.hello')), "'.hello'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('@hello')), "'@hello'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(hello@world)), "hello@world"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('0hello')), "'0hello'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(hello0world)), "hello0world"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('Hello')), "'Hello'"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(helloWorld)), "helloWorld"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom(hello_world)), "hello_world"),
+    ?ASSERT_MATCH(?FLT(io_lib:write_atom('hello\'world')), "'hello\\'world'"),
+    ok.
+
+test_write_string() ->
+    ?ASSERT_MATCH(?FLT(io_lib:write_string("foo")), "\"foo\""),
+    ?ASSERT_MATCH(?FLT(io_lib:write_string([42])), "\"*\""),
+    ?ASSERT_MATCH(?FLT(io_lib:write_string([])), "\"\""),
+    ?ASSERT_MATCH(?FLT(io_lib:write_string("アトム")), "\"アトム\""),
+    ok.
+
+test_chars_length() ->
+    ?ASSERT_MATCH(io_lib:chars_length("foo"), 3),
+    ?ASSERT_MATCH(io_lib:chars_length("アトム"), 3),
+    ?ASSERT_MATCH(io_lib:chars_length([$f, [$o, [$o]]]), 3),
+    ok.
+
+test_printable_list() ->
+    UnicodeRange = io:printable_range() =:= unicode,
+    ?ASSERT_MATCH(io_lib:printable_list("foo"), true),
+    ?ASSERT_MATCH(io_lib:printable_list([$f, [$o, [$o]]]), false),
+    ?ASSERT_MATCH(io_lib:printable_list("アトム"), UnicodeRange),
+    ?ASSERT_MATCH(io_lib:printable_list([1, 2, 3]), false),
+    ?ASSERT_MATCH(io_lib:printable_list([1, 2, -3]), false),
+    ?ASSERT_MATCH(io_lib:printable_list(foo), false),
     ok.
 
 id(X) ->
