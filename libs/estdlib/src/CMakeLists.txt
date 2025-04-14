@@ -41,6 +41,7 @@ set(ERLANG_MODULES
     gen_tcp_socket
     supervisor
     inet
+    init
     io_lib
     io
     lists
