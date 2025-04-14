@@ -897,9 +897,15 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
     }
 }
 
+static inline term_integer_sign_t term_integer_sign_from_int(avm_int_t value)
+{
+    avm_uint_t uvalue = ((avm_uint_t) value);
+    return (term_integer_sign_t) ((uvalue >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS);
+}
+
 static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
-    avm_uint_t sign = (((avm_uint_t) value) >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
+    avm_uint_t sign = (avm_uint_t) term_integer_sign_from_int(value);
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     boxed_int[1] = value;
