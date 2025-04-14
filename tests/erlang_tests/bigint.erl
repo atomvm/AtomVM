@@ -24,8 +24,11 @@
     mul/2,
     shrink/0,
     pow/2,
+    sort/1,
     twice/1,
     fact/1,
+    the_out_of_order_list/0,
+    the_ordered_list/0,
     get_machine_atom/0,
     expect_badarg/1,
     expect_overflow/1,
@@ -42,7 +45,8 @@
 
 start() ->
     test_mul() +
-        parse_bigint().
+        parse_bigint() +
+        test_cmp().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -229,6 +233,286 @@ parse_bigint() ->
     end),
 
     0.
+
+test_cmp() ->
+    OutOfOrder = ?MODULE:the_out_of_order_list(),
+    Ordered = ?MODULE:sort(OutOfOrder),
+    true = (Ordered == binlist_to_integer(the_ordered_list())),
+    EndianessOutOfOrder = [
+        0,
+        erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFFBBBBBBBBEEEEEEEE">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF00000000FFFFFFFF">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"BBBBBBBBEEEEEEEEFFFFFFFFFFFFFFFF">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"00000000FFFFFFFFFFFFFFFFFFFFFFFF">>), 16)
+    ],
+    EndianessOrdered = [
+        0,
+        erlang:binary_to_integer(?MODULE:id(<<"00000000FFFFFFFFFFFFFFFFFFFFFFFF">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"BBBBBBBBEEEEEEEEFFFFFFFFFFFFFFFF">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF00000000FFFFFFFF">>), 16),
+        erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFFBBBBBBBBEEEEEEEE">>), 16)
+    ],
+    EndianessOrdered = ?MODULE:sort(EndianessOutOfOrder),
+    0.
+
+binlist_to_integer([]) ->
+    [];
+binlist_to_integer([H | T]) ->
+    [erlang:binary_to_integer(H) | binlist_to_integer(T)].
+
+the_out_of_order_list() ->
+    [
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"1BCDEFGHIJKLMNOPQRSTUVWXYZA12345689ABCDEFJHIJKLMNZ">>), 36
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"-1BCDEFGHIJKLMNOPQRSTUVWXYZA12345689ABCDEFJHIJKLMNZ">>), 36
+            )
+        ),
+        10,
+        -23,
+        ?MODULE:pow(-2, 39),
+        ?MODULE:pow(2, 63),
+        9,
+        ?MODULE:pow(2, 39),
+        0,
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        0,
+        ?MODULE:pow(2, 40),
+        0,
+        ?MODULE:pow(-2, 31),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"-1BCDEFGHIJKLMNOPQRSTUVWXYZA12345689ABCDEFJHIJKLMNZ">>), 36
+            )
+        ),
+        0,
+        -1,
+        1,
+        5,
+        ?MODULE:pow(2, 31),
+        ?MODULE:pow(-2, 47),
+        ?MODULE:pow(-2, 63),
+        89,
+        -1,
+        0,
+        0,
+        1,
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFE">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-10000000000000000">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"10000000000000000">>), 16)),
+        0,
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFE">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFE">>), 16)),
+        2,
+        3,
+        0,
+        -20,
+        20,
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"100000000">>), 16)),
+        -1,
+        -2,
+        -3,
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-100000000">>), 16)),
+        16#FFFFFFF,
+        16#FFFFFFE,
+        -16#FFFFFFF,
+        -16#FFFFFFE,
+        16#10000000,
+        -16#10000000,
+        16#10000001,
+        -16#10000001,
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFE">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFE">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFF">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"1000000000000000">>), 16)),
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-1000000000000000">>), 16)),
+        ?MODULE:fact(47),
+        ?MODULE:fact(48),
+        ?MODULE:fact(49),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"1BCDEFGHIJKLMNOPQRSTUVWXYZA12345689ABCDEFJHIJKLMNZ">>), 36
+            )
+        ),
+        0,
+        -89,
+        94,
+        -94,
+        81,
+        -81,
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:id(
+            erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFF2FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            )
+        ),
+        ?MODULE:pow(2, 64),
+        ?MODULE:pow(2, 63)
+    ].
+
+the_ordered_list() ->
+    [
+        <<"-115792089237316195423570985008687907853269984665640564039457584007913129639935">>,
+        <<"-115792089237316195423570985008687907853269984665640564039457584007913129639935">>,
+        <<"-23866129307451569834960726085978030586952270370050797044683392240429208077823">>,
+        <<"-23866129307451569834960726085978030586952270370050797044683392240429208077823">>,
+        <<"-18446744073709551616">>,
+        <<"-18446744073709551615">>,
+        <<"-18446744073709551614">>,
+        <<"-9223372036854775808">>,
+        <<"-1152921504606846976">>,
+        <<"-1152921504606846975">>,
+        <<"-1152921504606846974">>,
+        <<"-140737488355328">>,
+        <<"-549755813888">>,
+        <<"-4294967296">>,
+        <<"-4294967295">>,
+        <<"-4294967294">>,
+        <<"-2147483648">>,
+        <<"-268435457">>,
+        <<"-268435456">>,
+        <<"-268435455">>,
+        <<"-268435454">>,
+        <<"-94">>,
+        <<"-89">>,
+        <<"-81">>,
+        <<"-23">>,
+        <<"-20">>,
+        <<"-3">>,
+        <<"-2">>,
+        <<"-1">>,
+        <<"-1">>,
+        <<"-1">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"0">>,
+        <<"1">>,
+        <<"1">>,
+        <<"2">>,
+        <<"3">>,
+        <<"5">>,
+        <<"9">>,
+        <<"10">>,
+        <<"20">>,
+        <<"81">>,
+        <<"89">>,
+        <<"94">>,
+        <<"268435454">>,
+        <<"268435455">>,
+        <<"268435456">>,
+        <<"268435457">>,
+        <<"2147483648">>,
+        <<"4294967294">>,
+        <<"4294967295">>,
+        <<"4294967296">>,
+        <<"549755813888">>,
+        <<"1099511627776">>,
+        <<"1152921504606846974">>,
+        <<"1152921504606846975">>,
+        <<"1152921504606846975">>,
+        <<"1152921504606846976">>,
+        <<"9223372036854775808">>,
+        <<"9223372036854775808">>,
+        <<"18446744073709551615">>,
+        <<"18446744073709551616">>,
+        <<"18446744073709551616">>,
+        <<"258623241511168180642964355153611979969197632389120000000000">>,
+        <<"12413915592536072670862289047373375038521486354677760000000000">>,
+        <<"608281864034267560872252163321295376887552831379210240000000000">>,
+        <<"23866129307451569834960726085978030586952270370050797044683392240429208077823">>,
+        <<"23866129307451569834960726085978030586952270370050797044683392240429208077823">>,
+        <<"101318078082651670995624611882601919371611236582435493534525386006923988434943">>,
+        <<"108555083659983933209597798445644913612440610624038028786991485007418559037439">>,
+        <<"108555083659983933209597798445644913612440610624038028786991485007418559037439">>,
+        <<"115792089237316195423570984985303881655975537974381606715997055693418208952319">>,
+        <<"115792089237316195423570985008687617943582403767539724075120039579213551894527">>,
+        <<"115792089237316195423570985008687907853269984665640564039457584007913129639933">>,
+        <<"115792089237316195423570985008687907853269984665640564039457584007913129639934">>,
+        <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">>,
+        <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">>
+    ].
+
+sort([Pivot | T]) ->
+    sort([X || X <- T, X < Pivot]) ++
+        [Pivot] ++
+        sort([X || X <- T, X >= Pivot]);
+sort([]) ->
+    [].
 
 id(X) ->
     X.
