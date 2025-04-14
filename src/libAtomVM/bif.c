@@ -1051,7 +1051,9 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
 
                 } else {
-                    return make_boxed_int64(ctx, fail_label, live, -val);
+                    // maybe boxed int64 since we need to handle -(AVM_INT_MAX + 1) that is
+                    // AVM_INT_MIN that fits into a 32 bit boxed value
+                    return make_maybe_boxed_int64(ctx, fail_label, live, -val);
                 }
             }
             #endif
