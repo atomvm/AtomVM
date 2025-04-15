@@ -23,10 +23,13 @@
 -export([start/0, pow/2, test/1, id/1]).
 
 start() ->
-    Res = (pow(-2, 63) + id(10.0)) * id(-1.0),
+    Res = ?MODULE:id((pow(-2, 63) + id(10.0)) * id(-1.0)),
+    true = ?MODULE:id(is_number(Res)),
     test(Res).
 
 id(I) when is_float(I) ->
+    I;
+id(I) when is_atom(I) ->
     I.
 
 pow(_N, 0) ->

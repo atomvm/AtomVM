@@ -27,20 +27,53 @@
 %%-----------------------------------------------------------------------------
 -module(io_lib).
 
--export([format/2, latin1_char_list/1]).
+-export([
+    write/1,
+    format/2,
+    fwrite/2,
+    latin1_char_list/1,
+    write_atom/1,
+    printable_list/1,
+    write_string/1,
+    write_string/2,
+    chars_length/1
+]).
+
+-export_type([
+    chars/0
+]).
+
+-type chars() :: [char() | chars()].
+
+%%-----------------------------------------------------------------------------
+%% @equiv format(Format, Args)
+%% @param   Format format string
+%% @param   Args format argument
+%% @returns string
+%% @doc     Format string and data to a string.
+%%          Features most of OTP `io_lib:format/2'.
+%%          Raises `badarg' error if the number of format specifiers
+%%          does not match the length of the Args.
+%% @end
+%%-----------------------------------------------------------------------------
+fwrite(Format, Args) ->
+    format(Format, Args).
 
 %%-----------------------------------------------------------------------------
 %% @param   Format format string
 %% @param   Args format argument
 %% @returns string
 %% @doc     Format string and data to a string.
-%%          Approximates features of OTP io_lib:format/2, but
-%%          only supports ~p and ~n format specifiers.
+%%          Features most of OTP `io_lib:format/2'.
 %%          Raises `badarg' error if the number of format specifiers
 %%          does not match the length of the Args.
 %% @end
 %%-----------------------------------------------------------------------------
--spec format(Format :: string(), Args :: list()) -> string().
+-spec format(Format :: io:format(), Args :: list()) -> string().
+format(Format, Args) when is_binary(Format) ->
+    format(binary_to_list(Format), Args);
+format(Format, Args) when is_atom(Format) ->
+    format(atom_to_list(Format), Args);
 format(Format, Args) ->
     {FormatTokens, Instr} = split(Format),
     case length(FormatTokens) == length(Args) + 1 of
@@ -236,11 +269,7 @@ format_string(Format, T) ->
 format_spw(#format{control = s}, T) when is_atom(T) ->
     erlang:atom_to_list(T);
 format_spw(_Format, T) when is_atom(T) ->
-    AtomStr = erlang:atom_to_list(T),
-    case atom_requires_quotes(T, AtomStr) of
-        false -> AtomStr;
-        true -> [$', AtomStr, $']
-    end;
+    write_atom(T);
 format_spw(#format{control = s, mod = t} = Format, T) when is_binary(T) ->
     case unicode:characters_to_list(T, utf8) of
         L when is_list(L) -> L;
@@ -254,8 +283,8 @@ format_spw(#format{control = Control, mod = t} = Format, T) when is_binary(T) ->
         L when is_list(L) ->
             FormattedStr =
                 case {Control, test_string_class(L)} of
-                    {p, latin1_printable} -> format_p_string(L, []);
-                    {p, unicode} -> [format_p_string(L, []), "/utf8"];
+                    {p, latin1_printable} -> write_string(L, $");
+                    {p, unicode} -> [write_string(L, $"), "/utf8"];
                     _ -> lists:join($,, [integer_to_list(B) || B <- L])
                 end,
             [$<, $<, FormattedStr, $>, $>];
@@ -266,7 +295,7 @@ format_spw(#format{control = Control, mod = undefined}, T) when is_binary(T) ->
     L = erlang:binary_to_list(T),
     FormattedStr =
         case {Control, test_string_class(L)} of
-            {p, latin1_printable} -> format_p_string(L, []);
+            {p, latin1_printable} -> write_string(L, $");
             _ -> lists:join($,, [integer_to_list(B) || B <- L])
         end,
     [$<, $<, FormattedStr, $>, $>];
@@ -279,7 +308,7 @@ format_spw(#format{control = s, mod = Mod}, L) when is_list(L) ->
     end;
 format_spw(#format{control = p} = Format, L) when is_list(L) ->
     case test_string_class(L) of
-        latin1_printable -> format_p_string(L, []);
+        latin1_printable -> write_string(L, $");
         _ -> [$[, lists:join($,, [format_spw(Format, E) || E <- L]), $]]
     end;
 format_spw(#format{control = w} = Format, L) when is_list(L) ->
@@ -316,7 +345,6 @@ format_spw(#format{mod = Mod} = Format, T) when is_map(T) ->
         $}
     ].
 
-%% We will probably need to add 'maybe' with OTP 27
 -define(RESERVED_KEYWORDS, [
     'after',
     'and',
@@ -336,6 +364,7 @@ format_spw(#format{mod = Mod} = Format, T) when is_map(T) ->
     'fun',
     'if',
     'let',
+    'maybe',
     'not',
     'of',
     'or',
@@ -347,23 +376,38 @@ format_spw(#format{mod = Mod} = Format, T) when is_map(T) ->
     'xor'
 ]).
 
-%% @private
-atom_requires_quotes(Atom, AtomStr) ->
+-spec write_atom(Atom :: atom()) -> chars().
+write_atom(Atom) ->
+    AtomStr = erlang:atom_to_list(Atom),
     case lists:member(Atom, ?RESERVED_KEYWORDS) of
-        true -> true;
-        false -> atom_requires_quotes0(AtomStr)
+        true -> [$', AtomStr, $'];
+        false -> write_atom_maybe_quote_escape(AtomStr)
     end.
 
-atom_requires_quotes0([C | _T]) when C < $a orelse C > $z -> true;
-atom_requires_quotes0([_C | T]) -> atom_requires_quotes1(T).
+%% @private
+write_atom_maybe_quote_escape([C | _T] = AtomStr) when C < $a orelse C > $z ->
+    write_atom_maybe_quote_escape(AtomStr, true, []);
+write_atom_maybe_quote_escape(AtomStr) ->
+    write_atom_maybe_quote_escape(AtomStr, false, []).
 
-atom_requires_quotes1([]) -> false;
-atom_requires_quotes1([$@ | T]) -> atom_requires_quotes1(T);
-atom_requires_quotes1([$_ | T]) -> atom_requires_quotes1(T);
-atom_requires_quotes1([C | T]) when C >= $A andalso C =< $Z -> atom_requires_quotes1(T);
-atom_requires_quotes1([C | T]) when C >= $0 andalso C =< $9 -> atom_requires_quotes1(T);
-atom_requires_quotes1([C | T]) when C >= $a andalso C =< $z -> atom_requires_quotes1(T);
-atom_requires_quotes1(_) -> true.
+write_atom_maybe_quote_escape([], false, Acc) ->
+    lists:reverse(Acc);
+write_atom_maybe_quote_escape([], true, Acc) ->
+    [$' | lists:reverse([$' | Acc])];
+write_atom_maybe_quote_escape([$@ | T], Quote, Acc) ->
+    write_atom_maybe_quote_escape(T, Quote, [$@ | Acc]);
+write_atom_maybe_quote_escape([$_ | T], Quote, Acc) ->
+    write_atom_maybe_quote_escape(T, Quote, [$_ | Acc]);
+write_atom_maybe_quote_escape([C | T], Quote, Acc) when C >= $A andalso C =< $Z ->
+    write_atom_maybe_quote_escape(T, Quote, [C | Acc]);
+write_atom_maybe_quote_escape([C | T], Quote, Acc) when C >= $0 andalso C =< $9 ->
+    write_atom_maybe_quote_escape(T, Quote, [C | Acc]);
+write_atom_maybe_quote_escape([C | T], Quote, Acc) when C >= $a andalso C =< $z ->
+    write_atom_maybe_quote_escape(T, Quote, [C | Acc]);
+write_atom_maybe_quote_escape([$' | T], _Quote, Acc) ->
+    write_atom_maybe_quote_escape(T, true, [$', $\\ | Acc]);
+write_atom_maybe_quote_escape([C | T], _Quote, Acc) ->
+    write_atom_maybe_quote_escape(T, true, [C | Acc]).
 
 %% @private
 format_integer(#format{control = C, precision = Precision0}, T0) when
@@ -449,8 +493,8 @@ format_char(_, _) ->
 %% @private
 %% String classes:
 %% latin1_printable
-%% latin1_unprintable
 %% unicode
+%% unprintable
 %% io_lib doesn't distinguish between valid unicode and invalid unicode
 %% characters. This is done with io, though, when actually writing the string.
 %% Compare:
@@ -466,9 +510,9 @@ test_string_class([H | T], Class) when is_integer(H) andalso H >= 0 ->
         case {Class, char_class(H)} of
             {_, latin1_printable} -> Class;
             {latin1_printable, CharClass} -> CharClass;
-            {_, latin1_unprintable} -> Class;
-            {latin1_unprintable, CharClass} -> CharClass;
-            _ -> unicode
+            {_, unicode} -> Class;
+            {unicode, CharClass} -> CharClass;
+            _ -> unprintable
         end,
     test_string_class(T, NewClass);
 test_string_class([], Class) ->
@@ -476,28 +520,81 @@ test_string_class([], Class) ->
 test_string_class(_String, _Class) ->
     not_a_string.
 
-char_class(H) when H >= 0 andalso H < 8 -> latin1_unprintable;
+char_class(H) when H >= 0 andalso H < 8 -> unprintable;
 char_class(27) -> latin1_printable;
-char_class(H) when H >= 14 andalso H < 32 -> latin1_unprintable;
+char_class(H) when H >= 14 andalso H < 32 -> unprintable;
 char_class(H) when H < 256 -> latin1_printable;
 char_class(_H) -> unicode.
 
+%%-----------------------------------------------------------------------------
+%% @equiv write_string(String, $")
+%% @param String string to print
+%% @doc Returns the list of characters needed to print String as a string.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write_string(string()) -> chars().
+write_string(String) ->
+    write_string(String, $").
+
 %% @private
-format_p_string([], Acc) ->
-    [$", lists:reverse(Acc), $"];
-format_p_string([8 | T], Acc) ->
-    format_p_string(T, ["\\b" | Acc]);
-format_p_string([9 | T], Acc) ->
-    format_p_string(T, ["\\t" | Acc]);
-format_p_string([10 | T], Acc) ->
-    format_p_string(T, ["\\n" | Acc]);
-format_p_string([11 | T], Acc) ->
-    format_p_string(T, ["\\v" | Acc]);
-format_p_string([12 | T], Acc) ->
-    format_p_string(T, ["\\f" | Acc]);
-format_p_string([13 | T], Acc) ->
-    format_p_string(T, ["\\r" | Acc]);
-format_p_string([27 | T], Acc) ->
-    format_p_string(T, ["\\e" | Acc]);
-format_p_string([H | T], Acc) ->
-    format_p_string(T, [H | Acc]).
+-spec write_string(string(), char()) -> chars().
+write_string(String, $") ->
+    format_p_string(String, $", []).
+
+%% @private
+format_p_string([], Q, Acc) ->
+    [Q, lists:reverse(Acc), Q];
+format_p_string([8 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\b" | Acc]);
+format_p_string([9 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\t" | Acc]);
+format_p_string([10 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\n" | Acc]);
+format_p_string([11 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\v" | Acc]);
+format_p_string([12 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\f" | Acc]);
+format_p_string([13 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\r" | Acc]);
+format_p_string([27 | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\e" | Acc]);
+format_p_string([Q | T], Q, Acc) ->
+    format_p_string(T, Q, ["\\", Q | Acc]);
+format_p_string([H | T], Q, Acc) ->
+    format_p_string(T, Q, [H | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @param List term to test
+%% @doc Determine if `List' is a flat list of printable characters
+%% @end
+%%-----------------------------------------------------------------------------
+-spec printable_list(List :: any()) -> boolean().
+printable_list(List) ->
+    StringClass = test_string_class(List),
+    case {StringClass, io:printable_range()} of
+        {not_a_string, _} -> false;
+        {unprintable, _} -> false;
+        {latin1_printable, _} -> true;
+        {unicode, unicode} -> true;
+        {unicode, latin1} -> false
+    end.
+
+%% @private
+-spec chars_length(chars()) -> non_neg_integer().
+chars_length(S) ->
+    try
+        iolist_size(S)
+    catch
+        _:_ ->
+            string:length(S)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @equiv forma("~w", [Term])
+%% @param Term term to represent
+%% @doc Returns a character list that represents Term
+%% @end
+%%-----------------------------------------------------------------------------
+-spec write(any()) -> chars().
+write(Term) ->
+    format("~w", [Term]).

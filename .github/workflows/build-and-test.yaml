@@ -34,7 +34,8 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
+    container: ${{ matrix.container }}
     strategy:
 
       fail-fast: false
@@ -57,21 +58,21 @@ jobs:
         - cc: "gcc-7"
           cxx: "g++-7"
           compiler_pkgs: "gcc-7 g++-7"
-          os: "ubuntu-20.04"
+          container: "ubuntu:20.04"
           otp: "27"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
         - cc: "gcc-8"
           cxx: "g++-8"
           compiler_pkgs: "gcc-8 g++-8"
-          os: "ubuntu-20.04"
+          container: "ubuntu:20.04"
           otp: "27"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
         - cc: "gcc-9"
           cxx: "g++-9"
           compiler_pkgs: "gcc-9 g++-9"
-          os: "ubuntu-20.04"
+          container: "ubuntu:20.04"
           # otp: all
         - cc: "gcc-10"
           cxx: "g++-10"
@@ -119,13 +120,13 @@ jobs:
           cxx: "clang++-10"
           compiler_pkgs: "clang-10"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-20.04"
+          container: "ubuntu:20.04"
           # otp: all
         - cc: "clang-11"
           cxx: "clang++-11"
           compiler_pkgs: "clang-11"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-20.04"
+          container: "ubuntu:20.04"
           otp: "27"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
@@ -195,37 +196,41 @@ jobs:
           rebar3_version: "3.24.0"
 
         # Old versions of OTP/Elixir
-        - os: "ubuntu-20.04"
+        - container: "ubuntu:20.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
           otp: "21"
           elixir_version: "1.7"
           rebar3_version: "3.15.2"
+          compiler_pkgs: "g++"
 
-        - os: "ubuntu-20.04"
+        - container: "ubuntu:20.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
           otp: "22"
           elixir_version: "1.8"
           rebar3_version: "3.18.0"
+          compiler_pkgs: "g++"
 
-        - os: "ubuntu-20.04"
+        - container: "ubuntu:20.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
           otp: "23"
           elixir_version: "1.11"
           rebar3_version: "3.20.0"
+          compiler_pkgs: "g++"
 
-        - os: "ubuntu-22.04"
+        - container: "ubuntu:20.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
           otp: "24"
           elixir_version: "1.14"
           rebar3_version: "3.23.0"
+          compiler_pkgs: "g++"
 
         - os: "ubuntu-24.04"
           cc: "cc"
@@ -235,13 +240,14 @@ jobs:
           rebar3_version: "3.24.0"
 
         # Additional default compiler builds
-        - os: "ubuntu-20.04"
+        - container: "ubuntu:20.04"
           cc: "cc"
           cxx: "c++"
           cflags: ""
           otp: "27"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
+          compiler_pkgs: "g++"
 
         - os: "ubuntu-22.04"
           cc: "cc"
@@ -271,7 +277,7 @@ jobs:
           compiler_pkgs: "clang-18"
 
         # Additional 32 bits build
-        - os: "ubuntu-20.04"
+        - container: "ubuntu:20.04"
           cc: "gcc-10"
           cxx: "g++-10"
           cflags: "-m32 -O3"
@@ -285,13 +291,30 @@ jobs:
             libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
     env:
+      ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
       CXX: ${{ matrix.cxx }}
       CFLAGS: ${{ matrix.cflags }}
       CXXFLAGS: ${{ matrix.cflags }}
+      DEBIAN_FRONTEND: noninteractive
+      TZ: "Etc/UTC"
 
     steps:
     # Setup
+    - name: "Install deps for containers"
+      if: matrix.container != ''
+      run: apt-get update && apt-get install -y --no-install-recommends sudo unzip git tzdata
+
+    - name: "Add i386 architecture"
+      if: matrix.arch == 'i386'
+      run: sudo dpkg --add-architecture i386
+
+    - name: "APT update"
+      run: sudo apt update -y
+
+    - name: "Install deps"
+      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev
+
     - name: "Checkout repo"
       uses: actions/checkout@v4
       with:
@@ -307,16 +330,6 @@ jobs:
           https://builds.hex.pm
           https://repo.hex.pm
           https://cdn.jsdelivr.net/hex
-
-    - name: "Add i386 architecture"
-      if: matrix.arch == 'i386'
-      run: sudo dpkg --add-architecture i386
-
-    - name: "APT update"
-      run: sudo apt update -y
-
-    - name: "Install deps"
-      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev
 
     # Builder info
     - name: "System info"
@@ -436,10 +449,12 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        if command -v elixirc &> /dev/null
+        if command -v elixirc >/dev/null 2>&1 && command -v elixir >/dev/null 2>&1
         then
           valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
           ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+        else
+          echo "Elixir not installed, skipping Elixir tests"
         fi
 
     - name: "Install and smoke test"

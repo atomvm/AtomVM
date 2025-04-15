@@ -27,7 +27,7 @@
 %%-----------------------------------------------------------------------------
 -module(string).
 
--export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2, find/2, find/3]).
+-export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2, find/2, find/3, length/1]).
 
 %%-----------------------------------------------------------------------------
 %% @param Input a string or character to convert
@@ -251,3 +251,14 @@ find_list([_C | Rest] = String, SearchPattern, leading) ->
     end;
 find_list([], _SearchPattern, leading) ->
     nomatch.
+
+%%-----------------------------------------------------------------------------
+%% @param String string to compute the length of
+%% @doc Return the length of the string in characters.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec length(String :: unicode:chardata()) -> non_neg_integer().
+length(String) when is_list(String) ->
+    erlang:length(String);
+length(String) when is_binary(String) ->
+    erlang:length(unicode:characters_to_list(String)).

@@ -41,6 +41,7 @@ test() ->
     ok = test_any(),
     ok = test_list_match(),
     ok = test_flatten(),
+    ok = test_flatmap(),
     ok = test_filter(),
     ok = test_join(),
     ok = test_seq(),
@@ -205,6 +206,49 @@ test_flatten() ->
         lists:flatten([[a, b, c], [d, e, f], [g, h, i]]),
         [a, b, c, d, e, f, g, h, i]
     ),
+    ok.
+
+test_flatmap() ->
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> X + 1 end, []), []),
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> [X + 1] end, [1]), [2]),
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> [X * X] end, [1, 2, 3, 4, 5]), [1, 4, 9, 16, 25]),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [X + 1];
+                    1 -> [X + 2]
+                end
+            end,
+            [1, 2]
+        ),
+        [3, 3]
+    ),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [[X + 1]];
+                    1 -> [X + 2]
+                end
+            end,
+            [1, 2]
+        ),
+        [3, [3]]
+    ),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [X + 1];
+                    1 -> [X + 1, X + 2]
+                end
+            end,
+            [1, 4]
+        ),
+        [2, 3, 5]
+    ),
+    ?ASSERT_ERROR(lists:flatmap(fun(X) -> X + 1 end, [1]), badarg),
     ok.
 
 test_filter() ->

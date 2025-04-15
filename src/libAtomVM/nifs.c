@@ -3148,33 +3148,26 @@ static term nif_binary_last_1(Context *ctx, int argc, term argv[])
 static term nif_binary_part_3(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-
-    term bin_term = argv[0];
+    term pattern_term = argv[0];
     term pos_term = argv[1];
     term len_term = argv[2];
-
-    VALIDATE_VALUE(bin_term, term_is_binary);
+    VALIDATE_VALUE(pattern_term, term_is_binary);
     VALIDATE_VALUE(pos_term, term_is_integer);
     VALIDATE_VALUE(len_term, term_is_integer);
 
-    int bin_size = term_binary_size(bin_term);
     avm_int_t pos = term_to_int(pos_term);
     avm_int_t len = term_to_int(len_term);
-
-    if (len < 0) {
-        pos += len;
-        len = -len;
-    }
-
-    if (UNLIKELY((pos < 0) || (pos > bin_size) || (pos + len > bin_size))) {
+    BinaryPosLen slice;
+    if (UNLIKELY(!term_normalize_binary_pos_len(pattern_term, pos, len, &slice))) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    size_t size = term_sub_binary_heap_size(bin_term, len);
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, 1, &bin_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    size_t heap_size = term_sub_binary_heap_size(pattern_term, len);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 1, &pattern_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    return term_maybe_create_sub_binary(bin_term, pos, len, &ctx->heap, ctx->global);
+
+    return term_maybe_create_sub_binary(pattern_term, slice.pos, slice.len, &ctx->heap, ctx->global);
 }
 
 static term nif_binary_split(Context *ctx, int argc, term argv[])

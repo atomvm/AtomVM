@@ -48,6 +48,7 @@ set(ERLANG_MODULES
     net_kernel
     net_kernel_sup
     inet
+    init
     io_lib
     io
     lists

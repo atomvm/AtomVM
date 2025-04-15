@@ -322,7 +322,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_atom_to_binary, 1),
     TEST_CASE(test_unicode),
 
-    TEST_CASE_EXPECTED(test_binary_part, 12),
+    TEST_CASE(test_binary_part),
     TEST_CASE(test_binary_split),
     TEST_CASE(test_split_binary),
 

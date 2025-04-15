@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:get/0` and `erlang:erase/0`.
 - Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
 - Added support for 'ets:delete/1'.
+- Added `lists:flatmap/2`
+- Added `io:fwrite/1,2,3` and `io:format/3` as well as few io functions required by remote shell
+- Added `code:is_loaded/1` and `code:which/1`
+- Added several `io_lib` functions including `io_lib:fwrite/2` and `io_lib:write_atom/1`
+- Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
 - Added `application:get_env/2`
 
 ### Changed
@@ -113,6 +118,7 @@ memory error
 - Fix `is_function/2` guard
 - Fixed segfault when calling `lists:reverse/1` (#1600)
 - Fixed nif_atomvm_posix_read GC bug
+- Fixed `erlang:is_number/1` function, now returns true also for floats
 
 ### Changed
 
