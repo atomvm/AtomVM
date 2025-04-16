@@ -27,6 +27,7 @@
     sort/1,
     twice/1,
     fact/1,
+    divtrunc/2,
     the_out_of_order_list/0,
     the_ordered_list/0,
     get_machine_atom/0,
@@ -46,7 +47,8 @@
 start() ->
     test_mul() +
         parse_bigint() +
-        test_cmp().
+        test_cmp() +
+        conv_to_float().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -513,6 +515,31 @@ sort([Pivot | T]) ->
         sort([X || X <- T, X >= Pivot]);
 sort([]) ->
     [].
+
+conv_to_float() ->
+    Int0 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"1000000000000000000">>), 16)),
+    Int1 = ?MODULE:id(
+        erlang:binary_to_integer(?MODULE:id(<<"CAFECAFE1234000000000000000000">>), 16)
+    ),
+    Int2 = ?MODULE:id(
+        erlang:binary_to_integer(?MODULE:id(<<"-CAFECAFE1234000000000000000000">>), 16)
+    ),
+    Num1 = ?MODULE:mul(?MODULE:id(Int1), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
+    Num2 = ?MODULE:mul(?MODULE:id(Int2), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
+    Num3 = ?MODULE:id(Int1) * ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"2.0">>))),
+    true =
+        erlang:binary_to_integer(?MODULE:id(<<"CAFECAFE1234">>), 16) =:=
+            ?MODULE:divtrunc(?MODULE:id(Num1), Int0),
+    true =
+        erlang:binary_to_integer(?MODULE:id(<<"-CAFECAFE1234">>), 16) =:=
+            ?MODULE:divtrunc(?MODULE:id(Num2), Int0),
+    true =
+        erlang:binary_to_integer(?MODULE:id(<<"195FD95FC2468">>), 16) =:=
+            ?MODULE:divtrunc(?MODULE:id(Num3), Int0),
+    0.
+
+divtrunc(X, Y) ->
+    erlang:trunc(X / Y).
 
 id(X) ->
     X.

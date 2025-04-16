@@ -895,3 +895,34 @@ term term_get_map_assoc(term map, term key, GlobalContext *glb)
     }
     return term_get_map_value(map, pos);
 }
+
+avm_float_t term_conv_to_float(term t)
+{
+    if (term_is_float(t)) {
+        return term_to_float(t);
+    } else if (term_is_integer(t)) {
+        return term_to_int(t);
+    } else if (term_is_boxed_integer(t)) {
+        size_t boxed_size = term_boxed_size(t);
+        switch (boxed_size) {
+            case 0:
+                UNREACHABLE();
+            case 1:
+                return term_unbox_int(t);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2:
+                return term_unbox_int64(t);
+#endif
+            default: {
+                const intn_digit_t *num = (intn_digit_t *) term_intn_data(t);
+                size_t digits_per_term = (sizeof(term) / sizeof(intn_digit_t));
+                size_t len = boxed_size * digits_per_term;
+                term_integer_sign_t t_sign = term_boxed_integer_sign(t);
+
+                return intn_to_double(num, len, (intn_integer_sign_t) t_sign);
+            }
+        }
+    } else {
+        UNREACHABLE();
+    }
+}
