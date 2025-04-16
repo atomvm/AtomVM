@@ -59,10 +59,6 @@
 #define MAP_EXT_BASE_SIZE 5
 #define SMALL_ATOM_EXT_BASE_SIZE 2
 
-// Assuming two's-complement implementation of signed integers
-#define REMOVE_SIGN(val, unsigned_type)                                                            \
-    ((val) < 0 ? ~((unsigned_type) (val)) + 1 : (unsigned_type) (val))
-
 // MAINTENANCE NOTE.  Range checking on the external term buffer is only performed in
 // the calculate_heap_usage function, which will fail with an invalid term if there is
 // insufficient space in the external term buffer (preventing reading off the end of the
@@ -250,12 +246,13 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             }
             return INTEGER_EXT_SIZE;
         } else {
-            avm_uint64_t unsigned_val = REMOVE_SIGN(val, avm_uint64_t);
+            bool is_negative;
+            avm_uint64_t unsigned_val = int64_safe_unsigned_abs_set_flag(val, &is_negative);
             uint8_t num_bytes = get_num_bytes(unsigned_val);
             if (buf != NULL) {
                 buf[0] = SMALL_BIG_EXT;
                 buf[1] = num_bytes;
-                buf[2] = val < 0 ? 0x01 : 0x00;
+                buf[2] = is_negative ? 0x01 : 0x00;
                 write_bytes(buf + 3, unsigned_val);
             }
             return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
@@ -439,13 +436,9 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             // NB due to call to calculate_heap_usage, there is no loss of precision:
             // 1. 0 <= unsigned_value <= INT64_MAX if sign is 0
             // 2. 0 <= unsigned_value <= INT64_MAX + 1 if sign is not 0
-            avm_int64_t value = 0;
-            if (sign != 0x00) {
-                value = -((avm_int64_t) unsigned_value);
-            } else {
-                value = (avm_int64_t) unsigned_value;
-            }
+            avm_int64_t value = int64_cond_neg_unsigned(sign != 0x00, unsigned_value);
             *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
+
             return term_make_maybe_boxed_int64(value, heap);
         }
 
@@ -700,12 +693,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             // Compute the size with the sign as -2^27 or -2^59 can be encoded
             // on 1 term while 2^27 and 2^59 respectively (32/64 bits) cannot.
-            avm_int64_t value = 0;
-            if (sign != 0x00) {
-                value = -((avm_int64_t) unsigned_value);
-            } else {
-                value = (avm_int64_t) unsigned_value;
-            }
+            avm_int64_t value = int64_cond_neg_unsigned(sign != 0x00, unsigned_value);
             return term_boxed_integer_size(value);
         }
 

@@ -207,17 +207,6 @@ size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char *out_end)
 
 #endif
 
-static inline int64_t int64_safe_neg_unsigned(uint64_t u64)
-{
-    return (-((int64_t) (u64 - 1)) - 1);
-}
-
-static inline int64_t uint64_does_overflow_int64(uint64_t val, bool is_negative)
-{
-    return ((is_negative && (val > ((uint64_t) INT64_MAX) + 1))
-        || (!is_negative && (val > ((uint64_t) INT64_MAX))));
-}
-
 static inline bool is_base_10_digit(char c)
 {
     return (c >= '0') && (c <= '9');
@@ -265,7 +254,7 @@ static int buf10_to_int64(
         utmp /= 10;
         pos--;
     }
-    *out = is_negative ? int64_safe_neg_unsigned(utmp) : (int64_t) utmp;
+    *out = int64_cond_neg_unsigned(is_negative, utmp);
     return pos;
 
 #elif INTPTR_MAX == INT32_MAX
@@ -379,7 +368,7 @@ static int buf16_to_int64(
         utmp >>= 4;
         pos--;
     }
-    *out = is_negative ? int64_safe_neg_unsigned(utmp) : (int64_t) utmp;
+    *out = int64_cond_neg_unsigned(is_negative, utmp);
     return pos;
 
 #elif INTPTR_MAX == INT32_MAX
@@ -407,7 +396,7 @@ static int buf16_to_int64(
         pos--;
     }
     // this trick is useful to avoid any intermediate undefined/overflow
-    *out = is_negative ? int64_safe_neg_unsigned(combined) : (int64_t) combined;
+    *out = int64_cond_neg_unsigned(is_negative, combined);
 
     return pos;
 #else
