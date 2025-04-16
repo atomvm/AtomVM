@@ -6108,7 +6108,11 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(!term_is_number(src_value))) {
                         RAISE_ERROR(BADARITH_ATOM);
                     }
-                    ctx->fr[freg] = term_conv_to_float(src_value);
+                    avm_float_t converted = term_conv_to_float(src_value);
+                    if (UNLIKELY(!isfinite(converted))) {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                    ctx->fr[freg] = converted;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
