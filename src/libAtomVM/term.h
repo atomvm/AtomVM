@@ -1566,15 +1566,6 @@ static inline avm_float_t term_to_float(term t)
     return boxed_float->f;
 }
 
-static inline avm_float_t term_conv_to_float(term t)
-{
-    if (term_is_any_integer(t)) {
-        return term_maybe_unbox_int64(t);
-    } else {
-        return term_to_float(t);
-    }
-}
-
 static inline bool term_is_number(term t)
 {
     return term_is_any_integer(t) || term_is_float(t);
@@ -1623,6 +1614,8 @@ int term_fprint(FILE *fd, term t, const GlobalContext *global);
  * @returns the number of printed characters.
  */
 int term_snprint(char *buf, size_t size, term t, const GlobalContext *global);
+
+avm_float_t term_conv_to_float(term t);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)
