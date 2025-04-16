@@ -77,16 +77,8 @@ static inline void intn_copy(
     memset(out + num_len, 0, (extend_to - num_len) * sizeof(intn_digit_t));
 }
 
-static inline void int64_to_intn_2(int64_t i64, uint32_t out[], intn_integer_sign_t *out_sign)
+static inline void intn_u64_to_digits(uint64_t absu64, uint32_t out[])
 {
-    uint64_t absu64;
-    if (i64 < 0) {
-        absu64 = -i64;
-        *out_sign = IntNNegativeInteger;
-    } else {
-        absu64 = i64;
-        *out_sign = IntNPositiveInteger;
-    }
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     memcpy(out, &absu64, sizeof(absu64));
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -98,6 +90,28 @@ static inline void int64_to_intn_2(int64_t i64, uint32_t out[], intn_integer_sig
 #endif
 }
 
+static inline void int64_to_intn_2(int64_t i64, uint32_t out[], intn_integer_sign_t *out_sign)
+{
+    bool is_negative;
+    uint64_t absu64 = int64_safe_unsigned_abs_set_flag(i64, &is_negative);
+    *out_sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
+    intn_u64_to_digits(absu64, out);
+}
+
+static inline uint64_t intn_digits_to_u64(const intn_digit_t num[])
+{
+    uint64_t utmp;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    memcpy(&utmp, num, sizeof(uint64_t));
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    utmp = (((uint64_t) num[1] << 32) | (uint64_t) num[0]);
+#else
+#error "Unsupported endianess"
+#endif
+
+    return utmp;
+}
+
 static inline int64_t intn_2_digits_to_int64(
     const intn_digit_t num[], size_t len, intn_integer_sign_t sign)
 {
@@ -105,17 +119,10 @@ static inline int64_t intn_2_digits_to_int64(
         case 0:
             return 0;
         case 1:
-            return (sign == IntNPositiveInteger) ? (int32_t) num[0] : -((int32_t) num[0]);
+            return int32_cond_neg_unsigned(sign == IntNNegativeInteger, num[0]);
         case 2: {
-            int64_t ret;
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-            memcpy(&ret, num, sizeof(int64_t));
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-            ret = (((uint64_t) num[1] << 32) | (uint64_t) num[0]);
-#else
-#error "Unsupported endianess"
-#endif
-            return (sign == IntNPositiveInteger) ? ret : -ret;
+            uint64_t utmp = intn_digits_to_u64(num);
+            return int64_cond_neg_unsigned(sign == IntNNegativeInteger, utmp);
         }
         default:
             UNREACHABLE();
@@ -127,12 +134,8 @@ static inline bool intn_fits_int64(const intn_digit_t num[], size_t len, intn_in
     if (len < INTN_INT64_LEN) {
         return true;
     } else if (len == INTN_INT64_LEN) {
-        uint64_t u64 = (((uint64_t) num[1]) << 32) | (num[0]);
-        if (sign == IntNPositiveInteger) {
-            return u64 <= ((uint64_t) INT64_MAX);
-        } else {
-            return u64 <= ((uint64_t) INT64_MAX) + 1;
-        }
+        uint64_t u64 = intn_digits_to_u64(num);
+        return !uint64_does_overflow_int64(u64, sign == IntNNegativeInteger);
     }
     return false;
 }
