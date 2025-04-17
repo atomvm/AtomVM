@@ -61,6 +61,23 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
+/*
+ * they are the max/min values, that can be converted to int64, such as:
+ * avm_float_t fvalue;
+ * int64_t ivalue = fvalue;
+ * // ivalue is guarnteed to be valid (>= INT64_MIN and <= INT64_MAX)
+ *
+ * They have been found with few test C programs (and while playing with bits)
+ * do not use `(avm_float_t) INT64_MIN` or `(avm_float_t) INT64_MAX`.
+ */
+#ifdef AVM_USE_SINGLE_PRECISION
+    #define INT64_MIN_AS_AVM_FLOAT -9223372586610590720.0 // 0xDF000000 = -2^63
+    #define INT64_MAX_AS_AVM_FLOAT 9223371761976868863.0 // 0x5F000000 = 2^63
+#else
+    #define INT64_MIN_AS_AVM_FLOAT -9223372036854776832.0 // 0xC3E0000000000000 = -2^63
+    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
+#endif
+
 // intn.h and term.h headers are decoupled. We check here that sign enum values are matching.
 _Static_assert(
     (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
@@ -1246,28 +1263,37 @@ term bif_erlang_rem_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+static term float_to_integer_helper(
+    avm_float_t fresult, Context *ctx, uint32_t fail_label, int live)
+{
+    if (LIKELY(isfinite(fresult))) {
+        if ((fresult >= INT64_MIN_AS_AVM_FLOAT) && (fresult <= INT64_MAX_AS_AVM_FLOAT)) {
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, fail_label, live, fresult);
+#else
+            return make_maybe_boxed_int(ctx, fail_label, live, fresult);
+#endif
+        }
+    }
+
+    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+}
+
 term bif_erlang_ceil_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 {
     UNUSED(live);
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue <= INT64_MIN_AS_AVM_FLOAT) || (fvalue >= INT64_MAX_AS_AVM_FLOAT)) {
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-        }
 
-        avm_int64_t result;
-        #if AVM_USE_SINGLE_PRECISION
-            result = ceilf(fvalue);
-        #else
-            result = ceil(fvalue);
-        #endif
+        avm_float_t fresult;
+#if AVM_USE_SINGLE_PRECISION
+        fresult = ceilf(fvalue);
+#else
+        fresult = ceil(fvalue);
+#endif
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-            return make_maybe_boxed_int64(ctx, fail_label, live, result);
-        #else
-            return make_maybe_boxed_int(ctx, fail_label, live, result);
-        #endif
+        return float_to_integer_helper(fresult, ctx, fail_label, live);
     }
 
     if (term_is_any_integer(arg1)) {
@@ -1284,22 +1310,15 @@ term bif_erlang_floor_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue <= INT64_MIN_AS_AVM_FLOAT) || (fvalue >= INT64_MAX_AS_AVM_FLOAT)) {
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-        }
 
-        avm_int64_t result;
-        #if AVM_USE_SINGLE_PRECISION
-            result = floorf(fvalue);
-        #else
-            result = floor(fvalue);
-        #endif
+        avm_float_t fresult;
+#if AVM_USE_SINGLE_PRECISION
+        fresult = floorf(fvalue);
+#else
+        fresult = floor(fvalue);
+#endif
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-            return make_maybe_boxed_int64(ctx, fail_label, live, result);
-        #else
-            return make_maybe_boxed_int(ctx, fail_label, live, result);
-        #endif
+        return float_to_integer_helper(fresult, ctx, fail_label, live);
     }
 
     if (term_is_any_integer(arg1)) {
@@ -1316,22 +1335,15 @@ term bif_erlang_round_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue <= INT64_MIN_AS_AVM_FLOAT) || (fvalue >= INT64_MAX_AS_AVM_FLOAT)) {
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-        }
 
-        avm_int64_t result;
-        #if AVM_USE_SINGLE_PRECISION
-            result = llroundf(fvalue);
-        #else
-            result = llround(fvalue);
-        #endif
+        avm_float_t fresult;
+#if AVM_USE_SINGLE_PRECISION
+        fresult = roundf(fvalue);
+#else
+        fresult = round(fvalue);
+#endif
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-            return make_maybe_boxed_int64(ctx, fail_label, live, result);
-        #else
-            return make_maybe_boxed_int(ctx, fail_label, live, result);
-        #endif
+        return float_to_integer_helper(fresult, ctx, fail_label, live);
     }
 
     if (term_is_any_integer(arg1)) {
@@ -1348,22 +1360,15 @@ term bif_erlang_trunc_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
     if (term_is_float(arg1)) {
         avm_float_t fvalue = term_to_float(arg1);
-        if ((fvalue <= INT64_MIN_AS_AVM_FLOAT) || (fvalue >= INT64_MAX_AS_AVM_FLOAT)) {
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-        }
 
-        avm_int64_t result;
-        #if AVM_USE_SINGLE_PRECISION
-            result = truncf(fvalue);
-        #else
-            result = trunc(fvalue);
-        #endif
+        avm_float_t fresult;
+#if AVM_USE_SINGLE_PRECISION
+        fresult = truncf(fvalue);
+#else
+        fresult = trunc(fvalue);
+#endif
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-            return make_maybe_boxed_int64(ctx, fail_label, live, result);
-        #else
-            return make_maybe_boxed_int(ctx, fail_label, live, result);
-        #endif
+        return float_to_integer_helper(fresult, ctx, fail_label, live);
     }
 
     if (term_is_any_integer(arg1)) {
