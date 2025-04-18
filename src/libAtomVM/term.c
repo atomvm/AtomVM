@@ -24,6 +24,7 @@
 #include "atom_table.h"
 #include "context.h"
 #include "interop.h"
+#include "intn.h"
 #include "module.h"
 #include "tempstack.h"
 
@@ -393,8 +394,21 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             case 2:
                 return fun->print(fun, AVM_INT64_FMT, term_unbox_int64(t));
 #endif
-            default:
-                AVM_ABORT();
+            default: {
+                size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
+                size_t boxed_size = term_intn_size(t);
+                const intn_digit_t *intn_data = (const intn_digit_t *) term_intn_data(t);
+                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
+                size_t unused_s_len;
+                char *s = intn_to_string(
+                    intn_data, boxed_size * digits_per_term, sign, 10, &unused_s_len);
+                if (IS_NULL_PTR(s)) {
+                    return -1;
+                }
+                int print_res = fun->print(fun, "%s", s);
+                free(s);
+                return print_res;
+            }
         }
 
     } else if (term_is_float(t)) {
@@ -623,12 +637,105 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
             }
 
         } else if (term_is_any_integer(t) && term_is_any_integer(other)) {
-            avm_int64_t t_int = term_maybe_unbox_int64(t);
-            avm_int64_t other_int = term_maybe_unbox_int64(other);
-            if (t_int == other_int) {
-                CMP_POP_AND_CONTINUE();
+            term_integer_sign_t t_sign;
+            size_t t_size;
+            if (term_is_boxed(t)) {
+                t_sign = term_boxed_integer_sign(t);
+                t_size = term_boxed_size(t);
             } else {
-                result = (t_int > other_int) ? TermGreaterThan : TermLessThan;
+                t_sign = term_integer_sign_from_int(term_to_int(t));
+                t_size = 0;
+            }
+            term_integer_sign_t other_sign;
+            size_t other_size;
+            if (term_is_boxed(other)) {
+                other_sign = term_boxed_integer_sign(other);
+                other_size = term_boxed_size(other);
+            } else {
+                other_sign = term_integer_sign_from_int(term_to_int(other));
+                other_size = 0;
+            }
+
+            _Static_assert(
+                TermPositiveInteger < TermNegativeInteger, "Unexpected sign definition in term.h");
+            if (t_sign < other_sign) {
+                result = TermGreaterThan;
+                break;
+            } else if (t_sign > other_sign) {
+                result = TermLessThan;
+                break;
+            }
+
+            TermCompareResult more_digits_result;
+            TermCompareResult less_digits_result;
+            if (t_sign == TermPositiveInteger) {
+                more_digits_result = TermGreaterThan;
+                less_digits_result = TermLessThan;
+            } else {
+                more_digits_result = TermLessThan;
+                less_digits_result = TermGreaterThan;
+            }
+
+            if (t_size == other_size) {
+                const term *t_ptr = term_to_const_term_ptr(t);
+                const term *other_ptr = term_to_const_term_ptr(other);
+                bool equals = true;
+                if (t_size == 1) {
+                    if (t_ptr[1] != other_ptr[1]) {
+                        result = (t_ptr[1] > other_ptr[1]) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                } else if (t_size == 2) {
+                    avm_int64_t t64 = term_unbox_int64(t);
+                    avm_int64_t other64 = term_unbox_int64(other);
+                    if (t64 != other64) {
+                        result = (t64 > other64) ? TermGreaterThan : TermLessThan;
+                        break;
+                    }
+#endif
+                } else {
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+                    // on 64-bit big endian systems, term size is 64 bit, so a term
+                    // contains 2 intn_digit_t
+                    // however inside a big integer digits are in "little endian" order
+                    // so comparison cannot be directly done in 64-bit chunks
+                    intn_digit_t *t_digits = (intn_digit_t *) t_ptr;
+                    intn_digit_t *other_digits = (intn_digit_t *) other_ptr;
+                    size_t digits_per_term = (sizeof(term) / sizeof(intn_digit_t));
+                    size_t digit_count = (1 + t_size) * digits_per_term;
+                    // t_digits[0] ... t_digits[digits_per_term - 1] is the boxed header
+                    for (size_t i = digit_count - 1; i >= digits_per_term; i--) {
+                        if (t_digits[i] != other_digits[i]) {
+                            result = (t_digits[i] > other_digits[i]) ? more_digits_result
+                                                                     : less_digits_result;
+                            equals = false;
+                            break;
+                        }
+                    }
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+                    for (size_t i = t_size; i >= 1; i--) {
+                        if (t_ptr[i] != other_ptr[i]) {
+                            result = (t_ptr[i] > other_ptr[i]) ? more_digits_result
+                                                               : less_digits_result;
+                            equals = false;
+                            break;
+                        }
+                    }
+#else
+#error "Unsupported endianess"
+#endif
+                }
+                if (equals) {
+                    CMP_POP_AND_CONTINUE();
+                } else {
+                    break;
+                }
+            } else if (t_size > other_size) {
+                result = more_digits_result;
+                break;
+            } else {
+                result = less_digits_result;
                 break;
             }
 
@@ -787,4 +894,35 @@ term term_get_map_assoc(term map, term key, GlobalContext *glb)
         AVM_ABORT();
     }
     return term_get_map_value(map, pos);
+}
+
+avm_float_t term_conv_to_float(term t)
+{
+    if (term_is_float(t)) {
+        return term_to_float(t);
+    } else if (term_is_integer(t)) {
+        return term_to_int(t);
+    } else if (term_is_boxed_integer(t)) {
+        size_t boxed_size = term_boxed_size(t);
+        switch (boxed_size) {
+            case 0:
+                UNREACHABLE();
+            case 1:
+                return term_unbox_int(t);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2:
+                return term_unbox_int64(t);
+#endif
+            default: {
+                const intn_digit_t *num = (intn_digit_t *) term_intn_data(t);
+                size_t digits_per_term = (sizeof(term) / sizeof(intn_digit_t));
+                size_t len = boxed_size * digits_per_term;
+                term_integer_sign_t t_sign = term_boxed_integer_sign(t);
+
+                return intn_to_double(num, len, (intn_integer_sign_t) t_sign);
+            }
+        }
+    } else {
+        UNREACHABLE();
+    }
 }

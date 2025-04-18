@@ -582,6 +582,8 @@ struct Test tests[] = {
 
     TEST_CASE(test_ets),
 
+    TEST_CASE(bigint),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
