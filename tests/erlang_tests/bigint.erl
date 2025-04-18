@@ -48,7 +48,7 @@ start() ->
     test_mul() +
         parse_bigint() +
         test_cmp() +
-        conv_to_float().
+        conv_to_from_float().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -516,7 +516,9 @@ sort([Pivot | T]) ->
 sort([]) ->
     [].
 
-conv_to_float() ->
+conv_to_from_float() ->
+    % to float
+
     Int0 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"1000000000000000000">>), 16)),
     Int1 = ?MODULE:id(
         erlang:binary_to_integer(?MODULE:id(<<"CAFECAFE1234000000000000000000">>), 16)
@@ -524,6 +526,7 @@ conv_to_float() ->
     Int2 = ?MODULE:id(
         erlang:binary_to_integer(?MODULE:id(<<"-CAFECAFE1234000000000000000000">>), 16)
     ),
+    Int3 = ?MODULE:mul(?MODULE:id(Int1), 2),
     Num1 = ?MODULE:mul(?MODULE:id(Int1), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
     Num2 = ?MODULE:mul(?MODULE:id(Int2), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
     Num3 = ?MODULE:id(Int1) * ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"2.0">>))),
@@ -536,6 +539,22 @@ conv_to_float() ->
     true =
         erlang:binary_to_integer(?MODULE:id(<<"195FD95FC2468">>), 16) =:=
             ?MODULE:divtrunc(?MODULE:id(Num3), Int0),
+
+    % from float
+
+    Int1 = ?MODULE:id(trunc(?MODULE:id(Num1))),
+    Int2 = ?MODULE:id(round(?MODULE:id(Num2))),
+    Int3 = ?MODULE:id(floor(?MODULE:id(Num3))),
+    Int3 = ?MODULE:id(ceil(?MODULE:id(Num3))),
+
+    Int64Max = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"7FFFFFFFFFFFFFFF">>), 16)),
+    true = (Int64Max >= ?MODULE:id(trunc(?MODULE:id(9223372036854775295.0)))),
+    true = (Int64Max < ?MODULE:id(trunc(?MODULE:id(9223372036854775296.0)))),
+
+    Int64Min = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-8000000000000000">>), 16)),
+    true = (Int64Min =< ?MODULE:id(trunc(?MODULE:id(-9223372036854776832.0)))),
+    true = (Int64Min > ?MODULE:id(trunc(?MODULE:id(-9223372036854776833.0)))),
+
     0.
 
 divtrunc(X, Y) ->

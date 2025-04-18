@@ -1273,6 +1273,13 @@ static term float_to_integer_helper(
 #else
             return make_maybe_boxed_int(ctx, fail_label, live, fresult);
 #endif
+        } else {
+            intn_digit_t res[INTN_MAX_RES_LEN];
+            intn_integer_sign_t sign;
+            size_t len = intn_from_double(fresult, res, &sign);
+            if (LIKELY(len > 0)) {
+                return make_bigint(ctx, fail_label, live, res, len, sign);
+            }
         }
     }
 
