@@ -71,6 +71,7 @@ int intn_parse(
     const char buf[], size_t buf_len, int base, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
 double intn_to_double(const intn_digit_t *num, size_t len, intn_integer_sign_t sign);
+int intn_from_double(double dnum, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
 static inline void intn_copy(
     const intn_digit_t *num, size_t num_len, intn_digit_t *out, size_t extend_to)

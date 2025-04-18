@@ -23,13 +23,13 @@
 -export([start/0]).
 
 start() ->
-    to_int(id(id([1.0e+20, 0]))).
+    to_int(id(id([1.0e+78, 0]))).
 
 to_int(A) ->
     try round(id(A)) of
         B when is_integer(B) ->
             "BEAM" = erlang:system_info(machine),
-            "100000000000000000000" = integer_to_list(B),
+            79 = length(integer_to_list(B)),
             0;
         _Other ->
             1
