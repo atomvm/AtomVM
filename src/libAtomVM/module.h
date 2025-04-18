@@ -323,7 +323,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_index)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
@@ -333,7 +333,7 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
     // arity
     // label
     // index
-    uint32_t n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    uint32_t n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 
     return n_freeze;
@@ -342,17 +342,17 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
 static inline void module_get_fun(const Module *this_module, int fun_index, uint32_t *label, uint32_t *arity, uint32_t *n_freeze)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
     }
 
     // fun atom index
-    *arity = READ_32_ALIGNED(table_data + fun_index * 24 + 4 + 12);
-    *label = READ_32_ALIGNED(table_data + fun_index * 24 + 8 + 12);
+    *arity = READ_32_UNALIGNED(table_data + fun_index * 24 + 4 + 12);
+    *label = READ_32_UNALIGNED(table_data + fun_index * 24 + 8 + 12);
     // index
-    *n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    *n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 }
 
