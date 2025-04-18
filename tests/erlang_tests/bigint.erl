@@ -555,6 +555,28 @@ conv_to_from_float() ->
     true = (Int64Min =< ?MODULE:id(trunc(?MODULE:id(-9223372036854776832.0)))),
     true = (Int64Min > ?MODULE:id(trunc(?MODULE:id(-9223372036854776833.0)))),
 
+    % test limits and comparisons
+    MaxInt = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    MaxIntAsFloat = erlang:float(?MODULE:id(MaxInt)),
+    true = (?MODULE:id(1.111111111111111e77) < MaxIntAsFloat),
+    true = (MaxIntAsFloat < ?MODULE:id(1.888888888888888e77)),
+
+    MinInt = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    MinIntAsFloat = erlang:float(?MODULE:id(MinInt)),
+    true = (?MODULE:id(-1.111111111111111e77) > MinIntAsFloat),
+    true = (MinIntAsFloat > ?MODULE:id(-1.888888888888888e77)),
+
+    % test overflows
+    expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
+    expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end),
+
+    true = (trunc(?MODULE:id(1.157920892373160e77)) > ?MODULE:pow(2, 255)),
+    true = (trunc(?MODULE:id(-1.157920892373160e77)) < ?MODULE:pow(-2, 255)),
+
     0.
 
 divtrunc(X, Y) ->
