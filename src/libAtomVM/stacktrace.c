@@ -83,8 +83,10 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
     const void *key = filename;
     if (IS_NULL_PTR(filename)) {
         key = mod;
-        AtomString module_name_atom_str = globalcontext_atomstring_from_term(global, module_get_name(mod));
-        filename_len = atom_string_len(module_name_atom_str) + 4; // ".erl"
+        size_t module_name_len;
+        const uint8_t *module_name_data = atom_table_get_atom_string(global->atom_table, term_to_atom_index(module_get_name(mod)), &module_name_len);
+        UNUSED(module_name_data);
+        filename_len = module_name_len + 4; // ".erl"
     }
     for (size_t i = 0; i < locations_set_size; i++) {
         if (locations_set[i] == key) {
@@ -358,15 +360,16 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
                 term path = find_path_created(key, module_paths, module_path_idx);
                 if (term_is_invalid_term(path)) {
                     if (IS_NULL_PTR(filename)) {
-                        AtomString module_name_atom_str = globalcontext_atomstring_from_term(ctx->global, module_get_name(cp_mod));
-                        uint8_t *default_filename = malloc(atom_string_len(module_name_atom_str) + 4);
+                        size_t module_name_len;
+                        const uint8_t *module_name_data = atom_table_get_atom_string(ctx->global->atom_table, term_to_atom_index(module_get_name(cp_mod)), &module_name_len);
+                        uint8_t *default_filename = malloc(module_name_len + 4);
                         if (IS_NULL_PTR(default_filename)) {
                             free(module_paths);
                             return OUT_OF_MEMORY_ATOM;
                         }
-                        memcpy(default_filename, atom_string_data(module_name_atom_str), atom_string_len(module_name_atom_str));
-                        memcpy(default_filename + atom_string_len(module_name_atom_str), ".erl", 4);
-                        path = term_from_string(default_filename, atom_string_len(module_name_atom_str) + 4, &ctx->heap);
+                        memcpy(default_filename, module_name_data, module_name_len);
+                        memcpy(default_filename + module_name_len, ".erl", 4);
+                        path = term_from_string(default_filename, module_name_len + 4, &ctx->heap);
                         free(default_filename);
                     } else {
                         path = term_from_string(filename, filename_len, &ctx->heap);
@@ -381,12 +384,12 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
         }
         term_put_tuple_element(frame_i, 3, aux_data);
 
-        AtomString function_name = NULL;
+        atom_index_t function_name;
         int arity = 0;
-        bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity, glb);
+        bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity);
 
         if (LIKELY(result)) {
-            term_put_tuple_element(frame_i, 1, globalcontext_make_atom(glb, function_name));
+            term_put_tuple_element(frame_i, 1, term_from_atom_index(function_name));
             term_put_tuple_element(frame_i, 2, term_from_int(arity));
         } else {
             term_put_tuple_element(frame_i, 1, UNDEFINED_ATOM);
