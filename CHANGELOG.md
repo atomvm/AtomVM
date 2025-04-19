@@ -174,6 +174,9 @@ instead
 when `network:stop/0` was used, see issue [#643](https://github.com/atomvm/AtomVM/issues/643)
 - `uart:open/1,2` now works with uppercase peripheral names
 
+### Removed
+- Deprecated `network_fsm` module
+
 ## [0.6.4] - 2024-08-18
 
 ### Added
