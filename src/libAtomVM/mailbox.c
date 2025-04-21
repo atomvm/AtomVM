@@ -96,7 +96,9 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             break;
         }
         case KillSignal:
-        case TrapAnswerSignal: {
+        case TrapAnswerSignal:
+        case LinkExitSignal:
+        case MonitorDownSignal: {
             struct TermSignal *term_signal = CONTAINER_OF(m, struct TermSignal, base);
             term mso_list = term_signal->storage[STORAGE_MSO_LIST_INDEX];
             HeapFragment *fragment = mailbox_message_to_heap_fragment(term_signal, term_signal->heap_end);
@@ -109,10 +111,15 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             free(request_signal);
             break;
         }
-        case TrapExceptionSignal:
-        case UnlinkSignal: {
+        case TrapExceptionSignal: {
             struct ImmediateSignal *immediate_signal = CONTAINER_OF(m, struct ImmediateSignal, base);
             free(immediate_signal);
+            break;
+        }
+        case UnlinkIDSignal:
+        case UnlinkIDAckSignal: {
+            struct ImmediateRefSignal *immediate_ref_signal = CONTAINER_OF(m, struct ImmediateRefSignal, base);
+            free(immediate_ref_signal);
             break;
         }
         case FlushMonitorSignal:
@@ -289,6 +296,20 @@ void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_tic
     ref_signal->ref_ticks = ref_ticks;
 
     mailbox_post_message(c, &ref_signal->base);
+}
+
+void mailbox_send_immediate_ref_signal(Context *c, enum MessageType type, term immediate, uint64_t ref_ticks)
+{
+    struct ImmediateRefSignal *immediate_ref_signal = malloc(sizeof(struct ImmediateRefSignal));
+    if (IS_NULL_PTR(immediate_ref_signal)) {
+        fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        return;
+    }
+    immediate_ref_signal->base.type = type;
+    immediate_ref_signal->immediate = immediate;
+    immediate_ref_signal->ref_ticks = ref_ticks;
+
+    mailbox_post_message(c, &immediate_ref_signal->base);
 }
 
 void mailbox_send_monitor_signal(Context *c, enum MessageType type, struct Monitor *monitor)
