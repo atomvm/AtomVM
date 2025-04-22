@@ -46,11 +46,21 @@
 #define INTN_DIV_OUT_LEN(m, n) ((m) - (n) + 1 + 1)
 #define INTN_ABS_OUT_LEN(m) ((m) + 1)
 
+#define INTN_MAX_UNSIGNED_BYTES_SIZE 32
+#define INTN_MAX_UNSIGNED_BITS_SIZE 256
+
 typedef enum
 {
     IntNPositiveInteger = 0,
     IntNNegativeInteger = 4
 } intn_integer_sign_t;
+
+typedef enum
+{
+    IntnUnsignedBigEndian = 0,
+    IntnSigned = 1,
+    IntnLittleEndian = 2
+} intn_from_integer_options_t;
 
 typedef uint32_t intn_digit_t;
 
@@ -72,6 +82,9 @@ int intn_parse(
 
 double intn_to_double(const intn_digit_t *num, size_t len, intn_integer_sign_t sign);
 int intn_from_double(double dnum, intn_digit_t *out, intn_integer_sign_t *out_sign);
+
+int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_integer_options_t opts,
+    intn_digit_t out[], intn_integer_sign_t *out_sign);
 
 static inline void intn_copy(
     const intn_digit_t *num, size_t num_len, intn_digit_t *out, size_t extend_to)

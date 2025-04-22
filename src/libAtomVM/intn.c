@@ -622,3 +622,75 @@ int intn_parse(
     // let's count at the end
     return out_len;
 }
+
+static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[])
+{
+    if (sign == IntNNegativeInteger) {
+        uint32_t carry = 1;
+        size_t i;
+        int last_non_zero = -1;
+        for (i = 0; i < INTN_MAX_RES_LEN - 1; i++) {
+            uint64_t temp = (uint64_t) (~out[i]) + (uint64_t) carry;
+            if ((uint32_t) temp != 0) {
+                last_non_zero = i;
+            }
+            out[i] = (uint32_t) temp;
+            carry = temp >> 32;
+        }
+        if (carry) {
+            out[i] = carry;
+            return i;
+        } else {
+            return last_non_zero + 1;
+        }
+    } else {
+        return intn_count_digits(out, INTN_MAX_IN_LEN);
+    }
+}
+
+int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_integer_options_t opts,
+    intn_digit_t out[], intn_integer_sign_t *out_sign)
+{
+    size_t msb_index;
+    if (opts & IntnLittleEndian) {
+        msb_index = in_size - 1;
+    } else {
+        msb_index = 0;
+    }
+
+    uint8_t filler = 0x00;
+    intn_integer_sign_t sign = IntNPositiveInteger;
+    if (opts & IntnSigned) {
+        if (in[msb_index] & 0x80) {
+            filler = 0xFF;
+            sign = IntNNegativeInteger;
+        }
+        *out_sign = sign;
+    }
+
+    memset(out, filler, INTN_MAX_RES_LEN * sizeof(intn_digit_t));
+
+    size_t dest_j = in_size;
+
+    if (UNLIKELY(dest_j / sizeof(intn_digit_t) >= INTN_MAX_RES_LEN)) {
+        return -1;
+    }
+
+    if (opts & IntnLittleEndian) {
+        for (int i = in_size - 1; i >= 0; i--) {
+            dest_j--;
+            size_t dest_block = dest_j / sizeof(intn_digit_t);
+            out[dest_block] <<= 8;
+            out[dest_block] |= in[i];
+        }
+    } else {
+        for (size_t i = 0; i < in_size; i++) {
+            dest_j--;
+            size_t dest_block = dest_j / sizeof(intn_digit_t);
+            out[dest_block] <<= 8;
+            out[dest_block] |= in[i];
+        }
+    }
+
+    return cond_neg_in_place(sign, out);
+}
