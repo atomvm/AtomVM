@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "intn.h"
 #include "memory.h"
 #include "refc_binary.h"
 #include "utils.h"
@@ -983,6 +984,25 @@ static inline size_t term_intn_size(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return term_get_size_from_boxed_header(boxed_value[0]);
+}
+
+static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+{
+    size_t bytes = n * sizeof(intn_digit_t);
+    size_t rounded = ((bytes + 7) >> 3) << 3;
+    *intn_data_size = rounded / sizeof(term);
+
+    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        // we need to distinguish between "small" boxed integers, that are integers
+        // up to int64, and bigger integers.
+        // The real difference is that "small" boxed integers use 2-complement,
+        // real bigints not (and also endianess might differ).
+        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
+        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
+        rounded = *intn_data_size * sizeof(term);
+    }
+
+    *rounded_num_len = rounded / sizeof(intn_digit_t);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)

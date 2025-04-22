@@ -713,25 +713,6 @@ term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
-static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
-{
-    size_t bytes = n * sizeof(intn_digit_t);
-    size_t rounded = ((bytes + 7) >> 3) << 3;
-    *intn_data_size = rounded / sizeof(term);
-
-    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
-        // we need to distinguish between "small" boxed integers, that are integers
-        // up to int64, and bigger integers.
-        // The real difference is that "small" boxed integers use 2-complement,
-        // real bigints not (and also endianess might differ).
-        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
-        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
-        rounded = *intn_data_size * sizeof(term);
-    }
-
-    *rounded_num_len = rounded / sizeof(intn_digit_t);
-}
-
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
@@ -744,7 +725,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     if (!intn_fits_int64(bigres, count, sign)) {
         size_t intn_data_size;
         size_t rounded_res_len;
-        intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+        term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
 
         if (UNLIKELY(memory_ensure_free_with_roots(
                          ctx, BOXED_INTN_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)

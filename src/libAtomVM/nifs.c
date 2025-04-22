@@ -1905,30 +1905,11 @@ static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[])
     return result;
 }
 
-static inline void intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
-{
-    size_t bytes = n * sizeof(intn_digit_t);
-    size_t rounded = ((bytes + 7) >> 3) << 3;
-    *intn_data_size = rounded / sizeof(term);
-
-    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
-        // we need to distinguish between "small" boxed integers, that are integers
-        // up to int64, and bigger integers.
-        // The real difference is that "small" boxed integers use 2-complement,
-        // real bigints not (and also endianess might differ).
-        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
-        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
-        rounded = *intn_data_size * sizeof(term);
-    }
-
-    *rounded_num_len = rounded / sizeof(intn_digit_t);
-}
-
 static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
     size_t intn_data_size;
     size_t rounded_res_len;
-    intn_to_term_size(bigres_len, &intn_data_size, &rounded_res_len);
+    term_intn_to_term_size(bigres_len, &intn_data_size, &rounded_res_len);
 
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
