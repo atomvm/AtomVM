@@ -48,7 +48,8 @@ start() ->
     test_mul() +
         parse_bigint() +
         test_cmp() +
-        conv_to_from_float().
+        conv_to_from_float() +
+        external_term_decode().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -581,6 +582,38 @@ conv_to_from_float() ->
 
 divtrunc(X, Y) ->
     erlang:trunc(X / Y).
+
+external_term_decode() ->
+    T1B = ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF9E024D5C1207BCB8FCDD50C17BBBB">>),
+    T1 = ?MODULE:id(erlang:binary_to_integer(T1B, 16)),
+    T1 = ?MODULE:id(
+        erlang:binary_to_term(
+            ?MODULE:id(
+                <<131, 110, 32, 0, 187, 187, 23, 12, 213, 205, 143, 203, 123, 32, 193, 213, 36, 224,
+                    249, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                    255, 255>>
+            )
+        )
+    ),
+    T2B = ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF9E024D5C1207BCB8FCDD50C17BDA">>),
+    T2 = ?MODULE:id(erlang:binary_to_integer(T2B, 16)),
+    T2 = ?MODULE:id(
+        erlang:binary_to_term(
+            ?MODULE:id(
+                <<131, 110, 32, 0, 218, 123, 193, 80, 221, 252, 184, 188, 7, 18, 92, 77, 2, 158,
+                    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                    255, 15>>
+            )
+        )
+    ),
+    T3B = ?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>),
+    T3 = ?MODULE:id(erlang:binary_to_integer(T3B, 16)),
+    T3 = ?MODULE:id(
+        erlang:binary_to_term(
+            ?MODULE:id(<<131, 110, 8, 1, 255, 255, 255, 255, 255, 255, 255, 255>>)
+        )
+    ),
+    0.
 
 id(X) ->
     X.

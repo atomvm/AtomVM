@@ -430,16 +430,39 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
         }
 
         case SMALL_BIG_EXT: {
-            uint8_t num_bytes = external_term_buf[1];
-            uint8_t sign = external_term_buf[2];
-            avm_uint64_t unsigned_value = read_bytes(external_term_buf + 3, num_bytes);
-            // NB due to call to calculate_heap_usage, there is no loss of precision:
-            // 1. 0 <= unsigned_value <= INT64_MAX if sign is 0
-            // 2. 0 <= unsigned_value <= INT64_MAX + 1 if sign is not 0
-            avm_int64_t value = int64_cond_neg_unsigned(sign != 0x00, unsigned_value);
-            *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
+            uint8_t int_len = external_term_buf[1];
+            uint8_t sign_byte = external_term_buf[2];
+            const uint8_t *int_bytes = external_term_buf + 3;
+            bool is_negative = sign_byte != 0x00;
 
-            return term_make_maybe_boxed_int64(value, heap);
+            if (int_len <= 8) {
+                avm_uint64_t unsigned_value = read_bytes(int_bytes, int_len);
+                if (!uint64_does_overflow_int64(unsigned_value, is_negative)) {
+                    avm_int64_t value = int64_cond_neg_unsigned(is_negative, unsigned_value);
+                    *eterm_size = SMALL_BIG_EXT_BASE_SIZE + int_len;
+                    return term_make_maybe_boxed_int64(value, heap);
+                }
+            }
+
+            // int_len > 8 || uint64_does_overflow_int64
+            intn_digit_t bigint[INTN_MAX_RES_LEN];
+            int count = intn_from_integer_bytes(int_bytes, int_len, IntnLittleEndian, bigint, NULL);
+            if (UNLIKELY(count < 0)) {
+                // this means a bug, `calculate_heap_usage` already checks this
+                AVM_ABORT();
+            }
+
+            size_t intn_data_size;
+            size_t rounded_res_len;
+            term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+
+            intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
+            term bigint_term
+                = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, heap);
+            intn_digit_t *dest_buf = (void *) term_intn_data(bigint_term);
+            intn_copy(bigint, count, dest_buf, rounded_res_len);
+
+            return bigint_term;
         }
 
         case ATOM_EXT: {
@@ -681,20 +704,29 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
 
         case SMALL_BIG_EXT: {
             size_t num_bytes = external_term_buf[1];
-            if (UNLIKELY(num_bytes > 8 || remaining < (SMALL_BIG_EXT_BASE_SIZE + num_bytes))) {
+            if (UNLIKELY(remaining < (SMALL_BIG_EXT_BASE_SIZE + num_bytes)
+                    || num_bytes > INTN_MAX_UNSIGNED_BYTES_SIZE)) {
                 return INVALID_TERM_SIZE;
             }
             uint8_t sign = external_term_buf[2];
+            bool is_negative = sign != 0x00;
             *eterm_size = SMALL_BIG_EXT_BASE_SIZE + num_bytes;
-            avm_uint64_t unsigned_value = read_bytes(external_term_buf + 3, num_bytes);
-            // NB.  We currently support max 64-bit signed integers (assuming two's complement signed values in 63 bits)
-            if (UNLIKELY((sign == 0 && unsigned_value > INT64_MAX) || (sign != 0 && unsigned_value > (((avm_uint64_t) INT64_MAX) + 1)))) {
-                return INVALID_TERM_SIZE;
+
+            if (LIKELY(num_bytes <= 8)) {
+                avm_uint64_t unsigned_value = read_bytes(external_term_buf + 3, num_bytes);
+                if (!uint64_does_overflow_int64(unsigned_value, is_negative)) {
+                    // Compute the size with the sign as -2^27 or -2^59 can be encoded
+                    // on 1 term while 2^27 and 2^59 respectively (32/64 bits) cannot.
+                    avm_int64_t value = int64_cond_neg_unsigned(is_negative, unsigned_value);
+                    return term_boxed_integer_size(value);
+                }
             }
-            // Compute the size with the sign as -2^27 or -2^59 can be encoded
-            // on 1 term while 2^27 and 2^59 respectively (32/64 bits) cannot.
-            avm_int64_t value = int64_cond_neg_unsigned(sign != 0x00, unsigned_value);
-            return term_boxed_integer_size(value);
+
+            // num_bytes > 8 bytes || uint64_does_overflow_int64
+            size_t data_size;
+            size_t unused_rounded_len;
+            term_intn_to_term_size(num_bytes, &data_size, &unused_rounded_len);
+            return BOXED_INTN_SIZE(data_size);
         }
 
         case ATOM_EXT: {
