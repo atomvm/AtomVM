@@ -80,26 +80,70 @@ static void scheduler_process_native_signal_messages(Context *ctx)
     // This mirrors PROCESS_SIGNAL_MESSAGES macro of emulated processes, but
     // for native processes.
     MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
+    bool reprocess_outer = false;
     while (signal_message) {
-        if (signal_message->type == KillSignal) {
-            struct TermSignal *kill_signal = CONTAINER_OF(signal_message, struct TermSignal, base);
-            context_process_kill_signal(ctx, kill_signal);
-        } else if (signal_message->type == ProcessInfoRequestSignal) {
-            struct BuiltInAtomRequestSignal *request_signal
-                = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
-            context_process_process_info_request_signal(ctx, request_signal);
-        } else if (signal_message->type == MonitorSignal) {
-            struct MonitorPointerSignal *monitor_signal
-                = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
-            context_add_monitor(ctx, monitor_signal->monitor);
-        } else if (signal_message->type == DemonitorSignal) {
-            struct RefSignal *ref_signal
-                = CONTAINER_OF(signal_message, struct RefSignal, base);
-            context_demonitor(ctx, ref_signal->ref_ticks);
+        switch (signal_message->type) {
+            case KillSignal: {
+                struct TermSignal *kill_signal = CONTAINER_OF(signal_message, struct TermSignal, base);
+                context_process_kill_signal(ctx, kill_signal);
+                break;
+            }
+            case ProcessInfoRequestSignal: {
+                struct BuiltInAtomRequestSignal *request_signal
+                    = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+                context_process_process_info_request_signal(ctx, request_signal, false);
+                break;
+            }
+            case MonitorSignal: {
+                struct MonitorPointerSignal *monitor_signal
+                    = CONTAINER_OF(signal_message, struct MonitorPointerSignal, base);
+                context_add_monitor(ctx, monitor_signal->monitor);
+                break;
+            }
+            case DemonitorSignal: {
+                struct RefSignal *ref_signal
+                    = CONTAINER_OF(signal_message, struct RefSignal, base);
+                context_demonitor(ctx, ref_signal->ref_ticks);
+                break;
+            }
+            case UnlinkIDSignal: {
+                struct ImmediateRefSignal *immediate_ref_signal
+                    = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);
+                context_ack_unlink(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks, false);
+                break;
+            }
+            case UnlinkIDAckSignal: {
+                struct ImmediateRefSignal *immediate_ref_signal
+                    = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);
+                context_unlink_ack(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks);
+                break;
+            }
+            case LinkExitSignal: {
+                struct TermSignal *link_exit_signal
+                    = CONTAINER_OF(signal_message, struct TermSignal, base);
+                if (context_process_link_exit_signal(ctx, link_exit_signal)) {
+                    reprocess_outer = true;
+                }
+                break;
+            }
+            case GCSignal: // ports don't GC
+            case TrapAnswerSignal: // ports cannot be trapped
+            case TrapExceptionSignal: // id.
+            case FlushMonitorSignal: // ports cannot monitor
+            case FlushInfoMonitorSignal: // id.
+            case MonitorDownSignal: // id
+                break;
+            case NormalMessage: {
+                UNREACHABLE();
+            }
         }
         MailboxMessage *next = signal_message->next;
         mailbox_message_dispose(signal_message, &ctx->heap);
         signal_message = next;
+        if (UNLIKELY(reprocess_outer && signal_message == NULL)) {
+            reprocess_outer = false;
+            signal_message = mailbox_process_outer_list(&ctx->mailbox);
+        }
     }
 }
 
@@ -237,7 +281,12 @@ Context *scheduler_run(GlobalContext *global)
         if (result->native_handler) {
             // process signal messages and also empty outer list to inner list.
             scheduler_process_native_signal_messages(result);
-            if (!(result->flags & Killed)) {
+            if (UNLIKELY(result->flags & Killed)) {
+                SMP_SPINLOCK_LOCK(&global->processes_spinlock);
+                list_remove(&result->processes_list_head);
+                SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
+                context_destroy(result);
+            } else {
                 if (mailbox_has_next(&result->mailbox)) {
                     if (result->native_handler(result) == NativeContinue) {
                         // If native handler has memory fragments, garbage collect
