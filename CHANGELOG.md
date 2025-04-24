@@ -102,6 +102,7 @@ memory error
 - Fixed segfault when calling `lists:reverse/1` (#1600)
 - Fixed nif_atomvm_posix_read GC bug
 - Fixed `erlang:is_number/1` function, now returns true also for floats
+- Fixed unlink protocol and add support for `link/1` on ports
 
 ### Changed
 

@@ -698,27 +698,3 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index)
     SMP_RWLOCK_UNLOCK(global->modules_lock);
     return result;
 }
-
-bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
-{
-    struct ListHead *pitem;
-
-    struct ListHead *processes_table_list = synclist_wrlock(&global->processes_table);
-    LIST_FOR_EACH (pitem, processes_table_list) {
-        Context *p = GET_LIST_ENTRY(pitem, Context, processes_table_head);
-
-        struct ListHead *item;
-        LIST_FOR_EACH (item, &p->monitors_head) {
-            struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-            if (monitor->ref_ticks == ref_ticks) {
-                list_remove(&monitor->monitor_list_head);
-                free(monitor);
-                synclist_unlock(&global->processes_table);
-                return true;
-            }
-        }
-    }
-
-    synclist_unlock(&global->processes_table);
-    return false;
-}

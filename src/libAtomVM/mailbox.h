@@ -82,8 +82,11 @@ enum MessageType
     FlushMonitorSignal,
     FlushInfoMonitorSignal,
     MonitorSignal,
-    UnlinkSignal,
+    UnlinkIDSignal,
+    UnlinkIDAckSignal,
+    LinkExitSignal,
     DemonitorSignal,
+    MonitorDownSignal,
 };
 
 struct MailboxMessage
@@ -134,6 +137,14 @@ struct RefSignal
 {
     MailboxMessage base;
 
+    uint64_t ref_ticks;
+};
+
+struct ImmediateRefSignal
+{
+    MailboxMessage base;
+
+    term immediate;
     uint64_t ref_ticks;
 };
 
@@ -239,6 +250,16 @@ void mailbox_send_built_in_atom_request_signal(
  * @param ref_ticks the ref
  */
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks);
+
+/**
+ * @brief Sends an immediate and ref signal to a certain mailbox.
+ *
+ * @param c the process context.
+ * @param type the type of the signal
+ * @param immediate the immediate term to send (atom or pid)
+ * @param ref_ticks the ref
+ */
+void mailbox_send_immediate_ref_signal(Context *c, enum MessageType type, term immediate, uint64_t ref_ticks);
 
 /**
  * @brief Sends a ref immediate signal to a certain mailbox.

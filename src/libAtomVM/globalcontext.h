@@ -491,17 +491,6 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
  */
 Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name);
 
-/**
- * @brief remove a monitor
- *
- * @details iterate on the list of all processes and then on each monitor
- * to find a given monitor, and remove it
- * @param global the global context
- * @param ref_ticks the reference to the monitor
- * @return true if the monitor was found
- */
-bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
-
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
 {
