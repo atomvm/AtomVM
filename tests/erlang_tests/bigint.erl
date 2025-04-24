@@ -27,6 +27,8 @@
     sort/1,
     twice/1,
     fact/1,
+    lit_ovf1/0,
+    lit_ovf2/0,
     divtrunc/2,
     the_out_of_order_list/0,
     the_ordered_list/0,
@@ -49,7 +51,8 @@ start() ->
         parse_bigint() +
         test_cmp() +
         conv_to_from_float() +
-        external_term_decode().
+        external_term_decode() +
+        big_literals().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -614,6 +617,48 @@ external_term_decode() ->
         )
     ),
     0.
+
+big_literals() ->
+    <<"-CAFE1234ABCD9876EFAB0189FEDCBA98">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#CAFE1234ABCD9876EFAB0189FEDCBA98), 16)
+    ),
+    <<"-CAFE1234ABCD9876EFAB0189FEDCBA984">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#CAFE1234ABCD9876EFAB0189FEDCBA984), 16)
+    ),
+    <<"-CAFE1234ABCD9876EFAB0189FEDCBA9842">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#CAFE1234ABCD9876EFAB0189FEDCBA9842), 16)
+    ),
+    <<"CAFE1234ABCD9876EFAB0189FEDCBA9842">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#CAFE1234ABCD9876EFAB0189FEDCBA9842), 16)
+    ),
+
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), 16
+        )
+    ),
+
+    <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF), 16
+        )
+    ),
+
+    % this cannot be tested
+    % bigger literals, such as the one here, are encoded using an external term
+    % (having SMALL_BIG_EXT type).
+    % The reader function is not able to distinguish between different kind of invalid
+    % errors, such as overflow, so this cannot be tested.
+    % ok = expect_overflow(fun ?MODULE:lit_ovf1/0),
+    % ok = expect_overflow(fun ?MODULE:lit_ovf2/0),
+
+    0.
+
+lit_ovf1() ->
+    ?MODULE:id(16#10000000000000000000000000000000000000000000000000000000000000000).
+
+lit_ovf2() ->
+    ?MODULE:id(-16#10000000000000000000000000000000000000000000000000000000000000000).
 
 id(X) ->
     X.
