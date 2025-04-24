@@ -30,6 +30,7 @@
 #include "debug.h"
 #include "defaultatoms.h"
 #include "exportedfunction.h"
+#include "intn.h"
 #include "nifs.h"
 #include "opcodes.h"
 #include "scheduler.h"
@@ -233,13 +234,11 @@ typedef dreg_t dreg_gc_safe_t;
                     break;                                                              \
                 case COMPACT_NBITS_VALUE:{                                              \
                     int sz = (first_byte >> 5) + 2;                                     \
-                    if (UNLIKELY(sz > 8)) {                                             \
-                        /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
-                        fprintf(stderr, "Unexpected nbits vaue @ %" PRIuPTR "\n", (uintptr_t) ((decode_pc) - 1)); \
-                        AVM_ABORT();                                                    \
-                        break;                                                          \
+                    if (LIKELY(sz <= 8)) {                                              \
+                        (decode_pc) += sz;                                              \
+                    } else {                                                            \
+                        (decode_pc) += decode_nbits_integer(NULL, (decode_pc), NULL);   \
                     }                                                                   \
-                    (decode_pc) += sz;                                                  \
                     break;                                                              \
                 }                                                                       \
                 default:                                                                \
@@ -712,11 +711,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                                                                                                                         \
                 case COMPACT_NBITS_VALUE: {                                                                             \
                     size_t num_bytes = (first_byte >> 5) + 2;                                                           \
-                    dest_term = large_integer_to_term(ctx, num_bytes, decode_pc);                                       \
+                    dest_term = large_integer_to_term(ctx, num_bytes, &decode_pc);                                      \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
                         HANDLE_ERROR();                                                                                 \
                     }                                                                                                   \
-                    (decode_pc) += num_bytes;                                                                           \
                     break;                                                                                              \
                 }                                                                                                       \
                 default:                                                                                                \
@@ -1511,21 +1509,31 @@ static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_i
     }
 }
 
-static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *compact_term)
+static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term);
+
+static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t **encoded)
 {
+    const uint8_t *compact_term = *encoded;
     switch (num_bytes) {
+        case 0:
+        case 1:
+            UNREACHABLE();
+
         case 2: {
+            *encoded += 2;
             int16_t ret_val16 = ((int16_t) compact_term[0]) << 8 | compact_term[1];
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val16, 2);
         }
 
         case 3: {
+            *encoded += 3;
             struct Int24 ret_val24;
             ret_val24.val24 = ((int32_t) compact_term[0]) << 16 | ((int32_t) compact_term[1] << 8) | compact_term[2];
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val24.val24, 3);
         }
 
         case 4: {
+            *encoded += 4;
             int32_t ret_val32;
             ret_val32 = ((int32_t) compact_term[0]) << 24 | ((int32_t) compact_term[1] << 16)
                 | ((int32_t) compact_term[2] << 8) | compact_term[3];
@@ -1533,6 +1541,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 5: {
+            *encoded += 5;
             struct Int40 ret_val40;
             ret_val40.val40 = ((int64_t) compact_term[0]) << 32 | ((int64_t) compact_term[1] << 24)
                 | ((int64_t) compact_term[2] << 16) | ((int64_t) compact_term[3] << 8)
@@ -1542,6 +1551,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 6: {
+            *encoded += 6;
             struct Int48 ret_val48;
             ret_val48.val48 = ((int64_t) compact_term[0]) << 40 | ((int64_t) compact_term[1] << 32)
                 | ((int64_t) compact_term[2] << 24) | ((int64_t) compact_term[3] << 16)
@@ -1551,6 +1561,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 7: {
+            *encoded += 7;
             struct Int56 ret_val56;
             ret_val56.val56 = ((int64_t) compact_term[0]) << 48 | ((int64_t) compact_term[1] << 40)
                 | ((int64_t) compact_term[2] << 32) | ((int64_t) compact_term[3] << 24)
@@ -1561,6 +1572,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 8: {
+            *encoded += 8;
             int64_t ret_val64;
             ret_val64 = ((int64_t) compact_term[0]) << 56 | ((int64_t) compact_term[1] << 48)
                 | ((int64_t) compact_term[2] << 40) | ((int64_t) compact_term[3] << 32)
@@ -1570,10 +1582,15 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val64, 8);
         }
 
-        default:
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OVERFLOW_ATOM;
-            return term_invalid_term();
+        case 9: {
+            term int_term;
+            *encoded += decode_nbits_integer(ctx, compact_term, &int_term);
+            return int_term;
+        }
+
+        default: {
+            UNREACHABLE();
+        }
     }
 }
 
@@ -1746,6 +1763,54 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 #endif
 
 #endif
+
+    static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
+    {
+        const uint8_t *new_encoded = encoded;
+        unsigned int len;
+        DECODE_LITERAL(len, new_encoded);
+
+        len += 9;
+
+        if (out_term) {
+            intn_integer_sign_t sign;
+            intn_digit_t bigint[INTN_MAX_RES_LEN];
+            int count = intn_from_integer_bytes(new_encoded, len, IntnSigned, bigint, &sign);
+            if (UNLIKELY(count < 0)) {
+                // this is likely unreachable, compiler seem to generate an external term
+                // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
+                ctx->x[0] = ERROR_ATOM;
+                ctx->x[1] = OVERFLOW_ATOM;
+                *out_term = term_invalid_term();
+                goto return_size;
+            }
+
+            size_t intn_data_size;
+            size_t rounded_res_len;
+            term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+
+            Heap heap;
+            if (UNLIKELY(
+                    memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+                ctx->x[0] = ERROR_ATOM;
+                ctx->x[1] = OUT_OF_MEMORY_ATOM;
+                *out_term = term_invalid_term();
+                goto return_size;
+            }
+
+            term bigint_term
+                = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
+            intn_digit_t *dest_buf = (void *) term_intn_data(bigint_term);
+            intn_copy(bigint, count, dest_buf, rounded_res_len);
+
+            memory_heap_append_heap(&ctx->heap, &heap);
+
+            *out_term = bigint_term;
+        }
+
+    return_size:
+        return (new_encoded - encoded) + len;
+    }
 
 #ifndef __clang__
 #pragma GCC diagnostic push
