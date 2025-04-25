@@ -381,7 +381,7 @@ COLD_FUNC void module_destroy(Module *module)
 
 static bool module_are_literals_compressed(const uint8_t *litT)
 {
-    uint32_t required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    uint32_t required_buf_size = READ_32_UNALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
     return (required_buf_size != 0);
 }
 
