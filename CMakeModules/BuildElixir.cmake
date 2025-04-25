@@ -94,3 +94,64 @@ macro(pack_runnable avm_name main)
     add_dependencies(${avm_name} ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
 
 endmacro()
+
+
+macro(pack_test avm_name main)
+    find_package(Elixir REQUIRED)
+
+    # Compile the main module
+    add_custom_command(
+        OUTPUT Elixir.${main}.beam
+        COMMAND elixirc ${CMAKE_CURRENT_SOURCE_DIR}/${main}.ex
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${main}.ex
+        COMMENT "Compiling ${main}.ex"
+        VERBATIM
+    )
+
+    add_custom_target(
+        ${avm_name}_main
+        DEPENDS Elixir.${main}.beam
+    )
+
+    # Compile test modules
+    foreach(module_name ${ARGN})
+        add_custom_command(
+            OUTPUT Elixir.${module_name}.beam
+            COMMAND elixirc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
+            COMMENT "Compiling ${module_name}.ex"
+            VERBATIM
+        )
+        set(TEST_BEAMS ${TEST_BEAMS} Elixir.${module_name}.beam)
+    endforeach()
+
+    add_custom_target(
+        ${avm_name}_tests
+        DEPENDS ${TEST_BEAMS}
+    )
+
+    if(AVM_RELEASE)
+        set(INCLUDE_LINES "")
+    else()
+        set(INCLUDE_LINES "-i")
+    endif()
+
+    # Set up standard libraries
+    set(ARCHIVE_TARGETS estdlib eavmlib exavmlib etest)
+    foreach(archive_name ${ARCHIVE_TARGETS})
+        if(${archive_name} STREQUAL "exavmlib")
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        else()
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        endif()
+    endforeach()
+
+    add_custom_target(
+        ${avm_name} ALL
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
+        COMMENT "Packing test ${avm_name}.avm"
+        VERBATIM
+    )
+    add_dependencies(${avm_name} ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM)
+
+endmacro()

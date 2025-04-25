@@ -65,7 +65,7 @@ static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len
 
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
-    int atoms_count = READ_32_ALIGNED(table_data + 8);
+    int atoms_count = READ_32_UNALIGNED(table_data + 8);
 
     enum EnsureAtomsOpt ensure_opts = EnsureAtomsNoOpts;
     if (atoms_count < 0) {
@@ -95,7 +95,7 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
 
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
-    int functions_count = READ_32_ALIGNED(table_data + 8);
+    int functions_count = READ_32_UNALIGNED(table_data + 8);
 
     this_module->imported_funcs = calloc(functions_count, sizeof(struct ExportedFunction *));
     if (IS_NULL_PTR(this_module->imported_funcs)) {
@@ -104,11 +104,11 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
     }
 
     for (int i = 0; i < functions_count; i++) {
-        int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
-        int local_function_atom_index = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        int local_module_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 12);
+        int local_function_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
         AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
         AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
-        uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
+        uint32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
 
         const struct ExportedFunction *bif = bif_registry_get_handler(module_atom, function_atom, arity);
 
@@ -140,13 +140,13 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
 void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->import_table;
-    int functions_count = READ_32_ALIGNED(table_data + 8);
+    int functions_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(index > functions_count)) {
         AVM_ABORT();
     }
-    int local_module_atom_index = READ_32_ALIGNED(table_data + index * 12 + 12);
-    int local_function_atom_index = READ_32_ALIGNED(table_data + index * 12 + 4 + 12);
+    int local_module_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 12);
+    int local_function_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 4 + 12);
     *module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
     *function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
 }
@@ -156,11 +156,11 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
 {
     int best_label = -1;
     const uint8_t *export_table_data = (const uint8_t *) this_module->export_table;
-    int exports_count = READ_32_ALIGNED(export_table_data + 8);
+    int exports_count = READ_32_UNALIGNED(export_table_data + 8);
     for (int export_index = exports_count - 1; export_index >= 0; export_index--) {
-        int fun_atom_index = READ_32_ALIGNED(export_table_data + (export_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(export_table_data + (export_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(export_table_data + (export_index * 12) + 8 + 12);
+        int fun_atom_index = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 12);
+        int fun_arity = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 4 + 12);
+        int fun_label = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 8 + 12);
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
@@ -169,11 +169,11 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
     }
 
     const uint8_t *local_table_data = (const uint8_t *) this_module->local_table;
-    int locals_count = READ_32_ALIGNED(local_table_data + 8);
+    int locals_count = READ_32_UNALIGNED(local_table_data + 8);
     for (int local_index = locals_count - 1; local_index >= 0; local_index--) {
-        int fun_atom_index = READ_32_ALIGNED(local_table_data + (local_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(local_table_data + (local_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(local_table_data + (local_index * 12) + 8 + 12);
+        int fun_atom_index = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 12);
+        int fun_arity = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 4 + 12);
+        int fun_label = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 8 + 12);
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
@@ -190,7 +190,7 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
 size_t module_get_exported_functions_count(Module *this_module)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
-    size_t functions_count = READ_32_ALIGNED(table_data + 8);
+    size_t functions_count = READ_32_UNALIGNED(table_data + 8);
     return functions_count;
 }
 
@@ -200,10 +200,10 @@ uint32_t module_search_exported_function(Module *this_module, AtomString func_na
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
-        int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_UNALIGNED(table_data + i * 12 + 12), glb);
+        int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
         if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
-            uint32_t label = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
+            uint32_t label = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
             return label;
         }
     }
@@ -218,8 +218,8 @@ term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContex
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
-        int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_UNALIGNED(table_data + i * 12 + 12), glb);
+        int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
         term function_tuple = term_alloc_tuple(2, heap);
         term_put_tuple_element(function_tuple, 0, globalcontext_existing_term_from_atom_string(glb, function_atom));
         term_put_tuple_element(function_tuple, 1, term_from_int(arity));
@@ -349,7 +349,7 @@ static bool module_are_literals_compressed(const uint8_t *litT)
 #ifdef WITH_ZLIB
 static void *module_uncompress_literals(const uint8_t *litT, int size)
 {
-    unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    unsigned int required_buf_size = READ_32_UNALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
 
     uint8_t *outBuf = malloc(required_buf_size);
     if (IS_NULL_PTR(outBuf)) {
@@ -384,7 +384,7 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
 
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 {
-    uint32_t terms_count = READ_32_ALIGNED(literalsBuf);
+    uint32_t terms_count = READ_32_UNALIGNED(literalsBuf);
 
     const uint8_t *pos = (const uint8_t *) literalsBuf + sizeof(uint32_t);
 

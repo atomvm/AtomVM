@@ -56,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed `gen_server` internal messages to match OTP so it works across erlang distribution
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
+- packbeam: fix memory leak preventing building with address sanitizer
 
 ## [0.6.6] - Unreleased
 
@@ -119,6 +120,7 @@ memory error
 - Fixed segfault when calling `lists:reverse/1` (#1600)
 - Fixed nif_atomvm_posix_read GC bug
 - Fixed `erlang:is_number/1` function, now returns true also for floats
+- Fixed unlink protocol and add support for `link/1` on ports
 
 ### Changed
 
