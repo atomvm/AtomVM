@@ -36,6 +36,8 @@ extern "C" {
 
 #define DIST_OTP_RELEASE "27"
 
+struct LinkRemoteMonitor;
+
 extern const ErlNifResourceTypeInit dist_connection_resource_type_init;
 
 extern const struct Nif setnode_3_nif;
@@ -81,6 +83,44 @@ term dist_monitor(struct DistConnection *conn_obj, term from_pid, term target_pr
  * @param ctx context for memory allocation
  */
 void dist_spawn_reply(term req_id, term to_pid, bool link, bool monitor, term result, struct DistConnection *connection, GlobalContext *global);
+
+/**
+ * @doc Send a link exit signal (PAYLOAD_EXIT)
+ * @param monitor structure with node, process_id, serial and creation
+ * @param reason reason to send as the payload
+ * @param ctx process that is exiting.
+ */
+void dist_send_payload_exit(struct LinkRemoteMonitor *monitor, term reason, Context *ctx);
+
+/**
+ * @doc Send a link signal (LINK)
+ * @param from_pid the pid linking to
+ * @param to_pid the (remote) pid to link to
+ * @param ctx context for memory allocation
+ * @return true if the link message was sent or queued, or term_invalid if an
+ * error occurred (e.g. noproc or oom)
+ */
+term dist_send_link(term from_pid, term to_pid, Context *ctx);
+
+/**
+ * @doc Send an unlink id signal (UNLINK_ID), silently do nothing if node is
+ * not connected
+ * @param unlink_id unique id of the unlink operation
+ * @param from_pid the pid linking to
+ * @param to_pid the (remote) pid to link to
+ * @param ctx context for memory allocation
+ */
+void dist_send_unlink_id(uint64_t unlink_id, term from_pid, term to_pid, Context *ctx);
+
+/**
+ * @doc Send an unlink id ack signal (UNLINK_ID_ACK), silently do nothing if node is
+ * not connected
+ * @param unlink_id unique id of the unlink operation
+ * @param from_pid the pid linking to
+ * @param to_pid the (remote) pid to link to
+ * @param ctx context for memory allocation
+ */
+void dist_send_unlink_id_ack(uint64_t unlink_id, term from_pid, term to_pid, Context *ctx);
 
 #ifdef __cplusplus
 }

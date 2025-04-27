@@ -44,48 +44,23 @@ enum ExternalTermResult
     EXTERNAL_TERM_HEAP_ALLOC = 3
 };
 
-typedef enum
-{
-    ExternalTermNoOpts = 0,
-    ExternalTermToHeapFragment = 1,
-    ExternalTermCopy = 2,
-} ExternalTermFlags;
-
 /**
- * @brief Gets a term from external term data.
+ * @brief Create a term from a binary.
  *
- * @details Deserialize an external term from external format and returns a term.
- * @param external_term the external term that will be deserialized.
- * @param size to allocate for term.
+ * @details Deserialize a binary term that stores term data in Erlang external
+ * term format, and instantiate the serialized terms.  The heap from the
+ * context will be used to allocate the instantiated terms.  This function is
+ * the complement of externalterm_to_binary.
+ * WARNING: This function may call the GC, which may render the input binary
+ * invalid. See `externalterm_from_binary_with_roots'
  * @param ctx the context that owns the memory that will be allocated.
- * @param flags options to deserialize data.
- * The following flags are supported:
- * - `ExternalTermToHeapFragment' : use a heap fragment to store the generated
- * terms (default is to use the heap in the provided context). Note that when
- * using the context heap, this function may call the GC, if there is
- * insufficient space to store the generated terms.
- * - `ExternalTermCopy' : copy (binary and atom) data. Suitable when
- * `external_term' pointer is not a const literal.
- * @returns a term.
+ * @param dst a pointer to a term that will contain the binary encoded term.
+ * @param binary the binary.
+ * @param bytes_read the number of bytes read from the input binary.
+ * @returns the term deserialized from the input term, or an invalid term, if
+ * deserialization fails.
  */
-term externalterm_to_term(
-    const void *external_term, size_t size, Context *ctx, ExternalTermFlags flags);
-
-/**
- * @brief Create a term from external term data. This variant is meant to be used
- * for distribution or in cases where the number of bytes read is important.
- *
- * @param   external_term   buffer containing external term
- * @param   size            size of the external_term
- * @param   ctx             current context in which terms may be stored
- * @param   flags           additional flags (see above)
- * @param   bytes_read      the number of bytes read off external_term in order to yield a term
- * @param   num_roots       number of roots when invoking GC
- * @param   roots           roots to preserve when invoking GC
- * @return  the parsed term
- */
-term externalterm_to_term_with_roots(const void *external_term, size_t size, Context *ctx,
-    ExternalTermFlags flags, size_t *bytes_read, size_t num_roots, term *roots);
+term externalterm_from_binary(Context *ctx, term binary, size_t *bytes_read);
 
 /**
  * @brief Create a term from a binary.
@@ -95,13 +70,28 @@ term externalterm_to_term_with_roots(const void *external_term, size_t size, Con
  * allocate the instantiated terms.  This function is the complement of externalterm_to_binary.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
- * @param dst a pointer to a term that will contain the binary encoded term.
- * @param binary the binary.
+ * @param binary_ix offset of the binary in roots
+ * @param offset offset in the binary
  * @param bytes_read the number of bytes read from the input binary.
+ * @param num_roots number of roots to preserve in case of GC
+ * @param roots roots to preserve in case of GC
  * @returns the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-enum ExternalTermResult externalterm_from_binary(Context *ctx, term *dst, term binary, size_t *bytes_read);
+term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots);
+
+/**
+ * @brief Gets a term from a const literal (module in flash).
+ *
+ * @details Deserialize an external term from external format and returns a
+ * term. Use a heap fragment to store the generated terms. The heap fragment
+ * is appended to the context heap. Atoms and binaries are not copied.
+ * @param external_term the const literal buffer that will be deserialized
+ * @param size to allocate for term.
+ * @param ctx the context that owns the memory that will be allocated.
+ * @returns a term.
+ */
+term externalterm_from_const_literal(const void *external_term, size_t size, Context *ctx);
 
 /**
  * @brief Create a binary from a term.

@@ -1071,6 +1071,22 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     context_unlink_ack(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks); \
                     break;                                                                      \
                 }                                                                               \
+                case UnlinkRemoteIDSignal: {                                                    \
+                    struct TermSignal *term_signal                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0)); \
+                    term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);      \
+                    context_ack_unlink(ctx, remote_pid, unlink_id, false);                      \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkRemoteIDAckSignal: {                                                 \
+                    struct TermSignal *term_signal                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0)); \
+                    term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);      \
+                    context_unlink_ack(ctx, remote_pid, unlink_id);                             \
+                    break;                                                                      \
+                }                                                                               \
                 case LinkExitSignal: {                                                          \
                     struct TermSignal *link_exit_signal                                         \
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
@@ -1477,6 +1493,17 @@ COLD_FUNC static void dump(Context *ctx)
                 }
                 fprintf(stderr, "to ");
                 term_display(stderr, link_monitor->link_local_process_id, ctx);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_LINK_REMOTE: {
+                struct LinkRemoteMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+                fprintf(stderr, "remote link ");
+                if (link_monitor->unlink_id) {
+                    fprintf(stderr, "(inactive) ");
+                }
+                fprintf(stderr, "to ");
+                term_display(stderr, link_monitor->node, ctx);
                 fprintf(stderr, "\n");
                 break;
             }

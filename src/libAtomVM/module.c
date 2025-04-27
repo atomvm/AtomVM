@@ -406,8 +406,7 @@ static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    term t = externalterm_to_term(mod->literals_table[index].data, mod->literals_table[index].size,
-        ctx, ExternalTermToHeapFragment);
+    term t = externalterm_from_const_literal(mod->literals_table[index].data, mod->literals_table[index].size, ctx);
     if (term_is_invalid_term(t)) {
         fprintf(stderr, "Invalid term reading literals_table[%i] from module\n", index);
         AVM_ABORT();
