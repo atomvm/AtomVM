@@ -22,6 +22,8 @@
 
 -export([test/0]).
 
+-define(EPMD_PORT, 4369).
+
 test() ->
     % AtomVM's epmd only runs on AtomVM and OTP 24+
     CanRunEpmd =
@@ -82,12 +84,43 @@ has_command("ATOM", Command) ->
     Result.
 
 ensure_epmd("BEAM") ->
-    _ = os:cmd("epmd -daemon"),
+    Result = os:cmd("epmd -daemon"),
+    io:format("~s\n", [Result]),
     ok;
 ensure_epmd("ATOM") ->
-    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "epmd -daemon"], undefined, [stdout]),
+    {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", "epmd -daemon 2>&1"], undefined, [
+        stdout
+    ]),
+    print_loop(Fd),
     ok = atomvm:posix_close(Fd),
     ok.
+
+ensure_epmd_connect_loop(0) ->
+    io:format("Coult not connect to epmd\n"),
+    exit(timeout);
+ensure_epmd_connect_loop(N) ->
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    Result = socket:connect(Socket, #{addr => {127, 0, 0, 1}, port => ?EPMD_PORT, family => inet}),
+    socket:close(Socket),
+    case Result of
+        ok ->
+            ok;
+        {error, econnrefused} ->
+            timer:sleep(100),
+            ensure_epmd_connect_loop(N - 1);
+        {error, closed} ->
+            timer:sleep(100),
+            ensure_epmd_connect_loop(N - 1)
+    end.
+
+print_loop(Fd) ->
+    case atomvm:posix_read(Fd, 200) of
+        eof ->
+            ok;
+        {ok, Line} ->
+            io:format("~s", [Line]),
+            print_loop(Fd)
+    end.
 
 stop_epmd("BEAM") ->
     case os:cmd("epmd -kill") of
@@ -122,7 +155,7 @@ start_epmd() ->
         true ->
             ok = ensure_epmd(Platform),
             % on CI, epmd may be slow to accept connections
-            timer:sleep(500),
+            ensure_epmd_connect_loop(50),
             ok;
         false ->
             {error, not_found}

@@ -1004,6 +1004,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     {                                                                                           \
         MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);             \
         void *next_label = NULL;                                                                \
+        bool reprocess_outer = false;                                                           \
         while (signal_message) {                                                                \
             switch (signal_message->type) {                                                     \
                 case KillSignal: {                                                              \
@@ -1022,7 +1023,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case ProcessInfoRequestSignal: {                                                \
                     struct BuiltInAtomRequestSignal *request_signal                             \
                         = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);  \
-                    context_process_process_info_request_signal(ctx, request_signal);           \
+                    context_process_process_info_request_signal(ctx, request_signal, false);    \
                     break;                                                                      \
                 }                                                                               \
                 case TrapAnswerSignal: {                                                        \
@@ -1058,10 +1059,24 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     }                                                                           \
                     break;                                                                      \
                 }                                                                               \
-                case UnlinkSignal: {                                                            \
-                    struct ImmediateSignal *immediate_signal                                    \
-                        = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
-                    context_unlink(ctx, immediate_signal->immediate);                           \
+                case UnlinkIDSignal: {                                                          \
+                    struct ImmediateRefSignal *immediate_ref_signal                             \
+                        = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);        \
+                    context_ack_unlink(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks, false); \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkIDAckSignal: {                                                       \
+                    struct ImmediateRefSignal *immediate_ref_signal                             \
+                        = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);        \
+                    context_unlink_ack(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks); \
+                    break;                                                                      \
+                }                                                                               \
+                case LinkExitSignal: {                                                          \
+                    struct TermSignal *link_exit_signal                                         \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    if (context_process_link_exit_signal(ctx, link_exit_signal)) {              \
+                        reprocess_outer = true;                                                 \
+                    }                                                                           \
                     break;                                                                      \
                 }                                                                               \
                 case MonitorSignal: {                                                           \
@@ -1076,6 +1091,13 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     context_demonitor(ctx, ref_signal->ref_ticks);                              \
                     break;                                                                      \
                 }                                                                               \
+                case MonitorDownSignal: {                                                       \
+                    struct TermSignal *monitor_down_signal                                      \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    context_process_monitor_down_signal(ctx, monitor_down_signal);              \
+                    reprocess_outer = true;                                                     \
+                    break;                                                                      \
+                }                                                                               \
                 case NormalMessage: {                                                           \
                     UNREACHABLE();                                                              \
                 }                                                                               \
@@ -1083,6 +1105,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             MailboxMessage *next = signal_message->next;                                        \
             mailbox_message_dispose(signal_message, &ctx->heap);                                \
             signal_message = next;                                                              \
+            if (UNLIKELY(reprocess_outer && signal_message == NULL)) {                          \
+                reprocess_outer = false;                                                        \
+                signal_message = mailbox_process_outer_list(&ctx->mailbox);                     \
+            }                                                                                   \
         }                                                                                       \
         if (context_get_flags(ctx, Killed)) {                                                   \
             goto terminate_context;                                                             \
@@ -1442,18 +1468,41 @@ COLD_FUNC static void dump(Context *ctx)
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (term_is_pid(monitor->monitor_obj)) {
-            term_display(stderr, monitor->monitor_obj, ctx);
-        } else {
-            fprintf(stderr, "<resource %p>", (void *) term_to_const_term_ptr(monitor->monitor_obj));
+        switch (monitor->monitor_type) {
+            case CONTEXT_MONITOR_LINK_LOCAL: {
+                struct LinkLocalMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
+                fprintf(stderr, "link ");
+                if (link_monitor->unlink_id) {
+                    fprintf(stderr, "(inactive) ");
+                }
+                fprintf(stderr, "to ");
+                term_display(stderr, link_monitor->link_local_process_id, ctx);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORING_LOCAL: {
+                struct MonitorLocalMonitor* monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+                fprintf(stderr, "monitor to ");
+                term_display(stderr, monitoring_monitor->monitor_obj, ctx);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORED_LOCAL: {
+                struct MonitorLocalMonitor* monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+                fprintf(stderr, "monitored by ");
+                term_display(stderr, monitored_monitor->monitor_obj, ctx);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_RESOURCE: {
+                struct ResourceContextMonitor* resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
+                fprintf(stderr, "monitored by resource %p ref=%lu", resource_monitor->resource_obj, (long unsigned) resource_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
         }
-        fprintf(stderr, " ");
-        if (monitor->ref_ticks == 0) {
-            fprintf(stderr, "<");
-        }
-        fprintf(stderr, "---> ");
-        term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
-        fprintf(stderr, "\n");
     }
     synclist_unlock(&glb->processes_table);
 

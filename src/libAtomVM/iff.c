@@ -50,7 +50,7 @@ void scan_iff(const void *iff_binary, int buf_size, unsigned long *offsets, unsi
 
     int current_pos = 12;
 
-    uint32_t iff_size = READ_32_ALIGNED(data + 4);
+    uint32_t iff_size = READ_32_UNALIGNED(data + 4);
     int file_size = iff_size;
     if (UNLIKELY(buf_size < file_size)) {
         fprintf(stderr, "error: buffer holding IFF is smaller than IFF size: %i\n", buf_size);
