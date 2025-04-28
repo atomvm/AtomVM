@@ -45,12 +45,14 @@
 #define RAISE_ERROR(error_type_atom) \
     ctx->x[0] = ERROR_ATOM;          \
     ctx->x[1] = (error_type_atom);   \
+    ctx->x[2] = term_nil();          \
     return term_invalid_term();
 
 #define RAISE_ERROR_BIF(fail_label, error_type_atom) \
     if (fail_label == 0) {                           \
         ctx->x[0] = ERROR_ATOM;                      \
         ctx->x[1] = (error_type_atom);               \
+        ctx->x[2] = term_nil();                      \
     }                                                \
     return term_invalid_term();
 

@@ -1170,7 +1170,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)           \
     if (term_is_invalid_term(return_value)) {                   \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
-            HANDLE_ERROR();                                     \
+            HANDLE_ERROR_MAYBE_STACKTRACE();                    \
         } else {                                                \
             SCHEDULE_WAIT(mod, pc);                             \
         }                                                       \
@@ -1180,7 +1180,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     if (term_is_invalid_term(return_value)) {                             \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {                    \
             pc = rest_pc;                                                 \
-            HANDLE_ERROR();                                               \
+            HANDLE_ERROR_MAYBE_STACKTRACE();                              \
         } else {                                                          \
             SCHEDULE_WAIT(mod, pc);                                       \
         }                                                                 \
@@ -1189,7 +1189,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)      \
     if (term_is_invalid_term(return_value)) {                   \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
-            HANDLE_ERROR();                                     \
+            HANDLE_ERROR_MAYBE_STACKTRACE();                    \
         } else {                                                \
             DO_RETURN();                                        \
             SCHEDULE_WAIT(mod, pc);                             \
@@ -1214,6 +1214,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define HANDLE_ERROR()                                                  \
     x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
+    goto handle_error;
+
+#define HANDLE_ERROR_MAYBE_STACKTRACE() \
+    x_regs[2] = x_regs[2] == term_nil() ? stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]) : x_regs[2];  \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name, label)           \
@@ -3741,9 +3745,13 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%lx exc_value=0x%lx\n", stacktrace, exc_value);
-                    x_regs[0] = stacktrace_exception_class(stacktrace);
-                    x_regs[1] = exc_value;
-                    x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    if (stacktrace_is_built(stacktrace)) {
+                        x_regs[2] = stacktrace;
+                    } else {
+                        x_regs[0] = stacktrace_exception_class(stacktrace);
+                        x_regs[1] = exc_value;
+                        x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    }
                     goto handle_error;
                 #endif
 
@@ -3780,7 +3788,7 @@ wait_timeout_trap_handler:
                             break;
 
                         case ERROR_ATOM_INDEX: {
-                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
+                            x_regs[2] = stacktrace_ensure_built(ctx, &x_regs[2], 3);
                             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
                             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -6249,7 +6257,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
 
-                    x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
+                    x_regs[0] = stacktrace_ensure_built(ctx, &x_regs[0], 1);
 
                 #endif
                 break;

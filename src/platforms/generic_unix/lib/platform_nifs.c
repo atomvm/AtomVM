@@ -40,12 +40,14 @@
     if (UNLIKELY(!verify_function((value)))) { \
         argv[0] = ERROR_ATOM;                  \
         argv[1] = BADARG_ATOM;                 \
+        ctx->x[2] = term_nil();                \
         return term_invalid_term();            \
     }
 
 #define RAISE_ERROR(error_type_atom) \
     ctx->x[0] = ERROR_ATOM;          \
     ctx->x[1] = (error_type_atom);   \
+    ctx->x[2] = term_nil();          \
     return term_invalid_term();
 
 #if ATOMVM_HAS_MBEDTLS
