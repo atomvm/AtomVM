@@ -52,7 +52,8 @@ start() ->
         test_cmp() +
         conv_to_from_float() +
         external_term_decode() +
-        big_literals().
+        big_literals() +
+        to_external_term().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -659,6 +660,135 @@ lit_ovf1() ->
 
 lit_ovf2() ->
     ?MODULE:id(-16#10000000000000000000000000000000000000000000000000000000000000000).
+
+to_external_term() ->
+    % maximum
+    <<131, 110, 32, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>
+                    ),
+                    16
+                )
+            )
+        )
+    ),
+
+    % minimum
+    <<131, 110, 32, 1, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>
+                    ),
+                    16
+                )
+            )
+        )
+    ),
+
+    % positive test pattern
+    <<131, 110, 32, 0, 189, 121, 53, 209, 236, 251, 234, 208, 201, 184, 167, 86, 79, 62, 45, 28, 11,
+        42, 49, 82, 116, 150, 248, 222, 188, 154, 120, 86, 52, 18, 254, 202>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"CAFE123456789ABCDEF8967452312A0B1C2D3E4F56A7B8C9D0EAFBECD13579BD">>
+                    ),
+                    16
+                )
+            )
+        )
+    ),
+
+    % negative test pattern
+    <<131, 110, 32, 1, 189, 121, 53, 209, 236, 251, 234, 208, 201, 184, 167, 86, 79, 62, 45, 28, 11,
+        42, 49, 82, 116, 150, 248, 222, 188, 154, 120, 86, 52, 18, 254, 202>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"-CAFE123456789ABCDEF8967452312A0B1C2D3E4F56A7B8C9D0EAFBECD13579BD">>
+                    ),
+                    16
+                )
+            )
+        )
+    ),
+
+    % test encoding multiple elements
+    <<131, 108, 0, 0, 0, 2, 110, 32, 0, 189, 121, 53, 209, 236, 251, 234, 208, 201, 184, 167, 86,
+        79, 62, 45, 28, 11, 42, 49, 82, 116, 150, 248, 222, 188, 154, 120, 86, 52, 18, 254, 202,
+        109, 0, 0, 0, 3, 116, 115, 116, 106>> = ?MODULE:id(
+        erlang:term_to_binary([
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"CAFE123456789ABCDEF8967452312A0B1C2D3E4F56A7B8C9D0EAFBECD13579BD">>
+                    ),
+                    16
+                )
+            ),
+            ?MODULE:id(<<"tst">>)
+        ])
+    ),
+
+    % length is 31 bytes long, not divisible by 4, this might cause buffer overflows
+    % if not handled correctly
+    <<131, 110, 31, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>
+                    ),
+                    16
+                )
+            )
+        )
+    ),
+
+    % length is 27 bytes long, not disible by 4, also on 64 bits system there is a 0 digit once encoded as term
+    % this might cause issues if not handled correctly
+    <<131, 110, 27, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id(
+                erlang:binary_to_integer(
+                    ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+                )
+            )
+        )
+    ),
+
+    % test if encoding multiple elements works
+    <<131, 108, 0, 0, 0, 3, 97, 1, 110, 27, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 109, 0,
+        0, 0, 6, 116, 115, 116, 98, 105, 110, 106>> = ?MODULE:id(
+        erlang:term_to_binary(
+            ?MODULE:id([
+                1,
+                ?MODULE:id(
+                    erlang:binary_to_integer(
+                        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+                    )
+                ),
+                <<"tstbin">>
+            ])
+        )
+    ),
+
+    0.
 
 id(X) ->
     X.
