@@ -190,9 +190,9 @@ static size_t count16(const uint16_t *num, size_t num_len)
     return count;
 }
 
-static inline uint32_t nlz(uint32_t x)
+// make sure that x != 0 before calling this function
+static inline uint32_t uint32_nlz(uint32_t x)
 {
-    // This function is used only from divmnu, that doesn't allow 32 leading zeros
     ASSUME(x != 0);
 
 #ifdef __has_builtin
@@ -272,7 +272,7 @@ static int divmnu16(
     // same amount.  We may have to append a high-order
     // digit on the dividend; we do that unconditionally.
 
-    s = nlz(v[n - 1]) - 16; // 0 <= s <= 15.
+    s = uint32_nlz(v[n - 1]) - 16; // 0 <= s <= 15.
     uint16_t vn[INTN_DIVMNU_MAX_IN_LEN * (sizeof(intn_digit_t) / sizeof(uint16_t))];
     for (i = n - 1; i > 0; i--)
         vn[i] = (v[i] << s) | (v[i - 1] >> (16 - s));
@@ -693,4 +693,98 @@ int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_intege
     }
 
     return cond_neg_in_place(sign, out);
+}
+
+int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_sign_t in_sign,
+    intn_from_integer_options_t opts, uint8_t out[], size_t out_len)
+{
+    size_t count = intn_count_digits(in, in_len);
+    if (UNLIKELY(count == 0)) {
+        memset(out, 0, out_len);
+        return out_len;
+    }
+
+    size_t to_copy = (count - 1);
+    size_t to_copy_bytes = to_copy * sizeof(intn_digit_t);
+
+    if (UNLIKELY(to_copy_bytes > out_len)) {
+        return -1;
+    }
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    memcpy(out, in, to_copy_bytes);
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    for (size_t i = 0; i < to_copy; i++) {
+        out[i * 4] = in[i] & 0xFF;
+        out[i * 4 + 1] = (in[i] >> 8) & 0xFF;
+        out[i * 4 + 2] = (in[i] >> 16) & 0xFF;
+        out[i * 4 + 3] = (in[i] >> 24) & 0xFF;
+    }
+#else
+#error "Unsupported endianess"
+#endif
+
+    intn_digit_t last_in = in[to_copy];
+    size_t k;
+    for (k = to_copy * 4; k < (to_copy + 1) * 4; k++) {
+        if (last_in == 0) {
+            break;
+        }
+        if (UNLIKELY(k >= out_len)) {
+            return -1;
+        }
+        out[k] = last_in & 0xFF;
+        last_in >>= 8;
+    }
+    size_t copied_len = k;
+
+    bool negate = false;
+    if ((opts & IntnSigned) && (in_sign == IntNNegativeInteger)) {
+        negate = true;
+    }
+
+    uint8_t filler = 0x00;
+    if (negate) {
+        filler = 0xFF;
+        unsigned int carry = 1;
+        for (size_t i = 0; i < copied_len; i++) {
+            unsigned int temp = ((int) (~out[i])) + carry;
+            out[i] = temp & 0xFF;
+            carry = temp >> 8;
+        }
+    }
+
+    if ((opts & IntnSigned) && (copied_len == out_len)) {
+        uint8_t last_byte = out[copied_len - 1];
+        if (UNLIKELY(
+                (negate && ((last_byte & 0x80) == 0)) || (!negate && ((last_byte & 0x80) != 0)))) {
+            return -1;
+        }
+    }
+
+    memset(out + copied_len, filler, out_len - copied_len);
+
+    // rotate when big endian
+    if (!(opts & IntnLittleEndian)) {
+        for (size_t i = 0; i < out_len / 2; i++) {
+            uint8_t tmp = out[i];
+            out[i] = out[out_len - 1 - i];
+            out[out_len - 1 - i] = tmp;
+        }
+    }
+
+    return out_len;
+}
+
+size_t intn_required_unsigned_integer_bytes(const intn_digit_t in[], size_t in_len)
+{
+    int i;
+    for (i = in_len - 1; i >= 0; i--) {
+        uint32_t in_i = in[i];
+        if (in_i != 0) {
+            return (i + 1) * sizeof(uint32_t) - (uint32_nlz(in_i) / 8);
+        }
+    }
+
+    return 0;
 }
