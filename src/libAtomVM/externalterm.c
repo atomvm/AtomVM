@@ -237,23 +237,40 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         return 2;
 
     } else if (term_is_any_integer(t)) {
-
-        avm_int64_t val = term_maybe_unbox_int64(t);
-        if (val >= INT32_MIN && val <= INT32_MAX) {
-            if (buf != NULL) {
-                buf[0] = INTEGER_EXT;
-                WRITE_32_UNALIGNED(buf + 1, (int32_t) val);
+        if (term_is_integer(t) || term_boxed_size(t) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            avm_int64_t val = term_maybe_unbox_int64(t);
+            if (val >= INT32_MIN && val <= INT32_MAX) {
+                if (buf != NULL) {
+                    buf[0] = INTEGER_EXT;
+                    WRITE_32_UNALIGNED(buf + 1, (int32_t) val);
+                }
+                return INTEGER_EXT_SIZE;
+            } else {
+                bool is_negative;
+                avm_uint64_t unsigned_val = int64_safe_unsigned_abs_set_flag(val, &is_negative);
+                uint8_t num_bytes = get_num_bytes(unsigned_val);
+                if (buf != NULL) {
+                    buf[0] = SMALL_BIG_EXT;
+                    buf[1] = num_bytes;
+                    buf[2] = is_negative ? 0x01 : 0x00;
+                    write_bytes(buf + 3, unsigned_val);
+                }
+                return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
             }
-            return INTEGER_EXT_SIZE;
         } else {
-            bool is_negative;
-            avm_uint64_t unsigned_val = int64_safe_unsigned_abs_set_flag(val, &is_negative);
-            uint8_t num_bytes = get_num_bytes(unsigned_val);
+            size_t intn_size = term_intn_size(t);
+            size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
+            size_t bigint_len = intn_size * digits_per_term;
+            const intn_digit_t *bigint = (const intn_digit_t *) term_intn_data(t);
+            size_t num_bytes = intn_required_unsigned_integer_bytes(bigint, bigint_len);
             if (buf != NULL) {
+                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
+
                 buf[0] = SMALL_BIG_EXT;
                 buf[1] = num_bytes;
-                buf[2] = is_negative ? 0x01 : 0x00;
-                write_bytes(buf + 3, unsigned_val);
+                buf[2] = sign == IntNNegativeInteger ? 0x01 : 0x00;
+                intn_to_integer_bytes(bigint, bigint_len, IntNPositiveInteger, IntnLittleEndian,
+                        buf + 3, num_bytes);
             }
             return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
         }
