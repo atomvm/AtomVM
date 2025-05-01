@@ -66,17 +66,6 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
-Run tests within build directory with:
-```
-$ ./tests/test-erlang
-$ ./tests/test-enif
-$ ./tests/test-mailbox
-$ ./tests/test-structs
-$ ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
-$ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
-$ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-```
-
 Complete [Build Instructions](https://www.atomvm.net/doc/main/build-instructions.html) are
 available in the documentation for
 [Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
