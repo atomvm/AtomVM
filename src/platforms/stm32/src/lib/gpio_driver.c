@@ -558,7 +558,8 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts)
     term reg_name_term = globalcontext_make_atom(global, gpio_atom);
     int atom_index = term_to_atom_index(reg_name_term);
 
-    if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, ctx->process_id))) {
+    term local_port_id = term_port_from_local_process_id(ctx->process_id);
+    if (UNLIKELY(!globalcontext_register_process(ctx->global, atom_index, local_port_id))) {
         scheduler_terminate(ctx);
         AVM_LOGE(TAG, "Only a single GPIO driver can be opened.");
         return NULL;
