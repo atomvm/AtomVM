@@ -630,7 +630,7 @@ static NativeHandlerResult consume_gpio_mailbox(Context *ctx)
     }
 
     term ret_msg;
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
         ret_msg = create_pair(ctx, gen_message.ref, ret);

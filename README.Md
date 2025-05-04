@@ -112,7 +112,7 @@ All of these limitations are going to be fixed in a reasonable amount of time.
 About This Project
 ==================
 This project has been created by [Davide Bettio](https://github.com/bettio/), and now is developed
-from a growing number of contributors.
+from a growing number of [contributors](https://github.com/atomvm/AtomVM/graphs/contributors).
 
 How to Contribute
 -----------------
@@ -123,3 +123,18 @@ of the [organization](https://github.com/atomvm) repositories.
 License
 -------
 This project is under the terms of the Apache 2.0 license.
+
+❤️ Acknowledgements
+-------------------
+
+AtomVM is made possible thanks to the dedication of a vibrant community of individual contributors
+who have generously shared their time and expertise. We are deeply grateful for their ongoing
+support and passion over the years.
+
+We also want to extend a special thank you to the following companies for supporting the development
+of AtomVM:
+
+[![Dashbit](doc/assets/dashbit-logo.png)](https://dashbit.co/)
+[![Software Mansion](doc/assets/sw-mansion-logo.png)](https://swmansion.com/)
+
+Thank you all for being part of this journey! 🙌
