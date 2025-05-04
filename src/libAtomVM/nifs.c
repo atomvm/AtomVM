@@ -4088,11 +4088,25 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
         }
 
-        if (term_is_local_pid(leader)) {
-            // We cannot put leader term on the heap
+        if (target != ctx) {
+            // always use signals when changing group leader of another context
+            // this will avoid any heap access during GC and in general avoids a number
+            // of annoying situations
+            // this will be async
             mailbox_send_term_signal(target, SetGroupLeaderSignal, leader);
         } else {
-            target->group_leader = leader;
+            // this will be sync
+            if (term_is_local_pid(leader)) {
+                ctx->group_leader = leader;
+            } else {
+                size_t leader_term_size = memory_estimate_usage(leader);
+                if (UNLIKELY(memory_ensure_free_with_roots(
+                                 ctx, leader_term_size, 1, &leader, MEMORY_CAN_SHRINK)
+                        != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                ctx->group_leader = memory_copy_term_tree(&ctx->heap, leader);
+            }
         }
 
         globalcontext_get_process_unlock(ctx->global, target);
