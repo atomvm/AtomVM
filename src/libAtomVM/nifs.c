@@ -4083,19 +4083,33 @@ static term nif_erlang_group_leader(Context *ctx, int argc, term argv[])
         VALIDATE_VALUE(leader, term_is_pid);
 
         int local_process_id = term_to_local_process_id(pid);
-        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-        if (IS_NULL_PTR(target)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-
-        if (term_is_local_pid(leader)) {
-            // We cannot put leader term on the heap
-            mailbox_send_term_signal(target, SetGroupLeaderSignal, leader);
+        if (ctx->process_id == local_process_id) {
+            // use a synchronous approach when updating group leader for this process
+            if (term_is_local_pid(leader)) {
+                ctx->group_leader = leader;
+            } else {
+                size_t leader_term_size = memory_estimate_usage(leader);
+                if (UNLIKELY(memory_ensure_free_with_roots(
+                                 ctx, leader_term_size, 1, &leader, MEMORY_CAN_SHRINK)
+                        != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                ctx->group_leader = memory_copy_term_tree(&ctx->heap, leader);
+            }
         } else {
-            target->group_leader = leader;
-        }
+            Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+            if (IS_NULL_PTR(target)) {
+                RAISE_ERROR(BADARG_ATOM);
+            }
 
-        globalcontext_get_process_unlock(ctx->global, target);
+            // always use signals when changing group leader of another context
+            // this will avoid any heap access during GC and in general avoids a number
+            // of annoying situations
+            // this will be async
+            mailbox_send_term_signal(target, SetGroupLeaderSignal, leader);
+
+            globalcontext_get_process_unlock(ctx->global, target);
+        }
         return TRUE_ATOM;
     }
 }
