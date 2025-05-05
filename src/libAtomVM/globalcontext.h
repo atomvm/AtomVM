@@ -412,11 +412,15 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
  *          global context.
  * @param glb pointer to the global context
  * @param string an AtomString
- * @return an atom term formed from the supplied atom string.
+ * @return an atom term formed from the supplied atom string, or an invalid term when out of memory
  */
 static inline term globalcontext_make_atom(GlobalContext *glb, AtomString string)
 {
     int global_atom_index = globalcontext_insert_atom(glb, string);
+    if (UNLIKELY(global_atom_index < 0)) {
+        return term_invalid_term();
+    }
+
     return term_from_atom_index(global_atom_index);
 }
 

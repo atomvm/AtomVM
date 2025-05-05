@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 
+### Changed
+- `globalcontext_make_atom` might return an invalid term when memory allocation fails. Therefore
+return value must be checked (e.g. using `term_is_invalid_term()`)
+
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
