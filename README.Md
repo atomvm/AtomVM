@@ -1,5 +1,5 @@
 <!---
-  Copyright 2017-2021 Davide Bettio <davide@uninstall.it>
+  Copyright 2017-2025 Davide Bettio <davide@uninstall.it>
 
   SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
@@ -66,17 +66,6 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
-Run tests within build directory with:
-```
-$ ./tests/test-erlang
-$ ./tests/test-enif
-$ ./tests/test-mailbox
-$ ./tests/test-structs
-$ ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
-$ ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
-$ ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
-```
-
 Complete [Build Instructions](https://www.atomvm.net/doc/main/build-instructions.html) are
 available in the documentation for
 [Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
@@ -91,23 +80,44 @@ Project Status
 
 [![Build and Test](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml/badge.svg?branch=main)](https://github.com/atomvm/AtomVM/actions/workflows/build-and-test.yaml)
 
-AtomVM is still in its early stages, but it can run simple applications similar to those available
-in [examples](examples/) and [tests](tests/).
+AtomVM is no longer just a prototype — it has reached a solid level of compatibility with the BEAM
+ecosystem. It can execute unmodified, compiled BEAM modules, and most
+[core standard library functions](https://www.atomvm.net/doc/main/api-reference-documentation.html)
+are already supported.
 
-AtomVM might crash with a similar message:
-```
-Undecoded opcode: 15
-Aborted (core dumped)
-```
-This basically means that an instruction has not been implemented yet, or that an outdated version has been used. Please, make sure to always run AtomVM using latest version.
+AtomVM is tested with code compiled with any version from OTP 21 to 27 (28 is supported only in `main` branch).
+
+Crashes may still occur in edge cases, so we recommend using either the
+[latest stable release](https://github.com/atomvm/AtomVM/releases)
+[(v0.6.x)](https://github.com/atomvm/AtomVM/tree/release-0.6) or the
+[main branch](https://github.com/atomvm/AtomVM/tree/main) if you're experimenting with newer
+features.
+If you run into issues, please [open an issue](https://github.com/atomvm/AtomVM/issues/new/choose)
+ — we’d love your feedback.
+
+For a detailed list of recent changes and new features, see the
+[changelog](https://github.com/atomvm/AtomVM/blob/main/CHANGELOG.md).
+
+AtomVM is ready to power your next embedded or lightweight functional programming project.
 
 Known Limitations
 -----------------
-This project is a work in progress, so there are several known limitations, that will prevent to run unmodified software, some of them are:
-* There is a minimal standard library, so several standard functions are missing.
-* Several instructions are not yet implemented.
 
-All of these limitations are going to be fixed in a reasonable amount of time.
+Your existing project might not work out of the box due to a few current limitations:
+
+- The standard library is minimal — some functions and modules are not yet implemented.
+- Features that depend on a full operating system (e.g. file I/O, OS processes) may be missing or
+behave differently.
+- Certain BEAM features like `on_load` functions and tracing are not yet supported.
+- Some functionality may simply be missing — if you find a gap, feel free to open an issue, and
+we’ll take a look.
+
+When a feature is implemented, we aim to provide behavior that is consistent with the official
+[BEAM documentation](https://www.erlang.org/docs) and
+[Erlang/OTP runtime](https://github.com/erlang/otp).
+
+Some of these limitations are on the roadmap, while others are deliberate design decisions to keep
+AtomVM lightweight, portable, and suitable for embedded systems.
 
 About This Project
 ==================
