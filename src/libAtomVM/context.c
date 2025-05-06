@@ -248,6 +248,15 @@ void context_destroy(Context *ctx)
     free(ctx);
 }
 
+static inline term term_pid_or_port_from_context(const Context *ctx)
+{
+    if (ctx->native_handler != NULL) {
+        return term_port_from_local_process_id(ctx->process_id);
+    } else {
+        return term_from_local_process_id(ctx->process_id);
+    }
+}
+
 void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
 {
     // exit_reason is one of the roots when garbage collecting
@@ -589,11 +598,7 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                     // Prepare the message on ctx's heap which will be freed afterwards.
                     term info_tuple = term_alloc_tuple(3, &ctx->heap);
                     term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
-                    if (ctx->native_handler != NULL) {
-                        term_put_tuple_element(info_tuple, 1, term_port_from_local_process_id(ctx->process_id));
-                    } else {
-                        term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
-                    }
+                    term_put_tuple_element(info_tuple, 1, term_pid_or_port_from_context(ctx));
                     term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
                     mailbox_send_term_signal(target, LinkExitSignal, info_tuple);
                 }
@@ -616,16 +621,15 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                 // Prepare the message on ctx's heap which will be freed afterwards.
                 term ref = term_from_ref_ticks(monitored_monitor->ref_ticks, &ctx->heap);
 
+                term port_or_process = term_pid_or_port_from_context(ctx);
+                term port_or_process_atom
+                    = term_is_local_port(port_or_process) ? PORT_ATOM : PROCESS_ATOM;
+
                 term info_tuple = term_alloc_tuple(5, &ctx->heap);
                 term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
                 term_put_tuple_element(info_tuple, 1, ref);
-                if (ctx->native_handler != NULL) {
-                    term_put_tuple_element(info_tuple, 2, PORT_ATOM);
-                    term_put_tuple_element(info_tuple, 3, term_port_from_local_process_id(ctx->process_id));
-                } else {
-                    term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
-                    term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
-                }
+                term_put_tuple_element(info_tuple, 2, port_or_process_atom);
+                term_put_tuple_element(info_tuple, 3, port_or_process);
                 term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
                 mailbox_send_term_signal(target, MonitorDownSignal, info_tuple);
@@ -770,12 +774,7 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
                         target = globalcontext_get_process_lock(ctx->global, local_process_id);
                     }
                     if (LIKELY(target)) {
-                        term self_pid;
-                        if (ctx->native_handler != NULL) {
-                            self_pid = term_port_from_local_process_id(ctx->process_id);
-                        } else {
-                            self_pid = term_from_local_process_id(ctx->process_id);
-                        }
+                        term self_pid = term_pid_or_port_from_context(ctx);
                         mailbox_send_immediate_ref_signal(target, UnlinkIDAckSignal, self_pid, unlink_id);
                         if (!process_table_locked) {
                             globalcontext_get_process_unlock(ctx->global, target);
