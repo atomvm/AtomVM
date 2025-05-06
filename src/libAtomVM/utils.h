@@ -28,6 +28,8 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -326,6 +328,126 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 #else
     #define UNREACHABLE(...)
 #endif
+
+#if defined(__GNUC__) && !defined(__clang__)
+#if __GNUC__ >= 13
+#define HAVE_ASSUME 1
+#define ASSUME(x) __attribute__((assume((x))))
+#endif
+#endif
+
+#ifndef HAVE_ASSUME
+#if defined __has_builtin
+#if __has_builtin(__builtin_assume)
+#define HAVE_ASSUME 1
+#define ASSUME(x) __builtin_assume((x))
+#endif
+#endif
+#endif
+
+#ifndef ASSUME
+#define ASSUME(...)
+#endif
+
+static inline int32_t int32_neg_unsigned(uint32_t u32)
+{
+    return (UINT32_C(0) - u32);
+}
+
+static inline int64_t int64_neg_unsigned(uint64_t u64)
+{
+    return (UINT64_C(0) - u64);
+}
+
+static inline int32_t int32_cond_neg_unsigned(bool negative, uint32_t u32)
+{
+    return negative ? int32_neg_unsigned(u32) : (int32_t) u32;
+}
+
+static inline int64_t int64_cond_neg_unsigned(bool negative, uint64_t u64)
+{
+    return negative ? int64_neg_unsigned(u64) : (int64_t) u64;
+}
+
+static inline bool uint32_does_overflow_int32(uint32_t u32, bool is_negative)
+{
+    return ((is_negative && (u32 > ((uint32_t) INT32_MAX) + 1))
+        || (!is_negative && (u32 > ((uint32_t) INT32_MAX))));
+}
+
+static inline bool uint64_does_overflow_int64(uint64_t u64, bool is_negative)
+{
+    return ((is_negative && (u64 > ((uint64_t) INT64_MAX) + 1))
+        || (!is_negative && (u64 > ((uint64_t) INT64_MAX))));
+}
+
+static inline uint32_t int32_safe_unsigned_abs(int32_t i32)
+{
+    return (i32 < 0) ? ((uint32_t) - (i32 + 1)) + 1 : (uint32_t) i32;
+}
+
+static inline uint64_t int64_safe_unsigned_abs(int64_t i64)
+{
+    return (i64 < 0) ? ((uint64_t) - (i64 + 1)) + 1 : (uint64_t) i64;
+}
+
+static inline bool int32_is_negative(int32_t i32)
+{
+    return ((uint32_t) i32) >> 31;
+}
+
+static inline bool int64_is_negative(int64_t i64)
+{
+    return ((uint64_t) i64) >> 63;
+}
+
+static inline uint32_t int32_safe_unsigned_abs_set_flag(int32_t i32, bool *is_negative)
+{
+    *is_negative = int32_is_negative(i32);
+    return int32_safe_unsigned_abs(i32);
+}
+
+static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_negative)
+{
+    *is_negative = int64_is_negative(i64);
+    return int64_safe_unsigned_abs(i64);
+}
+
+#if INTPTR_MAX <= INT32_MAX
+#define INTPTR_WRITE_TO_ASCII_BUF_LEN (32 + 1)
+#elif INTPTR_MAX <= INT64_MAX
+#define INTPTR_WRITE_TO_ASCII_BUF_LEN (64 + 1)
+#endif
+
+#define INT32_WRITE_TO_ASCII_BUF_LEN (32 + 1)
+#define INT64_WRITE_TO_ASCII_BUF_LEN (64 + 1)
+
+size_t intptr_write_to_ascii_buf(intptr_t n, unsigned int base, char *out_end);
+
+#if INTPTR_MAX >= INT32_MAX
+static inline size_t int32_write_to_ascii_buf(int32_t n, unsigned int base, char *out_end)
+{
+    return intptr_write_to_ascii_buf(n, base, out_end);
+}
+#endif
+
+#if INT64_MAX > INTPTR_MAX
+size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char *out_end);
+#else
+static inline size_t int64_write_to_ascii_buf(int64_t n, unsigned int base, char *out_end)
+{
+    return intptr_write_to_ascii_buf(n, base, out_end);
+}
+#endif
+
+typedef enum
+{
+    BufToInt64NoOptions,
+    BufToInt64RejectSign
+} buf_to_int64_options_t;
+
+int int64_parse_ascii_buf(const char buf[], size_t buf_len, unsigned int base,
+    buf_to_int64_options_t options, int64_t *out);
 
 #ifdef __cplusplus
 }

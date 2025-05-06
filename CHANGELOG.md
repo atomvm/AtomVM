@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 
+### Changed
+- `binary_to_integer/1` doesn't accept anymore binaries such as `"0xFF"` or `"  123"`
+
 ### Fixed
 - ESP32: improved sntp sync speed from a cold boot.
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
