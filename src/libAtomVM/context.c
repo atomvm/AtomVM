@@ -294,7 +294,7 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
     return true;
 }
 
-bool context_process_signal_set_group_leader(Context *ctx, struct TermSignal *signal)
+bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal)
 {
     size_t leader_term_size = memory_estimate_usage(signal->signal_term);
     ctx->group_leader = UNDEFINED_ATOM;
