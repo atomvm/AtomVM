@@ -1222,13 +1222,17 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
     term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
-    term request_term = interop_proplist_get_value(opts_term, REQUEST_ATOM);
+    term request_term = interop_proplist_get_value_default(opts_term, REQUEST_ATOM, UNDEFINED_ATOM);
     term group_leader;
+    bool valid_request = false;
 
-    if (UNLIKELY(request_term != term_nil())) {
+    if (LIKELY(request_term == UNDEFINED_ATOM)) {
+        group_leader = ctx->group_leader;
+    } else if (term_is_tuple(request_term) && (term_get_tuple_arity(request_term) >= 5)) {
+        valid_request = true;
         group_leader = term_get_tuple_element(request_term, 3);
     } else {
-        group_leader = ctx->group_leader;
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     if (min_heap_size_term != term_nil()) {
@@ -1338,7 +1342,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         term_put_tuple_element(pid_ref_tuple, 1, ref);
 
         return pid_ref_tuple;
-    } else if (UNLIKELY(request_term != term_nil())) {
+    } else if (UNLIKELY(valid_request)) {
         // Handling of spawn_request
         // spawn_request requires that the reply is enqueued before
         // any message from the spawned process
