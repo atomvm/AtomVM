@@ -421,7 +421,7 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
  * @param signal the message with the group leader term
  * @return \c true if successful, \c false in case of memory error
  */
-bool context_process_signal_set_group_leader(Context *ctx, struct TermSignal *signal);
+bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal);
 
 /**
  * @brief Process a link exit signal.
