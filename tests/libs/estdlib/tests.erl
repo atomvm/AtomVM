@@ -31,6 +31,8 @@ start() ->
                 case atomvm:platform() of
                     emscripten ->
                         false;
+                    stm32 ->
+                        false;
                     _ ->
                         true
                 end;
