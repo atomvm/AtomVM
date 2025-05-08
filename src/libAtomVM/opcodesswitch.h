@@ -46,9 +46,11 @@
 #include "trace.h"
 
 // These constants can be used to reduce the size of the VM for a specific
-// range of compiler versions
+// range of compiler versions. It's difficult to assert whether a compiler still
+// generates a given opcode, we're mostly using heuristics here.
+// @bjorng suggested using compiler test suites and coverage to find out
 #define MINIMUM_OTP_COMPILER_VERSION 21
-#define MAXIMUM_OTP_COMPILER_VERSION 26
+#define MAXIMUM_OTP_COMPILER_VERSION 27
 
 #ifdef __cplusplus
 extern "C" {
@@ -2429,6 +2431,8 @@ schedule_in:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION < 27
+// Not executable by OTP27 or higher
             case OP_ALLOCATE_ZERO: {
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, pc);
@@ -2454,8 +2458,10 @@ schedule_in:
                 #endif
                 break;
             }
+#endif
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 23
+// Not executable by OTP27 or higher
             case OP_ALLOCATE_HEAP_ZERO: {
                 uint32_t stack_need;
                 DECODE_LITERAL(stack_need, pc);
@@ -2516,6 +2522,8 @@ schedule_in:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION < 27
+// Not executable by OTP27 or higher (called init there)
             case OP_KILL: {
                 uint32_t target;
                 DECODE_YREG(target, pc);
@@ -2527,6 +2535,7 @@ schedule_in:
                 #endif
                 break;
             }
+#endif
 
             case OP_DEALLOCATE: {
                 uint32_t n_words;
@@ -3498,6 +3507,7 @@ wait_timeout_trap_handler:
             }
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 21
+// Not executable by OTP27 or higher
             case OP_PUT_TUPLE: {
                 uint32_t size;
                 DECODE_LITERAL(size, pc);
@@ -3767,6 +3777,8 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION < 27
+// Not executable by OTP27 or higher
             case OP_MAKE_FUN2: {
                 uint32_t fun_index;
                 DECODE_LITERAL(fun_index, pc)
@@ -3782,6 +3794,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_TRY: {
                 DEST_REGISTER(dreg);
@@ -4710,6 +4723,7 @@ wait_timeout_trap_handler:
 #endif
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 21
+// Not executable by OTP25 or higher
             case OP_BS_START_MATCH2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4972,6 +4986,7 @@ wait_timeout_trap_handler:
             }
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 21
+// Not executable by OTP25 or higher
             case OP_BS_SAVE2: {
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
@@ -5001,6 +5016,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
+// Not executable by OTP25 or higher
             case OP_BS_RESTORE2: {
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
@@ -5322,6 +5338,8 @@ wait_timeout_trap_handler:
                 break;
             }
 
+#if MINIMUM_OTP_COMPILER_VERSION < 25
+// Not executable by OTP25 or higher
             case OP_BS_CONTEXT_TO_BINARY: {
                 // Do not check if dreg is a binary or not
                 // In case it is not a binary or a match state, dreg will not be changed.
@@ -5359,6 +5377,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
+#endif
 
             case OP_APPLY: {
                 #ifdef IMPL_EXECUTE_LOOP
@@ -5742,6 +5761,7 @@ wait_timeout_trap_handler:
 #if MINIMUM_OTP_COMPILER_VERSION <= 23
             //TODO: stub, implement recv_mark/1
             //it looks like it can be safely left unimplemented
+// Not executable by OTP27 or higher
             case OP_RECV_MARK: {
                 uint32_t label;
                 DECODE_LABEL(label, pc);
@@ -5753,6 +5773,7 @@ wait_timeout_trap_handler:
 
             //TODO: stub, implement recv_set/1
             //it looks like it can be safely left unimplemented
+// Not executable by OTP27 or higher
             case OP_RECV_SET: {
                 uint32_t label;
                 DECODE_LABEL(label, pc);
@@ -6103,12 +6124,14 @@ wait_timeout_trap_handler:
             }
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 23
+// Not executable by OTP27 or higher
             case OP_FCLEARERROR: {
                 // This can be a noop as we raise from bifs
                 TRACE("fclearerror/0\n");
                 break;
             }
 
+// Not executable by OTP27 or higher
             case OP_FCHECKERROR: {
                 // This can be a noop as we raise from bifs
                 int fail_label;
@@ -6931,6 +6954,11 @@ wait_timeout_trap_handler:
                 break;
             }
 
+            case OP_NIF_START: {
+                TRACE("nif_start/0\n");
+                break;
+            }
+
             case OP_BADRECORD: {
                 TRACE("badrecord/1\n");
 
@@ -7258,6 +7286,21 @@ bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                     continue;
                 #endif
+            }
+#endif
+
+#if MAXIMUM_OTP_COMPILER_VERSION >= 27
+            case OP_EXECUTABLE_LINE: {
+                term arg1;
+                DECODE_COMPACT_TERM(arg1, pc);
+                term arg2;
+                DECODE_COMPACT_TERM(arg2, pc);
+
+                TRACE("executable_line/2 arg1=0x%lx, arg2=0x%lx\n", arg1, arg2);
+
+                USED_BY_TRACE(arg1);
+                USED_BY_TRACE(arg2);
+                break;
             }
 #endif
 

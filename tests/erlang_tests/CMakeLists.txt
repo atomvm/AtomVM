@@ -21,13 +21,17 @@
 cmake_minimum_required (VERSION 3.13)
 project (erlang_tests)
 
-function(compile_erlang module_name)
-    add_custom_command(
-        OUTPUT ${module_name}.beam
-        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-        COMMENT "Compiling ${module_name}.erl"
-    )
+function(compile_erlang)
+    cmake_parse_arguments(arg "" "" "ERLC_OPTIONS;MODULES" ${ARGN})
+
+    foreach(module_name ${arg_UNPARSED_ARGUMENTS} ${arg_MODULES})
+        add_custom_command(
+            OUTPUT ${module_name}.beam
+            COMMAND erlc ${arg_ERLC_OPTIONS} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+            COMMENT "Compiling ${module_name}.erl"
+        )
+    endforeach()
 endfunction()
 
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
@@ -503,6 +507,9 @@ compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
 
 compile_erlang(test_module_info)
+
+# -compile attribute doesn't seem to work in OTP27
+compile_erlang(ERLC_OPTIONS +line_coverage MODULES test_executable_line)
 
 compile_erlang(int64_build_binary)
 
@@ -996,6 +1003,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_close_avm_pack.beam
 
     test_module_info.beam
+    test_executable_line.beam
 
     int64_build_binary.beam
 
