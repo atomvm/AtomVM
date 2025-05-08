@@ -273,6 +273,10 @@ bool smp_is_main_thread(GlobalContext *glb);
 #define SMP_RWLOCK_WRLOCK(lock) smp_rwlock_wrlock(lock)
 #define SMP_RWLOCK_UNLOCK(lock) smp_rwlock_unlock(lock)
 
+#ifdef __cplusplus
+}
+#endif
+
 #else
 
 #define SMP_SPINLOCK_LOCK(spinlock)
@@ -285,10 +289,6 @@ bool smp_is_main_thread(GlobalContext *glb);
 #define SMP_RWLOCK_TRYRDLOCK(lock)
 #define SMP_RWLOCK_WRLOCK(lock)
 #define SMP_RWLOCK_UNLOCK(lock)
-#endif
-
-#ifdef __cplusplus
-}
 #endif
 
 #endif
