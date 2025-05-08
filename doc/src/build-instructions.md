@@ -770,7 +770,7 @@ chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the Blac
 ```{attention}
 For devices with only 512KB of flash the application address is different and must be adjusted when flashing your
 application with st-flash, or using the recommended `atomvm_rebar3_plugin`. The application address for these
-devices is `0x8060000`.
+devices is `0x8072800`.
 ```
 
 ### Configuring the Console

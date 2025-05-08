@@ -238,7 +238,7 @@ Congratulations!  You have now flashed the AtomVM VM image onto your STM32 devic
 ```{important}
 AtomVM expects to find the AVM at the address 0x8080000. On a STM32 Discovery board this means that the 1MB of flash
 will be split in 512KB available for the program and 512KB available for the packed AVM. For devices with only 512KB
-of flash the application address is 0x8060000, leaving 128KB of application flash available.
+of flash the application address is 0x8072800, leaving 96KB of application flash available.
 ```
 
 #### Console Printing
@@ -249,7 +249,7 @@ For Nucleo boards the on board USB-COM to USART may be used by configuring your 
 
 ### Deploying an AtomVM application for STM32
 
-An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x8080000`, for boards with 512KB of flash the address is `0x8060000`.
+An AtomVM application is a collection of BEAM files, which have been compiled using the Erlang or Elixir compiler.  These BEAM files are assembled into an AtomVM "packbeam" (`.avm`) file, which in turn is flashed to the `main` data partition on the STM32 flash module, starting at address `0x8080000`, for boards with 512KB of flash the address is `0x8072800`.
 
 When the AtomVM virtual machine starts, it will search for the first module that contains an exported `start/0` function in this partition, and it will begin execution of the BEAM bytecode at that function.
 
@@ -368,7 +368,7 @@ Copying may also fail with UF2 files downloaded from the Internet, typically Ato
 ```shell
 $ cp ~/Downloads/AtomVM-pico_w-v0.6.0.uf2 /Volumes/RPI-RP2/.
 cp: /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: fcopyfile failed: Operation not permitted
-cp: /Users/joe/Downloads/AtomVM-pico-v0.6.0.uf2: could not copy extended attributes to 
+cp: /Users/joe/Downloads/AtomVM-pico-v0.6.0.uf2: could not copy extended attributes to
 /Volumes/RPI-RP2/AtomVM-pico-v0.6.0.uf2: Operation not permitted
 ```
 

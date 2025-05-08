@@ -180,9 +180,9 @@ $ rebar3 atomvm stm32_flash
 For devices with only 512KB of flash the application address is different and must be specified:
 
 ```shell
-$ rebar3 atomvm stm32_flash -o 0x8060000
+$ rebar3 atomvm stm32_flash -o 0x8072800
 ...
-===> st-flash --reset write _build/default/lib/hello_world.avm 0x8060000
+===> st-flash --reset write _build/default/lib/hello_world.avm 0x8072800
 ```
 
 See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions about how to use the `stm32_flash` target.
@@ -417,12 +417,12 @@ For example:
 $ mix atomvm.stm32.flash
 ```
 
-Most devices do not need to enter the default application offset `0x8080000`, but devices with only 512KiB of flash storage need to use `--flash_offset=0x8060000` parameter setting to upload the application to the correct flash location.
+Most devices do not need to enter the default application offset `0x8080000`, but devices with only 512KiB of flash storage need to use `--flash_offset=0x8072800` parameter setting to upload the application to the correct flash location.
 
 BlackPill V2 example:
 
 ```shell
-$ mix atomvm.stm32.flash --flash_offset=0x8060000
+$ mix atomvm.stm32.flash --flash_offset=0x8072800
 ```
 
 If the `st-flash` tool is not in environment PATH, the full path to the `st-flash` tool should be exported to the environment variable `ATOMVM_MIX_PLUGIN_STFLASH`, for example:

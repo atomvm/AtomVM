@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
 
+### Changed
+- Flash offset of applications on STM32 devices with 512K flash is now 0x8072800.
+
 ## [0.6.6] - Unreleased
 
 ### Added
