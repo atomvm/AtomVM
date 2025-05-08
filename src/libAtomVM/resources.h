@@ -25,6 +25,7 @@
 
 #include "erl_nif.h"
 #include "list.h"
+#include "mailbox.h"
 #include "memory.h"
 #include "synclist.h"
 
@@ -82,6 +83,7 @@ struct SelectEvent
     bool close;
     int32_t local_pid;
     uint64_t ref_ticks;
+    Message *message;
 };
 
 static inline void resource_type_destroy(struct ResourceType *resource_type)

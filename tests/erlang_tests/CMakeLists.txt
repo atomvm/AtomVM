@@ -163,6 +163,7 @@ compile_erlang(test_concat_badarg)
 compile_erlang(register_and_whereis_badarg)
 compile_erlang(test_send)
 compile_erlang(test_open_port_badargs)
+compile_erlang(test_port_to_list)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
@@ -282,6 +283,7 @@ compile_erlang(test_unicode)
 
 compile_erlang(test_binary_part)
 compile_erlang(test_binary_split)
+compile_erlang(test_split_binary)
 
 compile_erlang(plusone)
 compile_erlang(plusone2)
@@ -525,6 +527,7 @@ compile_erlang(maps_nifs)
 compile_erlang(test_raw_raise)
 
 compile_erlang(test_ets)
+compile_erlang(test_node)
 
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
@@ -648,6 +651,7 @@ add_custom_target(erlang_test_modules DEPENDS
     register_and_whereis_badarg.beam
     test_send.beam
     test_open_port_badargs.beam
+    test_port_to_list.beam
     echo.beam
     pingpong.beam
     prime_ext.beam
@@ -768,6 +772,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_binary_part.beam
     test_binary_split.beam
+    test_split_binary.beam
 
     plusone.beam
     plusone2.beam
@@ -1016,4 +1021,5 @@ add_custom_target(erlang_test_modules DEPENDS
     test_raw_raise.beam
 
     test_ets.beam
+    test_node.beam
 )

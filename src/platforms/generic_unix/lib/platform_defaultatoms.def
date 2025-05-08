@@ -40,7 +40,6 @@ X(BUFFER_ATOM, "\x6", "buffer")
 
 X(GETADDRINFO_ATOM, "\xB", "getaddrinfo")
 X(NO_SUCH_HOST_ATOM, "\xC", "no_such_host")
-X(CONNECT_ATOM, "\x7", "connect")
 X(TCP_CLOSED_ATOM, "\xA", "tcp_closed")
 
 X(LISTEN_ATOM, "\x6", "listen")

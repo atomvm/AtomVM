@@ -346,7 +346,6 @@ static term nif_net_gethostname(Context *ctx, int argc, term argv[])
         }
         return make_error_tuple(posix_errno_to_term(errno, ctx->global), ctx);
     }
-
     size_t len = strlen(buf);
     if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + LIST_SIZE(len, 1), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

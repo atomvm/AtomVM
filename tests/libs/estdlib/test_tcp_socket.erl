@@ -27,7 +27,9 @@ test() ->
     ok = test_shutdown(),
     ok = test_close_by_another_process(),
     ok = test_buf_size(),
-    ok = test_override_buf_size(),
+    ok = test_timeout(),
+    ok = test_recv_nowait(),
+    ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
     case get_otp_version() of
         atomvm ->
@@ -37,6 +39,8 @@ test() ->
     end,
     ok.
 
+-define(PACKET_SIZE, 7).
+
 test_echo_server() ->
     etest:flush_msg_queue(),
 
@@ -45,7 +49,7 @@ test_echo_server() ->
 
     test_send_receive(Port, 10),
 
-    close_listen_socket(ListenSocket).
+    ok = close_listen_socket(ListenSocket).
 
 %%
 %% test_shutdown
@@ -64,12 +68,12 @@ test_shutdown() ->
     id(ok).
 
 test_shutdown_of_client_sockets(Port) ->
-    ok = test_shutdown_of_side(Port, write),
-    ok = test_shutdown_of_side(Port, read_write),
-    ok = test_shutdown_of_side(Port, read),
+    ok = test_shutdown_of_side(Port, write, <<"echo:01">>),
+    ok = test_shutdown_of_side(Port, read_write, <<"echo:02">>),
+    ok = test_shutdown_of_side(Port, read, <<"echo:03">>),
     id(ok).
 
-test_shutdown_of_side(Port, Side) ->
+test_shutdown_of_side(Port, Side, Packet) ->
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = try_connect(Socket, Port, 10),
 
@@ -77,21 +81,25 @@ test_shutdown_of_side(Port, Side) ->
     case Side of
         read ->
             %% read on the socket should fail
-            socket:send(Socket, erlang:atom_to_binary(Side, latin1)),
+            socket:send(Socket, Packet),
             case catch (socket:recv(Socket)) of
                 {error, _} ->
                     ok;
                 {ok, Data} ->
-                    %% On some Linux kernels, shutdown is not guaranteed to
-                    %% result in an error on read.
+                    %% On some Linux kernels, shutdown doesn't return an error
+                    %% until all buffered data is read.
                     %% C.f. https://stackoverflow.com/questions/740817/behavior-of-shutdownsock-shut-rd-with-tcp
-                    erlang:display({warning, expected_error_on_recv, Side, Data}),
-                    % error({expected_error_on_recv, Side, Data})
-                    ok
+                    %% Second recv will fail
+                    case catch (socket:recv(Socket)) of
+                        {error, _} ->
+                            ok;
+                        {ok, Data} ->
+                            error({expected_error_on_recv, Side, Data})
+                    end
             end;
         _ ->
             %% write on the socket should fail
-            case catch (socket:send(Socket, erlang:atom_to_binary(Side, latin1))) of
+            case catch (socket:send(Socket, Packet)) of
                 {error, _} ->
                     ok;
                 {ok, Data} ->
@@ -123,25 +131,7 @@ test_close_by_another_process() ->
 
     timer:sleep(10),
 
-    ok = close_listen_socket(ListenSocket),
-
-    id(ok).
-
-check_receive(Socket, Packet, Length, Expect) ->
-    case socket:send(Socket, Packet) of
-        ok ->
-            ok =
-                case socket:recv(Socket, Length) of
-                    {ok, Expect} ->
-                        ok;
-                    Error ->
-                        io:format("Unexpected value on recv: ~p~n", [Error]),
-                        Error
-                end;
-        {error, Reason} = Error ->
-            io:format("Error on send: ~p~n", [Reason]),
-            Error
-    end.
+    ok = close_listen_socket(ListenSocket).
 
 test_buf_size() ->
     etest:flush_msg_queue(),
@@ -157,50 +147,26 @@ test_buf_size() ->
     {error, _} = socket:setopt(Socket, {otp, rcvbuf}, not_an_int),
     {error, _} = socket:setopt(Socket, {otp, rcvbuf}, -1),
 
-    %% limit the recv buffer size to 10 bytes
-    ok = socket:setopt(Socket, {otp, rcvbuf}, 10),
-
-    Packet = "012345678901234567890123456789",
+    %% limit the recv buffer size to 5 bytes
+    ok = socket:setopt(Socket, {otp, rcvbuf}, 5),
+    true = 5 < ?PACKET_SIZE,
 
     %% we should only be able to receive
-    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
-    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
-    ok = check_receive(Socket, Packet, 0, <<"0123456789">>),
-
-    timer:sleep(10),
-
-    ok = close_client_socket(Socket),
-
-    ok = close_listen_socket(ListenSocket),
-
-    id(ok).
-
-test_override_buf_size() ->
-    etest:flush_msg_queue(),
-
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
-
-    {ok, Socket} = socket:open(inet, stream, tcp),
-    ok = try_connect(Socket, Port, 10),
-
-    %% limit the recv buffer size to 10 bytes
-    ok = socket:setopt(Socket, {otp, rcvbuf}, 10),
-
-    Packet = "012345678901234567890123456789",
+    ok = socket:send(Socket, <<"echo:01">>),
+    {ok, <<"echo:">>} = socket:recv(Socket, 0, 5000),
+    {ok, <<"01">>} = socket:recv(Socket, 0, 5000),
+    ok = socket:send(Socket, <<"echo:02">>),
+    {ok, <<"echo:">>} = socket:recv(Socket, 0, 5000),
+    {ok, <<"02">>} = socket:recv(Socket, 0, 5000),
 
     %% verify that the socket:recv length parameter takes
     %% precedence over the default
-    ok = check_receive(Socket, Packet, 15, <<"012345678901234">>),
-    ok = check_receive(Socket, Packet, 15, <<"567890123456789">>),
-
-    timer:sleep(10),
+    ok = socket:send(Socket, <<"echo:03">>),
+    {ok, <<"echo:03">>} = socket:recv(Socket, ?PACKET_SIZE, 5000),
 
     ok = close_client_socket(Socket),
 
-    ok = close_listen_socket(ListenSocket),
-
-    id(ok).
+    ok = close_listen_socket(ListenSocket).
 
 %%
 %% echo_server
@@ -245,18 +211,18 @@ accept(Pid, ListenSocket) ->
     end.
 
 echo(Pid, Socket) ->
-    case socket:recv(Socket) of
-        {ok, Packet} ->
-            % Pid ! {packet_received, Packet},
-            ok =
-                case socket:send(Socket, Packet) of
-                    ok ->
-                        ok;
-                    E ->
-                        %% TODO support returning Rest when Packet > buffer_size
-                        {unexpected_reply_from_send, E}
-                end,
-            % Pid ! {packet_echoed, Packet},
+    case socket:recv(Socket, ?PACKET_SIZE) of
+        {ok, <<"echo:", _/binary>> = Packet} ->
+            ok = socket:send(Socket, Packet),
+            echo(Pid, Socket);
+        {ok, <<"wait:", _/binary>> = Packet} ->
+            timer:sleep(500),
+            ok = socket:send(Socket, Packet),
+            echo(Pid, Socket);
+        {ok, <<"chnk:", Rest/binary>>} ->
+            ok = socket:send(Socket, <<"chnk:">>),
+            timer:sleep(500),
+            ok = socket:send(Socket, Rest),
             echo(Pid, Socket);
         %% estdlib TODO
         {error, closed} ->
@@ -264,6 +230,9 @@ echo(Pid, Socket) ->
             ok;
         %% OTP-24
         {error, econnreset} ->
+            Pid ! recv_terminated,
+            ok;
+        {error, {closed, <<"read">>}} ->
             Pid ! recv_terminated,
             ok;
         SomethingElse ->
@@ -275,23 +244,13 @@ close_listen_socket(ListenSocket) ->
     %% Close the socket, and wait for a signal that we came out of accept
     %%
     ok = socket:close(ListenSocket),
-    receive
-        accept_terminated ->
-            ok
-    after 1000 ->
-        %%
-        %% Closing the listening socket from another process may in some
-        %% cases not result in the blocking accept to break out of its
-        %% call with an expected return value.  In this case, we will
-        %% allow the wait for the `accept_terminated` message to fail
-        %% and simply warn the user.  See TODO comment to this effect in
-        %% `nif_socket_close` function in `otp_socket.c`
-        %%
-        erlang:display({warning, timeout, waiting, accept_terminated})
-        % throw({timeout, waiting, accept_terminated})
-    end,
-
-    ok.
+    ok =
+        receive
+            accept_terminated ->
+                ok
+        after 1000 ->
+            {error, {timeout, accept_terminated}}
+        end.
 
 %%
 %% send_receive loop
@@ -313,7 +272,7 @@ close_client_socket(Socket) ->
     receive
         recv_terminated ->
             ok
-    after 1000 ->
+    after 2000 ->
         throw({timeout, waiting, recv_terminated})
     end.
 
@@ -331,7 +290,8 @@ try_connect(Socket, Port, Tries) ->
 send_receive_loop(_Socket, 0) ->
     ok;
 send_receive_loop(Socket, I) ->
-    Packet = pid_to_list(self()) ++ ":" ++ integer_to_list(I),
+    Packet = list_to_binary(io_lib:format("echo:~2.10.0B", [I])),
+    ?PACKET_SIZE = byte_size(Packet),
     case socket:send(Socket, Packet) of
         ok ->
             case socket:recv(Socket) of
@@ -345,6 +305,222 @@ send_receive_loop(Socket, I) ->
             io:format("Error on send: ~p~n", [Reason]),
             Error
     end.
+
+receive_loop_nowait(Socket, Packet) when byte_size(Packet) > 0 ->
+    case socket:recv(Socket, byte_size(Packet), nowait) of
+        {ok, ReceivedPacket} when ReceivedPacket =:= Packet ->
+            ok;
+        {select, {select_info, recv, SelectHandle}} when is_reference(SelectHandle) ->
+            receive
+                {'$socket', Socket, select, SelectHandle} ->
+                    receive_loop_nowait(Socket, Packet)
+            after 5000 ->
+                {error, timeout}
+            end;
+        {select, {{select_info, recv, SelectHandle}, Data}} when is_reference(SelectHandle) ->
+            {Data, Rest} = split_binary(Packet, byte_size(Data)),
+            receive
+                {'$socket', Socket, select, SelectHandle} ->
+                    receive_loop_nowait(Socket, Rest)
+            after 5000 ->
+                {error, timeout}
+            end;
+        {error, _} = Error ->
+            io:format("Error on recv: ~p~n", [Error]),
+            Error
+    end.
+
+receive_loop_nowait_ref(Socket, Packet) when byte_size(Packet) > 0 ->
+    Ref = make_ref(),
+    case socket:recv(Socket, byte_size(Packet), Ref) of
+        {ok, ReceivedPacket} when ReceivedPacket =:= Packet ->
+            ok;
+        {select, {select_info, recv, Ref}} ->
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    receive_loop_nowait_ref(Socket, Packet)
+            after 5000 ->
+                {error, timeout}
+            end;
+        {select, {{select_info, recv, Ref}, Data}} ->
+            {Data, Rest} = split_binary(Packet, byte_size(Data)),
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    receive_loop_nowait_ref(Socket, Rest)
+            after 5000 ->
+                {error, timeout}
+            end;
+        {error, _} = Error ->
+            io:format("Error on recv: ~p~n", [Error]),
+            Error
+    end.
+
+test_timeout() ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = try_connect(Socket, Port, 10),
+
+    % receive of two chunks with an infinity timeout
+    Packet0 = <<"chnk:00">>,
+    ok = socket:send(Socket, Packet0),
+    {ok, Packet0} = socket:recv(Socket, ?PACKET_SIZE, infinity),
+
+    % receive of two chunks with a large timeout
+    Packet1 = <<"chnk:01">>,
+    ok = socket:send(Socket, Packet1),
+    {ok, Packet1} = socket:recv(Socket, ?PACKET_SIZE, 5000),
+
+    % receive of two chunks with a small timeout causing a timeout error
+    Packet2 = <<"chnk:02">>,
+    ok = socket:send(Socket, Packet2),
+    {error, Timeout02} = socket:recv(Socket, ?PACKET_SIZE, 250),
+    case Timeout02 of
+        {timeout, <<"chnk:">>} ->
+            % AtomVM usually does return partial data
+            {ok, <<"02">>} = socket:recv(Socket, 2, infinity);
+        timeout ->
+            % BEAM OTP-27 seems to never return partial data
+            {ok, <<"chnk:02">>} = socket:recv(Socket, ?PACKET_SIZE, infinity)
+    end,
+
+    % receive of two chunks with a null timeout causing a timeout error
+    Packet3 = <<"chnk:03">>,
+    ok = socket:send(Socket, Packet3),
+    timer:sleep(250),
+    case socket:recv(Socket, ?PACKET_SIZE, 0) of
+        {ok, <<"chnk:">>} ->
+            % BEAM OTP-22 to OTP-24 returns this on Linux on the CI.
+            {ok, <<"03">>} = socket:recv(Socket, 2);
+        {error, Timeout03} ->
+            case Timeout03 of
+                {timeout, <<"chnk:">>} ->
+                    % BEAM OTP-27 seems to always return partial data
+                    % AtomVM usually does
+                    {ok, <<"03">>} = socket:recv(Socket, 2);
+                timeout ->
+                    % Depending on scheduling, AtomVM may return no partial data
+                    {ok, <<"chnk:03">>} = socket:recv(Socket, ?PACKET_SIZE)
+            end
+    end,
+
+    % Test recv
+    ok = socket:send(Socket, <<"wait:01">>),
+    {error, timeout} = socket:recv(Socket, 0, 100),
+    {ok, <<"wait:01">>} = socket:recv(Socket, 0, 5000),
+
+    ok = socket:send(Socket, <<"wait:02">>),
+    {error, timeout} = socket:recv(Socket, ?PACKET_SIZE, 0),
+    {ok, <<"wait:02">>} = socket:recv(Socket, ?PACKET_SIZE, 5000),
+
+    ok = socket:send(Socket, <<"wait:03">>),
+    {error, Timeout04} = socket:recv(Socket, 2 * ?PACKET_SIZE, 5000),
+    ok =
+        case Timeout04 of
+            {timeout, <<"wait:03">>} ->
+                % AtomVM usually does return partial data
+                ok;
+            timeout ->
+                % BEAM OTP-27 seems to never return partial data
+                ok
+        end,
+
+    ok = close_client_socket(Socket),
+    ok = close_listen_socket(ListenSocket).
+
+test_recv_nowait() ->
+    ok = test_recv_nowait(fun receive_loop_nowait/2),
+    ok = test_recv_nowait(fun receive_loop_nowait_ref/2),
+    ok.
+
+test_recv_nowait(ReceiveFun) ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    ListenSocket = start_echo_server(Port),
+
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = try_connect(Socket, Port, 10),
+
+    Packet0 = <<"echo:00">>,
+    ok = socket:send(Socket, Packet0),
+    ok = ReceiveFun(Socket, Packet0),
+
+    Packet1 = <<"wait:00">>,
+    ok = socket:send(Socket, Packet1),
+    ok = ReceiveFun(Socket, Packet1),
+
+    Packet2 = <<"chnk:00">>,
+    ok = socket:send(Socket, Packet2),
+    ok = ReceiveFun(Socket, Packet2),
+
+    ok = close_client_socket(Socket),
+
+    ok = close_listen_socket(ListenSocket).
+
+test_accept_nowait() ->
+    OTPVersion = get_otp_version(),
+    ok = test_accept_nowait(nowait, OTPVersion),
+    ok = test_accept_nowait(make_ref(), OTPVersion),
+    ok.
+
+% actually since 22.1, but let's simplify here.
+test_accept_nowait(_NoWaitRef, Version) when Version =/= atomvm andalso Version < 23 -> ok;
+test_accept_nowait(Ref, Version) when
+    is_reference(Ref) andalso Version =/= atomvm andalso Version < 24
+->
+    ok;
+test_accept_nowait(NoWaitRef, _Version) ->
+    etest:flush_msg_queue(),
+
+    Port = 44404,
+    {ok, Socket} = socket:open(inet, stream, tcp),
+    ok = socket:setopt(Socket, {socket, reuseaddr}, true),
+    ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
+
+    ok = socket:bind(Socket, #{
+        family => inet, addr => loopback, port => Port
+    }),
+
+    ok = socket:listen(Socket),
+
+    Parent = self(),
+    {Child, MonitorRef} = spawn_opt(
+        fun() ->
+            {select, {select_info, accept, Ref}} = socket:accept(Socket, NoWaitRef),
+            Parent ! {self(), got_nowait},
+            receive
+                {'$socket', Socket, select, Ref} ->
+                    {ok, ConnSocket} = socket:accept(Socket, 0),
+                    socket:send(ConnSocket, <<"hello">>),
+                    socket:close(ConnSocket)
+            after 5000 ->
+                exit(timeout)
+            end
+        end,
+        [link, monitor]
+    ),
+    ok =
+        receive
+            {Child, got_nowait} -> ok
+        after 5000 -> timeout
+        end,
+    {ok, ClientSocket} = socket:open(inet, stream, tcp),
+    ok = socket:connect(ClientSocket, #{family => inet, addr => loopback, port => Port}),
+    {ok, <<"hello">>} = socket:recv(ClientSocket, 5),
+
+    socket:close(ClientSocket),
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, Child, normal} -> ok
+        after 5000 ->
+            timeout
+        end,
+    socket:close(Socket),
+    ok.
 
 test_setopt_getopt() ->
     {ok, Socket} = socket:open(inet, stream, tcp),

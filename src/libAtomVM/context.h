@@ -65,6 +65,7 @@ enum ContextFlags
     Ready = 8,
     Killed = 16,
     Trap = 32,
+    Distribution = 64,
 };
 
 enum HeapGrowthStrategy
@@ -412,6 +413,15 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
  * @param info whether to return FALSE_ATOM if no message was flushed.
  */
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info);
+
+/**
+ * @brief Process set group leader signal
+ *
+ * @param ctx the context being executed
+ * @param signal the message with the group leader term
+ * @return \c true if successful, \c false in case of memory error
+ */
+bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal);
 
 /**
  * @brief Process a link exit signal.

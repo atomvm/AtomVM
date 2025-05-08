@@ -209,6 +209,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(register_and_whereis_badarg, 333),
     TEST_CASE(test_send),
     TEST_CASE_EXPECTED(test_open_port_badargs, -21),
+    TEST_CASE(test_port_to_list),
     TEST_CASE_EXPECTED(prime_ext, 1999),
     TEST_CASE_EXPECTED(test_try_case_end, 256),
     TEST_CASE(test_exception_classes),
@@ -323,6 +324,7 @@ struct Test tests[] = {
 
     TEST_CASE(test_binary_part),
     TEST_CASE(test_binary_split),
+    TEST_CASE(test_split_binary),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
@@ -488,7 +490,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(fail_apply_last, 17),
 
     TEST_CASE_EXPECTED(pid_to_list_test, 63),
-    TEST_CASE_EXPECTED(ref_to_list_test, 386),
+    TEST_CASE(ref_to_list_test),
     TEST_CASE_EXPECTED(test_binary_to_integer, 99),
     TEST_CASE(test_binary_to_integer_2),
 
@@ -582,6 +584,7 @@ struct Test tests[] = {
     TEST_CASE(test_raw_raise),
 
     TEST_CASE(test_ets),
+    TEST_CASE(test_node),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

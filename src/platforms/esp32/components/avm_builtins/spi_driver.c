@@ -677,7 +677,7 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
 
 bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, GlobalContext *global)
 {
-    if (UNLIKELY(!term_is_pid(spi_port))) {
+    if (UNLIKELY(!term_is_local_port(spi_port))) {
         ESP_LOGW(TAG, "Given term is not a SPI port driver.");
         return false;
     }

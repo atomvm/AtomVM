@@ -40,7 +40,7 @@
 %%-----------------------------------------------------------------------------
 -spec puts(iodata()) -> ok | {error, term()}.
 puts(Text) ->
-    puts(get_pid(), Text).
+    puts(get_port(), Text).
 
 %% @hidden
 -spec puts(pid(), iodata()) -> ok.
@@ -55,7 +55,7 @@ puts(Console, Text) ->
 %%-----------------------------------------------------------------------------
 -spec flush() -> ok | {error, term()}.
 flush() ->
-    flush(get_pid()).
+    flush(get_port()).
 
 %% @hidden
 -spec flush(pid()) -> ok.
@@ -77,18 +77,18 @@ print(_Text) ->
 %% Internal operations
 
 %% @private
--spec get_pid() -> pid().
-get_pid() ->
+-spec get_port() -> port().
+get_port() ->
     case whereis(console) of
         undefined ->
             start();
-        Pid when is_pid(Pid) ->
-            Pid
+        Port when is_port(Port) ->
+            Port
     end.
 
 %% @private
--spec start() -> pid().
+-spec start() -> port().
 start() ->
-    Pid = erlang:open_port({spawn, "console"}, []),
-    erlang:register(console, Pid),
-    Pid.
+    Port = erlang:open_port({spawn, "console"}, []),
+    erlang:register(console, Port),
+    Port.

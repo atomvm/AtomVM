@@ -1,7 +1,7 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2023 Paul Guyot <pguyot@kallisys.net>
+ * Copyright 2019 Davide Bettio <davide@uninstall.it>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,15 +20,30 @@
 
 #include "platform_defaultatoms.h"
 
-static const char *const emscripten_atom = ATOM_STR("\xA", "emscripten");
+#include <stdlib.h>
+#include <string.h>
 
 void platform_defaultatoms_init(GlobalContext *glb)
 {
-    int ok = 1;
+// About X macro: https://en.wikipedia.org/wiki/X_macro
+#define X(name, lenstr, str) \
+    lenstr str,
 
-    ok &= globalcontext_insert_atom(glb, emscripten_atom) == EMSCRIPTEN_ATOM_INDEX;
+    static const char *const atoms[] = {
+#include "platform_defaultatoms.def"
 
-    if (!ok) {
-        AVM_ABORT();
+        // dummy value
+        NULL
+    };
+#undef X
+
+    for (int i = 0; i < ATOM_FIRST_AVAIL_INDEX - PLATFORM_ATOMS_BASE_INDEX; i++) {
+        if (UNLIKELY((size_t) atoms[i][0] != strlen(atoms[i] + 1))) {
+            AVM_ABORT();
+        }
+
+        if (UNLIKELY(globalcontext_insert_atom(glb, atoms[i]) != i + PLATFORM_ATOMS_BASE_INDEX)) {
+            AVM_ABORT();
+        }
     }
 }

@@ -35,19 +35,31 @@ start() ->
         _ ->
             assert(is_binary(erlang:system_info(system_architecture)))
     end,
+    SystemVersion = erlang:system_info(system_version),
+    true = is_list(SystemVersion),
+    case Machine of
+        "BEAM" ->
+            "Erlang/OTP " ++ _ = SystemVersion;
+        _ ->
+            "AtomVM " ++ _ = SystemVersion
+    end,
+    OTPRelease = erlang:system_info(otp_release),
+    true = is_list(OTPRelease),
+    OTPReleaseInt = list_to_integer(OTPRelease),
+    true = OTPReleaseInt > 20,
     case Machine of
         "BEAM" ->
             % beam raises badarg, and probably so should AtomVM.
             ok =
                 try
-                    erlang:system_info(some_wierd_unused_key),
+                    erlang:system_info(some_weird_unused_key),
                     unexpected
                 catch
                     error:badarg ->
                         ok
                 end;
         _ ->
-            assert(erlang:system_info(some_wierd_unused_key) =:= undefined)
+            assert(erlang:system_info(some_weird_unused_key) =:= undefined)
     end,
     0.
 

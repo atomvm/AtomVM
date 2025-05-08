@@ -57,7 +57,7 @@
     detach_interrupt/1
 ]).
 
--type gpio() :: pid().
+-type gpio() :: port().
 %% This is the pid returned by `gpio:start/0'.
 -type pin() :: non_neg_integer() | pin_tuple().
 %% The pin definition for ESP32 and PR2040 is a non-negative integer. A tuple is used on the STM32 platform and for the extra "WL" pins on the Pico-W.

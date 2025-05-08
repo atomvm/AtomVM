@@ -53,6 +53,7 @@
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
 static struct ResourceContextMonitor *context_monitors_handle_terminate(Context *ctx);
+static void context_distribution_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
 
 Context *context_new(GlobalContext *glb)
@@ -133,6 +134,11 @@ void context_destroy(Context *ctx)
     // Ensure process is not registered
     globalcontext_maybe_unregister_process_id(ctx->global, ctx->process_id);
 
+    // Handle distribution termination
+    if (UNLIKELY(ctx->flags & Distribution)) {
+        context_distribution_handle_terminate(ctx);
+    }
+
     // Process any link/unlink/monitor/demonitor signal that arrived recently
     // Also process ProcessInfoRequestSignal so caller isn't trapped waiting
     MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
@@ -142,6 +148,12 @@ void context_destroy(Context *ctx)
                 struct BuiltInAtomRequestSignal *request_signal
                     = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
                 context_process_process_info_request_signal(ctx, request_signal, true);
+                break;
+            }
+            case SetGroupLeaderSignal: {
+                struct TermSignal *group_leader
+                    = CONTAINER_OF(signal_message, struct TermSignal, base);
+                (void) context_process_signal_set_group_leader(ctx, group_leader);
                 break;
             }
             case MonitorSignal: {
@@ -195,9 +207,6 @@ void context_destroy(Context *ctx)
     // Eventually call resource monitors handlers after the processes table was unlocked
     // The monitors were removed from the list of monitors.
     if (resource_monitors) {
-        ErlNifEnv env;
-        erl_nif_env_partial_init_from_globalcontext(&env, ctx->global);
-
         struct ListHead monitors;
         list_prepend(&resource_monitors->monitor.monitor_list_head, &monitors);
 
@@ -207,7 +216,7 @@ void context_destroy(Context *ctx)
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
             struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
             struct RefcBinary *refc = refc_binary_from_data(resource_monitor->resource_obj);
-            resource_type_fire_monitor(refc->resource_type, &env, resource_monitor->resource_obj, ctx->process_id, resource_monitor->ref_ticks);
+            resource_type_fire_monitor(refc->resource_type, erl_nif_env_from_context(ctx), resource_monitor->resource_obj, ctx->process_id, resource_monitor->ref_ticks);
             free(monitor);
         }
     }
@@ -237,6 +246,15 @@ void context_destroy(Context *ctx)
     ets_delete_owned_tables(&ctx->global->ets, ctx->process_id, ctx->global);
 
     free(ctx);
+}
+
+static inline term term_pid_or_port_from_context(const Context *ctx)
+{
+    if (ctx->native_handler != NULL) {
+        return term_port_from_local_process_id(ctx->process_id);
+    } else {
+        return term_from_local_process_id(ctx->process_id);
+    }
 }
 
 void context_process_kill_signal(Context *ctx, struct TermSignal *signal)
@@ -285,6 +303,17 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
     return true;
 }
 
+bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal)
+{
+    size_t leader_term_size = memory_estimate_usage(signal->signal_term);
+    ctx->group_leader = UNDEFINED_ATOM;
+    if (UNLIKELY(memory_ensure_free_opt(ctx, leader_term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        return false;
+    }
+    ctx->group_leader = memory_copy_term_tree(&ctx->heap, signal->signal_term);
+    return true;
+}
+
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info)
 {
     context_update_flags(ctx, ~Trap, NoFlags);
@@ -295,7 +324,7 @@ void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool
         if (term_is_tuple(msg)
             && term_get_tuple_arity(msg) == 5
             && term_get_tuple_element(msg, 0) == DOWN_ATOM
-            && term_is_reference(term_get_tuple_element(msg, 1))
+            && term_is_local_reference(term_get_tuple_element(msg, 1))
             && term_to_ref_ticks(term_get_tuple_element(msg, 1)) == ref_ticks) {
             mailbox_remove_message(&ctx->mailbox, &ctx->heap);
             // If option info is combined with option flush, false is returned if a flush was needed, otherwise true.
@@ -569,7 +598,7 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                     // Prepare the message on ctx's heap which will be freed afterwards.
                     term info_tuple = term_alloc_tuple(3, &ctx->heap);
                     term_put_tuple_element(info_tuple, 0, EXIT_ATOM);
-                    term_put_tuple_element(info_tuple, 1, term_from_local_process_id(ctx->process_id));
+                    term_put_tuple_element(info_tuple, 1, term_pid_or_port_from_context(ctx));
                     term_put_tuple_element(info_tuple, 2, ctx->exit_reason);
                     mailbox_send_term_signal(target, LinkExitSignal, info_tuple);
                 }
@@ -592,15 +621,15 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                 // Prepare the message on ctx's heap which will be freed afterwards.
                 term ref = term_from_ref_ticks(monitored_monitor->ref_ticks, &ctx->heap);
 
+                term port_or_process = term_pid_or_port_from_context(ctx);
+                term port_or_process_atom
+                    = term_is_local_port(port_or_process) ? PORT_ATOM : PROCESS_ATOM;
+
                 term info_tuple = term_alloc_tuple(5, &ctx->heap);
                 term_put_tuple_element(info_tuple, 0, DOWN_ATOM);
                 term_put_tuple_element(info_tuple, 1, ref);
-                if (ctx->native_handler != NULL) {
-                    term_put_tuple_element(info_tuple, 2, PORT_ATOM);
-                } else {
-                    term_put_tuple_element(info_tuple, 2, PROCESS_ATOM);
-                }
-                term_put_tuple_element(info_tuple, 3, term_from_local_process_id(ctx->process_id));
+                term_put_tuple_element(info_tuple, 2, port_or_process_atom);
+                term_put_tuple_element(info_tuple, 3, port_or_process);
                 term_put_tuple_element(info_tuple, 4, ctx->exit_reason);
 
                 mailbox_send_term_signal(target, MonitorDownSignal, info_tuple);
@@ -610,6 +639,14 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
         }
     }
     return result;
+}
+
+static void context_distribution_handle_terminate(Context *ctx)
+{
+    // For now, the only process with Distribution flag set is net_kernel.
+    GlobalContext *glb = ctx->global;
+    glb->node_name = NONODE_AT_NOHOST_ATOM;
+    glb->creation = 0;
 }
 
 struct Monitor *monitor_link_new(term link_pid)
@@ -737,7 +774,7 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
                         target = globalcontext_get_process_lock(ctx->global, local_process_id);
                     }
                     if (LIKELY(target)) {
-                        term self_pid = term_from_local_process_id(ctx->process_id);
+                        term self_pid = term_pid_or_port_from_context(ctx);
                         mailbox_send_immediate_ref_signal(target, UnlinkIDAckSignal, self_pid, unlink_id);
                         if (!process_table_locked) {
                             globalcontext_get_process_unlock(ctx->global, target);

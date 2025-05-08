@@ -24,6 +24,7 @@ include(FetchMbedTLS)
 
 set(HEADER_FILES
     emscripten_sys.h
+    websocket_nifs.h
     "../../../../libAtomVM/otp_crypto.h"
 )
 
@@ -32,6 +33,7 @@ set(SOURCE_FILES
     platform_nifs.c
     smp.c
     sys.c
+    websocket_nifs.c
     "../../../../libAtomVM/otp_crypto.c"
 )
 

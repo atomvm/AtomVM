@@ -132,6 +132,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case FlushMonitorSignal: // ports cannot monitor
             case FlushInfoMonitorSignal: // id.
             case MonitorDownSignal: // id
+            case SetGroupLeaderSignal: // ports can't be group leaders
                 break;
             case NormalMessage: {
                 UNREACHABLE();

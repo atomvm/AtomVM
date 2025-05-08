@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added a limited implementation of the OTP `ets` interface
 - Added `code:all_loaded/0` and `code:all_available/0`
+- Added `erlang:split_binary/2`
+- Added `inet:getaddr/2`
+- Added support for external pids and encoded pids in external terms
+- Added support for external refs and encoded refs in external terms
+- Introduce ports to represent native processes and added support for external ports and encoded ports in external terms
+- Added `atomvm:get_creation/0`, equivalent to `erts_internal:get_creation/0`
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
 - Partial support for `erlang:fun_info/2`
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
@@ -19,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `esp:partition_read/3`, and documentation for `esp:partition_erase_range/2/3` and `esp:partition_write/3`
 - Added support for list insertion in 'ets:insert/2'.
 - Support to OTP-28
+- Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
+- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
+- Added `erl_epmd` client implementation to epmd using `socket` module
+- Added support for socket asynchronous API for `recv`, `recvfrom` and `accept`.
+- Added support for UDP multicast with socket API.
 - Added support for `ets:update_counter/3` and `ets:update_counter/4`.
 - Added `erlang:+/1`
 - Added `lists:append/1` and `lists:append/2`
@@ -33,10 +44,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `code:is_loaded/1` and `code:which/1`
 - Added several `io_lib` functions including `io_lib:fwrite/2` and `io_lib:write_atom/1`
 - Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
+- Added `application:get_env/2`
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 
+### Changed
+
+- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
+
 ### Fixed
+
 - ESP32: improved sntp sync speed from a cold boot.
+- Fixed `gen_server` internal messages to match OTP so it works across erlang distribution
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer

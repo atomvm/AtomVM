@@ -27,6 +27,7 @@ set(ERLANG_MODULES
     test_file
     test_ahttp_client
     test_http_server
+    test_mdns
     test_port
     test_timer_manager
 )

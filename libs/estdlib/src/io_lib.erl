@@ -321,6 +321,8 @@ format_spw(_Format, T) when is_float(T) ->
     erlang:float_to_list(T);
 format_spw(_Format, T) when is_pid(T) ->
     erlang:pid_to_list(T);
+format_spw(_Format, T) when is_port(T) ->
+    erlang:port_to_list(T);
 format_spw(_Format, T) when is_reference(T) ->
     erlang:ref_to_list(T);
 format_spw(_Format, T) when is_function(T) ->
