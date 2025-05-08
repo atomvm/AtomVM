@@ -687,10 +687,7 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
         return NULL;
     }
 
-    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
-    new_module->module_platform_data = NULL;
-
-    return new_module;
+    return module_new_from_iff_binary(global, beam_module, beam_module_size);
 }
 
 Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
