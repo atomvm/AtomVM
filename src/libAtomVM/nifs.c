@@ -1232,6 +1232,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         valid_request = true;
         group_leader = term_get_tuple_element(request_term, 3);
     } else {
+        context_destroy(new_ctx);
         RAISE_ERROR(BADARG_ATOM);
     }
 
