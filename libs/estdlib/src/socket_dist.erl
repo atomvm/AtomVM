@@ -22,6 +22,7 @@
 % dist interface
 -export([
     listen/1,
+    listen/2,
     accept/1,
     accept_connection/5,
     setup/5,
@@ -37,24 +38,37 @@
 
 -spec listen(string()) -> {ok, {any(), #net_address{}, pos_integer()}} | {error, any()}.
 listen(Name) ->
+    listen(Name, 0).
+
+-spec listen(string(), non_neg_integer()) ->
+    {ok, {any(), #net_address{}, pos_integer()}} | {error, any()}.
+listen(Name, SocketPort) ->
     {ok, LSock} = socket:open(inet, stream, tcp),
-    ok = socket:bind(LSock, #{
-        family => inet,
-        port => 0,
-        addr => {0, 0, 0, 0}
-    }),
-    ok = socket:listen(LSock),
-    {ok, #{addr := Addr, port := Port}} = socket:sockname(LSock),
-    ErlEpmd = net_kernel:epmd_module(),
-    Address = #net_address{
-        host = Addr,
-        protocol = tcp,
-        family = inet
-    },
-    case ErlEpmd:register_node(Name, Port) of
-        {ok, Creation} ->
-            {ok, {LSock, Address, Creation}};
-        Error ->
+    case
+        socket:bind(LSock, #{
+            family => inet,
+            port => SocketPort,
+            addr => {0, 0, 0, 0}
+        })
+    of
+        ok ->
+            ok = socket:listen(LSock),
+            {ok, #{addr := Addr, port := Port}} = socket:sockname(LSock),
+            ErlEpmd = net_kernel:epmd_module(),
+            Address = #net_address{
+                host = Addr,
+                protocol = tcp,
+                family = inet
+            },
+            case ErlEpmd:register_node(Name, Port) of
+                {ok, Creation} ->
+                    {ok, {LSock, Address, Creation}};
+                Error ->
+                    socket:close(LSock),
+                    Error
+            end;
+        {error, _} = Error ->
+            socket:close(LSock),
             Error
     end.
 
