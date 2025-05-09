@@ -67,6 +67,7 @@ memory error
 - Fixed nif_atomvm_posix_read GC bug
 - Fixed `erlang:is_number/1` function, now returns true also for floats
 - Fixed unlink protocol and add support for `link/1` on ports
+- Correctly set Pico-W unique hostname, use `dhcp_hostname` if present in config.
 
 ### Changed
 
