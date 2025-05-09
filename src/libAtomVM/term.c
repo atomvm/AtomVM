@@ -115,10 +115,10 @@ int term_snprint(char *buf, size_t size, term t, const GlobalContext *global)
 int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
 {
     if (term_is_atom(t)) {
-        int atom_index = term_to_atom_index(t);
-        AtomString atom_string = atom_table_get_atom_string(global->atom_table, atom_index);
-        return fun->print(fun, "%.*s", (int) atom_string_len(atom_string),
-            (char *) atom_string_data(atom_string));
+        atom_index_t atom_index = term_to_atom_index(t);
+        size_t atom_len;
+        const uint8_t *atom_data = atom_table_get_atom_string(global->atom_table, atom_index, &atom_len);
+        return fun->print(fun, "%.*s", (int) atom_len, atom_data);
 
     } else if (term_is_integer(t)) {
         avm_int_t iv = term_to_int(t);
@@ -222,57 +222,33 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
             term function_atom = boxed_value[2];
             int arity = term_to_int(boxed_value[3]);
 
-            int module_atom_index = term_to_atom_index(module_atom);
-            size_t module_buf_len;
-            atom_ref_t module_atom_ref = atom_table_get_atom_ptr_and_len(
-                global->atom_table, module_atom_index, &module_buf_len);
-            char *module_name = malloc(module_buf_len);
-            if (IS_NULL_PTR(module_name)) {
-                return -1;
-            }
-            atom_table_write_bytes(
-                global->atom_table, module_atom_ref, module_buf_len, module_name);
+            atom_index_t module_atom_index = term_to_atom_index(module_atom);
+            size_t module_name_len;
+            const uint8_t *module_name = atom_table_get_atom_string(global->atom_table, module_atom_index, &module_name_len);
 
-            int function_atom_index = term_to_atom_index(function_atom);
-            size_t function_buf_len;
-            atom_ref_t function_atom_ref = atom_table_get_atom_ptr_and_len(
-                global->atom_table, function_atom_index, &function_buf_len);
-            char *function_name = malloc(function_buf_len);
-            if (IS_NULL_PTR(function_name)) {
-                free(module_name);
-                return -1;
-            }
-            atom_table_write_bytes(
-                global->atom_table, function_atom_ref, function_buf_len, function_name);
+            atom_index_t function_atom_index = term_to_atom_index(function_atom);
+            size_t function_name_len;
+            const uint8_t *function_name = atom_table_get_atom_string(global->atom_table, function_atom_index, &function_name_len);
 
             // fun m:f/a
-            int ret = fun->print(fun, "fun %.*s:%.*s/%i", (int) module_buf_len, module_name,
-                (int) function_buf_len, function_name, arity);
-            free(module_name);
-            free(function_name);
+            int ret = fun->print(fun, "fun %.*s:%.*s/%i", (int) module_name_len, module_name,
+                (int) function_name_len, function_name, arity);
             return ret;
 
         } else {
             Module *fun_module = (Module *) boxed_value[1];
 
             term module_name_atom = module_get_name(fun_module);
-            int atom_index = term_to_atom_index(module_name_atom);
-            size_t buf_len;
-            atom_ref_t atom_ref
-                = atom_table_get_atom_ptr_and_len(global->atom_table, atom_index, &buf_len);
-            char *module_name = malloc(buf_len);
-            if (IS_NULL_PTR(module_name)) {
-                return -1;
-            }
-            atom_table_write_bytes(global->atom_table, atom_ref, buf_len, module_name);
+            atom_index_t module_atom_index = term_to_atom_index(module_name_atom);
+            size_t module_name_len;
+            const uint8_t *module_name = atom_table_get_atom_string(global->atom_table, module_atom_index, &module_name_len);
 
             // this is not the same fun_index used on the BEAM, but it should be fine
             uint32_t fun_index = boxed_value[2];
 
             // TODO: last component is a uniq, we are temporarly using the memory address
-            int ret = fun->print(fun, "#Fun<%.*s.%" PRIu32 ".%" PRIuPTR ">", (int) buf_len,
+            int ret = fun->print(fun, "#Fun<%.*s.%" PRIu32 ".%" PRIuPTR ">", (int) module_name_len,
                 module_name, fun_index, (uintptr_t) fun_module);
-            free(module_name);
             return ret;
         }
 
@@ -819,7 +795,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
     return result;
 }
 
-void term_get_function_mfa(term fun, term *m, term *f, term *a, GlobalContext *global)
+void term_get_function_mfa(term fun, term *m, term *f, term *a)
 {
     TERM_DEBUG_ASSERT(term_is_fun(fun));
 
@@ -847,10 +823,10 @@ void term_get_function_mfa(term fun, term *m, term *f, term *a, GlobalContext *g
         uint32_t label, arity, n_freeze;
         module_get_fun(module, fun_index, &label, &arity, &n_freeze);
 
-        AtomString fun_name = NULL;
-        bool has_local_name = module_get_function_from_label(module, label, &fun_name, (int *) &arity, global);
+        atom_index_t fun_name;
+        bool has_local_name = module_get_function_from_label(module, label, &fun_name, (int *) &arity);
 
-        *f = has_local_name ? globalcontext_make_atom(global, fun_name) : term_nil();
+        *f = has_local_name ? term_from_atom_index(fun_name) : term_nil();
     }
     if (a != NULL) {
         uint32_t fun_index = term_to_int32(boxed_value[2]);
