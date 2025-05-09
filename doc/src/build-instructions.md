@@ -569,8 +569,8 @@ documentation.
 
 The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.  In general, they involve:
 
-1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree;
-1. Adding the component to the corresponding `main/component_nifs.txt` or `main/component_ports.txt` files;
+1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree.
+1. Run `idf.py reconfigure` to pick up any menuconfig options, many extra drivers have an option to disable them (they are enabled by default). Optionally use `idf.py menuconfig` and confirm the driver is enabled and save when quitting.
 1. Building the AtomVM binary.
 
 ```{attention}
@@ -604,10 +604,12 @@ To add support for a new peripheral or protocol using custom AtomVM Nif, you nee
     Instructions for implementing Nifs is outside of the scope of this document.
     ```
 
-* Add your `<moniker>` to the `main/component_nifs.txt` file in the `src/platforms/esp32` directory.
-```{attention}
-The `main/component_nifs.txt` file will not exist until after the first clean build.
-```
+* Add the `REGISTER_NIF_COLLECTION` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `RESOLVE_NIF_CB` macro to the end of your nif code. Example:
+
+    ```c
+        REGISTER_NIF_COLLECTION(my_nif, NULL, NULL, my_nif_get_nif);
+    ```
+
 
 #### Adding a custom AtomVM Port
 
@@ -630,10 +632,12 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
     Instructions for implementing Ports is outside of the scope of this document.
     ```
 
-* Add your `<moniker>` to the `main/component_ports.txt` file in the `src/platforms/esp32` directory.
-```{attention}
-The `main/component_ports.txt` file will not exist until after the first clean build.
-```
+* Add the `REGISTER_PORT_COLLECTION` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `RESOLVE_NIF_CB` macro to the end of your nif code. Example:
+
+    ```c
+        REGISTER_PORT_COLLECTION(my_port, my_port_init, NULL, my_port_create_port);
+    ```
+
 
 ## Building for STM32
 
