@@ -57,6 +57,12 @@ static void module_add_label(Module *mod, int index, const uint8_t *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
 static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len);
 
+struct LineRefOffset
+{
+    struct ListHead head;
+    unsigned int offset;
+};
+
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
 #undef TRACE
@@ -276,7 +282,6 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     }
 
     module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
-    list_init(&mod->line_ref_offsets);
 
     if (offsets[LITT]) {
         #ifdef WITH_ZLIB
@@ -305,7 +310,40 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    mod->end_instruction_ii = read_core_chunk(mod);
+    struct ListHead line_refs;
+    list_init(&line_refs);
+    mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
+
+    // Create the list of offsets if the module has line informations.
+    if (mod->line_refs_table != NULL) {
+        // Compute the size of the list
+        size_t num_offsets = 0;
+        struct ListHead *item = line_refs.next;
+        while (item != &line_refs) {
+            num_offsets++;
+            item = item->next;
+        }
+        mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
+        if (IS_NULL_PTR(mod->line_refs_offsets)) {
+            fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
+        } else {
+            size_t index = 0;
+            item = line_refs.next;
+            while (item != &line_refs) {
+                struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
+                mod->line_refs_offsets[index] = offset->offset;
+                index++;
+                item = item->next;
+            }
+            mod->line_refs_offsets_count = num_offsets;
+        }
+    }
+    // Empty the list
+    while (!list_is_empty(&line_refs)) {
+        struct ListHead *item = line_refs.next;
+        list_remove(item);
+        free(item);
+    }
 
     return mod;
 }
@@ -316,6 +354,7 @@ COLD_FUNC void module_destroy(Module *module)
     free(module->imported_funcs);
     free(module->literals_table);
     free(module->local_atoms_to_global_table);
+    free(module->line_refs_offsets);
     if (module->free_literals_data) {
         free(module->literals_data);
     }
@@ -697,19 +736,28 @@ static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len
     }
 }
 
-void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
+void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint32_t line_ref, int offset)
 {
     if (IS_NULL_PTR(mod->line_refs_table) || line_ref == 0) {
         return;
     }
     struct LineRefOffset *ref_offset = malloc(sizeof(struct LineRefOffset));
     if (IS_NULL_PTR(ref_offset)) {
-        fprintf(stderr, "Warning: Unable to allocate space for line ref offset.  Line information in stacktraces may be missing\n");
+        size_t num_refs = 0;
+        // Empty the list
+        while (!list_is_empty(line_refs)) {
+            struct ListHead *item = line_refs->next;
+            list_remove(item);
+            free(item);
+            num_refs++;
+        }
+        fprintf(stderr, "Warning: Unable to allocate space for an additional line ref offset (we had %zu).  Line information in stacktraces may be missing\n", num_refs);
+        // Give up having line numbers for this module.
+        mod->line_refs_table = NULL;
         return;
     }
-    ref_offset->line_ref = line_ref;
     ref_offset->offset = offset;
-    list_append(&mod->line_ref_offsets, &ref_offset->head);
+    list_append(line_refs, &ref_offset->head);
 }
 
 static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line, size_t *filename_len, const uint8_t **filename)
@@ -723,30 +771,30 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
 
 bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
-    int i = 0;
-    struct LineRefOffset *head = GET_LIST_ENTRY(&mod->line_ref_offsets, struct LineRefOffset, head);
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &mod->line_ref_offsets) {
-        struct LineRefOffset *ref_offset = GET_LIST_ENTRY(item, struct LineRefOffset, head);
-
-        if (offset == ref_offset->offset) {
-            return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
-        } else if (i == 0 && offset < ref_offset->offset) {
-            return false;
-        } else {
-
-            struct LineRefOffset *prev_ref_offset = GET_LIST_ENTRY(ref_offset->head.prev, struct LineRefOffset, head);
-            if (prev_ref_offset->offset <= offset && offset < ref_offset->offset) {
-                return module_find_line_ref(mod, prev_ref_offset->line_ref, line, filename_len, filename);
-            }
-
-            struct LineRefOffset *next_ref_offset = GET_LIST_ENTRY(ref_offset->head.next, struct LineRefOffset, head);
-            if (next_ref_offset == head && ref_offset->offset <= offset) {
-                return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
-            }
-        }
-
-        ++i;
+    size_t i;
+    unsigned int ref_offset;
+    uint32_t line_ref;
+    const uint8_t *ref_pc;
+    if (IS_NULL_PTR(mod->line_refs_offsets)) {
+        return false;
     }
-    return false;
+    for (i = 0; i < mod->line_refs_offsets_count; i++) {
+        ref_offset = mod->line_refs_offsets[i];
+        if (offset == ref_offset) {
+            ref_pc = &mod->code->code[ref_offset];
+            DECODE_LITERAL(line_ref, ref_pc);
+            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+        } else if (i == 0 && offset < ref_offset) {
+            return false;
+        } else if (offset < ref_offset) {
+            ref_offset = mod->line_refs_offsets[i - 1];
+            ref_pc = &mod->code->code[ref_offset];
+            DECODE_LITERAL(line_ref, ref_pc);
+            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+        }
+    }
+    ref_offset = mod->line_refs_offsets[i - 1];
+    ref_pc = &mod->code->code[ref_offset];
+    DECODE_LITERAL(line_ref, ref_pc);
+    return module_find_line_ref(mod, line_ref, line, filename_len, filename);
 }
