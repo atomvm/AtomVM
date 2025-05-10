@@ -107,16 +107,27 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
 
 static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
+#ifdef CONFIG_LWIP_IPV6
     out_addr->type = IPADDR_TYPE_V4;
     out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
+#else
+    out_addr->addr = htonl(socket_tuple_to_addr(address_tuple));
+#endif
 }
 
 static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
 {
+#ifdef CONFIG_LWIP_IPV6
     uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
     uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
     uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
     uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
+#else
+    uint8_t ad1 = ip4_addr1(addr);
+    uint8_t ad2 = ip4_addr2(addr);
+    uint8_t ad3 = ip4_addr3(addr);
+    uint8_t ad4 = ip4_addr4(addr);
+#endif
     term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
     term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
     term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
@@ -127,6 +138,7 @@ static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
 static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
 {
     term addr_tuple;
+#ifdef CONFIG_LWIP_IPV6
     switch (IP_GET_TYPE(addr)) {
         case IPADDR_TYPE_V4: {
             addr_tuple = term_alloc_tuple(4, heap);
@@ -141,6 +153,11 @@ static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
         default:
             addr_tuple = term_invalid_term();
     }
+#else
+    // When IPv6 is disabled, we only have IPv4 addresses
+    addr_tuple = term_alloc_tuple(4, heap);
+    socket_fill_ipv4_addr_tuple(addr_tuple, addr);
+#endif
 
     return addr_tuple;
 }
@@ -888,7 +905,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     TRACE("tcp: connecting to: %s\n", address_string);
 
-    struct ip_addr remote_ip;
+    ip_addr_t remote_ip;
     //TODO: use dns_gethostbyname instead
     err_t status = netconn_gethostbyname(address_string, &remote_ip);
     if (UNLIKELY(status != ERR_OK)) {
