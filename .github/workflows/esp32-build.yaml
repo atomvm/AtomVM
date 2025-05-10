@@ -54,6 +54,19 @@ jobs:
           idf-version: 'v5.0.7'
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.1.5'
+
+        # ESP-IDF 5.0.7 and 5.1.5 containers are based on Ubuntu focal which has Erlang/OTP 22
+        # ESP-IDF 5.2.3 and 5.3.2 containers are based on Ubuntu jammy which has Erlang/OTP 24
+        include:
+        - idf-version: 'v5.0.7'
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=22 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=22
+        - idf-version: 'v5.1.5'
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=22 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=22
+        - idf-version: 'v5.2.3'
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=24 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=24
+        - idf-version: 'v5.3.2'
+          cmake_opts: -DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=24 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=24
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -170,8 +183,8 @@ jobs:
         echo "CONFIG_ESP_WIFI_RX_IRAM_OPT=n" >> sdkconfig.defaults
         . $IDF_PATH/export.sh
         export IDF_TARGET=${{matrix.esp-idf-target}}
-        idf.py set-target ${{matrix.esp-idf-target}}
-        idf.py build
+        idf.py ${{matrix.cmake_opts}} set-target ${{matrix.esp-idf-target}}
+        idf.py ${{matrix.cmake_opts}} build
 
     - name: Run ESP32 tests using qemu with memory checks build
       working-directory: ./src/platforms/esp32/test/
@@ -191,8 +204,8 @@ jobs:
         . $IDF_PATH/export.sh
         export IDF_TARGET=${{matrix.esp-idf-target}}
         export PATH=${PATH}:${HOME}/.cache/rebar3/bin
-        idf.py set-target ${{matrix.esp-idf-target}}
-        idf.py build
+        idf.py ${{matrix.cmake_opts}} set-target ${{matrix.esp-idf-target}}
+        idf.py ${{matrix.cmake_opts}} build
 
     - name: Run ESP32 tests using qemu
       working-directory: ./src/platforms/esp32/test/

@@ -59,6 +59,11 @@ set(AVM_SELECT_IN_TASK ON)
 
 project(atomvm-esp32-test)
 
+# Ensure erlang version is compatible with VM
+set(AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION "25" CACHE STRING "Minimum supported OTP Release for Erlang compiler")
+set(AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION "28" CACHE STRING "Maximum supported OTP Release for Erlang compiler")
+find_package(Erlang ${AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION}...${AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION} REQUIRED)
+
 # esp-idf does not use compile_feature but instead sets version in
 # c_compile_options
 # Ensure project is compiled with at least C11

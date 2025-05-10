@@ -18,7 +18,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-cmake_minimum_required (VERSION 3.12)
+cmake_minimum_required (VERSION 3.13)
 project(libs)
 
 add_subdirectory(estdlib/src)
@@ -64,6 +64,9 @@ if (Dialyzer_FOUND)
 else()
     message("Dialyzer was not found -- skipping PLT build")
 endif()
+
+# Ensure erlang version is compatible with VM
+find_package(Erlang ${AVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION}...${AVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION} REQUIRED)
 
 install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm

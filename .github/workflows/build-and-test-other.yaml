@@ -129,6 +129,16 @@ jobs:
         name: test-modules
         path: build_tests
 
+    - name: Skip compilation of Erlang code
+      run: |
+        sed -e 's|add_subdirectory(libs)|# add_subdirectory(libs)|g' \
+            -e 's|add_subdirectory(examples)|# add_subdirectory(examples)|g' \
+            -i CMakeLists.txt
+        sed -e 's|add_subdirectory(erlang_tests)|# add_subdirectory(erlang_tests)|g' \
+            -e 's|add_subdirectory(libs/|# add_subdirectory(libs/|g' \
+            -e 's|add_dependencies(test-erlang erlang_test_modules)|# add_dependencies(test-erlang erlang_test_modules)|g' \
+            -i tests/CMakeLists.txt
+
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
 
@@ -159,13 +169,17 @@ jobs:
         mkdir -p build &&
         cd build &&
         cmake .. ${{ matrix.cmake_opts }} &&
+        mkdir -p tests/erlang_tests/code_load/beams/ &&
         cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
         cp ../build_tests/tests/erlang_tests/code_load/*.{avm,beam,hrl} tests/erlang_tests/code_load/ &&
-        mkdir -p tests/erlang_tests/code_load/beams/ &&
         cp ../build_tests/tests/erlang_tests/code_load/beams/*.beam tests/erlang_tests/code_load/beams/ &&
+        mkdir -p tests/libs/etest/ &&
         cp ../build_tests/tests/libs/etest/*.avm tests/libs/etest/  &&
-        cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
+        mkdir -p tests/libs/estdlib/ &&
+        cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/ &&
+        mkdir -p tests/libs/eavmlib/ &&
         cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
+        mkdir -p tests/libs/alisp/ &&
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
         make AtomVM &&
         make test-erlang &&

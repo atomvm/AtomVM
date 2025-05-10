@@ -204,6 +204,7 @@ jobs:
           elixir_version: "1.7"
           rebar3_version: "3.15.2"
           compiler_pkgs: "g++"
+          cmake_opts_other: "-DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=21 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=21"
 
         - container: "ubuntu:20.04"
           cc: "cc"
@@ -213,6 +214,7 @@ jobs:
           elixir_version: "1.8"
           rebar3_version: "3.18.0"
           compiler_pkgs: "g++"
+          cmake_opts_other: "-DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=22 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=22"
 
         - container: "ubuntu:20.04"
           cc: "cc"
@@ -222,6 +224,7 @@ jobs:
           elixir_version: "1.11"
           rebar3_version: "3.20.0"
           compiler_pkgs: "g++"
+          cmake_opts_other: "-DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=23 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=23"
 
         - container: "ubuntu:20.04"
           cc: "cc"
@@ -231,6 +234,7 @@ jobs:
           elixir_version: "1.14"
           rebar3_version: "3.23.0"
           compiler_pkgs: "g++"
+          cmake_opts_other: "-DAVM_MINIMUM_OTP_RELEASE_COMPILER_VERSION=24 -DAVM_MAXIMUM_OTP_RELEASE_COMPILER_VERSION=24"
 
         - os: "ubuntu-24.04"
           cc: "cc"
@@ -281,9 +285,9 @@ jobs:
           cc: "gcc-10"
           cxx: "g++-10"
           cflags: "-m32 -O3"
-          otp: "23"
-          elixir_version: "1.11"
-          rebar3_version: "3.20.0"
+          otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
           # Use Werror so we get an error with 32 bit specific warnings
           cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
           arch: "i386"

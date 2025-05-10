@@ -47,8 +47,12 @@
 
 // These constants can be used to reduce the size of the VM for a specific
 // range of compiler versions
-#define MINIMUM_OTP_COMPILER_VERSION 21
-#define MAXIMUM_OTP_COMPILER_VERSION 26
+#ifndef MINIMUM_OTP_COMPILER_VERSION
+#define MINIMUM_OTP_COMPILER_VERSION 25
+#endif
+#ifndef MAXIMUM_OTP_COMPILER_VERSION
+#define MAXIMUM_OTP_COMPILER_VERSION 28
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -5071,7 +5075,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
+#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_BS_TEST_UNIT: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
