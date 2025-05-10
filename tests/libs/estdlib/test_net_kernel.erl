@@ -38,6 +38,10 @@ test() ->
             ok = test_autoconnect_fail(Platform),
             ok = test_autoconnect_to_beam(Platform),
             ok = test_groupleader(Platform),
+            ok = test_link_remote_exit_remote(Platform),
+            ok = test_link_remote_exit_local(Platform),
+            ok = test_link_local_unlink_remote(Platform),
+            ok = test_link_local_unlink_local(Platform),
             ok = test_is_alive(Platform),
             ok;
         false ->
@@ -213,7 +217,7 @@ test_autoconnect_to_beam(Platform) ->
     net_kernel:stop(),
     ok.
 
-test_groupleader(Platform) ->
+start_apply_loop(Platform) ->
     {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
     Node = node(),
     erlang:set_cookie(Node, 'AtomVM'),
@@ -229,7 +233,10 @@ test_groupleader(Platform) ->
                     "F = fun(G) ->"
                     " receive"
                     "   {Caller, apply, M, F, A} -> Result = apply(M, F, A), Caller ! {self(), Result}, G(G);"
-                    "   {Caller, quit} -> Caller ! {self(), quit}"
+                    "   {Caller, spawn} -> Result = spawn(fun() -> G(G) end), Caller ! {self(), Result}, G(G);"
+                    "   {Caller, exit, Reason} -> Caller ! {self(), exiting}, exit(Reason);"
+                    "   {Caller, quit} -> Caller ! {self(), quit};"
+                    "   {Caller, flush_exit} -> receive {'EXIT', Pid, Reason} -> Caller ! {self(), {exit, Pid, Reason}} after 5000 -> exit(timeout) end, G(G)"
                     "   after 5000 -> exit(timeout)"
                     " end "
                     "end, "
@@ -239,46 +246,209 @@ test_groupleader(Platform) ->
         end,
         [link, monitor]
     ),
-    BeamMainPid =
-        receive
-            {beam, BeamMainPid0} ->
-                BeamMainPid0;
-            {io_result, Result0} ->
-                io:format("~s\n", [Result0]),
-                exit(timeout)
-        after 5000 -> exit(timeout)
-        end,
-    BeamMainPid ! {self(), apply, rpc, call, [Node, io, format, ["hello group leader"]]},
-    ok =
-        receive
-            {BeamMainPid, Result} ->
-                Result;
-            {io_result, Result1} ->
-                io:format("~s\n", [Result1]),
-                exit(timeout)
-        after 5000 -> exit(timeout)
-        end,
-    BeamMainPid ! {self(), quit},
-    ok =
-        receive
-            {BeamMainPid, quit} ->
-                ok;
-            {io_result, Result2} ->
-                io:format("~s\n", [Result2]),
-                exit(timeout)
-        after 5000 -> timeout
-        end,
-    "hello group leader" =
-        receive
-            {io_result, IOResult} -> IOResult
-        after 5000 -> timeout
-        end,
+    BeamMainPid = start_apply_loop_io(),
+    {BeamMainPid, Pid, MonitorRef}.
+
+start_apply_loop_io() ->
+    receive
+        {beam, BeamMainPid0} ->
+            BeamMainPid0;
+        {io_result, []} ->
+            start_apply_loop_io();
+        {io_result, Result0} ->
+            io:format("~s\n", [Result0]),
+            start_apply_loop_io()
+    after 5000 -> exit(timeout)
+    end.
+
+call_apply_loop(Pid, Message) ->
+    Pid ! Message,
+    receive
+        {Pid, Result} ->
+            Result;
+        {io_result, Result1} ->
+            io:format("~s\n", [Result1]),
+            exit(timeout)
+    after 5000 -> exit(timeout)
+    end.
+
+stop_apply_loop(BeamMainPid, Pid, MonitorRef) ->
+    quit = call_apply_loop(BeamMainPid, {self(), quit}),
     normal =
         receive
             {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
         after 5000 -> timeout
         end,
     net_kernel:stop(),
+    unregister(atomvm),
+    ok.
+
+test_groupleader(Platform) ->
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    Node = node(),
+    ok = call_apply_loop(
+        BeamMainPid, {self(), apply, rpc, call, [Node, io, format, ["hello group leader"]]}
+    ),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
+    "hello group leader" =
+        receive
+            {io_result, IOResult} -> IOResult
+        after 5000 -> timeout
+        end,
+    ok.
+
+test_link_remote_exit_remote(Platform) ->
+    Main = self(),
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    SpawnedPid = call_apply_loop(BeamMainPid, {self(), spawn}),
+    {LocalSpawnedPid, LocalSpawnedMonitor} = spawn_opt(
+        fun() ->
+            process_flag(trap_exit, true),
+            receive
+                {'EXIT', ExitPid, Reason} -> Main ! {exit, ExitPid, Reason}
+            after 5000 -> exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    true = call_apply_loop(SpawnedPid, {self(), apply, erlang, link, [LocalSpawnedPid]}),
+    {links, [LocalSpawnedPid]} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    {links, [SpawnedPid]} = process_info(LocalSpawnedPid, links),
+    exiting = call_apply_loop(SpawnedPid, {self(), exit, some_reason}),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
+    some_reason =
+        receive
+            {exit, SpawnedPid, ExitReason} -> ExitReason
+        after 5000 -> timeout
+        end,
+    normal =
+        receive
+            {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
+        after 5000 -> timeout
+        end,
+    ok.
+
+test_link_remote_exit_local(Platform) ->
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    SpawnedPid = call_apply_loop(BeamMainPid, {self(), spawn}),
+    {LocalSpawnedPid, LocalSpawnedMonitor} = spawn_opt(
+        fun() ->
+            receive
+            after 5000 -> exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    true = call_apply_loop(SpawnedPid, {self(), apply, erlang, link, [LocalSpawnedPid]}),
+    {links, [LocalSpawnedPid]} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    {links, [SpawnedPid]} = process_info(LocalSpawnedPid, links),
+    false = call_apply_loop(SpawnedPid, {self(), apply, erlang, process_flag, [trap_exit, true]}),
+    true = exit(LocalSpawnedPid, some_reason),
+    some_reason =
+        receive
+            {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
+        after 5000 -> timeout
+        end,
+    {exit, LocalSpawnedPid, some_reason} = call_apply_loop(SpawnedPid, {self(), flush_exit}),
+    quit = call_apply_loop(SpawnedPid, {self(), quit}),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
+    ok.
+
+test_link_local_unlink_remote(Platform) ->
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    SpawnedPid = call_apply_loop(BeamMainPid, {self(), spawn}),
+    {LocalSpawnedPid, LocalSpawnedMonitor} = spawn_opt(
+        fun() ->
+            receive
+                {Caller, link} ->
+                    Result = link(SpawnedPid),
+                    Caller ! {self(), Result}
+            after 5000 -> exit(timeout)
+            end,
+            receive
+                quit -> ok
+            after 5000 -> exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    {links, []} = process_info(LocalSpawnedPid, links),
+    LocalSpawnedPid ! {self(), link},
+    receive
+        {LocalSpawnedPid, true} -> ok
+    end,
+    {links, [SpawnedPid]} = process_info(LocalSpawnedPid, links),
+    {links, [LocalSpawnedPid]} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    true = call_apply_loop(SpawnedPid, {self(), apply, erlang, unlink, [LocalSpawnedPid]}),
+    {links, []} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    {links, []} = process_info(LocalSpawnedPid, links),
+    LocalSpawnedPid ! quit,
+    normal =
+        receive
+            {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
+        after 5000 -> timeout
+        end,
+    quit = call_apply_loop(SpawnedPid, {self(), quit}),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
+    ok.
+
+test_link_local_unlink_local(Platform) ->
+    {BeamMainPid, Pid, MonitorRef} = start_apply_loop(Platform),
+    SpawnedPid = call_apply_loop(BeamMainPid, {self(), spawn}),
+    {LocalSpawnedPid, LocalSpawnedMonitor} = spawn_opt(
+        fun() ->
+            receive
+                {LinkCaller, link} ->
+                    LinkResult = link(SpawnedPid),
+                    LinkCaller ! {self(), LinkResult}
+            after 5000 -> exit(timeout)
+            end,
+            receive
+                {UnlinkCaller, unlink} ->
+                    UnlinkResult = unlink(SpawnedPid),
+                    UnlinkCaller ! {self(), UnlinkResult}
+            after 5000 -> exit(timeout)
+            end,
+            receive
+                quit -> ok
+            after 5000 -> exit(timeout)
+            end
+        end,
+        [monitor]
+    ),
+    {links, []} = process_info(LocalSpawnedPid, links),
+    LocalSpawnedPid ! {self(), link},
+    receive
+        {LocalSpawnedPid, true} -> ok
+    end,
+    {links, [SpawnedPid]} = process_info(LocalSpawnedPid, links),
+    {links, [LocalSpawnedPid]} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    LocalSpawnedPid ! {self(), unlink},
+    receive
+        {LocalSpawnedPid, true} -> ok
+    end,
+    {links, []} = call_apply_loop(
+        SpawnedPid, {self(), apply, erlang, process_info, [SpawnedPid, links]}
+    ),
+    {links, []} = process_info(LocalSpawnedPid, links),
+    LocalSpawnedPid ! quit,
+    normal =
+        receive
+            {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
+        after 5000 -> timeout
+        end,
+    quit = call_apply_loop(SpawnedPid, {self(), quit}),
+    ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
     ok.
 
 test_is_alive(Platform) ->

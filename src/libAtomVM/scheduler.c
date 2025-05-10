@@ -24,6 +24,7 @@
 
 #include "debug.h"
 #include "list.h"
+#include "mailbox.h"
 #include "smp.h"
 #include "sys.h"
 #include "utils.h"
@@ -133,6 +134,8 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case FlushInfoMonitorSignal: // id.
             case MonitorDownSignal: // id
             case SetGroupLeaderSignal: // ports can't be group leaders
+            case UnlinkRemoteIDSignal: // ports can't be part of distributed links
+            case UnlinkRemoteIDAckSignal: // id.
                 break;
             case NormalMessage: {
                 UNREACHABLE();

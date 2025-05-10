@@ -93,6 +93,8 @@ enum MessageType
     MonitorSignal,
     UnlinkIDSignal,
     UnlinkIDAckSignal,
+    UnlinkRemoteIDSignal,
+    UnlinkRemoteIDAckSignal,
     LinkExitSignal,
     DemonitorSignal,
     MonitorDownSignal,

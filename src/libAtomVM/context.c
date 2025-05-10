@@ -52,7 +52,7 @@
 #define DEFAULT_STACK_SIZE 8
 #define BYTES_PER_TERM (TERM_BITS / 8)
 
-static struct ResourceContextMonitor *context_monitors_handle_terminate(Context *ctx);
+static struct Monitor *context_monitors_handle_terminate(Context *ctx);
 static void context_distribution_handle_terminate(Context *ctx);
 static void destroy_extended_registers(Context *ctx, unsigned int live);
 
@@ -174,6 +174,22 @@ void context_destroy(Context *ctx)
                 context_unlink_ack(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks);
                 break;
             }
+            case UnlinkRemoteIDSignal: {
+                struct TermSignal *term_signal
+                    = CONTAINER_OF(signal_message, struct TermSignal, base);
+                uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0));
+                term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);
+                context_ack_unlink(ctx, remote_pid, unlink_id, true);
+                break;
+            }
+            case UnlinkRemoteIDAckSignal: {
+                struct TermSignal *term_signal
+                    = CONTAINER_OF(signal_message, struct TermSignal, base);
+                uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0));
+                term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);
+                context_unlink_ack(ctx, remote_pid, unlink_id);
+                break;
+            }
             case DemonitorSignal: {
                 struct RefSignal *ref_signal
                     = CONTAINER_OF(signal_message, struct RefSignal, base);
@@ -200,24 +216,44 @@ void context_destroy(Context *ctx)
 
     // When monitor message is sent, process is no longer in the table
     // and is no longer registered either.
-    struct ResourceContextMonitor *resource_monitors = context_monitors_handle_terminate(ctx);
+    struct Monitor *remaining_monitors = context_monitors_handle_terminate(ctx);
 
     synclist_unlock(&ctx->global->processes_table);
 
-    // Eventually call resource monitors handlers after the processes table was unlocked
+    // Eventually call distribution and resource monitors handlers after the processes table was unlocked
     // The monitors were removed from the list of monitors.
-    if (resource_monitors) {
+    if (remaining_monitors) {
         struct ListHead monitors;
-        list_prepend(&resource_monitors->monitor.monitor_list_head, &monitors);
+        list_prepend(&remaining_monitors->monitor_list_head, &monitors);
 
         struct ListHead *item;
         struct ListHead *tmp;
         MUTABLE_LIST_FOR_EACH (item, tmp, &monitors) {
             struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-            struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-            struct RefcBinary *refc = refc_binary_from_data(resource_monitor->resource_obj);
-            resource_type_fire_monitor(refc->resource_type, erl_nif_env_from_context(ctx), resource_monitor->resource_obj, ctx->process_id, resource_monitor->ref_ticks);
-            free(monitor);
+            switch (monitor->monitor_type) {
+                case CONTEXT_MONITOR_RESOURCE: {
+                    struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
+                    struct RefcBinary *refc = refc_binary_from_data(resource_monitor->resource_obj);
+                    resource_type_fire_monitor(refc->resource_type, erl_nif_env_from_context(ctx), resource_monitor->resource_obj, ctx->process_id, resource_monitor->ref_ticks);
+                    free(monitor);
+                    break;
+                }
+                case CONTEXT_MONITOR_LINK_REMOTE: {
+                    struct LinkRemoteMonitor *link_monitor = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+                    // Handle the case of inactive link.
+                    if (link_monitor->unlink_id != UNLINK_ID_LINK_ACTIVE) {
+                        free(monitor);
+                        continue;
+                    }
+                    dist_send_payload_exit(link_monitor, ctx->exit_reason, ctx);
+                    free(monitor);
+                    break;
+                }
+                case CONTEXT_MONITOR_LINK_LOCAL:
+                case CONTEXT_MONITOR_MONITORED_LOCAL:
+                case CONTEXT_MONITOR_MONITORING_LOCAL:
+                    UNREACHABLE();
+            }
         }
     }
 
@@ -439,17 +475,21 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             break;
         case LINKS_ATOM: {
             struct ListHead *item;
-            size_t links_count = 0;
+            ret_size = TUPLE_SIZE(2);
             LIST_FOR_EACH (item, &ctx->monitors_head) {
                 struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
                 if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
                     struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
                     if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
-                        links_count++;
+                        ret_size += CONS_SIZE;
+                    }
+                } else if (monitor->monitor_type == CONTEXT_MONITOR_LINK_REMOTE) {
+                    struct LinkRemoteMonitor *link = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+                    if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
+                        ret_size += CONS_SIZE + EXTERNAL_PID_SIZE;
                     }
                 }
             }
-            ret_size = TUPLE_SIZE(2) + CONS_SIZE * links_count;
             break;
         }
         default:
@@ -531,6 +571,12 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                     if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
                         list = term_list_prepend(link->link_local_process_id, list, heap);
                     }
+                } else if (monitor->monitor_type == CONTEXT_MONITOR_LINK_REMOTE) {
+                    struct LinkRemoteMonitor *link = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+                    if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
+                        term external_pid = term_make_external_process_id(link->node, link->pid_number, link->pid_serial, link->creation, heap);
+                        list = term_list_prepend(external_pid, list, heap);
+                    }
                 }
             }
             term_put_tuple_element(ret, 1, list);
@@ -544,12 +590,12 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
     return true;
 }
 
-static struct ResourceContextMonitor *context_monitors_handle_terminate(Context *ctx)
+static struct Monitor *context_monitors_handle_terminate(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
     struct ListHead *item;
     struct ListHead *tmp;
-    struct ResourceContextMonitor *result = NULL;
+    struct Monitor *result = NULL;
     MUTABLE_LIST_FOR_EACH (item, tmp, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         switch (monitor->monitor_type) {
@@ -557,12 +603,11 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                 // monitor with resource
                 // remove it from the list we are iterating on and
                 // add it to the list of resource monitors to handle afterwards
-                struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
                 if (result == NULL) {
                     list_init(&monitor->monitor_list_head);
-                    result = resource_monitor;
+                    result = monitor;
                 } else {
-                    list_append(&result->monitor.monitor_list_head, &monitor->monitor_list_head);
+                    list_append(&result->monitor_list_head, &monitor->monitor_list_head);
                 }
                 break;
             }
@@ -603,6 +648,16 @@ static struct ResourceContextMonitor *context_monitors_handle_terminate(Context 
                     mailbox_send_term_signal(target, LinkExitSignal, info_tuple);
                 }
                 free(monitor);
+                break;
+            }
+            case CONTEXT_MONITOR_LINK_REMOTE: {
+                // Process it afterwards
+                if (result == NULL) {
+                    list_init(&monitor->monitor_list_head);
+                    result = monitor;
+                } else {
+                    list_append(&result->monitor_list_head, &monitor->monitor_list_head);
+                }
                 break;
             }
             case CONTEXT_MONITOR_MONITORED_LOCAL: {
@@ -651,15 +706,28 @@ static void context_distribution_handle_terminate(Context *ctx)
 
 struct Monitor *monitor_link_new(term link_pid)
 {
-    struct LinkLocalMonitor *monitor = malloc(sizeof(struct LinkLocalMonitor));
-    if (IS_NULL_PTR(monitor)) {
-        return NULL;
+    if (term_is_local_pid_or_port(link_pid)) {
+        struct LinkLocalMonitor *monitor = malloc(sizeof(struct LinkLocalMonitor));
+        if (IS_NULL_PTR(monitor)) {
+            return NULL;
+        }
+        monitor->monitor.monitor_type = CONTEXT_MONITOR_LINK_LOCAL;
+        monitor->unlink_id = UNLINK_ID_LINK_ACTIVE;
+        monitor->link_local_process_id = link_pid;
+        return &monitor->monitor;
+    } else {
+        struct LinkRemoteMonitor *monitor = malloc(sizeof(struct LinkRemoteMonitor));
+        if (IS_NULL_PTR(monitor)) {
+            return NULL;
+        }
+        monitor->monitor.monitor_type = CONTEXT_MONITOR_LINK_REMOTE;
+        monitor->unlink_id = UNLINK_ID_LINK_ACTIVE;
+        monitor->node = term_get_external_node(link_pid);
+        monitor->pid_number = term_get_external_pid_process_id(link_pid);
+        monitor->pid_serial = term_get_external_pid_serial(link_pid);
+        monitor->creation = term_get_external_node_creation(link_pid);
+        return &monitor->monitor;
     }
-    monitor->monitor.monitor_type = CONTEXT_MONITOR_LINK_LOCAL;
-    monitor->unlink_id = UNLINK_ID_LINK_ACTIVE;
-    monitor->link_local_process_id = link_pid;
-
-    return &monitor->monitor;
 }
 
 struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring)
@@ -727,6 +795,18 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     }
                     break;
                 }
+                case CONTEXT_MONITOR_LINK_REMOTE: {
+                    struct LinkRemoteMonitor *new_link_monitor = CONTAINER_OF(new_monitor, struct LinkRemoteMonitor, monitor);
+                    struct LinkRemoteMonitor *existing_link_monitor = CONTAINER_OF(existing, struct LinkRemoteMonitor, monitor);
+                    if (UNLIKELY(existing_link_monitor->node == new_link_monitor->node
+                            && existing_link_monitor->pid_number == new_link_monitor->pid_number
+                            && existing_link_monitor->pid_serial == new_link_monitor->pid_serial
+                            && existing_link_monitor->creation == new_link_monitor->creation)) {
+                        free(new_monitor);
+                        return false;
+                    }
+                    break;
+                }
             }
         }
     }
@@ -739,9 +819,24 @@ bool context_set_unlink_id(Context *ctx, term link_pid, uint64_t *unlink_id)
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
+        if (term_is_local_pid_or_port(link_pid) && monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
             struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
             if (link->link_local_process_id == link_pid) {
+                if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
+                    uint64_t new_id = globalcontext_get_ref_ticks(ctx->global);
+                    link->unlink_id = new_id;
+                    *unlink_id = new_id;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        } else if (term_is_external_pid(link_pid) && monitor->monitor_type == CONTEXT_MONITOR_LINK_REMOTE) {
+            struct LinkRemoteMonitor *link = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+            if (link->node == term_get_external_node(link_pid)
+                && link->pid_number == term_get_external_pid_process_id(link_pid)
+                && link->pid_serial == term_get_external_pid_serial(link_pid)
+                && link->creation == term_get_external_node_creation(link_pid)) {
                 if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
                     uint64_t new_id = globalcontext_get_ref_ticks(ctx->global);
                     link->unlink_id = new_id;
@@ -761,7 +856,7 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
+        if (term_is_local_pid_or_port(link_pid) && monitor->monitor_type == CONTEXT_MONITOR_LINK_LOCAL) {
             struct LinkLocalMonitor *link = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
             if (link->link_local_process_id == link_pid) {
                 if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
@@ -780,6 +875,20 @@ void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool pr
                             globalcontext_get_process_unlock(ctx->global, target);
                         }
                     }
+                    list_remove(&monitor->monitor_list_head);
+                    free(monitor);
+                }
+                return;
+            }
+        } else if (term_is_external_pid(link_pid) && monitor->monitor_type == CONTEXT_MONITOR_LINK_REMOTE) {
+            struct LinkRemoteMonitor *link = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+            if (link->node == term_get_external_node(link_pid)
+                && link->pid_number == term_get_external_pid_process_id(link_pid)
+                && link->pid_serial == term_get_external_pid_serial(link_pid)
+                && link->creation == term_get_external_node_creation(link_pid)) {
+                if (link->unlink_id == UNLINK_ID_LINK_ACTIVE) {
+                    // Send ack and remove link
+                    dist_send_unlink_id_ack(unlink_id, term_from_local_process_id(ctx->process_id), link_pid, ctx);
                     list_remove(&monitor->monitor_list_head);
                     free(monitor);
                 }
@@ -833,6 +942,7 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
                 }
             }
             case CONTEXT_MONITOR_LINK_LOCAL:
+            case CONTEXT_MONITOR_LINK_REMOTE:
                 break;
         }
     }
@@ -854,6 +964,7 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
                 break;
             }
             case CONTEXT_MONITOR_LINK_LOCAL:
+            case CONTEXT_MONITOR_LINK_REMOTE:
             case CONTEXT_MONITOR_RESOURCE:
                 break;
         }
