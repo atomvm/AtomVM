@@ -220,6 +220,7 @@ int unlink(const char *name)
 
 int main()
 {
+    int MemBegin = sys_get_free_heap();
     // Flash cache must be enabled before system clock is activated
     sys_enable_flash_cache();
     sys_init_icache();
@@ -231,6 +232,7 @@ int main()
     GlobalContext *glb = globalcontext_new();
 
     usart_setup(glb);
+    AVM_LOGD(TAG, "Free Heap before init: %i", MemBegin);
 
     fprintf(stdout, "%s", ATOMVM_BANNER);
     AVM_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
@@ -273,6 +275,7 @@ int main()
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
     fprintf(stdout, "---\n");
 
+    AVM_LOGD(TAG, "Free heap before application start: %i", sys_get_free_heap());
     context_execute_loop(ctx, mod, "start", 0);
 
     term ret_value = ctx->x[0];
@@ -294,6 +297,7 @@ int main()
         AVM_LOGE(TAG, "AtomVM application terminated with non-ok return value.  Rebooting ...");
         scb_reset_system();
     } else {
+        AVM_LOGD(TAG, "Free Heap at exit: %i", sys_get_free_heap());
         AVM_LOGI(TAG, "AtomVM application terminated.  Going to sleep forever ...");
         // Disable all interrupts
         cm_disable_interrupts();
