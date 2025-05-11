@@ -32,7 +32,9 @@
 
 #include <cyw43.h>
 #include <dhserver.h>
+#if PICO_RP2040
 #include <hardware/rtc.h>
+#endif
 #include <lwip/apps/sntp.h>
 #include <pico/cyw43_arch.h>
 
@@ -439,7 +441,7 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec)
     settimeofday(&tv, NULL);
 
     send_sntp_sync(&tv);
-
+#if PICO_RP2040
     // We also set RTC time.
     if (UNLIKELY(!rtc_running())) {
         rtc_init();
@@ -456,6 +458,8 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec)
     pico_datetime.min = utc.tm_min;
     pico_datetime.sec = utc.tm_sec;
     rtc_set_datetime(&pico_datetime);
+#endif
+    // On Pico 2W, this is not required as mtime is set with settimeofday
 }
 
 static void setup_sntp(term sntp_config, GlobalContext *global)
