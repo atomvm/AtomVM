@@ -831,7 +831,7 @@ After your application has been tested (_and debugged_) and is ready to put into
 
 ## Building for Raspberry Pi RP2
 
-You can build with all boards supported by Raspberry Pi pico SDK, including Pico, Pico-W and Pico2. AtomVM also works with clones such as RP2040 Zero.
+You can build with all boards supported by Raspberry Pi pico SDK, including Pico, Pico W, Pico2 and Pico 2 W. AtomVM also works with clones such as RP2040 Zero.
 
 ### RP2 Prerequisites
 
@@ -855,7 +855,7 @@ $ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
 ```
 
-### AtomVM build steps (Pico-W)
+### AtomVM build steps (Pico W)
 
 ```shell
 $ cd src/platforms/rp2/
@@ -869,7 +869,7 @@ $ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
 ```
 
-### AtomVM build steps (Pico2 or boards based on RP2350)
+### AtomVM build steps (Pico 2 or boards based on RP2350)
 
 For ARM S platform (recommended) :
 ```shell
@@ -887,6 +887,31 @@ $ cd src/platforms/rp2/
 $ mkdir build
 $ cd build
 $ cmake .. -G Ninja -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350-riscv
+$ ninja
+```
+
+```{tip}
+You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
+```
+
+### AtomVM build steps (Pico 2 W)
+
+For ARM S platform (recommended) :
+```shell
+$ cd src/platforms/rp2/
+$ mkdir build
+$ cd build
+$ cmake .. -G Ninja -DPICO_BOARD=pico2_w
+$ ninja
+```
+
+For RISC-V platform (supported but slower) :
+
+```shell
+$ cd src/platforms/rp2/
+$ mkdir build
+$ cd build
+$ cmake .. -G Ninja -DPICO_BOARD=pico2_w -DPICO_PLATFORM=rp2350-riscv
 $ ninja
 ```
 
