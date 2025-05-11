@@ -88,13 +88,6 @@ struct ModuleFilename
     size_t len;
 };
 
-struct LineRefOffset
-{
-    struct ListHead head;
-    unsigned int offset;
-    uint16_t line_ref;
-};
-
 struct Module
 {
 #ifdef ENABLE_ADVANCED_TRACE
@@ -113,7 +106,8 @@ struct Module
     size_t locations_count;
     const uint8_t *locations_table;
 
-    struct ListHead line_ref_offsets;
+    unsigned int *line_refs_offsets;
+    size_t line_refs_offsets_count;
 
     const struct ExportedFunction **imported_funcs;
 
@@ -391,10 +385,11 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
  * is a no-op.
  *
  * @param mod the module
+ * @param line_refs the list of line references to append to
  * @param line_ref the line reference (index)
  * @param offset the instruction offset at which the line instruction occurred.
  */
-void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
+void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint32_t line_ref, int offset);
 
 /*
  * @brief Find the latest line reference (index) before or at which the instruction offset

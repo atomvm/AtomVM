@@ -1819,9 +1819,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 #endif
 
 #ifdef IMPL_CODE_LOADER
-    int read_core_chunk0(Module *mod);
+    int read_core_chunk0(Module *mod, struct ListHead *line_refs);
 
-    int read_core_chunk(Module *mod)
+    int read_core_chunk(Module *mod, struct ListHead *line_refs)
 #else
     #ifdef IMPL_EXECUTE_LOOP
         int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
@@ -1858,7 +1858,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
     #endif
 
 #ifdef IMPL_CODE_LOADER
-    return read_core_chunk0(mod);
+    return read_core_chunk0(mod, line_refs);
 #endif
 #ifdef IMPL_EXECUTE_LOOP
     // This process is the first scheduler process
@@ -1870,7 +1870,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 }
 
 #ifdef IMPL_CODE_LOADER
-int read_core_chunk0(Module *mod)
+int read_core_chunk0(Module *mod, struct ListHead *line_refs)
 #else
 #ifdef IMPL_EXECUTE_LOOP
 HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
@@ -5765,15 +5765,16 @@ wait_timeout_trap_handler:
 
             case OP_LINE: {
                 #ifdef IMPL_CODE_LOADER
-                    const uint8_t *saved_pc = pc -1;
+                    unsigned int offset = pc - code;
                 #endif
                 uint32_t line_number;
+                // This decode increments pc and ensures we can decode it
                 DECODE_LITERAL(line_number, pc);
 
                 TRACE("line/1: %i\n", line_number);
 
                 #ifdef IMPL_CODE_LOADER
-                    module_insert_line_ref_offset(mod, line_number, saved_pc - code);
+                    module_insert_line_ref_offset(mod, line_refs, line_number, offset);
                 #endif
                 break;
             }
