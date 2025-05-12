@@ -53,4 +53,8 @@ disconnected() ->
     io:format("Disconnected from access point.\n").
 
 sntp_synchronized({TVSec, TVUsec}) ->
-    io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p\n", [TVSec, TVUsec]).
+    io:format("Synchronized time with SNTP server. TVSec=~p TVUsec=~p\n", [TVSec, TVUsec]),
+    {{Year, Month, Day}, {Hour, Minute, Second}} = erlang:universaltime(),
+    io:format("Date: ~p/~p/~p ~p:~p:~p (~pms)~n", [
+        Year, Month, Day, Hour, Minute, Second, erlang:system_time(millisecond)
+    ]).
