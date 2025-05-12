@@ -156,6 +156,7 @@ enum ContextMonitorType
     CONTEXT_MONITOR_MONITORING_LOCAL,
     CONTEXT_MONITOR_MONITORED_LOCAL,
     CONTEXT_MONITOR_RESOURCE,
+    CONTEXT_MONITOR_LINK_REMOTE,
 };
 
 #define UNLINK_ID_LINK_ACTIVE 0x0
@@ -189,6 +190,16 @@ struct ResourceContextMonitor
     struct Monitor monitor;
     uint64_t ref_ticks;
     void *resource_obj;
+};
+
+struct LinkRemoteMonitor
+{
+    struct Monitor monitor;
+    uint64_t unlink_id;
+    term node;
+    uint32_t pid_number;
+    uint32_t pid_serial;
+    uint32_t creation;
 };
 
 struct ExtendedRegister
@@ -456,10 +467,10 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
 /**
  * @brief Half-link process to another process
  *
- * @param monitor_pid process to link to
+ * @param link_pid process to link to (local or remote)
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_link_new(term monitor_pid);
+struct Monitor *monitor_link_new(term link_pid);
 
 /**
  * @brief Create a monitor on a process.

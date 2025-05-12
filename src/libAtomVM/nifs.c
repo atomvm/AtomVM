@@ -2998,20 +2998,9 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         && interop_proplist_get_value_default(argv[1], USED_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         return_used = 1;
     }
-    term dst = term_invalid_term();
     size_t bytes_read = 0;
-    enum ExternalTermResult result = externalterm_from_binary(ctx, &dst, binary, &bytes_read);
-    switch (result) {
-        case EXTERNAL_TERM_BAD_ARG:
-            RAISE_ERROR(BADARG_ATOM);
-        case EXTERNAL_TERM_MALLOC:
-        case EXTERNAL_TERM_HEAP_ALLOC:
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        case EXTERNAL_TERM_OK:
-        default:
-            break;
-    }
-    if (term_is_invalid_term(dst)) {
+    term dst = externalterm_from_binary(ctx, binary, &bytes_read);
+    if (UNLIKELY(term_is_invalid_term(dst))) {
         RAISE_ERROR(BADARG_ATOM)
     }
     if (return_used) {
@@ -4010,37 +3999,51 @@ static term nif_erlang_link(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
+    if (term_is_local_pid_or_port(target_pid)) {
+        int local_process_id = term_to_local_process_id(target_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            RAISE_ERROR(NOPROC_ATOM);
+        }
 
-    int local_process_id = term_to_local_process_id(target_pid);
-    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-    if (IS_NULL_PTR(target)) {
-        RAISE_ERROR(NOPROC_ATOM);
-    }
+        struct Monitor *self_link = monitor_link_new(target_pid);
+        if (IS_NULL_PTR(self_link)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
 
-    struct Monitor *self_link = monitor_link_new(target_pid);
-    if (IS_NULL_PTR(self_link)) {
+        term self_pid = term_from_local_process_id(ctx->process_id);
+        struct Monitor *other_link = monitor_link_new(self_pid);
+        if (IS_NULL_PTR(other_link)) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            free(other_link);
+            return TRUE_ATOM;
+        }
+
+        mailbox_send_monitor_signal(target, MonitorSignal, other_link);
         globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
 
-    term self_pid = term_from_local_process_id(ctx->process_id);
-    struct Monitor *other_link = monitor_link_new(self_pid);
-    if (IS_NULL_PTR(other_link)) {
-        globalcontext_get_process_unlock(ctx->global, target);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
-        globalcontext_get_process_unlock(ctx->global, target);
-        free(other_link);
         return TRUE_ATOM;
+    } else if (term_is_external_pid(target_pid)) {
+        struct Monitor *self_link = monitor_link_new(target_pid);
+        if (IS_NULL_PTR(self_link)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        if (UNLIKELY(!context_add_monitor(ctx, self_link))) {
+            return TRUE_ATOM;
+        }
+
+        term self_pid = term_from_local_process_id(ctx->process_id);
+        return dist_send_link(self_pid, target_pid, ctx);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
     }
-
-    mailbox_send_monitor_signal(target, MonitorSignal, other_link);
-    globalcontext_get_process_unlock(ctx->global, target);
-
-    return TRUE_ATOM;
 }
 
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
@@ -4049,23 +4052,32 @@ static term nif_erlang_unlink(Context *ctx, int argc, term argv[])
 
     term target_pid = argv[0];
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
+    if (term_is_local_pid_or_port(target_pid)) {
+        int local_process_id = term_to_local_process_id(target_pid);
+        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+        if (IS_NULL_PTR(target)) {
+            return TRUE_ATOM;
+        }
 
-    int local_process_id = term_to_local_process_id(target_pid);
-    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-    if (IS_NULL_PTR(target)) {
-        return TRUE_ATOM;
-    }
+        uint64_t unlink_id;
+        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
+            globalcontext_get_process_unlock(ctx->global, target);
+            return TRUE_ATOM;
+        }
 
-    uint64_t unlink_id;
-    if (UNLIKELY(!context_set_unlink_id(ctx, argv[0], &unlink_id))) {
+        term self_pid = term_from_local_process_id(ctx->process_id);
+        mailbox_send_immediate_ref_signal(target, UnlinkIDSignal, self_pid, unlink_id);
         globalcontext_get_process_unlock(ctx->global, target);
-        return TRUE_ATOM;
+    } else if (term_is_external_pid(target_pid)) {
+        uint64_t unlink_id;
+        if (UNLIKELY(!context_set_unlink_id(ctx, target_pid, &unlink_id))) {
+            return TRUE_ATOM;
+        }
+        term self_pid = term_from_local_process_id(ctx->process_id);
+        dist_send_unlink_id(unlink_id, self_pid, target_pid, ctx);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
     }
-
-    term self_pid = term_from_local_process_id(ctx->process_id);
-    mailbox_send_immediate_ref_signal(target, UnlinkIDSignal, self_pid, unlink_id);
-    globalcontext_get_process_unlock(ctx->global, target);
 
     return TRUE_ATOM;
 }
