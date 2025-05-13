@@ -69,7 +69,7 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
 {
     uint8_t *_old_brk;
 
-    if (_heap_end == NULL) {
+    if (UNLIKELY(_heap_end == NULL)) {
         local_heap_setup(&_cur_brk, &_heap_end);
     }
 
