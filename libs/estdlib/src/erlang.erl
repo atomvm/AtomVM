@@ -71,6 +71,7 @@
     float_to_binary/2,
     float_to_list/1,
     float_to_list/2,
+    fun_info/1,
     fun_info/2,
     integer_to_binary/1,
     integer_to_binary/2,
@@ -829,6 +830,21 @@ float_to_list(_Float) ->
 -spec float_to_list(Float :: float(), Options :: [float_format_option()]) -> string().
 float_to_list(_Float, _Options) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun     Function to get information about
+%% @returns         Requested information about the function as a list of tuples.
+%% @doc             Returns information about the function `Fun' in unspecified order.
+%% @end
+%%-----------------------------------------------------------------------------
+fun_info(Fun) ->
+    Items = [module, name, arity, type, env],
+    lists:map(
+        fun(Item) ->
+            erlang:fun_info(Fun, Item)
+        end,
+        Items
+    ).
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     Function to get information about

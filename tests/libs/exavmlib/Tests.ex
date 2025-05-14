@@ -29,11 +29,32 @@ defmodule Tests do
   def start() do
     :ok = IO.puts("Running Elixir tests")
     :ok = Some.Submodule.start()
+    :ok = test_funs()
     :ok = test_enum()
     :ok = test_exception()
     :ok = test_chars_protocol()
     :ok = test_inspect()
     :ok = IO.puts("Finished Elixir tests")
+  end
+
+  defp test_funs() do
+    add = fn a, b -> a + b end
+
+    :ok =
+      case add.(1, 2) do
+        3 -> :ok
+        _ -> :error
+      end
+
+    2 =
+      Function.info(add)
+      |> Keyword.get(:arity)
+
+    {:module, Tests} = Function.info(add, :module)
+
+    42 = Function.identity(42)
+
+    :ok
   end
 
   defp test_enum() do
@@ -137,6 +158,9 @@ defmodule Tests do
     # other enum functions
     test_enum_chunk_while()
 
+    # We are about to call Enum.map on an un-enumerable tuple, on purpose.
+    IO.puts("Any warnings about Elixir.Enumerable.Tuple.beam are expected and to be ignored.")
+
     undef =
       try do
         Enum.map({1, 2}, fn x -> x end)
@@ -187,6 +211,9 @@ defmodule Tests do
       end
 
     %RuntimeError{message: "This is a test"} = ex1
+
+    # We are about to call the undefined :undef module, on purpose.
+    IO.puts("Any warnings about undef.beam are expected and to be ignored.")
 
     ex2 =
       try do
