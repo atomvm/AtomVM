@@ -47,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `application:get_env/2`
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 - Added `system_info/1` key `avm_free_heap_size` support for STM32
+- Added `system_info/1` key `avm_minimum_free_size` support for STM32
 
 ### Changed
 

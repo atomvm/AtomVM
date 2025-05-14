@@ -85,5 +85,6 @@ void local_heap_setup(uint8_t **start, uint8_t **end);
 void sys_enable_core_periph_clocks();
 bool sys_lock_pin(GlobalContext *glb, uint32_t gpio_bank, uint16_t pin_num);
 int sys_get_free_heap();
+int sys_least_free_heap();
 
 #endif /* _STM_SYS_H_ */

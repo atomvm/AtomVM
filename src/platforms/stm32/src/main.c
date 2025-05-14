@@ -298,6 +298,7 @@ int main()
         scb_reset_system();
     } else {
         AVM_LOGD(TAG, "Free Heap at exit: %i", sys_get_free_heap());
+        AVM_LOGD(TAG, "Smallest free heap during execution: %i", sys_least_free_heap());
         AVM_LOGI(TAG, "AtomVM application terminated.  Going to sleep forever ...");
         // Disable all interrupts
         cm_disable_interrupts();
