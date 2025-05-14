@@ -289,11 +289,15 @@ process_info(_Pid, _Key) ->
 %%      <li><b>schedulers</b> the number of schedulers, equal to the number of online processors (integer)</li>
 %%      <li><b>schedulers_online</b> the current number of schedulers (integer)</li>
 %% </ul>
+%% The following keys are supported on ESP32 and STM32 platforms:
+%% <ul>
+%%      <li><b>atomvm_free_heap_size</b> the number of (noncontiguous) free bytes in the STM32 heap (integer)</li>
+%%      <li><b>atomvm_minimum_free_size</b> the smallest number of free bytes in the STM32 heap since boot (integer)</li>
+%% </ul>
+%%
 %% The following keys are supported on the ESP32 platform:
 %% <ul>
-%%      <li><b>esp32_free_heap_size</b> the number of (noncontiguous) free bytes in the ESP32 heap (integer)</li>
 %%      <li><b>esp32_largest_free_block</b> the number of the largest contiguous free bytes in the ESP32 heap (integer)</li>
-%%      <li><b>esp32_minimum_free_size</b> the smallest number of free bytes in the ESP32 heap since boot (integer)</li>
 %%      <li><b>esp32_chip_info</b> Details about the model and capabilities of the ESP32 device (map)</li>
 %% </ul>
 %%
