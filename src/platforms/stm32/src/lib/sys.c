@@ -51,6 +51,7 @@ extern uint8_t _ebss, _stack;
 
 static uint8_t *_cur_brk = NULL;
 static uint8_t *_heap_end = NULL;
+static uint8_t *_heap_high_mark = NULL;
 
 /*
  * If not overridden, this puts the heap into the left
@@ -63,6 +64,7 @@ static void __local_ram(uint8_t **start, uint8_t **end)
 {
     *start = &_ebss;
     *end = (uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE));
+    _heap_high_mark = 0;
 }
 
 void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
@@ -79,12 +81,21 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
         return (void *) -1;
     }
     _cur_brk += diff;
+    if (_cur_brk > _heap_high_mark) {
+        _heap_high_mark = _cur_brk;
+    }
+
     return _old_brk;
 }
 
 static int sys_get_free_heap()
 {
     return (int) ((uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE))) - (_cur_brk == NULL ? (int) &_ebss : (int) _cur_brk);
+}
+
+static int sys_least_free_heap()
+{
+    return (int) ((uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE))) - (int) _heap_high_mark;
 }
 
 // Monotonically increasing number of milliseconds from reset
@@ -272,9 +283,11 @@ term sys_get_info(Context *ctx, term key)
     if (key == globalcontext_existing_term_from_atom_string(glb, ATOM_STR("\x15", "atomvm_free_heap_size"))) {
         return term_from_int32(sys_get_free_heap());
     }
+    if (key == globalcontext_existing_term_from_atom_string(glb, ATOM_STR("\x18", "atomvm_minimum_free_size"))) {
+        return term_from_int32(sys_least_free_heap());
+    }
     return UNDEFINED_ATOM;
 }
-
 
 void sys_enable_flash_cache()
 {
