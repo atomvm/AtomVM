@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 - Added Function.ex and Protocol.ex improving Elixir 1.18 support
 - Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
+- Added `erlang:system_info/1` keys `atomvm_free_heap_size` and `atomvm_minimum_free_size` on STM32 platform
 
 ### Changed
 
