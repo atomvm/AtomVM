@@ -1413,6 +1413,25 @@ The `esp:get_mac/1` function can be used to retrieve the network Media Access Co
 >MacAddress = esp:get_mac(wifi_sta)
 >```
 
+## STM32-specific APIs
+
+Certain APIs are specific to and only supported on the STM32 platform.  This section describes these APIs.
+
+### System-Level APIs
+
+As noted above, the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) function can be used to obtain system-specific information about the platform on which your application is deployed.
+
+You can request STM32-specific information using using the following input atoms:
+
+* `avm_free_heap_size` Returns the available free space in the STM32 heap.
+* `avm_minimum_free_size` Returns the smallest ever free space available in the STM32 heap since boot, this will tell you how close you have come to running out of free memory.
+
+For example,
+
+```erlang
+FreeHeapSize = erlang:system_info(avm_free_heap_size).
+```
+
 ## Peripherals
 
 The AtomVM virtual machine and libraries support APIs for interfacing with peripheral devices connected to the ESP32 and other supported microcontrollers.  This section provides information about these APIs.  Unless otherwise stated the documentation for these peripherals is specific to the ESP32, most peripherals are not yet supported on rp2040 or stm32 devices - but work is on-going to expand support for these platforms.
@@ -1591,7 +1610,7 @@ The read options take the form of a proplist, if the key `raw` is true (`{raw, t
 
 If the key `voltage` is true (or simply appears in the list as an atom), then a calibrated voltage value will be returned in millivolts in the second element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
 
-You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`. 
+You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`.
 
 ```{warning}
 Using a large number of samples can significantly increase the amount of time before a response, up to several seconds.
