@@ -40,7 +40,7 @@ jobs:
       fail-fast: false
 
       matrix:
-        esp-idf-target: ["esp32", "esp32c3"]
+        esp-idf-target: ["esp32", "esp32c3", "esp32p4"]
         language: ['cpp']
         idf-version:
          - 'v5.0.7'
@@ -54,6 +54,13 @@ jobs:
           idf-version: 'v5.0.7'
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.1.5'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.0.7'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.1.5'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.2.3'
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -147,6 +154,7 @@ jobs:
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
 
     - name: Install pytest and pytest-embedded plugins
+      if: matrix.esp-idf-target != 'esp32p4'
       run: |
         set -e
         . $IDF_PATH/export.sh
@@ -157,6 +165,7 @@ jobs:
             pytest-embedded-qemu==1.10.3
 
     - name: Build ESP32 tests using idf.py with memory checks
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
@@ -174,6 +183,7 @@ jobs:
         idf.py build
 
     - name: Run ESP32 tests using qemu with memory checks build
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       timeout-minutes: 10
       run: |
@@ -185,6 +195,7 @@ jobs:
         cp sdkconfig.defaults.backup sdkconfig.defaults
 
     - name: Build ESP32 tests using idf.py
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
@@ -195,6 +206,7 @@ jobs:
         idf.py build
 
     - name: Run ESP32 tests using qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       timeout-minutes: 10
       run: |
