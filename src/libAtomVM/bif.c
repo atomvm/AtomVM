@@ -1428,23 +1428,28 @@ term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
 
-static inline term bitwise_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
+static inline term bitwise_helper(
+    Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
 {
-    UNUSED(live);
+    if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+        size_t arg2_size = term_is_integer(arg2) ? 0 : term_boxed_size(arg2);
+        if (MAX(arg1_size, arg2_size) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            int64_t a = term_maybe_unbox_int64(arg1);
+            int64_t b = term_maybe_unbox_int64(arg2);
+            int64_t result = op(a, b);
 
-    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_any_integer(arg2))) {
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, fail_label, live, result);
+#else
+            return make_maybe_boxed_int(ctx, fail_label, live, result);
+#endif
+        } else {
+            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+        }
+    } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
-
-    int64_t a = term_maybe_unbox_int64(arg1);
-    int64_t b = term_maybe_unbox_int64(arg2);
-    int64_t result = op(a, b);
-
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-        return make_maybe_boxed_int64(ctx, fail_label, live, result);
-    #else
-        return make_maybe_boxed_int(ctx, fail_label, live, result);
-    #endif
 }
 
 static inline int64_t bor(int64_t a, int64_t b)
