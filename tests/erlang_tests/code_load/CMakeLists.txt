@@ -27,8 +27,6 @@ compile_erlang(export_test_module)
 generate_hrl(export_test_module_data.hrl EXPORT_TEST_MODULE_DATA export_test_module.beam)
 
 pack_archive(code_load_pack export_test_module)
-# workaround since generate_hrl requires a file name, but pack_archive target is not
-add_custom_target(code_load_pack.avm DEPENDS code_load_pack)
 generate_hrl(code_load_pack_data.hrl CODE_LOAD_PACK_DATA code_load_pack.avm)
 
 add_custom_target(code_load_files DEPENDS
