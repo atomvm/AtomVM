@@ -108,4 +108,22 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec);
 
 #define TCP_LISTEN_BACKLOG 1
 
+#define LWIP_NETIF_LOOPBACK 1
+#define LWIP_NETIF_LOOPBACK_MULTITHREADING 1
+#define LWIP_HAVE_LOOPIF 0
+
+// See https://github.com/atomvm/AtomVM/issues/1588
+// if we have UDP we assume we also have SNTP; lwip needs one more timer,
+// but doesn't account for it
+#if LWIP_UDP > 0
+#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+#endif
+
+// To support loopback, we implement our own version of tcpip_try_callback that
+// enqueues a call to netif_poll.
+struct netif;
+void netif_poll(struct netif *netif);
+typedef void(* tcpip_callback_fn) (void *ctx);
+int tcpip_try_callback(tcpip_callback_fn function, void *ctx);
+
 #endif /* __LWIPOPTS_H__ */

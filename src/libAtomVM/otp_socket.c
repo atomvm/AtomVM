@@ -146,6 +146,7 @@ struct UDPReceivedItem
 
 static err_t tcp_recv_cb(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err);
 static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port);
+static void tcp_err_cb(void *arg, err_t err);
 
 #endif
 
@@ -620,6 +621,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         if (rsrc_obj->socket_state & SocketStateTCP) {
             LWIP_BEGIN();
             tcp_arg(rsrc_obj->tcp_pcb, rsrc_obj);
+            tcp_err(rsrc_obj->tcp_pcb, tcp_err_cb);
             tcp_recv(rsrc_obj->tcp_pcb, tcp_recv_cb);
             LWIP_END();
         } else {
@@ -996,6 +998,23 @@ static void udp_recv_cb(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip
         otp_socket_lwip_enqueue(&event);
     } // Otherwise socket was closed.
 }
+
+// LwIP tcpip_try_callback uses queue.
+static void tcpip_try_callback_handler(struct LWIPEvent *event)
+{
+    event->tcpip_try_callback.function(event->tcpip_try_callback.ctx);
+}
+
+int tcpip_try_callback(tcpip_callback_fn function, void *ctx)
+{
+    struct LWIPEvent event;
+    event.handler = tcpip_try_callback_handler;
+    event.tcpip_try_callback.function = function;
+    event.tcpip_try_callback.ctx = ctx;
+    otp_socket_lwip_enqueue(&event);
+    return ERR_OK;
+}
+
 #endif
 
 static term nif_socket_select_read(Context *ctx, int argc, term argv[])
@@ -2639,6 +2658,25 @@ static err_t tcp_connected_cb(void *arg, struct tcp_pcb *tpcb, err_t err)
     } // else: sender died
     return ERR_OK;
 }
+
+static void tcp_err_cb(void *arg, err_t err)
+{
+    UNUSED(err);
+
+    struct SocketResource *rsrc_obj = (struct SocketResource *) arg;
+    struct RefcBinary *rsrc_refc = refc_binary_from_data(rsrc_obj);
+    GlobalContext *global = rsrc_refc->resource_type->global;
+    int32_t target_pid = rsrc_obj->selecting_process_id;
+    rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
+    rsrc_obj->socket_state = SocketStateTCPConnected;
+    if (target_pid != INVALID_PROCESS_ID) {
+        struct LWIPEvent event;
+        event.handler = trap_answer_closed;
+        event.trap_answer_closed.global = global;
+        event.trap_answer_closed.target_pid = target_pid;
+        otp_socket_lwip_enqueue(&event);
+    } // else: sender died
+}
 #endif
 
 static term nif_socket_connect(Context *ctx, int argc, term argv[])
@@ -2741,6 +2779,9 @@ static term nif_socket_connect(Context *ctx, int argc, term argv[])
     LWIP_END();
 
     if (UNLIKELY(err != ERR_OK)) {
+        if (err == ERR_USE || err == ERR_RTE) {
+            return make_error_tuple(CLOSED_ATOM, ctx);
+        }
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     if (rsrc_obj->socket_state & SocketStateUDP) {
