@@ -159,6 +159,7 @@ jobs:
         mkdir -p build &&
         cd build &&
         cmake .. ${{ matrix.cmake_opts }} &&
+        make PackBEAM &&
         cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
         cp ../build_tests/tests/erlang_tests/code_load/*.{avm,beam,hrl} tests/erlang_tests/code_load/ &&
         mkdir -p tests/erlang_tests/code_load/beams/ &&
@@ -167,6 +168,8 @@ jobs:
         cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
         cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
+        touch tests/erlang_tests/code_load/code_load_pack.avm &&
+        touch tests/erlang_tests/code_load/code_load_pack_data.hrl &&
         make AtomVM &&
         make test-erlang &&
         make test-enif &&

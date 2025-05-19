@@ -43,15 +43,18 @@ macro(pack_archive avm_name)
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${avm_name} ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_beams PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_beams PackBEAM)
 
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm
+    )
 endmacro()
 
 macro(pack_runnable avm_name main)
@@ -85,13 +88,18 @@ macro(pack_runnable avm_name main)
         set(ARCHIVE_TARGETS ${ARCHIVE_TARGETS} ${archive_name})
     endforeach()
 
-    add_custom_target(
-        ${avm_name} ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM)
+
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm
+    )
 
 endmacro()
 
@@ -146,12 +154,16 @@ macro(pack_test avm_name main)
         endif()
     endforeach()
 
-    add_custom_target(
-        ${avm_name} ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
         COMMENT "Packing test ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM)
 
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm
+    )
 endmacro()
