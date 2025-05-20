@@ -400,7 +400,7 @@ recv0(Socket, Length, Timeout) ->
 
 recv0_nowait(Socket, Length, Ref) ->
     case ?MODULE:nif_recv(Socket, Length) of
-        {error, timeout} ->
+        {error, Reason} when Reason =:= timeout orelse Reason =:= eagain ->
             case ?MODULE:nif_select_read(Socket, Ref) of
                 ok ->
                     {select, {select_info, recv, Ref}};

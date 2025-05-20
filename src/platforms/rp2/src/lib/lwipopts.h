@@ -107,4 +107,16 @@ void sntp_set_system_time_us(unsigned long sec, unsigned long usec);
 #define SNTP_SET_SYSTEM_TIME_US(sec, usec) sntp_set_system_time_us(sec, usec)
 
 #define TCP_LISTEN_BACKLOG 1
+
+#define LWIP_NETIF_LOOPBACK 1
+#define LWIP_NETIF_LOOPBACK_MULTITHREADING 1
+#define LWIP_HAVE_LOOPIF 0
+
+// To support loopback, we implement our own version of tcpip_try_callback that
+// enqueues a call to netif_poll.
+struct netif;
+void netif_poll(struct netif *netif);
+typedef void (*tcpip_callback_fn)(void *ctx);
+int tcpip_try_callback(tcpip_callback_fn function, void *ctx);
+
 #endif /* __LWIPOPTS_H__ */
