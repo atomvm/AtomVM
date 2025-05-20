@@ -131,6 +131,11 @@ struct LWIPEvent
         {
             struct SocketResource *rsrc_obj;
         } finalize_close;
+        struct
+        {
+            tcpip_callback_fn function;
+            void *ctx;
+        } tcpip_try_callback;
         // Used by otp_net
         struct
         {
