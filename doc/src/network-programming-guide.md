@@ -6,9 +6,9 @@
 
 # Network Programming Guide
 
-One of the exciting features of the ESP32 and the Pico-W is their support for WiFi networking, allowing ESP32 and Pico-W micro-controllers to communicate with the outside world over common IP networking protocols, such as TCP or IDP.  The ESP32 and the Pico-W can be configured in station mode (STA), whereby the devices connect to an existing access point, as well as "softAP" mode (AP), whereby they function as an access point, to which other stations can connect. The ESP32 also supports a combined STA+softAP mode, which allows the device to function in both STA and softAP mode simultaneously.
+One of the exciting features of the ESP32 and the Pico W/Pico 2 W is their support for WiFi networking, allowing ESP32 and Pico W/Pico 2 W micro-controllers to communicate with the outside world over common IP networking protocols, such as TCP or IDP.  The ESP32 and the Pico W/Pico 2 W can be configured in station mode (STA), whereby the devices connect to an existing access point, as well as "softAP" mode (AP), whereby they function as an access point, to which other stations can connect. The ESP32 also supports a combined STA+softAP mode, which allows the device to function in both STA and softAP mode simultaneously.
 
-AtomVM provides an Erlang API interface for interacting with the WiFi networking layer on ESP32 and Pico-W devices, providing support for configuring your ESP32 or Pico-W device in STA mode, AP mode, or a combined STA+AP mode, allowing Erlang/Elixir applications to send and receive data from other devices on a network.  This interface is encapsulated in the [`network` module](./apidocs/erlang/eavmlib/network.md), which implements a simple interface for connecting to existing WiFi networks or for functioning as a WiFi access point. The same `network` module is used for both the ESP32 and the Pico-W.
+AtomVM provides an Erlang API interface for interacting with the WiFi networking layer on ESP32 and Pico W/Pico 2 W devices, providing support for configuring your ESP32 or Pico W/Pico 2 W device in STA mode, AP mode, or a combined STA+AP mode, allowing Erlang/Elixir applications to send and receive data from other devices on a network.  This interface is encapsulated in the [`network` module](./apidocs/erlang/eavmlib/network.md), which implements a simple interface for connecting to existing WiFi networks or for functioning as a WiFi access point. The same `network` module is used for both the ESP32 and the Pico W/Pico 2 W.
 
 Once the network has been set up (in STA or AP mode), AtomVM can use various socket interfaces to interact with the socket layer to create a client or server application.  For example, on ESP32, AtomVM supports the [`gen_udp`](./apidocs/erlang/estdlib/gen_udp.md) and [`gen_tcp`](./apidocs/erlang/estdlib/gen_tcp.md) APIs, while AtomVM extensions may support HTTP, MQTT, and other protocols built over low-level networking interfaces.
 
@@ -18,7 +18,7 @@ This document describes the basic design of the AtomVM network interfaces, and h
 
 ## Station (STA) mode
 
-In STA mode, the ESP32 or the Pico-W connect to an existing WiFi network.
+In STA mode, the ESP32 or the Pico W/Pico 2 W connect to an existing WiFi network.
 
 In this case, the input configuration should be a properties list containing a tuple of the form `{sta, <sta-properties>}`, where `<sta-properties>` is a property list containing configuration properties for the device in station mode.
 
