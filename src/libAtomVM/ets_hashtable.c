@@ -115,7 +115,7 @@ cleanup:
     return NULL;
 }
 
-EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
+EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
 {
     term key = new_node->key;
     uint32_t hash = hash_term(key, global);
@@ -132,7 +132,7 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     while (node) {
         TermCompareResult cmp = term_compare(key, node->key, TermCompareExact, global);
         if (UNLIKELY(cmp == TermCompareMemoryAllocFail)) {
-            return EtsHashtableError;
+            return EtsHashtableOutOfMemory;
         }
 
         if (cmp == TermEquals) {

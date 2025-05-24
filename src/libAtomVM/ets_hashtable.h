@@ -42,17 +42,17 @@ typedef enum EtsHashtableOptions
     EtsHashtableAllowOverwrite = 1
 } EtsHashtableOptions;
 
-typedef enum EtsHashtableErrorCode
+typedef enum EtsHashtableStatus
 {
     EtsHashtableOk = 0,
     EtsHashtableKeyAlreadyExists,
-    EtsHashtableError
-} EtsHashtableErrorCode;
+    EtsHashtableOutOfMemory
+} EtsHashtableStatus;
 
 struct EtsHashTable *ets_hashtable_new();
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global);
 
-EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
+EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
 term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
 bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
 struct HNode *ets_hashtable_new_node(term entry, int keypos);
