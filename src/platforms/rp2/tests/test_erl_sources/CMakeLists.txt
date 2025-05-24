@@ -22,7 +22,7 @@ include(ExternalProject)
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
-    BUILD_COMMAND cmake --build . --target=atomvmlib --target=PackBEAM --target=uf2tool
+    BUILD_COMMAND cmake --build . --target=atomvmlib --target=PackBEAM --target=UF2Tool
 )
 
 function(compile_erlang module_name module_src_dir)
