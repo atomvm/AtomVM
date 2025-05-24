@@ -22,8 +22,9 @@ include(FetchContent)
 
 FetchContent_Declare(
   mbedtls
+  PATCH_COMMAND git apply "${CMAKE_CURRENT_LIST_DIR}/mbedtls.patch"
   GIT_REPOSITORY http://github.com/mbed-TLS/mbedtls.git
-  GIT_TAG        v3.6.2
+  GIT_TAG        v3.6.3.1
   GIT_SHALLOW    1
 )
 
