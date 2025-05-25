@@ -91,6 +91,10 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
 
 size_t intn_required_unsigned_integer_bytes(const intn_digit_t in[], size_t in_len);
 
+size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
 static inline void intn_copy(
     const intn_digit_t *num, size_t num_len, intn_digit_t *out, size_t extend_to)
 {
