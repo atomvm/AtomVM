@@ -380,6 +380,107 @@ size_t intn_addmnu(
     return i;
 }
 
+static void cond_neg(
+    intn_integer_sign_t sign, const intn_digit_t in[], size_t in_len, intn_digit_t out[])
+{
+    if (sign == IntNPositiveInteger) {
+        memcpy(out, in, sizeof(intn_digit_t) * in_len);
+    } else {
+        uint32_t carry = 1;
+        for (size_t i = 0; i < in_len; i++) {
+            uint64_t temp = (uint64_t) (~in[i]) + (uint64_t) carry;
+            out[i] = (uint32_t) temp;
+            carry = temp >> 32;
+        }
+    }
+}
+
+static size_t prepare_out(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, const intn_digit_t *b[],
+    size_t *b_len, intn_integer_sign_t *b_sign, intn_digit_t out[])
+{
+    const intn_digit_t *longest;
+    size_t longest_len;
+    intn_integer_sign_t longest_sign;
+
+    if (m_len > n_len) {
+        longest = m;
+        longest_len = m_len;
+        longest_sign = m_sign;
+        *b = n;
+        *b_len = n_len;
+        *b_sign = n_sign;
+    } else {
+        longest = n;
+        longest_len = n_len;
+        longest_sign = n_sign;
+        *b = m;
+        *b_len = m_len;
+        *b_sign = m_sign;
+    }
+
+    cond_neg(longest_sign, longest, longest_len, out);
+    if (longest_sign == IntNPositiveInteger) {
+        out[longest_len] = 0;
+    } else {
+        out[longest_len] = UINT32_MAX;
+    }
+    return longest_len + 1;
+}
+
+static inline uint32_t bit_op(uint32_t a, uint32_t b) { return a | b; }
+
+static inline size_t neg_and_bitwise(const intn_digit_t b[], size_t b_len,
+    intn_integer_sign_t b_sign, intn_digit_t out[], size_t out_len)
+{
+    if (b_sign == IntNPositiveInteger) {
+        for (size_t i = 0; i < b_len; i++) {
+            out[i] = bit_op(out[i], b[i]);
+        }
+        for (size_t i = b_len; i < out_len; i++) {
+            out[i] = bit_op(out[i], 0);
+        }
+    } else {
+        uint32_t carry = 1;
+        for (size_t i = 0; i < b_len; i++) {
+            uint64_t temp = (uint64_t) (~b[i]) + (uint64_t) carry;
+            out[i] = bit_op(out[i], (uint32_t) temp);
+            carry = temp >> 32;
+        }
+        if (b_len < out_len) {
+            out[b_len] = bit_op(out[b_len], (UINT32_MAX) + carry);
+        }
+        for (size_t i = b_len + 1; i < out_len; i++) {
+            out[i] = bit_op(out[i], UINT32_MAX);
+        }
+    }
+    return out_len;
+}
+
+size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    intn_digit_t working_buf[INTN_MAX_IN_LEN + 1];
+
+    const intn_digit_t *b;
+    size_t b_len;
+    intn_integer_sign_t b_sign;
+
+    size_t count
+        = prepare_out(m, m_len, m_sign, n, n_len, n_sign, &b, &b_len, &b_sign, working_buf);
+
+    neg_and_bitwise(b, b_len, b_sign, working_buf, count);
+
+    *out_sign = (intn_integer_sign_t) ((unsigned int) m_sign | (unsigned int) n_sign)
+        & IntNNegativeInteger;
+
+    size_t ret_count = count; // MAX(count, count2);
+    cond_neg(*out_sign, working_buf, ret_count, out);
+
+    return ret_count;
+}
+
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
 {
     int i;
