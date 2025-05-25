@@ -1427,9 +1427,13 @@ term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 }
 
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
+typedef size_t (*bitwise_big_op)(
+        const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+        const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign,
+        intn_digit_t out[], intn_integer_sign_t *out_sign);
 
 static inline term bitwise_helper(
-    Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
+    Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op, bitwise_big_op big_op)
 {
     if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
         size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
@@ -1445,7 +1449,21 @@ static inline term bitwise_helper(
             return make_maybe_boxed_int(ctx, fail_label, live, result);
 #endif
         } else {
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            intn_digit_t tmp_buf1[INTN_INT64_LEN];
+            intn_digit_t tmp_buf2[INTN_INT64_LEN];
+            intn_digit_t *m;
+            size_t m_len;
+            intn_integer_sign_t m_sign;
+            intn_digit_t *n;
+            size_t n_len;
+            intn_integer_sign_t n_sign;
+            args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
+
+            intn_digit_t bigres[INTN_MAX_RES_LEN];
+            intn_integer_sign_t bigres_sign;
+            size_t bigres_len = big_op(m, m_len, m_sign, n, n_len, n_sign, bigres, &bigres_sign);
+
+            return make_bigint(ctx, fail_label, live, bigres, bigres_len, bigres_sign);
         }
     } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
@@ -1462,7 +1480,7 @@ term bif_erlang_bor_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 | arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bormn);
     }
 }
 
@@ -1476,7 +1494,7 @@ term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_bandmn);
     }
 }
 
@@ -1490,7 +1508,7 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxormn);
     }
 }
 

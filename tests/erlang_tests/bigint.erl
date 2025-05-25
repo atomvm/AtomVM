@@ -53,7 +53,10 @@ start() ->
         conv_to_from_float() +
         external_term_decode() +
         big_literals() +
-        to_external_term().
+        to_external_term() +
+        test_band() +
+        test_bxor() +
+        test_bor().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -790,8 +793,271 @@ to_external_term() ->
 
     0.
 
+test_band() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+
+    % Following are converted using base 10
+    <<"0">> = erlang:integer_to_binary(?MODULE:id(?MODULE:id(0) band ?MODULE:id(MaxPattern))),
+    <<"1">> = erlang:integer_to_binary(?MODULE:id(?MODULE:id(1) band ?MODULE:id(MaxPattern))),
+    <<"42">> = erlang:integer_to_binary(?MODULE:id(?MODULE:id(42) band ?MODULE:id(MaxPattern))),
+
+    % base 16 again
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(-1) band ?MODULE:id(MaxPattern)), 16
+    ),
+    MaxPatternBin = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(-1) band ?MODULE:id(MaxPattern)), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD6">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(-42) band ?MODULE:id(MaxPattern)), 16
+    ),
+
+    Pattern1Bin = <<"ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">>,
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(Pattern1Bin), 16),
+    Pattern2Bin = <<"-ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">>,
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(Pattern2Bin), 16),
+    Pattern3Bin = <<"429F7B79E176813134266B08934B692D150E2256A5622164F5E71321FC02A7B6">>,
+    Pattern3 = erlang:binary_to_integer(?MODULE:id(Pattern3Bin), 16),
+    Pattern4Bin = <<"7D4BEFE3454125529A5C377D7D02D005B4ABA5C133FEB2768E0A04A610735D88">>,
+    Pattern4 = erlang:binary_to_integer(?MODULE:id(Pattern4Bin), 16),
+    Pattern5Bin = <<"C617C2D4AD3FA4331BAD932538A828460E5D55FCAC2444154AA37E60EFEB7351">>,
+    Pattern5 = erlang:binary_to_integer(?MODULE:id(Pattern5Bin), 16),
+    Pattern6Bin = <<"-DBD6308C83498D7C8B5327507D10C30974CB034EEB514EFE4D85E044B5BF25DC">>,
+    Pattern6 = erlang:binary_to_integer(?MODULE:id(Pattern6Bin), 16),
+
+    <<"ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern1) band ?MODULE:id(Pattern1)), 16
+    ),
+    <<"1">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern1) band ?MODULE:id(Pattern2)), 16
+    ),
+    <<"-ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern2) band ?MODULE:id(Pattern2)), 16
+    ),
+    <<"40121078C0328030240443008100012401062012A442012045E6002088020504">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern2) band ?MODULE:id(Pattern3)), 16
+    ),
+    <<"400B6B61414001101004230811024005140A2040216220648402002010020580">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern3) band ?MODULE:id(Pattern4)), 16
+    ),
+    <<"4403C2C0050124121A0C132538000004040905C0202400140A02042000635100">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern4) band ?MODULE:id(Pattern5)), 16
+    ),
+    <<"401C2502C36200310AC902500A828460A1454B00424000102221E204A405200">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern5) band ?MODULE:id(Pattern6)), 16
+    ),
+    <<"401C2502C36200310AC902500A828460A1454B00424000102221E204A405200">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern6) band ?MODULE:id(Pattern5)), 16
+    ),
+    <<"401C2502C36200310AC902500A828460A1454B00424000102221E204A405200">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern5) band ?MODULE:id(Pattern6)), 16
+    ),
+    <<"-DBD6308C83498D7C8B5327507D10C30974CB034EEB514EFE4D85E044B5BF25DC">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern6) band ?MODULE:id(Pattern6)), 16
+    ),
+    <<"-FBDFFF8DA34DEFFD9B7B3F5D7F7FFB8BFCCB876FEB71FEFEFF95F355F7BFAFFC">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern2) band ?MODULE:id(Pattern6)), 16
+    ),
+    <<"-FBDFFF8DA34DEFFD9B7B3F5D7F7FFB8BFCCB876FEB71FEFEFF95F355F7BFAFFC">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern6) band ?MODULE:id(Pattern2)), 16
+    ),
+
+    Pattern7Bin = <<"-8000000000000000000000000000000000000000000000000000000000000000">>,
+    Pattern7 = erlang:binary_to_integer(?MODULE:id(Pattern7Bin), 16),
+    Pattern8Bin = <<"-4000000000000000000000000000000000000000000000000000000000000000">>,
+    Pattern8 = erlang:binary_to_integer(?MODULE:id(Pattern8Bin), 16),
+
+    <<"-8000000000000000000000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern7) band ?MODULE:id(Pattern8)), 16
+    ),
+
+    <<"-8000000000000000000000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern8) band ?MODULE:id(Pattern7)), 16
+    ),
+
+    Pattern9Bin = <<"-8000000000000000000000000000000000000000000000000000000000000000">>,
+    Pattern9 = erlang:binary_to_integer(?MODULE:id(Pattern9Bin), 16),
+    Pattern10Bin = <<"4000000000000000000000000000000000000000000000000000000000000000">>,
+    Pattern10 = erlang:binary_to_integer(?MODULE:id(Pattern10Bin), 16),
+
+    <<"0">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern9) band ?MODULE:id(Pattern10)), 16
+    ),
+
+    <<"0">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern10) band ?MODULE:id(Pattern9)), 16
+    ),
+
+    Pattern11Bin = <<"FFFFFFFFFFFFFFFFF">>,
+    Pattern11 = erlang:binary_to_integer(?MODULE:id(Pattern11Bin), 16),
+    Pattern12Bin = <<"F00FFFFFFFFFFFFFFFF">>,
+    Pattern12 = erlang:binary_to_integer(?MODULE:id(Pattern12Bin), 16),
+
+    <<"FFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern11) band ?MODULE:id(Pattern12)), 16
+    ),
+
+    Pattern13Bin = <<"FFF1FFFFFFFFFFFF">>,
+    Pattern13 = erlang:binary_to_integer(?MODULE:id(Pattern13Bin), 16),
+    Pattern14Bin = <<"FFFFFFFFFFF5FFFF">>,
+    Pattern14 = erlang:binary_to_integer(?MODULE:id(Pattern14Bin), 16),
+
+    <<"FFF1FFFFFFF5FFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern13) band ?MODULE:id(Pattern14)), 16
+    ),
+
+    0.
+
+test_bxor() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(0) bxor ?MODULE:id(MaxPattern)), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(1) bxor ?MODULE:id(MaxPattern)), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFA">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(5) bxor ?MODULE:id(MaxPattern)), 16
+    ),
+
+    % Here the behaviour differs from the BEAM
+    % The BEAM has an "unlimited" big integers, so it is always possible to build a bigger one
+    % without any loss of information.
+    % AtomVM is limited to 256 bit + sign, so the sign bit might be discarded in some specific
+    % situations, since it is not possible to build a "more negative" 257 bit integer.
+    Res1 = choose_result(
+        <<"0">>, <<"-10000000000000000000000000000000000000000000000000000000000000000">>
+    ),
+    Res1 = erlang:integer_to_binary(?MODULE:id(?MODULE:id(-1) bxor ?MODULE:id(MaxPattern)), 16),
+    Res1 = erlang:integer_to_binary(?MODULE:id(?MODULE:id(MaxPattern) bxor ?MODULE:id(-1)), 16),
+
+    Pattern1Bin = <<"ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">>,
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(Pattern1Bin), 16),
+    Pattern2Bin = <<"-ABCDEF01234567891A2B3C4D5E6F7A8B9C0987654321FEDCBA1133557799AABB">>,
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(Pattern2Bin), 16),
+    Pattern3Bin = <<"429F7B79E176813134266B08934B692D150E2256A5622164F5E71321FC02A7B6">>,
+    Pattern3 = erlang:binary_to_integer(?MODULE:id(Pattern3Bin), 16),
+    Pattern4Bin = <<"7D4BEFE3454125529A5C377D7D02D005B4ABA5C133FEB2768E0A04A610735D88">>,
+    Pattern4 = erlang:binary_to_integer(?MODULE:id(Pattern4Bin), 16),
+    Pattern5Bin = <<"C617C2D4AD3FA4331BAD932538A828460E5D55FCAC2444154AA37E60EFEB7351">>,
+    Pattern5 = erlang:binary_to_integer(?MODULE:id(Pattern5Bin), 16),
+    Pattern6Bin = <<"-DBD6308C83498D7C8B5327507D10C30974CB034EEB514EFE4D85E044B5BF25DC">>,
+    Pattern6 = erlang:binary_to_integer(?MODULE:id(Pattern6Bin), 16),
+    Pattern7Bin = <<"1FE2315B2ED07E444FD674612917C4EA">>,
+    Pattern7 = erlang:binary_to_integer(?MODULE:id(Pattern7Bin), 16),
+    Pattern8Bin = <<"66291789880994637C2DDCE876C62C32">>,
+    Pattern8 = erlang:binary_to_integer(?MODULE:id(Pattern8Bin), 16),
+    Pattern9Bin = <<"-51E890688B984C76550C33A169F41C1E">>,
+    Pattern9 = erlang:binary_to_integer(?MODULE:id(Pattern9Bin), 16),
+
+    <<"0">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern1) bxor ?MODULE:id(Pattern1)), 16
+    ),
+    <<"-2">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern1) bxor ?MODULE:id(Pattern2)), 16
+    ),
+    <<"0">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern2) bxor ?MODULE:id(Pattern2)), 16
+    ),
+    <<"-E9529478C233E6B82E0D5745CD2413A68907A533E643DFB84FF620748B9B0D0D">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern2) bxor ?MODULE:id(Pattern3)), 16
+    ),
+    <<"3FD4949AA437A463AE7A5C75EE49B928A1A58797969C93127BED1787EC71FA3E">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern3) bxor ?MODULE:id(Pattern4)), 16
+    ),
+    <<"BB5C2D37E87E816181F1A45845AAF843BAF6F03D9FDAF663C4A97AC6FF982ED9">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern4) bxor ?MODULE:id(Pattern5)), 16
+    ),
+    <<"-1DC1F2582E76294F90FEB47545B8EB4F7A9656B247750AEB07269E245A54568B">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern5) bxor ?MODULE:id(Pattern6)), 16
+    ),
+    <<"0">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern6) bxor ?MODULE:id(Pattern6)), 16
+    ),
+    <<"79CB26D2A6D9EA2733FBA8895FD1E8D8">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern7) bxor ?MODULE:id(Pattern8)), 16
+    ),
+    <<"-37C187E10391D8152921EF491F323030">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern8) bxor ?MODULE:id(Pattern9)), 16
+    ),
+
+    0.
+
+test_bor() ->
+    Pattern1 = erlang:binary_to_integer(
+        ?MODULE:id(
+            <<"10101010101010101010101010101010101010101010101010101010101010100000000000000000">>
+        ),
+        2
+    ),
+    Pattern2 = erlang:binary_to_integer(
+        ?MODULE:id(
+            <<"1010101010101010101010101010101010101010101010101010101010101010000000000000000">>
+        ),
+        2
+    ),
+    Res1 = erlang:binary_to_integer(
+        ?MODULE:id(
+            <<"11111111111111111111111111111111111111111111111111111111111111110000000000000000">>
+        ),
+        2
+    ),
+    Res1 = Pattern1 bor Pattern2,
+
+    Pattern3 = erlang:binary_to_integer(?MODULE:id(<<"-1">>), 2),
+    Res2 = ?MODULE:id(-1),
+    Res2 = Pattern1 bor Pattern3,
+
+    Pattern4 = erlang:binary_to_integer(?MODULE:id(<<"-5555555511111111123456789ABCDEF0">>), 16),
+    Pattern5 = erlang:binary_to_integer(?MODULE:id(<<"+30303030333333333111111111111111">>), 16),
+    Res3 = erlang:binary_to_integer(?MODULE:id(<<"-4545454500000000022446688AACCEEF">>), 16),
+    Res3 = Pattern4 bor Pattern5,
+
+    Pattern6 = erlang:binary_to_integer(?MODULE:id(<<"-30303030333333333111111111111111">>), 16),
+    Res4 = erlang:binary_to_integer(?MODULE:id(<<"-10101010111111111010101010101001">>), 16),
+    Res4 = Pattern4 bor Pattern6,
+
+    Pattern7 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-8000000000000000000000000000000000000000000000000000000000000000">>), 16
+    ),
+    Res5 = ?MODULE:id(-1),
+    Res5 = ?MODULE:id(Pattern7) bor ?MODULE:id(-1),
+
+    Res6 = Pattern4,
+    Res6 = ?MODULE:id(Pattern4) bor ?MODULE:id(Pattern7),
+
+    Res7 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Res7 = ?MODULE:id(Pattern7) bor ?MODULE:id(1),
+
+    Pattern8 = erlang:binary_to_integer(
+        ?MODULE:id(<<"5555555555555555555555555555555555555555555555555555555555555555">>), 16
+    ),
+    Pattern9 = erlang:binary_to_integer(
+        ?MODULE:id(<<"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">>), 16
+    ),
+    Res8 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Res8 = Pattern8 bor Pattern9,
+
+    Res9 = ?MODULE:id(-1),
+    Res9 = ?MODULE:id(-1) bor Res8,
+
+    0.
+
 id(X) ->
     X.
+
+choose_result(AResult, BResult) ->
+    case get_machine_atom() of
+        atomvm -> AResult;
+        beam -> BResult
+    end.
 
 expect_overflow(OvfFun) ->
     Machine = ?MODULE:get_machine_atom(),
