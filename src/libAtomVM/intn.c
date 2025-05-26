@@ -485,6 +485,73 @@ size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     return count;
 }
 
+static inline intn_digit_t digit_band(intn_digit_t a, intn_digit_t b)
+{
+    return a & b;
+}
+
+size_t intn_bandmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    intn_digit_t working_buf[INTN_MAX_IN_LEN];
+
+    const intn_digit_t *b;
+    size_t b_len;
+    intn_integer_sign_t b_sign;
+
+    size_t count
+        = prepare_working_buf(m, m_len, m_sign, n, n_len, n_sign, &b, &b_len, &b_sign, working_buf);
+
+    signed_bitwise(b, b_len, b_sign, working_buf, count, digit_bor);
+    intn_integer_sign_t res_sign = sign_bitwise(m_sign, n_sign, digit_band);
+
+    cond_neg(res_sign, working_buf, count, out);
+    *out_sign = res_sign;
+
+    return count;
+}
+
+static inline intn_digit_t digit_bxor(intn_digit_t a, intn_digit_t b)
+{
+    return a ^ b;
+}
+
+size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    intn_digit_t working_buf[INTN_MAX_IN_LEN];
+
+    const intn_digit_t *b;
+    size_t b_len;
+    intn_integer_sign_t b_sign;
+
+    size_t count
+        = prepare_working_buf(m, m_len, m_sign, n, n_len, n_sign, &b, &b_len, &b_sign, working_buf);
+
+    signed_bitwise(b, b_len, b_sign, working_buf, count, digit_bor);
+    intn_integer_sign_t res_sign = sign_bitwise(m_sign, n_sign, digit_bxor);
+
+    cond_neg(res_sign, working_buf, count, out);
+    *out_sign = res_sign;
+
+    if (res_sign == IntNNegativeInteger) {
+        bool all_zeros = true;
+        for (size_t i = 0; i < count; i++) {
+            if (out[i] != 0) {
+                all_zeros = false;
+                break;
+            }
+        }
+        if (all_zeros) {
+            *out_sign = IntNPositiveInteger;
+        }
+    }
+
+    return count;
+}
+
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
 {
     int i;

@@ -77,6 +77,14 @@ size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
+size_t intn_bandmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
+size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
 
 char *intn_to_string(const intn_digit_t *num, size_t len, intn_integer_sign_t num_sign, int base,
