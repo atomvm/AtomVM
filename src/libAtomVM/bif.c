@@ -1494,7 +1494,7 @@ term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, NULL);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_bandmn);
     }
 }
 
@@ -1508,7 +1508,7 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, NULL);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxormn);
     }
 }
 
