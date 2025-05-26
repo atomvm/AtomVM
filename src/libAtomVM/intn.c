@@ -395,7 +395,7 @@ static void cond_neg(
     }
 }
 
-static size_t prepare_out(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+static size_t prepare_working_buf(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, const intn_digit_t *b[],
     size_t *b_len, intn_integer_sign_t *b_sign, intn_digit_t out[])
 {
@@ -420,18 +420,13 @@ static size_t prepare_out(const intn_digit_t m[], size_t m_len, intn_integer_sig
     }
 
     cond_neg(longest_sign, longest, longest_len, out);
-    if (longest_sign == IntNPositiveInteger) {
-        out[longest_len] = 0;
-    } else {
-        out[longest_len] = UINT32_MAX;
-    }
-    return longest_len + 1;
+    return longest_len;
 }
 
-static inline uint32_t bit_op(uint32_t a, uint32_t b) { return a | b; }
+typedef intn_digit_t (*bit_op_t)(intn_digit_t a, intn_digit_t b);
 
-static inline size_t neg_and_bitwise(const intn_digit_t b[], size_t b_len,
-    intn_integer_sign_t b_sign, intn_digit_t out[], size_t out_len)
+static inline void signed_bitwise(const intn_digit_t b[], size_t b_len, intn_integer_sign_t b_sign,
+    intn_digit_t out[], size_t out_len, bit_op_t bit_op)
 {
     if (b_sign == IntNPositiveInteger) {
         for (size_t i = 0; i < b_len; i++) {
@@ -454,31 +449,40 @@ static inline size_t neg_and_bitwise(const intn_digit_t b[], size_t b_len,
             out[i] = bit_op(out[i], UINT32_MAX);
         }
     }
-    return out_len;
+}
+
+static inline intn_integer_sign_t sign_bitwise(
+    intn_integer_sign_t m_sign, intn_integer_sign_t n_sign, bit_op_t bit_op)
+{
+    return (intn_integer_sign_t) bit_op((unsigned int) m_sign, (unsigned int) n_sign)
+        & IntNNegativeInteger;
+}
+
+static inline intn_digit_t digit_bor(intn_digit_t a, intn_digit_t b)
+{
+    return a | b;
 }
 
 size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
-    intn_digit_t working_buf[INTN_MAX_IN_LEN + 1];
+    intn_digit_t working_buf[INTN_MAX_IN_LEN];
 
     const intn_digit_t *b;
     size_t b_len;
     intn_integer_sign_t b_sign;
 
     size_t count
-        = prepare_out(m, m_len, m_sign, n, n_len, n_sign, &b, &b_len, &b_sign, working_buf);
+        = prepare_working_buf(m, m_len, m_sign, n, n_len, n_sign, &b, &b_len, &b_sign, working_buf);
 
-    neg_and_bitwise(b, b_len, b_sign, working_buf, count);
+    signed_bitwise(b, b_len, b_sign, working_buf, count, digit_bor);
+    intn_integer_sign_t res_sign = sign_bitwise(m_sign, n_sign, digit_bor);
 
-    *out_sign = (intn_integer_sign_t) ((unsigned int) m_sign | (unsigned int) n_sign)
-        & IntNNegativeInteger;
+    cond_neg(res_sign, working_buf, count, out);
+    *out_sign = res_sign;
 
-    size_t ret_count = count; // MAX(count, count2);
-    cond_neg(*out_sign, working_buf, ret_count, out);
-
-    return ret_count;
+    return count;
 }
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
