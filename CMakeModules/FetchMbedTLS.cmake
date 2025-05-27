@@ -22,10 +22,37 @@ include(FetchContent)
 
 FetchContent_Declare(
   mbedtls
-  PATCH_COMMAND git apply "${CMAKE_CURRENT_LIST_DIR}/mbedtls.patch"
   GIT_REPOSITORY http://github.com/mbed-TLS/mbedtls.git
   GIT_TAG        v3.6.3.1
   GIT_SHALLOW    1
 )
 
-FetchContent_MakeAvailable(mbedtls)
+include(CheckCompilerFlag)
+check_compiler_flag(C -Wno-unterminated-string-initialization compiler_supports_unterminated_string_initialization)
+
+if (${compiler_supports_unterminated_string_initialization})
+    get_property(
+        compile_options
+        DIRECTORY
+        PROPERTY COMPILE_OPTIONS
+    )
+
+    set_property(
+        DIRECTORY
+        APPEND
+        PROPERTY COMPILE_OPTIONS -Wno-unterminated-string-initialization
+    )
+
+    FetchContent_MakeAvailable(mbedtls)
+
+    set_property(
+        DIRECTORY
+        PROPERTY COMPILE_OPTIONS ${compile_options}
+    )
+
+    unset(compile_options)
+else()
+    FetchContent_MakeAvailable(mbedtls)
+endif ()
+
+unset(compiler_supports_unterminated_string_initialization)
