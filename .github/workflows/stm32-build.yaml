@@ -11,12 +11,14 @@ on:
     paths:
       - '.github/workflows/stm32-build.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
   pull_request:
     paths:
       - '.github/workflows/stm32-build.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
 

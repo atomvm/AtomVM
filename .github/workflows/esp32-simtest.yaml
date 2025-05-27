@@ -12,6 +12,7 @@ on:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
       - "CMakeLists.txt"
+      - 'CMakeModules/**'
       - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
@@ -20,9 +21,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
+      - "CMakeLists.txt"
+      - 'CMakeModules/**'
+      - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
       - "src/libAtomVM/**"
+      - "tools/packbeam/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
