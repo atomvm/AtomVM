@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
 
+### Changed
+- `globalcontext_make_atom` might return an invalid term when memory allocation fails. Therefore
+return value must be checked (e.g. using `term_is_invalid_term()`)
+
 ### Fixed
 
 - ESP32: improved sntp sync speed from a cold boot.

@@ -46,6 +46,12 @@ extern "C" {
     ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
+#define REQUIRE_ATOM(name, lenstr, str, glb) \
+    term name = globalcontext_make_atom(glb, lenstr str); \
+    if (UNLIKELY(term_is_invalid_term(name))) { \
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM); \
+    }
+
 const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
 
 // spawn opt is used by distribution nifs
