@@ -38,7 +38,7 @@ jobs:
     strategy:
       matrix:
         os: ["macos-13", "macos-14", "macos-15"]
-        otp: ["24", "25", "26", "27"]
+        otp: ["24", "25", "26", "27", "28"]
 
     steps:
     # Setup
@@ -48,20 +48,17 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      if: matrix.otp != '24'
+      if: matrix.otp != '24' && matrix.otp != '25
       run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ninja mbedtls rebar3
 
     - name: "Install deps"
-      if: matrix.otp == '24'
+      if: matrix.otp == '24' || matrix.otp == '25'
       run: |
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ninja mbedtls
         wget https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3
         chmod +x rebar3
-        if [ -e /usr/local/opt/erlang@24/bin/ ] ; then
-            sudo cp rebar3 /usr/local/opt/erlang@24/bin/
-        fi
-        if [ -e /opt/homebrew/opt/erlang@24/bin/ ] ; then
-            sudo cp rebar3 /opt/homebrew/opt/erlang@24/bin/
+        if [ -e {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ] ; then
+            sudo cp rebar3 {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/
         fi
 
     # Builder info
