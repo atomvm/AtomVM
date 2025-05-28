@@ -11,6 +11,7 @@ on:
     paths:
       - '.github/workflows/pico-build.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'libs/**'
       - 'src/platforms/rp2/**'
       - 'src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl'
@@ -19,6 +20,7 @@ on:
     paths:
       - '.github/workflows/pico-build.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'libs/**'
       - 'src/platforms/rp2/**'
       - 'src/platforms/esp32/test/main/test_erl_sources/test_crypto.erl'

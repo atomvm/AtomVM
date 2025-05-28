@@ -11,6 +11,7 @@ on:
     paths:
       - '.github/workflows/esp32-mkimage.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
@@ -19,9 +20,13 @@ on:
   pull_request:
     paths:
       - '.github/workflows/esp32-mkimage.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
       - 'src/libAtomVM/**'
+      - 'tools/packbeam/**'
 
 permissions:
   contents: write

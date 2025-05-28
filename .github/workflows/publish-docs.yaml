@@ -20,6 +20,7 @@ on:
     paths:
       - '.github/workflows/publish-docs.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'doc/**'
       - 'libs/**'
       - 'src/libAtomVM/**'
