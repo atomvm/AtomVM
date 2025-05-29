@@ -39,12 +39,14 @@
 #pragma GCC diagnostic pop
 
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
+#define DEFAULT_HOSTNAME_SIZE (strlen("atomvm-") + 12 + 1)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
 static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
 static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
 static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
+static const char *const dhcp_hostname_atom = ATOM_STR("\xD", "dhcp_hostname");
 static const char *const host_atom = ATOM_STR("\x4", "host");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
 static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
@@ -79,6 +81,8 @@ struct NetworkDriverData
     int stas_count;
     uint8_t *stas_mac;
     struct dhcp_config *dhcp_config;
+    char *hostname;
+    char *ap_hostname;
     queue_t queue;
 };
 
@@ -211,10 +215,29 @@ static void send_sntp_sync(struct timeval *tv)
     END_WITH_STACK_HEAP(heap, driver_data->global);
 }
 
+// param should be pointer to malloc'd destination to copy device hostname
+// return ok atom or error as atom
+static term get_default_device_name(char *name, GlobalContext *global)
+{
+    uint8_t mac[6];
+    // Device name is used for AP mode ssid (if undefined), and for the
+    // default dhcp_hostname on both interfaces.  It seems the interface
+    // parameter is ignored and both interfaces have the same MAC address.
+    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac);
+    if (err) {
+        return globalcontext_make_atom(global, ATOM_STR("\x10", "device_mac_error"));
+    }
+    size_t buf_size = DEFAULT_HOSTNAME_SIZE;
+    snprintf(name, buf_size,
+        "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return OK_ATOM;
+}
+
 static term start_sta(term sta_config, GlobalContext *global)
 {
     term ssid_term = interop_kv_get_value(sta_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(sta_config, psk_atom, global);
+    term hostname_term = interop_kv_get_value(sta_config, dhcp_hostname_atom, global);
 
     //
     // Check parameters
@@ -236,7 +259,54 @@ static term start_sta(term sta_config, GlobalContext *global)
         }
     }
 
-    cyw43_arch_enable_sta_mode();
+    if (term_is_invalid_term(hostname_term)) {
+        driver_data->hostname = malloc(DEFAULT_HOSTNAME_SIZE);
+        if (IS_NULL_PTR(driver_data->hostname)) {
+            free(ssid);
+            free(psk);
+            cyw43_arch_disable_sta_mode();
+            return OUT_OF_MEMORY_ATOM;
+        } else {
+            term error = get_default_device_name(driver_data->hostname, global);
+            if (error != OK_ATOM) {
+                free(ssid);
+                free(psk);
+                free(driver_data->hostname);
+                cyw43_arch_disable_sta_mode();
+                return error;
+            }
+        }
+    } else {
+        int ok = 0;
+        char *buf = interop_term_to_string(hostname_term, &ok);
+        if (!ok || IS_NULL_PTR(buf)) {
+            free(ssid);
+            free(psk);
+            if (buf != NULL) {
+                free(buf);
+                cyw43_arch_disable_sta_mode();
+                return BADARG_ATOM;
+            }
+            cyw43_arch_disable_sta_mode();
+            return OUT_OF_MEMORY_ATOM;
+        }
+        size_t buf_size = strlen(buf);
+        driver_data->hostname = malloc(buf_size);
+        if (IS_NULL_PTR(driver_data->hostname)) {
+            free(ssid);
+            free(psk);
+            free(buf);
+            cyw43_arch_disable_sta_mode();
+            return OUT_OF_MEMORY_ATOM;
+        }
+        memcpy(driver_data->hostname, buf, buf_size);
+        free(buf);
+    }
+
+    // hostname must be set after enabling sta mode, because it is erased by
+    // cyw43_arch_enable_sta_mode and reset to factory "PicoW".
+    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], driver_data->hostname);
+
     uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_MIXED_PSK;
     int result = cyw43_arch_wifi_connect_async(ssid, psk, auth);
     // We need to set the callback after calling connect async because it's
@@ -247,30 +317,12 @@ static term start_sta(term sta_config, GlobalContext *global)
     free(ssid);
     free(psk);
     if (result != 0) {
+        free(driver_data->hostname);
+        cyw43_arch_disable_sta_mode();
         return BADARG_ATOM;
     }
 
     return OK_ATOM;
-}
-
-static char *get_default_device_name()
-{
-    uint8_t mac[6];
-    // Device name is used for AP mode. It seems the interface parameter is
-    // ignored and both interfaces have the same MAC address.
-    int err = cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_AP, mac);
-    if (err) {
-        return NULL;
-    }
-
-    size_t buf_size = strlen("atomvm-") + 12 + 1;
-    char *buf = malloc(buf_size);
-    if (IS_NULL_PTR(buf)) {
-        return NULL;
-    }
-    snprintf(buf, buf_size,
-        "atomvm-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    return buf;
 }
 
 static void network_driver_do_cyw43_assoc(GlobalContext *glb)
@@ -384,13 +436,23 @@ static term start_ap(term ap_config, GlobalContext *global)
     term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
     term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
     term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, global);
+    term hostname_term = interop_kv_get_value(ap_config, dhcp_hostname_atom, global);
 
     //
     // Check parameters
     //
     char *ssid = NULL;
     if (term_is_invalid_term(ssid_term)) {
-        ssid = get_default_device_name();
+        ssid = malloc(DEFAULT_HOSTNAME_SIZE);
+        if (IS_NULL_PTR(ssid)) {
+            return OUT_OF_MEMORY_ATOM;
+        } else {
+            term error = get_default_device_name(ssid, global);
+            if (error != OK_ATOM) {
+                free(ssid);
+                return error;
+            }
+        }
     } else {
         int ok = 0;
         ssid = interop_term_to_string(ssid_term, &ok);
@@ -419,9 +481,50 @@ static term start_ap(term ap_config, GlobalContext *global)
         }
     }
 
+    if (term_is_invalid_term(hostname_term)) {
+        driver_data->ap_hostname = malloc(DEFAULT_HOSTNAME_SIZE);
+        if (IS_NULL_PTR(driver_data->ap_hostname)) {
+            free(ssid);
+            free(psk);
+            return OUT_OF_MEMORY_ATOM;
+        } else {
+            term error = get_default_device_name(driver_data->ap_hostname, global);
+            if (error != OK_ATOM) {
+                free(ssid);
+                free(psk);
+                free(driver_data->ap_hostname);
+                return error;
+            }
+        }
+    } else {
+        int ok = 0;
+        char *buf = interop_term_to_string(hostname_term, &ok);
+        if (UNLIKELY(!ok || buf == NULL)) {
+            free(ssid);
+            free(psk);
+            if (buf != NULL) {
+                free(buf);
+                return ERROR_ATOM;
+            }
+            return OUT_OF_MEMORY_ATOM;
+        }
+        size_t buf_size = strlen(buf);
+        driver_data->ap_hostname = malloc(buf_size);
+        if (IS_NULL_PTR(driver_data->ap_hostname)) {
+            free(ssid);
+            free(psk);
+            free(buf);
+            return OUT_OF_MEMORY_ATOM;
+        }
+        memcpy(driver_data->ap_hostname, buf, buf_size);
+        free(buf);
+    }
+
     uint32_t auth = (psk == NULL) ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
     cyw43_state.assoc_cb = network_driver_cyw43_assoc_cb;
     cyw43_arch_enable_ap_mode(ssid, psk, auth);
+    // Set hostname after enabling AP mode otherwise hostname will revert to "PicoW"
+    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_AP], driver_data->ap_hostname);
     send_ap_started(global);
     free(ssid);
     free(psk);
@@ -574,6 +677,11 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         return;
     }
 
+    // Always enable sta mode so the bus is initialized and we get a MAC
+    // address. This is done before configuring the interface because the
+    // MAC is added to the default hostname, and default ssid in ap mode.
+    // (i.e. atomvm-0123456789ab)
+    cyw43_arch_enable_sta_mode();
     if (!term_is_invalid_term(sta_config)) {
         term result_atom = start_sta(sta_config, ctx->global);
         if (result_atom != OK_ATOM) {
@@ -581,10 +689,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             port_send_reply(ctx, pid, ref, error);
             return;
         }
-    } else {
-        // Always enable sta mode so the bus is initialized and we get a MAC
-        // address.
-        cyw43_arch_enable_sta_mode();
     }
 
     if (!term_is_invalid_term(ap_config)) {
@@ -705,6 +809,10 @@ void network_driver_init(GlobalContext *global)
 void network_driver_destroy(GlobalContext *global)
 {
     if (driver_data) {
+        free(driver_data->hostname);
+        if (driver_data->ap_hostname) {
+            free(driver_data->ap_hostname);
+        }
         free(driver_data->sntp_hostname);
         free(driver_data->stas_mac);
         if (driver_data->dhcp_config) {
