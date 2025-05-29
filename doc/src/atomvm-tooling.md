@@ -304,7 +304,7 @@ remote: Total 17 (delta 6), reused 16 (delta 6), pack-reused 0
 origin/HEAD set to main
 ```
 
-You can now use the `atomvm.packbeam` target to create a packbeam (ending in `.avm`) file:
+You can now use the `mix atomvm.packbeam` task to create a packbeam (ending in `.avm`) file:
 
 ```shell
 $ mix atomvm.packbeam
@@ -328,7 +328,7 @@ $ ls -l HelloWorld.avm
 
 ```{seealso}
 See the [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) page for more detailed instructions about how to use the
-`atomvm.packbeam` target.
+`mix atomvm.packbeam` task.
 ```
 
 ### Running on the `generic_unix` platform
@@ -349,10 +349,10 @@ The [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) plugin supports flash targe
 
 #### ESP32 flash task
 
-To flash AtomVM packbeam file to an ESP32 device, use the `mix.esp32.flash` target.  Users will typically specify the device port and baud rate as command-line options to this target.
+To flash AtomVM packbeam file to an ESP32 device, use the `mix atomvm.esp32.flash` task.  Users will typically specify the device port and baud rate as command-line options to this target.
 
 ```{important}
-In order to use the `mix.esp32.flash` target, you will need to install the [`esptool`](https://github.com/espressif/esptool) program.
+In order to use the `mix atomvm.esp32.flash` task, you will need to install the [`esptool`](https://github.com/espressif/esptool) program.
 ```
 
 For example:
@@ -362,14 +362,10 @@ $ mix atomvm.esp32.flash --port /dev/ttyUSB0 --baud 921600
 ```
 
 ```{tip}
-A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even
-2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz
-crystal) may need to use a slower baud rate such as 115200.
+A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
 ```
 
-> Note.  A baud rate of 921600 works well for most ESP32 devices, some can work reliably at higher rates of 1500000, or even 2000000, but some devices (especially those with a 26Mhz crystal frequency, rather than the more common 40 Mhz crystal) may need to use a slower baud rate such as 115200.
-
-See the [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) page for more detailed instructions about how to use the `mix.esp32.flash` target.
+See the [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) page for more detailed instructions about how to use the `mix atomvm.esp32.flash` task.
 
 You can now use a serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen) to view console output from a device.
 
@@ -404,10 +400,10 @@ You can now use a serial console program such as [minicom](https://en.wikipedia.
 
 #### STM32 flash task
 
-To flash AtomVM packbeam file to an STM32 device, use the `atomvm.stm32.flash` mix target.
+To flash AtomVM packbeam file to an STM32 device, use the `mix atomvm.stm32.flash` task.
 
 ```{important}
-In order to use the `mix.stm32.flash` target, you will need to install the  `st-flash` tool from the open source
+In order to use the `mix atomvm.stm32.flash` task, you will need to install the  `st-flash` tool from the open source
 (bsd-3 licensed) [stlink](https://github.com/stlink-org/stlink) suite of stm32 utilities.
 ```
 
