@@ -319,11 +319,14 @@ const struct Nif *nvs_nif_get_nif(const char *nifname)
 
 static int write_atom_c_string(Context *ctx, char *buf, size_t bufsize, term t)
 {
-    AtomString atom_string = globalcontext_atomstring_from_term(ctx->global, t);
-    if (atom_string == NULL) {
+    size_t t_atom_len;
+    const uint8_t *t_atom_data = atom_table_get_atom_string(ctx->global->atom_table, term_to_atom_index(t), &t_atom_len);
+    if (IS_NULL_PTR(t_atom_data)) {
         return -1;
     }
-    atom_string_to_c(atom_string, buf, bufsize);
+
+    memcpy(buf, t_atom_data, t_atom_len);
+    buf[t_atom_len] = 0;
     return 0;
 }
 
