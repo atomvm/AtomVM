@@ -30,9 +30,9 @@ defmodule BadArityError do
     fun = exception.function
     args = exception.args
     insp = Enum.map_join(args, ", ", &inspect/1)
-    # TODO: enable as soon as :erlang.fun_info and Function.info are implemented
-    # {:arity, arity} = Function.info(fun, :arity)
-    # "#{inspect(fun)} with arity #{arity} called with #{count(length(args), insp)}"
+
+    {:arity, arity} = Function.info(fun, :arity)
+    "#{inspect(fun)} with arity #{arity} called with #{count(length(args), insp)}"
     "#{inspect(fun)} called with #{count(length(args), insp)}"
   end
 

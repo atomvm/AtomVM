@@ -40,6 +40,7 @@ set(ELIXIR_MODULES
     Enumerable.MapSet
     Enumerable.Range
     Exception
+    Function
     IO
     List
     Map
@@ -48,6 +49,7 @@ set(ELIXIR_MODULES
     Keyword
     Kernel
     Process
+    Protocol
     Protocol.UndefinedError
     Range
     System
