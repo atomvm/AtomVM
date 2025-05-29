@@ -44,6 +44,7 @@
     min/2,
     max/2,
     memory/1,
+    nif_error/1,
     get/0,
     get/1,
     put/2,
@@ -1508,4 +1509,9 @@ unique_integer() ->
 %%-----------------------------------------------------------------------------
 -spec unique_integer([monotonic | positive]) -> integer().
 unique_integer(_Options) ->
+    erlang:nif_error(undefined).
+
+%% @private
+-spec nif_error(Reason :: any()) -> no_return().
+nif_error(_Reason) ->
     erlang:nif_error(undefined).
