@@ -48,18 +48,21 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      if: matrix.otp != '24' && matrix.otp != '25
-      run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ninja mbedtls rebar3
+      if: matrix.otp != '24' && matrix.otp != '25'
+      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam mbedtls rebar3
 
     - name: "Install deps"
       if: matrix.otp == '24' || matrix.otp == '25'
       run: |
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ninja mbedtls
+        brew update
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam mbedtls
         wget https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3
         chmod +x rebar3
-        if [ -e {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ] ; then
-            sudo cp rebar3 {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/
-        fi
+        for bin_dir in {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ; do
+            if [ -e ${bin_dir} ]; then
+                sudo cp rebar3 ${bin_dir}
+            fi
+        done
 
     # Builder info
     - name: "System info"
