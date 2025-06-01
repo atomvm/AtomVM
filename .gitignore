@@ -10,6 +10,8 @@ build/**
 xcode/**
 examples/**/build
 libs/**/build
+src/platforms/esp32/dependencies.lock
+src/platforms/esp32/managed_components/**
 src/platforms/esp32/build/**
 src/platforms/esp32/build/**/*.d
 src/platforms/esp32/test/build/**

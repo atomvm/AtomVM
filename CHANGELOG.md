@@ -47,10 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `application:get_env/2`
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 - Added Function.ex and Protocol.ex improving Elixir 1.18 support
+- Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
 
 ### Changed
 
 - Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
+- Release images for ESP32 chips are built with ESP-IDF v5.4
 
 ### Fixed
 
