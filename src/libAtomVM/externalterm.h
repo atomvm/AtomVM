@@ -81,19 +81,6 @@ term externalterm_from_binary(Context *ctx, term binary, size_t *bytes_read);
 term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots);
 
 /**
- * @brief Gets a term from a const literal (module in flash).
- *
- * @details Deserialize an external term from external format and returns a
- * term. Use a heap fragment to store the generated terms. The heap fragment
- * is appended to the context heap. Atoms and binaries are not copied.
- * @param external_term the const literal buffer that will be deserialized
- * @param size to allocate for term.
- * @param ctx the context that owns the memory that will be allocated.
- * @returns a term.
- */
-term externalterm_from_const_literal(const void *external_term, size_t size, Context *ctx);
-
-/**
  * @brief Create a binary from a term.
  *
  * @details Serialize a term in Erlang external term format, and store the result in
