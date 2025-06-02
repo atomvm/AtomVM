@@ -42,6 +42,7 @@
 
 -export([open/1, close/1, read_at/4, write_at/5, write/3, write_read/3]).
 
+%% TODO remove deprecated hspi and vspi
 -type peripheral() :: hspi | vspi | string() | binary().
 -type bus_config() :: [
     {poci, non_neg_integer()}
@@ -102,7 +103,7 @@
 %%   <tr> <td>`miso'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MISO pin number</td></tr>
 %%   <tr> <td>`mosi'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>MOSI pin number</td></tr>
 %%   <tr> <td>`sclk'</td> <td>`non_neg_integer()'</td> <td>-</td> <td>SCLK pin number</td></tr>
-%%   <tr> <td>`peripheral'</td> <td>`hspi | vspi'</td> <td>`hspi'</td> <td>SPI Peripheral (ESP32 only)</td></tr>
+%%   <tr> <td>`peripheral'</td> <td>`"spi2" | "spi3"'</td> <td>`"spi2"'</td> <td>SPI Peripheral (ESP32 only)</td></tr>
 %% </table>
 %%
 %% Each device configuration is a properties list containing the following entries:
@@ -309,7 +310,7 @@ validate_bus_config(MaybeOldBusConfig) when
 ->
     BusConfig = migrate_deprecated(MaybeOldBusConfig),
     ValidatedConfig0 = #{
-        peripheral => validate_peripheral(get_value(peripheral, BusConfig, hspi)),
+        peripheral => validate_peripheral(get_value(peripheral, BusConfig, <<"spi2">>)),
         sclk => validate_integer_entry(sclk, BusConfig)
     },
     ValidatedConfig1 = maybe_validate_optional_integer(miso, ValidatedConfig0, BusConfig),
