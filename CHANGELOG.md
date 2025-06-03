@@ -67,6 +67,8 @@ memory error
 - Fixed nif_atomvm_posix_read GC bug
 - Fixed `erlang:is_number/1` function, now returns true also for floats
 - Fixed unlink protocol and add support for `link/1` on ports
+- Fixed potential memory corruption when handling integer immediates that are stored as boxed
+integer (this never happens with integers < 28 bits)
 
 ### Changed
 
