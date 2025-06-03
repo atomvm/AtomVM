@@ -17,4 +17,5 @@ dependencies:
 
   espressif/esp_wifi_remote:
     rules:
-     - if: "idf_version >= 5.4"
+      - if: "idf_version >= 5.4"
+      - if: target in ["esp32p4"]
