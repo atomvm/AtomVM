@@ -23,13 +23,13 @@
 -export([start/0]).
 
 start() ->
-    to_int(id(id([1.0e+257, 0]))).
+    to_int(id(id([1.0e+78, 0]))).
 
 to_int(A) ->
     try trunc(id(A)) of
         B when is_integer(B) ->
             "BEAM" = erlang:system_info(machine),
-            258 = length(integer_to_list(B)),
+            79 = length(integer_to_list(B)),
             0;
         _Other ->
             1
