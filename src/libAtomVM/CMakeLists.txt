@@ -42,6 +42,7 @@ set(HEADER_FILES
     globalcontext.h
     iff.h
     interop.h
+    intn.h
     list.h
     listeners.h
     mailbox.h
@@ -89,6 +90,7 @@ set(SOURCE_FILES
     globalcontext.c
     iff.c
     interop.c
+    intn.c
     mailbox.c
     memory.c
     module.c
@@ -102,6 +104,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
+    utils.c
     valueshashtable.c
 )
 

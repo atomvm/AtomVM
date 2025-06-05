@@ -20,18 +20,53 @@
 
 -module(test_binary_to_integer_2).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 start() ->
-    ok = assert_badarg(fun() -> binary_to_integer(<<"10">>, -1) end),
-    ok = assert_badarg(fun() -> binary_to_integer(<<"10">>, 0) end),
-    ok = assert_badarg(fun() -> binary_to_integer(<<"10">>, 1) end),
-    2 = binary_to_integer(<<"10">>, 2),
-    36 = binary_to_integer(<<"10">>, 36),
-    ok = assert_badarg(fun() -> binary_to_integer(<<"10">>, 37) end),
-    ok = assert_badarg(fun() -> binary_to_integer(<<"">>, 10) end),
-    10 = binary_to_integer(<<"0A">>, 16),
-    10 = binary_to_integer(<<"0a">>, 16),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"10">>), -1) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"10">>), 0) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"10">>), 1) end),
+    2 = binary_to_integer(?MODULE:id(<<"10">>), 2),
+    36 = binary_to_integer(?MODULE:id(<<"10">>), 36),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"10">>), 37) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"">>), 10) end),
+    10 = binary_to_integer(?MODULE:id(<<"0A">>), 16),
+    10 = binary_to_integer(?MODULE:id(<<"0a">>), 16),
+
+    1330 = binary_to_integer(?MODULE:id(<<"AAA">>), 11),
+    1330 = binary_to_integer(?MODULE:id(<<"0000AAA">>), 11),
+    1330 = binary_to_integer(?MODULE:id(<<"+AAA">>), 11),
+    1330 = binary_to_integer(?MODULE:id(<<"+00000AAA">>), 11),
+    -1330 = binary_to_integer(?MODULE:id(<<"-AAA">>), 11),
+    -1330 = binary_to_integer(?MODULE:id(<<"-0000AAA">>), 11),
+
+    2147483647 = binary_to_integer(?MODULE:id(<<"2147483647">>), 10),
+    -2147483648 = binary_to_integer(?MODULE:id(<<"-2147483648">>), 10),
+    2147483648 = binary_to_integer(?MODULE:id(<<"2147483648">>), 10),
+    -2147483649 = binary_to_integer(?MODULE:id(<<"-2147483649">>), 10),
+    9223372036854775807 = binary_to_integer(?MODULE:id(<<"00009223372036854775807">>), 10),
+    -9223372036854775808 = binary_to_integer(?MODULE:id(<<"-009223372036854775808">>), 10),
+
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"102">>), 2) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0000009">>), 7) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"9">>), 7) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"9">>), 9) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"FF">>), 15) end),
+
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"123     ">>), 10) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" 123">>), 10) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" 0xFF">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0xab">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0xAB">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0XAB">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0x">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"00000x5">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0x000005">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"0x0x5">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"-0xAB">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" -0xAB">>), 16) end),
+    ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<" +0xAB">>), 16) end),
+
     0.
 
 assert_badarg(F) ->
@@ -41,3 +76,6 @@ assert_badarg(F) ->
     catch
         error:badarg -> ok
     end.
+
+id(B) ->
+    B.

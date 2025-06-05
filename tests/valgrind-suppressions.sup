@@ -1,0 +1,26 @@
+{
+   bogus_memcpy_overlap
+   Memcheck:Overlap
+   fun:__memcpy_chk
+   fun:memmove
+   fun:intn_to_string
+   fun:integer_to_buf
+   fun:nif_erlang_integer_to_binary_2
+   fun:scheduler_entry_point
+   fun:main
+}
+{
+   bogus_memcpy_overlap_tests
+   Memcheck:Overlap
+   fun:__memcpy_chk
+   fun:memmove
+   fun:intn_to_string
+   fun:integer_to_buf
+   fun:nif_erlang_integer_to_binary_2
+   fun:scheduler_entry_point
+   fun:test_atom
+   fun:test_module_execution.part.0
+   fun:test_module_execution
+   fun:test_modules_execution
+   fun:main
+}
