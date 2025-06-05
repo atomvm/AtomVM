@@ -27,7 +27,6 @@ set(HEADER_FILES
     atom_table.h
     avmpack.h
     bif.h
-    intn.h
     bitstring.h
     context.h
     debug.h
@@ -43,6 +42,7 @@ set(HEADER_FILES
     globalcontext.h
     iff.h
     interop.h
+    intn.h
     list.h
     listeners.h
     mailbox.h
@@ -79,7 +79,6 @@ set(SOURCE_FILES
     atom_table.c
     avmpack.c
     bif.c
-    intn.c
     bitstring.c
     context.c
     debug.c
@@ -91,6 +90,7 @@ set(SOURCE_FILES
     globalcontext.c
     iff.c
     interop.c
+    intn.c
     mailbox.c
     memory.c
     module.c
