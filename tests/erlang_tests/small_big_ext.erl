@@ -55,19 +55,18 @@ start() ->
     true = test_reverse(pow(59) - 1, <<131, 110, 8, 0, 255, 255, 255, 255, 255, 255, 255, 7>>),
     true = test_reverse(-pow(59), <<131, 110, 8, 1, 0, 0, 0, 0, 0, 0, 0, 8>>),
 
-    % TODO: enable as soon as serialization for big integers is ready
-    %true = test_reverse(
-    %    erlang:binary_to_integer(?MODULE:id(<<"8000000000000001">>), 16),
-    %    <<131, 110, 8, 0, 1, 0, 0, 0, 0, 0, 0, 128>>
-    %),
-    %true = test_reverse(
-    %    erlang:binary_to_integer(?MODULE:id(<<"-8000000000000002">>), 16),
-    %    <<131, 110, 8, 1, 2, 0, 0, 0, 0, 0, 0, 128>>
-    %),
-    %true = test_reverse(
-    %    erlang:binary_to_integer(?MODULE:id(<<"100000000000000000000000000000000">>), 16),
-    %    <<131, 110, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
-    %),
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"8000000000000001">>), 16),
+        <<131, 110, 8, 0, 1, 0, 0, 0, 0, 0, 0, 128>>
+    ),
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"-8000000000000002">>), 16),
+        <<131, 110, 8, 1, 2, 0, 0, 0, 0, 0, 0, 128>>
+    ),
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"100000000000000000000000000000000">>), 16),
+        <<131, 110, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+    ),
 
     %% missing sign
     ok = assert_badarg(
