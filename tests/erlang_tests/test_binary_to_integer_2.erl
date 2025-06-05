@@ -31,6 +31,7 @@ start() ->
     ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"10">>), 37) end),
     ok = assert_badarg(fun() -> binary_to_integer(?MODULE:id(<<"">>), 10) end),
     10 = binary_to_integer(?MODULE:id(<<"0A">>), 16),
+    10 = binary_to_integer(?MODULE:id(<<"0a">>), 16),
 
     1330 = binary_to_integer(?MODULE:id(<<"AAA">>), 11),
     1330 = binary_to_integer(?MODULE:id(<<"0000AAA">>), 11),
