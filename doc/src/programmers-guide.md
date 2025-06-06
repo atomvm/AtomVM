@@ -624,6 +624,11 @@ For example,
 io:format("Atom Count: ~p~n", [erlang:system_info(atom_count)]).
 ```
 
+In addition AtomVM supports the following keys on ESP32 and STM32 platforms:
+
+* `atomvm_free_heap_size` Returns the available free space in the heap.
+* `atomvm_minimum_free_size` Returns the smallest ever free space available in the heap since boot, this will tell you how close you have come to running out of free memory.
+
 ```{note}
 Additional platform-specific information is supported, depending on the platform type.  See below.
 ```
@@ -1141,9 +1146,7 @@ As noted above, the [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#
 
 You can request ESP32-specific information using using the following input atoms:
 
-* `esp32_free_heap_size` Returns the available free space in the ESP32 heap.
 * `esp32_largest_free_block` Returns the size of the largest free continuous block in the ESP32 heap.
-* `esp32_minimum_free_size` Returns the smallest ever free space available in the ESP32 heap since boot, this will tell you how close you have come to running out of free memory.
 * `esp32_chip_info` Returns map of the form `#{features := Features, cores := Cores, revision := Revision, model := Model}`, where `Features` is a list of features enabled in the chip, from among the following atoms: `[emb_flash, bgn, ble, bt]`; `Cores` is the number of CPU cores on the chip; `Revision` is the chip version; and `Model` is one of the following atoms: `esp32`, `esp32_s2`, `esp32_s3`, `esp32_c3`, etc.
 * `esp_idf_version` Return the IDF SDK version, as a string.
 
@@ -1591,7 +1594,7 @@ The read options take the form of a proplist, if the key `raw` is true (`{raw, t
 
 If the key `voltage` is true (or simply appears in the list as an atom), then a calibrated voltage value will be returned in millivolts in the second element of the returned tuple.  Otherwise, this element will be the atom `undefined`.
 
-You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`. 
+You may specify the number of samples (1 - 100000) to be taken and averaged over using the tuple `{samples, Samples :: 1..100000}`, the default is `64`.
 
 ```{warning}
 Using a large number of samples can significantly increase the amount of time before a response, up to several seconds.

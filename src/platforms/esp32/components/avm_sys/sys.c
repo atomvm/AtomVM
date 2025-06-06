@@ -72,8 +72,12 @@ static void *select_thread_loop(void *);
 static void select_thread_signal(struct ESP32PlatformData *platform);
 
 // clang-format off
+// TODO: remove deprecated `atomvm_free_heap_size_atom` for the 0.8.x release cycle
+static const char *const atomvm_free_heap_size_atom = "\x15" "atomvm_free_heap_size";
 static const char *const esp_free_heap_size_atom = "\x14" "esp32_free_heap_size";
 static const char *const esp_largest_free_block_atom = "\x18" "esp32_largest_free_block";
+static const char *const atomvm_get_minimum_free_size_atom = "\x18" "atomvm_minimum_free_size";
+// TODO: remove deprecated `esp_get_minimum_free_size_atom` for the 0.8.x release cycle
 static const char *const esp_get_minimum_free_size_atom = "\x17" "esp32_minimum_free_size";
 static const char *const esp_chip_info_atom = "\xF" "esp32_chip_info";
 static const char *const esp_idf_version_atom = "\xF" "esp_idf_version";
@@ -499,13 +503,27 @@ static term get_features(Context *ctx, uint32_t features)
 term sys_get_info(Context *ctx, term key)
 {
     GlobalContext *glb = ctx->global;
+    // TODO: remove this deprecated key for the 0.8.x release cycle
     if (key == globalcontext_make_atom(glb, esp_free_heap_size_atom)) {
+        ESP_LOGW(TAG, "The system_info/1 key 'esp32_free_heap_size' has been deprecated in favor of the \
+        muti-platform key 'atomvm_free_heap_size'. This key will be removed in a future release, please \
+        update your application to use 'atomvm_free_heap_size'.");
+        return term_from_int32(esp_get_free_heap_size());
+    }
+    if (key == globalcontext_make_atom(glb, atomvm_free_heap_size_atom)) {
         return term_from_int32(esp_get_free_heap_size());
     }
     if (key == globalcontext_make_atom(glb, esp_largest_free_block_atom)) {
         return term_from_int32(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     }
+    // TODO: remove this deprecated key for the 0.8.x release cycle
     if (key == globalcontext_make_atom(glb, esp_get_minimum_free_size_atom)) {
+        ESP_LOGW(TAG, "The system_info/1 key 'esp32_minimum_free_size' has been deprecated in favor of the \
+        muti-platform key 'atomvm_minimum_free_size'. This key will be removed in a future release, please \
+        update your application to use 'atomvm_minimum_free_size'.");
+        return term_from_int32(esp_get_minimum_free_heap_size());
+    }
+    if (key == globalcontext_make_atom(glb, atomvm_get_minimum_free_size_atom)) {
         return term_from_int32(esp_get_minimum_free_heap_size());
     }
     if (key == globalcontext_make_atom(glb, esp_chip_info_atom)) {
