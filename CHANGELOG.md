@@ -78,6 +78,8 @@ network. (See issue #1094)
 ### Changed
 
 - ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
+- ESP32: `v0.6.6` uses esp-idf v5.4.1 for pre-built images and `v5.4.x` is the suggested release
+also for custom builds
 
 ## [0.6.5] - 2024-10-15
 
