@@ -1531,21 +1531,27 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT64_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        return term_make_boxed_int64(value, &ctx->heap);
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int64(value, &heap);
     } else
 #endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        return term_make_boxed_int(value, &ctx->heap);
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int(value, &heap);
     } else {
         return term_from_int(value);
     }
