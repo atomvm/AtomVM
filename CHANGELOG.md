@@ -16,6 +16,7 @@ with nodejs and emscripten)
 - Added `uart:read/2` with a timeout parameter.
 - Missing `erlang:is_function/2` BIF
 - Added `erlang:is_record/2`
+- Added ability to set per-interface `dhcp_hostname` on Pico W if present in config.
 
 ### Fixed
 
@@ -70,6 +71,9 @@ memory error
 - Do not abort when an out of memory happens while loading a literal value
 - Fixed potential memory corruption when handling integer immediates that are stored as boxed
 integer (this never happens with integers < 28 bits)
+- Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
+used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
+network. (See issue #1094)
 
 ### Changed
 
