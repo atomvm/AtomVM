@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
 - Added Function.ex and Protocol.ex improving Elixir 1.18 support
 - Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
+- Added ability to set per-interface `dhcp_hostname` on Pico (2)W if present in config.
 
 ### Changed
 
@@ -62,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
+- Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
+used the same "PicoW" dhcp hostname, causing collisions when multiple rp2 devices are on the same
+network. (See issue #1094)
 
 ## [0.6.6] - Unreleased
 
