@@ -458,6 +458,17 @@ static inline intn_integer_sign_t sign_bitwise(
         & IntNNegativeInteger;
 }
 
+// normalizes -0 to 0
+static inline size_t count_and_normalize_sign(const intn_digit_t num[], size_t len, intn_integer_sign_t sign, intn_integer_sign_t *out_sign) {
+    size_t count = intn_count_digits(num, len);
+    if ((count == 0) && (sign == IntNNegativeInteger)) {
+        *out_sign = IntNPositiveInteger;
+    } else {
+        *out_sign = sign;
+    }
+    return count;
+}
+
 static inline intn_digit_t digit_bor(intn_digit_t a, intn_digit_t b)
 {
     return a | b;
@@ -507,9 +518,9 @@ size_t intn_bandmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     intn_integer_sign_t res_sign = sign_bitwise(m_sign, n_sign, digit_band);
 
     cond_neg(res_sign, working_buf, count, out);
-    *out_sign = res_sign;
+    size_t res_count = count_and_normalize_sign(out, count, res_sign, out_sign);
 
-    return count;
+    return res_count;
 }
 
 static inline intn_digit_t digit_bxor(intn_digit_t a, intn_digit_t b)
@@ -534,22 +545,9 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     intn_integer_sign_t res_sign = sign_bitwise(m_sign, n_sign, digit_bxor);
 
     cond_neg(res_sign, working_buf, count, out);
-    *out_sign = res_sign;
+    size_t res_count = count_and_normalize_sign(out, count, res_sign, out_sign);
 
-    if (res_sign == IntNNegativeInteger) {
-        bool all_zeros = true;
-        for (size_t i = 0; i < count; i++) {
-            if (out[i] != 0) {
-                all_zeros = false;
-                break;
-            }
-        }
-        if (all_zeros) {
-            *out_sign = IntNPositiveInteger;
-        }
-    }
-
-    return count;
+    return res_count;
 }
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
