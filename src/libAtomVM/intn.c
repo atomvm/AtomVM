@@ -550,6 +550,74 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     return res_count;
 }
 
+#define INTN_BSL_MAX_OUT_LEN 8
+
+static inline size_t size_round_to(size_t n, size_t round_to)
+{
+    return (n + (round_to - 1)) & ~(round_to - 1);
+}
+
+size_t intn_bsl(const uint32_t num[], size_t len, size_t n, uint32_t *out)
+{
+    size_t digit_bit_size = sizeof(uint32_t) * 8;
+
+    size_t digit_left_bit_shift = n % 32;
+    size_t right_shift_n = (32 - digit_left_bit_shift);
+
+    size_t counted_digits = intn_count_digits(num, len);
+    size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
+    size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
+    size_t new_bits_len = size_round_to(effective_bits_len + n, digit_bit_size);
+
+    size_t new_digits_count = new_bits_len / digit_bit_size;
+
+    if (new_digits_count > INTN_BSL_MAX_OUT_LEN) {
+        return new_digits_count;
+    }
+
+    size_t initial_zeros = MIN(n / digit_bit_size, INTN_BSL_MAX_OUT_LEN);
+    memset(out, 0, initial_zeros * sizeof(uint32_t));
+
+    if (right_shift_n == 32) {
+        memcpy(out + initial_zeros, num, len * sizeof(uint32_t));
+        return initial_zeros + len;
+    }
+
+    uint32_t last_digit = 0;
+    size_t i;
+    for (i = 0; i < counted_digits; i++) {
+        uint32_t digit = num[i];
+        out[initial_zeros + i] = (digit << digit_left_bit_shift) | (last_digit >> right_shift_n);
+        last_digit = digit;
+    }
+    uint32_t maybe_last_out = (last_digit >> right_shift_n);
+
+    if (initial_zeros + i > new_digits_count) {
+        abort();
+    }
+
+    if (maybe_last_out) {
+        out[initial_zeros + i] = maybe_last_out;
+        return initial_zeros + i + 1;
+    }
+    
+    return initial_zeros + i;
+}
+
+/*
+    uint32_t last_digit = 0;
+    for (size_t i = initial_zeros; i < out_len - 1; i++) {
+        uint32_t digit = num[i - initial_zeros];
+        if (i - initial_zeros >= counted_digits) {
+            abort();
+        }
+        out[i] = (digit << digit_left_bit_shift) | (last_digit >> right_shift_n);
+        last_digit = digit;
+        fprintf(stderr, "in: %i, (%i), last_digit: %i\n", (int) i - initial_zeros,  (int) i, (int) last_digit);
+    }
+    out[out_len - 1] = (last_digit >> right_shift_n);
+*/
+
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
 {
     int i;
