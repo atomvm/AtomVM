@@ -5420,7 +5420,7 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arity_term, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
+                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%p\n", label, arg1, (void *) arity_term);
 
                     if (term_is_function(arg1) && term_is_integer(arity_term)) {
                         const term *boxed_value = term_to_const_term_ptr(arg1);
