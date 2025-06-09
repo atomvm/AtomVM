@@ -48,7 +48,13 @@
 extern "C" {
 #endif
 
-#define TERM_BOXED_VALUE_TAG 0x2
+#define TERM_PRIMARY_MASK 0x3
+#define TERM_PRIMARY_CP 0x0
+#define TERM_PRIMARY_LIST 0x1
+#define TERM_PRIMARY_BOXED 0x2
+// #define TERM_PRIMARY_IMMED 0x3
+
+#define TERM_BOXED_VALUE_TAG _Pragma ("TERM_BOXED_VALUE_TAG is deprecated, use TERM_PRIMARY_BOXED instead") TERM_PRIMARY_BOXED
 
 #define TERM_IMMED_TAG_MASK 0xF
 #define TERM_PID_TAG 0x3
@@ -62,7 +68,6 @@ extern "C" {
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
-#define TERM_CATCH_TAG 0x1B
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
@@ -71,6 +76,12 @@ extern "C" {
 #define TERM_BOXED_EXTERNAL_PID 0x30
 #define TERM_BOXED_EXTERNAL_PORT 0x34
 #define TERM_BOXED_EXTERNAL_REF 0x38
+
+#define TERM_IMMED2_TAG_MASK 0x3F
+#define TERM_IMMED2_TAG_SIZE 6
+#define TERM_IMMED2_ATOM 0xB
+#define TERM_IMMED2_CATCH 0x1B
+#define TERM_NIL 0x3B
 
 #define TERM_UNUSED 0x2B
 #define TERM_RESERVED_MARKER(x) ((x << 6) | TERM_UNUSED)
@@ -138,7 +149,7 @@ extern "C" {
 
 #define TERM_DEBUG_ASSERT(...)
 
-#define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
+#define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << TERM_IMMED2_TAG_SIZE) | TERM_IMMED2_ATOM)
 
 // Local ref is at most 30 bytes:
 // 2^32-1 = 4294967295 (10 chars)
@@ -294,7 +305,7 @@ static inline const term *term_to_const_term_ptr(term t)
 static inline bool term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
-    return ((t & TERM_BOXED_TAG_MASK) == 0xB);
+    return ((t & TERM_IMMED2_TAG_MASK) == TERM_IMMED2_ATOM);
 }
 
 /**
@@ -319,7 +330,7 @@ static inline bool term_is_invalid_term(term t)
 static inline bool term_is_nil(term t)
 {
     /* nil: 11 10 11 */
-    return ((t & TERM_BOXED_TAG_MASK) == 0x3B);
+    return ((t & TERM_IMMED2_TAG_MASK) == TERM_NIL);
 }
 
 /**
@@ -332,7 +343,7 @@ static inline bool term_is_nil(term t)
 static inline bool term_is_nonempty_list(term t)
 {
     /* list: 01 */
-    return ((t & 0x3) == 0x1);
+    return ((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_LIST);
 }
 
 /**
@@ -358,7 +369,7 @@ static inline bool term_is_list(term t)
 static inline bool term_is_boxed(term t)
 {
     /* boxed: 10 */
-    return ((t & 0x3) == 0x2);
+    return ((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_BOXED);
 }
 
 /**
@@ -384,7 +395,7 @@ static inline size_t term_get_size_from_boxed_header(term header)
 static inline size_t term_boxed_size(term t)
 {
     /* boxed: 10 */
-    TERM_DEBUG_ASSERT((t & 0x3) == 0x2);
+    TERM_DEBUG_ASSERT((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_BOXED);
 
     const term *boxed_value = term_to_const_term_ptr(t);
     return term_get_size_from_boxed_header(*boxed_value);
@@ -400,7 +411,7 @@ static inline size_t term_boxed_size(term t)
 static inline bool term_is_binary(term t)
 {
     /* boxed: 10 */
-    if ((t & 0x3) == 0x2) {
+    if ((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_BOXED) {
         const term *boxed_value = term_to_const_term_ptr(t);
         int masked_value = boxed_value[0] & TERM_BOXED_TAG_MASK;
         switch (masked_value) {
@@ -522,7 +533,7 @@ static inline bool term_is_any_integer(term t)
 
 static inline bool term_is_catch_label(term t)
 {
-    return (t & TERM_BOXED_TAG_MASK) == TERM_CATCH_TAG;
+    return (t & TERM_IMMED2_TAG_MASK) == TERM_IMMED2_CATCH;
 }
 
 /**
@@ -775,7 +786,7 @@ static inline bool term_is_external_fun(term t)
  */
 static inline bool term_is_cp(term t)
 {
-    return ((t & 0x3) == 0);
+    return ((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_CP);
 }
 
 /**
@@ -797,7 +808,7 @@ static inline term term_invalid_term()
  */
 static inline term term_nil()
 {
-    return 0x3B;
+    return TERM_NIL;
 }
 
 /**
@@ -1023,7 +1034,7 @@ static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
     boxed_int[1] = value;
-    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
@@ -1045,7 +1056,7 @@ static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
     #else
         #error "unsupported configuration."
     #endif
-    return ((term) boxed_int) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_make_maybe_boxed_int64(avm_int64_t value, Heap *heap)
@@ -1080,7 +1091,7 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
-    return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);
+    return (term) ((module_index << 24) | (label << 6) | TERM_IMMED2_CATCH);
 }
 
 /**
@@ -1229,7 +1240,7 @@ static inline term term_create_uninitialized_binary(size_t size, Heap *heap, Glo
         boxed_value[0] = (size_in_terms << 6) | TERM_BOXED_HEAP_BINARY;
         boxed_value[1] = size;
 
-        return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+        return ((term) boxed_value) | TERM_PRIMARY_BOXED;
     } else {
         return term_alloc_refc_binary(size, false, heap, glb);
     }
@@ -1417,7 +1428,7 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
         #error "terms must be either 32 or 64 bit wide"
     #endif
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 static inline uint64_t term_to_ref_ticks(term rt)
@@ -1461,7 +1472,7 @@ static inline term term_make_external_process_id(term node, uint32_t process_id,
     external_thing_words[2] = process_id;
     external_thing_words[3] = serial;
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 /**
@@ -1485,7 +1496,7 @@ static inline term term_make_external_port_number(term node, uint64_t number, ui
     external_thing_words[2] = number >> 32;
     external_thing_words[3] = (uint32_t) number;
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 /**
@@ -1601,7 +1612,7 @@ static inline term term_make_external_reference(term node, uint16_t len, uint32_
         #error "terms must be either 32 or 64 bit wide"
     #endif
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 /**
@@ -1667,7 +1678,7 @@ static inline term term_alloc_tuple(uint32_t size, Heap *heap)
     term *boxed_value = memory_heap_alloc(heap, 1 + size);
     boxed_value[0] = (size << 6); //tuple
 
-    return ((term) boxed_value) | 0x2;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 /**
@@ -1741,7 +1752,7 @@ static inline term term_from_string(const uint8_t *data, uint16_t size, Heap *he
         list_cells[i] = (term) &list_cells[i + 2] | 0x1;
         list_cells[i + 1] = term_from_int11(data[i / 2]);
     }
-    list_cells[size * 2 - 2] = 0x3B;
+    list_cells[size * 2 - 2] = TERM_NIL;
 
     return ((term) list_cells) | 0x1;
 }
@@ -1877,7 +1888,7 @@ static inline term term_from_float(avm_float_t f, Heap *heap)
     float_term_t *boxed_float = (float_term_t *) (boxed_value + 1);
     boxed_float->f = f;
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 static inline avm_float_t term_to_float(term t)
@@ -1985,7 +1996,7 @@ static inline term term_make_function_reference(term m, term f, term a, Heap *he
     boxed_func[2] = f;
     boxed_func[3] = a;
 
-    return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_func) | TERM_PRIMARY_BOXED;
 }
 
 static inline bool term_is_match_state(term t)
@@ -2066,7 +2077,7 @@ static inline term term_alloc_bin_match_state(term binary_or_state, int slots, H
         }
     }
 
-    return ((term) boxed_match_state) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_match_state) | TERM_PRIMARY_BOXED;
 }
 
 /**
@@ -2080,7 +2091,7 @@ static inline term term_alloc_bin_match_state(term binary_or_state, int slots, H
 static inline void term_truncate_boxed(term boxed, size_t new_size, Heap *heap)
 {
     /* boxed: 10 */
-    TERM_DEBUG_ASSERT((t & 0x3) == 0x2);
+    TERM_DEBUG_ASSERT((t & TERM_PRIMARY_MASK) == TERM_PRIMARY_BOXED);
 
     term *boxed_value = term_to_term_ptr(boxed);
     int size_diff = (boxed_value[0] >> 6) - new_size;
@@ -2127,7 +2138,7 @@ static inline term term_alloc_map_maybe_shared(avm_uint_t size, term keys, Heap 
     boxed_value[0] = ((1 + size) << 6) | TERM_BOXED_MAP;
     boxed_value[term_get_map_keys_offset()] = keys;
 
-    return ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_alloc_map(avm_uint_t size, Heap *heap)
@@ -2229,7 +2240,7 @@ static inline term term_from_resource(void *resource, Heap *heap)
     boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
     boxed_value[1] = (term) 0; // binary size, this is pre ERTS 9.0 (OTP-20.0) behavior
     boxed_value[2] = (term) RefcNoFlags;
-    term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     boxed_value[3] = (term) refc;
     // Add the resource to the mso list
     refc->ref_count++;

@@ -393,7 +393,7 @@ static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t n
         term *boxed_ptr = term_to_term_ptr(head);
         term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_heap_root, old_end, delta);
         if (boxed_ptr != new_boxed_ptr) {
-            new_list_ptr[1] = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+            new_list_ptr[1] = ((term) new_boxed_ptr) | TERM_PRIMARY_BOXED;
         }
         // Loop with tail.
         mso_ptr = new_list_ptr;
@@ -660,7 +660,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
                 case TERM_BOXED_REFC_BINARY: {
                     TRACE("- Found refc binary.\n");
-                    term ref = ((term) ptr) | TERM_BOXED_VALUE_TAG;
+                    term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
                     if (!term_refc_binary_is_const(ref)) {
                         *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *mso_list);
                         refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(ref));
@@ -748,7 +748,7 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                     term *boxed_ptr = term_to_term_ptr(binary_or_state);
                     term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_start, old_end, delta);
                     if (boxed_ptr != new_boxed_ptr) {
-                        *ptr = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+                        *ptr = ((term) new_boxed_ptr) | TERM_PRIMARY_BOXED;
                     }
                     ptr += term_get_size_from_boxed_header(t);
                     break;
@@ -815,7 +815,7 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
             term *boxed_ptr = term_to_term_ptr(t);
             term *new_boxed_ptr = memory_rewrite_pointer(boxed_ptr, old_start, old_end, delta);
             if (boxed_ptr != new_boxed_ptr) {
-                ptr[-1] = ((term) new_boxed_ptr) | TERM_BOXED_VALUE_TAG;
+                ptr[-1] = ((term) new_boxed_ptr) | TERM_PRIMARY_BOXED;
             }
         }
     }
@@ -876,7 +876,7 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
         // However it is also required to avoid boxed terms duplication.
         // So instead all empty tuples will reference the same boxed term.
         if (boxed_size == 1) {
-            return ((term) &empty_tuple) | TERM_BOXED_VALUE_TAG;
+            return ((term) &empty_tuple) | TERM_PRIMARY_BOXED;
         }
 
         term *dest = *new_heap;
@@ -885,7 +885,7 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
         }
         *new_heap += boxed_size;
 
-        term new_term = ((term) dest) | TERM_BOXED_VALUE_TAG;
+        term new_term = ((term) dest) | TERM_PRIMARY_BOXED;
 
         if (move) {
             memory_replace_with_moved_marker(boxed_value, new_term);
