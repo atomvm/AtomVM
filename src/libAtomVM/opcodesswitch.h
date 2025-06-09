@@ -3172,7 +3172,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (!(term_is_tuple(arg1) && (uint32_t) term_get_tuple_arity(arg1) == arity)) {
+                    assert(term_is_tuple(arg1));
+                    if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
                         pc = mod->labels[label];
                     }
                 #endif
