@@ -35,6 +35,9 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[]);
+static size_t neg_in_place(intn_digit_t out[], size_t len);
+
 /*
  * Multiplication
  */
@@ -388,18 +391,23 @@ size_t intn_addmnu(
     return i;
 }
 
+static void neg(const intn_digit_t in[], size_t in_len, intn_digit_t out[])
+{
+    uint32_t carry = 1;
+    for (size_t i = 0; i < in_len; i++) {
+        uint64_t temp = (uint64_t) (~in[i]) + (uint64_t) carry;
+        out[i] = (uint32_t) temp;
+        carry = temp >> 32;
+    }
+}
+
 static void cond_neg(
     intn_integer_sign_t sign, const intn_digit_t in[], size_t in_len, intn_digit_t out[])
 {
     if (sign == IntNPositiveInteger) {
         memcpy(out, in, sizeof(intn_digit_t) * in_len);
     } else {
-        uint32_t carry = 1;
-        for (size_t i = 0; i < in_len; i++) {
-            uint64_t temp = (uint64_t) (~in[i]) + (uint64_t) carry;
-            out[i] = (uint32_t) temp;
-            carry = temp >> 32;
-        }
+        neg(in, in_len, out);
     }
 }
 
@@ -558,6 +566,119 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     size_t res_count = count_and_normalize_sign(out, count, res_sign, out_sign);
 
     return res_count;
+}
+
+#define INTN_BSL_MAX_OUT_LEN 8
+
+static inline size_t size_round_to(size_t n, size_t round_to)
+{
+    return (n + (round_to - 1)) & ~(round_to - 1);
+}
+
+size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
+{
+    size_t digit_bit_size = sizeof(uint32_t) * 8;
+
+    size_t digit_left_bit_shift = n % 32;
+    size_t right_shift_n = (32 - digit_left_bit_shift);
+
+    size_t counted_digits = intn_count_digits(num, len);
+    size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
+    size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
+    size_t new_bits_len = size_round_to(effective_bits_len + n, digit_bit_size);
+
+    size_t new_digits_count = new_bits_len / digit_bit_size;
+
+    if (new_digits_count > INTN_BSL_MAX_OUT_LEN) {
+        return new_digits_count;
+    }
+
+    size_t initial_zeros = MIN(n / digit_bit_size, INTN_BSL_MAX_OUT_LEN);
+    memset(out, 0, initial_zeros * sizeof(uint32_t));
+
+    if (right_shift_n == 32) {
+        memcpy(out + initial_zeros, num, len * sizeof(uint32_t));
+        return initial_zeros + len;
+    }
+
+    uint32_t last_digit = 0;
+    size_t i;
+    for (i = 0; i < counted_digits; i++) {
+        uint32_t digit = num[i];
+        out[initial_zeros + i] = (digit << digit_left_bit_shift) | (last_digit >> right_shift_n);
+        last_digit = digit;
+    }
+    uint32_t maybe_last_out = (last_digit >> right_shift_n);
+
+    if (initial_zeros + i > new_digits_count) {
+        abort();
+    }
+
+    if (maybe_last_out) {
+        out[initial_zeros + i] = maybe_last_out;
+        return initial_zeros + i + 1;
+    }
+
+    return initial_zeros + i;
+}
+
+void bsru(
+    const uint32_t num[], size_t effective_bits_len, size_t n, uint32_t last_digit, uint32_t *out)
+{
+    size_t digit_bit_size = sizeof(uint32_t) * 8; // 32
+
+    size_t digit_right_bit_shift = n % digit_bit_size;
+    size_t left_shift_n = (digit_bit_size - digit_right_bit_shift);
+
+    size_t len_in_digits = size_round_to(effective_bits_len, digit_bit_size) / digit_bit_size;
+
+    // caller makes sure that discarded < len_in_digits
+    size_t discarded = n / digit_bit_size;
+
+    if (left_shift_n == 32) {
+        memcpy(out, num + discarded, (len_in_digits - discarded) * sizeof(uint32_t));
+        return;
+    }
+
+    size_t i;
+    for (i = discarded; i < len_in_digits - 1; i++) {
+        uint32_t next_digit = num[i + 1];
+        uint32_t digit = num[i];
+        out[i - discarded] = (digit >> digit_right_bit_shift) | (next_digit << left_shift_n);
+    }
+    uint32_t maybe_last_out = (num[i] >> digit_right_bit_shift) | (last_digit << left_shift_n);
+
+    if (maybe_last_out) {
+        out[i - discarded] = maybe_last_out;
+    }
+}
+
+size_t intn_bsr(
+    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out)
+{
+    size_t digit_bit_size = sizeof(uint32_t) * 8;
+    size_t counted_digits = intn_count_digits(num, len);
+    size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
+    size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
+
+    if (n >= effective_bits_len) {
+        out[0] = (num_sign == IntNPositiveInteger) ? 0 : 1;
+        return 1;
+    }
+
+    size_t shifted_len = size_round_to(effective_bits_len - n, digit_bit_size) / digit_bit_size;
+
+    if (num_sign == IntNPositiveInteger) {
+        bsru(num, effective_bits_len, n, 0, out);
+
+    } else {
+        uint32_t tmp_buf[INTN_MAX_RES_LEN];
+        neg(num, counted_digits, tmp_buf);
+        bsru(tmp_buf, effective_bits_len, n, (uint32_t) -1, out);
+        neg_in_place(out, shifted_len);
+    }
+
+    return shifted_len;
 }
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
@@ -803,26 +924,31 @@ int intn_parse(
     return out_len;
 }
 
+static size_t neg_in_place(intn_digit_t out[], size_t len)
+{
+    uint32_t carry = 1;
+    size_t i;
+    int last_non_zero = -1;
+    for (i = 0; i < len; i++) {
+        uint64_t temp = (uint64_t) (~out[i]) + (uint64_t) carry;
+        if ((uint32_t) temp != 0) {
+            last_non_zero = i;
+        }
+        out[i] = (uint32_t) temp;
+        carry = temp >> 32;
+    }
+    if (carry) {
+        out[i] = carry;
+        return i;
+    } else {
+        return last_non_zero + 1;
+    }
+}
+
 static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[])
 {
     if (sign == IntNNegativeInteger) {
-        uint32_t carry = 1;
-        size_t i;
-        int last_non_zero = -1;
-        for (i = 0; i < INTN_MAX_RES_LEN - 1; i++) {
-            uint64_t temp = (uint64_t) (~out[i]) + (uint64_t) carry;
-            if ((uint32_t) temp != 0) {
-                last_non_zero = i;
-            }
-            out[i] = (uint32_t) temp;
-            carry = temp >> 32;
-        }
-        if (carry) {
-            out[i] = carry;
-            return i;
-        } else {
-            return last_non_zero + 1;
-        }
+        return neg_in_place(out, INTN_MAX_RES_LEN - 1);
     } else {
         return intn_count_digits(out, INTN_MAX_IN_LEN);
     }
