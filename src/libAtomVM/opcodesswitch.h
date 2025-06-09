@@ -3509,9 +3509,6 @@ wait_timeout_trap_handler:
                 TRACE("if_end/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    x_regs[0] = ERROR_ATOM;
-                    x_regs[1] = IF_CLAUSE_ATOM;
-
                     RAISE_ERROR(IF_CLAUSE_ATOM);
                 #endif
                 break;
