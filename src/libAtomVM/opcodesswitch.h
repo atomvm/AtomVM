@@ -1539,7 +1539,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
         boxed_func[i] = *ext_reg;
     }
 
-    return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_func) | TERM_PRIMARY_BOXED;
 }
 
 static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index_t function_name, int arity,
@@ -6441,7 +6441,7 @@ wait_timeout_trap_handler:
                 }
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term fun = ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+                    term fun = ((term) boxed_func) | TERM_PRIMARY_BOXED;
                     WRITE_REGISTER(dreg, fun);
                 #endif
                 break;
