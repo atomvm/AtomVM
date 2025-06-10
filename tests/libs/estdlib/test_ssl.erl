@@ -61,32 +61,32 @@ test_start_twice() ->
     ok = ssl:start().
 
 test_connect_close() ->
-    {ok, SSLSocket} = ssl:connect("www.atomvm.net", 443, [{verify, verify_none}, {active, false}]),
+    {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [{verify, verify_none}, {active, false}]),
     ok = ssl:close(SSLSocket).
 
 test_connect_error() ->
-    {error, _Error} = ssl:connect("www.atomvm.net", 80, [{verify, verify_none}, {active, false}]),
+    {error, _Error} = ssl:connect("test.atomvm.org", 80, [{verify, verify_none}, {active, false}]),
     ok.
 
 test_send_recv() ->
-    {ok, SSLSocket} = ssl:connect("www.atomvm.net", 443, [
+    {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [
         {verify, verify_none}, {active, false}, {binary, true}
     ]),
     UserAgent = erlang:system_info(machine),
     ok = ssl:send(SSLSocket, [
-        <<"GET / HTTP/1.1\r\nHost: www.atomvm.net\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
+        <<"GET / HTTP/1.1\r\nHost: test.atomvm.org\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
     ]),
     {ok, <<"HTTP/1.1 200 OK">>} = ssl:recv(SSLSocket, 15),
     ok = ssl:close(SSLSocket),
     ok.
 
 test_send_recv_zero() ->
-    {ok, SSLSocket} = ssl:connect("www.atomvm.net", 443, [
+    {ok, SSLSocket} = ssl:connect("test.atomvm.org", 443, [
         {verify, verify_none}, {active, false}, {binary, true}
     ]),
     UserAgent = erlang:system_info(machine),
     ok = ssl:send(SSLSocket, [
-        <<"GET / HTTP/1.1\r\nHost: www.atomvm.net\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
+        <<"GET / HTTP/1.1\r\nHost: test.atomvm.org\r\nUser-Agent: ">>, UserAgent, <<"\r\n\r\n">>
     ]),
     {ok, <<"HTTP/1.1 200 OK", _/binary>>} = ssl:recv(SSLSocket, 0),
     ok = ssl:close(SSLSocket),

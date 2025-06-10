@@ -50,7 +50,7 @@ start() ->
     ok = send_loop(
         SSLContext,
         Socket,
-        <<"GET / HTTP/1.1\r\nHost: atomvm.net\r\nUser-Agent: AtomVM within qemu\r\n\r\n">>
+        <<"GET / HTTP/1.1\r\nHost: test.atomvm.org\r\nUser-Agent: AtomVM within qemu\r\n\r\n">>
     ),
     % Read
     {ok, <<"HTTP/1.1">>} = recv_loop(SSLContext, Socket, 8, []),
