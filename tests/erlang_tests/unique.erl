@@ -20,7 +20,7 @@
 
 -module(unique).
 
--export([start/0, id/1, check_error/3]).
+-export([start/0, id/1]).
 
 start() ->
     ok = unique_0(),
@@ -28,6 +28,7 @@ start() ->
     ok = unique_monotonic(),
     ok = unique_positive_monotonic(),
     ok = unique_monotonic_processes(),
+    ok = invalid_args(),
 
     Self = self(),
     N = length([
@@ -39,15 +40,19 @@ start() ->
     receive_messages(N),
     0.
 
-test_invalid() ->
-    ok = ?MODULE:check_error(fun() -> erlang:unique_integer(?MODULE:id(5)) end),
-    ok = ?MODULE:check_error(fun() -> erlang:unique_integer(?MODULE:id([positive | monotonic])) end).
+invalid_args() ->
+    ok = raises(badarg, fun() -> erlang:unique_integer(?MODULE:id(5)) end),
+    ok = raises(badarg, fun() ->
+        erlang:unique_integer(?MODULE:id([positive | monotonic]))
+    end),
+    ok.
 
-check_error(F, A, B) ->
+raises(Reason, F) ->
     try F() of
         Result -> {unexpected, Result}
     catch
-        A:B -> ok
+        error:Reason -> ok;
+        E:R -> {unexpected, E, R}
     end.
 
 id(X) ->
