@@ -66,7 +66,6 @@ extern "C" {
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
-#define TERM_CATCH_TAG 0x1B
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
@@ -75,6 +74,11 @@ extern "C" {
 #define TERM_BOXED_EXTERNAL_PID 0x30
 #define TERM_BOXED_EXTERNAL_PORT 0x34
 #define TERM_BOXED_EXTERNAL_REF 0x38
+
+#define TERM_IMMED2_TAG_MASK 0x3F
+#define TERM_IMMED2_TAG_SIZE 6
+#define TERM_IMMED2_ATOM 0xB
+#define TERM_IMMED2_CATCH 0x1B
 #define TERM_NIL 0x3B
 
 #define TERM_UNUSED 0x2B
@@ -143,7 +147,7 @@ extern "C" {
 
 #define TERM_DEBUG_ASSERT(...)
 
-#define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << 6) | 0xB)
+#define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << TERM_IMMED2_TAG_SIZE) | TERM_IMMED2_ATOM)
 
 // Local ref is at most 30 bytes:
 // 2^32-1 = 4294967295 (10 chars)
@@ -299,7 +303,7 @@ static inline const term *term_to_const_term_ptr(term t)
 static inline bool term_is_atom(term t)
 {
     /* atom: | atom index | 00 10 11 */
-    return ((t & TERM_BOXED_TAG_MASK) == 0xB);
+    return ((t & TERM_IMMED2_TAG_MASK) == TERM_IMMED2_ATOM);
 }
 
 /**
@@ -324,7 +328,7 @@ static inline bool term_is_invalid_term(term t)
 static inline bool term_is_nil(term t)
 {
     /* nil: 11 10 11 */
-    return ((t & TERM_BOXED_TAG_MASK) == TERM_NIL);
+    return ((t & TERM_IMMED2_TAG_MASK) == TERM_NIL);
 }
 
 /**
@@ -527,7 +531,7 @@ static inline bool term_is_any_integer(term t)
 
 static inline bool term_is_catch_label(term t)
 {
-    return (t & TERM_BOXED_TAG_MASK) == TERM_CATCH_TAG;
+    return (t & TERM_IMMED2_TAG_MASK) == TERM_IMMED2_CATCH;
 }
 
 /**
@@ -1085,7 +1089,7 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
-    return (term) ((module_index << 24) | (label << 6) | TERM_CATCH_TAG);
+    return (term) ((module_index << 24) | (label << 6) | TERM_IMMED2_CATCH);
 }
 
 /**
