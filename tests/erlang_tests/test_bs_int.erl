@@ -32,12 +32,14 @@ start() ->
         Signedness <- [unsigned, signed]
     ],
 
-    [
-        test_bs_ints(Binaries, Size, Endianness, Signedness)
-     || Size <- [64],
-        Endianness <- [big, little, native],
-        Signedness <- [unsigned]
-    ],
+    % 64 cannot be used (64 makes use of temporary big integers)
+    % 48 would be great, but `bitstring_insert_integer` doesn't support 48 bits
+    %    [
+    %        test_bs_ints(Binaries, Size, Endianness, Signedness)
+    %     || Size <- [48],
+    %        Endianness <- [big, little, native],
+    %        Signedness <- [unsigned]
+    %    ],
 
     0.
 
