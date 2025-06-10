@@ -1512,47 +1512,128 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     }
 }
 
-typedef int64_t (*bitshift_op)(int64_t a, avm_int_t b);
-
-static inline term bitshift_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitshift_op op)
+static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
 {
-    UNUSED(live);
-
-    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_integer(arg2))) {
-        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
-    }
-
-    int64_t a = term_maybe_unbox_int64(arg1);
-    avm_int_t b = term_to_int(arg2);
-    int64_t result = op(a, b);
-
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-        return make_maybe_boxed_int64(ctx, fail_label, live, result);
-    #else
-        return make_maybe_boxed_int(ctx, fail_label, live, result);
-    #endif
+    return (int32_t) ((n < 0) ? ~(~((uint32_t ) n) >> rshift) : (((uint32_t) n) >> rshift));
 }
 
-static inline int64_t bsl(int64_t a, avm_int_t b)
+static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *out)
 {
-    // TODO check for overflow
-    return a << b;
+    //
+    if ((n != 0) && (lshift > 64)) {
+        return true;
+    }
+    //
+
+    int32_t res = (int32_t) (((uint32_t) n) << lshift);
+    *out = res;
+    int32_t check = int32_bsr(res, lshift);
+    return check != n;
+}
+
+static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
+{
+    return (int64_t) ((n < 0) ? ~(~((uint64_t ) n) >> rshift) : (((uint64_t) n) >> rshift));
+}
+
+static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
+{
+    //
+    if ((n != 0) && (lshift > 64)) {
+        return true;
+    }
+    //
+
+    int64_t res = (int64_t) (((uint64_t) n) << lshift);
+    *out = res;
+    int64_t check = int64_bsr(res, lshift);
+    return check != n;
 }
 
 term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    return bitshift_helper(ctx, fail_label, live, arg1, arg2, bsl);
-}
+    if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+        avm_int_t b = term_to_int(arg2);
+        if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            int64_t a = term_maybe_unbox_int64(arg1);
+            //if (uint64_leading_zeros(a) >= b) {
+            int64_t result;
+            if (!int64_bsl_overflow(a, b, &result)) {
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                    return make_maybe_boxed_int64(ctx, fail_label, live, result);
+                #else
+                    return make_maybe_boxed_int(ctx, fail_label, live, result);
+                #endif
+            } else {
+                fprintf(stderr, "was with b: %i, with: ", (int) b);
+                term_display(stderr, arg1, ctx);
+                fprintf(stderr, "\n");
+            }
+        }
 
-static inline int64_t bsr(int64_t a, avm_int_t b)
-{
-    // TODO check for underflow
-    return a >> b;
+        intn_digit_t tmp_buf1[INTN_INT64_LEN];
+        intn_digit_t tmp_buf2[INTN_INT64_LEN];
+        intn_digit_t *m;
+        size_t m_len;
+        intn_integer_sign_t m_sign;
+        intn_digit_t *n;
+        size_t n_len;
+        intn_integer_sign_t n_sign;
+        args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
+
+        intn_digit_t bigres[INTN_MAX_RES_LEN];
+        size_t bigres_len;
+        bigres_len = intn_bsl(m, m_len, b, bigres);
+        fprintf(stderr, "bigres: %i\n", (int) bigres_len);
+
+        return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
 }
 
 term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    return bitshift_helper(ctx, fail_label, live, arg1, arg2, bsr);
+    if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+
+        avm_int_t b = term_to_int(arg2);
+
+        fprintf(stderr, "going to do b: %i, with: ", (int) b);
+        term_display(stderr, arg1, ctx);
+        fprintf(stderr, "\n");
+
+        if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            uint64_t a = (uint64_t) term_maybe_unbox_int64(arg1);
+            int64_t result = (int64_t) (a >> b); //FIX THIS
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, fail_label, live, result);
+            #else
+                return make_maybe_boxed_int(ctx, fail_label, live, result);
+            #endif
+        }
+
+        intn_digit_t tmp_buf1[INTN_INT64_LEN];
+        intn_digit_t tmp_buf2[INTN_INT64_LEN];
+        intn_digit_t *m;
+        size_t m_len;
+        intn_integer_sign_t m_sign;
+        intn_digit_t *n;
+        size_t n_len;
+        intn_integer_sign_t n_sign;
+        args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
+
+        intn_digit_t bigres[INTN_MAX_RES_LEN];
+        size_t bigres_len;
+        //intn_bsl(m, m_len, b, bigres, &bigres_len); //FIXME TODO CHANGE ME
+        abort();
+
+        return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
 }
 
 term bif_erlang_bnot_1(Context *ctx, uint32_t fail_label, int live, term arg1)
