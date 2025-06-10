@@ -20,6 +20,7 @@
 
 #include "intn.h"
 
+#include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -610,9 +611,7 @@ size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
     }
     uint32_t maybe_last_out = (last_digit >> right_shift_n);
 
-    if (initial_zeros + i > new_digits_count) {
-        abort();
-    }
+    assert(initial_zeros + i <= new_digits_count);
 
     if (maybe_last_out) {
         out[initial_zeros + i] = maybe_last_out;

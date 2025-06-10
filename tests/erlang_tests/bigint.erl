@@ -56,7 +56,9 @@ start() ->
         to_external_term() +
         test_band() +
         test_bxor() +
-        test_bor().
+        test_bor() +
+        test_bsl() +
+        test_bsr().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -1050,6 +1052,174 @@ test_bor() ->
 
     0.
 
+test_bsl() ->
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432">>), 16),
+    <<"CAFE1234AABBCCDD98765432000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(24), 16
+    ),
+    <<"195FC2469557799BB30ECA8640000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(29), 16
+    ),
+    <<"CAFE1234AABBCCDD9876543200000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(32), 16
+    ),
+    <<"657F091A555DE66ECC3B2A19000000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(35), 16
+    ),
+    <<"CAFE1234AABBCCDD98765432000000000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(48), 16
+    ),
+    <<"657F091A555DE66ECC3B2A190000000000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(51), 16
+    ),
+    <<"CAFE1234AABBCCDD987654320000000000000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(64), 16
+    ),
+    <<"CAFE1234AABBCCDD987654320000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        Pattern1 bsl ?MODULE:id(160), 16
+    ),
+    <<"657F00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#CAFE) bsl ?MODULE:id(127), 16
+    ),
+    <<"CAFE00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#CAFE) bsl ?MODULE:id(128), 16
+    ),
+    <<"195FC00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#CAFE) bsl ?MODULE:id(129), 16
+    ),
+    <<"CAFE000000000000000000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#CAFE) bsl ?MODULE:id(240), 16
+    ),
+
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432">>), 16),
+    <<"-CAFE1234AABBCCDD98765432000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(24), 16
+    ),
+    <<"-195FC2469557799BB30ECA8640000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(29), 16
+    ),
+    <<"-CAFE1234AABBCCDD9876543200000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(32), 16
+    ),
+    <<"-657F091A555DE66ECC3B2A19000000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(35), 16
+    ),
+    <<"-CAFE1234AABBCCDD98765432000000000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(48), 16
+    ),
+    <<"-657F091A555DE66ECC3B2A190000000000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(51), 16
+    ),
+    <<"-CAFE1234AABBCCDD987654320000000000000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(64), 16
+    ),
+    <<"-CAFE1234AABBCCDD987654320000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        Pattern2 bsl ?MODULE:id(160), 16
+    ),
+    <<"-657F00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#CAFE) bsl ?MODULE:id(127), 16
+    ),
+    <<"-CAFE00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#CAFE) bsl ?MODULE:id(128), 16
+    ),
+    <<"-195FC00000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#CAFE) bsl ?MODULE:id(129), 16
+    ),
+    <<"-CAFE000000000000000000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#CAFE) bsl ?MODULE:id(240), 16
+    ),
+
+    LS1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"CAFE000000000000000000000000000000000000000000000000000000000001">>), 16
+    ),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(LS1)) end),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsl ?MODULE:id(LS1)) end),
+    0 = ?MODULE:id(?MODULE:id(0) bsl ?MODULE:id(LS1)),
+
+    LS2 = erlang:binary_to_integer(?MODULE:id(<<"4000000000000000">>), 16),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(LS2)) end),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsl ?MODULE:id(LS2)) end),
+    0 = ?MODULE:id(?MODULE:id(0) bsl ?MODULE:id(LS2)),
+
+    % Negative bsl is bsr
+    Pattern3 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"CAFE1234AABBCCDD98765432987">> = erlang:integer_to_binary(Pattern3 bsl ?MODULE:id(-24), 16),
+
+    NLS1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-CAFE000000000000000000000000000000000000000000000000000000000001">>), 16
+    ),
+    0 = ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(NLS1)),
+    -1 = ?MODULE:id(?MODULE:id(-1) bsl ?MODULE:id(NLS1)),
+    0 = ?MODULE:id(?MODULE:id(0) bsl ?MODULE:id(NLS1)),
+
+    NLS2 = erlang:binary_to_integer(?MODULE:id(<<"-4000000000000000">>), 16),
+    0 = ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(NLS2)),
+    -1 = ?MODULE:id(?MODULE:id(-1) bsl ?MODULE:id(NLS2)),
+    0 = ?MODULE:id(?MODULE:id(0) bsl ?MODULE:id(NLS2)),
+
+    0.
+
+test_bsr() ->
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"CAFE1234AABBCCDD98765432987">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(24), 16),
+    <<"657F091A555DE66ECC3B2A194C">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(29), 16),
+    <<"CAFE1234AABBCCDD987654329">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(32), 16),
+    <<"195FC2469557799BB30ECA865">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(35), 16),
+    <<"CAFE1234AABBCCDD98765">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(48), 16),
+    <<"195FC2469557799BB30EC">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(51), 16),
+    <<"CAFE1234AABBCCDD9">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(64), 16),
+    <<"C">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(128), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(250), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(256), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(257), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(600), 16),
+
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"-CAFE1234AABBCCDD98765432988">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(24), 16),
+    <<"-657F091A555DE66ECC3B2A194D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(29), 16),
+    <<"-CAFE1234AABBCCDD98765432A">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(32), 16),
+    <<"-195FC2469557799BB30ECA866">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(35), 16),
+    <<"-CAFE1234AABBCCDD98766">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(48), 16),
+    <<"-195FC2469557799BB30ED">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(51), 16),
+    <<"-CAFE1234AABBCCDDA">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(64), 16),
+    <<"-D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(128), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(250), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(256), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(257), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(600), 16),
+
+    LS1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"CAFE000000000000000000000000000000000000000000000000000000000001">>), 16
+    ),
+    0 = ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(LS1)),
+    -1 = ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(LS1)),
+    0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(LS1)),
+
+    LS2 = erlang:binary_to_integer(?MODULE:id(<<"4000000000000000">>), 16),
+    0 = ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(LS2)),
+    -1 = ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(LS2)),
+    0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(LS2)),
+
+    % Negative bsr is bsl
+    Pattern3 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432">>), 16),
+    <<"CAFE1234AABBCCDD98765432000000">> = erlang:integer_to_binary(
+        Pattern3 bsr ?MODULE:id(-24), 16
+    ),
+
+    NLS1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-CAFE000000000000000000000000000000000000000000000000000000000001">>), 16
+    ),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(NLS1)) end),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(NLS1)) end),
+    0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(LS1)),
+
+    NLS2 = erlang:binary_to_integer(?MODULE:id(<<"-4000000000000000">>), 16),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(NLS2)) end),
+    ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(NLS2)) end),
+    0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(NLS2)),
+
+    0.
+
 id(X) ->
     X.
 
@@ -1066,6 +1236,15 @@ expect_overflow(OvfFun) ->
         {atomvm, Result} -> {unexpected_result, Result}
     catch
         error:overflow -> ok;
+        _:E -> {unexpected_error, E}
+    end.
+
+expect_overflow_or_limit(OvfFun) ->
+    try OvfFun() of
+        {atomvm, Result} -> {unexpected_result, Result}
+    catch
+        error:overflow -> ok;
+        error:system_limit -> ok;
         _:E -> {unexpected_error, E}
     end.
 
