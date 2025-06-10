@@ -41,7 +41,7 @@ check_guard(A, B, A) when is_function(B, A) ->
     A;
 check_guard(A, _B, A) when A < 0 ->
     error;
-check_guard(_A, _B, _A) ->
+check_guard(_, _, _) ->
     false.
 
 discard(_X) ->
