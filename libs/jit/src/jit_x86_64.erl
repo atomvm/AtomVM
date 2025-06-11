@@ -32,6 +32,7 @@
     update_branches/2,
     call_primitive/3,
     call_primitive_last/3,
+    call_primitive_with_cp/3,
     handle_error_if_false/2,
     handle_error_if_zero/2,
     return_if_not_null/2,
@@ -1196,6 +1197,11 @@ decrement_reductions_and_maybe_schedule_next(
 call_or_schedule_next(State0, Label) ->
     {RewriteOffset, State1} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
+    rewrite_cp_offset(State2, RewriteOffset).
+
+call_primitive_with_cp(State0, Primitive, Args) ->
+    {RewriteOffset, State1} = set_cp(State0),
+    State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset).
 
 call_only_or_schedule_next(
