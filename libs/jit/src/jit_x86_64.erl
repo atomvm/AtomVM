@@ -60,6 +60,7 @@
     get_module_index/1,
     and_/3,
     or_/3,
+    decrement_reductions_and_maybe_schedule_next/1,
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
     call_ext_or_schedule_next/3,
@@ -1164,6 +1165,32 @@ or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Imm) ->
     I1 = jit_x86_64_asm:orq(Imm, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
+
+-spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
+decrement_reductions_and_maybe_schedule_next(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:decl(?JITSTATE_REDUCTIONCOUNT),
+    {RewriteJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(0),
+    {RewriteLEAOffset, I3} = jit_x86_64_asm:leaq_rel32({0, rip}, Temp),
+    I4 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = State0#state{stream = Stream1},
+    State2 = call_primitive_last(State1, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]),
+    % Rewrite jumps
+    #state{stream = Stream2} = State2,
+    NewOffset = StreamModule:offset(Stream2),
+    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RewriteJNZOffset, <<
+        (NewOffset - Offset - byte_size(I1) - byte_size(I2))
+    >>),
+    Stream4 = StreamModule:replace(
+        Stream3, Offset + byte_size(I1) + byte_size(I2) + RewriteLEAOffset, <<
+            (NewOffset - Offset - byte_size(I1) - byte_size(I2) - byte_size(I3)):32/little
+        >>
+    ),
+    State2#state{stream = Stream4}.
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
