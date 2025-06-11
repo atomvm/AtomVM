@@ -26,6 +26,7 @@
 #include "tempstack.h"
 #include "term.h"
 #include "term_typedef.h"
+#include "utils.h"
 #include "valueshashtable.h"
 #include <stdint.h>
 
@@ -324,13 +325,24 @@ InteropFunctionResult interop_iolist_size(term t, size_t *size)
     return interop_chardata_fold(t, size_fold_fun, NULL, size);
 }
 
+static inline char is_safe_downcast(avm_int_t value)
+{
+    return 0 <= value && value <= UCHAR_MAX;
+}
+
 static inline InteropFunctionResult write_string_fold_fun(term t, void *accum)
 {
     char **p = (char **) accum;
     if (term_is_integer(t)) {
-        **p = term_to_int(t);
+        avm_int_t value = term_to_int(t);
+        if (UNLIKELY(!is_safe_downcast(value))) {
+            return InteropBadArg;
+        }
+        **p = value;
         (*p)++;
-    } else /* term_is_binary(t) */ {
+    } else {
+        assert(term_is_binary(t));
+
         int len = term_binary_size(t);
         memcpy(*p, term_binary_data(t), len);
         *p += len;

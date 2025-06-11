@@ -204,3 +204,4 @@ math:sinh/1, &math_sinh_nif
 math:sqrt/1, &math_sqrt_nif
 math:tan/1, &math_tan_nif
 math:tanh/1, &math_tanh_nif
+zlib:compress/1, &zlib_compress_nif
