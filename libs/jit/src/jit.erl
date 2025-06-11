@@ -185,8 +185,9 @@ first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     {Index, Rest2} = decode_literal(Rest1),
     {NWords, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_CALL_EXT_LAST ~p, ~p, ~p\n", [Arity, Index, NWords]),
-    MSt1 = MMod:call_ext_onlylast_or_schedule_next(MSt0, Arity, Index, NWords),
-    first_pass(Rest3, MMod, MSt1, State0);
+    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index, NWords]),
+    first_pass(Rest3, MMod, MSt2, State0);
 % 9
 first_pass(<<?OP_BIF0, Rest0/binary>>, MMod, MSt0, State0) ->
     {Bif, Rest1} = decode_literal(Rest0),
@@ -698,6 +699,9 @@ first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass(Rest1, MMod, MSt2, State0);
 % 75
 % first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+%    {ArgsCount, Rest1} = decode_literal(Rest0),
+%    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+%    MSt2 = MMod:call_primitive_with_cp(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index]),
 % 77
 first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -718,8 +722,9 @@ first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Arity, Rest1} = decode_literal(Rest0),
     {Index, Rest2} = decode_literal(Rest1),
     ?TRACE("OP_CALL_EXT_ONLY ~p, ~p\n", [Arity, Index]),
-    MSt1 = MMod:call_ext_onlylast_or_schedule_next(MSt0, Arity, Index, -1),
-    first_pass(Rest2, MMod, MSt1, State0);
+    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index, -1]),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 96
 % first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 97
