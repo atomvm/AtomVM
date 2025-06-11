@@ -31,6 +31,7 @@
 #include "defaultatoms.h"
 #include "dist_nifs.h"
 #include "exportedfunction.h"
+#include "jit.h"
 #include "nifs.h"
 #include "opcodes.h"
 #include "scheduler.h"
@@ -1013,14 +1014,28 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
     {                                                                                             \
+        assert(restore_mod->native_code == NULL);                                                 \
         ctx->saved_ip = restore_to;                                                               \
         ctx->saved_module = restore_mod;                                                          \
         ctx = scheduler_next(ctx->global, ctx);                                                   \
         goto schedule_in;                                                                         \
     }
 
+#define SCHEDULE_WAIT_ANY(restore_mod) \
+    {                                                                                             \
+        if (restore_mod->native_code == NULL) {                                                   \
+            ctx->saved_ip = pc;                                                                   \
+        } else {                                                                                  \
+            ctx->saved_ip = native_pc;                                                            \
+        }                                                                                         \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+
 #define SCHEDULE_WAIT(restore_mod, restore_to) \
     {                                                                                             \
+        assert(restore_mod->native_code == NULL);                                                 \
         ctx->saved_ip = restore_to;                                                               \
         ctx->saved_module = restore_mod;                                                          \
         ctx = scheduler_wait(ctx);                                                                \
@@ -1163,7 +1178,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             goto *next_label;                                                                   \
         }                                                                                       \
         if (context_get_flags(ctx, Trap)) {                                                     \
-            SCHEDULE_WAIT(mod, pc);                                                             \
+            SCHEDULE_WAIT_ANY(mod);                                                             \
         }                                                                                       \
     }
 
@@ -1209,7 +1224,12 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             mod = globalcontext_get_module_by_index(glb, module_index); \
             code = mod->code->code;                                     \
         }                                                               \
-        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
+        if (mod->native_code) {                                         \
+            native_pc = (ModuleNativeEntryPoint) ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2); \
+        } else {                                                        \
+            native_pc = NULL;                                           \
+            pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);      \
+        }                                                               \
     }
 
 #define HANDLE_ERROR()                                                  \
@@ -1734,8 +1754,15 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
         ctx->saved_module = mod;
 
-        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
-        ctx->saved_ip = mod->labels[label];
+        if (mod->native_code == NULL) {
+            ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
+            ctx->saved_ip = mod->labels[label];
+            ctx->saved_module = mod;
+        } else {
+            ctx->cp = module_address(mod->module_index, 0);
+            ctx->saved_ip = module_get_native_entry_point(mod, label);
+            ctx->saved_module = mod;
+        }
         scheduler_init_ready(ctx);
     #endif
 
@@ -1767,6 +1794,7 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
     Module *prev_mod;
     term *x_regs;
     const uint8_t *pc;
+    ModuleNativeEntryPoint native_pc;
     int remaining_reductions;
 
     Context *ctx = scheduler_run(glb);
@@ -1779,16 +1807,29 @@ schedule_in:
     prev_mod = mod;
     code = mod->code->code;
     x_regs = ctx->x;
-    pc = (ctx->saved_ip);
     remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+    if (mod->native_code == NULL) {
+        // set PC
+        pc = (ctx->saved_ip);
+        native_pc = NULL;
+    } else {
+        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);
+    }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
     // Handle traps.
-    if (ctx->restore_trap_handler)
-        goto *ctx->restore_trap_handler;
-    // Handle signals
-    PROCESS_SIGNAL_MESSAGES();
+    if (ctx->restore_trap_handler) {
+        if (mod->native_code == NULL) {
+            goto *ctx->restore_trap_handler;
+        } else {
+            native_pc = ctx->restore_trap_handler;
+            printf("ctx->restore_trap_handler -- native_pc = %p\n", (void *) native_pc);
+        }
+    } else {
+        // Handle signals
+        PROCESS_SIGNAL_MESSAGES();
+    }
 #pragma GCC diagnostic pop
 #endif
 
@@ -1800,6 +1841,34 @@ schedule_in:
 #endif
 
     while (1) {
+#ifdef IMPL_EXECUTE_LOOP
+        if (native_pc) {
+            struct JITState jit_state;
+            jit_state.continuation = (void *) -1L;
+            jit_state.module = mod;
+            jit_state.remaining_reductions = remaining_reductions;
+            // __asm__ volatile("int $0x03");
+            ctx = native_pc(ctx, &jit_state, &module_native_interface);
+            remaining_reductions = jit_state.remaining_reductions;
+            if (UNLIKELY(remaining_reductions == 0) || IS_NULL_PTR(ctx)) {
+                goto schedule_in;
+            }
+            if (jit_state.module != mod) {
+                mod = jit_state.module;
+                prev_mod = mod;
+                code = mod->code->code;
+            }
+            if (mod->native_code == NULL) {
+                // set PC
+                JUMP_TO_ADDRESS(jit_state.continuation);
+                native_pc = NULL;
+            } else {
+                native_pc = jit_state.continuation;
+            }
+            continue;
+        }
+#endif
+
     TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
 #ifdef IMPL_EXECUTE_LOOP
 loop:
@@ -1977,6 +2046,18 @@ loop:
 
                             break;
                         }
+                        case ModuleNativeFunction: {
+                            const struct ModuleNativeFunction *jump = EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func);
+
+                            ctx->cp = module_address(mod->module_index, pc - code);
+                            if (jump->target != mod) {
+                                prev_mod = mod;
+                                mod = jump->target;
+                                code = mod->code->code;
+                            }
+                            native_pc = jump->entry_point;
+                            continue;
+                        }
                         case BIFFunctionType: {
                             // Support compilers < OTP26 that generate CALL_EXT
                             // for min/2 and max/2
@@ -2101,6 +2182,20 @@ loop:
                             JUMP_TO_LABEL(jump->target, jump->label);
 
                             break;
+                        }
+                        case ModuleNativeFunction: {
+                            const struct ModuleNativeFunction *jump = EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func);
+
+                            ctx->cp = ctx->e[n_words];
+                            ctx->e += (n_words + 1);
+
+                            if (jump->target != mod) {
+                                prev_mod = mod;
+                                mod = jump->target;
+                                code = mod->code->code;
+                            }
+                            native_pc = jump->entry_point;
+                            continue;
                         }
                         case BIFFunctionType: {
                             // Support compilers < OTP26 that generate CALL_EXT_LAST
@@ -7171,8 +7266,13 @@ handle_error:
         {
             int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
-                code = mod->code->code;
-                JUMP_TO_ADDRESS(mod->labels[target_label]);
+                if (mod->native_code) {
+                    native_pc = module_get_native_entry_point(mod, target_label);
+                } else {
+                    native_pc = NULL;
+                    code = mod->code->code;
+                    JUMP_TO_ADDRESS(mod->labels[target_label]);
+                }
             }
         }
 
