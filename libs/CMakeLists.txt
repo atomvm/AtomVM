@@ -27,6 +27,7 @@ add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
+add_subdirectory(jit/src)
 
 set(ATOMVM_LIBS eavmlib estdlib alisp)
 
