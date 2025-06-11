@@ -1328,8 +1328,13 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     }
 
     new_ctx->saved_module = fun_module;
-    new_ctx->saved_ip = fun_module->labels[label];
-    new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
+    if (fun_module->native_code) {
+        new_ctx->saved_ip = module_get_native_entry_point(fun_module, label);
+        new_ctx->cp = module_address(fun_module->module_index, 0);
+    } else {
+        new_ctx->saved_ip = fun_module->labels[label];
+        new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
+    }
 
     return do_spawn(ctx, new_ctx, arity, n_freeze, opts_term);
 }
@@ -1365,8 +1370,13 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         AVM_ABORT();
     }
     new_ctx->saved_module = found_module;
-    new_ctx->saved_ip = found_module->labels[label];
-    new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
+    if (found_module->native_code) {
+        new_ctx->saved_ip = module_get_native_entry_point(found_module, label);
+        new_ctx->cp = module_address(found_module->module_index, 0);
+    } else {
+        new_ctx->saved_ip = found_module->labels[label];
+        new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
+    }
 
     // TODO: check available registers count
     int reg_index = 0;

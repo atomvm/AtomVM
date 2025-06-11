@@ -59,6 +59,17 @@ typedef struct Mutex Mutex;
 #define SMP_MODULE_UNLOCK(mod)
 #endif
 
+#ifndef TYPEDEF_JITSTATE
+#define TYPEDEF_JITSTATE
+typedef struct JITState JITState;
+#endif
+
+// Interface to native functions:
+// Entry point returns the current (or new) context
+// jit_state->remaining_reductions is updated. If it is zero, scheduler
+// resumes in schedule_in, i.e. it assumes ctx was changed.
+typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
+
 typedef struct
 {
     char magic[4];
@@ -71,6 +82,23 @@ typedef struct
 
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
+
+typedef struct
+{
+    uint16_t architecture;
+    uint16_t variant;
+    uint32_t offset;
+} __attribute__((packed)) NativeCodeArch;
+
+typedef struct
+{
+    char magic[4];
+    uint32_t size;
+    uint32_t info_size;
+    uint16_t version;
+    uint16_t architectures_count;
+    NativeCodeArch architectures[1];
+} __attribute__((packed)) NativeCodeChunk;
 
 struct ExportedFunction;
 
@@ -88,6 +116,8 @@ struct ModuleFilename
 
 struct Module
 {
+    int module_index;
+
 #ifdef ENABLE_ADVANCED_TRACE
     void *import_table;
 #endif
@@ -103,6 +133,7 @@ struct Module
     const uint8_t *line_refs_table;
     size_t locations_count;
     const uint8_t *locations_table;
+    ModuleNativeEntryPoint native_code;
 
     unsigned int *line_refs_offsets;
     size_t line_refs_offsets_count;
@@ -118,8 +149,6 @@ struct Module
     atom_index_t *local_atoms_to_global_table;
 
     void *module_platform_data;
-
-    int module_index;
 
     int end_instruction_ii;
 
@@ -353,6 +382,10 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param arity (output) the function arity
  */
 bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity);
+
+/**
+ */
+ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label);
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.
