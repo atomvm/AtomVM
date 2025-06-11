@@ -296,6 +296,24 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
+    if (offsets[AVMN]) {
+        NativeCodeChunk *native_code = (NativeCodeChunk *) (beam_file + offsets[AVMN]);
+        // Check compatibility
+        if (ENDIAN_SWAP_16(native_code->version) != JIT_FORMAT_VERSION) {
+            fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
+        } else {
+            for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
+                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_X86_64 && ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_VARIANT_PIC) {
+                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset);
+                    mod->native_code = (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->version + offset);
+                    break;
+                }
+            }
+            if (mod->native_code == NULL) {
+                fprintf(stderr, "Native code chunk found but no compatible architecture or variant found\n");
+            }
+        }
+    }
     uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
     mod->labels = calloc(num_labels, sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {
@@ -468,6 +486,39 @@ term module_load_literal(Module *mod, int index, Context *ctx)
     return t;
 }
 
+ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label)
+{
+    assert(module->native_code);
+    return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+}
+
+static const struct ExportedFunction *module_create_function(Module *found_module, int exported_label)
+{
+    if (found_module->native_code) {
+        struct ModuleNativeFunction *mfunc = malloc(sizeof(struct ModuleNativeFunction));
+        if (IS_NULL_PTR(mfunc)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return NULL;
+        }
+        mfunc->base.type = ModuleNativeFunction;
+        mfunc->target = found_module;
+        mfunc->entry_point = module_get_native_entry_point(found_module, exported_label);
+
+        return &mfunc->base;
+    } else {
+        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
+        if (IS_NULL_PTR(mfunc)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return NULL;
+        }
+        mfunc->base.type = ModuleFunction;
+        mfunc->target = found_module;
+        mfunc->label = exported_label;
+
+        return &mfunc->base;
+    }
+}
+
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
     Module *found_module = globalcontext_get_module(glb, unresolved->module_atom_index);
@@ -480,18 +531,13 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
             fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
             return NULL;
         }
-        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
-        if (IS_NULL_PTR(mfunc)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        const struct ExportedFunction *exported_function = module_create_function(found_module, exported_label);
+        if (IS_NULL_PTR(exported_function)) {
             return NULL;
         }
-        mfunc->base.type = ModuleFunction;
-        mfunc->target = found_module;
-        mfunc->label = exported_label;
-
+        mod->imported_funcs[import_table_index] = exported_function;
         free(unresolved);
-        mod->imported_funcs[import_table_index] = &mfunc->base;
-        return &mfunc->base;
+        return exported_function;
     } else {
         size_t atom_string_len;
         const uint8_t *atom_string_data = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index, &atom_string_len);
