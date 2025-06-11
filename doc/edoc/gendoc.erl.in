@@ -36,7 +36,7 @@ main([LibraryName, SrcDir, TgtDir]) ->
             {doclet, edown_doclet},
             {source_path, ["src"]},
             {library, LibraryName},
-            {LibraryName, "https://atomvm.net/doc/apidocs/erlang/" ++ LibraryName},
+            {LibraryName, "https://atomvm.org/doc/apidocs/erlang/" ++ LibraryName},
             {stylesheet, ""},
             {image, ""},
             {dir, TgtDir}
