@@ -1,0 +1,53 @@
+%
+% This file is part of AtomVM.
+%
+% Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%    http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+%
+% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+%
+
+-define(PRIM_RAISE_ERROR, 0).
+-define(PRIM_RETURN, 1).
+-define(PRIM_SCHEDULE_NEXT_CP, 2).
+-define(PRIM_MODULE_GET_ATOM_TERM_BY_ID, 3).
+-define(PRIM_CALL_EXT, 4).
+-define(PRIM_ALLOCATE, 5).
+-define(PRIM_HANDLE_ERROR, 6).
+-define(PRIM_TRIM_LIVE_REGS, 7).
+-define(PRIM_GET_IMPORTED_BIF, 8).
+-define(PRIM_DEALLOCATE, 9).
+-define(PRIM_TERMINATE_CONTEXT, 10).
+-define(PRIM_TERM_COMPARE, 11).
+-define(PRIM_TEST_HEAP, 12).
+-define(PRIM_PUT_LIST, 13).
+-define(PRIM_MODULE_LOAD_LITERAL, 14).
+-define(PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, 15).
+-define(PRIM_TERM_ALLOC_TUPLE, 16).
+-define(PRIM_SEND, 17).
+-define(PRIM_EXTENDED_REGISTER_PTR, 18).
+-define(PRIM_RAISE_ERROR_TUPLE, 19).
+-define(PRIM_TERM_ALLOC_FUN, 20).
+-define(PRIM_PROCESS_SIGNAL_MESSAGES, 21).
+-define(PRIM_MAILBOX_PEEK, 22).
+-define(PRIM_MAILBOX_REMOVE_MESSAGE, 23).
+-define(PRIM_TIMEOUT, 24).
+-define(PRIM_MAILBOX_NEXT, 25).
+-define(PRIM_CANCEL_TIMEOUT, 26).
+-define(PRIM_CLEAR_TIMEOUT_FLAG, 27).
+-define(PRIM_RAISE, 28).
+-define(PRIM_SCHEDULE_WAIT_CP, 29).
+-define(PRIM_WAIT_TIMEOUT, 30).
+-define(PRIM_WAIT_TIMEOUT_TRAP_HANDLER, 31).
+-define(PRIM_CALL_FUN, 32).
