@@ -95,8 +95,8 @@ jobs:
       - uses: actions/checkout@v4
         id: checkout-production
         with:
-          repository: atomvm/atomvm_www
-          ref: Production
+          repository: atomvm/doc.atomvm.org
+          ref: main
           path: /home/runner/work/AtomVM/AtomVM/www
 
       - name: Track all branches
@@ -116,8 +116,8 @@ jobs:
           cmake ..
           cd doc
           make GitHub_CI_Publish_Docs
-          rm -frv "/__w/AtomVM/AtomVM/www/doc/${{ github.ref_name }}"
-          cp -av html "/__w/AtomVM/AtomVM/www/doc/${{ github.ref_name }}"
+          rm -frv "/__w/AtomVM/AtomVM/www/${{ github.ref_name }}"
+          cp -av html "/__w/AtomVM/AtomVM/www/${{ github.ref_name }}"
       - name: Commit files
         id: commit_files
         if: github.repository == 'atomvm/AtomVM'
@@ -125,12 +125,11 @@ jobs:
         run: |
           git config --local user.email "atomvm-doc-bot@users.noreply.github.com"
           git config --local user.name "AtomVM Doc Bot"
-          ls -la doc/
-          git status "doc/${{ github.ref_name }}"
-          git add "doc/${{ github.ref_name }}"
+          git status "${{ github.ref_name }}"
+          git add "${{ github.ref_name }}"
           git add .
-          git diff --exit-code Production || echo "Going to commit"
-          git diff --exit-code Production || git commit -m "Update Documentation for ${{ github.ref_name }}"
+          git diff --exit-code main || echo "Going to commit"
+          git diff --exit-code main || git commit -m "Update Documentation for ${{ github.ref_name }}"
           git log -1
       - name: Push changes
         if: github.repository == 'atomvm/AtomVM'
@@ -143,7 +142,7 @@ jobs:
           echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
           echo "github.com ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBEmKSENjQEezOmxkZMy7opKgwFB9nkt5YRrYMjNuG5N87uRgg6CLrbo5wAdT/y6v0mKV0U2w0WZ2YB/++Tpockg=" >> ~/.ssh/known_hosts
           echo "github.com ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCj7ndNxQowgcQnjshcLrqPEiiphnt+VTTvDP6mHBL9j1aNUkY4Ue1gvwnGLVlOhGeYrnZaMgRK6+PKCUXaDbC7qtbW8gIkhL7aGCsOr/C56SJMy/BCZfxd1nWzAOxSDPgVsmerOBYfNqltV9/hWCqBywINIR+5dIg6JTJ72pcEpEjcYgXkE2YEFXV1JHnsKgbLWNlhScqb2UmyRkQyytRLtL+38TGxkxCflmO+5Z8CSSNY7GidjMIZ7Q4zMjA2n1nGrlTDkzwDCsw+wqFPGQA179cnfGWOWRVruj16z6XyvxvjJwbz0wQZ75XK5tKSb7FNyeIEs4TT4jk+S4dhPeAUC5y+bDYirYgM4GC7uEnztnZyaVWQ7B381AK4Qdrwt51ZqExKbQpTUNn+EjqoTwvqNj4kqx5QUCI0ThS/YkOxJCXmPUWZbhjpCg56i+2aB6CmK2JGhn57K5mj0MNdBXA4/WnwH6XoPWJzK5Nyu2zB3nAZp+S5hpQs+p1vN1/wsjk=" >> ~/.ssh/known_hosts
-          git remote add push_dest "git@github.com:atomvm/atomvm_www.git"
+          git remote add push_dest "git@github.com:atomvm/doc.atomvm.org.git"
           git fetch push_dest
-          git diff --exit-code push_dest/Production || echo "Going to push"
-          git diff --exit-code push_dest/Production || git push --set-upstream push_dest Production
+          git diff --exit-code push_dest/main || echo "Going to push"
+          git diff --exit-code push_dest/main || git push --set-upstream push_dest main

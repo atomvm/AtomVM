@@ -148,7 +148,9 @@ html_css_files = [
 
 html_favicon = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/favicon/favicon.ico'
 
-html_baseurl = 'https://atomvm.net/doc'
+# html_baseurl is used for the Canonical Link Relation
+# See also https://datatracker.ietf.org/doc/html/rfc6596.html
+html_baseurl = 'https://doc.atomvm.org/main/'
 
 ############################
 # SETUP THE RTD LOWER-LEFT #
@@ -158,7 +160,7 @@ try:
 except NameError:
    html_context = dict()
 
-html_baseurl = 'https://atomvm.net/doc'
+html_baseurl = 'https://doc.atomvm.org/main/'
 
 html_context['display_lower_left'] = 'True'
 
@@ -203,12 +205,12 @@ html_context['version'] = current_version
 html_context['versions'] = list()
 for version in versions:
     if ((version) == ('main')):
-        html_context['versions'].append( (version + ' branch (unstable)', '/doc/' +version+ '/') )
+        html_context['versions'].append( (version + ' branch (unstable)', '/' +version+ '/') )
     else:
         if (version not in release_list):
-            html_context['versions'].append( (version + ' branch (unreleased)', '/doc/' +version+ '/') )
+            html_context['versions'].append( (version + ' branch (unreleased)', '/' +version+ '/') )
         else:
-            html_context['versions'].append( (version, '/doc/' +version+ '/') )
+            html_context['versions'].append( (version, '/' +version+ '/') )
 
 html_sidebars = {
     '**': [
@@ -218,8 +220,8 @@ html_sidebars = {
 
 # POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
 html_context['downloads'] = list()
-html_context['downloads'].append( ('pdf', '/doc/' +download_version+ '/pdf/' +project+ '-' +download_version+ '.pdf') )
-html_context['downloads'].append( ('epub', '/doc/' +download_version+ '/epub/' +project+ '-' +download_version+ '.epub') )
+html_context['downloads'].append( ('pdf', '/' +download_version+ '/pdf/' +project+ '-' +download_version+ '.pdf') )
+html_context['downloads'].append( ('epub', '/' +download_version+ '/epub/' +project+ '-' +download_version+ '.epub') )
 
 # -- Options for PDF output -------------------------------------------------
 
