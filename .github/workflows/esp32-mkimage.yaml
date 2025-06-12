@@ -37,7 +37,7 @@ concurrency:
 
 jobs:
   esp32-release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     container: espressif/idf:v${{ matrix.idf-version }}
 
     strategy:
@@ -58,7 +58,7 @@ jobs:
       CXX: ${{ matrix.cxx }}
       CFLAGS: ${{ matrix.cflags }}
       CXXFLAGS: ${{ matrix.cflags }}
-      ImageOS: "ubuntu22"
+      ImageOS: "ubuntu24"
 
     steps:
     - name: Checkout repo

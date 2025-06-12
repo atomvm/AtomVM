@@ -2706,7 +2706,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement wait/1
             case OP_WAIT: {
                 uint32_t label;
                 DECODE_LABEL(label, pc)
@@ -2723,7 +2722,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement wait_timeout/2
             case OP_WAIT_TIMEOUT: {
                 #ifdef IMPL_EXECUTE_LOOP
                     // PC for wait_timeout_trap_handler, just before label
@@ -3037,7 +3035,6 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_number/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    //TODO: check for floats too
                     if (!term_is_number(arg1)) {
                         pc = mod->labels[label];
                     }
@@ -3262,7 +3259,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (!(term_is_tuple(arg1) && (uint32_t) term_get_tuple_arity(arg1) == arity)) {
+                    assert(term_is_tuple(arg1));
+                    if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
                         pc = mod->labels[label];
                     }
                 #endif
@@ -3367,7 +3365,6 @@ wait_timeout_trap_handler:
                         #endif
 
                         #ifdef IMPL_EXECUTE_LOOP
-                            //TODO: check if src_value is a tuple
                             if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
                                 jump_to_address = mod->labels[jmp_label];
                             }
@@ -3599,9 +3596,6 @@ wait_timeout_trap_handler:
                 TRACE("if_end/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    x_regs[0] = ERROR_ATOM;
-                    x_regs[1] = IF_CLAUSE_ATOM;
-
                     RAISE_ERROR(IF_CLAUSE_ATOM);
                 #endif
                 break;
@@ -3826,7 +3820,6 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
-                    //TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, catch_term);
                 #endif
                 break;
@@ -3839,7 +3832,6 @@ wait_timeout_trap_handler:
                 TRACE("try_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    //TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, term_nil());
                 #endif
                 break;
@@ -3920,7 +3912,6 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
-                    // TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, catch_term);
                 #endif
                 break;
@@ -3933,7 +3924,6 @@ wait_timeout_trap_handler:
                 TRACE("catch_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, term_nil());
                     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
                     switch (term_to_atom_index(x_regs[0])) {
@@ -5537,7 +5527,7 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arity_term, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
+                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%p\n", label, arg1, (void *) arity_term);
 
                     if (term_is_function(arg1) && term_is_integer(arity_term)) {
                         const term *boxed_value = term_to_const_term_ptr(arg1);
@@ -5675,7 +5665,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            //TODO: stub, always false
             case OP_IS_BITSTR: {
                 uint32_t label;
                 DECODE_LABEL(label, pc)
@@ -5698,8 +5687,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            // TODO: This opcode is currently uncovered by tests.
-            // We need to implement GC bifs with arity 3, e.g. binary_part/3.
             case OP_GC_BIF3: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
@@ -5773,7 +5760,6 @@ wait_timeout_trap_handler:
             }
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 23
-            //TODO: stub, implement recv_mark/1
             //it looks like it can be safely left unimplemented
             case OP_RECV_MARK: {
                 uint32_t label;
@@ -5784,7 +5770,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            //TODO: stub, implement recv_set/1
             //it looks like it can be safely left unimplemented
             case OP_RECV_SET: {
                 uint32_t label;

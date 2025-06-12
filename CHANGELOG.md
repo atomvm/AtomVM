@@ -76,6 +76,7 @@ with nodejs and emscripten)
 - Added `uart:read/2` with a timeout parameter.
 - Missing `erlang:is_function/2` BIF
 - Added `erlang:is_record/2`
+- Added ability to set per-interface `dhcp_hostname` on Pico W if present in config.
 
 ### Fixed
 
@@ -130,10 +131,15 @@ memory error
 - Do not abort when an out of memory happens while loading a literal value
 - Fixed potential memory corruption when handling integer immediates that are stored as boxed
 integer (this never happens with integers < 28 bits)
+- Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
+used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
+network. (See issue #1094)
 
 ### Changed
 
 - ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
+- ESP32: `v0.6.6` uses esp-idf v5.4.1 for pre-built images and `v5.4.x` is the suggested release
+also for custom builds
 
 ## [0.6.5] - 2024-10-15
 
