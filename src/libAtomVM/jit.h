@@ -113,6 +113,8 @@ extern const ModuleNativeInterface module_native_interface;
     #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
 
+#define TERMINATE_SCHEDULER (Context *) -1
+
 #ifdef __cplusplus
 }
 #endif

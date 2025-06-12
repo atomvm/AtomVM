@@ -430,6 +430,34 @@ is_boolean_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_ext_test() ->
+    State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State1 = jit_x86_64:decrement_reductions_and_maybe_schedule_next(State0),
+    State2 = jit_x86_64:call_primitive_with_cp(State1, 4, [ctx, jit_state, 2, 5, -1]),
+    jit_x86_64:assert_all_native_free(State2),
+    Stream = jit_x86_64:stream(State2),
+    Dump = <<
+"
+   0:	ff 4e 10             	decl   0x10(%rsi)
+   3:	75 11                	jne    0x16
+   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16
+   c:	48 89 46 08          	mov    %rax,0x8(%rsi)
+  10:	48 8b 42 10          	mov    0x10(%rdx),%rax
+  14:	ff e0                	jmpq   *%rax
+  16:	48 8b 06             	mov    (%rsi),%rax
+  19:	8b 00                	mov    (%rax),%eax
+  1b:	48 c1 e0 18          	shl    $0x18,%rax
+  1f:	48 0d 1c 01 00 00    	or     $0x11c,%rax
+  25:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)
+  2c:	48 8b 42 20          	mov    0x20(%rdx),%rax
+  30:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx
+  37:	48 c7 c1 05 00 00 00 	mov    $0x5,%rcx
+  3e:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8
+  45:	ff e0                	jmpq   *%rax
+"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
