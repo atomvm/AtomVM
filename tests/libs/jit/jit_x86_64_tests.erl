@@ -44,6 +44,7 @@
 -define(FALSE_ATOM, ((?FALSE_ATOM_INDEX bsl 6) bor 16#B)).
 -define(TRUE_ATOM, ((?TRUE_ATOM_INDEX bsl 6) bor 16#B)).
 
+-define(PRIM_CALL_EXT, 4).
 -define(PRIM_PUT_LIST, 13).
 -define(PRIM_EXTENDED_REGISTER_PTR, 18).
 
@@ -177,13 +178,13 @@ call_primitive_extended_regs_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_ext_only_or_schedule_next_test() ->
+call_ext_only_test() ->
     State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
-    State1 = jit_x86_64:call_ext_onlylast_or_schedule_next(State0, 2, 2, -1),
-    Stream = jit_x86_64:stream(State1),
+    State1 = jit_x86_64:decrement_reductions_and_maybe_schedule_next(State0),
+    State2 = jit_x86_64:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, -1]),
+    Stream = jit_x86_64:stream(State2),
     Dump =
         <<
-            "\n"
             "   0:	ff 4e 10             	decl   0x10(%rsi)\n"
             "   3:	75 11                	jne    0x16\n"
             "   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16\n"
@@ -198,29 +199,25 @@ call_ext_only_or_schedule_next_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_ext_or_schedule_next_test() ->
+call_ext_last_test() ->
     State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
-    State1 = jit_x86_64:call_ext_or_schedule_next(State0, 2, 2),
-    Stream = jit_x86_64:stream(State1),
+    State1 = jit_x86_64:decrement_reductions_and_maybe_schedule_next(State0),
+    State2 = jit_x86_64:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, 10]),
+    Stream = jit_x86_64:stream(State2),
+    file:write_file("dump.bin", Stream),
     Dump =
         <<
-            "\n"
-            "   0:	48 8b 06             	mov    (%rsi),%rax\n"
-            "   3:	8b 00                	mov    (%rax),%eax\n"
-            "   5:	48 c1 e0 18          	shl    $0x18,%rax\n"
-            "   9:	48 0d 1c 01 00 00    	or     $0x11c,%rax\n"
-            "   f:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)\n"
-            "  16:	ff 4e 10             	decl   0x10(%rsi)\n"
-            "  19:	75 11                	jne    0x2c\n"
-            "  1b:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x2c\n"
-            "  22:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
-            "  26:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
-            "  2a:	ff e0                	jmpq   *%rax\n"
-            "  2c:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
-            "  30:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
-            "  37:	48 c7 c1 02 00 00 00 	mov    $0x2,%rcx\n"
-            "  3e:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8\n"
-            "  45:	ff e0                	jmpq   *%rax\n"
+            "   0:	ff 4e 10             	decl   0x10(%rsi)\n"
+            "   3:	75 11                	jne    0x16\n"
+            "   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16\n"
+            "   c:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+            "  10:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
+            "  14:	ff e0                	jmpq   *%rax\n"
+            "  16:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
+            "  1a:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
+            "  21:	48 c7 c1 02 00 00 00 	mov    $0x2,%rcx\n"
+            "  28:	49 c7 c0 0a 00 00 00 	mov    $0xa,%r8\n"
+            "  2f:	ff e0                	jmpq   *%rax\n"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -437,24 +434,23 @@ call_ext_test() ->
     jit_x86_64:assert_all_native_free(State2),
     Stream = jit_x86_64:stream(State2),
     Dump = <<
-"
-   0:	ff 4e 10             	decl   0x10(%rsi)
-   3:	75 11                	jne    0x16
-   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16
-   c:	48 89 46 08          	mov    %rax,0x8(%rsi)
-  10:	48 8b 42 10          	mov    0x10(%rdx),%rax
-  14:	ff e0                	jmpq   *%rax
-  16:	48 8b 06             	mov    (%rsi),%rax
-  19:	8b 00                	mov    (%rax),%eax
-  1b:	48 c1 e0 18          	shl    $0x18,%rax
-  1f:	48 0d 1c 01 00 00    	or     $0x11c,%rax
-  25:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)
-  2c:	48 8b 42 20          	mov    0x20(%rdx),%rax
-  30:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx
-  37:	48 c7 c1 05 00 00 00 	mov    $0x5,%rcx
-  3e:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8
-  45:	ff e0                	jmpq   *%rax
-"
+        "\n"
+        "   0:	ff 4e 10             	decl   0x10(%rsi)\n"
+        "   3:	75 11                	jne    0x16\n"
+        "   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16\n"
+        "   c:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+        "  10:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
+        "  14:	ff e0                	jmpq   *%rax\n"
+        "  16:	48 8b 06             	mov    (%rsi),%rax\n"
+        "  19:	8b 00                	mov    (%rax),%eax\n"
+        "  1b:	48 c1 e0 18          	shl    $0x18,%rax\n"
+        "  1f:	48 0d 1c 01 00 00    	or     $0x11c,%rax\n"
+        "  25:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)\n"
+        "  2c:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
+        "  30:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
+        "  37:	48 c7 c1 05 00 00 00 	mov    $0x5,%rcx\n"
+        "  3e:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8\n"
+        "  45:	ff e0                	jmpq   *%rax\n"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
