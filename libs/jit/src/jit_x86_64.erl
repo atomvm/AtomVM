@@ -64,8 +64,6 @@
     decrement_reductions_and_maybe_schedule_next/1,
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
-    call_ext_or_schedule_next/3,
-    call_ext_onlylast_or_schedule_next/4,
     call_func_ptr/3
 ]).
 
@@ -1199,11 +1197,6 @@ call_or_schedule_next(State0, Label) ->
     State2 = call_only_or_schedule_next(State1, Label),
     rewrite_cp_offset(State2, RewriteOffset).
 
-call_primitive_with_cp(State0, Primitive, Args) ->
-    {RewriteOffset, State1} = set_cp(State0),
-    State2 = call_primitive_last(State1, Primitive, Args),
-    rewrite_cp_offset(State2, RewriteOffset).
-
 call_only_or_schedule_next(
     #state{
         stream_module = StreamModule,
@@ -1224,40 +1217,10 @@ call_only_or_schedule_next(
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
-call_ext_or_schedule_next(State0, Arity, Index) ->
+call_primitive_with_cp(State0, Primitive, Args) ->
     {RewriteOffset, State1} = set_cp(State0),
-    State2 = call_ext_onlylast_or_schedule_next(State1, Arity, Index, -1),
+    State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset).
-
-call_ext_onlylast_or_schedule_next(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
-    Arity,
-    Index,
-    NWords
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:decl(?JITSTATE_REDUCTIONCOUNT),
-    {RewriteJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(0),
-    {RewriteLEAOffset, I3} = jit_x86_64_asm:leaq_rel32({0, rip}, Temp),
-    I4 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    State2 = call_primitive_last(State1, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]),
-    % Rewrite jumps
-    #state{stream = Stream2} = State2,
-    NewOffset = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RewriteJNZOffset, <<
-        (NewOffset - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    Stream4 = StreamModule:replace(
-        Stream3, Offset + byte_size(I1) + byte_size(I2) + RewriteLEAOffset, <<
-            (NewOffset - Offset - byte_size(I1) - byte_size(I2) - byte_size(I3)):32/little
-        >>
-    ),
-    call_primitive_last(State2#state{stream = Stream4}, ?PRIM_CALL_EXT, [
-        ctx, jit_state, Arity, Index, NWords
-    ]).
 
 set_cp(State0) ->
     % get module index (dynamically)
