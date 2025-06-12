@@ -36,7 +36,9 @@ main([LibraryName, SrcDir, TgtDir]) ->
             {doclet, edown_doclet},
             {source_path, ["src"]},
             {library, LibraryName},
-            {LibraryName, "https://atomvm.net/doc/apidocs/erlang/" ++ LibraryName},
+            % This is used as Canonical Link Relation
+            % See also: https://datatracker.ietf.org/doc/html/rfc6596.html
+            {LibraryName, "https://doc.atomvm.org/release-0.6/apidocs/erlang/" ++ LibraryName},
             {stylesheet, ""},
             {image, ""},
             {dir, TgtDir}
