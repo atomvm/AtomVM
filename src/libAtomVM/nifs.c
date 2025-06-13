@@ -95,6 +95,7 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_last_1(Context *ctx, int argc, term argv[]);
 static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split(Context *ctx, int argc, term argv[]);
+static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
@@ -256,6 +257,12 @@ static const struct Nif binary_split_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_split
+};
+
+static const struct Nif binary_replace_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_replace
 };
 
 static const struct Nif make_ref_nif =
@@ -3270,6 +3277,97 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     } while (!term_is_nil(list_cursor));
 
     return result_list;
+}
+
+static term nif_binary_replace(Context *ctx, int argc, term argv[])
+{
+    term bin_term = argv[0];
+    term pattern = argv[1];
+    term replacement = argv[2];
+    term options = argc == 4 ? argv[3] : term_nil();
+
+    VALIDATE_VALUE(bin_term, term_is_binary);
+    VALIDATE_VALUE(pattern, term_is_binary);
+    VALIDATE_VALUE(replacement, term_is_binary);
+    VALIDATE_VALUE(options, term_is_list);
+
+    bool global = false;
+    while (term_is_nonempty_list(options)) {
+        term head = term_get_list_head(options);
+        if (LIKELY(head == GLOBAL_ATOM)) {
+            global = true;
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        options = term_get_list_tail(options);
+    }
+
+    size_t bin_size = term_binary_size(bin_term);
+    size_t pattern_size = term_binary_size(pattern);
+    size_t repl_size = term_binary_size(replacement);
+
+    if (bin_size < pattern_size || bin_size == 0) {
+        return bin_term;
+    }
+
+    if (UNLIKELY(pattern_size == 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const char *bin_data = term_binary_data(bin_term);
+    const char *pattern_data = term_binary_data(pattern);
+    const char *repl_data = term_binary_data(replacement);
+
+    int pattern_n = 0;
+    for (size_t i = 0; i < bin_size - pattern_size + 1;) {
+        bool pattern_found = memcmp(bin_data + i, pattern_data, pattern_size) == 0;
+        if (pattern_found) {
+            ++pattern_n;
+            if (!global) {
+                break;
+            }
+        }
+
+        i += pattern_found ? pattern_size : 1;
+    }
+    size_t result_size = bin_size + pattern_n * (repl_size - pattern_size);
+
+    char *result_data = malloc(result_size * sizeof(char));
+    if (IS_NULL_PTR(result_data)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    size_t bin_idx = 0;
+    size_t result_idx = 0;
+    while (bin_idx <= bin_size - pattern_size) {
+        bool pattern_found = memcmp(bin_data + bin_idx, pattern_data, pattern_size) == 0;
+        if (pattern_found) {
+            memcpy(result_data + result_idx, repl_data, repl_size);
+            result_idx += repl_size;
+            bin_idx += pattern_size;
+            if (!global) {
+                break;
+            }
+        } else {
+            result_data[result_idx++] = bin_data[bin_idx++];
+        }
+    }
+
+    bool has_leftover = bin_idx < bin_size;
+    if (has_leftover) {
+        // result_idx is not updated, we don't need it
+        memcpy(result_data + result_idx, bin_data + bin_idx, bin_size - bin_idx);
+    }
+
+    size_t size_binary = term_binary_data_size_in_terms(result_size);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, size_binary, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(result_data);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result_binary = term_from_literal_binary(result_data, result_size, &ctx->heap, ctx->global);
+    free(result_data);
+    return result_binary;
 }
 
 static term nif_erlang_throw(Context *ctx, int argc, term argv[])
