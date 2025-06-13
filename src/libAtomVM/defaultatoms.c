@@ -19,6 +19,7 @@
  */
 
 #include "defaultatoms.h"
+#include "term.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -38,12 +39,13 @@ void defaultatoms_init(GlobalContext *glb)
     };
 #undef X
 
-    for (int i = 0; i < PLATFORM_ATOMS_BASE_INDEX; i++) {
+    for (size_t i = 0; i < PLATFORM_ATOMS_BASE_INDEX; i++) {
         if (UNLIKELY((size_t) atoms[i][0] != strlen(atoms[i] + 1))) {
             AVM_ABORT();
         }
 
-        if (UNLIKELY(globalcontext_insert_atom(glb, atoms[i]) != i)) {
+        term atom_term = globalcontext_make_atom(glb, atoms[i]);
+        if (UNLIKELY(term_to_atom_index(atom_term) != i)) {
             AVM_ABORT();
         }
     }
