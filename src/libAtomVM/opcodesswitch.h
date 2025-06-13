@@ -1848,10 +1848,11 @@ schedule_in:
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
-            ctx = native_pc(ctx, &jit_state, &module_native_interface);
+            Context *new_ctx = native_pc(ctx, &jit_state, &module_native_interface);
             remaining_reductions = jit_state.remaining_reductions;
-            if (UNLIKELY(ctx == NULL || ctx == TERMINATE_SCHEDULER)) {
-                return 0;
+            if (UNLIKELY(new_ctx != ctx)) {
+                ctx = new_ctx;
+                goto schedule_in;
             }
             if (UNLIKELY(remaining_reductions == 0)) {
                 goto schedule_in;

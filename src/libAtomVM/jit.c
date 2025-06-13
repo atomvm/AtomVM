@@ -116,8 +116,7 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
     }
     scheduler_terminate(ctx);
     jit_state->remaining_reductions = 0;
-    Context *r = scheduler_run(global);
-    return r ? r : TERMINATE_SCHEDULER;
+    return scheduler_run(global);
 }
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state)
@@ -209,8 +208,7 @@ static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
-    Context *r = scheduler_next(ctx->global, ctx);
-    return r ? r : TERMINATE_SCHEDULER;
+    return scheduler_next(ctx->global, ctx);
 }
 
 static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
@@ -218,8 +216,7 @@ static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
-    Context *r = scheduler_wait(ctx);
-    return r ? r : TERMINATE_SCHEDULER;
+    return scheduler_wait(ctx);
 }
 
 static Context *jit_call_ext(Context *ctx, JITState *jit_state, int arity, int index, int n_words)
@@ -660,7 +657,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
     if (context_get_flags(ctx, Trap)) {
         return jit_schedule_wait_cp(ctx, jit_state);
     }
-    return NULL;
+    return ctx;
 }
 
 static void jit_mailbox_remove_message(Context *ctx)
@@ -704,7 +701,7 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
     }
 
     Context *r = jit_process_signal_messages(ctx, jit_state);
-    if (r) {
+    if (r != ctx) {
         return r;
     }
 
@@ -732,22 +729,11 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 
 static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state, int label)
 {
-    Context *r = jit_process_signal_messages(ctx, jit_state);
-    if (r) {
-        jit_state->continuation = NULL;
-        return r;
-    }
-
-    if (context_get_flags(ctx, WaitingTimeoutExpired)) {
-        jit_state->continuation = NULL;
-        return NULL; // continue
-    }
     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
         // No message is here.
         // We were signaled for another reason.
         jit_state->remaining_reductions = 0; // force schedule_in
-        Context *r = scheduler_wait(ctx);
-        return r ? r : TERMINATE_SCHEDULER;
+        return scheduler_wait(ctx);
     }
 
     jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
@@ -906,4 +892,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_wait_timeout,
     jit_wait_timeout_trap_handler,
     jit_call_fun,
+    context_get_flags,
 };

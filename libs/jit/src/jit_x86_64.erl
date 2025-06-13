@@ -36,6 +36,7 @@
     handle_error_if_false/2,
     handle_error_if_zero/2,
     return_if_not_null/2,
+    return_if_not_equal/3,
     jump_to_label/2,
     jump_to_label_if_zero/3,
     jump_to_label_if_and_non_zero_b/4,
@@ -44,6 +45,7 @@
     jump_to_label_if_not_equal/4,
     jump_to_offset_if_equal/3,
     jump_to_offset_if_and_equal/4,
+    jump_to_offset_if_not_zero/2,
     shift_right/3,
     shift_left/3,
     move_to_vm_register/3,
@@ -104,13 +106,16 @@
 
 % ctx->e is 0x28
 % ctx->x is 0x30
--define(Y_REGS, {16#28, rdi}).
--define(X_REG(N), {16#30 + (N * 8), rdi}).
--define(CP, {16#B8, rdi}).
--define(PRIMITIVE(N), {N * 8, rdx}).
--define(JITSTATE_MODULE, {0, rsi}).
--define(JITSTATE_CONTINUATION, {16#8, rsi}).
--define(JITSTATE_REDUCTIONCOUNT, {16#10, rsi}).
+-define(CTX_REG, rdi).
+-define(JITSTATE_REG, rsi).
+-define(NATIVE_INTERFACE_REG, rdx).
+-define(Y_REGS, {16#28, ?CTX_REG}).
+-define(X_REG(N), {16#30 + (N * 8), ?CTX_REG}).
+-define(CP, {16#B8, ?CTX_REG}).
+-define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
+-define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
+-define(JITSTATE_REDUCTIONCOUNT, {16#10, ?JITSTATE_REG}).
+-define(PRIMITIVE(N), {N * 8, ?NATIVE_INTERFACE_REG}).
 -define(MODULE_INDEX(ModuleReg), {0, ModuleReg}).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -210,7 +215,7 @@ call_primitive(
     PrepCall =
         case Primitive of
             0 ->
-                jit_x86_64_asm:movq({0, rdx}, Temp);
+                jit_x86_64_asm:movq({0, ?NATIVE_INTERFACE_REG}, Temp);
             N ->
                 jit_x86_64_asm:movq(?PRIMITIVE(N), Temp)
         end,
@@ -240,7 +245,7 @@ call_primitive_last(
     PrepCall =
         case Primitive of
             0 ->
-                jit_x86_64_asm:movq({0, rdx}, Temp);
+                jit_x86_64_asm:movq({0, ?NATIVE_INTERFACE_REG}, Temp);
             N ->
                 jit_x86_64_asm:movq(?PRIMITIVE(N), Temp)
         end,
@@ -282,6 +287,28 @@ return_if_not_null(
     {free, Reg}
 ) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
+    I3 =
+        case Reg of
+            rax -> <<>>;
+            _ -> jit_x86_64_asm:movq(Reg, rax)
+        end,
+    I4 = jit_x86_64_asm:retq(),
+    I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4)),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
+    {AvailableRegs1, UsedRegs1} = free_reg(AvailableRegs0, UsedRegs0, Reg),
+    State#state{stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs1}.
+
+return_if_not_equal(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = AvailableRegs0,
+        used_regs = UsedRegs0
+    } = State,
+    ctx,
+    {free, Reg}
+) ->
+    I1 = jit_x86_64_asm:cmpq(?CTX_REG, Reg),
     I3 =
         case Reg of
             rax -> <<>>;
@@ -489,6 +516,22 @@ jump_to_offset_if_and_equal(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
 
+jump_to_offset_if_not_zero(
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    Reg
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:testq(Reg, Reg),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
 ->
@@ -523,7 +566,7 @@ call_func_ptr(
         [{free, FuncPtrReg} | Args]
     ),
     UsedRegs1 = UsedRegs0 -- FreeRegs,
-    SavedRegs = [rdi, rsi, rdx | UsedRegs1],
+    SavedRegs = [rdi, ?JITSTATE_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
     Stream1 = lists:foldl(
         fun(Reg, AccStream) ->
             StreamModule:append(AccStream, jit_x86_64_asm:pushq(Reg))
@@ -623,12 +666,12 @@ set_args0([], _, Acc) ->
     list_to_binary(lists:reverse(Acc));
 set_args0([{free, FreeVal} | ArgsT], Regs, Acc) ->
     set_args0([FreeVal | ArgsT], Regs, Acc);
-set_args0([ctx | ArgsT], [rdi | Regs], Acc) ->
+set_args0([ctx | ArgsT], [?CTX_REG | Regs], Acc) ->
     set_args0(ArgsT, Regs, Acc);
-set_args0([jit_state | ArgsT], [rsi | Regs], Acc) ->
+set_args0([jit_state | ArgsT], [?JITSTATE_REG | Regs], Acc) ->
     set_args0(ArgsT, Regs, Acc);
 set_args0([jit_state | ArgsT], [rdi | Regs], Acc) ->
-    set_args0(ArgsT, Regs, [jit_x86_64_asm:movq(rsi, rdi) | Acc]);
+    set_args0(ArgsT, Regs, [jit_x86_64_asm:movq(?JITSTATE_REG, rdi) | Acc]);
 set_args0([{x_reg, X} | ArgsT], [Reg | RegsT], Acc) ->
     set_args0(ArgsT, RegsT, [jit_x86_64_asm:movq({16#30 + 8 * X, rdi}, Reg) | Acc]);
 set_args0([{ptr, Source} | ArgsT], [Reg | RegsT], Acc) ->
