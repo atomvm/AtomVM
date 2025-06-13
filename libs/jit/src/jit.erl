@@ -74,6 +74,8 @@
 -define(INT64_MIN, -16#8000000000000000).
 -define(INT64_MAX, 16#7FFFFFFFFFFFFFFF).
 
+-define(WAITING_TIMEOUT_EXPIRED, 2).
+
 -record(state, {
     line_offsets :: [{integer(), integer()}],
     labels :: [{integer(), integer()}]
@@ -305,7 +307,7 @@ first_pass(<<?OP_REMOVE_MESSAGE, Rest/binary>>, MMod, MSt0, State0) ->
     {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    MSt4 = MMod:return_if_not_null(MSt3, {free, ResultReg}),
+    MSt4 = MMod:return_if_not_equal(MSt3, ctx, {free, ResultReg}),
     {MSt5, Reg2} = MMod:call_primitive(MSt4, ?PRIM_MAILBOX_REMOVE_MESSAGE, [
         ctx
     ]),
@@ -325,7 +327,7 @@ first_pass(<<?OP_LOOP_REC, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    MSt2 = MMod:return_if_not_null(MSt1, {free, ResultReg}),
+    MSt2 = MMod:return_if_not_equal(MSt1, ctx, {free, ResultReg}),
     {MSt3, Dest, Rest2} = decode_compact_term(Rest1, MMod, MSt2),
     ?TRACE("OP_LOOP_REC ~p, ~p\n", [Label, Dest]),
     {MSt4, PointerReg} = MMod:get_pointer_to_vm_register(MSt3, Dest),
@@ -342,7 +344,7 @@ first_pass(<<?OP_LOOP_REC_END, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    MSt2 = MMod:return_if_not_null(MSt1, {free, ResultReg}),
+    MSt2 = MMod:return_if_not_equal(MSt1, ctx, {free, ResultReg}),
     {MSt3, Reg1} = MMod:call_primitive(MSt2, ?PRIM_MAILBOX_NEXT, [
         ctx
     ]),
@@ -359,19 +361,27 @@ first_pass(<<?OP_WAIT, Rest0/binary>>, MMod, MSt0, State0) ->
 % 26
 first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {Label, Rest1} = decode_label(Rest0),
-    {MSt1, OffsetRef} = MMod:set_continuation_to_offset(MSt0),
+    {MSt1, OffsetRef0} = MMod:set_continuation_to_offset(MSt0),
     {MSt2, Timeout, Rest2} = decode_compact_term(Rest1, MMod, MSt1),
     ?TRACE("OP_WAIT_TIMEOUT ~p, ~p\n", [Label, Timeout]),
     MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_WAIT_TIMEOUT, [
         ctx, jit_state, {free, Timeout}, Label
     ]),
-    Offset = MMod:offset(MSt3),
-    {MSt4, ResultReg} = MMod:call_primitive(MSt3, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
+    Offset0 = MMod:offset(MSt3),
+    {MSt4, ResultReg0} = MMod:call_primitive(MSt3, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+        ctx, jit_state
+    ]),
+    MSt5 = MMod:return_if_not_equal(MSt4, ctx, {free, ResultReg0}),
+    {MSt6, ResultReg1} = MMod:call_primitive(MSt5, ?PRIM_CONTEXT_GET_FLAGS, [
+        ctx, ?WAITING_TIMEOUT_EXPIRED
+    ]),
+    {MSt7, OffsetRef1} = MMod:jump_to_offset_if_not_zero(MSt6, ResultReg1),
+    MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
         ctx, jit_state, Label
     ]),
-    MSt5 = MMod:return_if_not_null(MSt4, {free, ResultReg}),
-    Labels1 = [{OffsetRef, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt5, State0#state{labels = Labels1});
+    Offset1 = MMod:offset(MSt8),
+    Labels1 = [{OffsetRef0, Offset0}, {OffsetRef1, Offset1} | Labels0],
+    first_pass(Rest2, MMod, MSt8, State0#state{labels = Labels1});
 % 39
 first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
