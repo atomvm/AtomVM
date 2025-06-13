@@ -503,6 +503,7 @@ compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
 
 compile_erlang(test_module_info)
+compile_erlang(erlang_module_loaded)
 
 compile_erlang(int64_build_binary)
 
@@ -996,6 +997,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_close_avm_pack.beam
 
     test_module_info.beam
+    erlang_module_loaded.beam
 
     int64_build_binary.beam
 

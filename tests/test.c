@@ -542,6 +542,7 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),
 
     TEST_CASE(test_module_info),
+    TEST_CASE(erlang_module_loaded),
 
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
