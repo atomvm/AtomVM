@@ -49,12 +49,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Function.ex and Protocol.ex improving Elixir 1.18 support
 - Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
 - Added Process.link/1 and unlink/1 to Elixir Process.ex
+- Added `erlang:system_info/1` keys `atomvm_free_heap_size` and `atomvm_minimum_free_size` on STM32 platform
 
 ### Changed
 
 - Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
 - Release images for ESP32 chips are built with ESP-IDF v5.4
 - ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
+- Deprecated ESP32 `erlang:system_info/1` memory keys  `esp32_free_heap_size` and
+`esp32_minimum_free_size` in favor of `atomvm_` prefixed keys with warnings to update applications
+before the old keys are removed.
 
 ### Fixed
 

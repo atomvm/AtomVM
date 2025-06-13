@@ -13,6 +13,9 @@ port socket driver, are also represented by a port and some matching code may ne
 `is_pid/1` to `is_port/1`.
 - Ports and pids can be registered. Function `globalcontext_get_registered_process` result now is
 a term that can be a `port()` or a `pid()`.
+- ESP32 `erlang:system_info/1` memory keys `esp32_free_heap_size` and `esp32_minimum_free_size` have
+been deprecated in favor of `atomvm_` prefixed keys. Applications should be updated to use
+`atomvm_free_heap_size` and `atomvm_minimum_free_size` instead.
 
 ## v0.6.4 -> v0.6.5
 
