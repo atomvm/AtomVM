@@ -89,6 +89,7 @@ struct ModuleNativeInterface {
     Context * (* wait_timeout)(Context *ctx, JITState *jit_state, term timeout, int label);
     Context * (* wait_timeout_trap_handler)(Context *ctx, JITState *jit_state, int label);
     Context * (* call_fun)(Context *ctx, JITState *jit_state, term fun, unsigned int args_count);
+    int (* context_get_flags)(Context *ctx, int mask);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
@@ -112,8 +113,6 @@ extern const ModuleNativeInterface module_native_interface;
 #ifdef __x86_64__
     #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
-
-#define TERMINATE_SCHEDULER (Context *) -1
 
 #ifdef __cplusplus
 }
