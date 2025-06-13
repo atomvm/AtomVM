@@ -185,3 +185,6 @@ X(CONNECT_ATOM, "\x7", "connect")
 X(SYSTEM_VERSION_ATOM, "\xE", "system_version")
 X(OTP_RELEASE_ATOM, "\xB", "otp_release")
 X(BREAK_IGNORED_ATOM, "\xD", "break_ignored")
+
+X(SCOPE_ATOM, "\x5", "scope")
+X(NOMATCH_ATOM, "\x7", "nomatch")

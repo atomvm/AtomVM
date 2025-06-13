@@ -1342,12 +1342,12 @@ static inline bool term_normalize_binary_pos_len(term binary, avm_int_t pos, avm
     return true;
 }
 
-static inline bool term_is_invalid_binary_pos_len(BinaryPosLen pos_len)
+static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 {
     return pos_len.pos == -1 && pos_len.len == -1;
 }
 
-static inline BinaryPosLen term_invalid_binary_pos_len(void)
+static inline BinaryPosLen term_nomatch_binary_pos_len()
 {
     return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
