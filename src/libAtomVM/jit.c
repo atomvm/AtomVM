@@ -31,10 +31,14 @@
 #include "stacktrace.h"
 #include "utils.h"
 
+#include <math.h>
+
 // #define ENABLE_TRACE
 #include "trace.h"
 
 // Verify matching atom index in defaultatoms.hrl
+_Static_assert(BADARITH_ATOM_INDEX == 6, "BADARITH_ATOM_INDEX is 6 in jit/src/defaultatoms.hrl");
+_Static_assert(BADFUN_ATOM_INDEX == 8, "BADFUN_ATOM_INDEX is 8 in jit/src/defaultatoms.hrl");
 _Static_assert(FUNCTION_CLAUSE_ATOM_INDEX == 10, "FUNCTION_CLAUSE_ATOM_INDEX is 10 in jit/src/defaultatoms.hrl");
 _Static_assert(BADMATCH_ATOM_INDEX == 31, "BADMATCH_ATOM_INDEX is 31 in jit/src/defaultatoms.hrl");
 _Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in jit/src/defaultatoms.hrl");
@@ -858,6 +862,37 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsign
     return ctx;
 }
 
+term jit_term_from_float(Context *ctx, avm_float_t f)
+{
+printf("jit_term_from_float -- f = %f\n", f);
+    return term_from_float(f, &ctx->heap);
+}
+
+void jit_term_conv_to_float(Context *ctx, term t, int freg)
+{
+    ctx->fr[freg] = term_conv_to_float(t);
+}
+
+bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
+{
+printf("jit_fadd -- freg1 = %d, freg2 = %d, freg3 = %d\n", freg1, freg2, freg3);
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        #pragma STDC FENV_ACCESS ON
+        feclearexcept(FE_OVERFLOW);
+    #endif
+    ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        if (fetestexcept(FE_OVERFLOW)) {
+            return false;
+        }
+    #else
+        if (!isfinite(ctx->fr[freg3])) {
+            return false;
+        }
+    #endif
+    return true;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -893,4 +928,9 @@ const ModuleNativeInterface module_native_interface = {
     jit_wait_timeout_trap_handler,
     jit_call_fun,
     context_get_flags,
+    context_ensure_fpregs,
+    jit_term_from_float,
+    term_is_number,
+    jit_term_conv_to_float,
+    jit_fadd,
 };
