@@ -799,71 +799,25 @@ first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = S
     {{fp_reg, FPRegIndex}, Rest2} = decode_fp_register(Rest1),
     {MSt8, ResultReg} = MMod:call_primitive(MSt7, ?PRIM_CONTEXT_ENSURE_FPREGS, [ctx]),
     MSt9 = MMod:free_native_register(MSt8, ResultReg),
-    ?TRACE("OP_FMOVE ~p, ~p\n", [SrcValue, {fp_reg, FPRegIndex}]),
+    ?TRACE("OP_FCONF ~p, ~p\n", [SrcValue, {fp_reg, FPRegIndex}]),
     {MSt10, ConvToFloatResReg} = MMod:call_primitive(MSt9, ?PRIM_TERM_CONV_TO_FLOAT, [
-        ctx, Reg, FPRegIndex
+        ctx, {free, Reg}, FPRegIndex
     ]),
     MSt11 = MMod:free_native_register(MSt10, ConvToFloatResReg),
     Labels1 = [{OffsetRef0, Offset0} | Labels0],
     first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
 % 98
-first_pass(<<?OP_FADD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
-    {Label, Rest1} = decode_label(Rest0),
-    {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
-    {{fp_reg, FPRegIndex2}, Rest3} = decode_fp_register(Rest2),
-    {{fp_reg, FPRegIndex3}, Rest4} = decode_fp_register(Rest3),
-    ?TRACE("OP_FADD ~p, ~p, ~p, ~p\n", [
-        Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}, {fp_reg, FPRegIndex3}
-    ]),
-    {MSt1, Reg} = MMod:call_primitive(MSt0, ?PRIM_FADD, [
-        ctx, FPRegIndex1, FPRegIndex2, FPRegIndex3
-    ]),
-    if
-        Label > 0 ->
-            MSt2 = MMod:jump_to_label_if_false(MSt1, Reg, Label),
-            MSt3 = MMod:free_native_register(MSt2, Reg),
-            first_pass(Rest4, MMod, MSt3, State0);
-        true ->
-            {MSt2, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_true(MSt1, Reg),
-            MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE_ERROR, [
-                ctx, jit_state, ?BADARITH_ATOM
-            ]),
-            {MSt4, Offset0} = MMod:offset(MSt3, [JumpToken0]),
-            MSt5 = MMod:free_native_register(MSt4, Reg),
-            Labels1 = [{OffsetRef0, Offset0} | Labels0],
-            first_pass(Rest4, MMod, MSt5, State0#state{labels = Labels1})
-    end;
+first_pass(<<?OP_FADD, Rest0/binary>>, MMod, MSt0, State0) ->
+    first_pass_float3(?PRIM_FADD, Rest0, MMod, MSt0, State0);
 % 99
-first_pass(<<?OP_FSUB, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
-    {Label, Rest1} = decode_label(Rest0),
-    {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
-    {{fp_reg, FPRegIndex2}, Rest3} = decode_fp_register(Rest2),
-    {{fp_reg, FPRegIndex3}, Rest4} = decode_fp_register(Rest3),
-    ?TRACE("OP_FSUB ~p, ~p, ~p, ~p\n", [
-        Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}, {fp_reg, FPRegIndex3}
-    ]),
-    {MSt1, Reg} = MMod:call_primitive(MSt0, ?PRIM_FSUB, [
-        ctx, FPRegIndex1, FPRegIndex2, FPRegIndex3
-    ]),
-    if
-        Label > 0 ->
-            MSt2 = MMod:jump_to_label_if_false(MSt1, Reg, Label),
-            MSt3 = MMod:free_native_register(MSt2, Reg),
-            first_pass(Rest4, MMod, MSt3, State0);
-        true ->
-            {MSt2, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_true(MSt1, Reg),
-            MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE_ERROR, [
-                ctx, jit_state, ?BADARITH_ATOM
-            ]),
-            {MSt4, Offset0} = MMod:offset(MSt3, [JumpToken0]),
-            MSt5 = MMod:free_native_register(MSt4, Reg),
-            Labels1 = [{OffsetRef0, Offset0} | Labels0],
-            first_pass(Rest4, MMod, MSt5, State0#state{labels = Labels1})
-    end;
+first_pass(<<?OP_FSUB, Rest0/binary>>, MMod, MSt0, State0) ->
+    first_pass_float3(?PRIM_FSUB, Rest0, MMod, MSt0, State0);
 % 100
-% first_pass(<<?OP_FMUL, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_FMUL, Rest0/binary>>, MMod, MSt0, State0) ->
+    first_pass_float3(?PRIM_FMUL, Rest0, MMod, MSt0, State0);
 % 101
-% first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt0, State0) ->
+    first_pass_float3(?PRIM_FDIV, Rest0, MMod, MSt0, State0);
 % 102
 % first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 104
@@ -1195,6 +1149,33 @@ first_pass(<<?OP_RECV_MARKER_USE, Rest0/binary>>, MMod, MSt0, State0) ->
 % first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 181
 % first_pass(<<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+
+first_pass_float3(Primitive, Rest0, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
+    {{fp_reg, FPRegIndex2}, Rest3} = decode_fp_register(Rest2),
+    {{fp_reg, FPRegIndex3}, Rest4} = decode_fp_register(Rest3),
+    ?TRACE("OP_F3*~p ~p, ~p, ~p, ~p\n", [
+        Primitive, Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}, {fp_reg, FPRegIndex3}
+    ]),
+    {MSt1, Reg} = MMod:call_primitive(MSt0, Primitive, [
+        ctx, FPRegIndex1, FPRegIndex2, FPRegIndex3
+    ]),
+    if
+        Label > 0 ->
+            MSt2 = MMod:jump_to_label_if_false(MSt1, Reg, Label),
+            MSt3 = MMod:free_native_register(MSt2, Reg),
+            first_pass(Rest4, MMod, MSt3, State0);
+        true ->
+            {MSt2, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_true(MSt1, Reg),
+            MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE_ERROR, [
+                ctx, jit_state, ?BADARITH_ATOM
+            ]),
+            {MSt4, Offset0} = MMod:offset(MSt3, [JumpToken0]),
+            MSt5 = MMod:free_native_register(MSt4, Reg),
+            Labels1 = [{OffsetRef0, Offset0} | Labels0],
+            first_pass(Rest4, MMod, MSt5, State0#state{labels = Labels1})
+    end.
 
 bif_faillabel_test(FailLabel, MMod, MSt0, {free, ResultReg}, {free, Dest}) when FailLabel > 0 ->
     MSt1 = MMod:jump_to_label_if_zero(MSt0, ResultReg, FailLabel),

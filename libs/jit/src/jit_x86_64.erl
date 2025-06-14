@@ -242,10 +242,8 @@ free_native_register(
 ) when
     is_atom(Reg)
 ->
-    {AvailableRegs1, AvailableFPRegs1, Used1} = free_reg(Available0, AvailableFP0, Used0, Reg),
-    State#state{
-        available_regs = AvailableRegs1, available_fpregs = AvailableFPRegs1, used_regs = Used1
-    };
+    {Available1, AvailableFP1, Used1} = free_reg(Available0, AvailableFP0, Used0, Reg),
+    State#state{available_regs = Available1, available_fpregs = AvailableFP1, used_regs = Used1};
 free_native_register(State, {ptr, Reg}) ->
     free_native_register(State, Reg);
 free_native_register(State, _Other) ->
@@ -769,6 +767,7 @@ call_func_ptr(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = AvailableRegs0,
+        available_fpregs = AvailableFP0,
         used_regs = UsedRegs0
     } = State0,
     {free, FuncPtrReg},
@@ -814,9 +813,17 @@ call_func_ptr(
     AvailableRegs1 = FreeRegs ++ AvailableRegs0,
     AvailableRegs2 = lists:delete(ResultReg, AvailableRegs1),
     AvailableRegs3 = ?AVAILABLE_REGS -- (?AVAILABLE_REGS -- AvailableRegs2),
+    AvailableFP1 = FreeRegs ++ AvailableFP0,
+    AvailableFP2 = lists:delete(ResultReg, AvailableFP1),
+    AvailableFP3 = ?AVAILABLE_FPREGS -- (?AVAILABLE_FPREGS -- AvailableFP2),
     UsedRegs2 = [ResultReg | UsedRegs1],
     {
-        State1#state{stream = Stream5, available_regs = AvailableRegs3, used_regs = UsedRegs2},
+        State1#state{
+            stream = Stream5,
+            available_regs = AvailableRegs3,
+            available_fpregs = AvailableFP3,
+            used_regs = UsedRegs2
+        },
         ResultReg
     }.
 
