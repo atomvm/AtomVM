@@ -116,8 +116,13 @@ movabsq(Imm, Reg) when is_atom(Reg) ->
         {1, Index} -> <<16#49, (16#B8 + Index), Imm:64/little>>
     end.
 
-movl({0, rax}, rax) ->
-    <<16#8b, 16#00>>.
+movl({0, SrcReg}, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),
+    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
+    (case {REX_R, REX_B} of
+        {0, 0} -> <<16#8B, 0:2, MODRM_REG:3, MODRM_RM:3>>;
+        _ -> <<?X86_64_REX(0, REX_R, 0, REX_B), 16#8B, 0:2, MODRM_REG:3, MODRM_RM:3>>
+    end).
 
 shlq(Imm, Reg) when ?IS_UINT8_T(Imm) ->
     case x86_64_x_reg(Reg) of
@@ -187,7 +192,10 @@ decl({Offset, rsi}) when ?IS_SINT8_T(Offset) ->
     <<16#FF, 16#4E, Offset>>.
 
 orq_rel32(Imm, rax) when ?IS_UINT32_T(Imm) ->
-    {2, <<16#48, 16#0d, Imm:32/little>>}.
+    {2, <<?X86_64_REX(1, 0, 0, 0), 16#0D, Imm:32/little>>};
+orq_rel32(Imm, Reg) when ?IS_UINT32_T(Imm) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    {3, <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 1:3, MODRM_RM:3, Imm:32/little>>}.
 
 orq(Imm, Reg) when ?IS_SINT8_T(Imm) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),

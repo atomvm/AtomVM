@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    offset/2,
     debugger/1,
     free_native_register/2,
     assert_all_native_free/1,
@@ -45,6 +46,7 @@
     jump_to_label_if_not_equal/4,
     jump_to_offset_if_equal/3,
     jump_to_offset_if_and_equal/4,
+    jump_to_offset_if_and_not_equal/4,
     jump_to_offset_if_not_zero/2,
     shift_right/3,
     shift_left/3,
@@ -97,6 +99,12 @@
     used_regs :: [x86_64_register()]
 }).
 
+-record(jump_token, {
+    used_regs :: [x86_64_register()]
+}).
+
+-type jump_token() :: #jump_token{}.
+
 -type state() :: #state{}.
 -type immediate() :: non_neg_integer().
 -type vm_register() ::
@@ -147,6 +155,21 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+-spec offset(state(), [jump_token()]) -> {state(), non_neg_integer()}.
+offset(#state{available_regs = AvailableRegs0, used_regs = UsedRegs0} = State0, JumpTokens) ->
+    Offset = offset(State0),
+    {AvailableRegs1, UsedRegs1} = lists:foldl(fun(#jump_token{used_regs = JTUsedRegs}, {AccAvail, AccUsed}) ->
+        lists:foldl(fun(UsedReg, {AccAvailIn, AccUsedIn}) ->
+            case lists:member(UsedReg, AccAvailIn) of
+                true ->
+                    {lists:delete(UsedReg, AccAvailIn), [UsedReg | AccUsedIn]};
+                false ->
+                    {AccAvailIn, AccUsedIn}
+            end
+        end, {AccAvail, AccUsed}, JTUsedRegs)
+    end, {AvailableRegs0, UsedRegs0}, JumpTokens),
+    {State0#state{available_regs = AvailableRegs1, used_regs = UsedRegs1}, Offset}.
 
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
     Stream1 = StreamModule:append(Stream0, <<16#CC>>),
@@ -473,7 +496,7 @@ jump_to_label_if_not_equal(
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
 jump_to_offset_if_equal(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs} = State,
     Reg,
     Val
 ) ->
@@ -487,14 +510,15 @@ jump_to_offset_if_equal(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{used_regs = UsedRegs}}.
 
 jump_to_offset_if_and_equal(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
         branches = AccBranches,
-        available_regs = [Temp | _]
+        available_regs = [Temp | _],
+        used_regs = UsedRegs
     } = State,
     Reg,
     Mask,
@@ -514,10 +538,64 @@ jump_to_offset_if_and_equal(
         I4/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{used_regs = UsedRegs}}.
+
+jump_to_offset_if_and_not_equal(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = AccBranches,
+        used_regs = UsedRegs
+    } = State0,
+    {free, Reg},
+    Mask,
+    Val
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:andq(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocJNZOffset, I3} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = State0#state{stream = Stream1, branches = [Reloc | AccBranches]},
+    State2 = free_native_register(State1, Reg),
+    {State2, OffsetRef, #jump_token{used_regs = UsedRegs}};
+jump_to_offset_if_and_not_equal(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = AccBranches,
+        available_regs = [Temp | _],
+        used_regs = UsedRegs
+    } = State,
+    Reg,
+    Mask,
+    Val
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:movq(Reg, Temp),
+    I2 = jit_x86_64_asm:andq(Mask, Temp),
+    I3 = jit_x86_64_asm:cmpq(Val, Temp),
+    {RelocJNZOffset, I4} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary,
+        I4/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{used_regs = UsedRegs}}.
 
 jump_to_offset_if_not_zero(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs} = State,
     Reg
 ) ->
     Offset = StreamModule:offset(Stream0),
@@ -530,7 +608,7 @@ jump_to_offset_if_not_zero(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{used_regs = UsedRegs}}.
 
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
@@ -1202,7 +1280,7 @@ decrement_reductions_and_maybe_schedule_next(#state{stream_module = StreamModule
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
-    {RewriteOffset, State1} = set_cp(State0),
+    {State1, RewriteOffset} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
     rewrite_cp_offset(State2, RewriteOffset).
 
@@ -1227,7 +1305,7 @@ call_only_or_schedule_next(
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
 call_primitive_with_cp(State0, Primitive, Args) ->
-    {RewriteOffset, State1} = set_cp(State0),
+    {State1, RewriteOffset} = set_cp(State0),
     State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset).
 
@@ -1242,12 +1320,12 @@ set_cp(State0) ->
     % next part of cp is instruction offset, after the call.
     {RewriteOffset, I2} = jit_x86_64_asm:orq_rel32(0, Reg),
     AddrOffset = Offset + byte_size(I1) + RewriteOffset,
-    I3 = jit_x86_64_asm:movq(Reg, {16#B8, rdi}),
+    I3 = jit_x86_64_asm:movq(Reg, ?CP),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State2 = State1#state{stream = Stream1},
     State3 = free_native_register(State2, Reg),
-    {AddrOffset, State3}.
+    {State3, AddrOffset}.
 
 -spec rewrite_cp_offset(state(), non_neg_integer()) -> state().
 rewrite_cp_offset(

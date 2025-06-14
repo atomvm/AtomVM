@@ -93,7 +93,13 @@ movabsq_test_() ->
 
 movl_test_() ->
     [
-        ?_assertEqual(<<16#8b, 16#00>>, jit_x86_64_asm:movl({0, rax}, rax))
+        ?_assertEqual(<<16#8b, 16#00>>, jit_x86_64_asm:movl({0, rax}, rax)),
+        ?_assertEqual(<<16#8b, 16#01>>, jit_x86_64_asm:movl({0, rcx}, rax)),
+        ?_assertEqual(<<16#8b, 16#09>>, jit_x86_64_asm:movl({0, rcx}, rcx)),
+        ?_assertEqual(<<16#44, 16#8B, 16#00>>, jit_x86_64_asm:movl({0, rax}, r8)),
+        ?_assertEqual(<<16#44, 16#8B, 16#01>>, jit_x86_64_asm:movl({0, rcx}, r8)),
+        ?_assertEqual(<<16#41, 16#8B, 16#00>>, jit_x86_64_asm:movl({0, r8}, rax)),
+        ?_assertEqual(<<16#45, 16#8B, 16#01>>, jit_x86_64_asm:movl({0, r9}, r8))
     ].
 
 shlq_test_() ->

@@ -375,13 +375,14 @@ first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, #state{labels = Label
     {MSt6, ResultReg1} = MMod:call_primitive(MSt5, ?PRIM_CONTEXT_GET_FLAGS, [
         ctx, ?WAITING_TIMEOUT_EXPIRED
     ]),
-    {MSt7, OffsetRef1} = MMod:jump_to_offset_if_not_zero(MSt6, ResultReg1),
+    {MSt7, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_not_zero(MSt6, ResultReg1),
     MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
         ctx, jit_state, Label
     ]),
-    Offset1 = MMod:offset(MSt8),
+    {MSt9, Offset1} = MMod:offset(MSt8, [JumpToken1]),
+    MSt10 = MMod:free_native_register(MSt9, ResultReg1),
     Labels1 = [{OffsetRef0, Offset0}, {OffsetRef1, Offset1} | Labels0],
-    first_pass(Rest2, MMod, MSt8, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
 % 39
 first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -479,7 +480,7 @@ first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     ?TRACE("OP_IS_INTEGER ~p, ~p\n", [Label, Arg1]),
     % test term_is_integer
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    {MSt3, OffsetRef} = MMod:jump_to_offset_if_and_equal(
+    {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_and_equal(
         MSt2, Reg, ?TERM_IMMED_TAG_MASK, ?TERM_INTEGER_TAG
     ),
     % test term_is_boxed
@@ -491,9 +492,10 @@ first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     MSt7 = MMod:jump_to_label_if_and_not_equal(
         MSt6, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_POSITIVE_INTEGER, Label
     ),
-    Offset = MMod:offset(MSt7),
+    {MSt8, Offset} = MMod:offset(MSt7, [JumpToken]),
+    MSt9 = MMod:free_native_register(MSt8, Reg),
     Labels1 = [{OffsetRef, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt7, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt9, State0#state{labels = Labels1});
 % 46
 first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -548,19 +550,20 @@ first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
     MSt6 = MMod:and_(MSt5, Reg, ?TERM_BOXED_TAG_MASK),
-    {MSt7, OffsetRef1} = MMod:jump_to_offset_if_equal(
+    {MSt7, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_equal(
         MSt6, Reg, ?TERM_BOXED_REFC_BINARY
     ),
-    {MSt8, OffsetRef2} = MMod:jump_to_offset_if_equal(
+    {MSt8, OffsetRef2, JumpToken2} = MMod:jump_to_offset_if_equal(
         MSt7, Reg, ?TERM_BOXED_HEAP_BINARY
     ),
     MSt9 = MMod:jump_to_label_if_not_equal(
         MSt8, Reg, ?TERM_BOXED_SUB_BINARY, Label
     ),
     MSt10 = MMod:free_native_register(MSt9, Reg),
-    Offset = MMod:offset(MSt10),
+    {MSt11, Offset} = MMod:offset(MSt10, [JumpToken1, JumpToken2]),
+    MSt12 = MMod:free_native_register(MSt11, Reg),
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt12, State0#state{labels = Labels1});
 % 55
 % first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 56
@@ -709,10 +712,30 @@ first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 75
-% first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
-%    {ArgsCount, Rest1} = decode_literal(Rest0),
-%    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
-%    MSt2 = MMod:call_primitive_with_cp(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index]),
+first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    % MSt0 = MMod:debugger(MStR),
+    {ArgsCount, Rest1} = decode_literal(Rest0),
+    ?TRACE("OP_CALL_FUN ~p\n", [ArgsCount]),
+    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+    {MSt2, FuncReg} = read_any_xreg(ArgsCount, MMod, MSt1),
+    {MSt3, Reg} = MMod:move_to_native_register(MSt2, FuncReg),
+    {MSt4, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
+        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED
+    ),
+    ErrorOffset = MMod:offset(MSt4),
+    MSt5 = MMod:call_primitive_last(MSt4, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, ?BADFUN_ATOM, Reg
+    ]),
+    {MSt6, ContinueOffset} = MMod:offset(MSt5, [JumpToken0]),
+    MSt7 = MMod:and_(MSt6, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt8, BoxTag} = MMod:get_array_element(MSt7, Reg, 0),
+    MSt9 = MMod:or_(MSt8, Reg, ?TERM_PRIMARY_BOXED),
+    {MSt10, OffsetRef1, _JumpToken1} = MMod:jump_to_offset_if_and_not_equal(
+        MSt9, {free, BoxTag}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FUN
+    ),
+    MSt11 = MMod:call_primitive_with_cp(MSt10, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
+    Labels1 = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset} | Labels0],
+    first_pass(Rest1, MMod, MSt11, State0#state{labels = Labels1});
 % 77
 first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -786,16 +809,16 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     ?TRACE("OP_IS_BOOLEAN ~p, ~p\n", [Label, Arg1]),
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    {MSt3, OffsetRef} = MMod:jump_to_offset_if_equal(
+    {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_equal(
         MSt2, Reg, ?TRUE_ATOM
     ),
     MSt4 = MMod:jump_to_label_if_not_equal(
         MSt3, Reg, ?FALSE_ATOM, Label
     ),
-    MSt5 = MMod:free_native_register(MSt4, Reg),
-    Offset = MMod:offset(MSt5),
+    {MSt5, Offset} = MMod:offset(MSt4, [JumpToken]),
+    MSt6 = MMod:free_native_register(MSt5, Reg),
     Labels1 = [{OffsetRef, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt5, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 115
 % first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 124
@@ -857,19 +880,19 @@ first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
     MSt6 = MMod:and_(MSt5, Reg, ?TERM_BOXED_TAG_MASK),
-    {MSt7, OffsetRef1} = MMod:jump_to_offset_if_equal(
+    {MSt7, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_equal(
         MSt6, Reg, ?TERM_BOXED_REFC_BINARY
     ),
-    {MSt8, OffsetRef2} = MMod:jump_to_offset_if_equal(
+    {MSt8, OffsetRef2, JumpToken2} = MMod:jump_to_offset_if_equal(
         MSt7, Reg, ?TERM_BOXED_HEAP_BINARY
     ),
     MSt9 = MMod:jump_to_label_if_not_equal(
         MSt8, Reg, ?TERM_BOXED_SUB_BINARY, Label
     ),
-    MSt10 = MMod:free_native_register(MSt9, Reg),
-    Offset = MMod:offset(MSt10),
+    {MSt10, Offset} = MMod:offset(MSt9, [JumpToken1, JumpToken2]),
+    MSt11 = MMod:free_native_register(MSt10, Reg),
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
 % 136
 first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
     {NWords, Rest1} = decode_literal(Rest0),
@@ -1188,6 +1211,15 @@ decode_dest(<<RegIndexH:3, 0:1, ?COMPACT_LARGE_XREG:4, RegIndexL, Rest/binary>>,
     end;
 decode_dest(<<RegIndexH:3, 0:1, ?COMPACT_LARGE_YREG:4, RegIndexL, Rest/binary>>, _MMod, MSt) ->
     {MSt, {y_reg, (RegIndexH bsl 8) bor RegIndexL}, Rest}.
+
+read_any_xreg(RegIndex, _MMod, MSt0) when RegIndex < ?MAX_REG ->
+    {MSt0, {x_reg, RegIndex}};
+read_any_xreg(RegIndex, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:call_primitive(
+        MSt0, ?PRIM_EXTENDED_REGISTER_PTR, [ctx, RegIndex]
+    ),
+    ?TRACE("extended_register_ptr(~p) => ~p\n", [RegIndex, Reg]),
+    {MSt1, {ptr, Reg}}.
 
 decode_extended_list_header(<<?COMPACT_EXTENDED_LIST, Rest0/binary>>) ->
     decode_literal(Rest0).
