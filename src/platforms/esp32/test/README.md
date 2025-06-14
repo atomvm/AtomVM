@@ -10,7 +10,7 @@ AtomVM provides two paths for testing "on device", the locally run QEMU emulator
 
 # QEMU emulator testing
 
-Instructions for running the tests [on QEMU are documented here](https://www.atomvm.net/doc/main/build-instructions.html#running-tests-for-esp32).
+Instructions for running the tests [on QEMU are documented here](https://doc.atomvm.org/main/build-instructions.html#running-tests-for-esp32).
 
 # Wokwi CI simulator testing
 

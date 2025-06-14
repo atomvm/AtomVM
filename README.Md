@@ -15,11 +15,11 @@ AtomVM implements from scratch a minimal Erlang VM that supports a subset of Erl
 Supported Platforms
 ===================
 
-* Linux, macOS, FreeBSD, DragonFly ([generic_unix](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-generic-unix-platform))
-* ESP32 SoC (with IDF/FreeRTOS, see [esp32](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-esp32-platform))
-* STM32 MCUs (with LibOpenCM3, see [stm32](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-stm32-platform))
-* Raspberry Pi Pico and Pico 2 (see [rp2](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
-* Browsers and NodeJS with WebAssembly (see [emscripten](https://www.atomvm.net/doc/main/getting-started-guide.html#getting-started-with-atomvm-webassembly))
+* Linux, macOS, FreeBSD, DragonFly ([generic_unix](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-generic-unix-platform))
+* ESP32 SoC (with IDF/FreeRTOS, see [esp32](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-esp32-platform))
+* STM32 MCUs (with LibOpenCM3, see [stm32](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-stm32-platform))
+* Raspberry Pi Pico and Pico 2 (see [rp2](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-on-the-raspberry-pi-pico-platform))
+* Browsers and NodeJS with WebAssembly (see [emscripten](https://doc.atomvm.org/main/getting-started-guide.html#getting-started-with-atomvm-webassembly))
 
 AtomVM aims to be easily portable to new platforms with a minimum effort, so additional platforms
 might be supported in a near future.
@@ -27,9 +27,9 @@ might be supported in a near future.
 Getting Started
 ===============
 There is much more information, including a more complete
-["Getting Started Guide"](https://www.atomvm.net/doc/main/getting-started-guide.html),
+["Getting Started Guide"](https://doc.atomvm.org/main/getting-started-guide.html),
 [examples](https://www.atomvm.net/sample-code),
-detailed [build instructions](https://www.atomvm.net/doc/main/build-instructions.html),
+detailed [build instructions](https://doc.atomvm.org/main/build-instructions.html),
 and [contact information](https://www.atomvm.net/contact) available on the
 [AtomVM](https://atomvm.net) project website.
 
@@ -66,14 +66,14 @@ $ make
 $ ./src/AtomVM ./examples/erlang/hello_world.avm
 ```
 
-Complete [Build Instructions](https://www.atomvm.net/doc/main/build-instructions.html) are
+Complete [Build Instructions](https://doc.atomvm.org/main/build-instructions.html) are
 available in the documentation for
-[Generic UNIX](https://www.atomvm.net/doc/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
-[ESP32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-esp32),
-[STM32](https://www.atomvm.net/doc/main/build-instructions.html#building-for-stm32),
-[Raspberry Pi Pico and Pico 2](https://www.atomvm.net/doc/main/build-instructions.html#building-for-raspberry-pi-pico)
+[Generic UNIX](https://doc.atomvm.org/main/build-instructions.html) (Linux, MacOS, FreeBSD, DragonFly),
+[ESP32](https://doc.atomvm.org/main/build-instructions.html#building-for-esp32),
+[STM32](https://doc.atomvm.org/main/build-instructions.html#building-for-stm32),
+[Raspberry Pi Pico and Pico 2](https://doc.atomvm.org/main/build-instructions.html#building-for-raspberry-pi-pico)
 (rp2), and
-[WASM](https://www.atomvm.net/doc/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
+[WASM](https://doc.atomvm.org/main/build-instructions.html#building-for-nodejs-web) (NodeJS/Web).
 
 Project Status
 ==============
@@ -82,7 +82,7 @@ Project Status
 
 AtomVM is no longer just a prototype — it has reached a solid level of compatibility with the BEAM
 ecosystem. It can execute unmodified, compiled BEAM modules, and most
-[core standard library functions](https://www.atomvm.net/doc/main/api-reference-documentation.html)
+[core standard library functions](https://doc.atomvm.org/main/api-reference-documentation.html)
 are already supported.
 
 AtomVM is tested with code compiled with any version from OTP 21 to 27 (28 is supported only in `main` branch).
