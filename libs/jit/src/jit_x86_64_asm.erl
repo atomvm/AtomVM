@@ -162,8 +162,11 @@ testb(Reg, Reg) when is_atom(Reg) ->
 testb(Imm, rax) when ?IS_SINT8_T(Imm) ->
     <<16#A8, Imm>>.
 
-testq(rax, rax) ->
-    <<16#48, 16#85, 16#C0>>.
+testq(Reg, Reg) when is_atom(Reg) ->
+    case x86_64_x_reg(Reg) of
+        {0, Index} -> <<16#48, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>;
+        {1, Index} -> <<16#49, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>
+    end.
 
 jz(Offset) when ?IS_SINT8_T(Offset) ->
     <<16#74, Offset>>.
@@ -280,4 +283,12 @@ movsd({0, BaseReg}, XmmReg) when is_atom(BaseReg), is_atom(XmmReg) ->
     case REX_B of
         0 -> <<16#F2, 16#0F, 16#10, ((XMM_INDEX bsl 3) bor MODRM_RM)>>;
         1 -> <<16#41, 16#F2, 16#0F, 16#10, ((XMM_INDEX bsl 3) bor MODRM_RM)>>
+    end;
+movsd({Offset, BaseReg}, XmmReg) when is_atom(BaseReg), is_atom(XmmReg), ?IS_SINT8_T(Offset) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(BaseReg),
+    XMM_INDEX = x86_64_xmm_index(XmmReg),
+    % MOVSD xmm, m64: 0F 10 /r, ModRM: mod=01 (disp8), reg=XMM, rm=BaseReg
+    case REX_B of
+        0 -> <<16#F2, 16#0F, 16#10, 1:2, XMM_INDEX:3, MODRM_RM:3, Offset>>;
+        1 -> <<16#41, 16#F2, 16#0F, 16#10, 1:2, XMM_INDEX:3, MODRM_RM:3, Offset>>
     end.
