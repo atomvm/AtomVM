@@ -862,17 +862,17 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsign
     return ctx;
 }
 
-term jit_term_from_float(Context *ctx, avm_float_t f)
+static term jit_term_from_float(Context *ctx, avm_float_t f)
 {
     return term_from_float(f, &ctx->heap);
 }
 
-void jit_term_conv_to_float(Context *ctx, term t, int freg)
+static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 {
     ctx->fr[freg] = term_conv_to_float(t);
 }
 
-bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
+static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
         #pragma STDC FENV_ACCESS ON
@@ -891,7 +891,7 @@ bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
     return true;
 }
 
-bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
+static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 {
     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
         #pragma STDC FENV_ACCESS ON
@@ -900,6 +900,44 @@ bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
         if (fetestexcept(FE_OVERFLOW)) {
+            return false;
+        }
+    #else
+        if (!isfinite(ctx->fr[freg3])) {
+            return false;
+        }
+    #endif
+    return true;
+}
+
+static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
+{
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        #pragma STDC FENV_ACCESS ON
+        feclearexcept(FE_OVERFLOW);
+    #endif
+    ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        if (fetestexcept(FE_OVERFLOW)) {
+            return false;
+        }
+    #else
+        if (!isfinite(ctx->fr[freg3])) {
+            return false;
+        }
+    #endif
+    return true;
+}
+
+static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
+{
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        #pragma STDC FENV_ACCESS ON
+        feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
+    #endif
+    ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
             return false;
         }
     #else
@@ -951,4 +989,6 @@ const ModuleNativeInterface module_native_interface = {
     jit_term_conv_to_float,
     jit_fadd,
     jit_fsub,
+    jit_fmul,
+    jit_fdiv,
 };
