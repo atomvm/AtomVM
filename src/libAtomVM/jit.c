@@ -891,6 +891,25 @@ bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
     return true;
 }
 
+bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
+{
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+    feclearexcept(FE_OVERFLOW);
+#endif
+    ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    if (fetestexcept(FE_OVERFLOW)) {
+        return false;
+    }
+#else
+    if (!isfinite(ctx->fr[freg3])) {
+        return false;
+    }
+#endif
+    return true;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -931,4 +950,5 @@ const ModuleNativeInterface module_native_interface = {
     term_is_number,
     jit_term_conv_to_float,
     jit_fadd,
+    jit_fsub,
 };
