@@ -5341,13 +5341,28 @@ static term nif_maps_next(Context *ctx, int argc, term argv[])
     return ret;
 }
 
+static bool encoding_from_atom(term encoding_atom, enum CharDataEncoding *encoding)
+{
+    switch (encoding_atom) {
+        case LATIN1_ATOM:
+            *encoding = Latin1Encoding;
+            return true;
+        case UTF8_ATOM:
+        case UNICODE_ATOM:
+            *encoding = UTF8Encoding;
+            return true;
+        default:
+            return false;
+    }
+}
+
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[])
 {
     enum CharDataEncoding in_encoding = UTF8Encoding;
-    if (argc == 2) {
-        if (argv[1] == LATIN1_ATOM) {
-            in_encoding = Latin1Encoding;
-        } else if (UNLIKELY((argv[1] != UTF8_ATOM))) {
+    bool has_in_encoding = argc == 2;
+    if (has_in_encoding) {
+        term in_encoding_atom = argv[1];
+        if (UNLIKELY(!encoding_from_atom(in_encoding_atom, &in_encoding))) {
             RAISE_ERROR(BADARG_ATOM);
         }
     }
@@ -5406,18 +5421,18 @@ static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]
 {
     enum CharDataEncoding in_encoding = UTF8Encoding;
     enum CharDataEncoding out_encoding = UTF8Encoding;
-    if (argc > 1) {
-        if (argv[1] == LATIN1_ATOM) {
-            in_encoding = Latin1Encoding;
-        } else if (UNLIKELY((argv[1] != UTF8_ATOM))) {
+    bool has_in_encoding = argc > 1;
+    bool has_out_encoding = argc == 3;
+    if (has_in_encoding) {
+        term in_encoding_atom = argv[1];
+        if (UNLIKELY(!encoding_from_atom(in_encoding_atom, &in_encoding))) {
             RAISE_ERROR(BADARG_ATOM);
         }
-        if (argc == 3) {
-            if (argv[2] == LATIN1_ATOM) {
-                out_encoding = Latin1Encoding;
-            } else if (UNLIKELY((argv[2] != UTF8_ATOM))) {
-                RAISE_ERROR(BADARG_ATOM);
-            }
+    }
+    if (has_out_encoding) {
+        term out_encoding_atom = argv[2];
+        if (UNLIKELY(!encoding_from_atom(out_encoding_atom, &out_encoding))) {
+            RAISE_ERROR(BADARG_ATOM);
         }
     }
     size_t len;
