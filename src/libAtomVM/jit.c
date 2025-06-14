@@ -864,7 +864,6 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsign
 
 term jit_term_from_float(Context *ctx, avm_float_t f)
 {
-printf("jit_term_from_float -- f = %f\n", f);
     return term_from_float(f, &ctx->heap);
 }
 
@@ -875,12 +874,30 @@ void jit_term_conv_to_float(Context *ctx, term t, int freg)
 
 bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
-printf("jit_fadd -- freg1 = %d, freg2 = %d, freg3 = %d\n", freg1, freg2, freg3);
     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
         #pragma STDC FENV_ACCESS ON
         feclearexcept(FE_OVERFLOW);
     #endif
     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        if (fetestexcept(FE_OVERFLOW)) {
+            return false;
+        }
+    #else
+        if (!isfinite(ctx->fr[freg3])) {
+            return false;
+        }
+    #endif
+    return true;
+}
+
+bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
+{
+    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+        #pragma STDC FENV_ACCESS ON
+        feclearexcept(FE_OVERFLOW);
+    #endif
+    ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
         if (fetestexcept(FE_OVERFLOW)) {
             return false;
@@ -933,4 +950,5 @@ const ModuleNativeInterface module_native_interface = {
     term_is_number,
     jit_term_conv_to_float,
     jit_fadd,
+    jit_fsub,
 };

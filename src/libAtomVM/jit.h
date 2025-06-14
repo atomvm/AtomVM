@@ -95,6 +95,7 @@ struct ModuleNativeInterface {
     bool (* term_is_number)(term t);
     void (* term_conv_to_float)(Context *ctx, term t, int fpreg);
     bool (* fadd)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
+    bool (* fsub)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
