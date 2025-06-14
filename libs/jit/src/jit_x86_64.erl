@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    offset/2,
     debugger/1,
     free_native_register/2,
     assert_all_native_free/1,
@@ -39,13 +40,16 @@
     return_if_not_equal/3,
     jump_to_label/2,
     jump_to_label_if_zero/3,
+    jump_to_label_if_false/3,
     jump_to_label_if_and_non_zero_b/4,
     jump_to_label_if_and_not_equal/5,
     jump_to_label_if_equal/4,
     jump_to_label_if_not_equal/4,
     jump_to_offset_if_equal/3,
     jump_to_offset_if_and_equal/4,
+    jump_to_offset_if_and_not_equal/4,
     jump_to_offset_if_not_zero/2,
+    jump_to_offset_if_true/2,
     shift_right/3,
     shift_left/3,
     move_to_vm_register/3,
@@ -86,7 +90,33 @@
 %% rdi / rsi / rdx are pushed to stack before calling a primitive and popped back.
 %% when returning (some push call pop push call pop sequences could be optimized)
 
--type x86_64_register() :: rax | rcx | rdx | rsi | rdi | r8 | r9 | r10 | r11.
+-type x86_64_register() ::
+    rax
+    | rcx
+    | rdx
+    | rsi
+    | rdi
+    | r8
+    | r9
+    | r10
+    | r11
+    | xmm0
+    | xmm1
+    | xmm2
+    | xmm3
+    | xmm4
+    | xmm5
+    | xmm6
+    | xmm7.
+
+-define(IS_GPR(Reg),
+    (Reg =:= rax orelse Reg =:= rcx orelse Reg =:= rdx orelse Reg =:= rsi orelse Reg =:= r8 orelse
+        Reg =:= r9 orelse Reg =:= r10 orelse Reg =:= r11)
+).
+-define(IS_FPR(Reg),
+    (Reg =:= xmm0 orelse Reg =:= xmm1 orelse Reg =:= xmm2 orelse Reg =:= xmm3 orelse Reg =:= xmm4 orelse
+        Reg =:= xmm5 orelse Reg =:= xmm6 orelse Reg =:= xmm7)
+).
 
 -record(state, {
     stream_module :: module(),
@@ -94,8 +124,15 @@
     offset :: non_neg_integer(),
     branches :: [],
     available_regs :: [x86_64_register()],
+    available_fpregs :: [x86_64_register()],
     used_regs :: [x86_64_register()]
 }).
+
+-record(jump_token, {
+    used_regs :: [x86_64_register()]
+}).
+
+-type jump_token() :: #jump_token{}.
 
 -type state() :: #state{}.
 -type immediate() :: non_neg_integer().
@@ -112,6 +149,7 @@
 -define(Y_REGS, {16#28, ?CTX_REG}).
 -define(X_REG(N), {16#30 + (N * 8), ?CTX_REG}).
 -define(CP, {16#B8, ?CTX_REG}).
+-define(FP_REGS, {16#C0, ?CTX_REG}).
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
 -define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
 -define(JITSTATE_REDUCTIONCOUNT, {16#10, ?JITSTATE_REG}).
@@ -124,7 +162,9 @@
 -define(IS_UINT32_T(X), is_integer(X) andalso X >= 0 andalso X < 16#100000000).
 
 -define(AVAILABLE_REGS, [rax, r11, r10, r9, r8, rcx]).
+-define(AVAILABLE_FPREGS, [xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7]).
 -define(PARAMETER_REGS, [rdi, rsi, rdx, rcx, r8, r9]).
+-define(PARAMETER_FPREGS, ?AVAILABLE_FPREGS).
 
 -spec word_size() -> 4 | 8.
 word_size() -> 8.
@@ -137,6 +177,7 @@ new(_Variant, StreamModule, Stream) ->
         branches = [],
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
+        available_fpregs = ?AVAILABLE_FPREGS,
         used_regs = []
     }.
 
@@ -148,22 +189,72 @@ stream(#state{stream = Stream}) ->
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
 
+-spec offset(state(), [jump_token()]) -> {state(), non_neg_integer()}.
+offset(
+    #state{
+        available_regs = AvailableRegs0, available_fpregs = AvailableFPRegs0, used_regs = UsedRegs0
+    } = State0,
+    JumpTokens
+) ->
+    Offset = offset(State0),
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = lists:foldl(
+        fun(#jump_token{used_regs = JTUsedRegs}, {AccAvail, AccAvailFP, AccUsed}) ->
+            lists:foldl(
+                fun(UsedReg, {AccAvailIn, AccAvailFPIn, AccUsedIn}) ->
+                    case lists:member(UsedReg, AccAvailIn) of
+                        true ->
+                            {lists:delete(UsedReg, AccAvailIn), AccAvailFPIn, [UsedReg | AccUsedIn]};
+                        false ->
+                            case lists:member(UsedReg, AccAvailFPIn) of
+                                true ->
+                                    {AccAvailIn, lists:delete(UsedReg, AccAvailFPIn), [
+                                        UsedReg | AccUsedIn
+                                    ]};
+                                false ->
+                                    {AccAvailIn, AccAvailFPIn, AccUsedIn}
+                            end
+                    end
+                end,
+                {AccAvail, AccAvailFP, AccUsed},
+                JTUsedRegs
+            )
+        end,
+        {AvailableRegs0, AvailableFPRegs0, UsedRegs0},
+        JumpTokens
+    ),
+    {
+        State0#state{
+            available_regs = AvailableRegs1,
+            available_fpregs = AvailableFPRegs1,
+            used_regs = UsedRegs1
+        },
+        Offset
+    }.
+
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
     Stream1 = StreamModule:append(Stream0, <<16#CC>>),
     State#state{stream = Stream1}.
 
 -spec free_native_register(state(), value()) -> state().
-free_native_register(#state{available_regs = Available0, used_regs = Used0} = State, Reg) when
+free_native_register(
+    #state{available_regs = Available0, available_fpregs = AvailableFP0, used_regs = Used0} = State,
+    Reg
+) when
     is_atom(Reg)
 ->
-    {AvailableRegs1, Used1} = free_reg(Available0, Used0, Reg),
-    State#state{available_regs = AvailableRegs1, used_regs = Used1};
+    {AvailableRegs1, AvailableFPRegs1, Used1} = free_reg(Available0, AvailableFP0, Used0, Reg),
+    State#state{
+        available_regs = AvailableRegs1, available_fpregs = AvailableFPRegs1, used_regs = Used1
+    };
 free_native_register(State, {ptr, Reg}) ->
     free_native_register(State, Reg);
 free_native_register(State, _Other) ->
     State.
 
-assert_all_native_free(#state{available_regs = ?AVAILABLE_REGS, used_regs = []}) -> ok.
+assert_all_native_free(#state{
+    available_regs = ?AVAILABLE_REGS, available_fpregs = ?AVAILABLE_FPREGS, used_regs = []
+}) ->
+    ok.
 
 jump_table(State, LabelsCount) ->
     jump_table0(State, 0, LabelsCount).
@@ -282,6 +373,7 @@ return_if_not_null(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = AvailableRegs0,
+        available_fpregs = AvailableFPRegs0,
         used_regs = UsedRegs0
     } = State,
     {free, Reg}
@@ -295,14 +387,22 @@ return_if_not_null(
     I4 = jit_x86_64_asm:retq(),
     I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
-    {AvailableRegs1, UsedRegs1} = free_reg(AvailableRegs0, UsedRegs0, Reg),
-    State#state{stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs1}.
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
+        AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
+    ),
+    State#state{
+        stream = Stream1,
+        available_regs = AvailableRegs1,
+        available_fpregs = AvailableFPRegs1,
+        used_regs = UsedRegs1
+    }.
 
 return_if_not_equal(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = AvailableRegs0,
+        available_fpregs = AvailableFPRegs0,
         used_regs = UsedRegs0
     } = State,
     ctx,
@@ -317,8 +417,15 @@ return_if_not_equal(
     I4 = jit_x86_64_asm:retq(),
     I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
-    {AvailableRegs1, UsedRegs1} = free_reg(AvailableRegs0, UsedRegs0, Reg),
-    State#state{stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs1}.
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
+        AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
+    ),
+    State#state{
+        stream = Stream1,
+        available_regs = AvailableRegs1,
+        available_fpregs = AvailableFPRegs1,
+        used_regs = UsedRegs1
+    }.
 
 jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State, Label
@@ -336,6 +443,25 @@ jump_to_label_if_zero(
 ) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:testq(Reg, Reg),
+    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
+    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
+    Sz = byte_size(I1) + byte_size(I2),
+    Reloc = {Label, Offset + Sz + RelocOffset, 32},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
+
+jump_to_label_if_false(
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    Reg,
+    Label
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:testb(Reg, Reg),
     {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
     I2 = jit_x86_64_asm:jnz(byte_size(I3)),
     Sz = byte_size(I1) + byte_size(I2),
@@ -374,13 +500,14 @@ jump_to_label_if_and_not_equal(
         stream = Stream0,
         branches = AccBranches,
         available_regs = AvailableRegs0,
+        available_fpregs = AvailableFPRegs0,
         used_regs = UsedRegs0
     } = State,
     {free, Reg},
     Mask,
     Val,
     Label
-) ->
+) when ?IS_GPR(Reg) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:andq(Mask, Reg),
     I2 = jit_x86_64_asm:cmpl(Val, Reg),
@@ -395,11 +522,14 @@ jump_to_label_if_and_not_equal(
         I4/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {AvailableRegs1, UsedRegs1} = free_reg(AvailableRegs0, UsedRegs0, Reg),
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
+        AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
+    ),
     State#state{
         stream = Stream1,
         branches = [Reloc | AccBranches],
         available_regs = AvailableRegs1,
+        available_fpregs = AvailableFPRegs1,
         used_regs = UsedRegs1
     };
 jump_to_label_if_and_not_equal(
@@ -413,7 +543,7 @@ jump_to_label_if_and_not_equal(
     Mask,
     Val,
     Label
-) when is_atom(Reg) ->
+) when ?IS_GPR(Reg) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andq(Mask, Temp),
@@ -473,7 +603,9 @@ jump_to_label_if_not_equal(
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
 jump_to_offset_if_equal(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    #state{
+        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
+    } = State,
     Reg,
     Val
 ) ->
@@ -487,14 +619,17 @@ jump_to_offset_if_equal(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
 
 jump_to_offset_if_and_equal(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
         branches = AccBranches,
-        available_regs = [Temp | _]
+        available_regs = [Temp | _],
+        used_regs = UsedRegs
     } = State,
     Reg,
     Mask,
@@ -514,10 +649,70 @@ jump_to_offset_if_and_equal(
         I4/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
+
+jump_to_offset_if_and_not_equal(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = AccBranches,
+        used_regs = UsedRegs
+    } = State0,
+    {free, Reg},
+    Mask,
+    Val
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:andq(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocJNZOffset, I3} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = State0#state{stream = Stream1, branches = [Reloc | AccBranches]},
+    State2 = free_native_register(State1, Reg),
+    {State2, OffsetRef, #jump_token{used_regs = UsedRegs}};
+jump_to_offset_if_and_not_equal(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = AccBranches,
+        available_regs = [Temp | _],
+        used_regs = UsedRegs
+    } = State,
+    Reg,
+    Mask,
+    Val
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:movq(Reg, Temp),
+    I2 = jit_x86_64_asm:andq(Mask, Temp),
+    I3 = jit_x86_64_asm:cmpq(Val, Temp),
+    {RelocJNZOffset, I4} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary,
+        I4/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
 
 jump_to_offset_if_not_zero(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    #state{
+        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
+    } = State,
     Reg
 ) ->
     Offset = StreamModule:offset(Stream0),
@@ -530,7 +725,29 @@ jump_to_offset_if_not_zero(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef}.
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
+
+jump_to_offset_if_true(
+    #state{
+        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
+    } = State,
+    Reg
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:testb(Reg, Reg),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
 
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
@@ -607,35 +824,29 @@ call_func_ptr(
 set_args(
     #state{stream = Stream0, stream_module = StreamModule, used_regs = UsedRegs} = State0, Args
 ) ->
-    % Handle overlaps if any
-    ParamRegs = lists:sublist(?PARAMETER_REGS, length(Args)),
-    ArgsRegs = lists:flatmap(
+    ParamRegs = parameter_regs(Args),
+    ArgsRegs = lists:map(
         fun
-            ({free, {ptr, Reg}}) -> [Reg];
-            ({free, Reg}) -> [Reg];
-            (Reg) when is_atom(Reg) -> [Reg];
-            (_) -> []
+            ({free, {ptr, Reg}}) -> Reg;
+            ({free, Reg}) when is_atom(Reg) -> Reg;
+            ({free, Imm}) when is_integer(Imm) -> imm;
+            (ctx) -> ?CTX_REG;
+            (jit_state) -> ?JITSTATE_REG;
+            (Reg) when is_atom(Reg) -> Reg;
+            (Imm) when is_integer(Imm) -> imm;
+            ({x_reg, _}) -> ?CTX_REG;
+            ({y_reg, _}) -> ?CTX_REG;
+            ({fp_reg, _}) -> ?CTX_REG;
+            ({free, {x_reg, _}}) -> ?CTX_REG;
+            ({free, {y_reg, _}}) -> ?CTX_REG;
+            ({free, {fp_reg, _}}) -> ?CTX_REG
         end,
         Args
     ),
-    OverlapRegs = ArgsRegs -- (ArgsRegs -- ParamRegs),
-    SetArgsCode =
-        case OverlapRegs of
-            [] ->
-                set_args0(Args, ParamRegs, []);
-            _ ->
-                AvailableScratch = [rdi, rsi, rdx, rcx, r8, r9, r10, r11] -- ParamRegs -- ArgsRegs,
-                {UpdatedArgs, _, SwapCode} = lists:foldl(
-                    fun(OverlapReg, {AccArgs, [Avail | AccAvailT], AccSwapCode}) ->
-                        I = jit_x86_64_asm:movq(OverlapReg, Avail),
-                        NewArgs = replace_reg(AccArgs, OverlapReg, Avail),
-                        {NewArgs, AccAvailT, [I | AccSwapCode]}
-                    end,
-                    {Args, AvailableScratch, <<>>},
-                    OverlapRegs
-                ),
-                set_args0(UpdatedArgs, ParamRegs, SwapCode)
-        end,
+    AvailableScratchGP =
+        [rdi, rsi, rdx, rcx, r8, r9, r10, r11] -- ParamRegs -- ArgsRegs -- UsedRegs,
+    AvailableScratchFP = ?AVAILABLE_FPREGS -- ParamRegs -- ArgsRegs -- UsedRegs,
+    SetArgsCode = set_args0(Args, ArgsRegs, ParamRegs, AvailableScratchGP, AvailableScratchFP, []),
     Stream1 = StreamModule:append(Stream0, SetArgsCode),
     NewUsedRegs = lists:foldl(
         fun
@@ -649,8 +860,35 @@ set_args(
     State0#state{
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS -- ParamRegs -- NewUsedRegs,
+        available_fpregs = ?AVAILABLE_FPREGS -- ParamRegs -- NewUsedRegs,
         used_regs = ParamRegs ++ (NewUsedRegs -- ParamRegs)
     }.
+
+parameter_regs(Args) ->
+    parameter_regs0(Args, ?PARAMETER_REGS, ?PARAMETER_FPREGS, []).
+
+parameter_regs0([], _, _, Acc) ->
+    lists:reverse(Acc);
+parameter_regs0([Special | T], [GPReg | GPRegsT], FPRegs, Acc) when
+    Special =:= ctx orelse Special =:= jit_state
+->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
+parameter_regs0([{free, Free} | T], GPRegs, FPRegs, Acc) ->
+    parameter_regs0([Free | T], GPRegs, FPRegs, Acc);
+parameter_regs0([{ptr, Reg} | T], [GPReg | GPRegsT], FPRegs, Acc) when ?IS_GPR(Reg) ->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
+parameter_regs0([Reg | T], [GPReg | GPRegsT], FPRegs, Acc) when ?IS_GPR(Reg) ->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
+parameter_regs0([Reg | T], GPRegs, [FPReg | FPRegsT], Acc) when ?IS_FPR(Reg) ->
+    parameter_regs0(T, GPRegs, FPRegsT, [FPReg | Acc]);
+parameter_regs0([{x_reg, _} | T], [GPReg | GPRegsT], FPRegs, Acc) ->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
+parameter_regs0([{y_reg, _} | T], [GPReg | GPRegsT], FPRegs, Acc) ->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
+parameter_regs0([{fp_reg, _} | T], GPRegs, [FPReg | FPRegsT], Acc) ->
+    parameter_regs0(T, GPRegs, FPRegsT, [FPReg | Acc]);
+parameter_regs0([Int | T], [GPReg | GPRegsT], FPRegs, Acc) when is_integer(Int) ->
+    parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]).
 
 replace_reg(Args, Reg1, Reg2) ->
     replace_reg0(Args, Reg1, Reg2, []).
@@ -662,32 +900,68 @@ replace_reg0([{free, Reg} | T], Reg, Replacement, Acc) ->
 replace_reg0([Other | T], Reg, Replacement, Acc) ->
     replace_reg0(T, Reg, Replacement, [Other | Acc]).
 
-set_args0([], _, Acc) ->
+set_args0([], [], [], _AvailGP, _AvailFP, Acc) ->
     list_to_binary(lists:reverse(Acc));
-set_args0([{free, FreeVal} | ArgsT], Regs, Acc) ->
-    set_args0([FreeVal | ArgsT], Regs, Acc);
-set_args0([ctx | ArgsT], [?CTX_REG | Regs], Acc) ->
-    set_args0(ArgsT, Regs, Acc);
-set_args0([jit_state | ArgsT], [?JITSTATE_REG | Regs], Acc) ->
-    set_args0(ArgsT, Regs, Acc);
-set_args0([jit_state | ArgsT], [rdi | Regs], Acc) ->
-    set_args0(ArgsT, Regs, [jit_x86_64_asm:movq(?JITSTATE_REG, rdi) | Acc]);
-set_args0([{x_reg, X} | ArgsT], [Reg | RegsT], Acc) ->
-    set_args0(ArgsT, RegsT, [jit_x86_64_asm:movq({16#30 + 8 * X, rdi}, Reg) | Acc]);
-set_args0([{ptr, Source} | ArgsT], [Reg | RegsT], Acc) ->
-    set_args0(ArgsT, RegsT, [jit_x86_64_asm:movq({0, Source}, Reg) | Acc]);
-set_args0([{y_reg, X} | ArgsT], [Reg | RegsT], Acc) ->
-    set_args0(ArgsT, RegsT, [
-        jit_x86_64_asm:movq({X * 8, Reg}, Reg), jit_x86_64_asm:movq(?Y_REGS, Reg) | Acc
+set_args0([{free, FreeVal} | ArgsT], ArgsRegs, ParamRegs, AvailGP, AvailFP, Acc) ->
+    set_args0([FreeVal | ArgsT], ArgsRegs, ParamRegs, AvailGP, AvailFP, Acc);
+set_args0([ctx | ArgsT], [?CTX_REG | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, AvailFP, Acc) ->
+    set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, AvailFP, Acc);
+set_args0(
+    [jit_state | ArgsT],
+    [?JITSTATE_REG | ArgsRegs],
+    [?JITSTATE_REG | ParamRegs],
+    AvailGP,
+    AvailFP,
+    Acc
+) ->
+    set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, AvailFP, Acc);
+set_args0(
+    [jit_state | ArgsT], [?JITSTATE_REG | ArgsRegs], [ParamReg | ParamRegs], AvailGP, AvailFP, Acc
+) ->
+    false = lists:member(ParamReg, ArgsRegs),
+    set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, AvailFP, [
+        jit_x86_64_asm:movq(?JITSTATE_REG, ParamReg) | Acc
     ]);
-set_args0([ArgReg | ArgsT], [Reg | RegsT], Acc) when is_atom(ArgReg) ->
-    set_args0(ArgsT, RegsT, [jit_x86_64_asm:movq(ArgReg, Reg) | Acc]);
-set_args0([Arg | ArgsT], [Reg | RegsT], Acc) when
-    is_integer(Arg) andalso Arg >= -16#80000000 andalso Arg < 16#80000000
-->
-    set_args0(ArgsT, RegsT, [jit_x86_64_asm:movq(Arg, Reg) | Acc]);
-set_args0([Arg | ArgsT], [Reg | RegsT], Acc) when is_integer(Arg) ->
-    set_args0(ArgsT, RegsT, [jit_x86_64_asm:movabsq(Arg, Reg) | Acc]).
+% ctx is special as we need it to access x_reg/y_reg/fp_reg
+set_args0([Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, AvailFP, Acc) ->
+    false = lists:member(?CTX_REG, ArgsRegs),
+    J = set_args1(Arg, ?CTX_REG),
+    set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, AvailFP, [J | Acc]);
+set_args0(
+    [Arg | ArgsT],
+    [_ArgReg | ArgsRegs],
+    [ParamReg | ParamRegs],
+    [Avail | AvailGPT] = AvailGP,
+    AvailFP,
+    Acc
+) ->
+    J = set_args1(Arg, ParamReg),
+    case lists:member(ParamReg, ArgsRegs) of
+        false ->
+            set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, AvailFP, [J | Acc]);
+        true ->
+            I = jit_x86_64_asm:movq(ParamReg, Avail),
+            NewArgsT = replace_reg(ArgsT, ParamReg, Avail),
+            set_args0(NewArgsT, ArgsRegs, ParamRegs, AvailGPT, AvailFP, [J, I | Acc])
+    end.
+
+set_args1(Reg, Reg) ->
+    [];
+set_args1({x_reg, X}, Reg) ->
+    jit_x86_64_asm:movq(?X_REG(X), Reg);
+set_args1({ptr, Source}, Reg) ->
+    jit_x86_64_asm:movq({0, Source}, Reg);
+set_args1({y_reg, X}, Reg) ->
+    [
+        jit_x86_64_asm:movq(?Y_REGS, Reg),
+        jit_x86_64_asm:movq({X * 8, Reg}, Reg)
+    ];
+set_args1(ArgReg, Reg) when ?IS_GPR(ArgReg) ->
+    jit_x86_64_asm:movq(ArgReg, Reg);
+set_args1(Arg, Reg) when is_integer(Arg) andalso Arg >= -16#80000000 andalso Arg < 16#80000000 ->
+    jit_x86_64_asm:movq(Arg, Reg);
+set_args1(Arg, Reg) when is_integer(Arg) ->
+    jit_x86_64_asm:movabsq(Arg, Reg).
 
 move_to_vm_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, 0, {x_reg, X}
@@ -868,6 +1142,16 @@ move_to_vm_register(
 ) when is_atom(Reg) ->
     I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
     I2 = jit_x86_64_asm:movq(Reg, {Y * 8, Temp}),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1};
+move_to_vm_register(
+    #state{stream_module = StreamModule, available_regs = [Temp | _], stream = Stream0} = State,
+    Reg,
+    {fp_reg, F}
+) when is_atom(Reg) ->
+    I1 = jit_x86_64_asm:movq(?FP_REGS, Temp),
+    I2 = jit_x86_64_asm:movq(Reg, {F * 8, Temp}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
@@ -1075,6 +1359,23 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [Reg | Used]}, Reg};
 move_to_native_register(State, Reg) when is_atom(Reg) ->
+    {State, Reg};
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _],
+        available_fpregs = [FPReg | AvailFT],
+        used_regs = Used
+    } = State,
+    {fp_reg, F}
+) ->
+    I1 = jit_x86_64_asm:movq(?FP_REGS, Temp),
+    I2 = jit_x86_64_asm:movsd({F * 8, Temp}, FPReg),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, available_fpregs = AvailFT, used_regs = [FPReg | Used]}, FPReg};
+move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg}.
 
 -spec save_to_native_register(state(), x86_64_register()) -> {state(), x86_64_register()}.
@@ -1236,7 +1537,7 @@ decrement_reductions_and_maybe_schedule_next(
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
-    {RewriteOffset, State1} = set_cp(State0),
+    {State1, RewriteOffset} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
     rewrite_cp_offset(State2, RewriteOffset).
 
@@ -1261,7 +1562,7 @@ call_only_or_schedule_next(
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
 call_primitive_with_cp(State0, Primitive, Args) ->
-    {RewriteOffset, State1} = set_cp(State0),
+    {State1, RewriteOffset} = set_cp(State0),
     State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset).
 
@@ -1276,12 +1577,12 @@ set_cp(State0) ->
     % next part of cp is instruction offset, after the call.
     {RewriteOffset, I2} = jit_x86_64_asm:orq_rel32(0, Reg),
     AddrOffset = Offset + byte_size(I1) + RewriteOffset,
-    I3 = jit_x86_64_asm:movq(Reg, {16#B8, rdi}),
+    I3 = jit_x86_64_asm:movq(Reg, ?CP),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State2 = State1#state{stream = Stream1},
     State3 = free_native_register(State2, Reg),
-    {AddrOffset, State3}.
+    {State3, AddrOffset}.
 
 -spec rewrite_cp_offset(state(), non_neg_integer()) -> state().
 rewrite_cp_offset(
@@ -1293,11 +1594,16 @@ rewrite_cp_offset(
     Stream1 = StreamModule:replace(Stream0, RewriteOffset, <<(NewOffset bsl 2):32/little>>),
     State0#state{stream = Stream1}.
 
-free_reg(AvailableRegs0, UsedRegs0, Reg) ->
+free_reg(AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
     AvailableRegs1 = free_reg0(?AVAILABLE_REGS, AvailableRegs0, Reg, []),
     true = lists:member(Reg, UsedRegs0),
     UsedRegs1 = lists:delete(Reg, UsedRegs0),
-    {AvailableRegs1, UsedRegs1}.
+    {AvailableRegs1, AvailableFPRegs0, UsedRegs1};
+free_reg(AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg) when ?IS_FPR(Reg) ->
+    AvailableFPRegs1 = free_reg0(?AVAILABLE_FPREGS, AvailableFPRegs0, Reg, []),
+    true = lists:member(Reg, UsedRegs0),
+    UsedRegs1 = lists:delete(Reg, UsedRegs0),
+    {AvailableRegs0, AvailableFPRegs1, UsedRegs1}.
 
 free_reg0([Reg | _SortedT], PrevRegs0, Reg, Acc) ->
     lists:reverse(Acc, [Reg | PrevRegs0]);

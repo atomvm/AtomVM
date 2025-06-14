@@ -37,16 +37,21 @@
 
 -define(TERM_BOXED_TAG_MASK, 16#3F).
 -define(TERM_BOXED_POSITIVE_INTEGER, 16#8).
+-define(TERM_BOXED_FUN, 16#14).
 
 -define(FALSE_ATOM_INDEX, 0).
 -define(TRUE_ATOM_INDEX, 1).
+-define(BADFUN_ATOM_INDEX, 8).
 
 -define(FALSE_ATOM, ((?FALSE_ATOM_INDEX bsl 6) bor 16#B)).
 -define(TRUE_ATOM, ((?TRUE_ATOM_INDEX bsl 6) bor 16#B)).
+-define(BADFUN_ATOM, ((?BADFUN_ATOM_INDEX bsl 6) bor 16#B)).
 
 -define(PRIM_CALL_EXT, 4).
 -define(PRIM_PUT_LIST, 13).
 -define(PRIM_EXTENDED_REGISTER_PTR, 18).
+-define(PRIM_RAISE_ERROR_TUPLE, 19).
+-define(PRIM_CALL_FUN, 32).
 
 % disassembly obtained with:
 % x86_64-elf-objdump -b binary -D dump.bin -M x86-64 -mi386
@@ -369,7 +374,7 @@ is_integer_test() ->
     State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
     Label = 1,
     {State1, Reg} = jit_x86_64:move_to_native_register(State0, {x_reg, 0}),
-    {State2, OffsetRef} = jit_x86_64:jump_to_offset_if_and_equal(
+    {State2, OffsetRef, JumpToken} = jit_x86_64:jump_to_offset_if_and_equal(
         State1, Reg, ?TERM_IMMED_TAG_MASK, ?TERM_INTEGER_TAG
     ),
     State3 = jit_x86_64:jump_to_label_if_and_not_equal(
@@ -380,11 +385,12 @@ is_integer_test() ->
     State6 = jit_x86_64:jump_to_label_if_and_not_equal(
         State5, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_POSITIVE_INTEGER, Label
     ),
-    Offset = jit_x86_64:offset(State6),
+    {State7, Offset} = jit_x86_64:offset(State6, [JumpToken]),
+    State8 = jit_x86_64:free_native_register(State7, Reg),
     Labels = [{Label, Offset + 16#100}, {OffsetRef, Offset}],
-    jit_x86_64:assert_all_native_free(State6),
-    State7 = jit_x86_64:update_branches(State6, Labels),
-    Stream = jit_x86_64:stream(State7),
+    jit_x86_64:assert_all_native_free(State8),
+    State9 = jit_x86_64:update_branches(State8, Labels),
+    Stream = jit_x86_64:stream(State9),
     Dump = <<
         "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
         "   4:	49 89 c3             	mov    %rax,%r11\n"
@@ -409,14 +415,14 @@ is_boolean_test() ->
     State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
     Label = 1,
     {State1, Reg} = jit_x86_64:move_to_native_register(State0, {x_reg, 0}),
-    {State2, OffsetRef} = jit_x86_64:jump_to_offset_if_equal(State1, Reg, ?TRUE_ATOM),
+    {State2, OffsetRef, JumpToken} = jit_x86_64:jump_to_offset_if_equal(State1, Reg, ?TRUE_ATOM),
     State3 = jit_x86_64:jump_to_label_if_not_equal(State2, Reg, ?FALSE_ATOM, Label),
-    State4 = jit_x86_64:free_native_register(State3, Reg),
-    Offset = jit_x86_64:offset(State3),
+    {State4, Offset} = jit_x86_64:offset(State3, [JumpToken]),
+    State5 = jit_x86_64:free_native_register(State4, Reg),
     Labels = [{Label, Offset + 16#100}, {OffsetRef, Offset}],
-    jit_x86_64:assert_all_native_free(State4),
-    State5 = jit_x86_64:update_branches(State4, Labels),
-    Stream = jit_x86_64:stream(State5),
+    jit_x86_64:assert_all_native_free(State5),
+    State6 = jit_x86_64:update_branches(State5, Labels),
+    Stream = jit_x86_64:stream(State6),
     Dump = <<
         "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
         "   4:	48 83 f8 4b          	cmp    $0x4b,%rax\n"
@@ -451,6 +457,67 @@ call_ext_test() ->
         "  37:	48 c7 c1 05 00 00 00 	mov    $0x5,%rcx\n"
         "  3e:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8\n"
         "  45:	ff e0                	jmpq   *%rax\n"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+call_fun_test() ->
+    State0 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State1 = jit_x86_64:decrement_reductions_and_maybe_schedule_next(State0),
+    FuncReg = {x_reg, 0},
+    ArgsCount = 0,
+    {State2, Reg} = jit_x86_64:move_to_native_register(State1, FuncReg),
+    {State3, OffsetRef0, JumpToken0} = jit_x86_64:jump_to_offset_if_and_equal(
+        State2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED
+    ),
+    ErrorOffset = jit_x86_64:offset(State3),
+    State4 = jit_x86_64:call_primitive_last(State3, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, ?BADFUN_ATOM, Reg
+    ]),
+    {State5, ContinueOffset} = jit_x86_64:offset(State4, [JumpToken0]),
+    State6 = jit_x86_64:and_(State5, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {State7, BoxTag} = jit_x86_64:get_array_element(State6, Reg, 0),
+    State8 = jit_x86_64:or_(State7, Reg, ?TERM_PRIMARY_BOXED),
+    {State9, OffsetRef1, _JumpToken1} = jit_x86_64:jump_to_offset_if_and_not_equal(
+        State8, {free, BoxTag}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FUN
+    ),
+    State10 = jit_x86_64:call_primitive_with_cp(State9, ?PRIM_CALL_FUN, [
+        ctx, jit_state, Reg, ArgsCount
+    ]),
+    Labels = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset}],
+    jit_x86_64:assert_all_native_free(State10),
+    State11 = jit_x86_64:update_branches(State10, Labels),
+    Stream = jit_x86_64:stream(State11),
+    Dump = <<
+        "   0:	ff 4e 10             	decl   0x10(%rsi)\n"
+        "   3:	75 11                	jne    0x16\n"
+        "   5:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x16\n"
+        "   c:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+        "  10:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
+        "  14:	ff e0                	jmpq   *%rax\n"
+        "  16:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "  1a:	49 89 c3             	mov    %rax,%r11\n"
+        "  1d:	49 83 e3 03          	and    $0x3,%r11\n"
+        "  21:	49 83 fb 02          	cmp    $0x2,%r11\n"
+        "  25:	74 14                	je     0x3b\n"
+        "  27:	4c 8b 9a 98 00 00 00 	mov    0x98(%rdx),%r11\n"
+        "  2e:	48 c7 c2 0b 02 00 00 	mov    $0x20b,%rdx\n"
+        "  35:	48 89 c1             	mov    %rax,%rcx\n"
+        "  38:	41 ff e3             	jmpq   *%r11\n"
+        "  3b:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax\n"
+        "  3f:	4c 8b 18             	mov    (%rax),%r11\n"
+        "  42:	48 83 c8 02          	or     $0x2,%rax\n"
+        "  46:	49 83 e3 3f          	and    $0x3f,%r11\n"
+        "  4a:	49 83 fb 14          	cmp    $0x14,%r11\n"
+        "  4e:	75 d7                	jne    0x27\n"
+        "  50:	4c 8b 1e             	mov    (%rsi),%r11\n"
+        "  53:	45 8b 1b             	mov    (%r11),%r11d\n"
+        "  56:	49 c1 e3 18          	shl    $0x18,%r11\n"
+        "  5a:	49 81 cb f0 01 00 00 	or     $0x1f0,%r11\n"
+        "  61:	4c 89 9f b8 00 00 00 	mov    %r11,0xb8(%rdi)\n"
+        "  68:	4c 8b 9a 00 01 00 00 	mov    0x100(%rdx),%r11\n"
+        "  6f:	48 89 c2             	mov    %rax,%rdx\n"
+        "  72:	48 c7 c1 00 00 00 00 	mov    $0x0,%rcx\n"
+        "  79:	41 ff e3             	jmpq   *%r11\n"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 

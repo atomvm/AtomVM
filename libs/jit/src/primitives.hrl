@@ -52,3 +52,12 @@
 -define(PRIM_WAIT_TIMEOUT_TRAP_HANDLER, 31).
 -define(PRIM_CALL_FUN, 32).
 -define(PRIM_CONTEXT_GET_FLAGS, 33).
+-define(PRIM_CONTEXT_ENSURE_FPREGS, 34).
+-define(PRIM_TERM_FROM_FLOAT, 35).
+-define(PRIM_TERM_IS_NUMBER, 36).
+-define(PRIM_TERM_CONV_TO_FLOAT, 37).
+-define(PRIM_FADD, 38).
+-define(PRIM_FSUB, 39).
+-define(PRIM_FMUL, 40).
+-define(PRIM_FDIV, 41).
+-define(PRIM_FNEGATE, 42).
