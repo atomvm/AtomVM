@@ -151,7 +151,7 @@ Your ESP32 device is now flashed with the ESP32 image you specified.
 
 The [`atomvm_examples`](https://github.com/atomvm/atomvm_examples) repo is a good place to start smoke testing.  We assume you know how to clone this repo using git.
 
-Note that you will need a supported OTP version and at least a recent version of the [rebar3](https://rebar3.org) tool.  If you want to smoke test Elixir programs, you should also have a comaptible version of the Elixir compiler and runtime available.  Consult the AtomVM [Relaase Notes](https://www.atomvm.net/doc/main/release-notes.html) for compatibility information.
+Note that you will need a supported OTP version and at least a recent version of the [rebar3](https://rebar3.org) tool.  If you want to smoke test Elixir programs, you should also have a comaptible version of the Elixir compiler and runtime available.  Consult the AtomVM [Relaase Notes](https://doc.atomvm.org/release-0.6/release-notes.html) for compatibility information.
 
 To run an example program, `cd` into the appropriate example directory, and build and flash the program.  We will show an example with the [`hello_world`](https://github.com/atomvm/atomvm_examples/tree/master/erlang/hello_world) program.
 
