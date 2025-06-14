@@ -90,6 +90,11 @@ struct ModuleNativeInterface {
     Context * (* wait_timeout_trap_handler)(Context *ctx, JITState *jit_state, int label);
     Context * (* call_fun)(Context *ctx, JITState *jit_state, term fun, unsigned int args_count);
     int (* context_get_flags)(Context *ctx, int mask);
+    void (* context_ensure_fpregs)(Context *ctx);
+    term (* term_from_float)(Context *ctx, avm_float_t f);
+    bool (* term_is_number)(term t);
+    void (* term_conv_to_float)(Context *ctx, term t, int fpreg);
+    bool (* fadd)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
