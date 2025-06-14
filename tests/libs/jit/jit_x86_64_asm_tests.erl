@@ -117,7 +117,11 @@ shrq_test_() ->
 testb_test_() ->
     [
         ?_assertEqual(<<16#A8, 16#01>>, jit_x86_64_asm:testb(1, rax)),
-        ?_assertEqual(<<16#84, 16#C0>>, jit_x86_64_asm:testb(rax, rax))
+        ?_assertEqual(<<16#84, 16#C0>>, jit_x86_64_asm:testb(rax, rax)),
+        ?_assertEqual(<<16#84, 16#C0>>, jit_x86_64_asm:testb(rax, rax)),
+        ?_assertEqual(<<16#84, 16#C9>>, jit_x86_64_asm:testb(rcx, rcx)),
+        ?_assertEqual(<<16#45, 16#84, 16#C0>>, jit_x86_64_asm:testb(r8, r8)),
+        ?_assertEqual(<<16#45, 16#84, 16#C9>>, jit_x86_64_asm:testb(r9, r9))
     ].
 
 testq_test_() ->
@@ -273,4 +277,16 @@ leaq_test_() ->
             <<16#4C, 16#8D, 16#87, 16#78, 16#56, 16#34, 16#12>>,
             jit_x86_64_asm:leaq({305419896, rdi}, r8)
         )
+    ].
+
+movsd_test_() ->
+    [
+        % movsd xmm0, [rax]
+        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#00>>, jit_x86_64_asm:movsd({0, rax}, xmm0)),
+        % movsd xmm1, [rcx]
+        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#09>>, jit_x86_64_asm:movsd({0, rcx}, xmm1)),
+        % movsd xmm0, [r8]
+        ?_assertEqual(<<16#41, 16#F2, 16#0F, 16#10, 16#00>>, jit_x86_64_asm:movsd({0, r8}, xmm0)),
+        % movsd xmm8, [r11]
+        ?_assertEqual(<<16#41, 16#F2, 16#0F, 16#10, 16#43>>, jit_x86_64_asm:movsd({0, r11}, xmm8))
     ].
