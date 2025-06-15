@@ -953,6 +953,8 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 115
 % first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+% 119
+% first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 124
 first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
     {FailLabel, Rest1} = decode_label(Rest0),
@@ -1025,6 +1027,8 @@ first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     MSt11 = MMod:free_native_register(MSt10, Reg),
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
     first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
+% 132
+% first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
 % 136
 first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
     {NWords, Rest1} = decode_literal(Rest0),
@@ -1334,7 +1338,7 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
 % 182
 % first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt0, State) ->
 
-term_alloc_bin_match_state(Live, Src, Dest, MMod, MSt0) ->
+term_alloc_bin_match_state(Live, Src, Dest, MMod, MSt0) when Live < ?MAX_REG ->
     {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
     MSt2 = MMod:free_native_register(MSt1, TrimResultReg),
     % Write Src to x_reg to have it as a gc root
@@ -1346,6 +1350,22 @@ term_alloc_bin_match_state(Live, Src, Dest, MMod, MSt0) ->
     MSt6 = MMod:free_native_register(MSt5, MemoryEnsureFreeReg),
     {MSt7, AllocMatchStateReg} = MMod:call_primitive(MSt6, ?PRIM_TERM_ALLOC_BIN_MATCH_STATE, [
         ctx, {x_reg, Live}, 0
+    ]),
+    MSt8 = MMod:move_to_vm_register(MSt7, AllocMatchStateReg, Dest),
+    MSt9 = MMod:free_native_register(MSt8, AllocMatchStateReg),
+    MSt9;
+term_alloc_bin_match_state(?MAX_REG, Src, Dest, MMod, MSt0) ->
+    {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, ?MAX_REG]),
+    MSt2 = MMod:free_native_register(MSt1, TrimResultReg),
+    % We have ?MAX_REG + 1 registers available
+    MSt3 = MMod:move_to_vm_register(MSt2, Src, {x_reg, extra}),
+    {MSt4, MemoryEnsureFreeReg} = MMod:call_primitive(MSt3, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+        ctx, jit_state, ?TERM_BOXED_BIN_MATCH_STATE_SIZE, ?MAX_REG + 1, ?MEMORY_CAN_SHRINK
+    ]),
+    MSt5 = MMod:handle_error_if_false(MSt4, MemoryEnsureFreeReg),
+    MSt6 = MMod:free_native_register(MSt5, MemoryEnsureFreeReg),
+    {MSt7, AllocMatchStateReg} = MMod:call_primitive(MSt6, ?PRIM_TERM_ALLOC_BIN_MATCH_STATE, [
+        ctx, {x_reg, extra}, 0
     ]),
     MSt8 = MMod:move_to_vm_register(MSt7, AllocMatchStateReg, Dest),
     MSt9 = MMod:free_native_register(MSt8, AllocMatchStateReg),
