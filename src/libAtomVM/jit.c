@@ -954,6 +954,48 @@ static void jit_fnegate(Context *ctx, int freg1, int freg2)
     ctx->fr[freg2] = - ctx->fr[freg1];
 }
 
+static bool jit_catch_end(Context *ctx, JITState *jit_state)
+{
+    // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
+    switch (term_to_atom_index(ctx->x[0])) {
+        case THROW_ATOM_INDEX:
+            ctx->x[0] = ctx->x[1];
+            break;
+
+        case ERROR_ATOM_INDEX: {
+            ctx->x[2] = stacktrace_build(ctx, &ctx->x[2], 3);
+            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, ctx->x + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                return false;
+            }
+            term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(reason_tuple, 0, ctx->x[1]);
+            term_put_tuple_element(reason_tuple, 1, ctx->x[2]);
+            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+            term_put_tuple_element(exit_tuple, 1, reason_tuple);
+            ctx->x[0] = exit_tuple;
+
+            break;
+        }
+        case LOWERCASE_EXIT_ATOM_INDEX: {
+            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, ctx->x + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                return false;
+            }
+            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+            term_put_tuple_element(exit_tuple, 1, ctx->x[1]);
+            ctx->x[0] = exit_tuple;
+
+            break;
+        }
+    }
+    return true;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -998,4 +1040,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_fmul,
     jit_fdiv,
     jit_fnegate,
+    jit_catch_end,
 };

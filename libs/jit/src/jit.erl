@@ -707,7 +707,23 @@ first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt1 = MMod:call_only_or_schedule_next(MSt0, Label),
     first_pass(Rest1, MMod, MSt1, State0);
 % 62
-% first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+% Same implementation as OP_TRY, to confirm.
+first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
+    {Label, Rest2} = decode_label(Rest1),
+    ?TRACE("OP_CATCH ~p, ~p\n", [Dest, Label]),
+    MSt2 = term_from_catch_label(Dest, Label, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
+% 63
+first_pass(<<?OP_CATCH_END, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
+    ?TRACE("OP_CATCH_END ~p\n", [Dest]),
+    MSt2 = MMod:move_to_vm_register(MSt1, ?TERM_NIL, Dest),
+    MSt3 = MMod:free_native_register(MSt2, Dest),
+    {MSt4, ResultReg} = MMod:call_primitive(MSt3, ?PRIM_CATCH_END, [ctx, jit_state]),
+    MSt5 = MMod:handle_error_if_false(MSt4, ResultReg),
+    MSt6 = MMod:free_native_register(MSt5, ResultReg),
+    first_pass(Rest1, MMod, MSt6, State0);
 % 64
 first_pass(<<?OP_MOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Source, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
@@ -882,13 +898,8 @@ first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {Label, Rest2} = decode_label(Rest1),
     ?TRACE("OP_TRY ~p, ~p\n", [Dest, Label]),
-    {MSt2, Reg} = MMod:get_module_index(MSt1),
-    MSt3 = MMod:shift_left(MSt2, Reg, 24),
-    MSt4 = MMod:or_(MSt3, Reg, (Label bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_CATCH),
-    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
-    MSt6 = MMod:free_native_register(MSt5, Reg),
-    MSt7 = MMod:free_native_register(MSt6, Dest),
-    first_pass(Rest2, MMod, MSt7, State0);
+    MSt2 = term_from_catch_label(Dest, Label, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 105
 first_pass(<<?OP_TRY_END, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
@@ -1068,6 +1079,10 @@ first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_IS_MAP ~p, ~p\n", [Label, Arg1]),
     MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_MAP, MMod, MSt1),
     first_pass(Rest2, MMod, MSt2, State0);
+% 157
+% first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+% 158
+% first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 159
 first_pass(<<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt0, State) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -1245,9 +1260,16 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt6, State1} = validate_is_function(MMod, MSt5, Reg, State0),
     MSt7 = MMod:call_primitive_with_cp(MSt6, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
     first_pass(Rest3, MMod, MSt7, State1).
-
 % 181
 % first_pass(<<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+
+term_from_catch_label(Dest, Label, MMod, MSt1) ->
+    {MSt2, Reg} = MMod:get_module_index(MSt1),
+    MSt3 = MMod:shift_left(MSt2, Reg, 24),
+    MSt4 = MMod:or_(MSt3, Reg, (Label bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_CATCH),
+    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+    MSt6 = MMod:free_native_register(MSt5, Reg),
+    MMod:free_native_register(MSt6, Dest).
 
 term_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
