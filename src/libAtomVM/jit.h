@@ -100,6 +100,8 @@ struct ModuleNativeInterface {
     bool (* fdiv)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
     void (* fnegate)(Context *ctx, int fpreg_1, int fpreg_2);
     bool (* catch_end)(Context *ctx, JITState *jit_state);
+    bool (* memory_ensure_free_with_roots)(Context *ctx, JITState *jit_state, int sz, int live, int flags);
+    term (* term_alloc_bin_match_state)(Context *ctx, term src, int slots);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
