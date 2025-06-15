@@ -6807,6 +6807,12 @@ wait_timeout_trap_handler:
             }
 
             case OP_CALL_FUN2: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        SCHEDULE_NEXT(mod, pc - 1);
+                    }
+                #endif
                 term tag;
                 DECODE_COMPACT_TERM(tag, pc)
                 unsigned int args_count;
