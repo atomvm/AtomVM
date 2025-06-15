@@ -976,6 +976,8 @@ set_args0(
 
 set_args1(Reg, Reg) ->
     [];
+set_args1({x_reg, extra}, Reg) ->
+    jit_x86_64_asm:movq(?X_REG(?MAX_REG), Reg);
 set_args1({x_reg, X}, Reg) ->
     jit_x86_64_asm:movq(?X_REG(X), Reg);
 set_args1({ptr, Source}, Reg) ->
@@ -998,6 +1000,12 @@ move_to_vm_register(
     X < ?MAX_REG
 ->
     I1 = jit_x86_64_asm:andq(0, ?X_REG(X)),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1};
+move_to_vm_register(
+    #state{stream_module = StreamModule, stream = Stream0} = State, 0, {x_reg, extra}
+) ->
+    I1 = jit_x86_64_asm:andq(0, ?X_REG(?MAX_REG)),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_vm_register(#state{stream_module = StreamModule, stream = Stream0} = State, 0, {ptr, Reg}) ->
