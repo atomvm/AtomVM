@@ -465,7 +465,7 @@ first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     {MSt2, Arg2, Rest3} = decode_compact_term(Rest2, MMod, MSt1),
-    ?TRACE("OP_IS_EQ_EXACT ~p, ~p, ~p\n", [Label, Arg1, Arg2]),
+    ?TRACE("OP_IS_NOT_EQ_EXACT ~p, ~p, ~p\n", [Label, Arg1, Arg2]),
     {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_COMPARE, [
         ctx, jit_state, {free, Arg1}, {free, Arg2}, ?TERM_COMPARE_EXACT
     ]),
@@ -489,16 +489,8 @@ first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     ?TRACE("OP_IS_FLOAT ~p, ~p\n", [Label, Arg1]),
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    MSt3 = MMod:jump_to_label_if_and_not_equal(
-        MSt2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
-    ),
-    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
-    MSt6 = MMod:jump_to_label_if_and_not_equal(
-        MSt5, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FLOAT, Label
-    ),
-    first_pass(Rest2, MMod, MSt6, State0);
+    MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_FLOAT, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 47
 first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -639,16 +631,8 @@ first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     ?TRACE("OP_IS_TUPLE ~p, ~p\n", [Label, Arg1]),
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    MSt3 = MMod:jump_to_label_if_and_not_equal(
-        MSt2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
-    ),
-    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
-    MSt6 = MMod:jump_to_label_if_and_not_equal(
-        MSt5, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_TUPLE, Label
-    ),
-    first_pass(Rest2, MMod, MSt6, State0);
+    MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TUPLE, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 58
 first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -813,16 +797,8 @@ first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     ?TRACE("OP_IS_FUNCTION ~p, ~p\n", [Label, Arg1]),
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    MSt3 = MMod:jump_to_label_if_and_not_equal(
-        MSt2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
-    ),
-    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
-    MSt6 = MMod:jump_to_label_if_and_not_equal(
-        MSt5, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FUN, Label
-    ),
-    first_pass(Rest2, MMod, MSt6, State0);
+    MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_FUN, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 78
 first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Arity, Rest1} = decode_literal(Rest0),
@@ -1086,7 +1062,12 @@ first_pass(
 % 154
 % first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 156
-% first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_MAP ~p, ~p\n", [Label, Arg1]),
+    MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_MAP, MMod, MSt1),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 159
 first_pass(<<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt0, State) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -1268,6 +1249,18 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
 % 181
 % first_pass(<<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 
+term_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    MSt3 = MMod:jump_to_label_if_and_not_equal(
+        MSt2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
+    ),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
+    MSt6 = MMod:jump_to_label_if_and_not_equal(
+        MSt5, {free, Reg}, ?TERM_BOXED_TAG_MASK, BoxedTag, Label
+    ),
+    MSt6.
+
 term_is_immediate_or_boxed(
     Label, Arg1, ImmediateTag, BoxedTag, MMod, MSt1, #state{labels = Labels0} = State0
 ) ->
@@ -1276,20 +1269,11 @@ term_is_immediate_or_boxed(
     {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_and_equal(
         MSt2, Reg, ?TERM_IMMED_TAG_MASK, ImmediateTag
     ),
-    % test term_is_boxed
-    MSt4 = MMod:jump_to_label_if_and_not_equal(
-        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
-    ),
-    MSt5 = MMod:and_(MSt4, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt6 = MMod:move_array_element(MSt5, Reg, 0, Reg),
-    % test tag
-    MSt7 = MMod:jump_to_label_if_and_not_equal(
-        MSt6, {free, Reg}, ?TERM_BOXED_TAG_MASK, BoxedTag, Label
-    ),
-    {MSt8, Offset} = MMod:offset(MSt7, [JumpToken]),
-    MSt9 = MMod:free_native_register(MSt8, Reg),
+    MSt4 = term_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt3),
+    {MSt5, Offset} = MMod:offset(MSt4, [JumpToken]),
+    MSt6 = MMod:free_native_register(MSt5, Reg),
     Labels1 = [{OffsetRef, Offset} | Labels0],
-    {MSt9, State0#state{labels = Labels1}}.
+    {MSt6, State0#state{labels = Labels1}}.
 
 validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
     {MSt1, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
