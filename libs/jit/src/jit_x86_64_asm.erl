@@ -124,9 +124,12 @@ movq(SrcReg, DestReg) when is_atom(SrcReg) andalso is_atom(DestReg) ->
 movq(Imm, DestReg) when is_integer(Imm) andalso is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#c7, 3:2, 0:3, MODRM_RM:3, Imm:32/little>>;
-movq(Imm, {Offset, DestReg}) when is_integer(Imm) ->
+movq(Imm, {Offset, DestReg}) when is_integer(Imm) andalso ?IS_SINT8_T(Offset) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
-    <<?X86_64_REX(1, 0, 0, REX_B), 16#c7, 1:2, 0:3, MODRM_RM:3, Offset, Imm:32/little>>.
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#c7, 1:2, 0:3, MODRM_RM:3, Offset, Imm:32/little>>;
+movq(Imm, {Offset, DestReg}) when is_integer(Imm) andalso ?IS_SINT32_T(Offset) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#c7, 2:2, 0:3, MODRM_RM:3, Offset:32/little, Imm:32/little>>.
 
 movabsq(Imm, Reg) when is_atom(Reg) ->
     case x86_64_x_reg(Reg) of

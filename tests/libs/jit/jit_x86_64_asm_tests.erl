@@ -81,8 +81,13 @@ movq_test_() ->
         ?_assertEqual(
             <<16#48, 16#c7, 16#42, 16#10, 16#12345678:32/little>>,
             jit_x86_64_asm:movq(16#12345678, {16, rdx})
+        ),
+        % movq $0x6ef, 0x80(%rdi)
+        ?_assertEqual(
+            <<16#48, 16#c7, 16#87, 16#80, 0, 0, 0, 16#ef, 16#06, 0, 0>>,
+            jit_x86_64_asm:movq(16#6EF, {16#80, rdi})
         )
-    ].
+     ].
 
 movabsq_test_() ->
     [
