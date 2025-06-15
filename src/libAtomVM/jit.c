@@ -948,6 +948,11 @@ static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
     return true;
 }
 
+static void jit_fnegate(Context *ctx, int freg1, int freg2)
+{
+    ctx->fr[freg2] = - ctx->fr[freg1];
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -991,4 +996,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_fsub,
     jit_fmul,
     jit_fdiv,
+    jit_fnegate,
 };
