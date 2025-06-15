@@ -667,10 +667,12 @@ first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
     {DefaultLabel, Rest2} = decode_label(Rest1),
     {ListSize, Rest3} = decode_extended_list_header(Rest2),
+    ?TRACE("OP_SELECT_VAL ~p, ~p", [SrcValue, DefaultLabel]),
     {MSt2, Rest4} = lists:foldl(
         fun(_Index, {AccMSt0, AccRest0}) ->
             {AccMSt1, CmpValue, AccRest1} = decode_compact_term(AccRest0, MMod, AccMSt0),
             {JmpLabel, AccRest2} = decode_label(AccRest1),
+            ?TRACE(", ~p => ~p", [CmpValue, JmpLabel]),
             {AccMSt2, ResultReg} = MMod:call_primitive(AccMSt1, ?PRIM_TERM_COMPARE, [
                 ctx, jit_state, {free, CmpValue}, SrcValue, ?TERM_COMPARE_EXACT
             ]),
@@ -684,6 +686,7 @@ first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt0, State0) ->
         {MSt1, Rest3},
         lists:seq(0, (ListSize div 2) - 1)
     ),
+    ?TRACE("\n", []),
     MSt3 = MMod:jump_to_label(MSt2, DefaultLabel),
     first_pass(Rest4, MMod, MSt3, State0);
 % 60
