@@ -40,6 +40,7 @@
 _Static_assert(BADARITH_ATOM_INDEX == 6, "BADARITH_ATOM_INDEX is 6 in jit/src/defaultatoms.hrl");
 _Static_assert(BADFUN_ATOM_INDEX == 8, "BADFUN_ATOM_INDEX is 8 in jit/src/defaultatoms.hrl");
 _Static_assert(FUNCTION_CLAUSE_ATOM_INDEX == 10, "FUNCTION_CLAUSE_ATOM_INDEX is 10 in jit/src/defaultatoms.hrl");
+_Static_assert(TRY_CLAUSE_ATOM_INDEX == 11, "TRY_CLAUSE_ATOM_INDEX is 11 in jit/src/defaultatoms.hrl");
 _Static_assert(BADMATCH_ATOM_INDEX == 31, "BADMATCH_ATOM_INDEX is 31 in jit/src/defaultatoms.hrl");
 _Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in jit/src/defaultatoms.hrl");
 _Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/src/defaultatoms.hrl");
