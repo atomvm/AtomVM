@@ -25,7 +25,9 @@
 %%-----------------------------------------------------------------------------
 -module(binary).
 
--export([at/2, decode_hex/1, encode_hex/1, encode_hex/2, part/3, split/2, split/3]).
+-export([
+    at/2, decode_hex/1, encode_hex/1, encode_hex/2, part/3, split/2, split/3, replace/3, replace/4
+]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to get a byte from
@@ -114,4 +116,38 @@ split(_Binary, _Pattern) ->
 %%-----------------------------------------------------------------------------
 -spec split(Binary :: binary(), Pattern :: binary(), Option :: [global]) -> [binary()].
 split(_Binary, _Pattern, _Option) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @equiv replace(Binary, Pattern, Replacement, [])
+%% @param   Binary      binary where the replacements should occur
+%% @param   Pattern     binary pattern which is to be replaced
+%% @param   Replacement binary which will replace the pattern
+%% @return  resulting binary after replacements
+%% @doc     Replaces first occurrence of Pattern in Binary with Replacement.
+%%          If Pattern is not found, returns the original binary unchanged.
+%%          Pattern and Replacement must be binaries.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec replace(Binary :: binary(), Pattern :: binary(), Replacement :: binary()) -> binary().
+replace(_Binary, _Pattern, _Replacement) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary      binary where the replacements should occur
+%% @param   Pattern     binary pattern which is to be replaced
+%% @param   Replacement binary which will replace the pattern
+%% @param   Options     list of options for the replacement operations.
+%% @return  resulting binary after replacements
+%% @doc     Replaces occurrences of Pattern in Binary with Replacement.
+%%          If Options includes `global`, replaces all occurrences; otherwise, replaces just the first occurrence.
+%%          If Pattern is not found, returns the original binary unchanged.
+%%          Pattern and Replacement must be binaries.
+%%          Only implemented option is `global`.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec replace(
+    Binary :: binary(), Pattern :: binary(), Replacement :: binary(), Options :: [global] | []
+) -> binary().
+replace(_Binary, _Pattern, _Replacement, _Options) ->
     erlang:nif_error(undefined).

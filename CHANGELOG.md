@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Function.ex and Protocol.ex improving Elixir 1.18 support
 - Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
 - Added Process.link/1 and unlink/1 to Elixir Process.ex
+- Added `binary:replace/3`, `binary:replace/4`
 
 ### Changed
 
