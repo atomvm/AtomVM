@@ -950,7 +950,7 @@ static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 
 static void jit_fnegate(Context *ctx, int freg1, int freg2)
 {
-    ctx->fr[freg2] = - ctx->fr[freg1];
+    ctx->fr[freg2] = -ctx->fr[freg1];
 }
 
 const ModuleNativeInterface module_native_interface = {

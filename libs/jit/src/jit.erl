@@ -565,7 +565,19 @@ first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
     first_pass(Rest2, MMod, MSt12, State0#state{labels = Labels1});
 % 55
-% first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_LIST ~p, ~p\n", [Label, Arg1]),
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_equal(MSt2, Reg, ?TERM_NIL),
+    MSt4 = MMod:jump_to_label_if_and_not_equal(
+        MSt3, {free, Reg}, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_LIST, Label
+    ),
+    {MSt5, Offset} = MMod:offset(MSt4, [JumpToken]),
+    MSt6 = MMod:free_native_register(MSt5, Reg),
+    Labels1 = [{OffsetRef, Offset} | Labels0],
+    first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 56
 first_pass(<<?OP_IS_NONEMPTY_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
