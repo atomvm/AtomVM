@@ -37,6 +37,7 @@
 #include "trace.h"
 
 // Verify matching atom index in defaultatoms.hrl
+_Static_assert(BADARG_ATOM_INDEX == 5, "BADARG_ATOM_INDEX is 5 in jit/src/defaultatoms.hrl");
 _Static_assert(BADARITH_ATOM_INDEX == 6, "BADARITH_ATOM_INDEX is 6 in jit/src/defaultatoms.hrl");
 _Static_assert(BADFUN_ATOM_INDEX == 8, "BADFUN_ATOM_INDEX is 8 in jit/src/defaultatoms.hrl");
 _Static_assert(FUNCTION_CLAUSE_ATOM_INDEX == 10, "FUNCTION_CLAUSE_ATOM_INDEX is 10 in jit/src/defaultatoms.hrl");
@@ -996,7 +997,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
     return true;
 }
 
-bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
+static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
 {
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, sz, live, ctx->x, flags) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
@@ -1005,7 +1006,7 @@ bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz
     return true;
 }
 
-term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
+static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 {
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
@@ -1056,4 +1057,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_fnegate,
     jit_catch_end,
     jit_memory_ensure_free_with_roots,
+    jit_term_alloc_bin_match_state,
 };
