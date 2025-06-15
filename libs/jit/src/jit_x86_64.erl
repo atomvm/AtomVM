@@ -46,6 +46,7 @@
     jump_to_label_if_equal/4,
     jump_to_label_if_not_equal/4,
     jump_to_offset_if_equal/3,
+    jump_to_offset_if_not_equal/3,
     jump_to_offset_if_and_equal/4,
     jump_to_offset_if_and_not_equal/4,
     jump_to_offset_if_not_zero/2,
@@ -610,6 +611,27 @@ jump_to_offset_if_equal(
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    OffsetRef = make_ref(),
+    Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
+        used_regs = UsedRegs
+    }}.
+
+jump_to_offset_if_not_equal(
+    #state{
+        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
+    } = State,
+    Reg,
+    Val
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     OffsetRef = make_ref(),
     Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
     Code = <<
