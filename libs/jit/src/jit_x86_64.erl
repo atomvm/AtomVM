@@ -1153,6 +1153,18 @@ move_to_vm_register(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_to_vm_register(
+    #state{stream_module = StreamModule, available_regs = [Temp1, Temp2 | _], stream = Stream0} =
+        State,
+    {ptr, Reg},
+    {y_reg, Y}
+) when ?IS_GPR(Reg) ->
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
+    I2 = jit_x86_64_asm:movq({0, Reg}, Temp2),
+    I3 = jit_x86_64_asm:movq(Temp2, {Y * 8, Temp1}),
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1};
+move_to_vm_register(
     #state{stream_module = StreamModule, available_regs = [Temp | _], stream = Stream0} = State,
     Reg,
     {fp_reg, F}

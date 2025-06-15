@@ -25,6 +25,8 @@
     compile/3
 ]).
 
+-compile([warnings_as_errors]).
+
 -include_lib("jit.hrl").
 
 -include("default_atoms.hrl").
@@ -526,7 +528,27 @@ first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
 % 49
 % first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 50
-% first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_REFERENCE ~p, ~p\n", [Label, Arg1]),
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    MSt3 = MMod:jump_to_label_if_and_not_equal(
+        MSt2, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
+    ),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
+    MSt6 = MMod:and_(MSt5, Reg, ?TERM_BOXED_TAG_MASK),
+    {MSt7, OffsetRef, JumpToken} = MMod:jump_to_offset_if_equal(
+        MSt6, Reg, ?TERM_BOXED_REF
+    ),
+    MSt8 = MMod:jump_to_label_if_not_equal(
+        MSt7, Reg, ?TERM_BOXED_EXTERNAL_REF, Label
+    ),
+    {MSt9, Offset} = MMod:offset(MSt8, [JumpToken]),
+    MSt10 = MMod:free_native_register(MSt9, Reg),
+    Labels1 = [{OffsetRef, Offset} | Labels0],
+    first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
 % 51
 % first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 52
@@ -559,11 +581,10 @@ first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     MSt9 = MMod:jump_to_label_if_not_equal(
         MSt8, Reg, ?TERM_BOXED_SUB_BINARY, Label
     ),
-    MSt10 = MMod:free_native_register(MSt9, Reg),
-    {MSt11, Offset} = MMod:offset(MSt10, [JumpToken1, JumpToken2]),
-    MSt12 = MMod:free_native_register(MSt11, Reg),
+    {MSt10, Offset} = MMod:offset(MSt9, [JumpToken1, JumpToken2]),
+    MSt11 = MMod:free_native_register(MSt10, Reg),
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt12, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
 % 55
 first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {Label, Rest1} = decode_label(Rest0),
