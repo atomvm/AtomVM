@@ -861,6 +861,35 @@ term bif_erlang_mul_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+term bif_erlang_fdiv_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
+{
+    UNUSED(live);
+    if (!term_is_integer(arg1) && !term_is_float(arg1)) {
+        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+
+    if (!term_is_integer(arg2) && !term_is_float(arg2)) {
+        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+    avm_float_t farg1 = term_conv_to_float(arg1);
+    avm_float_t farg2 = term_conv_to_float(arg2);
+
+    if (UNLIKELY(farg2 == 0)) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+    avm_float_t fresult = farg1 / farg2;
+
+    if (UNLIKELY(!isfinite(fresult))) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, FLOAT_SIZE, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_float(fresult, &ctx->heap);
+}
+
 static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     int size = 0;
