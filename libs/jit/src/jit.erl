@@ -928,11 +928,18 @@ first_pass(<<?OP_TRY_CASE, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt3 = MMod:free_native_register(MSt2, Dest),
     first_pass(Rest1, MMod, MSt3, State0);
 % 107
-% first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
+    ?TRACE("OP_TRY_CASE_END ~p\n", [Arg1]),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, ?TRY_CLAUSE_ATOM, Arg1
+    ]),
+    first_pass(Rest1, MMod, MSt2, State0);
 % 108
 first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Stacktrace, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
     {MSt2, ExcValue, Rest2} = decode_compact_term(Rest1, MMod, MSt1),
+    ?TRACE("OP_RAISE ~p, ~p\n", [Stacktrace, ExcValue]),
     MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE, [
         ctx, jit_state, Stacktrace, ExcValue
     ]),
