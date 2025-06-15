@@ -3260,7 +3260,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                if (LIKELY(term_is_tuple(src_value))) {
+                    assert(term_is_tuple(src_value));
                     int arity = term_get_tuple_arity(src_value);
                 #endif
 
@@ -3280,9 +3280,6 @@ wait_timeout_trap_handler:
                             }
                         #endif
                     }
-                #ifdef IMPL_EXECUTE_LOOP
-                }
-                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (!jump_to_address) {
