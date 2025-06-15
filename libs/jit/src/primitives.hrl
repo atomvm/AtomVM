@@ -61,3 +61,4 @@
 -define(PRIM_FMUL, 40).
 -define(PRIM_FDIV, 41).
 -define(PRIM_FNEGATE, 42).
+-define(PRIM_CATCH_END, 43).

@@ -99,6 +99,7 @@ struct ModuleNativeInterface {
     bool (* fmul)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
     bool (* fdiv)(Context *ctx, int fpreg_1, int fpreg_2, int fpreg_3);
     void (* fnegate)(Context *ctx, int fpreg_1, int fpreg_2);
+    bool (* catch_end)(Context *ctx, JITState *jit_state);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
