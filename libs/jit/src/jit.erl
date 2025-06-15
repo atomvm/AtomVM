@@ -724,30 +724,16 @@ first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 75
-first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, State0) ->
     % MSt0 = MMod:debugger(MStR),
     {ArgsCount, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_CALL_FUN ~p\n", [ArgsCount]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
     {MSt2, FuncReg} = read_any_xreg(ArgsCount, MMod, MSt1),
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, FuncReg),
-    {MSt4, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
-        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED
-    ),
-    ErrorOffset = MMod:offset(MSt4),
-    MSt5 = MMod:call_primitive_last(MSt4, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?BADFUN_ATOM, Reg
-    ]),
-    {MSt6, ContinueOffset} = MMod:offset(MSt5, [JumpToken0]),
-    MSt7 = MMod:and_(MSt6, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt8, BoxTag} = MMod:get_array_element(MSt7, Reg, 0),
-    MSt9 = MMod:or_(MSt8, Reg, ?TERM_PRIMARY_BOXED),
-    {MSt10, OffsetRef1, _JumpToken1} = MMod:jump_to_offset_if_and_not_equal(
-        MSt9, {free, BoxTag}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FUN
-    ),
-    MSt11 = MMod:call_primitive_with_cp(MSt10, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
-    Labels1 = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset} | Labels0],
-    first_pass(Rest1, MMod, MSt11, State0#state{labels = Labels1});
+    {MSt4, State1} = validate_is_function(MMod, MSt3, Reg, State0),
+    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
+    first_pass(Rest1, MMod, MSt5, State1);
 % 77
 first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -1163,13 +1149,43 @@ first_pass(<<?OP_RECV_MARKER_USE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, RegA, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_RECV_MARKER_USE ~p\n", [RegA]),
     MSt2 = MMod:free_native_register(MSt1, RegA),
-    first_pass(Rest1, MMod, MSt2, State0).
+    first_pass(Rest1, MMod, MSt2, State0);
 % 177
 % first_pass(<<?OP_BS_CREATE_BIN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 178
-% first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, Tag, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
+    {ArgsCount, Rest2} = decode_literal(Rest1),
+    {MSt2, Fun, Rest3} = decode_compact_term(Rest2, MMod, MSt1),
+    ?TRACE("OP_CALL_FUN2 ~p, ~p, ~p\n", [Tag, ArgsCount, Fun]),
+    % We ignore Tag (could be literal 0 or atom unsafe)
+    MSt3 = MSt3 = MMod:free_native_register(MSt2, Tag),
+    MSt4 = MMod:decrement_reductions_and_maybe_schedule_next(MSt3),
+    {MSt5, Reg} = MMod:move_to_native_register(MSt4, Fun),
+    {MSt6, State1} = validate_is_function(MMod, MSt5, Reg, State0),
+    MSt7 = MMod:call_primitive_with_cp(MSt6, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
+    first_pass(Rest3, MMod, MSt7, State1).
+
 % 181
 % first_pass(<<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+
+validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
+    {MSt1, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
+        MSt0, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED
+    ),
+    ErrorOffset = MMod:offset(MSt1),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, ?BADFUN_ATOM, Reg
+    ]),
+    {MSt3, ContinueOffset} = MMod:offset(MSt2, [JumpToken0]),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt5, BoxTag} = MMod:get_array_element(MSt4, Reg, 0),
+    MSt6 = MMod:or_(MSt5, Reg, ?TERM_PRIMARY_BOXED),
+    {MSt7, OffsetRef1, _JumpToken1} = MMod:jump_to_offset_if_and_not_equal(
+        MSt6, {free, BoxTag}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FUN
+    ),
+    Labels1 = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset} | Labels0],
+    {MSt7, State0#state{labels = Labels1}}.
 
 first_pass_float3(Primitive, Rest0, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -1257,6 +1273,12 @@ decode_compact_term(<<?COMPACT_EXTENDED_TYPED_REGISTER, Rest0/binary>>, MMod, MS
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {_Type, Rest2} = decode_literal(Rest1),
     {MSt1, Dest, Rest2};
+decode_compact_term(<<_Value:5, ?COMPACT_LABEL:3, _Rest/binary>> = Binary, _MMod, MSt0) ->
+    {Value, Rest} = decode_label(Binary),
+    {MSt0, {label, Value}, Rest};
+decode_compact_term(<<_Value:5, ?COMPACT_LITERAL:3, _Rest/binary>> = Binary, _MMod, MSt0) ->
+    {Value, Rest} = decode_value64(Binary),
+    {MSt0, {literal, Value}, Rest};
 decode_compact_term(Other, MMod, MSt) ->
     decode_dest(Other, MMod, MSt).
 
