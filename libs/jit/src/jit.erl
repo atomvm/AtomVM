@@ -819,7 +819,16 @@ first_pass(<<?OP_FMUL, Rest0/binary>>, MMod, MSt0, State0) ->
 first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass_float3(?PRIM_FDIV, Rest0, MMod, MSt0, State0);
 % 102
-% first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
+    {{fp_reg, FPRegIndex2}, Rest3} = decode_fp_register(Rest2),
+    ?TRACE("OP_FNEGATE ~p, ~p, ~p\n", [Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}]),
+    {MSt1, Reg} = MMod:call_primitive(MSt0, ?PRIM_FNEGATE, [
+        ctx, FPRegIndex1, FPRegIndex2
+    ]),
+    MSt2 = MMod:free_native_register(MSt1, Reg),
+    first_pass(Rest3, MMod, MSt2, State0);
 % 104
 first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
