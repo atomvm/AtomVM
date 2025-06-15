@@ -476,28 +476,14 @@ first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt6 = MMod:free_native_register(MSt5, ResultReg),
     first_pass(Rest3, MMod, MSt6, State0);
 % 45
-first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
     ?TRACE("OP_IS_INTEGER ~p, ~p\n", [Label, Arg1]),
-    % test term_is_integer
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_and_equal(
-        MSt2, Reg, ?TERM_IMMED_TAG_MASK, ?TERM_INTEGER_TAG
+    {MSt2, State1} = term_is_immediate_or_boxed(
+        Label, Arg1, ?TERM_INTEGER_TAG, ?TERM_BOXED_POSITIVE_INTEGER, MMod, MSt1, State0
     ),
-    % test term_is_boxed
-    MSt4 = MMod:jump_to_label_if_and_not_equal(
-        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
-    ),
-    MSt5 = MMod:and_(MSt4, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt6 = MMod:move_array_element(MSt5, Reg, 0, Reg),
-    MSt7 = MMod:jump_to_label_if_and_not_equal(
-        MSt6, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_POSITIVE_INTEGER, Label
-    ),
-    {MSt8, Offset} = MMod:offset(MSt7, [JumpToken]),
-    MSt9 = MMod:free_native_register(MSt8, Reg),
-    Labels1 = [{OffsetRef, Offset} | Labels0],
-    first_pass(Rest2, MMod, MSt9, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt2, State1);
 % 46
 first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -526,7 +512,14 @@ first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
     ),
     first_pass(Rest2, MMod, MSt3, State0);
 % 49
-% first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_PID ~p, ~p\n", [Label, Arg1]),
+    {MSt2, State1} = term_is_immediate_or_boxed(
+        Label, Arg1, ?TERM_PID_TAG, ?TERM_BOXED_EXTERNAL_PID, MMod, MSt1, State0
+    ),
+    first_pass(Rest2, MMod, MSt2, State1);
 % 50
 first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -550,7 +543,14 @@ first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, #state{labels = Label
     Labels1 = [{OffsetRef, Offset} | Labels0],
     first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
 % 51
-% first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_PORT ~p, ~p\n", [Label, Arg1]),
+    {MSt2, State1} = term_is_immediate_or_boxed(
+        Label, Arg1, ?TERM_PORT_TAG, ?TERM_BOXED_EXTERNAL_PORT, MMod, MSt1, State0
+    ),
+    first_pass(Rest2, MMod, MSt2, State1);
 % 52
 first_pass(<<?OP_IS_NIL, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -1207,6 +1207,29 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
 
 % 181
 % first_pass(<<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+
+term_is_immediate_or_boxed(
+    Label, Arg1, ImmediateTag, BoxedTag, MMod, MSt1, #state{labels = Labels0} = State0
+) ->
+    % test term_is_local_port/term_is_integer, etc.
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    {MSt3, OffsetRef, JumpToken} = MMod:jump_to_offset_if_and_equal(
+        MSt2, Reg, ?TERM_IMMED_TAG_MASK, ImmediateTag
+    ),
+    % test term_is_boxed
+    MSt4 = MMod:jump_to_label_if_and_not_equal(
+        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
+    ),
+    MSt5 = MMod:and_(MSt4, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt6 = MMod:move_array_element(MSt5, Reg, 0, Reg),
+    % test tag
+    MSt7 = MMod:jump_to_label_if_and_not_equal(
+        MSt6, {free, Reg}, ?TERM_BOXED_TAG_MASK, BoxedTag, Label
+    ),
+    {MSt8, Offset} = MMod:offset(MSt7, [JumpToken]),
+    MSt9 = MMod:free_native_register(MSt8, Reg),
+    Labels1 = [{OffsetRef, Offset} | Labels0],
+    {MSt9, State0#state{labels = Labels1}}.
 
 validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
     {MSt1, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
