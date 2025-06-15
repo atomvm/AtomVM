@@ -500,7 +500,32 @@ first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
     ),
     first_pass(Rest2, MMod, MSt6, State0);
 % 47
-% first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0),
+    ?TRACE("OP_IS_NUMBER ~p, ~p\n", [Label, Arg1]),
+    % test term_is_integer
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    {MSt3, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
+        MSt2, Reg, ?TERM_IMMED_TAG_MASK, ?TERM_INTEGER_TAG
+    ),
+    % test term_is_boxed
+    MSt4 = MMod:jump_to_label_if_and_not_equal(
+        MSt3, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED, Label
+    ),
+    MSt5 = MMod:and_(MSt4, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt6 = MMod:move_array_element(MSt5, Reg, 0, Reg),
+    % test tag
+    {MSt7, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_and_equal(
+        MSt6, Reg, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_POSITIVE_INTEGER
+    ),
+    MSt8 = MMod:jump_to_label_if_and_not_equal(
+        MSt7, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_FLOAT, Label
+    ),
+    {MSt9, Offset} = MMod:offset(MSt8, [JumpToken0, JumpToken1]),
+    MSt10 = MMod:free_native_register(MSt9, Reg),
+    Labels1 = [{OffsetRef0, Offset}, {OffsetRef1, Offset} | Labels0],
+    first_pass(Rest2, MMod, MSt10, State0#state{labels = Labels1});
 % 48
 first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
