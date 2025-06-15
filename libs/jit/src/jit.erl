@@ -694,6 +694,7 @@ first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
     {DefaultLabel, Rest2} = decode_label(Rest1),
     {ListSize, Rest3} = decode_extended_list_header(Rest2),
+    ?TRACE("OP_SELECT_TUPLE_ARITY ~p, ~p", [SrcValue, DefaultLabel]),
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, SrcValue),
     MSt3 = MMod:and_(MSt2, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt4 = MMod:move_array_element(MSt3, Reg, 0, Reg),
@@ -702,6 +703,7 @@ first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
         fun(_Index, {AccMSt0, AccRest0}) ->
             {CmpValue, AccRest1} = decode_literal(AccRest0),
             {JmpLabel, AccRest2} = decode_label(AccRest1),
+            ?TRACE(", ~p => ~p", [CmpValue, JmpLabel]),
             AccMSt1 = MMod:jump_to_label_if_equal(
                 AccMSt0, Reg, CmpValue, JmpLabel
             ),
@@ -710,6 +712,7 @@ first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
         {MSt5, Rest3},
         lists:seq(0, (ListSize div 2) - 1)
     ),
+    ?TRACE("\n", []),
     MSt7 = MMod:free_native_register(MSt6, Reg),
     MSt8 = MMod:jump_to_label(MSt7, DefaultLabel),
     first_pass(Rest4, MMod, MSt8, State0);
