@@ -6028,7 +6028,6 @@ wait_timeout_trap_handler:
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
                         // Space should be available on heap as compiler added an allocate opcode
-                        context_ensure_fpregs(ctx);
                         term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
                         WRITE_REGISTER(dreg, float_value);
                     #endif
@@ -6093,7 +6092,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6140,7 +6138,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6187,7 +6184,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6234,7 +6230,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
