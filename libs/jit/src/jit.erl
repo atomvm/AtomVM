@@ -1037,9 +1037,27 @@ first_pass(<<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt0, State) ->
 % 160
 % first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 162
-% first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
+    {MSt2, Dest, Rest3} = decode_dest(Rest1, MMod, MSt1),
+    ?TRACE("OP_GET_HD ~p, ~p\n", [SrcValue, Dest]),
+    {MSt3, Reg} = MMod:move_to_native_register(MSt2, SrcValue),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_array_element(MSt4, Reg, ?LIST_HEAD_INDEX, Dest),
+    MSt6 = MMod:free_native_register(MSt5, Dest),
+    MSt7 = MMod:free_native_register(MSt6, Reg),
+    first_pass(Rest3, MMod, MSt7, State0);
 % 163
-% first_pass(<<?OP_GET_TL, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_GET_TL, Rest0/binary>>, MMod, MSt0, State0) ->
+    {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0),
+    {MSt2, Dest, Rest3} = decode_dest(Rest1, MMod, MSt1),
+    ?TRACE("OP_GET_TL ~p, ~p\n", [SrcValue, Dest]),
+    {MSt3, Reg} = MMod:move_to_native_register(MSt2, SrcValue),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_array_element(MSt4, Reg, ?LIST_TAIL_INDEX, Dest),
+    MSt6 = MMod:free_native_register(MSt5, Dest),
+    MSt7 = MMod:free_native_register(MSt6, Reg),
+    first_pass(Rest3, MMod, MSt7, State0);
 % 164
 first_pass(<<?OP_PUT_TUPLE2, Rest0/binary>>, MMod, MSt0, State) ->
     %   MSt0 = MMod:debugger(MStR),
