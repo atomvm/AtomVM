@@ -524,14 +524,16 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
-    int arity = term_get_tuple_arity(to_insert);
-    avm_int_t position = term_to_int(position_term) - 1;
-    if (UNLIKELY(arity <= position || position < 1)) {
+    size_t arity = term_get_tuple_arity(to_insert);
+    size_t elem_index = term_to_int(position_term) - 1;
+    // FIXME: elem_index can be 0 (i.e. first element).
+    // The correct condition is to error if it's the same as key position in the ETS table
+    if (UNLIKELY(arity <= elem_index || elem_index < 1)) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
 
-    term elem = term_get_tuple_element(to_insert, position);
+    term elem = term_get_tuple_element(to_insert, elem_index);
     if (UNLIKELY(!term_is_integer(elem))) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
@@ -554,7 +556,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     }
 
     term final_value = term_from_int(elem_value);
-    term_put_tuple_element(to_insert, position, final_value);
+    term_put_tuple_element(to_insert, elem_index, final_value);
     EtsErrorCode insert_result = insert(ets_table, to_insert, ctx);
     if (insert_result == EtsOk) {
         *ret = final_value;
