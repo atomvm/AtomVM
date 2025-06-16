@@ -3707,10 +3707,10 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
     if (UNLIKELY(keypos < 1)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    size_t key_index = term_to_int(keypos_term) - 1;
+    size_t key_index = keypos - 1;
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key_term, key_index + 1, &ret, ctx);
+    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key_term, key_index, &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
