@@ -39,7 +39,7 @@ struct EtsHashTable
 
 typedef enum EtsHashtableOptions
 {
-    EtsHashtableAllowOverwrite = 1
+    EtsHashtableAllowOverwrite = (1 << 0),
 } EtsHashtableOptions;
 
 typedef enum EtsHashtableStatus

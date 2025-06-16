@@ -20,6 +20,7 @@
 
 #include "ets.h"
 
+#include <assert.h>
 #include "context.h"
 #include "defaultatoms.h"
 #include "ets_hashtable.h"
@@ -245,7 +246,7 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
     ets_delete_tables_internal(ets, true_pred, NULL, global);
 }
 
-static EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Context *ctx)
+static EtsErrorCode insert(struct EtsTable *ets_table, term entry, Context *ctx)
 {
     size_t keypos = ets_table->keypos;
 
@@ -266,7 +267,7 @@ static EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Con
     return EtsOk;
 }
 
-static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list, Context *ctx)
+static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Context *ctx)
 {
     term iter = list;
     size_t size = 0;
@@ -321,9 +322,9 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
 
     EtsErrorCode result;
     if (term_is_tuple(entry)) {
-        result = ets_table_insert(ets_table, entry, ctx);
+        result = insert(ets_table, entry, ctx);
     } else if (term_is_list(entry)) {
-        result = ets_table_insert_list(ets_table, entry, ctx);
+        result = insert_multiple(ets_table, entry, ctx);
     } else {
         result = EtsBadEntry;
     }
@@ -559,7 +560,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
 
     term final_value = term_from_int(elem_value);
     term_put_tuple_element(to_insert, position, final_value);
-    EtsErrorCode insert_result = ets_table_insert(ets_table, to_insert, ctx);
+    EtsErrorCode insert_result = insert(ets_table, to_insert, ctx);
     if (insert_result == EtsOk) {
         *ret = final_value;
     }
