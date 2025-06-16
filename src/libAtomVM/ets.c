@@ -57,7 +57,7 @@ struct EtsTable
     term name;
     bool is_named;
     int32_t owner_process_id;
-    size_t keypos;
+    size_t key_index;
     EtsTableType table_type;
     // In the future, we might support rb-trees for sorted sets
     // For this MVP, we only support unsorted sets
@@ -171,7 +171,7 @@ EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType ta
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
     ets_table->ref_ticks = ref_ticks;
 
-    ets_table->keypos = keypos;
+    ets_table->key_index = keypos;
 
 #ifndef AVM_NO_SMP
     ets_table->lock = smp_rwlock_create();
@@ -249,9 +249,9 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
 
 static EtsErrorCode insert(struct EtsTable *ets_table, term entry, Context *ctx)
 {
-    size_t keypos = ets_table->keypos;
+    size_t keypos = ets_table->key_index;
 
-    if ((size_t) term_get_tuple_arity(entry) < keypos + 1) {
+    if ((size_t) term_get_tuple_arity(entry) <= keypos) {
         return EtsBadEntry;
     }
 
@@ -276,7 +276,7 @@ static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Conte
     while (term_is_nonempty_list(iter)) {
         term tuple = term_get_list_head(iter);
         iter = term_get_list_tail(iter);
-        if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) < (ets_table->keypos + 1)) {
+        if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) <= ets_table->key_index) {
             return EtsBadEntry;
         }
         ++size;
@@ -293,7 +293,7 @@ static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Conte
     size_t i = 0;
     while (term_is_nonempty_list(list)) {
         term tuple = term_get_list_head(list);
-        nodes[i] = ets_hashtable_new_node(tuple, ets_table->keypos);
+        nodes[i] = ets_hashtable_new_node(tuple, ets_table->key_index);
         if (IS_NULL_PTR(nodes[i])) {
             for (size_t it = 0; it < i; ++it) {
                 ets_hashtable_free_node(nodes[it], ctx->global);
@@ -337,7 +337,7 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
 
 static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
 {
-    term res = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
+    term res = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
 
     if (term_is_nil(res)) {
         *ret = term_nil();
@@ -375,7 +375,7 @@ EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_
         return EtsBadAccess;
     }
 
-    term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
+    term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
     if (!term_is_tuple(entry)) {
         SMP_UNLOCK(ets_table);
         return EtsEntryNotFound;
@@ -424,7 +424,7 @@ EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
         return EtsBadAccess;
     }
 
-    bool _found = ets_hashtable_remove(ets_table->hashtable, key, ets_table->keypos, ctx->global);
+    bool _found = ets_hashtable_remove(ets_table->hashtable, key, ets_table->key_index, ctx->global);
     UNUSED(_found);
     SMP_UNLOCK(ets_table);
 
@@ -519,7 +519,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term threshold_term;
     term set_value_term;
     // +1 for index -> position, +1 for targeting elem after key
-    size_t default_pos = (ets_table->keypos + 1) + 1;
+    size_t default_pos = (ets_table->key_index + 1) + 1;
 
     if (UNLIKELY(!operation_to_tuple4(operation, default_pos, &position_term, &increment_term, &threshold_term, &set_value_term))) {
         SMP_UNLOCK(ets_table);
@@ -527,7 +527,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     }
     size_t arity = term_get_tuple_arity(to_insert);
     size_t elem_index = term_to_int(position_term) - 1;
-    if (UNLIKELY(arity <= elem_index || elem_index == ets_table->keypos)) {
+    if (UNLIKELY(arity <= elem_index || elem_index == ets_table->key_index)) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
