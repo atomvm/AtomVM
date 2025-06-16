@@ -27,6 +27,7 @@
 #include "memory.h"
 #include "overflow_helpers.h"
 #include "term.h"
+#include "utils.h"
 #include <assert.h>
 
 #define ETS_NO_INDEX SIZE_MAX
@@ -517,7 +518,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term increment_term;
     term threshold_term;
     term set_value_term;
-    // +1 to position, +1 to elem after key
+    // +1 for index -> position, +1 for targeting elem after key
     size_t default_pos = (ets_table->keypos + 1) + 1;
 
     if (UNLIKELY(!operation_to_tuple4(operation, default_pos, &position_term, &increment_term, &threshold_term, &set_value_term))) {
@@ -526,9 +527,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     }
     size_t arity = term_get_tuple_arity(to_insert);
     size_t elem_index = term_to_int(position_term) - 1;
-    // FIXME: elem_index can be 0 (i.e. first element).
-    // The correct condition is to error if it's the same as key position in the ETS table
-    if (UNLIKELY(arity <= elem_index || elem_index < 1)) {
+    if (UNLIKELY(arity <= elem_index || elem_index == ets_table->keypos)) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
