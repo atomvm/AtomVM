@@ -20,7 +20,6 @@
 
 #include "ets.h"
 
-#include <assert.h>
 #include "context.h"
 #include "defaultatoms.h"
 #include "ets_hashtable.h"
@@ -28,6 +27,7 @@
 #include "memory.h"
 #include "overflow_helpers.h"
 #include "term.h"
+#include <assert.h>
 
 #define ETS_NO_INDEX SIZE_MAX
 #define ETS_ANY_PROCESS -1
@@ -367,37 +367,32 @@ EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context 
     return result;
 }
 
-EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_index, term *ret, Context *ctx)
 {
-    if (UNLIKELY(pos == 0)) {
-        return EtsBadPosition;
-    }
-
     struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
 
     term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
-
-    if (term_is_nil(entry)) {
+    if (!term_is_tuple(entry)) {
         SMP_UNLOCK(ets_table);
         return EtsEntryNotFound;
     }
 
-    if ((size_t) term_get_tuple_arity(entry) < pos) {
+    size_t arity = term_get_tuple_arity(entry);
+    if (key_index >= arity) {
         SMP_UNLOCK(ets_table);
         return EtsBadPosition;
     }
 
-    term res = term_get_tuple_element(entry, pos - 1);
-    size_t size = (size_t) memory_estimate_usage(res);
-    // allocate [object]
+    term t = term_get_tuple_element(entry, key_index);
+    size_t size = (size_t) memory_estimate_usage(t);
     if (UNLIKELY(memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         SMP_UNLOCK(ets_table);
         return EtsAllocationFailure;
     }
-    *ret = memory_copy_term_tree(&ctx->heap, res);
+    *ret = memory_copy_term_tree(&ctx->heap, t);
     SMP_UNLOCK(ets_table);
 
     return EtsOk;
