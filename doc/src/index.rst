@@ -16,7 +16,7 @@ AtomVM is a lightweight implementation of the the Bogdan Erlang Abstract Machine
 
 AtomVM includes many advanced features, including process spawning, monitoring, message passing, pre-emptive scheduling, and efficient garbage collection.  It can also interface directly with peripherals and protocols supported on micro-controllers, such as GPIO, I2C, SPI, and UART.  It also supports WiFi networking on devices that support it, such as the Espressif ESP32.   All of this on a device that can cost as little as $2!
 
-.. warning:: AtomVM is currently in Alpha status.  Software may contain bugs and should not be used for mission-critical applications.  Application Programming Interfaces may change without warning.
+.. warning:: AtomVM is currently in `v0.x stage <https://semver.org/#spec-item-4>`_. Software may contain bugs and should not be used for mission-critical applications.  Application Programming Interfaces may change without warning.
 
 .. toctree::
    :maxdepth: 2
