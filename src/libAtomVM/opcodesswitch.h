@@ -5442,7 +5442,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("is_function/3\n");
+                    TRACE("is_function2/3\n");
                     UNUSED(label)
                     UNUSED(arg1)
                 #endif
