@@ -233,8 +233,14 @@ test_update_counter() ->
     31 = ets:update_counter(T, key, {4, 10, 39, 31}),
     30 = ets:update_counter(T, key, {4, -10, 30, 30}),
 
+    % {Position, Increment} with non-default position
+    T2 = ets:new(test, [{keypos, 2}]),
+    true = ets:insert(T2, {100, 200}),
+    150 = ets:update_counter(T2, 200, {1, 50}),
+
     TErr = ets:new(test, []),
     true = ets:insert(TErr, {key, 0, not_number}),
+    true = ets:insert(TErr, {0}),
     true = ets:insert(TErr, {not_number, ok}),
     assert_badarg(fun() -> ets:update_counter(TErr, none, 10) end),
     assert_badarg(fun() -> ets:update_counter(TErr, not_number, 10) end),
@@ -243,6 +249,7 @@ test_update_counter() ->
     assert_badarg(fun() -> ets:update_counter(TErr, key, {0, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {-1, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, 0, {1, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {3, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, not_number) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10}) end),
