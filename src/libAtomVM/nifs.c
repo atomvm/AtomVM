@@ -3572,7 +3572,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
     bool private = false;
     bool public = false;
     bool is_duplicate_bag = false;
-    avm_int_t keypos = 1;
+    size_t key_index = 0;
 
     while (term_is_nonempty_list(options)) {
         term head = term_get_list_head(options);
@@ -3605,10 +3605,11 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
             }
             case KEYPOS_ATOM: {
                 VALIDATE_VALUE(value, term_is_integer);
-                keypos = term_to_int(value);
+                avm_int_t keypos = term_to_int(value);
                 if (UNLIKELY(keypos < 1)) {
                     RAISE_ERROR(BADARG_ATOM);
                 }
+                key_index = keypos - 1;
                 break;
             }
             default:
@@ -3628,7 +3629,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
     EtsTableType type = is_duplicate_bag ? EtsTableDuplicateBag : EtsTableSet;
 
     term table = term_invalid_term();
-    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named, type, access, keypos - 1, &table, ctx);
+    EtsErrorCode result = ets_create_table_maybe_gc(name, is_named, type, access, key_index, &table, ctx);
     switch (result) {
         case EtsOk:
             return table;
@@ -3699,12 +3700,17 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
     term ref = argv[0];
     VALIDATE_VALUE(ref, is_ets_table_id);
 
-    term key = argv[1];
-    term pos = argv[2];
-    VALIDATE_VALUE(pos, term_is_integer);
+    term key_term = argv[1];
+    term keypos_term = argv[2];
+    VALIDATE_VALUE(keypos_term, term_is_integer);
+    avm_int_t keypos = term_to_int(keypos_term);
+    if (UNLIKELY(keypos < 1)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t key_index = term_to_int(keypos_term) - 1;
 
     term ret = term_invalid_term();
-    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key, term_to_int(pos), &ret, ctx);
+    EtsErrorCode result = ets_lookup_element_maybe_gc(ref, key_term, key_index + 1, &ret, ctx);
     switch (result) {
         case EtsOk:
             return ret;
@@ -3751,13 +3757,12 @@ static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
 
     term key = argv[1];
     term operation = argv[2];
-    term default_value;
+    term default_value = term_invalid_term();
     if (argc == 4) {
         default_value = argv[3];
         VALIDATE_VALUE(default_value, term_is_tuple);
+        // FIXME: this should be based on keypos in table
         term_put_tuple_element(default_value, 0, key);
-    } else {
-        default_value = term_invalid_term();
     }
     term ret;
     EtsErrorCode result = ets_update_counter_maybe_gc(ref, key, operation, default_value, &ret, ctx);
