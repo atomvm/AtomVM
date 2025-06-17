@@ -23,14 +23,14 @@
 -export([start/0]).
 
 start() ->
-    % ok = isolated(fun test_ets_new/0),
-    % ok = isolated(fun test_permissions/0),
-    % ok = isolated(fun test_keys/0),
-    % ok = isolated(fun test_keypos/0),
-    % ok = isolated(fun test_insert/0),
-    % ok = isolated(fun test_delete/0),
-    % ok = isolated(fun test_lookup_element/0),
-    % ok = isolated(fun test_update_counter/0),
+    ok = isolated(fun test_ets_new/0),
+    ok = isolated(fun test_permissions/0),
+    ok = isolated(fun test_keys/0),
+    ok = isolated(fun test_keypos/0),
+    ok = isolated(fun test_insert/0),
+    ok = isolated(fun test_delete/0),
+    ok = isolated(fun test_lookup_element/0),
+    ok = isolated(fun test_update_counter/0),
     ok = isolated(fun test_duplicate_bag/0),
     0.
 
@@ -265,7 +265,7 @@ test_duplicate_bag() ->
     Tid = ets:new(test_duplicate_bag, [duplicate_bag, {keypos, 2}]),
     T = {ok, foo, 100, extra},
     T2 = {error, foo, 200},
-    T3 = {error, foo, 300},
+    _T3 = {error, foo, 300},
 
     % true = ets:insert_new(Tid, T),
     % false = ets:insert_new(Tid, T),
@@ -280,15 +280,15 @@ test_duplicate_bag() ->
     % false = ets:insert_new(Tid, [T, {ok, bar, batat}]),
     % false = ets:member(Tid, bar),
 
-    % [ok, ok, ok, ok, error] = ets:lookup_element(Tid, foo, 1),
-    % [foo, foo, foo, foo, foo] = ets:lookup_element(Tid, foo, 2),
-    % [100, 100, 100, 100, 200] = ets:lookup_element(Tid, foo, 3),
+    [ok, ok, ok, error] = ets:lookup_element(Tid, foo, 1),
+    [foo, foo, foo, foo] = ets:lookup_element(Tid, foo, 2),
+    [100, 100, 100, 200] = ets:lookup_element(Tid, foo, 3),
     % % some tuples don't have 4 arity
-    % ok = expect_failure(fun() -> ets:lookup_element(Tid, foo, 4) end),
+    ok = assert_badarg(fun() -> ets:lookup_element(Tid, foo, 4) end),
 
     % % unsupported for duplicate bag
-    % ok = expect_failure(fun() -> ets:update_counter(Tid, foo, 10) end),
-    % ok = expect_failure(fun() -> ets:update_element(Tid, foo, {1, error}) end),
+    ok = assert_badarg(fun() -> ets:update_counter(Tid, foo, 10) end),
+    % ok = assert_badarg(fun() -> ets:update_element(Tid, foo, {1, error}) end),
 
     % true = ets:delete_object(Tid, {bad, bad}),
     % true = [T, T, T, T, T2] == ets:lookup(Tid, foo),
@@ -300,7 +300,7 @@ test_duplicate_bag() ->
     % true = [T2, T3] == ets:take(Tid, foo),
 
     % true = ets:delete(Tid),
-    % ok = expect_failure(fun() -> ets:insert(Tid, T) end),
+    % ok = assert_badarg(fun() -> ets:insert(Tid, T) end),
 
     ok.
 
