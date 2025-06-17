@@ -961,7 +961,7 @@ void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task)
     while (l != term_nil()) {
         term h = term_get_list_head(l);
         // the mso list only contains boxed values; each refc is unique
-        TERM_DEBUG_ASSERT(term_is_boxed(h))
+        TERM_DEBUG_ASSERT(term_is_boxed(h));
         term *boxed_value = term_to_term_ptr(h);
         if (memory_is_moved_marker(boxed_value)) {
             h = memory_dereference_moved_marker(boxed_value);

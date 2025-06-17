@@ -1683,7 +1683,7 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
 
     term *boxed_value = term_to_term_ptr(t);
 
-    TERM_DEBUG_ASSERT(((boxed_value[0] & TERM_BOXED_TAG_MASK) == 0) && (elem_index < (boxed_value[0] >> 6)));
+    TERM_DEBUG_ASSERT((size_t) elem_index < term_get_size_from_boxed_header(boxed_value[0]));
 
     boxed_value[elem_index + 1] = put_value;
 }
@@ -1702,7 +1702,7 @@ static inline term term_get_tuple_element(term t, int elem_index)
 
     const term *boxed_value = term_to_const_term_ptr(t);
 
-    TERM_DEBUG_ASSERT(((boxed_value[0] & TERM_BOXED_TAG_MASK) == 0) && (elem_index < (boxed_value[0] >> 6)));
+    TERM_DEBUG_ASSERT((size_t) elem_index < term_get_size_from_boxed_header(boxed_value[0]));
 
     return boxed_value[elem_index + 1];
 }
