@@ -178,10 +178,12 @@ for tag in tag_list:
         release_list.append(tag.name)
 
 omit_branch_list = [ 'release-0.5' ]
+allowed_branch_prefixes = ( 'release-', 'main' )
 branch_list = sorted(repo.branches, key=lambda t: t.commit.committed_datetime)
 for branch in branch_list:
     if branch.name not in omit_branch_list:
-        versions.append(branch.name)
+        if branch.name.startswith(allowed_branch_prefixes):
+            versions.append(branch.name)
 
 if ((repo.head.object.hexsha) == (latest_tag.commit.hexsha)):
     current_version = latest_tag.name
