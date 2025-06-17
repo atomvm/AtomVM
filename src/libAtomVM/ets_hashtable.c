@@ -201,15 +201,14 @@ EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct 
     return EtsHashtableOk;
 }
 
-term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t key_index, GlobalContext *global)
+term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, GlobalContext *global)
 {
     uint32_t hash = hash_term(key, global);
     uint32_t index = hash % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
-        term key_to_compare = term_get_tuple_element(node->entry, key_index);
-        if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
+        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
             return node->entry;
         }
         node = node->next;
@@ -218,7 +217,7 @@ term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t key_
     return term_nil();
 }
 
-bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t key_index, GlobalContext *global)
+bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, GlobalContext *global)
 {
     uint32_t hash = hash_term(key, global);
     uint32_t index = hash % hash_table->capacity;
@@ -226,8 +225,7 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t key_
     struct HNode *node = hash_table->buckets[index];
     struct HNode *prev_node = NULL;
     while (node) {
-        term key_to_compare = term_get_tuple_element(node->entry, key_index);
-        if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
+        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
             struct HNode *next_node = node->next;
             ets_hashtable_free_node(node, global);
             if (prev_node != NULL) {

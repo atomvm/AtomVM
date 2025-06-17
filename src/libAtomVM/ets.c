@@ -254,7 +254,6 @@ static inline bool has_key_at(term tuple, size_t key_index)
 
 static EtsErrorCode insert(struct EtsTable *ets_table, term tuple, Context *ctx)
 {
-    assert(term_is_tuple(tuple));
     size_t key_index = ets_table->key_index;
     if (UNLIKELY(!has_key_at(tuple, key_index))) {
         return EtsBadEntry;
@@ -264,7 +263,8 @@ static EtsErrorCode insert(struct EtsTable *ets_table, term tuple, Context *ctx)
     struct HNode *node = NULL;
     if (is_duplicate_bag) {
         term key = term_get_tuple_element(tuple, key_index);
-        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, key_index, ctx->global);
+        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, ctx->global);
+        assert(term_is_list(old_tuples));
         bool is_new = term_is_nil(old_tuples);
         node = ets_hashtable_new_node_from_list(is_new ? term_nil() : old_tuples, tuple, key_index);
     } else {
@@ -350,20 +350,53 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
     return result;
 }
 
-static EtsErrorCode lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
+static EtsErrorCode lookup_maybe_gc(struct EtsTable *ets_table, term key, size_t index, term *ret, Context *ctx, int num_roots, term *roots)
 {
-    term res = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
+    bool lookup_element = index != ETS_NO_INDEX;
+    term ets_entry = ets_hashtable_lookup(ets_table->hashtable, key, ctx->global);
 
-    if (term_is_nil(res)) {
+    if (term_is_nil(ets_entry)) {
         *ret = term_nil();
-    } else {
+    } else if (is_duplicate_bag) {
+        assert(term_is_list(ets_entry));
+        // for tuple list and it reversed version - we don't want to copy terms in the loop
+        int _proper;
+        size_t n = term_list_length(ets_entry, &_proper);
+        size_t size = LIST_SIZE(n, 1) + memory_estimate_usage(ets_entry);
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, num_roots, roots, MEMORY_CAN_SHRINK))) {
+            return EtsAllocationFailure;
+        }
+        term tuples = memory_copy_term_tree(&ctx->heap, ets_entry);
+        // lookup returns in insertion order
+        // TODO: store it in correct order?
+        term reversed = term_nil();
+        while (term_is_nonempty_list(tuples)) {
+            term elem = term_get_list_head(tuples);
+            if (lookup_element) {
+                term tuple = elem;
+                if (UNLIKELY(!has_key_at(tuple, index))) {
+                    return EtsBadPosition;
+                }
+                elem = term_get_tuple_element(tuple, index);
+            }
+            reversed = term_list_prepend(elem, reversed, &ctx->heap);
+            tuples = term_get_list_tail(tuples);
+        }
 
-        size_t size = (size_t) memory_estimate_usage(res);
-        // allocate [object]
+        *ret = reversed;
+    } else {
+        if (lookup_element) {
+            if (UNLIKELY(!has_key_at(ets_entry, index))) {
+                return EtsBadPosition;
+            }
+            ets_entry = term_get_tuple_element(ets_entry, index);
+        }
+        size_t size = (size_t) memory_estimate_usage(ets_entry);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, size + CONS_SIZE, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             return EtsAllocationFailure;
         }
-        term new_res = memory_copy_term_tree(&ctx->heap, res);
+        term new_res = memory_copy_term_tree(&ctx->heap, ets_entry);
         *ret = term_list_prepend(new_res, term_nil(), &ctx->heap);
     }
 
@@ -377,7 +410,7 @@ EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context 
         return EtsBadAccess;
     }
 
-    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ETS_NO_INDEX, ret, ctx, 0, NULL);
     SMP_UNLOCK(ets_table);
 
     return result;
@@ -389,25 +422,19 @@ EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
 
-    term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
-    if (UNLIKELY(!term_is_tuple(entry))) {
+    term entry;
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, key_index, &entry, ctx, 0, NULL);
+    if (result != EtsOk) {
+        SMP_UNLOCK(ets_table);
+        return result;
+    }
+    if (term_is_nil(entry)) {
         SMP_UNLOCK(ets_table);
         return EtsEntryNotFound;
     }
-
-    if (UNLIKELY(!has_key_at(entry, key_index))) {
-        SMP_UNLOCK(ets_table);
-        return EtsBadPosition;
-    }
-
-    term t = term_get_tuple_element(entry, key_index);
-    size_t size = (size_t) memory_estimate_usage(t);
-    if (UNLIKELY(memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        SMP_UNLOCK(ets_table);
-        return EtsAllocationFailure;
-    }
-    *ret = memory_copy_term_tree(&ctx->heap, t);
+    *ret = is_duplicate_bag ? entry : term_get_list_head(entry);
     SMP_UNLOCK(ets_table);
 
     return EtsOk;
@@ -438,7 +465,7 @@ EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
         return EtsBadAccess;
     }
 
-    bool _found = ets_hashtable_remove(ets_table->hashtable, key, ets_table->key_index, ctx->global);
+    bool _found = ets_hashtable_remove(ets_table->hashtable, key, ctx->global);
     UNUSED(_found);
     SMP_UNLOCK(ets_table);
 
@@ -503,7 +530,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term roots[] = { key, operation, safe_default_value };
 
     term list;
-    EtsErrorCode result = lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ETS_NO_INDEX, &list, ctx, 3, roots);
     if (UNLIKELY(result != EtsOk)) {
         SMP_UNLOCK(ets_table);
         return result;
