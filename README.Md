@@ -28,10 +28,10 @@ Getting Started
 ===============
 There is much more information, including a more complete
 ["Getting Started Guide"](https://doc.atomvm.org/main/getting-started-guide.html),
-[examples](https://www.atomvm.net/sample-code),
+[examples](https://atomvm.org/sample-code),
 detailed [build instructions](https://doc.atomvm.org/main/build-instructions.html),
-and [contact information](https://www.atomvm.net/contact) available on the
-[AtomVM](https://atomvm.net) project website.
+and [contact information](https://atomvm.org/contact) available on the
+[AtomVM](https://atomvm.org) project website.
 
 >Don't forget to check out the [examples repository](https://github.com/atomvm/atomvm_examples) to
 >help get you started on your next IoT project.

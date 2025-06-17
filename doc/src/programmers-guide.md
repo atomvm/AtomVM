@@ -2408,7 +2408,7 @@ Currently, the `net:getaddrinfo/1,2` functions only supports reporting of IPv4 a
 For example:
 
 ```erlang
-{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net"),
+{ok, AddrInfos} = net:getaddrinfo("atomvm.org"),
 
 lists:foreach(
     fun(AddrInfo) ->
@@ -2447,7 +2447,7 @@ with OTP 22 ff., AtomVM supports both the `address` and `addr` keys in this map 
 If you want to narrow the information you get back to a specific service type, you can specify a service name or port number (as a string value) as the second parameter:
 
 ```erlang
-{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net", "https"),
+{ok, AddrInfos} = net:getaddrinfo("atomvm.org", "https"),
 ...
 ```
 
