@@ -271,11 +271,9 @@ test_duplicate_bag() ->
     % false = ets:insert_new(Tid, T),
     true = ets:insert(Tid, T),
     true = ets:insert(Tid, T),
-    true = [T, T] == ets:lookup(Tid, foo),
-
-    % true = ets:insert(Tid, [T, T]),
-    % true = ets:insert(Tid, [T2]),
-    % true = [T, T, T, T, T2] == ets:lookup(Tid, foo),
+    true = ets:insert(Tid, [T, T]),
+    true = ets:insert(Tid, [T2]),
+    true = [T, T, T, T2] == ets:lookup(Tid, foo),
     % true = ets:member(Tid, foo),
 
     % % nothing inserted, T exists in table

@@ -26,6 +26,7 @@
 #include "list.h"
 #include "memory.h"
 #include "overflow_helpers.h"
+#include "smp.h"
 #include "term.h"
 #include "utils.h"
 #include <assert.h>
@@ -252,38 +253,70 @@ static inline bool has_key_at(term tuple, size_t key_index)
     return key_index < (size_t) term_get_tuple_arity(tuple);
 }
 
-static EtsErrorCode insert(struct EtsTable *ets_table, term tuple, Context *ctx)
+static struct HNode *tuple_to_insertion_node(struct EtsTable *ets_table, term tuple, GlobalContext *global)
+{
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
+    size_t key_index = ets_table->key_index;
+
+    if (is_duplicate_bag) {
+        term key = term_get_tuple_element(tuple, key_index);
+        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, global);
+        assert(term_is_list(old_tuples));
+        bool is_new = term_is_nil(old_tuples);
+        return ets_hashtable_new_node_from_list(is_new ? term_nil() : old_tuples, tuple, key_index);
+    }
+    return ets_hashtable_new_node(tuple, key_index);
+}
+
+static struct HNode **list_to_insertion_nodes(struct EtsTable *ets_table, term list, size_t size, GlobalContext *global)
+{
+    size_t last_i = 0;
+    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    if (IS_NULL_PTR(nodes)) {
+        goto oom;
+    }
+
+    while (term_is_nonempty_list(list)) {
+        term tuple = term_get_list_head(list);
+        nodes[last_i] = tuple_to_insertion_node(ets_table, tuple, global);
+        if (IS_NULL_PTR(nodes[last_i])) {
+            goto oom;
+        }
+        ++last_i;
+        list = term_get_list_tail(list);
+    }
+    return nodes;
+oom:
+    // skip last node, it's NULL
+    for (size_t i = 0; i < last_i; ++i) {
+        ets_hashtable_free_node(nodes[i], global);
+    }
+    free(nodes);
+    return NULL;
+}
+
+static EtsErrorCode insert_tuple(struct EtsTable *ets_table, term tuple, GlobalContext *global)
 {
     size_t key_index = ets_table->key_index;
     if (UNLIKELY(!has_key_at(tuple, key_index))) {
         return EtsBadEntry;
     }
 
-    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
-    struct HNode *node = NULL;
-    if (is_duplicate_bag) {
-        term key = term_get_tuple_element(tuple, key_index);
-        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, ctx->global);
-        assert(term_is_list(old_tuples));
-        bool is_new = term_is_nil(old_tuples);
-        node = ets_hashtable_new_node_from_list(is_new ? term_nil() : old_tuples, tuple, key_index);
-    } else {
-        node = ets_hashtable_new_node(tuple, key_index);
-    }
+    struct HNode *node = tuple_to_insertion_node(ets_table, tuple, global);
     if (IS_NULL_PTR(node)) {
         return EtsAllocationFailure;
     }
 
-    EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, node, EtsHashtableAllowOverwrite, ctx->global);
+    EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, node, EtsHashtableAllowOverwrite, global);
     if (UNLIKELY(res != EtsHashtableOk)) {
-        ets_hashtable_free_node(node, ctx->global);
+        ets_hashtable_free_node(node, global);
         return EtsAllocationFailure;
     }
 
     return EtsOk;
 }
 
-static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Context *ctx)
+static EtsErrorCode insert_tuple_list(struct EtsTable *ets_table, term list, GlobalContext *global)
 {
     term iter = list;
     size_t size = 0;
@@ -296,32 +329,19 @@ static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Conte
         }
         ++size;
     }
-    if (!term_is_nil(iter)) {
+    bool improper = !term_is_nil(iter);
+    if (UNLIKELY(improper)) {
         return EtsBadEntry;
     }
 
-    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    struct HNode **nodes = list_to_insertion_nodes(ets_table, list, size, global);
     if (IS_NULL_PTR(nodes)) {
         return EtsAllocationFailure;
     }
 
-    size_t i = 0;
-    while (term_is_nonempty_list(list)) {
-        term tuple = term_get_list_head(list);
-        nodes[i] = ets_hashtable_new_node(tuple, ets_table->key_index);
-        if (IS_NULL_PTR(nodes[i])) {
-            for (size_t it = 0; it < i; ++it) {
-                ets_hashtable_free_node(nodes[it], ctx->global);
-            }
-            free(nodes);
-            return EtsAllocationFailure;
-        }
-        ++i;
-        list = term_get_list_tail(list);
-    }
-
     for (size_t i = 0; i < size; ++i) {
-        EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, ctx->global);
+        EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, global);
+        // insert can fail when comparing keys
         assert(res == EtsHashtableOk);
     }
 
@@ -338,9 +358,9 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
 
     EtsErrorCode result;
     if (term_is_tuple(entry)) {
-        result = insert(ets_table, entry, ctx);
+        result = insert_tuple(ets_table, entry, ctx->global);
     } else if (term_is_list(entry)) {
-        result = insert_multiple(ets_table, entry, ctx);
+        result = insert_tuple_list(ets_table, entry, ctx->global);
     } else {
         result = EtsBadEntry;
     }
@@ -596,7 +616,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
 
     term final_value = term_from_int(elem_value);
     term_put_tuple_element(to_insert, elem_index, final_value);
-    EtsErrorCode insert_result = insert(ets_table, to_insert, ctx);
+    EtsErrorCode insert_result = insert_tuple(ets_table, to_insert, ctx->global);
     if (insert_result == EtsOk) {
         *ret = final_value;
     }
