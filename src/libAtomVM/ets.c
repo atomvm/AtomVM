@@ -247,21 +247,22 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
     ets_delete_tables_internal(ets, true_pred, NULL, global);
 }
 
-static EtsErrorCode insert(struct EtsTable *ets_table, term entry, Context *ctx)
+static EtsErrorCode insert(struct EtsTable *ets_table, term tuple, Context *ctx)
 {
-    size_t keypos = ets_table->key_index;
-
-    if ((size_t) term_get_tuple_arity(entry) <= keypos) {
+    assert(term_is_tuple(tuple));
+    size_t key_index = ets_table->key_index;
+    if ((size_t) term_get_tuple_arity(tuple) <= key_index) {
         return EtsBadEntry;
     }
 
-    struct HNode *new_node = ets_hashtable_new_node(entry, keypos);
+    struct HNode *new_node = ets_hashtable_new_node(tuple, key_index);
     if (IS_NULL_PTR(new_node)) {
         return EtsAllocationFailure;
     }
 
     EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, new_node, EtsHashtableAllowOverwrite, ctx->global);
     if (UNLIKELY(res != EtsHashtableOk)) {
+        ets_hashtable_free_node(new_node, ctx->global);
         return EtsAllocationFailure;
     }
 
