@@ -27,7 +27,7 @@ test() ->
 
 test_passive() ->
     ok = ssl:start(),
-    ConnectResult = ahttp_client:connect(https, "www.atomvm.net", 443, [
+    ConnectResult = ahttp_client:connect(https, "test.atomvm.org", 443, [
         {active, false}, {verify, verify_none}, {parse_headers, [<<"Location">>]}
     ]),
     case ConnectResult of
@@ -47,7 +47,7 @@ test_passive() ->
     ok.
 
 test_active() ->
-    ConnectResult = ahttp_client:connect(http, "www.atomvm.net", 80, [{active, true}]),
+    ConnectResult = ahttp_client:connect(http, "test.atomvm.org", 80, [{active, true}]),
     case ConnectResult of
         {ok, Conn} ->
             case ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined) of
