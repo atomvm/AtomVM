@@ -29,7 +29,7 @@ test() ->
 test_getaddr() ->
     {ok, {127, 0, 0, 1}} = inet:getaddr(localhost, inet),
     {ok, {127, 0, 0, 1}} = inet:getaddr("localhost", inet),
-    {ok, {_, _, _, _}} = inet:getaddr("www.atomvm.net", inet),
+    {ok, {_, _, _, _}} = inet:getaddr("test.atomvm.org", inet),
     % RFC8880
     {ok, {192, 0, 0, LastByte}} = inet:getaddr("ipv4only.arpa", inet),
     true = LastByte =:= 170 orelse LastByte =:= 171,
