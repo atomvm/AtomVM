@@ -389,6 +389,7 @@ compile_erlang(floatabs)
 compile_erlang(floatdiv)
 compile_erlang(floatmath)
 compile_erlang(floatext)
+compile_erlang(bif_bin_arith_ops)
 
 compile_erlang(boxed_is_not_float)
 compile_erlang(float_is_float)
@@ -880,6 +881,7 @@ add_custom_target(erlang_test_modules DEPENDS
     floatdiv.beam
     floatmath.beam
     floatext.beam
+    bif_bin_arith_ops.beam
 
     boxed_is_not_float.beam
     float_is_float.beam

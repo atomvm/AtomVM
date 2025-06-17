@@ -864,13 +864,10 @@ term bif_erlang_mul_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 term bif_erlang_fdiv_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
     UNUSED(live);
-    if (!term_is_integer(arg1) && !term_is_float(arg1)) {
-        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
+    if (UNLIKELY(!term_is_number(arg1))) {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
-
-    if (!term_is_integer(arg2) && !term_is_float(arg2)) {
-        TRACE("error: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
+    if (UNLIKELY(!term_is_number(arg2))) {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
     avm_float_t farg1 = term_conv_to_float(arg1);

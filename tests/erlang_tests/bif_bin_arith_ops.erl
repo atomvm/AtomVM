@@ -17,12 +17,12 @@
 %
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
--module(test_bif_bin_arith_ops).
+-module(bif_bin_arith_ops).
 
 -define(ID(X), ?MODULE:id(X)).
--export([test/0, id/1]).
+-export([start/0, id/1]).
 
-test() ->
+start() ->
     Ops = ['+', '-', '*', '/'],
     ValidInputs = [[2, 3], [0, 2], [2.0, 3], [2, 3.0], [2.0, 3.0]],
     InvalidInputs = [[not_int, 1], [1, not_int]],
@@ -35,10 +35,12 @@ test() ->
     {error, badarith} = call_op('div', [2, 3.0]),
     {error, badarith} = call_op('rem', [2.0, 3]),
     {error, badarith} = call_op('rem', [2, 3.0]),
-    ok.
+    0.
 
-call_op(Name, Args) ->
-    try apply(erlang, ?ID(Name), ?ID(Args)) of
+call_op(RawName, [RawA, RawB]) ->
+    Name = ?ID(RawName),
+    [A, B] = ?ID([RawA, RawB]),
+    try erlang:Name(A, B) of
         V -> {ok, V}
     catch
         C:E -> {C, E}
