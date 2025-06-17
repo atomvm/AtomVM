@@ -87,19 +87,19 @@ static void print_info(struct EtsHashTable *hash_table)
 }
 #endif
 
-struct HNode *ets_hashtable_new_node(term entry, int key_index)
+struct HNode *ets_hashtable_new_node(term tuple, int key_index)
 {
     struct HNode *new_node = malloc(sizeof(struct HNode));
     if (IS_NULL_PTR(new_node)) {
         goto cleanup;
     }
 
-    size_t size = memory_estimate_usage(entry);
+    size_t size = memory_estimate_usage(tuple);
     if (UNLIKELY(memory_init_heap(&new_node->heap, size) != MEMORY_GC_OK)) {
         goto cleanup;
     }
 
-    term new_entry = memory_copy_term_tree(&new_node->heap, entry);
+    term new_entry = memory_copy_term_tree(&new_node->heap, tuple);
     assert(term_is_tuple(new_entry));
     assert(term_get_tuple_arity(new_entry) >= key_index);
     term key = term_get_tuple_element(new_entry, key_index);
