@@ -57,8 +57,8 @@ struct HNode *ets_hashtable_new_node_from_list(term old_tuples_or_tuple, term ne
 void ets_hashtable_free_node(struct HNode *node, GlobalContext *global);
 
 EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
-term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t key_index, GlobalContext *global);
-bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t key_index, GlobalContext *global);
+term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, GlobalContext *global);
+bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, GlobalContext *global);
 
 #ifdef __cplusplus
 }
