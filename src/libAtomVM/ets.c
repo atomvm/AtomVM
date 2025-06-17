@@ -291,7 +291,7 @@ static EtsErrorCode insert_multiple(struct EtsTable *ets_table, term list, Conte
     while (term_is_nonempty_list(iter)) {
         term tuple = term_get_list_head(iter);
         iter = term_get_list_tail(iter);
-        if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) <= ets_table->key_index) {
+        if (UNLIKELY(!term_is_tuple(tuple) || !has_key_at(tuple, ets_table->key_index))) {
             return EtsBadEntry;
         }
         ++size;
@@ -391,13 +391,12 @@ EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_
     }
 
     term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
-    if (!term_is_tuple(entry)) {
+    if (UNLIKELY(!term_is_tuple(entry))) {
         SMP_UNLOCK(ets_table);
         return EtsEntryNotFound;
     }
 
-    size_t arity = term_get_tuple_arity(entry);
-    if (key_index >= arity) {
+    if (UNLIKELY(!has_key_at(entry, key_index))) {
         SMP_UNLOCK(ets_table);
         return EtsBadPosition;
     }
@@ -540,9 +539,8 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
-    size_t arity = term_get_tuple_arity(to_insert);
     size_t elem_index = term_to_int(position_term) - 1;
-    if (UNLIKELY(arity <= elem_index || elem_index == ets_table->key_index)) {
+    if (UNLIKELY(!has_key_at(to_insert, elem_index) || elem_index == ets_table->key_index)) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
