@@ -76,7 +76,7 @@ typedef enum TableAccessType
     TableAccessWrite
 } TableAccessType;
 
-static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global);
+static void delete_all_tables(struct Ets *ets, GlobalContext *global);
 
 static void ets_add_table(struct Ets *ets, struct EtsTable *ets_table)
 {
@@ -87,7 +87,7 @@ static void ets_add_table(struct Ets *ets, struct EtsTable *ets_table)
     synclist_unlock(&ets->ets_tables);
 }
 
-static struct EtsTable *ets_acquire_table(struct Ets *ets, int32_t process_id, term name_or_ref, TableAccessType requested_access_type)
+static struct EtsTable *acquire_table(struct Ets *ets, int32_t process_id, term name_or_ref, TableAccessType requested_access_type)
 {
     uint64_t ref = 0;
     term name = term_invalid_term();
@@ -135,14 +135,14 @@ void ets_init(struct Ets *ets)
 
 void ets_destroy(struct Ets *ets, GlobalContext *global)
 {
-    ets_delete_all_tables(ets, global);
+    delete_all_tables(ets, global);
     synclist_destroy(&ets->ets_tables);
 }
 
 EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
 {
     if (is_named) {
-        struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ETS_ANY_PROCESS, name, TableAccessNone);
+        struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ETS_ANY_PROCESS, name, TableAccessNone);
         if (ets_table != NULL) {
             return EtsTableNameInUse;
         }
@@ -209,7 +209,7 @@ static void ets_table_destroy(struct EtsTable *table, GlobalContext *global)
 
 typedef bool (*ets_table_filter_pred)(struct EtsTable *table, void *data);
 
-static void ets_delete_tables_internal(struct Ets *ets, ets_table_filter_pred pred, void *data, GlobalContext *global)
+static void delete_tables_pred(struct Ets *ets, ets_table_filter_pred pred, void *data, GlobalContext *global)
 {
     struct ListHead *ets_tables_list = synclist_wrlock(&ets->ets_tables);
     struct ListHead *item;
@@ -232,7 +232,7 @@ static bool equal_process_id_pred(struct EtsTable *table, void *data)
 
 void ets_delete_owned_tables(struct Ets *ets, int32_t process_id, GlobalContext *global)
 {
-    ets_delete_tables_internal(ets, equal_process_id_pred, &process_id, global);
+    delete_tables_pred(ets, equal_process_id_pred, &process_id, global);
 }
 
 static bool true_pred(struct EtsTable *table, void *data)
@@ -243,9 +243,9 @@ static bool true_pred(struct EtsTable *table, void *data)
     return true;
 }
 
-static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
+static void delete_all_tables(struct Ets *ets, GlobalContext *global)
 {
-    ets_delete_tables_internal(ets, true_pred, NULL, global);
+    delete_tables_pred(ets, true_pred, NULL, global);
 }
 
 static inline bool has_key_at(term tuple, size_t key_index)
@@ -351,7 +351,7 @@ static EtsErrorCode insert_tuple_list(struct EtsTable *ets_table, term list, Glo
 
 EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
@@ -425,7 +425,7 @@ static EtsErrorCode lookup_maybe_gc(struct EtsTable *ets_table, term key, size_t
 
 EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
@@ -438,7 +438,7 @@ EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context 
 
 EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_index, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
@@ -462,7 +462,7 @@ EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_
 
 EtsErrorCode ets_drop_table(term name_or_ref, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
@@ -480,7 +480,7 @@ EtsErrorCode ets_drop_table(term name_or_ref, term *ret, Context *ctx)
 
 EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
@@ -540,7 +540,7 @@ static bool operation_to_tuple4(term operation, size_t default_pos, term *positi
 
 EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, term default_value, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = ets_acquire_table(&ctx->global->ets, ctx->process_id, ref, TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
