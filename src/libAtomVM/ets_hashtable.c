@@ -20,6 +20,7 @@
 
 #include "ets_hashtable.h"
 
+#include "memory.h"
 #include "smp.h"
 #include "term.h"
 #include "utils.h"
@@ -53,17 +54,10 @@ struct EtsHashTable *ets_hashtable_new()
     return htable;
 }
 
-static void ets_hashtable_free_node(struct HNode *node, GlobalContext *global)
+void ets_hashtable_free_node(struct HNode *node, GlobalContext *global)
 {
     memory_destroy_heap(&node->heap, global);
     free(node);
-}
-
-void ets_hashtable_free_node_array(struct HNode **allocated, size_t size, GlobalContext *global)
-{
-    for (size_t i = 0; i < size; ++i) {
-        ets_hashtable_free_node(allocated[i], global);
-    }
 }
 
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global)
@@ -94,31 +88,68 @@ static void print_info(struct EtsHashTable *hash_table)
 }
 #endif
 
-struct HNode *ets_hashtable_new_node(term entry, int keypos)
+struct HNode *ets_hashtable_new_node(term tuple, int key_index)
 {
-
+    assert(term_is_tuple(tuple));
+    assert(term_get_tuple_arity(tuple) >= key_index);
     struct HNode *new_node = malloc(sizeof(struct HNode));
     if (IS_NULL_PTR(new_node)) {
-        return NULL;
+        goto cleanup;
     }
 
-    size_t size = (size_t) memory_estimate_usage(entry);
-    if (memory_init_heap(&new_node->heap, size) != MEMORY_GC_OK) {
-        free(new_node);
-        return NULL;
+    size_t size = memory_estimate_usage(tuple);
+    if (UNLIKELY(memory_init_heap(&new_node->heap, size) != MEMORY_GC_OK)) {
+        goto cleanup;
     }
 
-    term new_entry = memory_copy_term_tree(&new_node->heap, entry);
-    term key = term_get_tuple_element(new_entry, keypos);
+    term new_entry = memory_copy_term_tree(&new_node->heap, tuple);
+    term key = term_get_tuple_element(new_entry, key_index);
 
     new_node->next = NULL;
     new_node->key = key;
     new_node->entry = new_entry;
 
     return new_node;
+
+cleanup:
+    free(new_node);
+    return NULL;
 }
 
-EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
+// TODO: create list elsewhere, by copying terms from orig heap, appending new copied tuple and using ets_hashtable_new_node
+struct HNode *ets_hashtable_new_node_from_list(term old_tuples, term tuple, size_t key_index)
+{
+    assert(term_is_tuple(tuple));
+    assert((size_t) term_get_tuple_arity(tuple) >= key_index);
+    assert(term_is_list(old_tuples));
+
+    struct HNode *new_node = malloc(sizeof(struct HNode));
+    if (IS_NULL_PTR(new_node)) {
+        goto oom;
+    }
+
+    size_t old_list_size = memory_estimate_usage(old_tuples);
+    size_t new_tuple_size = memory_estimate_usage(tuple);
+    if (UNLIKELY(memory_init_heap(&new_node->heap, old_list_size + new_tuple_size + CONS_SIZE) != MEMORY_GC_OK)) {
+        goto oom;
+    }
+    term ets_list = memory_copy_term_tree(&new_node->heap, old_tuples);
+    term ets_tuple = memory_copy_term_tree(&new_node->heap, tuple);
+
+    term new_key = term_get_tuple_element(ets_tuple, key_index);
+    ets_list = term_list_prepend(ets_tuple, ets_list, &new_node->heap);
+
+    new_node->next = NULL;
+    new_node->key = new_key;
+    new_node->entry = ets_list;
+    return new_node;
+
+oom:
+    free(new_node);
+    return NULL;
+}
+
+EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
 {
     term key = new_node->key;
     uint32_t hash = hash_term(key, global);
@@ -133,7 +164,12 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     struct HNode *node = hash_table->buckets[index];
     struct HNode *last_node = NULL;
     while (node) {
-        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
+        TermCompareResult cmp = term_compare(key, node->key, TermCompareExact, global);
+        if (UNLIKELY(cmp == TermCompareMemoryAllocFail)) {
+            return EtsHashtableOutOfMemory;
+        }
+
+        if (cmp == TermEquals) {
             if (opts & EtsHashtableAllowOverwrite) {
                 if (IS_NULL_PTR(last_node)) {
                     new_node->next = node->next;
@@ -145,8 +181,7 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
                 ets_hashtable_free_node(node, global);
                 return EtsHashtableOk;
             } else {
-                ets_hashtable_free_node(new_node, global);
-                return EtsHashtableFailure;
+                return EtsHashtableKeyAlreadyExists;
             }
         }
         last_node = node;
@@ -166,15 +201,14 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     return EtsHashtableOk;
 }
 
-term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global)
+term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, GlobalContext *global)
 {
     uint32_t hash = hash_term(key, global);
     uint32_t index = hash % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
-        term key_to_compare = term_get_tuple_element(node->entry, keypos);
-        if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
+        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
             return node->entry;
         }
         node = node->next;
@@ -183,7 +217,7 @@ term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t keyp
     return term_nil();
 }
 
-bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global)
+bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, GlobalContext *global)
 {
     uint32_t hash = hash_term(key, global);
     uint32_t index = hash % hash_table->capacity;
@@ -191,13 +225,9 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keyp
     struct HNode *node = hash_table->buckets[index];
     struct HNode *prev_node = NULL;
     while (node) {
-        term key_to_compare = term_get_tuple_element(node->entry, keypos);
-        if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
-
-            memory_destroy_heap(&node->heap, global);
+        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
             struct HNode *next_node = node->next;
-            free(node);
-
+            ets_hashtable_free_node(node, global);
             if (prev_node != NULL) {
                 prev_node->next = next_node;
             } else {

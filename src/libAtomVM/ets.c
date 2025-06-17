@@ -26,7 +26,13 @@
 #include "list.h"
 #include "memory.h"
 #include "overflow_helpers.h"
+#include "smp.h"
 #include "term.h"
+#include "utils.h"
+#include <assert.h>
+
+#define ETS_NO_INDEX SIZE_MAX
+#define ETS_ANY_PROCESS -1
 
 #ifndef AVM_NO_SMP
 #define SMP_RDLOCK(table) smp_rwlock_rdlock(table->lock)
@@ -52,7 +58,7 @@ struct EtsTable
     term name;
     bool is_named;
     int32_t owner_process_id;
-    size_t keypos;
+    size_t key_index;
     EtsTableType table_type;
     // In the future, we might support rb-trees for sorted sets
     // For this MVP, we only support unsorted sets
@@ -70,7 +76,7 @@ typedef enum TableAccessType
     TableAccessWrite
 } TableAccessType;
 
-static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global);
+static void delete_all_tables(struct Ets *ets, GlobalContext *global);
 
 static void ets_add_table(struct Ets *ets, struct EtsTable *ets_table)
 {
@@ -81,51 +87,40 @@ static void ets_add_table(struct Ets *ets, struct EtsTable *ets_table)
     synclist_unlock(&ets->ets_tables);
 }
 
-static struct EtsTable *ets_get_table_by_ref(struct Ets *ets, uint64_t ref, TableAccessType access_type)
+static struct EtsTable *acquire_table(struct Ets *ets, int32_t process_id, term name_or_ref, TableAccessType requested_access_type)
 {
-    struct ListHead *ets_tables_list = synclist_rdlock(&ets->ets_tables);
-    struct ListHead *item;
-    struct EtsTable *ret = NULL;
-    LIST_FOR_EACH (item, ets_tables_list) {
-        struct EtsTable *table = GET_LIST_ENTRY(item, struct EtsTable, head);
-        if (table->ref_ticks == ref) {
-            switch (access_type) {
-                case TableAccessRead:
-                    SMP_RDLOCK(table);
-                    break;
-                case TableAccessWrite:
-                    SMP_WRLOCK(table);
-                    break;
-                default:
-                    break;
-            }
-            ret = table;
-            break;
-        }
+    uint64_t ref = 0;
+    term name = term_invalid_term();
+    bool is_atom = term_is_atom(name_or_ref);
+    if (is_atom) {
+        name = name_or_ref;
+    } else {
+        ref = term_to_ref_ticks(name_or_ref);
     }
-    synclist_unlock(&ets->ets_tables);
-    return ret;
-}
 
-static struct EtsTable *ets_get_table_by_name(struct Ets *ets, term name, TableAccessType access_type)
-{
+    struct EtsTable *ret = NULL;
     struct ListHead *ets_tables_list = synclist_rdlock(&ets->ets_tables);
     struct ListHead *item;
-    struct EtsTable *ret = NULL;
     LIST_FOR_EACH (item, ets_tables_list) {
         struct EtsTable *table = GET_LIST_ENTRY(item, struct EtsTable, head);
-        if (table->is_named && table->name == name) {
-            switch (access_type) {
-                case TableAccessRead:
-                    SMP_RDLOCK(table);
-                    break;
-                case TableAccessWrite:
-                    SMP_WRLOCK(table);
-                    break;
-                default:
-                    break;
+        bool found = is_atom ? table->is_named && table->name == name : table->ref_ticks == ref;
+        if (found) {
+            bool is_owner = table->owner_process_id == process_id;
+            bool is_non_private = table->access_type != EtsAccessPrivate;
+            bool is_public = table->access_type == EtsAccessPublic;
+
+            bool can_read = requested_access_type == TableAccessRead && (is_non_private || is_owner);
+            bool can_write = requested_access_type == TableAccessWrite && (is_public || is_owner);
+            bool access_none = requested_access_type == TableAccessNone;
+            if (can_read) {
+                SMP_RDLOCK(table);
+                ret = table;
+            } else if (can_write) {
+                SMP_WRLOCK(table);
+                ret = table;
+            } else if (access_none) {
+                ret = table;
             }
-            ret = table;
             break;
         }
     }
@@ -140,14 +135,14 @@ void ets_init(struct Ets *ets)
 
 void ets_destroy(struct Ets *ets, GlobalContext *global)
 {
-    ets_delete_all_tables(ets, global);
+    delete_all_tables(ets, global);
     synclist_destroy(&ets->ets_tables);
 }
 
 EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx)
 {
     if (is_named) {
-        struct EtsTable *ets_table = ets_get_table_by_name(&ctx->global->ets, name, TableAccessNone);
+        struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ETS_ANY_PROCESS, name, TableAccessNone);
         if (ets_table != NULL) {
             return EtsTableNameInUse;
         }
@@ -177,7 +172,7 @@ EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType ta
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
     ets_table->ref_ticks = ref_ticks;
 
-    ets_table->keypos = keypos;
+    ets_table->key_index = keypos;
 
 #ifndef AVM_NO_SMP
     ets_table->lock = smp_rwlock_create();
@@ -214,7 +209,7 @@ static void ets_table_destroy(struct EtsTable *table, GlobalContext *global)
 
 typedef bool (*ets_table_filter_pred)(struct EtsTable *table, void *data);
 
-static void ets_delete_tables_internal(struct Ets *ets, ets_table_filter_pred pred, void *data, GlobalContext *global)
+static void delete_tables_pred(struct Ets *ets, ets_table_filter_pred pred, void *data, GlobalContext *global)
 {
     struct ListHead *ets_tables_list = synclist_wrlock(&ets->ets_tables);
     struct ListHead *item;
@@ -237,7 +232,7 @@ static bool equal_process_id_pred(struct EtsTable *table, void *data)
 
 void ets_delete_owned_tables(struct Ets *ets, int32_t process_id, GlobalContext *global)
 {
-    ets_delete_tables_internal(ets, equal_process_id_pred, &process_id, global);
+    delete_tables_pred(ets, equal_process_id_pred, &process_id, global);
 }
 
 static bool true_pred(struct EtsTable *table, void *data)
@@ -248,78 +243,105 @@ static bool true_pred(struct EtsTable *table, void *data)
     return true;
 }
 
-static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
+static void delete_all_tables(struct Ets *ets, GlobalContext *global)
 {
-    ets_delete_tables_internal(ets, true_pred, NULL, global);
+    delete_tables_pred(ets, true_pred, NULL, global);
 }
 
-static EtsErrorCode ets_table_insert(struct EtsTable *ets_table, term entry, Context *ctx)
+static inline bool has_key_at(term tuple, size_t key_index)
 {
-    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        return EtsPermissionDenied;
+    return key_index < (size_t) term_get_tuple_arity(tuple);
+}
+
+static struct HNode *tuple_to_insertion_node(struct EtsTable *ets_table, term tuple, GlobalContext *global)
+{
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
+    size_t key_index = ets_table->key_index;
+
+    if (is_duplicate_bag) {
+        term key = term_get_tuple_element(tuple, key_index);
+        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, global);
+        assert(term_is_list(old_tuples));
+        bool is_new = term_is_nil(old_tuples);
+        return ets_hashtable_new_node_from_list(is_new ? term_nil() : old_tuples, tuple, key_index);
+    }
+    return ets_hashtable_new_node(tuple, key_index);
+}
+
+static struct HNode **list_to_insertion_nodes(struct EtsTable *ets_table, term list, size_t size, GlobalContext *global)
+{
+    size_t last_i = 0;
+    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    if (IS_NULL_PTR(nodes)) {
+        goto oom;
     }
 
-    size_t keypos = ets_table->keypos;
+    while (term_is_nonempty_list(list)) {
+        term tuple = term_get_list_head(list);
+        nodes[last_i] = tuple_to_insertion_node(ets_table, tuple, global);
+        if (IS_NULL_PTR(nodes[last_i])) {
+            goto oom;
+        }
+        ++last_i;
+        list = term_get_list_tail(list);
+    }
+    return nodes;
+oom:
+    // skip last node, it's NULL
+    for (size_t i = 0; i < last_i; ++i) {
+        ets_hashtable_free_node(nodes[i], global);
+    }
+    free(nodes);
+    return NULL;
+}
 
-    if ((size_t) term_get_tuple_arity(entry) < keypos + 1) {
+static EtsErrorCode insert_tuple(struct EtsTable *ets_table, term tuple, GlobalContext *global)
+{
+    size_t key_index = ets_table->key_index;
+    if (UNLIKELY(!has_key_at(tuple, key_index))) {
         return EtsBadEntry;
     }
 
-    struct HNode *new_node = ets_hashtable_new_node(entry, keypos);
-    if (IS_NULL_PTR(new_node)) {
+    struct HNode *node = tuple_to_insertion_node(ets_table, tuple, global);
+    if (IS_NULL_PTR(node)) {
         return EtsAllocationFailure;
     }
 
-    EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, new_node, EtsHashtableAllowOverwrite, ctx->global);
+    EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, node, EtsHashtableAllowOverwrite, global);
     if (UNLIKELY(res != EtsHashtableOk)) {
+        ets_hashtable_free_node(node, global);
         return EtsAllocationFailure;
     }
 
     return EtsOk;
 }
 
-static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list, Context *ctx)
+static EtsErrorCode insert_tuple_list(struct EtsTable *ets_table, term list, GlobalContext *global)
 {
-    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        return EtsPermissionDenied;
-    }
-
     term iter = list;
     size_t size = 0;
 
     while (term_is_nonempty_list(iter)) {
         term tuple = term_get_list_head(iter);
         iter = term_get_list_tail(iter);
-        if (!term_is_tuple(tuple) || (size_t) term_get_tuple_arity(tuple) < (ets_table->keypos + 1)) {
+        if (UNLIKELY(!term_is_tuple(tuple) || !has_key_at(tuple, ets_table->key_index))) {
             return EtsBadEntry;
         }
         ++size;
     }
-    if (!term_is_nil(iter)) {
+    bool improper = !term_is_nil(iter);
+    if (UNLIKELY(improper)) {
         return EtsBadEntry;
     }
 
-    struct HNode **nodes = malloc(size * sizeof(struct HNode *));
+    struct HNode **nodes = list_to_insertion_nodes(ets_table, list, size, global);
     if (IS_NULL_PTR(nodes)) {
         return EtsAllocationFailure;
     }
 
-    size_t i = 0;
-    while (term_is_nonempty_list(list)) {
-        term tuple = term_get_list_head(list);
-        nodes[i] = ets_hashtable_new_node(tuple, ets_table->keypos);
-        if (IS_NULL_PTR(nodes[i])) {
-            ets_hashtable_free_node_array(nodes, i, ctx->global);
-            free(nodes);
-            return EtsAllocationFailure;
-        }
-        ++i;
-        list = term_get_list_tail(list);
-    }
-
     for (size_t i = 0; i < size; ++i) {
-
-        EtsHashtableErrorCode res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, ctx->global);
+        EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, nodes[i], EtsHashtableAllowOverwrite, global);
+        // insert can fail when comparing keys
         assert(res == EtsHashtableOk);
     }
 
@@ -329,16 +351,16 @@ static EtsErrorCode ets_table_insert_list(struct EtsTable *ets_table, term list,
 
 EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessWrite) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessWrite);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsBadAccess;
     }
 
     EtsErrorCode result;
     if (term_is_tuple(entry)) {
-        result = ets_table_insert(ets_table, entry, ctx);
+        result = insert_tuple(ets_table, entry, ctx->global);
     } else if (term_is_list(entry)) {
-        result = ets_table_insert_list(ets_table, entry, ctx);
+        result = insert_tuple_list(ets_table, entry, ctx->global);
     } else {
         result = EtsBadEntry;
     }
@@ -348,24 +370,53 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
     return result;
 }
 
-static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
+static EtsErrorCode lookup_maybe_gc(struct EtsTable *ets_table, term key, size_t index, term *ret, Context *ctx, int num_roots, term *roots)
 {
-    if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
-        return EtsPermissionDenied;
-    }
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
+    bool lookup_element = index != ETS_NO_INDEX;
+    term ets_entry = ets_hashtable_lookup(ets_table->hashtable, key, ctx->global);
 
-    term res = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
-
-    if (term_is_nil(res)) {
+    if (term_is_nil(ets_entry)) {
         *ret = term_nil();
-    } else {
+    } else if (is_duplicate_bag) {
+        assert(term_is_list(ets_entry));
+        // for tuple list and it reversed version - we don't want to copy terms in the loop
+        int _proper;
+        size_t n = term_list_length(ets_entry, &_proper);
+        size_t size = LIST_SIZE(n, 1) + memory_estimate_usage(ets_entry);
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, num_roots, roots, MEMORY_CAN_SHRINK))) {
+            return EtsAllocationFailure;
+        }
+        term tuples = memory_copy_term_tree(&ctx->heap, ets_entry);
+        // lookup returns in insertion order
+        // TODO: store it in correct order?
+        term reversed = term_nil();
+        while (term_is_nonempty_list(tuples)) {
+            term elem = term_get_list_head(tuples);
+            if (lookup_element) {
+                term tuple = elem;
+                if (UNLIKELY(!has_key_at(tuple, index))) {
+                    return EtsBadPosition;
+                }
+                elem = term_get_tuple_element(tuple, index);
+            }
+            reversed = term_list_prepend(elem, reversed, &ctx->heap);
+            tuples = term_get_list_tail(tuples);
+        }
 
-        size_t size = (size_t) memory_estimate_usage(res);
-        // allocate [object]
+        *ret = reversed;
+    } else {
+        if (lookup_element) {
+            if (UNLIKELY(!has_key_at(ets_entry, index))) {
+                return EtsBadPosition;
+            }
+            ets_entry = term_get_tuple_element(ets_entry, index);
+        }
+        size_t size = (size_t) memory_estimate_usage(ets_entry);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, size + CONS_SIZE, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             return EtsAllocationFailure;
         }
-        term new_res = memory_copy_term_tree(&ctx->heap, res);
+        term new_res = memory_copy_term_tree(&ctx->heap, ets_entry);
         *ret = term_list_prepend(new_res, term_nil(), &ctx->heap);
     }
 
@@ -374,81 +425,46 @@ static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term k
 
 EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsBadAccess;
     }
 
-    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ETS_NO_INDEX, ret, ctx, 0, NULL);
     SMP_UNLOCK(ets_table);
 
     return result;
 }
 
-EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t pos, term *ret, Context *ctx)
+EtsErrorCode ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t key_index, term *ret, Context *ctx)
 {
-    if (UNLIKELY(pos == 0)) {
-        return EtsBadPosition;
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessRead);
+    if (IS_NULL_PTR(ets_table)) {
+        return EtsBadAccess;
     }
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
 
-    struct EtsTable *ets_table = term_is_atom(name_or_ref) ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead) : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
-    if (ets_table == NULL) {
-        return EtsTableNotFound;
-    }
-
-    if (ets_table->access_type == EtsAccessPrivate && ets_table->owner_process_id != ctx->process_id) {
+    term entry;
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, key_index, &entry, ctx, 0, NULL);
+    if (result != EtsOk) {
         SMP_UNLOCK(ets_table);
-        return EtsPermissionDenied;
+        return result;
     }
-
-    term entry = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->keypos, ctx->global);
-
     if (term_is_nil(entry)) {
         SMP_UNLOCK(ets_table);
         return EtsEntryNotFound;
     }
-
-    if ((size_t) term_get_tuple_arity(entry) < pos) {
-        SMP_UNLOCK(ets_table);
-        return EtsBadPosition;
-    }
-
-    term res = term_get_tuple_element(entry, pos - 1);
-    size_t size = (size_t) memory_estimate_usage(res);
-    // allocate [object]
-    if (UNLIKELY(memory_ensure_free_opt(ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        SMP_UNLOCK(ets_table);
-        return EtsAllocationFailure;
-    }
-    *ret = memory_copy_term_tree(&ctx->heap, res);
+    *ret = is_duplicate_bag ? entry : term_get_list_head(entry);
     SMP_UNLOCK(ets_table);
 
     return EtsOk;
 }
 
-static EtsErrorCode ets_table_delete(struct EtsTable *ets_table, term key, term *ret, Context *ctx)
-{
-    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        return EtsPermissionDenied;
-    }
-
-    bool _res = ets_hashtable_remove(ets_table->hashtable, key, ets_table->keypos, ctx->global);
-    UNUSED(_res);
-
-    *ret = TRUE_ATOM;
-    return EtsOk;
-}
-
 EtsErrorCode ets_drop_table(term name_or_ref, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(name_or_ref)
-        ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessWrite)
-        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
-        return EtsTableNotFound;
-    }
-    if (ets_table->access_type != EtsAccessPublic && ets_table->owner_process_id != ctx->process_id) {
-        return EtsPermissionDenied;
+        return EtsBadAccess;
     }
 
     struct ListHead *ets_tables_list = synclist_wrlock(&ctx->global->ets.ets_tables);
@@ -464,17 +480,17 @@ EtsErrorCode ets_drop_table(term name_or_ref, term *ret, Context *ctx)
 
 EtsErrorCode ets_delete(term name_or_ref, term key, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(name_or_ref)
-        ? ets_get_table_by_name(&ctx->global->ets, name_or_ref, TableAccessRead)
-        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(name_or_ref), TableAccessRead);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, name_or_ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
-        return EtsTableNotFound;
+        return EtsBadAccess;
     }
 
-    EtsErrorCode res = ets_table_delete(ets_table, key, ret, ctx);
-
+    bool _found = ets_hashtable_remove(ets_table->hashtable, key, ctx->global);
+    UNUSED(_found);
     SMP_UNLOCK(ets_table);
-    return res;
+
+    *ret = TRUE_ATOM;
+    return EtsOk;
 }
 
 static bool operation_to_tuple4(term operation, size_t default_pos, term *position, term *increment, term *threshold, term *set_value)
@@ -524,11 +540,13 @@ static bool operation_to_tuple4(term operation, size_t default_pos, term *positi
 
 EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, term default_value, term *ret, Context *ctx)
 {
-    struct EtsTable *ets_table = term_is_atom(ref)
-        ? ets_get_table_by_name(&ctx->global->ets, ref, TableAccessWrite)
-        : ets_get_table_by_ref(&ctx->global->ets, term_to_ref_ticks(ref), TableAccessWrite);
+    struct EtsTable *ets_table = acquire_table(&ctx->global->ets, ctx->process_id, ref, TableAccessWrite);
     if (IS_NULL_PTR(ets_table)) {
-        return EtsTableNotFound;
+        return EtsBadAccess;
+    }
+    if (UNLIKELY(ets_table->table_type == EtsTableDuplicateBag)) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
     }
 
     // do not use an invalid term as a root
@@ -536,7 +554,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term roots[] = { key, operation, safe_default_value };
 
     term list;
-    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ETS_NO_INDEX, &list, ctx, 3, roots);
     if (UNLIKELY(result != EtsOk)) {
         SMP_UNLOCK(ets_table);
         return result;
@@ -565,21 +583,20 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term increment_term;
     term threshold_term;
     term set_value_term;
-    // +1 to position, +1 to elem after key
-    size_t default_pos = (ets_table->keypos + 1) + 1;
+    // +1 for index -> position, +1 for targeting elem after key
+    size_t default_pos = (ets_table->key_index + 1) + 1;
 
     if (UNLIKELY(!operation_to_tuple4(operation, default_pos, &position_term, &increment_term, &threshold_term, &set_value_term))) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
-    int arity = term_get_tuple_arity(to_insert);
-    avm_int_t position = term_to_int(position_term) - 1;
-    if (UNLIKELY(arity <= position || position < 1)) {
+    size_t elem_index = term_to_int(position_term) - 1;
+    if (UNLIKELY(!has_key_at(to_insert, elem_index) || elem_index == ets_table->key_index)) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
     }
 
-    term elem = term_get_tuple_element(to_insert, position);
+    term elem = term_get_tuple_element(to_insert, elem_index);
     if (UNLIKELY(!term_is_integer(elem))) {
         SMP_UNLOCK(ets_table);
         return EtsBadEntry;
@@ -588,7 +605,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     avm_int_t elem_value;
     if (BUILTIN_ADD_OVERFLOW_INT(increment, term_to_int(elem), &elem_value)) {
         SMP_UNLOCK(ets_table);
-        return EtsOverlfow;
+        return EtsOverflow;
     }
     if (!term_is_invalid_term(threshold_term) && !term_is_invalid_term(set_value_term)) {
         avm_int_t threshold = term_to_int(threshold_term);
@@ -602,8 +619,8 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     }
 
     term final_value = term_from_int(elem_value);
-    term_put_tuple_element(to_insert, position, final_value);
-    EtsErrorCode insert_result = ets_table_insert(ets_table, to_insert, ctx);
+    term_put_tuple_element(to_insert, elem_index, final_value);
+    EtsErrorCode insert_result = insert_tuple(ets_table, to_insert, ctx->global);
     if (insert_result == EtsOk) {
         *ret = final_value;
     }
