@@ -544,6 +544,10 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     if (IS_NULL_PTR(ets_table)) {
         return EtsBadAccess;
     }
+    if (UNLIKELY(ets_table->table_type == EtsTableDuplicateBag)) {
+        SMP_UNLOCK(ets_table);
+        return EtsBadEntry;
+    }
 
     // do not use an invalid term as a root
     term safe_default_value = term_is_invalid_term(default_value) ? term_nil() : default_value;
