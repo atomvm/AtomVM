@@ -247,22 +247,36 @@ static void ets_delete_all_tables(struct Ets *ets, GlobalContext *global)
     ets_delete_tables_internal(ets, true_pred, NULL, global);
 }
 
+static inline bool has_key_at(term tuple, size_t key_index)
+{
+    return key_index < (size_t) term_get_tuple_arity(tuple);
+}
+
 static EtsErrorCode insert(struct EtsTable *ets_table, term tuple, Context *ctx)
 {
     assert(term_is_tuple(tuple));
     size_t key_index = ets_table->key_index;
-    if ((size_t) term_get_tuple_arity(tuple) <= key_index) {
+    if (UNLIKELY(!has_key_at(tuple, key_index))) {
         return EtsBadEntry;
     }
 
-    struct HNode *new_node = ets_hashtable_new_node(tuple, key_index);
-    if (IS_NULL_PTR(new_node)) {
+    bool is_duplicate_bag = ets_table->table_type == EtsTableDuplicateBag;
+    struct HNode *node = NULL;
+    if (is_duplicate_bag) {
+        term key = term_get_tuple_element(tuple, key_index);
+        term old_tuples = ets_hashtable_lookup(ets_table->hashtable, key, key_index, ctx->global);
+        bool is_new = term_is_nil(old_tuples);
+        node = ets_hashtable_new_node_from_list(is_new ? term_nil() : old_tuples, tuple, key_index);
+    } else {
+        node = ets_hashtable_new_node(tuple, key_index);
+    }
+    if (IS_NULL_PTR(node)) {
         return EtsAllocationFailure;
     }
 
-    EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, new_node, EtsHashtableAllowOverwrite, ctx->global);
+    EtsHashtableStatus res = ets_hashtable_insert(ets_table->hashtable, node, EtsHashtableAllowOverwrite, ctx->global);
     if (UNLIKELY(res != EtsHashtableOk)) {
-        ets_hashtable_free_node(new_node, ctx->global);
+        ets_hashtable_free_node(node, ctx->global);
         return EtsAllocationFailure;
     }
 
@@ -336,7 +350,7 @@ EtsErrorCode ets_insert(term name_or_ref, term entry, Context *ctx)
     return result;
 }
 
-static EtsErrorCode ets_table_lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
+static EtsErrorCode lookup_maybe_gc(struct EtsTable *ets_table, term key, term *ret, Context *ctx, int num_roots, term *roots)
 {
     term res = ets_hashtable_lookup(ets_table->hashtable, key, ets_table->key_index, ctx->global);
 
@@ -363,7 +377,7 @@ EtsErrorCode ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context 
         return EtsBadAccess;
     }
 
-    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, ret, ctx, 0, NULL);
     SMP_UNLOCK(ets_table);
 
     return result;
@@ -490,7 +504,7 @@ EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term operation, ter
     term roots[] = { key, operation, safe_default_value };
 
     term list;
-    EtsErrorCode result = ets_table_lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
+    EtsErrorCode result = lookup_maybe_gc(ets_table, key, &list, ctx, 3, roots);
     if (UNLIKELY(result != EtsOk)) {
         SMP_UNLOCK(ets_table);
         return result;

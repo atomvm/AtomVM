@@ -31,6 +31,7 @@ start() ->
     ok = isolated(fun test_delete/0),
     ok = isolated(fun test_lookup_element/0),
     ok = isolated(fun test_update_counter/0),
+    ok = isolated(fun test_duplicate_bag/0),
     0.
 
 test_ets_new() ->
@@ -258,6 +259,49 @@ test_update_counter() ->
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number, 100, 0}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, not_number, 0}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, 100, not_number}) end),
+    ok.
+
+test_duplicate_bag() ->
+    Tid = ets:new(test_duplicate_bag, [duplicate_bag, {keypos, 2}]),
+    T = {ok, foo, 100, extra},
+    T2 = {error, foo, 200},
+    T3 = {error, foo, 300},
+
+    % true = ets:insert_new(Tid, T),
+    % false = ets:insert_new(Tid, T),
+    true = ets:insert(Tid, T),
+    true = ets:insert(Tid, [T, T]),
+    true = ets:insert(Tid, [T2]),
+    % true = [T, T, T, T2] == ets:lookup(Tid, foo),
+    % true = [T, T, T, T, T2] == ets:lookup(Tid, foo),
+    % true = ets:member(Tid, foo),
+
+    % % nothing inserted, T exists in table
+    % false = ets:insert_new(Tid, [T, {ok, bar, batat}]),
+    % false = ets:member(Tid, bar),
+
+    % [ok, ok, ok, ok, error] = ets:lookup_element(Tid, foo, 1),
+    % [foo, foo, foo, foo, foo] = ets:lookup_element(Tid, foo, 2),
+    % [100, 100, 100, 100, 200] = ets:lookup_element(Tid, foo, 3),
+    % % some tuples don't have 4 arity
+    % ok = expect_failure(fun() -> ets:lookup_element(Tid, foo, 4) end),
+
+    % % unsupported for duplicate bag
+    % ok = expect_failure(fun() -> ets:update_counter(Tid, foo, 10) end),
+    % ok = expect_failure(fun() -> ets:update_element(Tid, foo, {1, error}) end),
+
+    % true = ets:delete_object(Tid, {bad, bad}),
+    % true = [T, T, T, T, T2] == ets:lookup(Tid, foo),
+    % true = ets:delete_object(Tid, T),
+    % true = [T2] == ets:lookup(Tid, foo),
+
+    % true = ets:insert(Tid, T3),
+    % % keeps insertion order
+    % true = [T2, T3] == ets:take(Tid, foo),
+
+    % true = ets:delete(Tid),
+    % ok = expect_failure(fun() -> ets:insert(Tid, T) end),
+
     ok.
 
 %%-----------------------------------------------------------------------------

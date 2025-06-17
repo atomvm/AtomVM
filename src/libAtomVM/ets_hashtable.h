@@ -53,6 +53,7 @@ struct EtsHashTable *ets_hashtable_new();
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global);
 
 struct HNode *ets_hashtable_new_node(term entry, int key_index);
+struct HNode *ets_hashtable_new_node_from_list(term old_tuples_or_tuple, term new_tuple, size_t key_index);
 void ets_hashtable_free_node(struct HNode *node, GlobalContext *global);
 
 EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
