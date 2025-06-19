@@ -104,7 +104,7 @@ struct Context
     size_t max_heap_size;
     enum HeapGrowthStrategy heap_growth_strategy;
 
-    unsigned long cp;
+    term cp;
 
     // saved state when scheduled out
     Module *saved_module;
