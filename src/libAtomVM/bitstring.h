@@ -87,6 +87,8 @@ extern "C" {
         )
 #endif
 
+// do not change the values
+// these values are the same used from opcodes such as bs_get_utf16
 enum BitstringFlags
 {
     LittleEndianInteger = 0x2,
