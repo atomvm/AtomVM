@@ -51,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Process.link/1 and unlink/1 to Elixir Process.ex
 - Added `erlang:module_loaded/1`
 - Added `binary:replace/3`, `binary:replace/4`
+- Added `binary:match/2` and `binary:match/3`
 
 ### Changed
 

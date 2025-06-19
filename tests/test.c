@@ -326,6 +326,7 @@ struct Test tests[] = {
     TEST_CASE(test_binary_split),
     TEST_CASE(test_split_binary),
     TEST_CASE(test_binary_replace),
+    TEST_CASE(test_binary_match),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
@@ -634,18 +635,23 @@ static int test_atom(struct Test *test)
 static int test_beam(struct Test *test)
 {
     char command[512];
-    snprintf(command, sizeof(command),
+    size_t written = snprintf(command, sizeof(command),
         "erl -pa . -eval '"
-        "erlang:process_flag(trap_exit, false), " /* init(3) traps exists */
-        "R = %s:start(), "
-        "S = if"
-        " R =:= %i -> 0;"
-        " true -> io:format(\"Expected ~B, got ~p\n\", [%i, R]) "
-        "end, "
+        "erlang:process_flag(trap_exit, false), \n" /* init(3) traps exits */
+        "S = try %s:start() of\n"
+        "    R when R =:= %i -> 0;\n"
+        "    R               -> io:format(\"Expected ~B, got ~p\\n\", [%i, R]), 1\n"
+        "catch\n"
+        "    _C:E:ST -> io:format(\"Raised ~p, stacktrace:\\n~p\\n\", [E, ST]), 1\n"
+        "end,\n"
         "erlang:halt(S).' -noshell",
         test->test_module,
         test->expected_value,
         test->expected_value);
+    if (written >= sizeof(command) - 1) {
+        fprintf(stderr, "Exceeded buffer size for module %s\n", test->test_module);
+        return 1;
+    }
     return system(command);
 }
 
