@@ -325,6 +325,7 @@ struct Test tests[] = {
     TEST_CASE(test_binary_part),
     TEST_CASE(test_binary_split),
     TEST_CASE(test_split_binary),
+    TEST_CASE(test_binary_replace),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
