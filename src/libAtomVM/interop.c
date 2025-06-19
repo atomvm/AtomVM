@@ -26,6 +26,7 @@
 #include "tempstack.h"
 #include "term.h"
 #include "term_typedef.h"
+#include "utils.h"
 #include "valueshashtable.h"
 #include <stdint.h>
 
@@ -307,10 +308,19 @@ inline InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold
     return InteropOk;
 }
 
+static inline bool is_u8(avm_int_t value)
+{
+    return 0 <= value && value <= UCHAR_MAX;
+}
+
 static inline InteropFunctionResult size_fold_fun(term t, void *accum)
 {
     size_t *size = (size_t *) accum;
     if (term_is_integer(t)) {
+        avm_int_t value = term_to_int(t);
+        if (UNLIKELY(!is_u8(value))) {
+            return InteropBadArg;
+        }
         *size += 1;
     } else /* term_is_binary(t) */ {
         *size += term_binary_size(t);
@@ -328,9 +338,15 @@ static inline InteropFunctionResult write_string_fold_fun(term t, void *accum)
 {
     char **p = (char **) accum;
     if (term_is_integer(t)) {
-        **p = term_to_int(t);
+        avm_int_t value = term_to_int(t);
+        if (UNLIKELY(!is_u8(value))) {
+            return InteropBadArg;
+        }
+        **p = value;
         (*p)++;
-    } else /* term_is_binary(t) */ {
+    } else {
+        assert(term_is_binary(t));
+
         int len = term_binary_size(t);
         memcpy(*p, term_binary_data(t), len);
         *p += len;

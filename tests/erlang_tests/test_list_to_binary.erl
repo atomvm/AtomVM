@@ -20,77 +20,71 @@
 
 -module(test_list_to_binary).
 
--export([start/0, concat/2, concat2/2, compare_bin/3, id/1]).
+-export([start/0, concat_space/2, concat/2, is_binary_equal/3, id/1]).
+-define(ID(X), ?MODULE:id(X)).
+-define(ID(X1, X2), ?MODULE:id(X1), ?MODULE:id(X2)).
 
 start() ->
-    ok = test_concat(),
-    ok = test_iolist(),
+    ok = test_list_to_binary(),
     ok = test_iolist_to_binary(),
-    ok = test_empty_list_to_binary(),
     0.
+test_list_to_binary() ->
+    <<"Hello world">> = erlang:list_to_binary(?ID([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
+    <<"">> = erlang:list_to_binary(?ID([])),
 
-test_concat() ->
-    Bin = concat("Hello", "world"),
-    Bin2 = concat2("", ""),
-    CompRes1 = compare_bin(Bin, <<"Hello world">>) - compare_bin(Bin, <<"HelloXworld">>),
-    1 = CompRes1 + byte_size(Bin2) + invalid(42),
-    ok.
+    % Concatenation
+    Hello = concat_space(?ID("Hello", "world")),
+    Empty = concat(?ID("", "")),
+    0 = byte_size(Empty),
+    true = is_binary_equal(Hello, <<"Hello world">>),
+    false = is_binary_equal(Hello, <<"HelloXworld">>),
 
-test_iolist() ->
-    <<"Hello world">> = list_to_binary(id([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
+    % Errors
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID(<<>>)) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID(<<"foo">>)) end),
+    ok = raises_badarg(fun() -> erlang:list_to_binary(?ID(42)) end),
     ok.
 
 test_iolist_to_binary() ->
-    <<"Hello world">> = iolist_to_binary(id([<<"Hello ">>, [<<"wor">>, [$l, $d]]])),
-    ok =
-        try
-            _ = list_to_binary(id(<<"foo">>)),
-            fail
-        catch
-            error:badarg ->
-                ok
-        end,
-    ok =
-        try
-            <<"foo">> = iolist_to_binary(id(<<"foo">>)),
-            ok
-        catch
-            error:badarg ->
-                fail
-        end,
+    <<"foo">> = erlang:iolist_to_binary(?ID(<<"foo">>)),
+    <<"">> = erlang:iolist_to_binary(?ID(<<>>)),
+    <<"">> = erlang:iolist_to_binary(?ID([])),
+    % The binary and charlist is "atom" in katakana as english transliteration ("atomu")
+    % (in direct binary form since formatter butchers the utf-8)
+    <<227, 130, 162, 227, 131, 136, 227, 131, 160>> = iolist_to_binary(
+        ?ID(<<227, 130, 162, 227, 131, 136, 227, 131, 160>>)
+    ),
+    ok = raises_badarg(fun() -> iolist_to_binary(?ID([12450, 12488, 12512])) end),
+    ok = raises_badarg(fun() -> iolist_size(?ID([12450, 12488, 12512])) end),
     ok.
 
-test_empty_list_to_binary() ->
-    <<"">> = erlang:list_to_binary([]),
-    ok.
-
-concat(A, B) ->
+concat_space(A, B) ->
     list_to_binary(A ++ " " ++ B).
 
-concat2(A, B) ->
+concat(A, B) ->
     list_to_binary(A ++ B).
 
-invalid(A) ->
-    try list_to_binary(A) of
-        Any -> byte_size(Any)
-    catch
-        error:badarg -> 0;
-        _:_ -> 1000
-    end.
+is_binary_equal(Bin1, Bin2) ->
+    is_binary_equal(Bin1, Bin2, byte_size(Bin1) - 1).
 
-compare_bin(Bin1, Bin2) ->
-    compare_bin(Bin1, Bin2, byte_size(Bin1) - 1).
-
-compare_bin(_Bin1, _Bin2, -1) ->
-    1;
-compare_bin(Bin1, Bin2, Index) ->
+is_binary_equal(_Bin1, _Bin2, -1) ->
+    true;
+is_binary_equal(Bin1, Bin2, Index) ->
     B1 = binary:at(Bin1, Index),
     case binary:at(Bin2, Index) of
         B1 ->
-            compare_bin(Bin1, Bin2, Index - 1);
+            is_binary_equal(Bin1, Bin2, Index - 1);
         _Any ->
-            0
+            false
     end.
 
 id(X) ->
     X.
+
+raises_badarg(Fun) ->
+    try Fun() of
+        Ret -> {unexpected, Ret}
+    catch
+        error:badarg -> ok;
+        C:E -> {unexpected, C, E}
+    end.
