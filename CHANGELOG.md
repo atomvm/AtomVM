@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release images for ESP32 chips are built with ESP-IDF v5.4
 - ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
 
+### Changed
+- `globalcontext_make_atom` might return an invalid term when memory allocation fails. Therefore
+return value must be checked (e.g. using `term_is_invalid_term()`)
+
 ### Fixed
 
 - ESP32: improved sntp sync speed from a cold boot.
