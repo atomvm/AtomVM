@@ -23,428 +23,299 @@
 -export([start/0]).
 
 start() ->
-    ok = test_basic(),
-    ok = test_named_table(),
-    ok = test_keypos(),
-    ok = test_key_types(),
-    ok = test_private_access(),
-    ok = test_protected_access(),
-    ok = test_public_access(),
-    ok = test_lookup_element(),
-    ok = test_insert_list(),
-    ok = test_update_counter(),
-    ok = test_delete_table(),
+    ok = isolated(fun test_ets_new/0),
+    ok = isolated(fun test_permissions/0),
+    ok = isolated(fun test_keys/0),
+    ok = isolated(fun test_keypos/0),
+    ok = isolated(fun test_insert/0),
+    ok = isolated(fun test_delete/0),
+    ok = isolated(fun test_lookup_element/0),
+    ok = isolated(fun test_update_counter/0),
     0.
 
-test_basic() ->
-    test_basic([]).
+test_ets_new() ->
+    assert_badarg(fun() -> ets:new([isnt, atom], []) end),
+    assert_badarg(fun() -> ets:new(name, not_a_list) end),
 
-test_named_table() ->
-    test_basic([named_table]).
+    ets:new(unnamed_test, []),
 
-test_basic(Options) ->
-    {ok, Tid} = run_test(fun test_basic_fun/2, Options),
+    named_test = ets:new(named_test, [named_table]),
+    true = assert_operation(named_test, insert, []),
+    ets:new(named_test, []),
+    assert_badarg(fun() -> ets:new(named_test, [named_table]) end),
 
-    %%
-    %% The table should no longer exist
-    %%
-    sleep(25),
-    ok = expect_failure(
-        fun() ->
-            ets:lookup(Tid, foo)
-        end
-    ),
+    ets:new(keypos_test, [{keypos, 2}]),
+    assert_badarg(fun() -> ets:new(keypos_test, [{keypos, 0}]) end),
+    assert_badarg(fun() -> ets:new(keypos_test, [{keypos, -1}]) end),
+
+    ets:new(type_test, [set]),
+
+    % Unimplemented
+    ets:new(type_test, [ordered_set]),
+    ets:new(type_test, [bag]),
+    ets:new(type_test, [duplicate_bag]),
+    ets:new(heir_test, [{heir, self(), []}]),
+    ets:new(heir_test, [{heir, none}]),
+    ets:new(write_conc_test, [{write_concurrency, true}]),
+    ets:new(read_conc_test, [{read_concurrency, true}]),
+    case otp_version() of
+        OTP when OTP >= 23 -> ets:new(decent_counters_test, [{decentralized_counters, true}]);
+        _ -> ok
+    end,
+    ets:new(compressed_test, [compressed]),
     ok.
 
-test_basic_fun(Pid, Options) ->
-    expect_failure(fun() -> ets:new([isnt, an, atom], []) end),
-    expect_failure(fun() -> ets:new(bad_options, not_a_list) end),
+test_permissions() ->
+    % Table doesn't exist after process dies
+    TDead = isolated(fun() ->
+        T = ets:new(test, []),
+        assert_operation(T, insert, []),
+        assert_operation(T, lookup, []),
+        T
+    end),
+    assert_operation(TDead, insert, [badarg]),
+    assert_operation(TDead, lookup, [badarg]),
 
-    Tid = ets:new(test, Options),
+    % Private
+    TPriv = ets:new(test, [private]),
+    assert_operation(TPriv, insert, []),
+    assert_operation(TPriv, lookup, []),
+    isolated(fun() ->
+        assert_operation(TPriv, insert, [badarg]),
+        assert_operation(TPriv, lookup, [badarg])
+    end),
 
-    %% check name in use
-    case member(named_table, Options) of
-        true ->
-            expect_failure(fun() -> ets:new(test, Options) end),
-            %% you can still create an un-named table with the same name
-            _Tid = ets:new(test, []);
-        _ ->
-            _Tid = ets:new(test, [])
-    end,
+    % Protected (default)
+    TProt = ets:new(test, []),
+    assert_operation(TProt, insert, []),
+    assert_operation(TProt, lookup, []),
+    isolated(fun() ->
+        assert_operation(TProt, insert, [badarg]),
+        assert_operation(TProt, lookup, [])
+    end),
 
-    [] = ets:lookup(Tid, foo),
-    true = ets:insert(Tid, {foo, bar}),
-    [{foo, bar}] = ets:lookup(Tid, foo),
+    % Public
+    TPub = ets:new(test, [public]),
+    assert_operation(TPub, insert, []),
+    assert_operation(TPub, lookup, []),
+    isolated(fun() ->
+        assert_operation(TPub, insert, []),
+        assert_operation(TPub, lookup, [])
+    end),
+    ok.
 
-    [] = ets:lookup(Tid, does_not_exist),
-
-    true = ets:insert(Tid, {foo, tapas}),
-    [{foo, tapas}] = ets:lookup(Tid, foo),
-
-    true = ets:delete(Tid, does_not_exist),
-    [] = ets:lookup(Tid, does_not_exist),
-    true = ets:delete(Tid, foo),
-    [] = ets:lookup(Tid, foo),
-
-    true = ets:insert(Tid, {foo, bar}),
-    true = ets:insert(Tid, {gnu, gnat}),
-    true = ets:insert(Tid, {bar, tapas}),
-
-    true = ets:delete(Tid, foo),
-    [{gnu, gnat}] = ets:lookup(Tid, gnu),
-    [{bar, tapas}] = ets:lookup(Tid, bar),
-    true = ets:delete(Tid, gnu),
-    [{bar, tapas}] = ets:lookup(Tid, bar),
-    [] = ets:lookup(Tid, gnu),
-    true = ets:delete(Tid, bar),
-    [] = ets:lookup(Tid, bar),
-
-    [] = ets:lookup(Tid, #{some => structured, key => [a, b, c]}),
-    true = ets:insert(Tid, {#{some => structured, key => [a, b, c]}, bar}),
-    [{#{some := structured, key := [a, b, c]}, bar}] = ets:lookup(Tid, #{
-        some => structured, key => [a, b, c]
+test_keys() ->
+    T = ets:new(test, []),
+    DistributedPidBin = <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>,
+    DistributedRefBin = <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>,
+    DistributedPortBin =
+        <<131, 120, 119, 14, "test@test_node", 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 4, 18>>,
+    Port = open_port({spawn, "echo"}, []),
+    ok = assert_stored_key(T, some_atom),
+    ok = assert_stored_key(T, 1),
+    ok = assert_stored_key(T, 0),
+    ok = assert_stored_key(T, -1),
+    ok = assert_stored_key(T, 1.0),
+    ok = assert_stored_key(T, self()),
+    ok = assert_stored_key(T, binary_to_term(DistributedPidBin)),
+    ok = assert_stored_key(T, Port),
+    ok = assert_stored_key(T, erlang:make_ref()),
+    ok = assert_stored_key(T, binary_to_term(DistributedRefBin)),
+    ok = assert_stored_key(T, <<"bin">>),
+    ok = assert_stored_key(T, <<"">>),
+    ok = assert_stored_key(T, {ok, 1}),
+    ok = assert_stored_key(T, [x, self(), 1.0]),
+    ok = assert_stored_key(T, [improper | list]),
+    ok = assert_stored_key(T, #{
+        some_atom => {a, b, c},
+        #{another => "map"} => erlang:make_ref(),
+        <<1, 2, 3, 4>> => <<-4, -3, -2, -1>>
     }),
-
-    expect_failure(fun() -> ets:insert(Tid, {}) end),
-    expect_failure(fun() -> ets:insert(Tid, not_a_tuple) end),
-    expect_failure(fun() -> ets:insert([isnt, a, table, reference], {foo, bar}) end),
-    expect_failure(fun() -> ets:lookup([isnt, a, table, reference], foo) end),
-    expect_failure(fun() -> ets:delete([isnt, a, table, reference], foo) end),
-
-    Pid ! {ok, Tid}.
+    case supports_v4_port_encoding() of
+        true -> ok = assert_stored_key(T, binary_to_term(DistributedPortBin));
+        false -> ok
+    end,
+    ok.
 
 test_keypos() ->
-    ok = run_test(fun test_keypos_fun/2, []),
+    T = ets:new(test, [{keypos, 2}]),
+    assert_badarg(fun() -> ets:new(bad_keypos, 0) end),
+    assert_badarg(fun() -> ets:new(bad_keypos, -1) end),
+
+    true = ets:insert(T, {value, key}),
+    [{value, key}] = ets:lookup(T, key),
+    assert_badarg(fun() -> ets:insert(T, {}) end),
+    assert_badarg(fun() -> ets:insert(T, {value}) end),
     ok.
 
-test_keypos_fun(Pid, _Options) ->
-    expect_failure(fun() -> ets:new(bad_keypos, -1) end),
+test_insert() ->
+    T = ets:new(test, []),
+    [] = ets:lookup(T, key),
+    true = ets:insert(T, {key, value}),
+    [{key, value}] = ets:lookup(T, key),
+    % Overwrite
+    true = ets:insert(T, {key, new_value}),
+    [{key, new_value}] = ets:lookup(T, key),
 
-    Tid = ets:new(test, [{keypos, 2}]),
+    TList = ets:new(test, []),
+    true = ets:insert(TList, []),
+    true = ets:insert(TList, [{key, value}, {key2, value2}]),
+    true = ets:insert(TList, [{key2, new_value2}, {key3, value3}]),
+    [{key, value}] = ets:lookup(TList, key),
+    [{key2, new_value2}] = ets:lookup(TList, key2),
+    [{key3, value3}] = ets:lookup(TList, key3),
 
-    true = ets:insert(Tid, {foo, bar}),
-    true = ets:insert(Tid, {gnu, gnat}),
-    true = ets:insert(Tid, {bar, tapas}),
-
-    [{foo, bar}] = ets:lookup(Tid, bar),
-    [{gnu, gnat}] = ets:lookup(Tid, gnat),
-    [{bar, tapas}] = ets:lookup(Tid, tapas),
-
-    expect_failure(fun() -> ets:insert(Tid, {}) end),
-    expect_failure(fun() -> ets:insert(Tid, {arity_1}) end),
-
-    Pid ! ok.
-
-test_key_types() ->
-    ok = run_test(fun test_key_types_fun/2, []),
+    TErr = ets:new(test, []),
+    assert_badarg(fun() -> ets:insert(TErr, {}) end),
+    assert_badarg(fun() -> ets:insert(TErr, [{}]) end),
+    assert_badarg(fun() -> ets:insert(TErr, [{key, value}, not_a_tuple]) end),
+    assert_badarg(fun() -> ets:insert(TErr, [{improper, true} | {list, true}]) end),
+    assert_badarg(fun() -> ets:insert(TErr, not_a_tuple) end),
+    assert_badarg(fun() -> ets:insert([not_a_ref], {key, value}) end),
+    [] = ets:lookup(TErr, key),
+    [] = ets:lookup(TErr, improper),
+    [] = ets:lookup(TErr, list),
     ok.
 
-test_key_types_fun(Pid, _Options) ->
-    Tid = ets:new(test, []),
-    EchoServer = spawn_opt(fun echo_server/0, []),
-    register(echo, EchoServer),
+test_delete() ->
+    T = ets:new(test, []),
 
-    ok = test_key_insert_lookup(
-        Tid,
-        some_atom
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        12345
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        0
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        -12345
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        3.14159365
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        self()
-    ),
-    DistributedPid = binary_to_term(
-        <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        DistributedPid
-    ),
-    TestPort = open_port({spawn, "echo"}, []),
-    ok = test_key_insert_lookup(
-        Tid,
-        TestPort
-    ),
-    ok =
-        case supports_v4_port_encoding() of
-            true ->
-                DistributedPort = binary_to_term(
-                    <<131, 120, 119, 14, "test@test_node", 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 4, 18>>
-                ),
-                test_key_insert_lookup(Tid, DistributedPort);
-            false ->
-                ok
-        end,
-    ok = test_key_insert_lookup(
-        Tid,
-        erlang:make_ref()
-    ),
-    DistributedRef = binary_to_term(
-        <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        DistributedRef
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        <<"fubar">>
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        <<"">>
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        {some_atom, 1234}
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        [a, b, c, self(), 3.1415265]
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        [a | b]
-    ),
-    ok = test_key_insert_lookup(
-        Tid,
-        #{
-            some_atom => {a, b, c},
-            #{another => "map"} => erlang:make_ref(),
-            <<1, 2, 3, 4>> => <<-4, -3, -2, -1>>
-        }
-    ),
+    % Not existing
+    true = ets:delete(T, key),
+    [] = ets:lookup(T, key),
 
-    EchoServer ! halt,
+    % Keep key2
+    true = ets:insert(T, {key, value}),
+    true = ets:insert(T, {key2, value2}),
+    [{key, value}] = ets:lookup(T, key),
+    true = ets:delete(T, key),
+    [] = ets:lookup(T, key),
+    [{key2, value2}] = ets:lookup(T, key2),
 
-    Pid ! ok.
+    % Re-add key
+    true = ets:insert(T, {key, new_value}),
+    [{key, new_value}] = ets:lookup(T, key),
 
-supports_v4_port_encoding() ->
-    {_Version, Support} =
-        case erlang:system_info(machine) of
-            "ATOM" ->
-                % small utf8 atom
-                {29, true};
-            "BEAM" ->
-                OTPRelease = erlang:system_info(otp_release),
-                if
-                    OTPRelease < "23" -> {23, false};
-                    OTPRelease < "24" -> {26, false};
-                    % v4 is supported but not the default
-                    OTPRelease < "26" -> {26, true};
-                    % small utf8 atom
-                    true -> {29, true}
-                end
-        end,
-    Support.
-
-test_key_insert_lookup(Tid, Key) ->
-    true = ets:insert(Tid, {Key, value}),
-    [{Key, value}] = ets:lookup(Tid, echo(Key)),
+    % Drop entire table
+    true = ets:delete(T),
+    assert_badarg(fun() -> ets:lookup(T, key) end),
+    assert_badarg(fun() -> ets:delete(T) end),
+    assert_badarg(fun() -> ets:delete(none) end),
     ok.
-
-test_private_access() ->
-    Self = self(),
-    Pid = spawn_opt(fun() -> test_access_fun(Self, [private]) end, []),
-
-    Pid ! get_table,
-    Tid =
-        receive
-            {table, T} ->
-                T
-        after 1000 ->
-            error(timeout_wait_for_table)
-        end,
-
-    ok = expect_failure(
-        fun() -> ets:insert(Tid, {gnu, gnat}) end
-    ),
-    ok = expect_failure(
-        fun() -> ets:lookup(Tid, foo) end
-    ),
-
-    Pid ! halt,
-    ok.
-
-test_protected_access() ->
-    Self = self(),
-    Pid = spawn_opt(fun() -> test_access_fun(Self, [protected]) end, []),
-
-    Pid ! get_table,
-    Tid =
-        receive
-            {table, T} ->
-                T
-        after 1000 ->
-            error(timeout_wait_for_table)
-        end,
-
-    ok = expect_failure(
-        fun() -> ets:insert(Tid, {gnu, gnat}) end
-    ),
-    [{foo, bar}] = ets:lookup(Tid, foo),
-
-    Pid ! halt,
-    ok.
-
-test_public_access() ->
-    Self = self(),
-    Pid = spawn_opt(fun() -> test_access_fun(Self, [public]) end, []),
-
-    Pid ! get_table,
-    Tid =
-        receive
-            {table, T} ->
-                T
-        after 1000 ->
-            error(timeout_wait_for_table)
-        end,
-
-    true = ets:insert(Tid, {gnu, gnat}),
-    [{foo, bar}] = ets:lookup(Tid, foo),
-
-    Pid ! halt,
-    ok.
-
-test_access_fun(Pid, Options) ->
-    Tid = ets:new(test, Options),
-
-    true = ets:insert(Tid, {foo, bar}),
-
-    receive
-        get_table ->
-            Pid ! {table, Tid}
-    end,
-
-    receive
-        halt ->
-            ok
-    end.
-
-run_test(Fun, Options) ->
-    Self = self(),
-    spawn_opt(fun() -> Fun(Self, Options) end, []),
-    wait_for_test_result().
-
-wait_for_test_result() ->
-    receive
-        Result ->
-            Result
-    after 1000 ->
-        {error, timeout_waiting_for_test_result}
-    end.
-
-expect_failure(Fun) ->
-    expect_failure(Fun, error, badarg).
-
-expect_failure(Fun, Class, Error) ->
-    try
-        Fun(),
-        fail
-    catch
-        Class:Error ->
-            ok;
-        OtherClass:OtherError ->
-            {fail, OtherClass, OtherError}
-    end.
-
-sleep(Ms) ->
-    receive
-    after Ms ->
-        ok
-    end.
-
-member(_Element, []) ->
-    false;
-member(Element, [Element | _]) ->
-    true;
-member(Element, [_ | Tail]) ->
-    member(Element, Tail).
-
-echo_server() ->
-    receive
-        {echo, Term, Pid} ->
-            Pid ! Term,
-            echo_server();
-        halt ->
-            ok
-    end.
-
-echo(Term) ->
-    EchoServer = whereis(echo),
-    EchoServer ! {echo, Term, self()},
-    receive
-        T ->
-            T
-    end.
 
 test_lookup_element() ->
-    Tid = ets:new(test_lookup_element, []),
-    true = ets:insert(Tid, {foo, tapas}),
-    foo = ets:lookup_element(Tid, foo, 1),
-    tapas = ets:lookup_element(Tid, foo, 2),
-    expect_failure(fun() -> ets:lookup_element(Tid, bar, 1) end),
-    expect_failure(fun() -> ets:lookup_element(Tid, foo, 3) end),
-    expect_failure(fun() -> ets:lookup_element(Tid, foo, 0) end),
-    ok.
-
-test_insert_list() ->
-    Tid = ets:new(test_insert_list, []),
-    true = ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}]),
-    true = ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}]),
-    [{patat, patat}] = ets:lookup(Tid, patat),
-    [{batat, batat}] = ets:lookup(Tid, batat),
-    true = ets:insert(Tid, []),
-    expect_failure(fun() -> ets:insert(Tid, [{foo, tapas} | {patat, patat}]) end),
-    expect_failure(fun() -> ets:insert(Tid, [{foo, tapas}, {batat, batat}, {patat, patat}, {}]) end),
-    expect_failure(fun() ->
-        ets:insert(Tid, [{foo, tapas}, pararara, {batat, batat}, {patat, patat}])
-    end),
-    expect_failure(fun() -> ets:insert(Tid, [{}]) end),
+    T = ets:new(test, []),
+    true = ets:insert(T, {key, value}),
+    key = ets:lookup_element(T, key, 1),
+    value = ets:lookup_element(T, key, 2),
+    assert_badarg(fun() -> ets:lookup_element(T, none, 1) end),
+    assert_badarg(fun() -> ets:lookup_element(T, key, 3) end),
+    assert_badarg(fun() -> ets:lookup_element(T, key, 0) end),
+    assert_badarg(fun() -> ets:lookup_element(T, key, -1) end),
     ok.
 
 test_update_counter() ->
-    Tid = ets:new(test_lookup_element, []),
-    true = ets:insert(Tid, {foo, 1, 2, 3}),
-    3 = ets:update_counter(Tid, foo, 2),
-    expect_failure(fun() -> ets:update_counter(Tid, tapas, 2) end),
-    5 = ets:update_counter(Tid, tapas, 2, {batat, 3}),
-    [] = ets:lookup(Tid, batat),
-    [{tapas, 5}] = ets:lookup(Tid, tapas),
-    0 = ets:update_counter(Tid, foo, {3, -2}),
-    expect_failure(fun() -> ets:update_counter(Tid, foo, {-3, -2}) end),
-    expect_failure(fun() -> ets:update_counter(Tid, foo, {30, -2}) end),
-    expect_failure(fun() -> ets:update_counter(Tid, patatas, {3, -2}, {cow, 1}) end),
-    0 = ets:update_counter(Tid, patatas, {3, -2}, {cow, 1, 2, 3}),
-    0 = ets:update_counter(Tid, patatas, {3, -2, 0, 0}),
-    10 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
-    0 = ets:update_counter(Tid, patatas, {3, 10, 10, 0}),
+    T = ets:new(test, []),
+    true = ets:insert(T, {key, 10, 20, 30}),
+    % Increment
+    15 = ets:update_counter(T, key, 5),
+    10 = ets:update_counter(T, key, -5),
+    % {Position, Increment}
+    25 = ets:update_counter(T, key, {3, 5}),
+    20 = ets:update_counter(T, key, {3, -5}),
+    % {Position, Increment, Threshold, SetValue}
+    31 = ets:update_counter(T, key, {4, 10, 39, 31}),
+    30 = ets:update_counter(T, key, {4, -10, 30, 30}),
+
+    TErr = ets:new(test, []),
+    true = ets:insert(TErr, {key, 0, not_number}),
+    true = ets:insert(TErr, {not_number, ok}),
+    assert_badarg(fun() -> ets:update_counter(TErr, none, 10) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, not_number, 10) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, not_number, {1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, not_number, {1, 10, 100, 0}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {0, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {-1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {3, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, not_number) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10, 100, 0}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number, 100, 0}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, not_number, 0}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, 100, not_number}) end),
     ok.
 
-test_delete_table() ->
-    Tid = ets:new(test_delete_table, []),
-    true = ets:delete(Tid),
-    ok = expect_failure(
-        fun() -> ets:insert(Tid, {gnu, gnat}) end
-    ),
-    Ntid = ets:new(test_delete_table, []),
-    true = ets:delete(Ntid),
-    ok = expect_failure(fun() -> ets:delete(Ntid) end),
-    ok = expect_failure(fun() -> ets:delete(Tid) end),
-    ok = expect_failure(fun() -> ets:delete(non_existent) end),
+%%-----------------------------------------------------------------------------
+%% @doc Performs specified operation on ETS table implicitly asserting that no exception is raised.
+%%      [badarg] can be passed as an option to assert that exception was raised.
+%% @end
+%%-----------------------------------------------------------------------------
+assert_operation(T, Operation, Opts) ->
+    Op =
+        case Operation of
+            insert -> fun() -> ets:insert(T, {key, value}) end;
+            lookup -> fun() -> ets:lookup(T, key) end
+        end,
+    case Opts of
+        [badarg] ->
+            assert_badarg(Op);
+        _ ->
+            Op()
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @doc Asserts that key can be used for insertion and retrieval of a value.
+%% @end
+%%-----------------------------------------------------------------------------
+assert_stored_key(T, Key) ->
+    true = ets:insert(T, {Key, value}),
+    [{Key, value}] = ets:lookup(T, Key),
     ok.
+
+isolated(Fun) ->
+    Ref = make_ref(),
+    Self = self(),
+    spawn_opt(
+        fun() ->
+            Ret = Fun(),
+            Self ! {ok, Ref, Ret}
+        end,
+        []
+    ),
+    receive
+        {ok, Ref, Ret} -> Ret
+    after 500 -> {error, timeout}
+    end.
+
+assert_badarg(Fun) ->
+    try
+        Fun(),
+        erlang:error(no_throw)
+    catch
+        error:badarg ->
+            ok;
+        OtherClass:OtherError ->
+            erlang:error({OtherClass, OtherError})
+    end.
+
+supports_v4_port_encoding() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            % small utf8 atom
+            true;
+        "BEAM" ->
+            OTP = otp_version(),
+            if
+                OTP < 24 -> false;
+                % v4 is supported but not the default
+                OTP < 26 -> true;
+                % small utf8 atom
+                true -> true
+            end
+    end.
+
+otp_version() ->
+    OTPRelease = erlang:system_info(otp_release),
+    list_to_integer(OTPRelease).
