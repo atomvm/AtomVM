@@ -47,6 +47,7 @@ typedef struct FileData {
 } FileData;
 
 static void pad_and_align(FILE *f);
+bool are_literals_compressed(const uint8_t *litT);
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize);
 static void add_module_header(FILE *f, const char *module_name, uint32_t flags);
 static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const char *filename, int is_entrypoint, bool include_lines);
@@ -340,6 +341,12 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
     }
 
     if (offsets[LITT]) {
+        if (UNLIKELY(!are_literals_compressed(data + offsets[LITT]))) {
+            fprintf(stderr, "Code compiled with OTP-28 is not supported by this version of AtomVM.\n"
+                    "Please recompile using an earlier version, such as OTP-27,\n"
+                    "or switch to a newer version of AtomVM, such as a main snapshot.\n");
+            abort();
+        }
         size_t u_size;
         void *deflated = uncompress_literals(data + offsets[LITT], sizes[LITT], &u_size);
         assert_fwrite("LitU", 4, pack);
@@ -417,6 +424,12 @@ static int do_list(int argc, char **argv)
     mapped_file_close(mapped_file);
 
     return ret;
+}
+
+bool are_literals_compressed(const uint8_t *litT)
+{
+    unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    return (required_buf_size != 0);
 }
 
 static void *uncompress_literals(const uint8_t *litT, int size, size_t *uncompressedSize)

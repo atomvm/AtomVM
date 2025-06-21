@@ -49,6 +49,7 @@
         return;                                  \
     }
 
+static bool module_are_literals_compressed(const uint8_t *litT);
 #ifdef WITH_ZLIB
     static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
@@ -71,6 +72,13 @@ struct LineRefOffset
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
     int atoms_count = READ_32_UNALIGNED(table_data + 8);
+
+    if (UNLIKELY(atoms_count < 0)) {
+        fprintf(stderr, "Code compiled with OTP-28 is not supported by this version of AtomVM.\n"
+                "Please recompile your code using an earlier version, such as OTP-27,\n"
+                "or switch to a newer version of AtomVM, such as a main snapshot.\n");
+        AVM_ABORT();
+    }
 
     const char *current_atom = (const char *) table_data + 12;
 
@@ -284,6 +292,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
 
     if (offsets[LITT]) {
+        if (UNLIKELY(!module_are_literals_compressed(beam_file + offsets[LITT]))) {
+            fprintf(stderr, "Code compiled with OTP-28 is not supported by this version of AtomVM.\n"
+                    "Please recompile your code using an earlier version, such as OTP-27,\n"
+                    "or switch to a newer version of AtomVM, such as a main snapshot.\n");
+        }
         #ifdef WITH_ZLIB
             mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
             if (IS_NULL_PTR(mod->literals_data)) {
@@ -362,6 +375,12 @@ COLD_FUNC void module_destroy(Module *module)
     smp_mutex_destroy(module->mutex);
 #endif
     free(module);
+}
+
+static bool module_are_literals_compressed(const uint8_t *litT)
+{
+    uint32_t required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    return (required_buf_size != 0);
 }
 
 #ifdef WITH_ZLIB
