@@ -31,6 +31,7 @@
 #include "overflow_helpers.h"
 #include "smp.h"
 #include "term.h"
+#include "term_typedef.h"
 #include "trace.h"
 #include "unicode.h"
 #include "utils.h"
@@ -58,12 +59,9 @@
         RAISE_ERROR_BIF(fail_label, BADARG_ATOM);              \
     }
 
-const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity)
+const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
 {
-    char bifname[MAX_BIF_NAME_LEN];
-
-    atom_write_mfa(bifname, MAX_BIF_NAME_LEN, module, function, arity);
-    const BifNameAndPtr *nameAndPtr = in_word_set(bifname, strlen(bifname));
+    const BifNameAndPtr *nameAndPtr = in_word_set(mfa, strlen(mfa));
     if (!nameAndPtr) {
         return NULL;
     }
@@ -1729,42 +1727,45 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
     }
 
     int ok;
+    avm_int_t len = term_list_length(a_list, &ok);
+    if (UNLIKELY(!ok)) {
+        *error_reason = BADARG_ATOM;
+        return term_invalid_term();
+    }
+    if (len > 255) {
+        *error_reason = SYSTEM_LIMIT_ATOM;
+        return term_invalid_term();
+    }
+
     char *atom_string = interop_list_to_utf8_string(a_list, &ok);
     if (UNLIKELY(!ok)) {
         *error_reason = OUT_OF_MEMORY_ATOM;
         return term_invalid_term();
     }
-    int atom_string_len = strlen(atom_string);
-    if (UNLIKELY(atom_string_len > 255)) {
-        free(atom_string);
-        *error_reason = SYSTEM_LIMIT_ATOM;
-        return term_invalid_term();
-    }
-
-    AtomString atom = malloc(atom_string_len + 1);
-    if (IS_NULL_PTR(atom)) {
-        free(atom_string);
-        *error_reason = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
-    }
-    ((uint8_t *) atom)[0] = atom_string_len;
-    memcpy(((char *) atom) + 1, atom_string, atom_string_len);
-    free(atom_string);
+    size_t atom_string_len = strlen(atom_string);
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
     if (!create_new) {
         atom_opts |= AtomTableAlreadyExisting;
     }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
-    free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        *error_reason = BADARG_ATOM;
-        return term_invalid_term();
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        *error_reason = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) atom_string, atom_string_len, atom_opts, &global_atom_index);
+    switch (ensure_result) {
+        case AtomTableEnsureAtomNotFound:
+        case AtomTableEnsureAtomInvalidLen: {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomAllocFail: {
+            *error_reason = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomOk: {
+            return term_from_atom_index(global_atom_index);
+        }
+        default:
+            UNREACHABLE();
     }
-    return term_from_atom_index(global_atom_index);
 }
 
 term bif_erlang_binary_to_atom_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
@@ -1800,10 +1801,6 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
 
     const char *atom_string = term_binary_data(a_binary);
     size_t atom_string_len = term_binary_size(a_binary);
-    if (UNLIKELY(atom_string_len > 255)) {
-        *error_reason = SYSTEM_LIMIT_ATOM;
-        return term_invalid_term();
-    }
 
     bool encode_latin1_to_utf8 = false;
     if (UNLIKELY((encoding == LATIN1_ATOM)
@@ -1815,54 +1812,64 @@ term binary_to_atom(Context *ctx, term a_binary, term encoding, bool create_new,
         return term_invalid_term();
     }
 
-    AtomString atom;
+    const uint8_t *atom_data;
+    size_t atom_data_len;
+    uint8_t *buf = NULL;
     if (LIKELY(!encode_latin1_to_utf8)) {
         if (UNLIKELY(!unicode_is_valid_utf8_buf((const uint8_t *) atom_string, atom_string_len))) {
             *error_reason = BADARG_ATOM;
             return term_invalid_term();
         }
-        atom = malloc(atom_string_len + 1);
-        if (IS_NULL_PTR(atom)) {
-            *error_reason = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
-        }
-        ((uint8_t *) atom)[0] = atom_string_len;
-        memcpy(((char *) atom) + 1, atom_string, atom_string_len);
-    } else {
-        // * 2 is the worst case size
-        size_t buf_len = atom_string_len * 2;
-        atom = malloc(buf_len + 1);
-        if (IS_NULL_PTR(atom)) {
-            *error_reason = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
-        }
-        uint8_t *atom_data = ((uint8_t *) atom) + 1;
-        size_t out_pos = 0;
-        for (size_t i = 0; i < atom_string_len; i++) {
-            size_t out_size;
-            bitstring_utf8_encode(((uint8_t) atom_string[i]), &atom_data[out_pos], &out_size);
-            out_pos += out_size;
-        }
-        if (out_pos > 255) {
-            free((void *) atom);
+        size_t len = unicode_buf_utf8_len((const uint8_t *) atom_string, atom_string_len);
+        if (UNLIKELY(len > 255)) {
             *error_reason = SYSTEM_LIMIT_ATOM;
             return term_invalid_term();
         }
-        ((uint8_t *) atom)[0] = out_pos;
+
+        atom_data = (const uint8_t *) atom_string;
+        atom_data_len = atom_string_len;
+    } else {
+        if (UNLIKELY(atom_string_len > 255)) {
+            *error_reason = SYSTEM_LIMIT_ATOM;
+            return term_invalid_term();
+        }
+
+        // * 2 is the worst case size
+        size_t buf_len = atom_string_len * 2;
+        buf = malloc(buf_len);
+        if (IS_NULL_PTR(buf)) {
+            *error_reason = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        atom_data = buf;
+        atom_data_len = 0;
+        for (size_t i = 0; i < atom_string_len; i++) {
+            size_t out_size;
+            bitstring_utf8_encode(((uint8_t) atom_string[i]), &buf[atom_data_len], &out_size);
+            atom_data_len += out_size;
+        }
     }
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
     if (!create_new) {
         atom_opts |= AtomTableAlreadyExisting;
     }
-    long global_atom_index = atom_table_ensure_atom(ctx->global->atom_table, atom, atom_opts);
-    free((void *) atom);
-    if (UNLIKELY(global_atom_index == ATOM_TABLE_NOT_FOUND)) {
-        *error_reason = BADARG_ATOM;
-        return term_invalid_term();
-    } else if (UNLIKELY(global_atom_index == ATOM_TABLE_ALLOC_FAIL)) {
-        *error_reason = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, atom_data, atom_data_len, atom_opts, &global_atom_index);
+    switch (ensure_result) {
+        case AtomTableEnsureAtomNotFound:
+        case AtomTableEnsureAtomInvalidLen: {
+            *error_reason = BADARG_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomAllocFail: {
+            *error_reason = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        case AtomTableEnsureAtomOk: {
+            return term_from_atom_index(global_atom_index);
+        }
+        default:
+            UNREACHABLE();
     }
-    return term_from_atom_index(global_atom_index);
 }
