@@ -1142,7 +1142,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define DO_RETURN()                                                     \
     {                                                                   \
-        int module_index = ctx->cp >> 24;                               \
+        int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
         if (module_index == prev_mod->module_index) {                   \
             Module *t = mod;                                            \
             mod = prev_mod;                                             \
@@ -1153,7 +1153,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             mod = globalcontext_get_module_by_index(glb, module_index); \
             code = mod->code->code;                                     \
         }                                                               \
-        pc = code + ((ctx->cp & 0xFFFFFF) >> 2);                        \
+        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
     }
 
 #define HANDLE_ERROR()                                                  \
@@ -1369,7 +1369,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
 COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
 {
-    Module *mod = globalcontext_get_module_by_index(ctx->global, cp >> 24);
+    Module *mod = globalcontext_get_module_by_index(ctx->global, ((uintptr_t) cp) >> 24);
     long mod_offset = (cp & 0xFFFFFF) >> 2;
 
     *cp_mod = mod;
@@ -2498,7 +2498,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE_RETURN(ctx);
 
-                    if ((long) ctx->cp == -1) {
+                    if ((intptr_t) ctx->cp == -1) {
                         return 0;
                     }
 
@@ -3625,7 +3625,7 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
-                            if ((long) ctx->cp == -1) {
+                            if ((intptr_t) ctx->cp == -1) {
                                 return 0;
                             }
 
