@@ -1168,7 +1168,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define DO_RETURN()                                                     \
     {                                                                   \
-        int module_index = ctx->cp >> 24;                               \
+        int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
         if (module_index == prev_mod->module_index) {                   \
             Module *t = mod;                                            \
             mod = prev_mod;                                             \
@@ -1179,7 +1179,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             mod = globalcontext_get_module_by_index(glb, module_index); \
             code = mod->code->code;                                     \
         }                                                               \
-        pc = code + ((ctx->cp & 0xFFFFFF) >> 2);                        \
+        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
     }
 
 #define HANDLE_ERROR()                                                  \
@@ -1395,7 +1395,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
 COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
 {
-    Module *mod = globalcontext_get_module_by_index(ctx->global, cp >> 24);
+    Module *mod = globalcontext_get_module_by_index(ctx->global, ((uintptr_t) cp) >> 24);
     long mod_offset = (cp & 0xFFFFFF) >> 2;
 
     *cp_mod = mod;
@@ -2590,7 +2590,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE_RETURN(ctx);
 
-                    if ((long) ctx->cp == -1) {
+                    if ((intptr_t) ctx->cp == -1) {
                         return 0;
                     }
 
@@ -3715,7 +3715,7 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
-                            if ((long) ctx->cp == -1) {
+                            if ((intptr_t) ctx->cp == -1) {
                                 return 0;
                             }
 
@@ -4285,8 +4285,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4295,7 +4295,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg));
+                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
 
@@ -4304,7 +4304,7 @@ wait_timeout_trap_handler:
 
                     int32_t val = 0;
                     size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];
@@ -4398,8 +4398,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4408,7 +4408,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg));
+                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
 
@@ -4416,7 +4416,7 @@ wait_timeout_trap_handler:
                     avm_int_t offset_bits = term_get_match_state_offset(src);
 
                     int32_t val = 0;
-                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];
