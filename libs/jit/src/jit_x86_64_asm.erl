@@ -32,11 +32,13 @@
     jz_rel8/1,
     jnz/1,
     jnz_rel8/1,
+    jge/1,
     jmp_rel32/1,
     andq/2,
     cmpl/2,
     cmpq/2,
     addq/2,
+    subq/2,
     decl/1,
     orq/2,
     orq_rel32/2,
@@ -183,6 +185,9 @@ jnz(Offset) when ?IS_SINT8_T(Offset) ->
 jnz_rel8(Offset) when ?IS_SINT8_T(Offset) ->
     {1, <<16#75, Offset>>}.
 
+jge(Offset) when ?IS_SINT8_T(Offset) ->
+    <<16#7D, Offset>>.
+
 jmp_rel32(Offset) when ?IS_SINT32_T(Offset) ->
     {1, <<16#E9, Offset:32/little>>}.
 
@@ -210,10 +215,25 @@ cmpq(Imm, Reg) when ?IS_SINT8_T(Imm) ->
     case x86_64_x_reg(Reg) of
         {0, Index} -> <<16#48, 16#83, (16#F8 + Index), Imm>>;
         {1, Index} -> <<16#49, 16#83, (16#F8 + Index), Imm>>
-    end.
+    end;
+cmpq(Imm, Reg) when ?IS_SINT32_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 7:3, MODRM_RM:3, Imm:32/little>>.
 
-addq(Imm, rax) when ?IS_UINT8_T(Imm) ->
-    <<16#48, 16#83, 16#C0, Imm>>.
+addq(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+    case x86_64_x_reg(Reg) of
+        {0, Index} -> <<16#48, 16#83, (16#C0 + Index), Imm>>;
+        {1, Index} -> <<16#49, 16#83, (16#C0 + Index), Imm>>
+    end;
+addq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#01, 3:2, MODRM_REG:3, MODRM_RM:3>>.
+
+subq(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
+    {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#29, 3:2, MODRM_REG:3, MODRM_RM:3>>.
 
 decl({Offset, rsi}) when ?IS_SINT8_T(Offset) ->
     <<16#FF, 16#4E, Offset>>.
