@@ -1311,14 +1311,17 @@ get_pointer_to_vm_register(State, {ptr, Reg}) ->
 
 %% @doc move reg[x] to a vm or native register
 -spec move_array_element(
-    state(), x86_64_register(), non_neg_integer(), vm_register() | x86_64_register()
+    state(),
+    x86_64_register(),
+    non_neg_integer() | x86_64_register(),
+    vm_register() | x86_64_register()
 ) -> state().
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     Reg,
     Index,
     {x_reg, X}
-) when X < ?MAX_REG ->
+) when X < ?MAX_REG andalso is_integer(Index) ->
     I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Temp),
     I2 = jit_x86_64_asm:movq(Temp, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
@@ -1328,7 +1331,7 @@ move_array_element(
     Reg,
     Index,
     {ptr, Dest}
-) ->
+) when is_integer(Index) ->
     I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Temp),
     I2 = jit_x86_64_asm:movq(Temp, {0, Dest}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
@@ -1339,7 +1342,7 @@ move_array_element(
     Reg,
     Index,
     {y_reg, Y}
-) ->
+) when is_integer(Index) ->
     I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
     I2 = jit_x86_64_asm:movq({Index * 8, Reg}, Temp2),
     I3 = jit_x86_64_asm:movq(Temp2, {Y * 8, Temp1}),
@@ -1348,10 +1351,36 @@ move_array_element(
     State#state{stream = Stream1};
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State, Reg, Index, Dest
-) when is_atom(Dest) ->
+) when is_atom(Dest) andalso is_integer(Index) ->
     I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Dest),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1}.
+    State#state{stream = Stream1};
+move_array_element(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = AvailableRegs0,
+        used_regs = UsedRegs0,
+        available_fpregs = AvailableFPRegs0
+    } = State,
+    Reg,
+    {free, IndexReg},
+    {x_reg, X}
+) when X < ?MAX_REG andalso is_atom(IndexReg) ->
+    I1 = jit_x86_64_asm:shlq(3, IndexReg),
+    I2 = jit_x86_64_asm:addq(Reg, IndexReg),
+    I3 = jit_x86_64_asm:movq({0, IndexReg}, IndexReg),
+    I4 = jit_x86_64_asm:movq(IndexReg, ?X_REG(X)),
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
+        AvailableRegs0, AvailableFPRegs0, UsedRegs0, IndexReg
+    ),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
+    State#state{
+        available_regs = AvailableRegs1,
+        available_fpregs = AvailableFPRegs1,
+        used_regs = UsedRegs1,
+        stream = Stream1
+    }.
 
 %% @doc move reg[x] to a vm or native register
 -spec get_array_element(state(), x86_64_register(), non_neg_integer()) ->

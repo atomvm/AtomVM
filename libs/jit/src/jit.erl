@@ -1038,6 +1038,8 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 115
 % first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+% 118
+% first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 119
 % first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 124
@@ -1175,9 +1177,99 @@ first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt2 = term_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_MAP, MMod, MSt1),
     first_pass(Rest2, MMod, MSt2, State0);
 % 157
-% first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {ListSize, Rest3} = decode_extended_list_header(Rest2),
+    ?TRACE("OP_HAS_MAP_FIELDS ~p,~p,[", [Label, Src]),
+    {MSt2, Key1, Rest4} = decode_compact_term(Rest3, MMod, MSt1, State0),
+    ?TRACE("~p", [Key1]),
+    {MSt3, PosReg1} = MMod:call_primitive(MSt2, ?PRIM_TERM_FIND_MAP_POS, [ctx, Src, {free, Key1}]),
+    MSt4 = MMod:jump_to_label_if_equal(MSt3, PosReg1, ?TERM_MAP_NOT_FOUND, Label),
+    {MSt5, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_not_equal(
+        MSt4, PosReg1, ?TERM_MAP_MEMORY_ALLOC_FAIL
+    ),
+    FailOffset = MMod:offset(MSt5),
+    MSt6 = MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [ctx, jit_state, ?OUT_OF_MEMORY_ATOM]),
+    {MSt7, ContinueOffset} = MMod:offset(MSt6, [JumpToken1]),
+    MSt8 = MMod:free_native_register(MSt7, PosReg1),
+    Labels1 = [{OffsetRef1, ContinueOffset} | Labels0],
+    {MSt9, Rest5, Labels2} = lists:foldl(
+        fun(_Index, {AccMSt0, AccRest0, AccLabels}) ->
+            {AccMSt1, Key, AccRest1} = decode_compact_term(AccRest0, MMod, AccMSt0, State0),
+            ?TRACE(",~p", [Key]),
+            {AccMSt2, PosReg} = MMod:call_primitive(AccMSt1, ?PRIM_TERM_FIND_MAP_POS, [
+                ctx, Src, Key
+            ]),
+            AccMSt3 = MMod:jump_to_label_if_equal(
+                AccMSt2, PosReg, ?TERM_MAP_NOT_FOUND, Label
+            ),
+            {AccMSt4, OffsetRef2, _JumpToken2} = MMod:jump_to_offset_if_equal(
+                AccMSt3, PosReg, ?TERM_MAP_MEMORY_ALLOC_FAIL
+            ),
+            AccMSt5 = MMod:free_native_register(AccMSt4, Key),
+            AccMSt6 = MMod:free_native_register(AccMSt5, PosReg),
+            NewAccLabels = [{OffsetRef2, FailOffset} | AccLabels],
+            {AccMSt6, AccRest1, NewAccLabels}
+        end,
+        {MSt8, Rest4, Labels1},
+        lists:seq(2, ListSize)
+    ),
+    ?TRACE("]\n", []),
+    State1 = State0#state{labels = Labels2},
+    first_pass(Rest5, MMod, MSt9, State1);
 % 158
-% first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {ListSize, Rest3} = decode_extended_list_header(Rest2),
+    ?TRACE("OP_GET_MAP_ELEMENTS ~p,~p,[", [Label, Src]),
+    {MSt2, Key1, Rest4} = decode_compact_term(Rest3, MMod, MSt1, State0),
+    ?TRACE("~p", [Key1]),
+    {MSt3, PosReg1} = MMod:call_primitive(MSt2, ?PRIM_TERM_FIND_MAP_POS, [ctx, Src, {free, Key1}]),
+    MSt4 = MMod:jump_to_label_if_equal(MSt3, PosReg1, ?TERM_MAP_NOT_FOUND, Label),
+    {MSt5, OffsetRef1, JumpToken1} = MMod:jump_to_offset_if_not_equal(
+        MSt4, PosReg1, ?TERM_MAP_MEMORY_ALLOC_FAIL
+    ),
+    FailOffset = MMod:offset(MSt5),
+    MSt6 = MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [ctx, jit_state, ?OUT_OF_MEMORY_ATOM]),
+    {MSt7, ContinueOffset} = MMod:offset(MSt6, [JumpToken1]),
+    Labels1 = [{OffsetRef1, ContinueOffset} | Labels0],
+    {MSt8, Dest1, Rest5} = decode_dest(Rest4, MMod, MSt7),
+    ?TRACE(",~p", [Dest1]),
+    {MSt9, MapReg} = MMod:copy_to_native_register(MSt8, Src),
+    MSt10 = MMod:and_(MSt9, MapReg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt11 = MMod:add(MSt10, MapReg, MMod:word_size() * 2),
+    MSt12 = MMod:move_array_element(MSt11, MapReg, {free, PosReg1}, Dest1),
+    {MSt13, Rest6, Labels2} = lists:foldl(
+        fun(_Index, {AccMSt0, AccRest0, AccLabels}) ->
+            {AccMSt1, Key, AccRest1} = decode_compact_term(AccRest0, MMod, AccMSt0, State0),
+            ?TRACE(",~p", [Key]),
+            {AccMSt2, PosReg} = MMod:call_primitive(AccMSt1, ?PRIM_TERM_FIND_MAP_POS, [
+                ctx, Src, Key
+            ]),
+            AccMSt3 = MMod:jump_to_label_if_equal(
+                AccMSt2, PosReg, ?TERM_MAP_NOT_FOUND, Label
+            ),
+            {AccMSt4, OffsetRef2, _JumpToken2} = MMod:jump_to_offset_if_equal(
+                AccMSt3, PosReg, ?TERM_MAP_MEMORY_ALLOC_FAIL
+            ),
+            AccMSt5 = MMod:free_native_register(AccMSt4, Key),
+            {AccMSt6, Dest, AccRest2} = decode_dest(AccRest1, MMod, AccMSt5),
+            ?TRACE(",~p", [Dest]),
+            AccMSt7 = MMod:move_array_element(AccMSt6, MapReg, {free, PosReg}, Dest),
+            NewAccLabels = [{OffsetRef2, FailOffset} | AccLabels],
+            {AccMSt7, AccRest2, NewAccLabels}
+        end,
+        {MSt12, Rest5, Labels1},
+        lists:seq(2, ListSize div 2)
+    ),
+    ?TRACE("]\n", []),
+    MSt14 = MMod:free_native_register(MSt13, MapReg),
+    State1 = State0#state{labels = Labels2},
+    first_pass(Rest6, MMod, MSt14, State1);
 % 159
 first_pass(
     <<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt0, #state{atom_resolver = AtomResolver} = State0
