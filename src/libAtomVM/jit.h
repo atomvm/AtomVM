@@ -103,6 +103,8 @@ struct ModuleNativeInterface {
     bool (* memory_ensure_free_with_roots)(Context *ctx, JITState *jit_state, int sz, int live, int flags);
     term (* term_alloc_bin_match_state)(Context *ctx, term src, int slots);
     term (* bitstring_extract_integer)(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags);
+    size_t (* term_sub_binary_heap_size)(term *bin_ptr, size_t size);
+    term (* term_maybe_create_sub_binary)(Context *ctx, term bin, size_t offset, size_t len);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
