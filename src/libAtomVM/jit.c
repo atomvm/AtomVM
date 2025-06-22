@@ -1067,6 +1067,11 @@ static term jit_term_maybe_create_sub_binary(Context *ctx, term binary, size_t o
     return term_maybe_create_sub_binary(binary, offset, len, &ctx->heap, ctx->global);
 }
 
+static int jit_term_find_map_pos(Context *ctx, term map, term key)
+{
+    return term_find_map_pos(map, key, ctx->global);
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1117,4 +1122,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_extract_integer,
     jit_term_sub_binary_heap_size,
     jit_term_maybe_create_sub_binary,
+    jit_term_find_map_pos,
 };

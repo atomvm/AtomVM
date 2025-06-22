@@ -63,3 +63,6 @@
 -define(LIST_TAIL_INDEX, 0).
 
 -define(TERM_BOXED_BIN_MATCH_STATE_SIZE, 4).
+
+-define(TERM_MAP_NOT_FOUND, -1).
+-define(TERM_MAP_MEMORY_ALLOC_FAIL, -2).
