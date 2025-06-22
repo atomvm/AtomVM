@@ -105,6 +105,7 @@ struct ModuleNativeInterface {
     term (* bitstring_extract_integer)(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags);
     size_t (* term_sub_binary_heap_size)(term *bin_ptr, size_t size);
     term (* term_maybe_create_sub_binary)(Context *ctx, term bin, size_t offset, size_t len);
+    int (* term_find_map_pos)(Context *ctx, term map, term key);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
