@@ -225,6 +225,9 @@ addq(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
         {0, Index} -> <<16#48, 16#83, (16#C0 + Index), Imm>>;
         {1, Index} -> <<16#49, 16#83, (16#C0 + Index), Imm>>
     end;
+addq(Imm, Reg) when ?IS_SINT32_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 0:3, MODRM_RM:3, Imm:32/little>>;
 addq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
     {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),

@@ -204,7 +204,25 @@ addq_test_() ->
         ?_assertEqual(<<16#49, 16#01, 16#C3>>, jit_x86_64_asm:addq(rax, r11)),
         ?_assertEqual(<<16#48, 16#01, 16#C6>>, jit_x86_64_asm:addq(rax, rsi)),
         ?_assertEqual(<<16#48, 16#01, 16#CE>>, jit_x86_64_asm:addq(rcx, rsi)),
-        ?_assertEqual(<<16#48, 16#01, 16#C8>>, jit_x86_64_asm:addq(rcx, rax))
+        ?_assertEqual(<<16#48, 16#01, 16#C8>>, jit_x86_64_asm:addq(rcx, rax)),
+
+        % 32-bit immediates
+        ?_assertEqual(
+            <<16#48, 16#81, 16#C0, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:addq(16#12345678, rax)
+        ),
+        ?_assertEqual(
+            <<16#48, 16#81, 16#C6, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:addq(16#12345678, rsi)
+        ),
+        ?_assertEqual(
+            <<16#49, 16#81, 16#C3, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:addq(16#12345678, r11)
+        ),
+        ?_assertEqual(
+            <<16#48, 16#81, 16#C0, 16#88, 16#A9, 16#CB, 16#ED>>,
+            jit_x86_64_asm:addq(-16#12345678, rax)
+        )
     ].
 
 cmpl_test_() ->

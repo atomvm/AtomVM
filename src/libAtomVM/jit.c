@@ -1056,6 +1056,17 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
     return t;
 }
 
+static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
+{
+    term binary = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+    return term_sub_binary_heap_size(binary, size);
+}
+
+static term jit_term_maybe_create_sub_binary(Context *ctx, term binary, size_t offset, size_t len)
+{
+    return term_maybe_create_sub_binary(binary, offset, len, &ctx->heap, ctx->global);
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1104,4 +1115,6 @@ const ModuleNativeInterface module_native_interface = {
     jit_memory_ensure_free_with_roots,
     jit_term_alloc_bin_match_state,
     jit_bitstring_extract_integer,
+    jit_term_sub_binary_heap_size,
+    jit_term_maybe_create_sub_binary,
 };
