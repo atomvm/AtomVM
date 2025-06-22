@@ -27,7 +27,7 @@
     offset/1,
     offset/2,
     debugger/1,
-    free_native_register/2,
+    free_native_registers/2,
     assert_all_native_free/1,
     jump_table/2,
     update_branches/2,
@@ -238,6 +238,13 @@ offset(
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
     Stream1 = StreamModule:append(Stream0, <<16#CC>>),
     State#state{stream = Stream1}.
+
+-spec free_native_registers(state(), [value()]) -> state().
+free_native_registers(State, []) ->
+    State;
+free_native_registers(State, [Reg | Rest]) ->
+    State1 = free_native_register(State, Reg),
+    free_native_registers(State1, Rest).
 
 -spec free_native_register(state(), value()) -> state().
 free_native_register(
