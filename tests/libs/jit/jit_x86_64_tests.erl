@@ -125,10 +125,9 @@ call_primitive_extended_regs_test() ->
         ctx, {free, {ptr, RegA}}, {free, {ptr, RegB}}
     ]),
     State5 = jit_x86_64:move_to_vm_register(State4, ResultReg, {ptr, RegC}),
-    State6 = jit_x86_64:free_native_register(State5, ResultReg),
-    State7 = jit_x86_64:free_native_register(State6, {ptr, RegC}),
-    jit_x86_64:assert_all_native_free(State7),
-    Stream = jit_x86_64:stream(State7),
+    State6 = jit_x86_64:free_native_registers(State5, [ResultReg, {ptr, RegC}]),
+    jit_x86_64:assert_all_native_free(State6),
+    Stream = jit_x86_64:stream(State6),
     file:write_file("dump.bin", Stream),
     Dump =
         <<
@@ -302,7 +301,7 @@ call_bif_with_large_literal_integer_test() ->
     ]),
     State4 = jit_x86_64:handle_error_if_zero(State3, ResultReg),
     State5 = jit_x86_64:move_to_vm_register(State4, ResultReg, {x_reg, 0}),
-    State6 = jit_x86_64:free_native_register(State5, ResultReg),
+    State6 = jit_x86_64:free_native_registers(State5, [ResultReg]),
     jit_x86_64:assert_all_native_free(State6),
     Stream = jit_x86_64:stream(State6),
     Dump =
@@ -355,7 +354,7 @@ get_list_test() ->
     State2 = jit_x86_64:and_(State1, Reg, -4),
     State3 = jit_x86_64:move_array_element(State2, Reg, 1, {y_reg, 1}),
     State4 = jit_x86_64:move_array_element(State3, Reg, 0, {y_reg, 0}),
-    State5 = jit_x86_64:free_native_register(State4, Reg),
+    State5 = jit_x86_64:free_native_registers(State4, [Reg]),
     jit_x86_64:assert_all_native_free(State5),
     Stream = jit_x86_64:stream(State5),
     Dump = <<
@@ -386,7 +385,7 @@ is_integer_test() ->
         State5, {free, Reg}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_POSITIVE_INTEGER, Label
     ),
     {State7, Offset} = jit_x86_64:offset(State6, [JumpToken]),
-    State8 = jit_x86_64:free_native_register(State7, Reg),
+    State8 = jit_x86_64:free_native_registers(State7, [Reg]),
     Labels = [{Label, Offset + 16#100}, {OffsetRef, Offset}],
     jit_x86_64:assert_all_native_free(State8),
     State9 = jit_x86_64:update_branches(State8, Labels),
@@ -418,7 +417,7 @@ is_boolean_test() ->
     {State2, OffsetRef, JumpToken} = jit_x86_64:jump_to_offset_if_equal(State1, Reg, ?TRUE_ATOM),
     State3 = jit_x86_64:jump_to_label_if_not_equal(State2, Reg, ?FALSE_ATOM, Label),
     {State4, Offset} = jit_x86_64:offset(State3, [JumpToken]),
-    State5 = jit_x86_64:free_native_register(State4, Reg),
+    State5 = jit_x86_64:free_native_registers(State4, [Reg]),
     Labels = [{Label, Offset + 16#100}, {OffsetRef, Offset}],
     jit_x86_64:assert_all_native_free(State5),
     State6 = jit_x86_64:update_branches(State5, Labels),
