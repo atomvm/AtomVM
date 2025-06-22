@@ -21,6 +21,7 @@
 #include "jit.h"
 
 #include "bif.h"
+#include "bitstring.h"
 #include "context.h"
 #include "debug.h"
 #include "defaultatoms.h"
@@ -462,6 +463,36 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     memory_heap_append_heap(&ctx->heap, &heap);
 
     return term_make_boxed_int(value, &heap);
+}
+
+static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
+{
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+    if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int64(value, &heap);
+    } else
+#endif
+    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int(value, &heap);
+    } else {
+        return term_from_int(value);
+    }
 }
 
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
@@ -1011,6 +1042,20 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
 
+static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
+{
+    union maybe_unsigned_int64 value;
+    bool status = bitstring_extract_integer(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+    if (UNLIKELY(!status)) {
+        return FALSE_ATOM;
+    }
+    term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+    if (UNLIKELY(term_is_invalid_term(t))) {
+        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+    }
+    return t;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1058,4 +1103,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_catch_end,
     jit_memory_ensure_free_with_roots,
     jit_term_alloc_bin_match_state,
+    jit_bitstring_extract_integer,
 };

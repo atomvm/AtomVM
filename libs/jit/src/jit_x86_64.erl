@@ -45,6 +45,7 @@
     jump_to_label_if_and_not_equal/5,
     jump_to_label_if_equal/4,
     jump_to_label_if_not_equal/4,
+    jump_to_label_if_lt/4,
     jump_to_offset_if_equal/3,
     jump_to_offset_if_not_equal/3,
     jump_to_offset_if_and_equal/4,
@@ -58,9 +59,9 @@
     move_to_cp/2,
     move_array_element/4,
     move_to_array_element/4,
+    copy_to_native_register/2,
     get_pointer_to_vm_register/2,
     get_array_element/3,
-    save_to_native_register/2,
     increment_sp/2,
     set_continuation_to_label/2,
     set_continuation_to_offset/1,
@@ -68,6 +69,8 @@
     get_module_index/1,
     and_/3,
     or_/3,
+    add/3,
+    sub/3,
     decrement_reductions_and_maybe_schedule_next/1,
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
@@ -300,23 +303,29 @@ call_primitive(
 ) ->
     % We need a register for the function pointer that should not be used as a parameter
     ParamRegs = lists:sublist(?PARAMETER_REGS, length(Args)),
-    [Temp | _] = AvailableRegs0 -- ParamRegs,
-    AvailableRegs1 = AvailableRegs0 -- [Temp],
-    PrepCall =
-        case Primitive of
-            0 ->
-                jit_x86_64_asm:movq({0, ?NATIVE_INTERFACE_REG}, Temp);
-            N ->
-                jit_x86_64_asm:movq(?PRIMITIVE(N), Temp)
-        end,
-    Stream1 = StreamModule:append(Stream0, PrepCall),
-    call_func_ptr(
-        State#state{
-            stream = Stream1, available_regs = AvailableRegs1, used_regs = [Temp | UsedRegs]
-        },
-        {free, Temp},
-        Args
-    ).
+    case AvailableRegs0 -- ParamRegs of
+        [Temp | _] ->
+            AvailableRegs1 = AvailableRegs0 -- [Temp],
+            PrepCall =
+                case Primitive of
+                    0 ->
+                        jit_x86_64_asm:movq({0, ?NATIVE_INTERFACE_REG}, Temp);
+                    N ->
+                        jit_x86_64_asm:movq(?PRIMITIVE(N), Temp)
+                end,
+            Stream1 = StreamModule:append(Stream0, PrepCall),
+            call_func_ptr(
+                State#state{
+                    stream = Stream1, available_regs = AvailableRegs1, used_regs = [Temp | UsedRegs]
+                },
+                {free, Temp},
+                Args
+            );
+        [] when length(Args) >= 3 ->
+            % No register left, we'll use the stack to save NATIVE_INTERFACE_REG
+            % and rax when calling function.
+            call_func_ptr(State, {primitive, Primitive}, Args)
+    end.
 
 call_primitive_last(
     #state{
@@ -561,6 +570,26 @@ jump_to_label_if_and_not_equal(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
+jump_to_label_if_lt(
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    Reg,
+    Val,
+    Label
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
+    I2 = jit_x86_64_asm:jge(byte_size(I3)),
+    Sz = byte_size(I1) + byte_size(I2),
+    Reloc = {Label, Offset + Sz + RelocOffset, 32},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
+
 jump_to_label_if_equal(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
     Reg,
@@ -783,7 +812,8 @@ shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, 
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
 
--spec call_func_ptr(state(), x86_64_register(), [arg()]) -> {state(), x86_64_register()}.
+-spec call_func_ptr(state(), {free, x86_64_register()} | {primitive, non_neg_integer()}, [arg()]) ->
+    {state(), x86_64_register()}.
 call_func_ptr(
     #state{
         stream_module = StreamModule,
@@ -792,7 +822,7 @@ call_func_ptr(
         available_fpregs = AvailableFP0,
         used_regs = UsedRegs0
     } = State0,
-    {free, FuncPtrReg},
+    FuncPtrTuple,
     Args
 ) ->
     FreeRegs = lists:flatmap(
@@ -801,10 +831,10 @@ call_func_ptr(
             ({free, Reg}) -> [Reg];
             (_) -> []
         end,
-        [{free, FuncPtrReg} | Args]
+        [FuncPtrTuple | Args]
     ),
     UsedRegs1 = UsedRegs0 -- FreeRegs,
-    SavedRegs = [rdi, ?JITSTATE_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
+    SavedRegs = [?CTX_REG, ?JITSTATE_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
     Stream1 = lists:foldl(
         fun(Reg, AccStream) ->
             StreamModule:append(AccStream, jit_x86_64_asm:pushq(Reg))
@@ -812,24 +842,47 @@ call_func_ptr(
         Stream0,
         SavedRegs
     ),
-    State1 = set_args(State0#state{stream = Stream1}, Args),
-    #state{stream = Stream2} = State1,
-    Call = jit_x86_64_asm:callq({FuncPtrReg}),
-    Stream3 = StreamModule:append(Stream2, Call),
+    Stream2 =
+        case FuncPtrTuple of
+            {free, _} ->
+                Stream1;
+            {primitive, Primitive} ->
+                PrepCall0 =
+                    case Primitive of
+                        0 ->
+                            jit_x86_64_asm:movq({0, ?NATIVE_INTERFACE_REG}, ?NATIVE_INTERFACE_REG);
+                        N ->
+                            jit_x86_64_asm:movq(?PRIMITIVE(N), ?NATIVE_INTERFACE_REG)
+                    end,
+                PrepCall1 = jit_x86_64_asm:pushq(?NATIVE_INTERFACE_REG),
+                StreamModule:append(Stream1, <<PrepCall0/binary, PrepCall1/binary>>)
+        end,
+    State1 = set_args(State0#state{stream = Stream2}, Args),
+    #state{stream = Stream3} = State1,
+    Call =
+        case FuncPtrTuple of
+            {free, FuncPtrReg} ->
+                jit_x86_64_asm:callq({FuncPtrReg});
+            {primitive, _} ->
+                Call0 = jit_x86_64_asm:popq(rax),
+                Call1 = jit_x86_64_asm:callq({rax}),
+                <<Call0/binary, Call1/binary>>
+        end,
+    Stream4 = StreamModule:append(Stream3, Call),
     % If rax is in used regs, save it to another temporary register
-    {Stream4, ResultReg} =
+    {Stream5, ResultReg} =
         case lists:member(rax, SavedRegs) of
             true ->
                 [Temp | _] = AvailableRegs0,
-                {StreamModule:append(Stream3, jit_x86_64_asm:movq(rax, Temp)), Temp};
+                {StreamModule:append(Stream4, jit_x86_64_asm:movq(rax, Temp)), Temp};
             false ->
-                {Stream3, rax}
+                {Stream4, rax}
         end,
-    Stream5 = lists:foldl(
+    Stream6 = lists:foldl(
         fun(Reg, AccStream) ->
             StreamModule:append(AccStream, jit_x86_64_asm:popq(Reg))
         end,
-        Stream4,
+        Stream5,
         lists:reverse(SavedRegs)
     ),
     AvailableRegs1 = FreeRegs ++ AvailableRegs0,
@@ -841,7 +894,7 @@ call_func_ptr(
     UsedRegs2 = [ResultReg | UsedRegs1],
     {
         State1#state{
-            stream = Stream5,
+            stream = Stream6,
             available_regs = AvailableRegs3,
             available_fpregs = AvailableFP3,
             used_regs = UsedRegs2
@@ -1373,6 +1426,14 @@ move_to_array_element(
     State#state{stream = Stream1}.
 
 -spec move_to_native_register(state(), value()) -> {state(), x86_64_register()}.
+move_to_native_register(State, Reg) when is_atom(Reg) ->
+    {State, Reg};
+move_to_native_register(
+    #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}
+) when is_atom(Reg) ->
+    I1 = jit_x86_64_asm:movq({0, Reg}, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1}, Reg};
 move_to_native_register(
     #state{
         stream_module = StreamModule,
@@ -1388,12 +1449,6 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}
-) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm:movq({0, Reg}, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
-    {State#state{stream = Stream1}, Reg};
-move_to_native_register(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
@@ -1407,8 +1462,6 @@ move_to_native_register(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [Reg | Used]}, Reg};
-move_to_native_register(State, Reg) when is_atom(Reg) ->
-    {State, Reg};
 move_to_native_register(
     #state{
         stream_module = StreamModule,
@@ -1423,12 +1476,10 @@ move_to_native_register(
     I2 = jit_x86_64_asm:movsd({F * 8, Temp}, FPReg),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, available_fpregs = AvailFT, used_regs = [FPReg | Used]}, FPReg};
-move_to_native_register(State, Reg) when is_atom(Reg) ->
-    {State, Reg}.
+    {State#state{stream = Stream1, available_fpregs = AvailFT, used_regs = [FPReg | Used]}, FPReg}.
 
--spec save_to_native_register(state(), x86_64_register()) -> {state(), x86_64_register()}.
-save_to_native_register(
+-spec copy_to_native_register(state(), value()) -> {state(), x86_64_register()}.
+copy_to_native_register(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
@@ -1440,7 +1491,7 @@ save_to_native_register(
     I1 = jit_x86_64_asm:movq(Reg, SaveReg),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [SaveReg | Used]}, SaveReg};
-save_to_native_register(
+copy_to_native_register(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
@@ -1451,7 +1502,9 @@ save_to_native_register(
 ) when is_atom(Reg) ->
     I1 = jit_x86_64_asm:movq({0, Reg}, SaveReg),
     Stream1 = StreamModule:append(Stream0, I1),
-    {State#state{stream = Stream1, available_regs = AvailT, used_regs = [SaveReg | Used]}, SaveReg}.
+    {State#state{stream = Stream1, available_regs = AvailT, used_regs = [SaveReg | Used]}, SaveReg};
+copy_to_native_register(State, Reg) ->
+    move_to_native_register(State, Reg).
 
 move_to_cp(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | _]} = State,
@@ -1548,13 +1601,23 @@ get_module_index(
         Reg
     }.
 
-and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Imm) ->
-    I1 = jit_x86_64_asm:andq(Imm, Reg),
+and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+    I1 = jit_x86_64_asm:andq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
-or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Imm) ->
-    I1 = jit_x86_64_asm:orq(Imm, Reg),
+or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+    I1 = jit_x86_64_asm:orq(Val, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
+
+add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+    I1 = jit_x86_64_asm:addq(Val, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
+
+sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+    I1 = jit_x86_64_asm:subq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 

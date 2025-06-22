@@ -102,6 +102,7 @@ struct ModuleNativeInterface {
     bool (* catch_end)(Context *ctx, JITState *jit_state);
     bool (* memory_ensure_free_with_roots)(Context *ctx, JITState *jit_state, int sz, int live, int flags);
     term (* term_alloc_bin_match_state)(Context *ctx, term src, int slots);
+    term (* bitstring_extract_integer)(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE

@@ -167,12 +167,32 @@ cmpq_test_() ->
         ?_assertEqual(<<16#48, 16#39, 16#C8>>, jit_x86_64_asm:cmpq(rcx, rax)),
         ?_assertEqual(<<16#48, 16#83, 16#F8, 16#01>>, jit_x86_64_asm:cmpq(1, rax)),
         ?_assertEqual(<<16#48, 16#83, 16#FE, 16#02>>, jit_x86_64_asm:cmpq(2, rsi)),
-        ?_assertEqual(<<16#49, 16#83, 16#FB, 16#02>>, jit_x86_64_asm:cmpq(2, r11))
+        ?_assertEqual(<<16#49, 16#83, 16#FB, 16#02>>, jit_x86_64_asm:cmpq(2, r11)),
+        % 32-bit immediates
+        ?_assertEqual(<<16#48, 16#81, 16#F8, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:cmpq(16#12345678, rax)),
+        ?_assertEqual(<<16#48, 16#81, 16#FE, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:cmpq(16#12345678, rsi)),
+        ?_assertEqual(<<16#49, 16#81, 16#FB, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:cmpq(16#12345678, r11)),
+        ?_assertEqual(<<16#48, 16#81, 16#F8, 16#88, 16#A9, 16#CB, 16#ED>>, jit_x86_64_asm:cmpq(-16#12345678, rax))
     ].
 
 addq_test_() ->
     [
-        ?_assertEqual(<<16#48, 16#83, 16#C0, 16#01>>, jit_x86_64_asm:addq(1, rax))
+        ?_assertEqual(<<16#48, 16#83, 16#C0, 16#01>>, jit_x86_64_asm:addq(1, rax)),
+        ?_assertEqual(<<16#48, 16#83, 16#C1, 16#01>>, jit_x86_64_asm:addq(1, rcx)),
+        ?_assertEqual(<<16#48, 16#83, 16#C2, 16#01>>, jit_x86_64_asm:addq(1, rdx)),
+        ?_assertEqual(<<16#48, 16#83, 16#C6, 16#01>>, jit_x86_64_asm:addq(1, rsi)),
+        ?_assertEqual(<<16#48, 16#83, 16#C7, 16#01>>, jit_x86_64_asm:addq(1, rdi)),
+        ?_assertEqual(<<16#49, 16#83, 16#C0, 16#01>>, jit_x86_64_asm:addq(1, r8)),
+        ?_assertEqual(<<16#49, 16#83, 16#C1, 16#01>>, jit_x86_64_asm:addq(1, r9)),
+        ?_assertEqual(<<16#49, 16#83, 16#C2, 16#01>>, jit_x86_64_asm:addq(1, r10)),
+        ?_assertEqual(<<16#49, 16#83, 16#C3, 16#01>>, jit_x86_64_asm:addq(1, r11)),
+        % Register to register
+        ?_assertEqual(<<16#48, 16#01, 16#C1>>, jit_x86_64_asm:addq(rax, rcx)),
+        ?_assertEqual(<<16#49, 16#01, 16#C2>>, jit_x86_64_asm:addq(rax, r10)),
+        ?_assertEqual(<<16#49, 16#01, 16#C3>>, jit_x86_64_asm:addq(rax, r11)),
+        ?_assertEqual(<<16#48, 16#01, 16#C6>>, jit_x86_64_asm:addq(rax, rsi)),
+        ?_assertEqual(<<16#48, 16#01, 16#CE>>, jit_x86_64_asm:addq(rcx, rsi)),
+        ?_assertEqual(<<16#48, 16#01, 16#C8>>, jit_x86_64_asm:addq(rcx, rax))
     ].
 
 cmpl_test_() ->
