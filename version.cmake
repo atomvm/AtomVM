@@ -20,4 +20,4 @@
 
 # Please, keep also in sync src/libAtomVM/atomvm_version.h
 set(ATOMVM_BASE_VERSION "0.6.6")
-set(ATOMVM_DEV TRUE)
+set(ATOMVM_DEV FALSE)
