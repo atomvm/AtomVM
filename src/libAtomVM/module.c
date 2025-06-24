@@ -805,7 +805,7 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
     unsigned int ref_offset;
     uint32_t line_ref;
     const uint8_t *ref_pc;
-    if (IS_NULL_PTR(mod->line_refs_offsets)) {
+    if (IS_NULL_PTR(mod->line_refs_offsets) || UNLIKELY(mod->line_refs_offsets_count == 0)) {
         return false;
     }
     for (i = 0; i < mod->line_refs_offsets_count; i++) {
