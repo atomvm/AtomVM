@@ -537,6 +537,8 @@ struct Test tests[] = {
 
     TEST_CASE(test_module_info),
 
+    TEST_CASE(test_op_bs_create_bin),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
