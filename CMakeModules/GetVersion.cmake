@@ -18,7 +18,9 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-include(${CMAKE_SOURCE_DIR}/version.cmake)
+if (NOT ATOMVM_BASE_VERSION)
+    include(${CMAKE_SOURCE_DIR}/version.cmake)
+endif()
 
 if (ATOMVM_DEV)
     set(ATOMVM_GIT_REVISION "<unknown>")
