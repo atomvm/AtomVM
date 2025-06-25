@@ -336,19 +336,21 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             num_offsets++;
             item = item->next;
         }
-        mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
-        if (IS_NULL_PTR(mod->line_refs_offsets)) {
-            fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
-        } else {
-            size_t index = 0;
-            item = line_refs.next;
-            while (item != &line_refs) {
-                struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
-                mod->line_refs_offsets[index] = offset->offset;
-                index++;
-                item = item->next;
+        if (num_offsets > 0) {
+            mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
+            if (IS_NULL_PTR(mod->line_refs_offsets)) {
+                fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
+            } else {
+                size_t index = 0;
+                item = line_refs.next;
+                while (item != &line_refs) {
+                    struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
+                    mod->line_refs_offsets[index] = offset->offset;
+                    index++;
+                    item = item->next;
+                }
+                mod->line_refs_offsets_count = num_offsets;
             }
-            mod->line_refs_offsets_count = num_offsets;
         }
     }
     // Empty the list
