@@ -68,7 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
 
-## [0.6.6] - Unreleased
+## [0.6.7] - Unreleased
+
+## [0.6.6] - 2025-06-23
 
 ### Added
 
