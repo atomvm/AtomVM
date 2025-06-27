@@ -20,7 +20,7 @@
 
 -module(small_big_ext).
 
--export([start/0]).
+-export([start/0, id/1]).
 
 -define(INT64_MAX, 9223372036854775807).
 -define(INT64_MIN, -9223372036854775808).
@@ -55,6 +55,19 @@ start() ->
     true = test_reverse(pow(59) - 1, <<131, 110, 8, 0, 255, 255, 255, 255, 255, 255, 255, 7>>),
     true = test_reverse(-pow(59), <<131, 110, 8, 1, 0, 0, 0, 0, 0, 0, 0, 8>>),
 
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"8000000000000001">>), 16),
+        <<131, 110, 8, 0, 1, 0, 0, 0, 0, 0, 0, 128>>
+    ),
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"-8000000000000002">>), 16),
+        <<131, 110, 8, 1, 2, 0, 0, 0, 0, 0, 0, 128>>
+    ),
+    true = test_reverse(
+        erlang:binary_to_integer(?MODULE:id(<<"100000000000000000000000000000000">>), 16),
+        <<131, 110, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+    ),
+
     %% missing sign
     ok = assert_badarg(
         fun() ->
@@ -62,37 +75,43 @@ start() ->
         end
     ),
 
-    %% we currently only support up to 64 bit (signed) integers
+    %% we currently only support up to 256 bit (unsigned) integers
     case erlang:system_info(machine) of
         "BEAM" ->
-            test_reverse(
-                pow(63) + 1, <<131, 110, 8, 0, 1, 0, 0, 0, 0, 0, 0, 128>>
+            true = test_reverse(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"20000000000000000000000000000000000000000000000000000000000000000">>
+                    ),
+                    16
+                ),
+                <<131, 110, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2>>
             ),
-            test_reverse(
-                -(pow(63) + 2), <<131, 110, 8, 1, 2, 0, 0, 0, 0, 0, 0, 128>>
-            ),
-            test_reverse(
-                pow(128), <<131, 110, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+            true = test_reverse(
+                erlang:binary_to_integer(
+                    ?MODULE:id(
+                        <<"-20000000000000000000000000000000000000000000000000000000000000000">>
+                    ),
+                    16
+                ),
+                <<131, 110, 33, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2>>
             );
         _ ->
             ok = assert_badarg(
                 fun() ->
                     erlang:binary_to_term(
-                        <<131, 110, 8, 0, 1, 0, 0, 0, 0, 0, 0, 128>>
+                        <<131, 110, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2>>
                     )
                 end
             ),
             ok = assert_badarg(
                 fun() ->
                     erlang:binary_to_term(
-                        <<131, 110, 17, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
-                    )
-                end
-            ),
-            ok = assert_badarg(
-                fun() ->
-                    erlang:binary_to_term(
-                        <<131, 110, 8, 1, 2, 0, 0, 0, 0, 0, 0, 128>>
+                        <<131, 110, 33, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2>>
                     )
                 end
             )
@@ -119,3 +138,6 @@ pow(0) ->
 pow(X) ->
     Y = pow(X - 1),
     Y bsl 1.
+
+id(N) ->
+    N.
