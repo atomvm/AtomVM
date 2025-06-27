@@ -1864,8 +1864,8 @@ schedule_in:
             }
             if (mod->native_code == NULL) {
                 // set PC
-                JUMP_TO_ADDRESS(jit_state.continuation);
                 native_pc = NULL;
+                JUMP_TO_ADDRESS(jit_state.continuation);
             } else {
                 native_pc = jit_state.continuation;
             }
@@ -7272,6 +7272,7 @@ handle_error:
             if (target_label) {
                 if (mod->native_code) {
                     native_pc = module_get_native_entry_point(mod, target_label);
+                    continue;
                 } else {
                     native_pc = NULL;
                     code = mod->code->code;
