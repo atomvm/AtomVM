@@ -24,6 +24,7 @@ project(AtomVM)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMakeModules)
 
 find_package(Dialyzer)
+find_package(Erlang)
 find_package(Elixir)
 
 option(AVM_DISABLE_FP "Disable floating point support." OFF)
