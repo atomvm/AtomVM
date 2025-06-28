@@ -23,7 +23,7 @@ project(examples_erlang)
 include(BuildErlang)
 
 add_subdirectory(esp32)
-add_subdirectory(rp2040)
+add_subdirectory(rp2)
 
 pack_runnable(hello_world hello_world)
 pack_runnable(udp_server udp_server estdlib eavmlib)
@@ -41,3 +41,4 @@ pack_runnable(mqtt_client mqtt_client estdlib eavmlib)
 pack_runnable(network_console network_console estdlib eavmlib alisp)
 pack_runnable(logging_example logging_example estdlib eavmlib)
 pack_runnable(http_client http_client estdlib eavmlib)
+pack_runnable(disterl disterl estdlib)

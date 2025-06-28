@@ -11,6 +11,7 @@ on:
     paths:
       - '.github/workflows/esp32-mkimage.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
@@ -19,9 +20,13 @@ on:
   pull_request:
     paths:
       - '.github/workflows/esp32-mkimage.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
       - 'src/libAtomVM/**'
+      - 'tools/packbeam/**'
 
 permissions:
   contents: write
@@ -32,12 +37,12 @@ concurrency:
 
 jobs:
   esp32-release:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     container: espressif/idf:v${{ matrix.idf-version }}
 
     strategy:
       matrix:
-        idf-version: ["5.3.2"]
+        idf-version: ["5.4.1"]
         cc: ["clang-14"]
         cxx: ["clang++-14"]
         cflags: ["-O3"]
@@ -53,7 +58,7 @@ jobs:
       CXX: ${{ matrix.cxx }}
       CFLAGS: ${{ matrix.cflags }}
       CXXFLAGS: ${{ matrix.cflags }}
-      ImageOS: "ubuntu22"
+      ImageOS: "ubuntu24"
 
     steps:
     - name: Checkout repo

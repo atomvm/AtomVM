@@ -12,6 +12,7 @@ on:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
       - "CMakeLists.txt"
+      - 'CMakeModules/**'
       - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
@@ -20,9 +21,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
+      - "CMakeLists.txt"
+      - 'CMakeModules/**'
+      - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
       - "src/libAtomVM/**"
+      - "tools/packbeam/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -75,16 +80,16 @@ jobs:
             "esp32h2",
             "esp32p4",
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.5", "v5.2.3", "v5.3.2", "v5.4"]')) || fromJSON('["v5.3.2"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.6", "v5.2.5", "v5.3.3", "v5.4.1"]')) || fromJSON('["v5.4.1"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.1.5"
+            idf-version: "v5.1.6"
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.2.3"
+            idf-version: "v5.2.5"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.1.5"
+            idf-version: "v5.1.6"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.2.3"
+            idf-version: "v5.2.5"
 
     steps:
       - name: Checkout repo

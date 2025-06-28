@@ -65,6 +65,7 @@ enum ContextFlags
     Ready = 8,
     Killed = 16,
     Trap = 32,
+    Distribution = 64,
 };
 
 enum HeapGrowthStrategy
@@ -104,7 +105,7 @@ struct Context
     size_t max_heap_size;
     enum HeapGrowthStrategy heap_growth_strategy;
 
-    unsigned long cp;
+    term cp;
 
     // saved state when scheduled out
     Module *saved_module;
@@ -149,9 +150,16 @@ struct Context
 typedef struct Context Context;
 #endif
 
-#define CONTEXT_MONITOR_RESOURCE_TAG 0x2
-#define CONTEXT_MONITOR_MONITORED_PID_TAG 0x3
-#define CONTEXT_MONITOR_MONITORING_PID_TAG 0x1
+enum ContextMonitorType
+{
+    CONTEXT_MONITOR_LINK_LOCAL,
+    CONTEXT_MONITOR_MONITORING_LOCAL,
+    CONTEXT_MONITOR_MONITORED_LOCAL,
+    CONTEXT_MONITOR_RESOURCE,
+    CONTEXT_MONITOR_LINK_REMOTE,
+};
+
+#define UNLINK_ID_LINK_ACTIVE 0x0
 
 /**
  * @brief A regular monitor or a half link.
@@ -159,8 +167,39 @@ typedef struct Context Context;
 struct Monitor
 {
     struct ListHead monitor_list_head;
-    uint64_t ref_ticks; // 0 for links
-    term monitor_obj; // pid for links, CONTEXT_MONITOR_*_TAG for monitors
+    enum ContextMonitorType monitor_type;
+};
+
+struct LinkLocalMonitor
+{
+    struct Monitor monitor;
+    uint64_t unlink_id;
+    term link_local_process_id;
+};
+
+struct MonitorLocalMonitor
+{
+    struct Monitor monitor;
+    uint64_t ref_ticks;
+    term monitor_obj;
+};
+
+// The other half is called ResourceMonitor and is a linked list of resources
+struct ResourceContextMonitor
+{
+    struct Monitor monitor;
+    uint64_t ref_ticks;
+    void *resource_obj;
+};
+
+struct LinkRemoteMonitor
+{
+    struct Monitor monitor;
+    uint64_t unlink_id;
+    term node;
+    uint32_t pid_number;
+    uint32_t pid_serial;
+    uint32_t creation;
 };
 
 struct ExtendedRegister
@@ -363,9 +402,10 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal);
  * @brief Process a process info request signal.
  *
  * @param ctx the context being executed
- * @param signal the kill message
+ * @param signal the process info signal
+ * @param process_table_locked whether process table is already locked
  */
-void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal);
+void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal, bool process_table_locked);
 
 /**
  * @brief Process a trap answer signal.
@@ -386,6 +426,32 @@ bool context_process_signal_trap_answer(Context *ctx, struct TermSignal *signal)
 void context_process_flush_monitor_signal(Context *ctx, uint64_t ref_ticks, bool info);
 
 /**
+ * @brief Process set group leader signal
+ *
+ * @param ctx the context being executed
+ * @param signal the message with the group leader term
+ * @return \c true if successful, \c false in case of memory error
+ */
+bool context_process_signal_set_group_leader(Context *ctx, const struct TermSignal *signal);
+
+/**
+ * @brief Process a link exit signal.
+ *
+ * @param ctx the context being executed
+ * @param signal the signal with the exit info tuple
+ * @return true if the process is trapping exit and info tuple was enqueued as a message;
+ */
+bool context_process_link_exit_signal(Context *ctx, struct TermSignal *signal);
+
+/**
+ * @brief Process a monitor down signal.
+ *
+ * @param ctx the context being executed
+ * @param signal the signal with the down info tuple
+ */
+void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal);
+
+/**
  * @brief Get process information.
  *
  * @param ctx the context being executed
@@ -401,10 +467,10 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
 /**
  * @brief Half-link process to another process
  *
- * @param monitor_pid process to link to
+ * @param link_pid process to link to (local or remote)
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_link_new(term monitor_pid);
+struct Monitor *monitor_link_new(term link_pid);
 
 /**
  * @brief Create a monitor on a process.
@@ -421,30 +487,53 @@ struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monito
  *
  * @param resource resource object
  * @param ref_ticks reference associated with the monitor
- * @param process_id process being monitored
  * @return the allocated resource monitor or NULL if allocation failed
  */
 struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks);
 
 /**
  * @brief Half-unlink process to another process
- * @details Called within the process only. For the other end of the
- * link, an UnlinkSignal is sent that calls this function.
+ * @details If process is found, an unlink id is generated and the link is
+ * deactivated.
  *
  * @param ctx the context being executed
- * @param monitor_pid process to unlink from
- * @return 0 on success
+ * @param link_pid process to unlink from
+ * @param unlink_id on output, unlink id to send to the target process
+ * @return true if process was found
  */
-void context_unlink(Context *ctx, term monitor_pid);
+bool context_set_unlink_id(Context *ctx, term link_pid, uint64_t *unlink_id);
 
 /**
- * @brief Destroy a monitor on a process.
- * @details Called within the process only. This function is called from
- * DemonitorSignal.
+ * @brief Half-unlink process to another process
+ * @details Called within the process only when an UnlinkID signal is received.
+ * If link is found, remove it and sends an UnlinkIDAck signal to the linked
+ * process.
  *
  * @param ctx the context being executed
+ * @param link_pid process to unlink from
+ * @param unlink_id unlink id from the signal
+ * @param process_table_locked whether process table is already locked
+ */
+void context_ack_unlink(Context *ctx, term link_pid, uint64_t unlink_id, bool process_table_locked);
+
+/**
+ * @brief Half-unlink process to another process
+ * @details Called within the process only when an UnlinkIDAck signal is received.
+ * If link is found and matches, remove it.
+ *
+ * @param ctx the context being executed
+ * @param link_pid process to unlink from
+ * @param unlink_id unlink id from the signal
+ */
+void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id);
+
+/**
+ * @brief Destroy a monitor on a process (monitoring, monitored or resource)
+ * @details Called within the process only. This function is called from
+ * DemonitorSignal as well as demonitor nif on monitoring process.
+ *
+ * @param ctx the context being executed (monitoring or monitored)
  * @param ref_ticks reference of the monitor to remove
- * @return 0 on success
  */
 void context_demonitor(Context *ctx, uint64_t ref_ticks);
 
@@ -467,9 +556,12 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
  * only exist once.
  *
  * @param ctx the context being executed
- * @param new_monitor monitor object to add
+ * @param new_monitor monitor object to add (ownership belongs to context
+ * afterwards)
+ * @return true if the monitor was added, false if it already existed and
+ * new_monitor waw freed.
  */
-void context_add_monitor(Context *ctx, struct Monitor *new_monitor);
+bool context_add_monitor(Context *ctx, struct Monitor *new_monitor);
 
 #ifdef __cplusplus
 }

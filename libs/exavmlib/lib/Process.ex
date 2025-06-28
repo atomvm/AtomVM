@@ -231,6 +231,12 @@ defmodule Process do
   @spec list() :: [pid]
   defdelegate list(), to: :erlang, as: :processes
 
+  @spec link(pid | port) :: true
+  defdelegate link(pid_or_port), to: :erlang
+
+  @spec unlink(pid | port) :: true
+  defdelegate unlink(pid_or_port), to: :erlang
+
   @doc """
   Register a PID or port identifier under `name`.
 

@@ -298,6 +298,9 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
     TRACE("- Running copy GC on exit reason\n");
     ctx->exit_reason = memory_shallow_copy_term(old_root_fragment, ctx->exit_reason, &ctx->heap.heap_ptr, true);
 
+    TRACE("- Running copy GC on group leader\n");
+    ctx->group_leader = memory_shallow_copy_term(old_root_fragment, ctx->group_leader, &ctx->heap.heap_ptr, true);
+
     TRACE("- Running copy GC on provided roots\n");
     for (size_t i = 0; i < num_roots; i++) {
         roots[i] = memory_shallow_copy_term(old_root_fragment, roots[i], &ctx->heap.heap_ptr, true);
@@ -371,6 +374,8 @@ static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t n
     }
     // ...exit_reason
     memory_scan_and_rewrite(1, &ctx->exit_reason, old_heap_root, old_end, delta, true);
+    // ...group_leader
+    memory_scan_and_rewrite(1, &ctx->group_leader, old_heap_root, old_end, delta, true);
     // ...and MSO list.
     term *mso_ptr = &ctx->heap.root->mso_list;
     while (!term_is_nil(*mso_ptr)) {
@@ -474,7 +479,10 @@ unsigned long memory_estimate_usage(term t)
         } else if (term_is_nil(t)) {
             t = temp_stack_pop(&temp_stack);
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
+            t = temp_stack_pop(&temp_stack);
+
+        } else if (term_is_local_port(t)) {
             t = temp_stack_pop(&temp_stack);
 
         } else if (term_is_nonempty_list(t)) {
@@ -585,19 +593,23 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
             TRACE("Found NIL (%" TERM_X_FMT ")\n", t);
             ptr++;
 
-        } else if (term_is_pid(t)) {
+        } else if (term_is_local_pid(t)) {
             TRACE("Found PID (%" TERM_X_FMT ")\n", t);
+            ptr++;
+
+        } else if (term_is_local_port(t)) {
+            TRACE("Found port (%" TERM_X_FMT ")\n", t);
             ptr++;
 
         } else if ((t & 0x3) == 0x0) {
             TRACE("Found boxed header (%" TERM_X_FMT ")\n", t);
 
+            size_t arity = term_get_size_from_boxed_header(t);
             switch (t & TERM_BOXED_TAG_MASK) {
                 case TERM_BOXED_TUPLE: {
-                    int arity = term_get_size_from_boxed_header(t);
-                    TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, arity);
+                    TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, (int) arity);
 
-                    for (int i = 1; i <= arity; i++) {
+                    for (size_t i = 1; i <= arity; i++) {
                         TRACE("-- Elem: %" TERM_X_FMT "\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
                     }
@@ -622,13 +634,24 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     TRACE("- Found ref.\n");
                     break;
 
+                case TERM_BOXED_EXTERNAL_PID:
+                    TRACE("- Found external pid.\n");
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PORT:
+                    TRACE("- Found external port.\n");
+                    break;
+
+                case TERM_BOXED_EXTERNAL_REF:
+                    TRACE("- Found external ref.\n");
+                    break;
+
                 case TERM_BOXED_FUN: {
-                    int fun_size = term_get_size_from_boxed_header(t);
-                    TRACE("- Found fun, size: %i.\n", fun_size);
+                    TRACE("- Found fun, size: %i.\n", (int) arity);
 
                     // first term is the boxed header, followed by module and fun index.
 
-                    for (int i = 3; i <= fun_size; i++) {
+                    for (size_t i = 3; i <= arity; i++) {
                         TRACE("-- Frozen: %" TERM_X_FMT "\n", ptr[i]);
                         ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
                     }
@@ -661,7 +684,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
                 case TERM_BOXED_MAP: {
                     TRACE("- Found map.\n");
-                    size_t map_size = term_get_size_from_boxed_header(t) - 1;
+                    size_t map_size = arity - 1;
                     size_t keys_offset = term_get_map_keys_offset();
                     size_t value_offset = term_get_map_value_offset();
                     TRACE("-- Map keys: %" TERM_X_FMT "\n", ptr[keys_offset]);
@@ -677,7 +700,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     AVM_ABORT();
             }
 
-            ptr += term_get_size_from_boxed_header(t) + 1;
+            ptr += arity + 1;
 
         } else if (term_is_nonempty_list(t)) {
             TRACE("Found nonempty list (%p)\n", (void *) t);
@@ -744,6 +767,18 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                     break;
 
                 case TERM_BOXED_REF:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PID:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_EXTERNAL_PORT:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_EXTERNAL_REF:
                     ptr += term_get_size_from_boxed_header(t);
                     break;
 
@@ -817,7 +852,10 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
     } else if (term_is_nil(t)) {
         return t;
 
-    } else if (term_is_pid(t)) {
+    } else if (term_is_local_pid(t)) {
+        return t;
+
+    } else if (term_is_local_port(t)) {
         return t;
 
     } else if (term_is_cp(t)) {
@@ -931,7 +969,7 @@ void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task)
     while (l != term_nil()) {
         term h = term_get_list_head(l);
         // the mso list only contains boxed values; each refc is unique
-        TERM_DEBUG_ASSERT(term_is_boxed(h))
+        TERM_DEBUG_ASSERT(term_is_boxed(h));
         term *boxed_value = term_to_term_ptr(h);
         if (memory_is_moved_marker(boxed_value)) {
             h = memory_dereference_moved_marker(boxed_value);

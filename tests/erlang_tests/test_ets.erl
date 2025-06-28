@@ -168,9 +168,38 @@ test_key_types_fun(Pid, _Options) ->
         Tid,
         self()
     ),
+    DistributedPid = binary_to_term(
+        <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
+    ),
+    ok = test_key_insert_lookup(
+        Tid,
+        DistributedPid
+    ),
+    TestPort = open_port({spawn, "echo"}, []),
+    ok = test_key_insert_lookup(
+        Tid,
+        TestPort
+    ),
+    ok =
+        case supports_v4_port_encoding() of
+            true ->
+                DistributedPort = binary_to_term(
+                    <<131, 120, 119, 14, "test@test_node", 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 4, 18>>
+                ),
+                test_key_insert_lookup(Tid, DistributedPort);
+            false ->
+                ok
+        end,
     ok = test_key_insert_lookup(
         Tid,
         erlang:make_ref()
+    ),
+    DistributedRef = binary_to_term(
+        <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
+    ),
+    ok = test_key_insert_lookup(
+        Tid,
+        DistributedRef
     ),
     ok = test_key_insert_lookup(
         Tid,
@@ -204,6 +233,25 @@ test_key_types_fun(Pid, _Options) ->
     EchoServer ! halt,
 
     Pid ! ok.
+
+supports_v4_port_encoding() ->
+    {_Version, Support} =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom
+                {29, true};
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> {23, false};
+                    OTPRelease < "24" -> {26, false};
+                    % v4 is supported but not the default
+                    OTPRelease < "26" -> {26, true};
+                    % small utf8 atom
+                    true -> {29, true}
+                end
+        end,
+    Support.
 
 test_key_insert_lookup(Tid, Key) ->
     true = ets:insert(Tid, {Key, value}),

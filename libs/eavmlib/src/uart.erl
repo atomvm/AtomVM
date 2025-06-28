@@ -42,42 +42,43 @@
 %%-----------------------------------------------------------------------------
 %% @param   Name the uart peripheral to be opened
 %% @param   Opts uart configuration options
-%% @returns Pid of the driver.
+%% @returns Port of the driver.
 %% @doc     Open a connection to the UART driver
 %%
 %%          This function will open a connection to the UART driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Name :: peripheral(), Opts :: uart_opts()) -> Pid :: pid() | {error, _Reason :: term()}.
+-spec open(Name :: peripheral(), Opts :: uart_opts()) ->
+    Port :: port() | {error, _Reason :: term()}.
 open(Name, Opts) ->
     open([{peripheral, Name} | Opts]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Opts uart configuration options
-%% @returns Pid of the driver.
+%% @returns Port of the driver.
 %% @doc     Open a connection to the UART driver default port
 %%
 %%          This function will open a connection to the UART driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Opts :: uart_opts()) -> Pid :: pid() | {error, _Reason :: term()}.
+-spec open(Opts :: uart_opts()) -> Port :: port() | {error, _Reason :: term()}.
 open(Opts) ->
     open_port({spawn, "uart"}, migrate_config(Opts)).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid of the uart port to be closed
+%% @param   Port of the uart port to be closed
 %% @returns ok.
 %% @doc     Close a port connection to the UART driver
 %%
 %%          This function will close the given port connection to the UART driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec close(Pid :: pid()) -> ok | {error, _Reason :: term()}.
-close(Pid) when is_pid(Pid) ->
-    port:call(Pid, close).
+-spec close(Port :: port()) -> ok | {error, _Reason :: term()}.
+close(Port) when is_port(Port) ->
+    port:call(Port, close).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid of the uart port to be read
+%% @param   Port of the uart port to be read
 %% @returns {ok, Data} or {error, Reason}
 %% @doc     Read data from a UART port
 %%
@@ -100,12 +101,12 @@ close(Pid) when is_pid(Pid) ->
 %%          next uart payload is sent by the driver will result in `{error, ealready}'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read(Pid :: pid()) -> {ok, Data :: iodata()} | {error, _Reason :: term()}.
-read(Pid) when is_pid(Pid) ->
-    port:call(Pid, read).
+-spec read(Port :: port()) -> {ok, Data :: iodata()} | {error, _Reason :: term()}.
+read(Port) when is_port(Port) ->
+    port:call(Port, read).
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid of the uart port to be read
+%% @param   Port of the uart port to be read
 %% @param   Timeout millisecond to wait for data to become available
 %% @returns `{ok, Data}', or `{error, Reason}'
 %% @doc     Read data from a UART port
@@ -129,19 +130,19 @@ read(Pid) when is_pid(Pid) ->
 %%          immediately begin another read.
 %% @end
 %%-----------------------------------------------------------------------------
--spec read(Pid :: pid(), Timeout :: pos_integer()) ->
+-spec read(Port :: port(), Timeout :: pos_integer()) ->
     {ok, Data :: iodata()} | {error, _Reason :: term()}.
-read(Pid, Timeout) when is_pid(Pid) ->
-    case port:call(Pid, read, Timeout) of
+read(Port, Timeout) when is_port(Port) ->
+    case port:call(Port, read, Timeout) of
         {error, timeout} ->
-            port:call(Pid, cancel_read),
+            port:call(Port, cancel_read),
             {error, timeout};
         Result ->
             Result
     end.
 
 %%-----------------------------------------------------------------------------
-%% @param   Pid of the uart port to be written to
+%% @param   Port of the uart port to be written to
 %% @param   Data to be written to the given uart port
 %% @returns ok or {error, Reason}
 %% @doc     Write data to a UART port
@@ -149,11 +150,11 @@ read(Pid, Timeout) when is_pid(Pid) ->
 %%          This function will write the given data to the UART port.
 %% @end
 %%-----------------------------------------------------------------------------
--spec write(Pid :: pid(), Data :: iodata()) -> ok | {error, _Reason :: term()}.
-write(Pid, Data) ->
-    case is_iolist(Data) andalso is_pid(Pid) of
+-spec write(Port :: port(), Data :: iodata()) -> ok | {error, _Reason :: term()}.
+write(Port, Data) ->
+    case is_iolist(Data) andalso is_port(Port) of
         true ->
-            port:call(Pid, {write, Data});
+            port:call(Port, {write, Data});
         false ->
             error(badarg)
     end.

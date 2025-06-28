@@ -88,13 +88,6 @@ struct ModuleFilename
     size_t len;
 };
 
-struct LineRefOffset
-{
-    struct ListHead head;
-    unsigned int offset;
-    uint16_t line_ref;
-};
-
 struct Module
 {
 #ifdef ENABLE_ADVANCED_TRACE
@@ -113,7 +106,8 @@ struct Module
     size_t locations_count;
     const uint8_t *locations_table;
 
-    struct ListHead line_ref_offsets;
+    unsigned int *line_refs_offsets;
+    size_t line_refs_offsets_count;
 
     const struct ExportedFunction **imported_funcs;
 
@@ -324,7 +318,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_index)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
@@ -334,7 +328,7 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
     // arity
     // label
     // index
-    uint32_t n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    uint32_t n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 
     return n_freeze;
@@ -343,17 +337,17 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
 static inline void module_get_fun(const Module *this_module, int fun_index, uint32_t *label, uint32_t *arity, uint32_t *n_freeze)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
     }
 
     // fun atom index
-    *arity = READ_32_ALIGNED(table_data + fun_index * 24 + 4 + 12);
-    *label = READ_32_ALIGNED(table_data + fun_index * 24 + 8 + 12);
+    *arity = READ_32_UNALIGNED(table_data + fun_index * 24 + 4 + 12);
+    *label = READ_32_UNALIGNED(table_data + fun_index * 24 + 8 + 12);
     // index
-    *n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    *n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 }
 
@@ -391,10 +385,11 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
  * is a no-op.
  *
  * @param mod the module
+ * @param line_refs the list of line references to append to
  * @param line_ref the line reference (index)
  * @param offset the instruction offset at which the line instruction occurred.
  */
-void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
+void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint32_t line_ref, int offset);
 
 /*
  * @brief Find the latest line reference (index) before or at which the instruction offset

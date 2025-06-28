@@ -655,14 +655,14 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
         default:
             TRACE("spi: error: unrecognized command.\n");
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-                return OUT_OF_MEMORY_ATOM;
+                ret = OUT_OF_MEMORY_ATOM;
             }
             term unkn_a = globalcontext_make_atom(ctx->global, ATOM_STR("\xF", "unknown_command"));
-            return create_pair(ctx, ERROR_ATOM, esp_err_to_term(ctx->global, unkn_a));
+            ret = create_pair(ctx, ERROR_ATOM, unkn_a);
     }
 
     term ret_msg;
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, 3, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ret_msg = OUT_OF_MEMORY_ATOM;
     } else {
         ret_msg = create_pair(ctx, gen_message.ref, ret);
@@ -677,7 +677,7 @@ static NativeHandlerResult spidriver_consume_mailbox(Context *ctx)
 
 bool spi_driver_get_peripheral(term spi_port, spi_host_device_t *host_dev, GlobalContext *global)
 {
-    if (UNLIKELY(!term_is_pid(spi_port))) {
+    if (UNLIKELY(!term_is_local_port(spi_port))) {
         ESP_LOGW(TAG, "Given term is not a SPI port driver.");
         return false;
     }

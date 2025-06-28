@@ -94,7 +94,7 @@ jobs:
 
         - arch: "arm32v7"
           platform: "arm/v7"
-          tag: "bullseye"
+          tag: "bookworm"
           # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
           # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
           cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
@@ -159,6 +159,7 @@ jobs:
         mkdir -p build &&
         cd build &&
         cmake .. ${{ matrix.cmake_opts }} &&
+        make PackBEAM &&
         cp ../build_tests/tests/erlang_tests/*.beam tests/erlang_tests/ &&
         cp ../build_tests/tests/erlang_tests/code_load/*.{avm,beam,hrl} tests/erlang_tests/code_load/ &&
         mkdir -p tests/erlang_tests/code_load/beams/ &&
@@ -167,6 +168,8 @@ jobs:
         cp ../build_tests/tests/libs/estdlib/*.avm tests/libs/estdlib/  &&
         cp ../build_tests/tests/libs/eavmlib/*.avm tests/libs/eavmlib/ &&
         cp ../build_tests/tests/libs/alisp/*.avm tests/libs/alisp/ &&
+        touch tests/erlang_tests/code_load/code_load_pack.avm &&
+        touch tests/erlang_tests/code_load/code_load_pack_data.hrl &&
         make AtomVM &&
         make test-erlang &&
         make test-enif &&

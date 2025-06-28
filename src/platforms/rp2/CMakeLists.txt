@@ -52,6 +52,8 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 # also avoid exposing unlink to silence warning that it will always fail
 set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
+# Likewise with EXECVE
+set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)

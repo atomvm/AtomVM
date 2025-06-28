@@ -119,19 +119,20 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
     return term_from_resource(obj, &env->heap);
 }
 
-int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref)
+static void enif_select_event_message_dispose(Message *message, GlobalContext *global, bool from_task)
 {
-    if (!(mode & (ERL_NIF_SELECT_STOP | ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE))) {
-        return ERL_NIF_SELECT_BADARG;
+    if (message) {
+        mailbox_message_dispose_unsent(message, global, from_task);
     }
-    if (UNLIKELY(mode & (ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE) && !term_is_reference(ref) && ref != UNDEFINED_ATOM)) {
-        return ERL_NIF_SELECT_BADARG;
-    }
+}
 
+static int enif_select_common(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref, Message *message)
+{
+    GlobalContext *global = env->global;
     struct RefcBinary *resource = refc_binary_from_data(obj);
     // Search for event and obj
     struct ListHead *item;
-    struct ListHead *select_events = synclist_wrlock(&env->global->select_events);
+    struct ListHead *select_events = synclist_wrlock(&global->select_events);
     struct SelectEvent *select_event = NULL;
     LIST_FOR_EACH (item, select_events) {
         select_event = GET_LIST_ENTRY(item, struct SelectEvent, head);
@@ -142,19 +143,20 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
     }
     if (mode & ERL_NIF_SELECT_STOP) {
         if (select_event == NULL) {
-            synclist_unlock(&env->global->select_events);
+            synclist_unlock(&global->select_events);
             return ERL_NIF_SELECT_INVALID_EVENT;
         }
         bool was_read = select_event->read;
         bool was_write = select_event->write;
         if (!was_read && !was_write) {
             list_remove(&select_event->head);
-            synclist_unlock(&env->global->select_events);
+            synclist_unlock(&global->select_events);
             // We can call stop now.
             if (resource->resource_type->stop) {
                 resource->resource_type->stop(env, obj, event, true);
             }
-            refc_binary_decrement_refcount(resource, env->global);
+            refc_binary_decrement_refcount(resource, global);
+            enif_select_event_message_dispose(select_event->message, global, false);
             free((void *) select_event);
             return ERL_NIF_SELECT_STOP_CALLED;
         }
@@ -164,13 +166,13 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
         select_event->close = 1;
         select_event->read = 0;
         select_event->write = 0;
-        synclist_unlock(&env->global->select_events);
+        synclist_unlock(&global->select_events);
         // Platform loop should check close flag after unregister is called
         if (was_read) {
-            sys_unregister_select_event(env->global, event, false);
+            sys_unregister_select_event(global, event, false);
         }
         if (was_write) {
-            sys_unregister_select_event(env->global, event, true);
+            sys_unregister_select_event(global, event, true);
         }
         return ERL_NIF_SELECT_STOP_SCHEDULED;
     }
@@ -182,29 +184,58 @@ int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, 
         }
         select_event->event = event;
         select_event->resource = resource;
+        select_event->message = NULL;
+        select_event->ref_ticks = 0;
         // Resource is used in select_event, so we increase refcount.
         refc_binary_increment_refcount(resource);
         list_init(&select_event->head);
         list_append(select_events, &select_event->head);
     }
-    // Second read or second write overwrite ref & pid.
-    if (ref == UNDEFINED_ATOM) {
+    // Second read or second write overwrite ref/message & pid.
+    enif_select_event_message_dispose(select_event->message, global, false);
+    select_event->message = message;
+    if (message) {
         select_event->ref_ticks = 0;
     } else {
-        select_event->ref_ticks = term_to_ref_ticks(ref);
+        if (ref == UNDEFINED_ATOM) {
+            select_event->ref_ticks = 0;
+        } else {
+            select_event->ref_ticks = term_to_ref_ticks(ref);
+        }
     }
     select_event->local_pid = *pid;
     select_event->read = mode & ERL_NIF_SELECT_READ;
     select_event->write = mode & ERL_NIF_SELECT_WRITE;
     select_event->close = 0;
-    synclist_unlock(&env->global->select_events);
+    synclist_unlock(&global->select_events);
     if (select_event->read) {
-        sys_register_select_event(env->global, event, false);
+        sys_register_select_event(global, event, false);
     }
     if (select_event->write) {
-        sys_register_select_event(env->global, event, true);
+        sys_register_select_event(global, event, true);
     }
     return 0;
+}
+
+int enif_select(ErlNifEnv *env, ErlNifEvent event, enum ErlNifSelectFlags mode, void *obj, const ErlNifPid *pid, ERL_NIF_TERM ref)
+{
+    if (!(mode & (ERL_NIF_SELECT_STOP | ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE))) {
+        return ERL_NIF_SELECT_BADARG;
+    }
+    if (UNLIKELY(mode & (ERL_NIF_SELECT_READ | ERL_NIF_SELECT_WRITE) && !term_is_local_reference(ref) && ref != UNDEFINED_ATOM)) {
+        return ERL_NIF_SELECT_BADARG;
+    }
+    return enif_select_common(env, event, mode, obj, pid, ref, NULL);
+}
+
+int enif_select_read(ErlNifEnv *env, ErlNifEvent event, void *obj, const ErlNifPid *pid, ERL_NIF_TERM msg, ErlNifEnv *msg_env)
+{
+    if (UNLIKELY(msg_env != NULL)) {
+        return ERL_NIF_SELECT_BADARG;
+    }
+    Message *message = mailbox_message_create_normal_message_from_term(msg);
+    enum ErlNifSelectFlags mode = ERL_NIF_SELECT_READ;
+    return enif_select_common(env, event, mode, obj, pid, term_nil(), message);
 }
 
 term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_write, Heap *heap)
@@ -225,19 +256,33 @@ term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_
 
 static void select_event_send_notification(struct SelectEvent *select_event, bool is_write, GlobalContext *global)
 {
-    BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
-    term notification = select_event_make_notification(select_event->resource->data, select_event->ref_ticks, is_write, &heap);
+    if (select_event->message) {
+        enum SendMessageResult result;
 #ifdef AVM_SELECT_IN_TASK
-    globalcontext_send_message_from_task(global, select_event->local_pid, NormalMessage, notification);
+        result = globalcontext_post_message_from_task(global, select_event->local_pid, select_event->message);
 #else
-    globalcontext_send_message(global, select_event->local_pid, notification);
+        result = globalcontext_post_message(global, select_event->local_pid, select_event->message);
 #endif
+        if (result == SEND_MESSAGE_OK) {
+            // Ownership was properly transfered.
+            // Otherwise, it will be destroyed when we have a context (when enif_select is called with stop for example)
+            select_event->message = NULL;
+        }
+    } else {
+        BEGIN_WITH_STACK_HEAP(SELECT_EVENT_NOTIFICATION_SIZE, heap)
+        term notification = select_event_make_notification(select_event->resource->data, select_event->ref_ticks, is_write, &heap);
+#ifdef AVM_SELECT_IN_TASK
+        globalcontext_send_message_from_task(global, select_event->local_pid, NormalMessage, notification);
+#else
+        globalcontext_send_message(global, select_event->local_pid, notification);
+#endif
+        END_WITH_STACK_HEAP(heap, global)
+    }
     if (is_write) {
         select_event->write = 0;
     } else {
         select_event->read = 0;
     }
-    END_WITH_STACK_HEAP(heap, global)
     sys_unregister_select_event(global, select_event->event, is_write);
 }
 
@@ -254,7 +299,6 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
         }
         select_event = NULL;
     }
-    synclist_unlock(&global->select_events);
     if (select_event) {
         if (is_read && select_event->read) {
             select_event_send_notification(select_event, false, global);
@@ -265,6 +309,7 @@ bool select_event_notify(ErlNifEvent event, bool is_read, bool is_write, GlobalC
             result = true;
         }
     }
+    synclist_unlock(&global->select_events);
     return result;
 }
 
@@ -280,6 +325,7 @@ static inline void select_event_destroy(struct SelectEvent *select_event, Global
 #else
     refc_binary_decrement_refcount(select_event->resource, global);
 #endif
+    enif_select_event_message_dispose(select_event->message, global, true);
     free((void *) select_event);
 }
 

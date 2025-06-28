@@ -25,7 +25,7 @@
 
 start() ->
     ssl:start(),
-    ConnectResult = ahttp_client:connect(https, "atomvm.net", 443, [
+    ConnectResult = ahttp_client:connect(https, "test.atomvm.org", 443, [
         {active, ?ACTIVE}, {verify, verify_none}, {parse_headers, [<<"Location">>]}
     ]),
     case ConnectResult of

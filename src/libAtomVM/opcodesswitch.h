@@ -29,6 +29,7 @@
 #include "bitstring.h"
 #include "debug.h"
 #include "defaultatoms.h"
+#include "dist_nifs.h"
 #include "exportedfunction.h"
 #include "intn.h"
 #include "nifs.h"
@@ -1001,6 +1002,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     {                                                                                           \
         MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);             \
         void *next_label = NULL;                                                                \
+        bool reprocess_outer = false;                                                           \
         while (signal_message) {                                                                \
             switch (signal_message->type) {                                                     \
                 case KillSignal: {                                                              \
@@ -1019,7 +1021,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case ProcessInfoRequestSignal: {                                                \
                     struct BuiltInAtomRequestSignal *request_signal                             \
                         = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);  \
-                    context_process_process_info_request_signal(ctx, request_signal);           \
+                    context_process_process_info_request_signal(ctx, request_signal, false);    \
                     break;                                                                      \
                 }                                                                               \
                 case TrapAnswerSignal: {                                                        \
@@ -1046,10 +1048,49 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     context_process_flush_monitor_signal(ctx, flush_signal->ref_ticks, info);   \
                     break;                                                                      \
                 }                                                                               \
-                case UnlinkSignal: {                                                            \
-                    struct ImmediateSignal *immediate_signal                                    \
-                        = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
-                    context_unlink(ctx, immediate_signal->immediate);                           \
+                case SetGroupLeaderSignal: {                                                    \
+                    struct TermSignal *group_leader                                             \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    if (UNLIKELY(!context_process_signal_set_group_leader(ctx, group_leader))) { \
+                        SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
+                        next_label = &&handle_error;                                            \
+                    }                                                                           \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkIDSignal: {                                                          \
+                    struct ImmediateRefSignal *immediate_ref_signal                             \
+                        = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);        \
+                    context_ack_unlink(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks, false); \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkIDAckSignal: {                                                       \
+                    struct ImmediateRefSignal *immediate_ref_signal                             \
+                        = CONTAINER_OF(signal_message, struct ImmediateRefSignal, base);        \
+                    context_unlink_ack(ctx, immediate_ref_signal->immediate, immediate_ref_signal->ref_ticks); \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkRemoteIDSignal: {                                                    \
+                    struct TermSignal *term_signal                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0)); \
+                    term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);      \
+                    context_ack_unlink(ctx, remote_pid, unlink_id, false);                      \
+                    break;                                                                      \
+                }                                                                               \
+                case UnlinkRemoteIDAckSignal: {                                                 \
+                    struct TermSignal *term_signal                                              \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    uint64_t unlink_id = term_maybe_unbox_int64(term_get_tuple_element(term_signal->signal_term, 0)); \
+                    term remote_pid = term_get_tuple_element(term_signal->signal_term, 1);      \
+                    context_unlink_ack(ctx, remote_pid, unlink_id);                             \
+                    break;                                                                      \
+                }                                                                               \
+                case LinkExitSignal: {                                                          \
+                    struct TermSignal *link_exit_signal                                         \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    if (context_process_link_exit_signal(ctx, link_exit_signal)) {              \
+                        reprocess_outer = true;                                                 \
+                    }                                                                           \
                     break;                                                                      \
                 }                                                                               \
                 case MonitorSignal: {                                                           \
@@ -1064,6 +1105,13 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     context_demonitor(ctx, ref_signal->ref_ticks);                              \
                     break;                                                                      \
                 }                                                                               \
+                case MonitorDownSignal: {                                                       \
+                    struct TermSignal *monitor_down_signal                                      \
+                        = CONTAINER_OF(signal_message, struct TermSignal, base);                \
+                    context_process_monitor_down_signal(ctx, monitor_down_signal);              \
+                    reprocess_outer = true;                                                     \
+                    break;                                                                      \
+                }                                                                               \
                 case NormalMessage: {                                                           \
                     UNREACHABLE();                                                              \
                 }                                                                               \
@@ -1071,6 +1119,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             MailboxMessage *next = signal_message->next;                                        \
             mailbox_message_dispose(signal_message, &ctx->heap);                                \
             signal_message = next;                                                              \
+            if (UNLIKELY(reprocess_outer && signal_message == NULL)) {                          \
+                reprocess_outer = false;                                                        \
+                signal_message = mailbox_process_outer_list(&ctx->mailbox);                     \
+            }                                                                                   \
         }                                                                                       \
         if (context_get_flags(ctx, Killed)) {                                                   \
             goto terminate_context;                                                             \
@@ -1114,7 +1166,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define DO_RETURN()                                                     \
     {                                                                   \
-        int module_index = ctx->cp >> 24;                               \
+        int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
         if (module_index == prev_mod->module_index) {                   \
             Module *t = mod;                                            \
             mod = prev_mod;                                             \
@@ -1125,7 +1177,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             mod = globalcontext_get_module_by_index(glb, module_index); \
             code = mod->code->code;                                     \
         }                                                               \
-        pc = code + ((ctx->cp & 0xFFFFFF) >> 2);                        \
+        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
     }
 
 #define HANDLE_ERROR()                                                  \
@@ -1341,7 +1393,7 @@ static int get_catch_label_and_change_module(Context *ctx, Module **mod)
 
 COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
 {
-    Module *mod = globalcontext_get_module_by_index(ctx->global, cp >> 24);
+    Module *mod = globalcontext_get_module_by_index(ctx->global, ((uintptr_t) cp) >> 24);
     long mod_offset = (cp & 0xFFFFFF) >> 2;
 
     *cp_mod = mod;
@@ -1430,18 +1482,52 @@ COLD_FUNC static void dump(Context *ctx)
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        if (term_is_pid(monitor->monitor_obj)) {
-            term_display(stderr, monitor->monitor_obj, ctx);
-        } else {
-            fprintf(stderr, "<resource %p>", (void *) term_to_const_term_ptr(monitor->monitor_obj));
+        switch (monitor->monitor_type) {
+            case CONTEXT_MONITOR_LINK_LOCAL: {
+                struct LinkLocalMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
+                fprintf(stderr, "link ");
+                if (link_monitor->unlink_id) {
+                    fprintf(stderr, "(inactive) ");
+                }
+                fprintf(stderr, "to ");
+                term_display(stderr, link_monitor->link_local_process_id, ctx);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_LINK_REMOTE: {
+                struct LinkRemoteMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
+                fprintf(stderr, "remote link ");
+                if (link_monitor->unlink_id) {
+                    fprintf(stderr, "(inactive) ");
+                }
+                fprintf(stderr, "to ");
+                term_display(stderr, link_monitor->node, ctx);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORING_LOCAL: {
+                struct MonitorLocalMonitor* monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+                fprintf(stderr, "monitor to ");
+                term_display(stderr, monitoring_monitor->monitor_obj, ctx);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORED_LOCAL: {
+                struct MonitorLocalMonitor* monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+                fprintf(stderr, "monitored by ");
+                term_display(stderr, monitored_monitor->monitor_obj, ctx);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_RESOURCE: {
+                struct ResourceContextMonitor* resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
+                fprintf(stderr, "monitored by resource %p ref=%lu", resource_monitor->resource_obj, (long unsigned) resource_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
         }
-        fprintf(stderr, " ");
-        if (monitor->ref_ticks == 0) {
-            fprintf(stderr, "<");
-        }
-        fprintf(stderr, "---> ");
-        term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
-        fprintf(stderr, "\n");
     }
     synclist_unlock(&glb->processes_table);
 
@@ -1480,21 +1566,27 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT64_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        return term_make_boxed_int64(value, &ctx->heap);
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int64(value, &heap);
     } else
 #endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, BOXED_INT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        Heap heap;
+        if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
             ctx->x[1] = OUT_OF_MEMORY_ATOM;
             return term_invalid_term();
         }
-        return term_make_boxed_int(value, &ctx->heap);
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return term_make_boxed_int(value, &heap);
     } else {
         return term_from_int(value);
     }
@@ -1825,9 +1917,9 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 #endif
 
 #ifdef IMPL_CODE_LOADER
-    int read_core_chunk0(Module *mod);
+    int read_core_chunk0(Module *mod, struct ListHead *line_refs);
 
-    int read_core_chunk(Module *mod)
+    int read_core_chunk(Module *mod, struct ListHead *line_refs)
 #else
     #ifdef IMPL_EXECUTE_LOOP
         int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
@@ -1864,7 +1956,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
     #endif
 
 #ifdef IMPL_CODE_LOADER
-    return read_core_chunk0(mod);
+    return read_core_chunk0(mod, line_refs);
 #endif
 #ifdef IMPL_EXECUTE_LOOP
     // This process is the first scheduler process
@@ -1876,7 +1968,7 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
 }
 
 #ifdef IMPL_CODE_LOADER
-int read_core_chunk0(Module *mod)
+int read_core_chunk0(Module *mod, struct ListHead *line_refs)
 #else
 #ifdef IMPL_EXECUTE_LOOP
 HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
@@ -2563,7 +2655,7 @@ schedule_in:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE_RETURN(ctx);
 
-                    if ((long) ctx->cp == -1) {
+                    if ((intptr_t) ctx->cp == -1) {
                         return 0;
                     }
 
@@ -2579,22 +2671,31 @@ schedule_in:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term recipient_term = x_regs[0];
-                    int local_process_id;
-                    if (term_is_pid(recipient_term)) {
-                        local_process_id = term_to_local_process_id(recipient_term);
-                    } else if (term_is_atom(recipient_term)) {
-                        local_process_id = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-                        if (UNLIKELY(local_process_id == 0)) {
+                    if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
+                        term return_value = dist_send_message(recipient_term, x_regs[1], ctx);
+                        if (UNLIKELY(term_is_invalid_term(return_value))) {
+                            HANDLE_ERROR();
+                        }
+                        x_regs[0] = return_value;
+                    } else {
+                        if (term_is_atom(recipient_term)) {
+                            recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+                            if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                        }
+
+                        int local_process_id;
+                        if (term_is_local_pid_or_port(recipient_term)) {
+                            local_process_id = term_to_local_process_id(recipient_term);
+                        } else {
                             RAISE_ERROR(BADARG_ATOM);
                         }
-                    } else {
-                        RAISE_ERROR(BADARG_ATOM);
+                        TRACE("send/0 target_pid=%i\n", local_process_id);
+                        TRACE_SEND(ctx, x_regs[0], x_regs[1]);
+                        globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
+                        x_regs[0] = x_regs[1];
                     }
-                    TRACE("send/0 target_pid=%i\n", local_process_id);
-                    TRACE_SEND(ctx, x_regs[0], x_regs[1]);
-                    globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
-
-                    x_regs[0] = x_regs[1];
                 #endif
                 break;
             }
@@ -2670,7 +2771,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement wait/1
             case OP_WAIT: {
                 uint32_t label;
                 DECODE_LABEL(label, pc)
@@ -2687,7 +2787,6 @@ schedule_in:
                 break;
             }
 
-            //TODO: implement wait_timeout/2
             case OP_WAIT_TIMEOUT: {
                 #ifdef IMPL_EXECUTE_LOOP
                     // PC for wait_timeout_trap_handler, just before label
@@ -3001,7 +3100,6 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_number/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    //TODO: check for floats too
                     if (!term_is_number(arg1)) {
                         pc = mod->labels[label];
                     }
@@ -3179,18 +3277,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_port/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (term_is_pid(arg1)) {
-                        int local_process_id = term_to_local_process_id(arg1);
-                        Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
-                        bool is_port_driver = false;
-                        if (target) {
-                            is_port_driver = context_is_port_driver(target);
-                            globalcontext_get_process_unlock(ctx->global, target);
-                        }
-                        if (!is_port_driver) {
-                            pc = mod->labels[label];
-                        }
-                    } else {
+                    if (!term_is_port(arg1)) {
                         pc = mod->labels[label];
                     }
                 #endif
@@ -3237,7 +3324,8 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%lx\n", label, arg1);
 
-                    if (!(term_is_tuple(arg1) && (uint32_t) term_get_tuple_arity(arg1) == arity)) {
+                    assert(term_is_tuple(arg1));
+                    if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
                         pc = mod->labels[label];
                     }
                 #endif
@@ -3327,7 +3415,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                if (LIKELY(term_is_tuple(src_value))) {
+                    assert(term_is_tuple(src_value));
                     int arity = term_get_tuple_arity(src_value);
                 #endif
 
@@ -3342,15 +3430,11 @@ wait_timeout_trap_handler:
                         #endif
 
                         #ifdef IMPL_EXECUTE_LOOP
-                            //TODO: check if src_value is a tuple
                             if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
                                 jump_to_address = mod->labels[jmp_label];
                             }
                         #endif
                     }
-                #ifdef IMPL_EXECUTE_LOOP
-                }
-                #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
                     if (!jump_to_address) {
@@ -3574,9 +3658,6 @@ wait_timeout_trap_handler:
                 TRACE("if_end/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    x_regs[0] = ERROR_ATOM;
-                    x_regs[1] = IF_CLAUSE_ATOM;
-
                     RAISE_ERROR(IF_CLAUSE_ATOM);
                 #endif
                 break;
@@ -3699,7 +3780,7 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             }
-                            if ((long) ctx->cp == -1) {
+                            if ((intptr_t) ctx->cp == -1) {
                                 return 0;
                             }
 
@@ -3801,7 +3882,6 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
-                    //TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, catch_term);
                 #endif
                 break;
@@ -3814,7 +3894,6 @@ wait_timeout_trap_handler:
                 TRACE("try_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    //TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, term_nil());
                 #endif
                 break;
@@ -3895,7 +3974,6 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
-                    // TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, catch_term);
                 #endif
                 break;
@@ -3908,7 +3986,6 @@ wait_timeout_trap_handler:
                 TRACE("catch_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // TODO: here just write to y registers is enough
                     WRITE_REGISTER(dreg, term_nil());
                     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
                     switch (term_to_atom_index(x_regs[0])) {
@@ -4273,8 +4350,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4283,7 +4360,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg));
+                    TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
 
@@ -4292,7 +4369,7 @@ wait_timeout_trap_handler:
 
                     int32_t val = 0;
                     size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];
@@ -4386,8 +4463,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4396,7 +4473,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx dreg=%c%i\n", fail, src, arg2, flags, T_DEST_REG(dreg));
+                    TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
 
@@ -4404,7 +4481,7 @@ wait_timeout_trap_handler:
                     avm_int_t offset_bits = term_get_match_state_offset(src);
 
                     int32_t val = 0;
-                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];
@@ -5512,7 +5589,7 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(arity_term, pc)
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%i\n", label, arg1, arity);
+                    TRACE("is_function2/3, label=%i, arg1=%lx, arity=%p\n", label, arg1, (void *) arity_term);
 
                     if (term_is_function(arg1) && term_is_integer(arity_term)) {
                         const term *boxed_value = term_to_const_term_ptr(arg1);
@@ -5547,7 +5624,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("is_function/3\n");
+                    TRACE("is_function2/3\n");
                     UNUSED(label)
                     UNUSED(arg1)
                 #endif
@@ -5650,7 +5727,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            //TODO: stub, always false
             case OP_IS_BITSTR: {
                 uint32_t label;
                 DECODE_LABEL(label, pc)
@@ -5673,8 +5749,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            // TODO: This opcode is currently uncovered by tests.
-            // We need to implement GC bifs with arity 3, e.g. binary_part/3.
             case OP_GC_BIF3: {
                 uint32_t fail_label;
                 DECODE_LABEL(fail_label, pc);
@@ -5748,7 +5822,6 @@ wait_timeout_trap_handler:
             }
 
 #if MINIMUM_OTP_COMPILER_VERSION <= 23
-            //TODO: stub, implement recv_mark/1
             //it looks like it can be safely left unimplemented
             case OP_RECV_MARK: {
                 uint32_t label;
@@ -5759,7 +5832,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-            //TODO: stub, implement recv_set/1
             //it looks like it can be safely left unimplemented
             case OP_RECV_SET: {
                 uint32_t label;
@@ -5773,15 +5845,16 @@ wait_timeout_trap_handler:
 
             case OP_LINE: {
                 #ifdef IMPL_CODE_LOADER
-                    const uint8_t *saved_pc = pc -1;
+                    unsigned int offset = pc - code;
                 #endif
                 uint32_t line_number;
+                // This decode increments pc and ensures we can decode it
                 DECODE_LITERAL(line_number, pc);
 
                 TRACE("line/1: %i\n", line_number);
 
                 #ifdef IMPL_CODE_LOADER
-                    module_insert_line_ref_offset(mod, line_number, saved_pc - code);
+                    module_insert_line_ref_offset(mod, line_refs, line_number, offset);
                 #endif
                 break;
             }
@@ -6134,7 +6207,6 @@ wait_timeout_trap_handler:
                     #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
                         // Space should be available on heap as compiler added an allocate opcode
-                        context_ensure_fpregs(ctx);
                         term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
                         WRITE_REGISTER(dreg, float_value);
                     #endif
@@ -6203,7 +6275,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6250,7 +6321,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6297,7 +6367,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW)) {
@@ -6344,7 +6413,6 @@ wait_timeout_trap_handler:
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
                     #endif
-                    context_ensure_fpregs(ctx);
                     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
@@ -6917,6 +6985,12 @@ wait_timeout_trap_handler:
             }
 
             case OP_CALL_FUN2: {
+                #ifdef IMPL_EXECUTE_LOOP
+                    remaining_reductions--;
+                    if (UNLIKELY(!remaining_reductions)) {
+                        SCHEDULE_NEXT(mod, pc - 1);
+                    }
+                #endif
                 term tag;
                 DECODE_COMPACT_TERM(tag, pc)
                 unsigned int args_count;

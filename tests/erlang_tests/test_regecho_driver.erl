@@ -23,7 +23,10 @@
 -export([start/0, do_open_port/2, echo/1]).
 
 start() ->
-    register(echo, do_open_port("echo", [])),
+    Port = do_open_port("echo", []),
+    true = is_port(Port),
+    register(echo, Port),
+    true = is_port(whereis(echo)),
     length(echo("Hello World")).
 
 do_open_port(PortName, Param) ->

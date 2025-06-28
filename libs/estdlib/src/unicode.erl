@@ -47,7 +47,7 @@
     char() | unicode_binary() | charlist(), unicode_binary() | []
 ).
 
--type encoding() :: utf8 | latin1.
+-type encoding() :: utf8 | unicode | latin1.
 
 -export_type([
     unicode_binary/0,

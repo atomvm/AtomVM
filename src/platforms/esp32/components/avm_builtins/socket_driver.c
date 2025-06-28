@@ -107,16 +107,27 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
 
 static void tuple_to_ip_addr(term address_tuple, ip_addr_t *out_addr)
 {
+#ifdef CONFIG_LWIP_IPV6
     out_addr->type = IPADDR_TYPE_V4;
     out_addr->u_addr.ip4.addr = htonl(socket_tuple_to_addr(address_tuple));
+#else
+    out_addr->addr = htonl(socket_tuple_to_addr(address_tuple));
+#endif
 }
 
 static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
 {
+#ifdef CONFIG_LWIP_IPV6
     uint8_t ad1 = ip4_addr1(&(addr->u_addr.ip4));
     uint8_t ad2 = ip4_addr2(&(addr->u_addr.ip4));
     uint8_t ad3 = ip4_addr3(&(addr->u_addr.ip4));
     uint8_t ad4 = ip4_addr4(&(addr->u_addr.ip4));
+#else
+    uint8_t ad1 = ip4_addr1(addr);
+    uint8_t ad2 = ip4_addr2(addr);
+    uint8_t ad3 = ip4_addr3(addr);
+    uint8_t ad4 = ip4_addr4(addr);
+#endif
     term_put_tuple_element(addr_tuple, 0, term_from_int11(ad1));
     term_put_tuple_element(addr_tuple, 1, term_from_int11(ad2));
     term_put_tuple_element(addr_tuple, 2, term_from_int11(ad3));
@@ -127,6 +138,7 @@ static void socket_fill_ipv4_addr_tuple(term addr_tuple, ip_addr_t *addr)
 static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
 {
     term addr_tuple;
+#ifdef CONFIG_LWIP_IPV6
     switch (IP_GET_TYPE(addr)) {
         case IPADDR_TYPE_V4: {
             addr_tuple = term_alloc_tuple(4, heap);
@@ -141,6 +153,11 @@ static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
         default:
             addr_tuple = term_invalid_term();
     }
+#else
+    // When IPv6 is disabled, we only have IPv4 addresses
+    addr_tuple = term_alloc_tuple(4, heap);
+    socket_fill_ipv4_addr_tuple(addr_tuple, addr);
+#endif
 
     return addr_tuple;
 }
@@ -515,7 +532,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     Context *new_ctx = context_new(glb);
     new_ctx->native_handler = socket_consume_mailbox;
 
-    term socket_pid = term_from_local_process_id(new_ctx->process_id);
+    term socket_pid = term_port_from_local_process_id(new_ctx->process_id);
 
     struct TCPClientSocketData *new_tcp_data = tcp_client_socket_data_new(new_ctx, accepted_conn, sockets, pid);
     socket_data_postinit(platform);
@@ -585,7 +602,7 @@ static void do_send_socket_error(Context *ctx, err_t status)
             term reason_atom = lwip_error_atom(glb, status);
             term result_tuple = term_alloc_tuple(3, &ctx->heap);
             term_put_tuple_element(result_tuple, 0, globalcontext_make_atom(glb, tcp_error_atom));
-            term socket_pid = term_from_local_process_id(ctx->process_id);
+            term socket_pid = term_port_from_local_process_id(ctx->process_id);
             term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
             term_put_tuple_element(result_tuple, 1, socket_wrapper);
             term_put_tuple_element(result_tuple, 2, reason_atom);
@@ -609,7 +626,7 @@ static void do_send_tcp_closed(Context *ctx)
         }
         term result_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result_tuple, 0, TCP_CLOSED_ATOM);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_tcp_socket_wrapper(socket_pid, &ctx->heap, glb);
         term_put_tuple_element(result_tuple, 1, socket_wrapper);
         globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
@@ -750,7 +767,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
     if (socket_data->active) {
         term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
-        term socket_pid = term_from_local_process_id(ctx->process_id);
+        term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper =
             socket_data->type == UDPSocket ?
                 create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) :
@@ -858,7 +875,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
-    bool ok = term_is_pid(controlling_process_term);
+    bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
         return;
@@ -888,7 +905,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     TRACE("tcp: connecting to: %s\n", address_string);
 
-    struct ip_addr remote_ip;
+    ip_addr_t remote_ip;
     //TODO: use dns_gethostbyname instead
     err_t status = netconn_gethostbyname(address_string, &remote_ip);
     if (UNLIKELY(status != ERR_OK)) {
@@ -1022,7 +1039,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     term active_term = interop_proplist_get_value_default(params, ACTIVE_ATOM, TRUE_ATOM);
     term controlling_process_term = interop_proplist_get_value(params, CONTROLLING_PROCESS_ATOM);
 
-    bool ok = term_is_pid(controlling_process_term);
+    bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
         return;
@@ -1369,7 +1386,7 @@ static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
         return;
     }
     term new_pid_term = term_get_tuple_element(gen_message->req, 1);
-    if (UNLIKELY(!term_is_pid(new_pid_term))) {
+    if (UNLIKELY(!term_is_local_pid(new_pid_term))) {
         do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
     } else {
         term return_msg;

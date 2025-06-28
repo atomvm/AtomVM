@@ -34,27 +34,23 @@ macro(pack_archive avm_name)
         set(pack_archive_${avm_name}_beams ${pack_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam)
     endforeach()
 
-    add_custom_target(
-        ${avm_name}_beams ALL
-        DEPENDS ${pack_archive_${avm_name}_beams}
-    )
-
     if(AVM_RELEASE)
         set(INCLUDE_LINES "")
     else()
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${avm_name} ALL
-        DEPENDS ${avm_name}_beams PackBEAM
-        #DEPENDS ${pack_archive_${avm_name}_beams}
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${pack_archive_${avm_name}_beams} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_archive_${avm_name}_beams}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_beams PackBEAM)
-
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm
+    )
 endmacro()
 
 
@@ -77,32 +73,36 @@ macro(pack_lib avm_name)
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${avm_name} ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${pack_lib_${avm_name}_archive_targets} PackBEAM)
-    if(TARGET ${avm_name}_main)
-        add_dependencies(${avm_name} ${avm_name}_main)
-    endif()
-
-    add_custom_target(
-        ${avm_name}-pico.uf2 ALL
+    add_custom_command(
+        OUTPUT ${avm_name}-pico.uf2
+        DEPENDS ${avm_name}.avm UF2Tool
         COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico.uf2 -s 0x10100000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}-pico.uf2 ${avm_name} uf2tool)
 
-    add_custom_target(
-        ${avm_name}-pico2.uf2 ALL
+    add_custom_command(
+        OUTPUT ${avm_name}-pico2.uf2
+        DEPENDS ${avm_name}.avm UF2Tool
         COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico2.uf2 -f data -s 0x10100000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}-pico2.uf2 ${avm_name} uf2tool)
+
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2
+    )
+    if(TARGET ${avm_name}_main)
+        add_dependencies(${avm_name} ${avm_name}_main)
+    endif()
 
 endmacro()
 
@@ -150,13 +150,18 @@ macro(pack_runnable avm_name main)
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${avm_name} ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${avm_name}_main ${pack_runnable_${avm_name}_archive_targets} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name} ${avm_name}_main ${pack_runnable_${avm_name}_archive_targets} PackBEAM)
+
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.avm
+    )
 endmacro()
 
 
@@ -175,16 +180,25 @@ macro(pack_test test_avm_name)
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${test_avm_name} ALL
-        COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
+    add_custom_command(
+        OUTPUT tests.beam
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
+        COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/tests.erl
+        VERBATIM
+    )
+
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm
+        DEPENDS ${pack_test_${test_avm_name}_archive_targets} PackBEAM tests.beam
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${test_avm_name} ${pack_test_${test_avm_name}_archive_targets} PackBEAM)
 
+    add_custom_target(
+        ${test_avm_name} ALL
+        DEPENDS ${test_avm_name}.avm
+    )
 endmacro()
 
 macro(pack_eunit test_avm_name)
@@ -202,15 +216,18 @@ macro(pack_eunit test_avm_name)
         set(INCLUDE_LINES "-i")
     endif()
 
-    add_custom_target(
-        ${test_avm_name} ALL
+    add_custom_command(
+        OUTPUT ${test_avm_name}.avm
+        DEPENDS ${pack_eunit_${test_avm_name}_archive_targets} PackBEAM ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam ${pack_eunit_${test_avm_name}_archives}
-        DEPENDS ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${test_avm_name} ${pack_eunit_${test_avm_name}_archive_targets} PackBEAM)
 
+    add_custom_target(
+        ${test_avm_name} ALL
+        DEPENDS ${test_avm_name}.avm etest
+    )
 endmacro()
 
 macro(pack_uf2 avm_name main)
@@ -237,20 +254,24 @@ macro(pack_uf2 avm_name main)
         set(pack_uf2_${avm_name}_archive_targets ${pack_uf2_${avm_name}_archive_targets} ${archive_name})
     endforeach()
 
-    add_custom_target(
-        ${avm_name}.avm ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.avm
+        DEPENDS ${avm_name}_main ${pack_uf2_${avm_name}_archive_targets} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
-    add_dependencies(${avm_name}.avm ${avm_name}_main ${pack_uf2_${avm_name}_archive_targets} PackBEAM)
 
-    add_custom_target(
-        ${avm_name}.uf2 ALL
+    add_custom_command(
+        OUTPUT ${avm_name}.uf2
+        DEPENDS ${avm_name}.avm UF2Tool
         COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}.uf2 -f universal -s 0x10180000 ${avm_name}.avm
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    add_dependencies(${avm_name}.uf2 ${avm_name}.avm uf2tool)
 
+    add_custom_target(
+        ${avm_name} ALL
+        DEPENDS ${avm_name}.uf2
+    )
 endmacro()

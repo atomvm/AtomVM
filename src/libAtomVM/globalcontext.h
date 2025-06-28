@@ -71,6 +71,11 @@ typedef struct GlobalContext GlobalContext;
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
+#ifndef TYPEDEF_MESSAGE
+#define TYPEDEF_MESSAGE
+typedef struct Message Message;
+#endif
+
 struct MessageQueueItem
 {
     struct MessageQueueItem *next;
@@ -151,6 +156,11 @@ struct GlobalContext
     SpinLock env_spinlock;
 #endif
 
+    term ATOMIC node_name;
+    uint32_t ATOMIC creation;
+    ErlNifResourceType *dist_connection_resource_type;
+    struct SyncList dist_connections;
+
 #if HAVE_OPEN && HAVE_CLOSE
     ErlNifResourceType *posix_fd_resource_type;
 #endif
@@ -160,6 +170,12 @@ struct GlobalContext
 #endif
 
     void *platform_data;
+};
+
+enum SendMessageResult
+{
+    SEND_MESSAGE_OK = 0,
+    SEND_MESSAGE_PROCESS_NOT_FOUND = 1
 };
 
 /**
@@ -247,6 +263,18 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
  */
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
 
+/**
+ * @brief Post a mailbox message to a process identified by its id.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message(GlobalContext *glb, int32_t process_id, Message *m);
+
 #ifdef AVM_TASK_DRIVER_ENABLED
 /**
  * @brief Send a message to a process identified by its id. This variant is to
@@ -263,6 +291,19 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
  * @param t the message to send.
  */
 void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t);
+
+/**
+ * @brief Post a mailbox message to a process identified by its id. Variant
+ * to be used from task drivers.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message_from_task(GlobalContext *glb, int32_t process_id, Message *m);
 
 /**
  * @brief Enqueue a refc binary from a task driver, to be refc decremented
@@ -299,10 +340,10 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx);
  * @details Register a process with a certain name (atom) so it can be easily retrieved later.
  * @param glb the global context, each registered process will be globally available for that context.
  * @param atom_index the atom table index.
- * @param local_process_id the process local id.
+ * @param local_pid_or_port the local pid or port
  * @returns \c true if the process was registered, \c false if another process with the same name already existed
  */
-bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port);
 
 /**
  * @brief Get registered name for a process/port
@@ -322,9 +363,9 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
  * @details Returns the local process id of a previously registered process.
  * @param glb the global context.
  * @param atom_index the atom table index.
- * @returns a previously registered process local id.
+ * @returns a previously registered process local id or UNDEFINED_ATOM
  */
-int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
+term globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
  * @brief Unregister a process by name
@@ -490,17 +531,6 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
  * found.
  */
 Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name);
-
-/**
- * @brief remove a monitor
- *
- * @details iterate on the list of all processes and then on each monitor
- * to find a given monitor, and remove it
- * @param global the global context
- * @param ref_ticks the reference to the monitor
- * @return true if the monitor was found
- */
-bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
 
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)

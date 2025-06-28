@@ -31,6 +31,8 @@ start() ->
                 case atomvm:platform() of
                     emscripten ->
                         false;
+                    stm32 ->
+                        false;
                     _ ->
                         true
                 end;
@@ -57,6 +59,11 @@ get_non_networking_tests(OTPVersion) when
     (is_integer(OTPVersion) andalso OTPVersion >= 27) orelse OTPVersion =:= atomvm
 ->
     [test_sets | get_non_networking_tests(undefined)];
+% test_binary uses encode_hex/1 (OTP-24), encode_hex/2 (OTP-26)
+get_non_networking_tests(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 26) orelse OTPVersion =:= atomvm
+->
+    [test_binary | get_non_networking_tests(undefined)];
 get_non_networking_tests(_OTPVersion) ->
     [
         test_apply,
@@ -79,6 +86,13 @@ get_non_networking_tests(_OTPVersion) ->
 get_networking_tests(OTPVersion) when
     (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion =:= atomvm
 ->
-    [test_tcp_socket, test_udp_socket, test_net, test_ssl | get_networking_tests(undefined)];
+    [
+        test_tcp_socket,
+        test_udp_socket,
+        test_epmd,
+        test_net,
+        test_ssl
+        | get_networking_tests(undefined)
+    ];
 get_networking_tests(_OTPVersion) ->
-    [test_gen_udp, test_gen_tcp].
+    [test_gen_udp, test_gen_tcp, test_inet, test_net_kernel].

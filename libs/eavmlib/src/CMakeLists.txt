@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     avm_pubsub
     console
     emscripten
+    epmd
     esp
     esp_adc
     gpio
@@ -36,6 +37,7 @@ set(ERLANG_MODULES
     json_encoder
     ledc
     logger_manager
+    mdns
     network
     network_fsm
     pico
@@ -44,6 +46,7 @@ set(ERLANG_MODULES
     timer_manager
     timestamp_util
     uart
+    websocket
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})

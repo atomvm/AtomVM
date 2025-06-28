@@ -32,8 +32,13 @@ file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
     DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-add_custom_target(
-    uf2tool ALL
+add_custom_command(
+    OUTPUT uf2tool
     COMMAND rebar3 escriptize && cp _build/default/bin/uf2tool .
     VERBATIM
+)
+
+add_custom_target(
+    UF2Tool ALL
+    DEPENDS uf2tool
 )
