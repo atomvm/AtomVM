@@ -46,6 +46,8 @@ _Static_assert(TRY_CLAUSE_ATOM_INDEX == 11, "TRY_CLAUSE_ATOM_INDEX is 11 in jit/
 _Static_assert(BADMATCH_ATOM_INDEX == 31, "BADMATCH_ATOM_INDEX is 31 in jit/src/defaultatoms.hrl");
 _Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in jit/src/defaultatoms.hrl");
 _Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/src/defaultatoms.hrl");
+_Static_assert(UNSUPPORTED_ATOM_INDEX == 36, "UNSUPPORTED_ATOM_INDEX is 36 in jit/src/defaultatoms.hrl");
+_Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultatoms.hrl");
 
 #define HANDLE_ERROR()                                          \
     ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ctx->x[0]);  \
@@ -1072,6 +1074,102 @@ static int jit_term_find_map_pos(Context *ctx, term map, term key)
     return term_find_map_pos(map, key, ctx->global);
 }
 
+static int jit_bitstring_utf8_size(int c)
+{
+    size_t utf8_size;
+    if (UNLIKELY(!bitstring_utf8_size(c, &utf8_size))) {
+        return 0;
+    }
+    return utf8_size;
+}
+
+static int jit_bitstring_utf16_size(int c)
+{
+    size_t utf16_size;
+    if (UNLIKELY(!bitstring_utf16_size(c, &utf16_size))) {
+        return 0;
+    }
+    return utf16_size;
+}
+
+static term jit_term_create_empty_binary(Context *ctx, size_t len)
+{
+    return term_create_empty_binary(len, &ctx->heap, ctx->global);
+}
+
+static int jit_decode_flags_list(Context *ctx, JITState *jit_state, term flags)
+{
+    int flags_value = 0;
+    while (term_is_nonempty_list(flags)) {
+        switch (term_get_list_head(flags)) {
+            case NATIVE_ATOM:
+                flags_value |= NativeEndianInteger;
+                break;
+            case LITTLE_ATOM:
+                flags_value |= LittleEndianInteger;
+                break;
+            case SIGNED_ATOM:
+                flags_value |= SignedInteger;
+                break;
+            default:
+                set_error(ctx, jit_state, BADARG_ATOM);
+                return -1;
+        }
+        flags = term_get_list_tail(flags);
+    }
+    if (UNLIKELY(!term_is_nil(flags))) {
+        set_error(ctx, jit_state, BADARG_ATOM);
+        return -1;
+    }
+    return flags_value;
+}
+
+static int jit_bitstring_insert_utf8(term bin, size_t offset, int c)
+{
+    size_t byte_size;
+    bool result = bitstring_insert_utf8(bin, offset, c, &byte_size);
+    if (UNLIKELY(!result)) {
+        return 0;
+    }
+    return byte_size;
+}
+
+static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum BitstringFlags flags)
+{
+    size_t byte_size;
+    bool result = bitstring_insert_utf16(bin, offset, c, flags, &byte_size);
+    if (UNLIKELY(!result)) {
+        return 0;
+    }
+    return byte_size;
+}
+
+static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
+{
+    UNUSED(ctx);
+    uint8_t *dst = (uint8_t *) term_binary_data(bin);
+    size_t remaining = 0;
+    const uint8_t *str = module_get_str(jit_state->module, str_id, &remaining);
+    bitstring_copy_bits(dst, offset, str, len);
+}
+
+static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size)
+{
+    if (offset % 8) {
+        set_error(ctx, jit_state, UNSUPPORTED_ATOM);
+        return -1;
+    }
+    uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
+    const uint8_t *bin = (const uint8_t *) term_binary_data(src);
+    size_t binary_size = term_binary_size(src);
+    if (size != ALL_ATOM) {
+        binary_size = (size_t) term_to_int(size);
+    }
+    memcpy(dst, bin, binary_size);
+    return binary_size * 8;
+}
+
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1123,4 +1221,15 @@ const ModuleNativeInterface module_native_interface = {
     jit_term_sub_binary_heap_size,
     jit_term_maybe_create_sub_binary,
     jit_term_find_map_pos,
+    jit_bitstring_utf8_size,
+    jit_bitstring_utf16_size,
+    jit_term_create_empty_binary,
+    jit_decode_flags_list,
+    jit_bitstring_insert_utf8,
+    jit_bitstring_insert_utf16,
+    bitstring_insert_utf32,
+    bitstring_insert_integer,
+    term_maybe_unbox_int64,
+    jit_bitstring_copy_module_str,
+    jit_bitstring_copy_binary,
 };
