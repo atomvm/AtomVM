@@ -45,7 +45,6 @@
     jump_to_offset/1,
     if_block/3,
     jump_to_offset_if_equal/3,
-    jump_to_offset_if_not_equal/3,
     jump_to_offset_if_and_equal/4,
     jump_to_offset_if_and_not_equal/4,
     shift_right/3,
@@ -78,6 +77,8 @@
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
+
+-define(ASSERT(Expr), true = Expr).
 
 %% System V X86_64 calling conventions which we apply here.
 %% (Integer) parameters : rdi, rsi, rdx, rcx, r8, r9
@@ -143,13 +144,14 @@
 -type value() :: immediate() | vm_register() | x86_64_register().
 -type arg() :: ctx | jit_state | value() | {free, value()}.
 
+-type maybe_free_x86_64_register() :: x86_64_register() | {free, x86_64_register()}.
+
 -type condition() ::
     {x86_64_register(), '<', 0}
-    | {x86_64_register(), '==', 0}
-    | {{free, x86_64_register()}, '==', 0}
-    | {'(uint8_t)', x86_64_register(), '==', false}
-    | {'(uint8_t)', {free, x86_64_register()}, '==', false}
-    | {x86_64_register(), '&', non_neg_integer(), '!=', 0}.
+    | {maybe_free_x86_64_register(), '==', 0}
+    | {maybe_free_x86_64_register(), '!=', integer()}
+    | {'(uint8_t)', maybe_free_x86_64_register(), '==', false}
+    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -669,11 +671,23 @@ jump_to_offset(
 
 -spec if_block(state(), condition(), fun((state()) -> state())) -> state().
 if_block(
-    #state{stream_module = StreamModule, stream = Stream0, used_regs = UsedRegs0} = State0,
-    {Reg, '<', 0},
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    Cond,
     BlockFn
-) when ?IS_GPR(Reg) ->
+) ->
     Offset = StreamModule:offset(Stream0),
+    {State1, ReplaceDelta} = if_block_cond(State0, Cond),
+    OffsetAfterCond = StreamModule:offset(State1#state.stream),
+    State2 = BlockFn(State1),
+    Stream2 = State2#state.stream,
+    OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - OffsetAfterCond < 16#80),
+    Stream3 = StreamModule:replace(Stream2, Offset + ReplaceDelta, <<
+        (OffsetAfter - OffsetAfterCond)
+    >>),
+    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
+
+if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
     Code = <<
@@ -682,19 +696,11 @@ if_block(
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJGEOffset, <<
-        (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    merge_used_regs(State2#state{stream = Stream3}, UsedRegs0);
-if_block(
-    #state{stream_module = StreamModule, stream = Stream0, used_regs = UsedRegs0} = State0,
-    {RegA, '<', RegB},
-    BlockFn
+    {State1, byte_size(I1) + RelocJGEOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {RegA, '<', RegB}
 ) when ?IS_GPR(RegA) andalso ?IS_GPR(RegB) ->
-    Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:cmpq(RegB, RegA),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
     Code = <<
@@ -703,22 +709,15 @@ if_block(
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJGEOffset, <<
-        (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    merge_used_regs(State2#state{stream = Stream3}, UsedRegs0);
-if_block(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}, BlockFn
+    {State1, byte_size(I1) + RelocJGEOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
 ) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     Code = <<
@@ -726,38 +725,18 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJNZOffset, <<
-        (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
-if_block(
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJNZOffset};
+if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {RegOrTuple, '!=', Imm},
-    BlockFn
+    {RegOrTuple, '!=', Imm}
 ) when is_integer(Imm) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:cmpq(Imm, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
@@ -765,38 +744,37 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJZOffset, <<
-        (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
-if_block(
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset};
+if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(uint8_t)', RegOrTuple, '==', false},
-    BlockFn
+    {RegOrTuple, '==', Imm}
+) when is_integer(Imm) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpq(Imm, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(uint8_t)', RegOrTuple, '==', false}
 ) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:testb(Reg, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     Code = <<
@@ -804,38 +782,17 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJNZOffset, <<
-        (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
-    >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
-if_block(
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJNZOffset};
+if_block_cond(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        used_regs = UsedRegs0,
         available_regs = [Temp | _]
     } = State0,
-    {Reg, '&', Mask, '!=', Val},
-    BlockFn
-) ->
-    Offset = StreamModule:offset(Stream0),
+    {Reg, '&', Mask, '!=', Val}
+) when ?IS_GPR(Reg) ->
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andq(Mask, Temp),
     I3 = jit_x86_64_asm:cmpq(Val, Temp),
@@ -848,15 +805,37 @@ if_block(
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
-    OffsetAfter = StreamModule:offset(Stream2),
-    Stream3 = StreamModule:replace(
-        Stream2, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset, <<
-            (OffsetAfter - Offset - byte_size(Code))
-        >>
-    ),
-    merge_used_regs(State2#state{stream = Stream3}, UsedRegs0).
+    {State1, byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
+if_block_cond(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State0,
+    {{free, Reg} = RegTuple, '&', Mask, '!=', Val}
+) when ?IS_GPR(Reg) ->
+    I1 = jit_x86_64_asm:andq(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + byte_size(I2) + RelocJZOffset}.
+
+if_block_free_reg({free, Reg}, State0) ->
+    #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
+    {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
+    State0#state{
+        available_regs = AvR1,
+        available_fpregs = AvFR1,
+        used_regs = UR1
+    };
+if_block_free_reg(Reg, State0) when ?IS_GPR(Reg) ->
+    State0.
 
 merge_used_regs(#state{used_regs = UR0, available_regs = AvR0, available_fpregs = AvFR0} = State, [
     Reg | T
@@ -885,27 +864,6 @@ jump_to_offset_if_equal(
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
-        used_regs = UsedRegs
-    }}.
-
-jump_to_offset_if_not_equal(
-    #state{
-        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
-    } = State,
-    Reg,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     OffsetRef = make_ref(),
     Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
     Code = <<
