@@ -78,6 +78,8 @@
 
 -include("primitives.hrl").
 
+-define(ASSERT(Expr), true = Expr).
+
 %% System V X86_64 calling conventions which we apply here.
 %% (Integer) parameters : rdi, rsi, rdx, rcx, r8, r9
 %% (Integer) result : rax
@@ -149,7 +151,7 @@
     | {maybe_free_x86_64_register(), '==', 0}
     | {maybe_free_x86_64_register(), '!=', integer()}
     | {'(uint8_t)', maybe_free_x86_64_register(), '==', false}
-    | {x86_64_register(), '&', non_neg_integer(), '!=', 0}.
+    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -685,6 +687,7 @@ if_block(
     State2 = BlockFn(State1),
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJGEOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
@@ -706,6 +709,7 @@ if_block(
     State2 = BlockFn(State1),
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJGEOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
@@ -726,27 +730,16 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    State3 = BlockFn(State2),
+    Stream2 = State3#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJNZOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
+    merge_used_regs(State3#state{stream = Stream3}, State1#state.used_regs);
 if_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Imm},
@@ -765,27 +758,16 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    State3 = BlockFn(State2),
+    Stream2 = State3#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJZOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
+    merge_used_regs(State3#state{stream = Stream3}, State1#state.used_regs);
 if_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', Imm},
@@ -804,27 +786,16 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    State3 = BlockFn(State2),
+    Stream2 = State3#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJZOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
+    merge_used_regs(State3#state{stream = Stream3}, State1#state.used_regs);
 if_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(uint8_t)', RegOrTuple, '==', false},
@@ -843,37 +814,30 @@ if_block(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 =
-        case RegOrTuple of
-            {free, _} ->
-                #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
-                {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
-                State0#state{
-                    stream = Stream1,
-                    available_regs = AvR1,
-                    available_fpregs = AvFR1,
-                    used_regs = UR1
-                };
-            _ ->
-                State0#state{stream = Stream1}
-        end,
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    State3 = BlockFn(State2),
+    Stream2 = State3#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(I1) - byte_size(I2) < 16#80),
     Stream3 = StreamModule:replace(Stream2, Offset + byte_size(I1) + RelocJNZOffset, <<
         (OffsetAfter - Offset - byte_size(I1) - byte_size(I2))
     >>),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
+    merge_used_regs(State3#state{stream = Stream3}, State1#state.used_regs);
 if_block(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        used_regs = UsedRegs0,
         available_regs = [Temp | _]
     } = State0,
-    {Reg, '&', Mask, '!=', Val},
+    {RegOrTuple, '&', Mask, '!=', Val},
     BlockFn
 ) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andq(Mask, Temp),
@@ -886,16 +850,29 @@ if_block(
         I4/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    State2 = BlockFn(State1),
-    Stream2 = State2#state.stream,
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    State3 = BlockFn(State2),
+    Stream2 = State3#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
+    ?ASSERT(OffsetAfter - Offset - byte_size(Code) < 16#80),
     Stream3 = StreamModule:replace(
         Stream2, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset, <<
             (OffsetAfter - Offset - byte_size(Code))
         >>
     ),
-    merge_used_regs(State2#state{stream = Stream3}, UsedRegs0).
+    merge_used_regs(State3#state{stream = Stream3}, State1#state.used_regs).
+
+if_block_free_reg({free, Reg}, State0) ->
+    #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
+    {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
+    State0#state{
+        available_regs = AvR1,
+        available_fpregs = AvFR1,
+        used_regs = UR1
+    };
+if_block_free_reg(Reg, State0) when ?IS_GPR(Reg) ->
+    State0.
 
 merge_used_regs(#state{used_regs = UR0, available_regs = AvR0, available_fpregs = AvFR0} = State, [
     Reg | T
