@@ -21,7 +21,9 @@
 #ifndef _JIT_H_
 #define _JIT_H_
 
+#include "bitstring.h"
 #include "term.h"
+#include "term_typedef.h"
 
 #include <stdbool.h>
 
@@ -106,6 +108,17 @@ struct ModuleNativeInterface {
     size_t (* term_sub_binary_heap_size)(term *bin_ptr, size_t size);
     term (* term_maybe_create_sub_binary)(Context *ctx, term bin, size_t offset, size_t len);
     int (* term_find_map_pos)(Context *ctx, term map, term key);
+    int (* bitstring_utf8_size)(int c);
+    int (* bitstring_utf16_size)(int c);
+    term (* term_create_empty_binary)(Context *ctx, size_t len);
+    int (* decode_flags_list)(Context *ctx, JITState *jit_state, term l);
+    int (* bitstring_insert_utf8)(term bin, size_t offset, int c);
+    int (* bitstring_insert_utf16)(term bin, size_t offset, int c, enum BitstringFlags flags);
+    bool (* bitstring_insert_utf32)(term bin, size_t offset, uint32_t c, enum BitstringFlags flags);
+    bool (* bitstring_insert_integer)(term bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags flags);
+    avm_int64_t (* term_maybe_unbox_int64)(term i);
+    void (* bitstring_copy_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
+    int (* bitstring_copy_binary)(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
