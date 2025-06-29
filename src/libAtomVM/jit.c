@@ -1169,6 +1169,43 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
     return binary_size * 8;
 }
 
+static Context *jit_apply(Context *ctx, JITState *jit_state, term module, term function, unsigned int arity)
+{
+    atom_index_t module_name = term_to_atom_index(module);
+    atom_index_t function_name = term_to_atom_index(function);
+
+    term native_return;
+    if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+        PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return);
+        ctx->x[0] = native_return;
+        if (ctx->heap.root->next) {
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                return jit_raise_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            }
+        }
+        return jit_return(ctx, jit_state);
+    } else {
+        Module *target_module = globalcontext_get_module(ctx->global, module_name);
+        if (IS_NULL_PTR(target_module)) {
+            set_error(ctx, jit_state, UNDEF_ATOM);
+            HANDLE_ERROR();
+        }
+        int target_label = module_search_exported_function(target_module, function_name, arity);
+        if (target_label == 0) {
+            set_error(ctx, jit_state, UNDEF_ATOM);
+            HANDLE_ERROR();
+        }
+        jit_state->module = target_module;
+        if (jit_state->module->native_code) {
+            // catch label is in native code.
+            jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
+        } else {
+            jit_state->continuation = jit_state->module->labels[target_label];
+        }
+        return ctx;
+    }
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1231,4 +1268,5 @@ const ModuleNativeInterface module_native_interface = {
     term_maybe_unbox_int64,
     jit_bitstring_copy_module_str,
     jit_bitstring_copy_binary,
+    jit_apply,
 };

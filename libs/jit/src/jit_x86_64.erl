@@ -1120,6 +1120,7 @@ set_args(
             (jit_state) -> ?JITSTATE_REG;
             (Reg) when is_atom(Reg) -> Reg;
             (Imm) when is_integer(Imm) -> imm;
+            ({ptr, Reg}) -> Reg;
             ({x_reg, _}) -> ?CTX_REG;
             ({y_reg, _}) -> ?CTX_REG;
             ({fp_reg, _}) -> ?CTX_REG;

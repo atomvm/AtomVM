@@ -1011,7 +1011,17 @@ first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     ]),
     first_pass(Rest2, MMod, MSt3, State0);
 % 112
-% first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Arity, Rest1} = decode_literal(Rest0),
+    {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
+    {MSt2, Function} = read_any_xreg(Arity + 1, MMod, MSt1),
+    ?TRACE("OP_APPLY ~p, ~p, ~p\n", [Arity, Module, Function]),
+    MSt3 = verify_is_atom(Module, 0, MMod, MSt2),
+    MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
+    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_APPLY, [
+        ctx, jit_state, {free, Module}, {free, Function}, Arity
+    ]),
+    first_pass(Rest1, MMod, MSt5, State0);
 % 113
 % first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 114
@@ -1741,8 +1751,8 @@ first_pass_bs_create_bin_compute_size(
 first_pass_bs_create_bin_compute_size(
     utf32, Src, _Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
-    {MSt1, State1} = verify_is_integer(Src, Fail, MMod, MSt0, State0),
-    {MSt1, AccLiteralSize0 + 32, AccSizeReg0, State1};
+    MSt1 = verify_is_integer(Src, Fail, MMod, MSt0),
+    {MSt1, AccLiteralSize0 + 32, AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
     integer, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
@@ -1751,9 +1761,9 @@ first_pass_bs_create_bin_compute_size(
         string, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State1
     );
 first_pass_bs_create_bin_compute_size(
-    string, _Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State1
+    string, _Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State0
 ) ->
-    {MSt2, State2} = verify_is_integer(Size, Fail, MMod, MSt1, State1),
+    MSt2 = verify_is_integer(Size, Fail, MMod, MSt1),
     {MSt3, SizeValue} = term_to_int(Size, 0, MMod, MSt2),
     MSt5 =
         if
@@ -1772,16 +1782,16 @@ first_pass_bs_create_bin_compute_size(
         end,
     if
         is_integer(SizeValue) ->
-            {MSt5, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State2};
+            {MSt5, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State0};
         true ->
             MSt6 = MMod:mul(MSt5, SizeValue, SegmentUnit),
             case AccSizeReg0 of
                 undefined ->
-                    {MSt6, AccLiteralSize0, SizeValue, State2};
+                    {MSt6, AccLiteralSize0, SizeValue, State0};
                 _ ->
                     MSt7 = MMod:add(MSt6, AccSizeReg0, SizeValue),
                     MSt8 = MMod:free_native_registers(MSt7, [SizeValue]),
-                    {MSt8, AccLiteralSize0, AccSizeReg0, State2}
+                    {MSt8, AccLiteralSize0, AccSizeReg0, State0}
             end
     end;
 first_pass_bs_create_bin_compute_size(
@@ -2375,32 +2385,31 @@ verify_is_match_state_and_get_ptr(MMod, MSt0, {free, Reg}) ->
     ),
     {MSt4, Reg}.
 
-verify_is_immediate(Arg1, ImmediateTag, _FailLabel, _MMod, MSt0, State0) when
-    is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
-->
-    {MSt0, State0};
-verify_is_immediate(Arg1, ImmediateTag, 0, MMod, MSt0, #state{labels = Labels0} = State0) ->
-    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
-    {MSt2, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
-        MSt1, Reg, ?TERM_IMMED_TAG_MASK, ImmediateTag
-    ),
-    MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?BADARG_ATOM
-    ]),
-    {MSt4, ContinueOffset} = MMod:offset(MSt3, [JumpToken0]),
-    Labels1 = [{OffsetRef0, ContinueOffset} | Labels0],
-    MSt5 = MMod:free_native_registers(MSt4, [Reg]),
-    {MSt5, State0#state{labels = Labels1}};
-verify_is_immediate(Arg1, ImmediateTag, FailLabel, MMod, MSt0, State0) ->
-    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
-    MSt2 = MMod:cond_jump_to_label(
-        MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, FailLabel
-    ),
-    MSt3 = MMod:free_native_registers(MSt2, [Reg]),
-    {MSt3, State0}.
+verify_is_immediate(Arg1, ImmediateTag, FailLabel, MMod, MSt0) ->
+    verify_is_immediate(Arg1, ?TERM_IMMED_TAG_MASK, ImmediateTag, FailLabel, MMod, MSt0).
 
-verify_is_integer(Arg1, Fail, MMod, MSt0, State0) ->
-    verify_is_immediate(Arg1, ?TERM_INTEGER_TAG, Fail, MMod, MSt0, State0).
+verify_is_immediate(Arg1, ImmediateMask, ImmediateTag, _FailLabel, _MMod, MSt0) when
+    is_integer(Arg1) andalso Arg1 band ImmediateMask =:= ImmediateTag
+->
+    MSt0;
+verify_is_immediate(Arg1, ImmediateMask, ImmediateTag, 0, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
+    MMod:if_block(MSt1, {{free, Reg}, '&', ImmediateMask, '!=', ImmediateTag}, fun(BSt0) ->
+        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, ?BADARG_ATOM
+        ])
+    end);
+verify_is_immediate(Arg1, ImmediateMask, ImmediateTag, FailLabel, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
+    MMod:cond_jump_to_label(
+        MSt1, {{free, Reg}, '&', ImmediateMask, '!=', ImmediateTag}, FailLabel
+    ).
+
+verify_is_integer(Arg1, Fail, MMod, MSt0) ->
+    verify_is_immediate(Arg1, ?TERM_INTEGER_TAG, Fail, MMod, MSt0).
+
+verify_is_atom(Arg1, Fail, MMod, MSt0) ->
+    verify_is_immediate(Arg1, ?TERM_IMMED2_TAG_MASK, ?TERM_IMMED2_ATOM, Fail, MMod, MSt0).
 
 verify_is_immediate_or_boxed(Arg1, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0, State0) when
     is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
