@@ -49,26 +49,26 @@ _Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/sr
 _Static_assert(UNSUPPORTED_ATOM_INDEX == 36, "UNSUPPORTED_ATOM_INDEX is 36 in jit/src/defaultatoms.hrl");
 _Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultatoms.hrl");
 
-#define HANDLE_ERROR()                                          \
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ctx->x[0]);  \
+#define HANDLE_ERROR()                                                       \
+    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ctx->x[0]); \
     return jit_handle_error(ctx, jit_state);
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)           \
-    if (term_is_invalid_term(return_value)) {                   \
-        if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
-            HANDLE_ERROR();                                     \
-        } else {                                                \
-            return jit_schedule_wait_cp(ctx, jit_state);        \
-        }                                                       \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)    \
+    if (term_is_invalid_term(return_value)) {            \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {   \
+            HANDLE_ERROR();                              \
+        } else {                                         \
+            return jit_schedule_wait_cp(ctx, jit_state); \
+        }                                                \
     }
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)      \
-    if (term_is_invalid_term(return_value)) {                   \
-        if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
-            HANDLE_ERROR();                                     \
-        } else {                                                \
-            return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state);        \
-        }                                                       \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)                      \
+    if (term_is_invalid_term(return_value)) {                                   \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {                          \
+            HANDLE_ERROR();                                                     \
+        } else {                                                                \
+            return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
+        }                                                                       \
     }
 
 static void destroy_extended_registers(Context *ctx, unsigned int live)
@@ -416,8 +416,8 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
             set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
             return false;
         }
-    // otherwise, there is enough space for the needed heap, but there might
-    // more more than necessary.  In that case, try to shrink the heap.
+        // otherwise, there is enough space for the needed heap, but there might
+        // more more than necessary.  In that case, try to shrink the heap.
     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
         TRIM_LIVE_REGS(live_registers);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -482,7 +482,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
         return term_make_boxed_int64(value, &heap);
     } else
 #endif
-    if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
+        if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
             ctx->x[0] = ERROR_ATOM;
@@ -909,83 +909,83 @@ static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 
 static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        #pragma STDC FENV_ACCESS ON
-        feclearexcept(FE_OVERFLOW);
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+    feclearexcept(FE_OVERFLOW);
+#endif
     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        if (fetestexcept(FE_OVERFLOW)) {
-            return false;
-        }
-    #else
-        if (!isfinite(ctx->fr[freg3])) {
-            return false;
-        }
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    if (fetestexcept(FE_OVERFLOW)) {
+        return false;
+    }
+#else
+    if (!isfinite(ctx->fr[freg3])) {
+        return false;
+    }
+#endif
     return true;
 }
 
 static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 {
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        #pragma STDC FENV_ACCESS ON
-        feclearexcept(FE_OVERFLOW);
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+    feclearexcept(FE_OVERFLOW);
+#endif
     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        if (fetestexcept(FE_OVERFLOW)) {
-            return false;
-        }
-    #else
-        if (!isfinite(ctx->fr[freg3])) {
-            return false;
-        }
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    if (fetestexcept(FE_OVERFLOW)) {
+        return false;
+    }
+#else
+    if (!isfinite(ctx->fr[freg3])) {
+        return false;
+    }
+#endif
     return true;
 }
 
 static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 {
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        #pragma STDC FENV_ACCESS ON
-        feclearexcept(FE_OVERFLOW);
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+    feclearexcept(FE_OVERFLOW);
+#endif
     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        if (fetestexcept(FE_OVERFLOW)) {
-            return false;
-        }
-    #else
-        if (!isfinite(ctx->fr[freg3])) {
-            return false;
-        }
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    if (fetestexcept(FE_OVERFLOW)) {
+        return false;
+    }
+#else
+    if (!isfinite(ctx->fr[freg3])) {
+        return false;
+    }
+#endif
     return true;
 }
 
 static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 {
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        #pragma STDC FENV_ACCESS ON
-        feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+    feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
+#endif
     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
-    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-        if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
-            return false;
-        }
-    #else
-        if (!isfinite(ctx->fr[freg3])) {
-            return false;
-        }
-    #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+    if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
+        return false;
+    }
+#else
+    if (!isfinite(ctx->fr[freg3])) {
+        return false;
+    }
+#endif
     return true;
 }
 
 static void jit_fnegate(Context *ctx, int freg1, int freg2)
 {
-    ctx->fr[freg2] = - ctx->fr[freg1];
+    ctx->fr[freg2] = -ctx->fr[freg1];
 }
 
 static bool jit_catch_end(Context *ctx, JITState *jit_state)
@@ -1169,6 +1169,42 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
     return binary_size * 8;
 }
 
+static Context *jit_apply(Context *ctx, JITState *jit_state, term module, term function, unsigned int arity)
+{
+    atom_index_t module_name = term_to_atom_index(module);
+    atom_index_t function_name = term_to_atom_index(function);
+
+    term native_return;
+    if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
+        PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return);
+        ctx->x[0] = native_return;
+        if (ctx->heap.root->next) {
+            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                return jit_raise_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            }
+        }
+        return jit_return(ctx, jit_state);
+    } else {
+        Module *target_module = globalcontext_get_module(ctx->global, module_name);
+        if (IS_NULL_PTR(target_module)) {
+            set_error(ctx, jit_state, UNDEF_ATOM);
+            HANDLE_ERROR();
+        }
+        int target_label = module_search_exported_function(target_module, function_name, arity);
+        if (target_label == 0) {
+            set_error(ctx, jit_state, UNDEF_ATOM);
+            HANDLE_ERROR();
+        }
+        jit_state->module = target_module;
+        if (jit_state->module->native_code) {
+            // catch label is in native code.
+            jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
+        } else {
+            jit_state->continuation = jit_state->module->labels[target_label];
+        }
+        return ctx;
+    }
+}
 
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
@@ -1232,4 +1268,5 @@ const ModuleNativeInterface module_native_interface = {
     term_maybe_unbox_int64,
     jit_bitstring_copy_module_str,
     jit_bitstring_copy_binary,
+    jit_apply,
 };
