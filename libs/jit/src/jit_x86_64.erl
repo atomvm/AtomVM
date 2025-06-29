@@ -1074,10 +1074,11 @@ call_func_ptr(
                 StreamModule:append(Stream6, PostCall1)
         end,
     % If rax is in used regs, save it to another temporary register
+    AvailableRegs1 = FreeRegs ++ AvailableRegs0,
     {Stream8, ResultReg} =
         case lists:member(rax, SavedRegs) of
             true ->
-                [Temp | _] = AvailableRegs0,
+                [Temp | _] = AvailableRegs1,
                 {StreamModule:append(Stream7, jit_x86_64_asm:movq(rax, Temp)), Temp};
             false ->
                 {Stream7, rax}
@@ -1089,7 +1090,6 @@ call_func_ptr(
         Stream8,
         lists:reverse(SavedRegs)
     ),
-    AvailableRegs1 = FreeRegs ++ AvailableRegs0,
     AvailableRegs2 = lists:delete(ResultReg, AvailableRegs1),
     AvailableRegs3 = ?AVAILABLE_REGS -- (?AVAILABLE_REGS -- AvailableRegs2),
     AvailableFP1 = FreeRegs ++ AvailableFP0,

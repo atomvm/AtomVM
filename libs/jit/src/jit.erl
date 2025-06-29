@@ -1817,7 +1817,8 @@ first_pass_bs_create_bin_compute_size(
         AtomType =:= private_append) andalso is_integer(Size) andalso Size > 0
 ->
     {MSt1, State1} = verify_is_binary(Src, Fail, MMod, MSt0, State0),
-    {MSt1, AccLiteralSize0 + (Size * SegmentUnit), AccSizeReg0, State1};
+    {MSt2, SizeValue} = term_to_int(Size, 0, MMod, MSt1),
+    {MSt2, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State1};
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
@@ -1941,7 +1942,7 @@ first_pass_bs_create_bin_insert_value(
     AtomType, _Flags, Src, Size, _SegmentUnit, _Fail, CreatedBin, Offset, MMod, MSt0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
     {MSt1, SizeValue} = MMod:call_primitive(MSt0, ?PRIM_BITSTRING_COPY_BINARY, [
-        ctx, jit_state, CreatedBin, Offset, {free, Src}, Size
+        ctx, jit_state, CreatedBin, Offset, Src, Size
     ]),
     MSt2 = MMod:if_block(MSt1, {SizeValue, '<', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_HANDLE_ERROR, [
