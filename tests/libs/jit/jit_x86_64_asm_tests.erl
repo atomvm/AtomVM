@@ -225,6 +225,32 @@ addq_test_() ->
         )
     ].
 
+imulq_test_() ->
+    [
+        % imulq imm8, reg
+        ?_assertEqual(<<16#48, 16#6B, 16#C0, 16#05>>, jit_x86_64_asm:imulq(5, rax)),
+        ?_assertEqual(<<16#4D, 16#6B, 16#D2, 16#7F>>, jit_x86_64_asm:imulq(127, r10)),
+        ?_assertEqual(<<16#48, 16#6B, 16#C9, 16#80>>, jit_x86_64_asm:imulq(-128, rcx)),
+        % imulq imm32, reg
+        ?_assertEqual(
+            <<16#48, 16#69, 16#C0, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:imulq(16#12345678, rax)
+        ),
+        ?_assertEqual(
+            <<16#4D, 16#69, 16#D2, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:imulq(16#12345678, r10)
+        ),
+        ?_assertEqual(
+            <<16#48, 16#69, 16#C9, 16#88, 16#A9, 16#CB, 16#ED>>,
+            jit_x86_64_asm:imulq(-16#12345678, rcx)
+        ),
+        % imulq reg, reg (register to register)
+        ?_assertEqual(<<16#48, 16#0F, 16#AF, 16#C1>>, jit_x86_64_asm:imulq(rcx, rax)),
+        ?_assertEqual(<<16#49, 16#0F, 16#AF, 16#C2>>, jit_x86_64_asm:imulq(r10, rax)),
+        ?_assertEqual(<<16#4C, 16#0F, 16#AF, 16#D1>>, jit_x86_64_asm:imulq(rcx, r10)),
+        ?_assertEqual(<<16#4D, 16#0F, 16#AF, 16#D2>>, jit_x86_64_asm:imulq(r10, r10))
+    ].
+
 cmpl_test_() ->
     [
         ?_assertEqual(<<16#83, 16#F8, 16#42>>, jit_x86_64_asm:cmpl(16#42, rax)),
