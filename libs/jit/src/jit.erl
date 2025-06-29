@@ -1348,24 +1348,23 @@ first_pass(<<?OP_BS_GET_TAIL, Rest0/binary>>, MMod, MSt0, State0) ->
     {Live, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_BS_GET_TAIL ~p, ~p, ~p\n", [Src, Dest, Live]),
     {MSt3, MatchStateReg0} = MMod:move_to_native_register(MSt2, Src),
-    {MSt4, State1} = validate_is_match_state(MMod, MSt3, MatchStateReg0, State0),
-    MSt5 = MMod:and_(MSt4, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt6, BSBinaryReg} = MMod:get_array_element(MSt5, MatchStateReg0, 1),
-    {MSt7, BSOffsetReg} = MMod:get_array_element(MSt6, MatchStateReg0, 2),
-    MSt8 = MMod:free_native_registers(MSt7, [MatchStateReg0]),
-    MSt9 = MMod:and_(MSt8, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt10, ResultTerm, NewMatchState, State2} = do_get_tail(
-        Src, Live, BSOffsetReg, BSBinaryReg, MMod, MSt9, State1
+    {MSt4, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt3, {free, MatchStateReg0}),
+    {MSt5, BSBinaryReg} = MMod:get_array_element(MSt4, MatchStateRegPtr, 1),
+    {MSt6, BSOffsetReg} = MMod:get_array_element(MSt5, MatchStateRegPtr, 2),
+    MSt7 = MMod:free_native_registers(MSt6, [MatchStateRegPtr]),
+    MSt8 = MMod:and_(MSt7, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt9, ResultTerm, NewMatchState, State2} = do_get_tail(
+        Src, Live, BSOffsetReg, BSBinaryReg, MMod, MSt8, State0
     ),
-    MSt11 = MMod:free_native_registers(MSt10, [BSBinaryReg]),
-    MSt12 = MMod:move_to_vm_register(MSt11, ResultTerm, Dest),
-    MSt13 = MMod:free_native_registers(MSt12, [ResultTerm, Dest]),
-    {MSt14, MatchStateReg1} = MMod:move_to_native_register(MSt13, NewMatchState),
-    MSt15 = MMod:and_(MSt14, MatchStateReg1, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt16 = MMod:move_to_array_element(MSt15, BSOffsetReg, MatchStateReg1, 2),
-    MSt17 = MMod:free_native_registers(MSt16, [MatchStateReg1, BSOffsetReg]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt17),
-    first_pass(Rest3, MMod, MSt17, State2);
+    MSt10 = MMod:free_native_registers(MSt9, [BSBinaryReg]),
+    MSt11 = MMod:move_to_vm_register(MSt10, ResultTerm, Dest),
+    MSt12 = MMod:free_native_registers(MSt11, [ResultTerm, Dest]),
+    {MSt13, MatchStateReg1} = MMod:move_to_native_register(MSt12, NewMatchState),
+    MSt14 = MMod:and_(MSt13, MatchStateReg1, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt15 = MMod:move_to_array_element(MSt14, BSOffsetReg, MatchStateReg1, 2),
+    MSt16 = MMod:free_native_registers(MSt15, [MatchStateReg1, BSOffsetReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt16),
+    first_pass(Rest3, MMod, MSt16, State2);
 % 166
 first_pass(<<?OP_BS_START_MATCH3, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1414,12 +1413,11 @@ first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Pos, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
     ?TRACE("OP_BS_SET_POSITION ~p, ~p\n", [Src, Pos]),
     {MSt3, MatchStateReg} = MMod:move_to_native_register(MSt2, Src),
-    {MSt4, State1} = validate_is_match_state(MMod, MSt3, MatchStateReg, State0),
+    {MSt4, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt3, {free, MatchStateReg}),
     {MSt5, PosVal} = term_to_int(Pos, 0, MMod, MSt4),
-    MSt6 = MMod:and_(MSt5, MatchStateReg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt7 = MMod:move_to_array_element(MSt6, PosVal, MatchStateReg, 2),
-    MSt8 = MMod:free_native_registers(MSt7, [PosVal, MatchStateReg]),
-    first_pass(Rest2, MMod, MSt8, State1);
+    MSt6 = MMod:move_to_array_element(MSt5, PosVal, MatchStateRegPtr, 2),
+    MSt7 = MMod:free_native_registers(MSt6, [PosVal, MatchStateRegPtr]),
+    first_pass(Rest2, MMod, MSt7, State0);
 % 169
 first_pass(<<?OP_SWAP, Rest0/binary>>, MMod, MSt0, State) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2345,29 +2343,31 @@ validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
     Labels1 = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset} | Labels0],
     {MSt7, State0#state{labels = Labels1}}.
 
-validate_is_match_state(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
-    {MSt1, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
-        MSt0, Reg, ?TERM_PRIMARY_MASK, ?TERM_PRIMARY_BOXED
-    ),
-    ErrorOffset = MMod:offset(MSt1),
-    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?BADARG_ATOM
-    ]),
-    {MSt3, ContinueOffset} = MMod:offset(MSt2, [JumpToken0]),
-    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt5, BoxTag} = MMod:get_array_element(MSt4, Reg, 0),
-    MSt6 = MMod:or_(MSt5, Reg, ?TERM_PRIMARY_BOXED),
-    {MSt7, OffsetRef1, _JumpToken1} = MMod:jump_to_offset_if_and_not_equal(
-        MSt6, {free, BoxTag}, ?TERM_BOXED_TAG_MASK, ?TERM_BOXED_BIN_MATCH_STATE
-    ),
-    Labels1 = [{OffsetRef0, ContinueOffset}, {OffsetRef1, ErrorOffset} | Labels0],
-    {MSt7, State0#state{labels = Labels1}}.
+verify_is_boxed(MMod, MSt0, Reg) ->
+    MMod:if_block(MSt0, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BlockSt) ->
+        MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, ?BADARG_ATOM
+        ])
+    end).
 
-validate_is_immediate(Arg1, ImmediateTag, _FailLabel, _MMod, MSt0, State0) when
+%% @doc verify_match_state and return the term_ptr for Reg.
+%% Actually, this means Reg isn't restored with OR ?TERM_PRIMARY_BOXED
+verify_is_match_state_and_get_ptr(MMod, MSt0, {free, Reg}) ->
+    MSt1 = verify_is_boxed(MMod, MSt0, Reg),
+    MSt2 = MMod:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt3, BoxTag} = MMod:get_array_element(MSt2, Reg, 0),
+    MSt4 = MMod:if_block(MSt3, {{free, BoxTag}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_BIN_MATCH_STATE}, fun(BlockSt) ->
+        MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, ?BADARG_ATOM
+        ])
+    end),
+    {MSt4, Reg}.
+
+verify_is_immediate(Arg1, ImmediateTag, _FailLabel, _MMod, MSt0, State0) when
     is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
 ->
     {MSt0, State0};
-validate_is_immediate(Arg1, ImmediateTag, 0, MMod, MSt0, #state{labels = Labels0} = State0) ->
+verify_is_immediate(Arg1, ImmediateTag, 0, MMod, MSt0, #state{labels = Labels0} = State0) ->
     {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
     {MSt2, OffsetRef0, JumpToken0} = MMod:jump_to_offset_if_and_equal(
         MSt1, Reg, ?TERM_IMMED_TAG_MASK, ImmediateTag
@@ -2379,7 +2379,7 @@ validate_is_immediate(Arg1, ImmediateTag, 0, MMod, MSt0, #state{labels = Labels0
     Labels1 = [{OffsetRef0, ContinueOffset} | Labels0],
     MSt5 = MMod:free_native_registers(MSt4, [Reg]),
     {MSt5, State0#state{labels = Labels1}};
-validate_is_immediate(Arg1, ImmediateTag, FailLabel, MMod, MSt0, State0) ->
+verify_is_immediate(Arg1, ImmediateTag, FailLabel, MMod, MSt0, State0) ->
     {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
     MSt2 = MMod:cond_jump_to_label(
         MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, FailLabel
@@ -2388,7 +2388,7 @@ validate_is_immediate(Arg1, ImmediateTag, FailLabel, MMod, MSt0, State0) ->
     {MSt3, State0}.
 
 verify_is_integer(Arg1, Fail, MMod, MSt0, State0) ->
-    validate_is_immediate(Arg1, ?TERM_INTEGER_TAG, Fail, MMod, MSt0, State0).
+    verify_is_immediate(Arg1, ?TERM_INTEGER_TAG, Fail, MMod, MSt0, State0).
 
 verify_is_immediate_or_boxed(Arg1, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0, State0) when
     is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
