@@ -23,6 +23,7 @@ escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
     --root_dir "@CMAKE_BINARY_DIR@/../../../.." \
     --config "@CMAKE_BINARY_DIR@/mkimage.config" \
     --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img" \
+    --boot "@CMAKE_BINARY_DIR@/../../../../build/libs/esp32boot/@BOOT_LIBS@" \
     "$@"
 
 if (test ${@} = "--help"); then
@@ -33,5 +34,5 @@ fi
 echo "============================================="
 
 echo ""
-echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image written to:"
+echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image with @BOOT_LIBS@ libraries written to:"
 echo "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img"

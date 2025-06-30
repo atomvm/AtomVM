@@ -23,7 +23,7 @@ set -e
 
 : "${FLASH_BAUD_RATE:=115200}"
 : "${FLASH_SERIAL_PORT:=/dev/ttyUSB0}"
-: "${FLASH_OFFSET:=0x210000}"
+: "${FLASH_OFFSET:=@AVM_APP_OFFSET@}"
 
 ESP_TOOL=`which esptool.py`
 if [ -z ${ESP_TOOL} ]; then
