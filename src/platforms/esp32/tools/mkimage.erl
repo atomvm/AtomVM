@@ -33,30 +33,18 @@ do_main(Argv) ->
             print_help(),
             0;
         _ ->
-            case maps:get(root_dir, Opts, undefined) of
-                undefined ->
-                    print_help(
-                        "root_dir option is required and should be the root directory of the AtomVM checkout"
-                    ),
-                    255;
-                RootDir ->
-                    try
-                        Config = load_config(maps:get(config, Opts, "mkimage.config")),
-                        BuildDir = get_build_dir(Opts, RootDir),
-                        BootFile = BuildDir ++ "/libs/esp32boot/esp32boot.avm",
-                        mkimage(
-                            RootDir,
-                            maps:get(boot, Opts, BootFile),
-                            maps:get(out, Opts, "atomvm.img"),
-                            maps:get(segments, Config)
-                        ),
-                        0
-                    catch
-                        _:Exception:Stacktrace ->
-                            io:format("Stacktrace: ~p~n", [Stacktrace]),
-                            print_help(io_lib:format("~s", [to_string(Exception)])),
-                            255
-                    end
+            try
+                Config = load_config(maps:get(config, Opts, "mkimage.config")),
+                mkimage(
+                    maps:get(out, Opts, "atomvm.img"),
+                    maps:get(segments, Config)
+                ),
+                0
+            catch
+                _:Exception:Stacktrace ->
+                    io:format("Stacktrace: ~p~n", [Stacktrace]),
+                    print_help(io_lib:format("~s", [to_string(Exception)])),
+                    255
             end
     end.
 
@@ -67,12 +55,8 @@ parse_args(Argv) ->
 %% @private
 parse_args([], {Opts, Args}) ->
     {Opts, lists:reverse(Args)};
-parse_args(["--boot", Path | T], {Opts, Args}) ->
-    parse_args(T, {Opts#{boot => Path}, Args});
 parse_args(["--out", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{out => Path}, Args});
-parse_args(["--root_dir", Path | T], {Opts, Args}) ->
-    parse_args(T, {Opts#{root_dir => Path}, Args});
 parse_args(["--config", Path | T], {Opts, Args}) ->
     parse_args(T, {Opts#{config => Path}, Args});
 parse_args(["--help" | T], {Opts, Args}) ->
@@ -95,9 +79,6 @@ print_help() ->
         "~n"
         "The following options are supported:"
         "~n"
-        "    * --root_dir <path>    Path to the root directory of the AtomVM git checkout~n"
-        "    * --boot <path>        Path to a esp32boot.avm file~n"
-        "    * --build_dir <path>   Path to the AtomVM build directory (defaults to root_dir/build, if unspecifeid)~n"
         "    * --out <path>         Output path for AtomVM image file~n"
         "    * --config <path>      Path to mkimage configuration file~n"
         "    * --help               Print this help"
@@ -120,19 +101,19 @@ load_config(ConfigFile) ->
     end.
 
 %% @private
-get_build_dir(Opts, RootDir) ->
-    case maps:get(build_dir, Opts, undefined) of
-        undefined ->
-            RootDir ++ "/build";
-        BuildDir ->
-            BuildDir
-    end.
-
-%% @private
-mkimage(RootDir, BootFile, OutputFile, Segments) ->
+mkimage(OutputFile, Segments) ->
     io:format("Writing output to ~s~n", [OutputFile]),
-    io:format("boot file is ~s~n", [BootFile]),
+    [BootLib] = maps:get(path, lists:last(Segments)),
+    io:format("boot file is ~s~n", [BootLib]),
     io:format("=============================================~n"),
+    case filename:basename(filename:absname(BootLib)) of
+        "NONE" ->
+            print_help("No esp32boot library configured, an image cannot be created."),
+            exit(254);
+        _ ->
+            ok
+    end,
+
     case file:open(OutputFile, [write, binary]) of
         {ok, Fout} ->
             lists:foldl(
@@ -161,12 +142,7 @@ mkimage(RootDir, BootFile, OutputFile, Segments) ->
                                     )
                             end
                     end,
-                    SegmentPaths = [
-                        replace(
-                            "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
-                        )
-                     || SegmentPath <- maps:get(path, Segment)
-                    ],
+                    SegmentPaths = maps:get(path, Segment),
                     case try_read(SegmentPaths) of
                         {ok, Data} ->
                             file:write(Fout, Data),
@@ -205,8 +181,3 @@ try_read([Path | Rest]) ->
 %% @private
 from_hex([$0, $x | Bits]) ->
     erlang:list_to_integer(Bits, 16).
-
-%% @private
-replace(VariableName, Value, String) ->
-    String0 = string:replace(String, io_lib:format("${~s}", [VariableName]), Value),
-    string:replace(String0, io_lib:format("$[~s]", [VariableName]), Value).

@@ -1,8 +1,7 @@
-#!/usr/bin/env bash
 #
 # This file is part of AtomVM.
 #
-# Copyright 2020-2021 Fred Dushin <fred@dushin.net>
+# Copyright 2025 Winford (Uncle Grumpy) <winford@object.stream>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +18,17 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-THIS_DIR="$(cd $(dirname $0) && pwd)"
-ROOT_DIR="$(cd "${THIS_DIR}/../../../.." && pwd)"
-
-FLASH_OFFSET="@BOOTLOADER_OFFSET@" ${ROOT_DIR}/src/platforms/esp32/build/flash.sh "$@" "${ROOT_DIR}/src/platforms/esp32/build/atomvm-@CONFIG_IDF_TARGET@@ATOMVM_FLAVOR@.img"
+partition_table_get_partition_info(app_offset "--partition-name main.avm" "offset")
+set(AVM_APP_OFFSET "${app_offset}")
+# 0x210000 = standard Erlang only partition layout (partitions.csv)
+if ("${app_offset}" STREQUAL "0x210000")
+    set(BOOT_LIBS "esp32boot.avm")
+    set(ATOMVM_FLAVOR "")
+# 0x250000 = Elixir-supported partition layout (partitions-elixir.csv)
+elseif ("${app_offset}" STREQUAL "0x250000")
+    set(BOOT_LIBS "elixir_esp32boot.avm")
+    set(ATOMVM_FLAVOR "-elixir")
+else()
+    set(BOOT_LIBS "NONE")
+    set(ATOMVM_FLAVOR "")
+endif()

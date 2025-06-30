@@ -239,29 +239,31 @@ $ cd <atomvm-source-tree-root>
 $ cd src/platforms/esp32
 ```
 
-If you want to build an image with Elixir modules included you must first have a version of Elixir installed that is compatible with your OTP version, then add the following line to sdkconfig.defaults:
+Start by configuring the default build configuration of local `sdkconfig` for your target device:
+
 ```shell
-CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions-elixir.csv"
+$ idf.py set-target ${CHIP}
 ```
 
-Start by updating the default build configuration of local `sdkconfig` file via the `idf.py reconfigure` command:
+If you want to build a deployment with Elixir modules included you must first have a version of Elixir
+installed that is compatible with your OTP version, and instead use the command:
 
 ```shell
-$ idf.py set-target esp32
-$ idf.py reconfigure
+idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target ${CHIP}
 ```
 
 ```{tip}
-For those familiar with esp-idf the build can be customized using `menuconfig` instead of
-`reconfigure`:
+For those familiar with esp-idf the build can be customized using `menuconfig`:
 
+    $ idf.py set-target ${CHIP}
     $ idf.py menuconfig
 
 This command will bring up a curses dialog box where you can make adjustments such as not including
 AtomVM components that are not desired in a particular build. You can also change the behavior of a
-crash in the VM to print the error and reboot, or halt after the error is printed. Extreme caution
-should be used when changing any non AtomVM settings. You can quit the program by typing `Q`.
-Save the changes, and the program will exit.
+crash in the VM to print the error and reboot, or halt after the error is printed. To configure an
+Elixir supported build under the "Partition Table" setting select the Custom partitions CSV file and
+set this to `partitions-elixir.csv`. Extreme caution should be used when changing any non AtomVM
+settings. You can quit the program by typing `Q`. Save the changes, and the program will exit.
 ```
 
 You can now build AtomVM using the build command:
@@ -467,24 +469,20 @@ core Erlang libraries will be written to the `build/libs` directory in the AtomV
 you target a different build directory when running CMake.
 ```
 
-Running this script will generate a single `atomvm-<sha>.img` file in the `build` directory of the esp32 source tree, where `<sha>` is the git hash of the current checkout.  This image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang libraries in one file, which can then be flashed to address `0x1000` for the esp32. The bootloader address varies for other chip variants. See the [flashing a binary image to ESP32](./getting-started-guide.md#flashing-a-binary-image-to-esp32) section of the [Getting Started Guide](./getting-started-guide.md) for a chart with the bootloader offset address of each model.
+Running this script will generate a single `atomvm-<target-chip>.img` file in the `build` directory
+of the esp32 source tree, where `<target-chip>` is the device configured with `set-target`.  This
+image contains the ESP32 bootloader, AtomVM executable, and the `eavmlib` and `estdlib` Erlang
+libraries (and `exavmlib` Elixir libraries if configured for Elixir support) in one file, which can
+then be flashed to address `0x1000` for the esp32. The bootloader address varies for other chip
+variants. See the
+[flashing a binary image to ESP32](./getting-started-guide.md#flashing-a-binary-image-to-esp32)
+section of the [Getting Started Guide](./getting-started-guide.md) for a chart with the bootloader
+offset address of each model.
 
-To build a thin image with only Erlang libraries `mkimage.sh` script is run from the `src/platform/esp32` directory as follows:
+To build a complete image use this command from the `src/platforms/esp32` directory as follows:
 
 ```shell
 $ ./build/mkimage.sh
-Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32.img
-=============================================
-Wrote bootloader at offset 0x1000 (4096)
-Wrote partition-table at offset 0x8000 (32768)
-Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
-Wrote AtomVM Core BEAM Library at offset 0x1D0000 (1114112)
-```
-
-To build a full image with Erlang and Elixir libraries the path to the previously (during the generic_unix build) built `elixir_esp32boot.avm` must be passed to the `mkimage.sh` script as follows (Note: this is still run from the AtomVM/src/platforms/esp32 directory for the relative path to work - feel free to use the absolute path to this file):
-
-```shell
-$ ./build/mkimage.sh --boot ../../../build/libs/esp32boot/elixir_esp32boot.avm
 Writing output to /home/joe/AtomVM/src/platforms/esp32/build/atomvm-esp32.img
 =============================================
 Wrote bootloader at offset 0x1000 (4096)
@@ -587,7 +585,7 @@ applications for the AtomVM platform.
 
 #### Flashing the core libraries
 
-If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `esp32boot.avm` (or `elixir_esp32boot.avm` when using an Elixir partition table) to the boot.avm partition (offset 0x1D0000) by using the `flash.sh` script in the esp32 build directory as follows:
+If you are doing development work on the core Erlang/Elixir libraries and wish to test changes that do not involve the `C` code in the core VM you may flash `esp32boot.avm` or `elixir_esp32boot.avm` to the boot.avm partition by using the `flash.sh` script in the esp32 build directory as follows:
 
 ```shell
 $ build/flash.sh -l ../../../build/libs/esp32boot.avm
@@ -621,6 +619,13 @@ Leaving...
 Hard resetting via RTS pin...
 ```
 
+```{attention}
+It is important that you flash the `esp32boot` variant that matches the configuration used to
+create the build currently on the device. Flashing `elixir_esp32boot.avm` to a device that was not
+flashed with an Elixir support build will not work, AtomVM will still try to load an application
+from an address that is now occupied by the `exavmlib` modules.
+```
+
 ### Adding custom Nifs, Ports, and third-party components
 
 While AtomVM is a functional implementation of the Erlang virtual machine, it is nonetheless designed to allow developers to extend the VM to support additional integrations with peripherals and protocols that are not otherwise supported in the core virtual machine.
@@ -636,7 +641,9 @@ documentation.
 The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.  In general, they involve:
 
 1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree.
-1. Run `idf.py reconfigure` to pick up any menuconfig options, many extra drivers have an option to disable them (they are enabled by default). Optionally use `idf.py menuconfig` and confirm the driver is enabled and save when quitting.
+1. Run `idf.py set-target ${CHIP}` to pick up any menuconfig options, many extra drivers have an
+option to disable them (they are enabled by default). Optionally use `idf.py menuconfig` and
+confirm the driver is enabled and save when quitting.
 1. Building the AtomVM binary.
 
 ```{attention}

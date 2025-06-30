@@ -54,6 +54,19 @@ set(AVM_SELECT_IN_TASK ON)
 # By default, JIT is disabled
 set(AVM_DISABLE_JIT ON)
 
+## Configure partition table based on boot flavor
+if (ATOMVM_ELIXIR_SUPPORT)
+    set(AVM_PARTITION_TABLE_FILENAME "partitions-elixir.csv")
+else()
+    set(AVM_PARTITION_TABLE_FILENAME "partitions.csv")
+endif()
+
+if (ATOMVM_RELEASE)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.release-defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
+else()
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
+endif()
+
 project(atomvm-esp32)
 
 # JIT is only supported on RISC-V targets (ESP32-C2, ESP32-C3, ESP32-C6, ESP32-H2, ESP32-P4)

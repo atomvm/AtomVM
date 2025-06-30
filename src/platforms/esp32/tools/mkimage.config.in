@@ -23,22 +23,22 @@
         #{
             name => "bootloader",
             offset => "@BOOTLOADER_OFFSET@",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/bootloader/bootloader.bin"]
+            path => ["@CMAKE_BINARY_DIR@/bootloader/bootloader.bin"]
         },
         #{
             name => "partition-table",
             offset => "0x8000",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/partition_table/partition-table.bin"]
+            path => ["@CMAKE_BINARY_DIR@/partition_table/partition-table.bin"]
         },
         #{
             name => "AtomVM Virtual Machine",
             offset => "0x10000",
-            path => ["${ROOT_DIR}/src/platforms/esp32/build/atomvm-esp32.bin"]
+            path => ["@CMAKE_BINARY_DIR@/atomvm-esp32.bin"]
         },
         #{
             name => "AtomVM Boot and Core BEAM Library",
             offset =>  "0x1D0000",
-            path => ["$[BOOT_FILE]"]
+            path => ["@ROOT_DIR@/build/libs/esp32boot/@BOOT_LIBS@"]
         }
     ]
 }.
