@@ -125,7 +125,7 @@ jobs:
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
-        cp sdkconfig.release-defaults sdkconfig.defaults
+        cp sdkconfig.release-defaults.in sdkconfig.defaults.in
 
     - name: "Build ${{ matrix.soc }}${{ matrix.flavor }} with idf.py"
       shell: bash
@@ -138,19 +138,14 @@ jobs:
           mv partitions${{ matrix.flavor }}.csv partitions.csv
         fi
         idf.py set-target ${{ matrix.soc }}
-        idf.py reconfigure
         idf.py build
 
     - name: "Create a ${{ matrix.soc }}${{ matrix.flavor }} image"
       working-directory: ./src/platforms/esp32/build
       run: |
-        if [ -z "${{ matrix.flavor }}" ]
+        ./mkimage.sh
+        if [ -n "${{ matrix.flavor }}" ]
         then
-          ./mkimage.sh
-        else
-          FLAVOR_SUFFIX=$(echo "${{ matrix.flavor }}" | sed 's/-//g')
-          BOOT_FILE="../../../../build/libs/esp32boot/${FLAVOR_SUFFIX}_esp32boot.avm"
-          ./mkimage.sh --boot "$BOOT_FILE"
           mv atomvm-${{ matrix.soc }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
         fi
         ls -l *.img
