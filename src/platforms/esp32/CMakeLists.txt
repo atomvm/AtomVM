@@ -51,6 +51,15 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
+## Configure partiton table based on boot flavor
+if (${AVM_ELIXIR_BOOT} MATCHES "ON|On|on|Y|y|YES|Yes|yes")
+    set(AVM_PARTITION_TABLE_FILENAME "partitions-elixir.csv")
+else()
+    set(AVM_PARTITION_TABLE_FILENAME "partitions.csv")
+endif()
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
+
 project(atomvm-esp32)
 
 # esp-idf does not use compile_feature but instead sets version in

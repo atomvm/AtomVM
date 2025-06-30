@@ -22,6 +22,7 @@ cmake_minimum_required (VERSION 3.13)
 project (ReleaseEsp32)
 include(../../../../version.cmake)
 include(../../../../CMakeModules/GetVersion.cmake)
+include(../GetBootAVM.cmake)
 
 ## Build image tools for target chip
 
@@ -45,6 +46,13 @@ elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32p4")
     set(BOOTLOADER_OFFSET "0x2000")
 endif()
 
+if (NOT EXISTS ../../../../build/libs/esp32boot/${BOOT_LIBS})
+    message(WARNING "A generic_unix build must be done first in the top level AtomVM/build directory! \n\
+    Consult https://doc.atomvm.org/main/build-instructions.html for build instructions.")
+endif()
+
+set(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../")
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/dev/flash.sh ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh COPYONLY)
@@ -64,7 +72,3 @@ file(COPY ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh
     FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )
 
-if (NOT EXISTS ../../../../build/libs/esp32boot/${BOOT_LIBS})
-    message(WARNING "A generic_unix build must be done first in the top level AtomVM/build directory! \n\
-    Consult https://doc.atomvm.org/main/build-instructions.html for build instructions.")
-endif()

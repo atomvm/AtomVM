@@ -1,8 +1,7 @@
-#!/usr/bin/env bash
 #
 # This file is part of AtomVM.
 #
-# Copyright 2020 Fred Dushin <fred@dushin.net>
+# Copyright 2025 Winford (Uncle Grumpy) <winford@object.stream>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,15 +18,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
-    --root_dir "@CMAKE_BINARY_DIR@/../../../.." \
-    --config "@CMAKE_BINARY_DIR@/mkimage.config" \
-    --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img" \
-    --boot "@CMAKE_BINARY_DIR@/../../../../build/libs/esp32boot/@BOOT_LIBS@"
-    "$@"
+partition_table_get_partition_info(app_offset "--partition-name main.avm" "offset")
+if ("${app_offset}" STREQUAL "0x210000")
+    set(BOOT_LIBS "esp32boot.avm")
+elseif ("${app_offset}" STREQUAL "0x250000")
+    set(BOOT_LIBS "elixir_esp32boot.avm")
+else()
+    message(FATAL_ERROR "Unable to determine esp32boot flavor from offset: ${app_offset}")
+endif()
 
-echo "============================================="
-
-echo ""
-echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image with @BOOT_LIBS@ libraries written to:"
-echo "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img"
