@@ -104,3 +104,16 @@ option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 
 add_subdirectory(tools)
+
+include(GetBootAVM.cmake)
+message(STATUS "-- Configuring atomvmlib esp32boot flavor: ${BOOT_LIBS}")
+if (NOT ("${BOOT_LIBS}" STREQUAL "NONE"))
+    set(BOOT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/libs/esp32boot/${BOOT_LIBS}")
+    if (NOT EXISTS "${BOOT_LIB_PATH}")
+        message(WARNING "A generic_unix build must be done first in the top level AtomVM/build directory! \n\
+        Consult https://doc.atomvm.org/main/build-instructions.html for build instructions.")
+    else()
+        partition_table_get_partition_info(lib_offset "--partition-name boot.avm" "offset")
+        esptool_py_flash_target_image(flash boot.avm "${lib_offset}" "${BOOT_LIB_PATH}")
+    endif()
+endif()

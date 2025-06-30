@@ -207,7 +207,10 @@ Tests for the following libraries are supported:
 
 Building AtomVM for ESP32 must be done on either a Linux or MacOS build machine.
 
-In order to build a complete AtomVM image for ESP32, you will also need to build AtomVM for the Generic UNIX platform (typically, the same build machine you are suing to build AtomVM for ESP32).
+In order to build a complete AtomVM image for ESP32, you will also need to build AtomVM for the Generic UNIX platform (typically, the same build machine you are using to build AtomVM for ESP32). This is expected to
+be done before building an ESP32 port, since the BEAM libraries packed into the esp32boot.avm (or
+elixir_esp32boot.avm for Elixir-supported builds) are created at the same time as the atomvmlib.avm
+libraries as part of the generic UNIX build.
 
 ### ESP32 Build Requirements
 
@@ -272,19 +275,34 @@ You can now build AtomVM using the build command:
 $ idf.py build
 ```
 
-This command, once completed, will create the Espressif bootloader, partition table, and AtomVM binary.  The last line of the output should read something like the following:
+This command, once completed, will create the Espressif bootloader, partition table, and AtomVM binary.  The last line of the output should read something like the following example:
 
-    Project build complete. To flash, run this command:
-    ~/.espressif/python_env/idf5.1_py3.11_env/bin/python ~/esp/esp-idf-v5.1/components
-    /esptool_py/esptool/esptool.py -p (PORT) -b 921600 --before default_reset
-    --after hard_reset --chip esp32 write_flash --flash_mode dio --flash_size detect
-    --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000
-    build/partition_table/partition-table.bin 0x10000 build/atomvm-esp32.bin
-    or run 'idf.py -p (PORT) flash'
+```shell
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 4MB --flash_freq 40m 0x1000 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/atomvm-esp32.bin 0x1d0000 ../../../build/libs/esp32boot/esp32boot.avm
+or from the "/home/joe/AtomVM/src/platforms/esp32/build" directory
+ python -m esptool --chip esp32 -b 921600 --before default_reset --after hard_reset write_flash "@flash_args"
+```
 
-At this point, you can run `idf.py flash` to upload the 3 binaries up to your ESP32 device, and in some development scenarios, this is a preferable shortcut.
+```{important}
+When using the `@flash_args` method be sure to execute from
+<path-to-your-cloned-AtomVM>/src/platforms/esp32/build.
+```
 
-However, first, we will build a single binary image file containing all of the above 3 binaries, as well as the AtomVM core libraries.  See [Building a Release Image](#building-a-release-image), below.  But first, it is helpful to understand a bit about how the AtomVM partitioning scheme works, on the ESP32.
+At this point, you can run `idf.py flash` and have a complete working image. In some development
+scenarios it may be helpful to use `idf.py app-flash` (to only flash a new AtomVM binary to the
+`factory` partition) to avoid re-flashing the entire image if no changes were made to the Erlang or
+Elixir libraries, and the partition table has not been altered. If you have made changes to the
+sdkconfig file (using `idf.py menuconfig` or by other means) it may be necessary to also update the
+bootloader using `idf.py bootloader-flash`. As with most other `idf.py` commands these may be
+combined (for example: `idf.py bootloader-flash app-flash`). For more information about these
+partitions and the flash partitions layout see [Flash Layout](#flash-layout) below.
+
+To build a single binary image file see [Building a Release Image](#building-a-release-image), below.
 
 ### Running tests for ESP32
 
@@ -402,18 +420,18 @@ The flash layout is roughly as follows (not to scale):
     | partition table | 3KB         |
     +-----------------+             |
     |                 |             |
-    |       NVS       | 24KB        |
+    |       nvs       | 24KB        |
     |                 |             |
     +-----------------+             |
     |     PHY_INIT    | 4KB         |
     +-----------------+             | AtomVM
     |                 |             | binary
     |                 |             | image
-    |                 |             |
     |     AtomVM      |             |
-    |     Virtual     | 1.75MB      |
-    |     Machine     |             |
+    |     Virtual     |             |
+    |     Machine     | 1.75MB      |
     |                 |             |
+    |    (factory)    |             |
     |                 |             |
     +-----------------+             |
     |     boot.avm    | 256-512KB   v
@@ -459,7 +477,7 @@ and `boot.avm` partitions.
 
 ### Building a Release Image
 
-The `<atomvm-source-tree-root>/tools/release/esp32` directory contains the `mkimage.sh` script that can be used to create a single AtomVM image file, which can be distributed as a release, allowing application developers to develop AtomVM applications without having to build AtomVM from scratch.
+The `<atomvm-source-tree-root>/src/platforms/esp32/build` directory contains the `mkimage.sh` script that can be used to create a single AtomVM image file, which can be distributed as a release, allowing application developers to develop AtomVM applications without having to build AtomVM from scratch.
 
 ```{attention}
 Before running the `mkimage.sh` script, you must have a complete build of both the esp32 project, as well as a full
