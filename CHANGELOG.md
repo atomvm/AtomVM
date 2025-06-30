@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `proc_lib`
 - Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 - Added `sys`
+- Added ESP32 `-DATOMVM_ELIXIR_SUPPORT=on` configuration option
 
 ### Changed
 
@@ -82,6 +83,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `binary_to_integer` and `list_to_integer` do not raise anymore `overflow` error, they raise
 instead `badarg`.
 - ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
+- ESP32 Elixir support is determined automatically from the offset of `boot.avm` in the partiton
+table.
 
 ### Fixed
 

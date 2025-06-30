@@ -33,12 +33,12 @@
         #{
             name => "AtomVM Virtual Machine",
             offset => "0x10000",
-            path => ["${BUILD_DIR}/atomvm-esp32.bin", "${ROOT_DIR}/src/platforms/esp32/build/atomvvm-esp32.bin"]
+            path => ["${BUILD_DIR}/atomvm-esp32.bin", "${ROOT_DIR}/src/platforms/esp32/build/atomvm-esp32.bin"]
         },
         #{
             name => "AtomVM Boot and Core BEAM Library",
             offset =>  "0x1D0000",
-            path => ["$[BOOT_FILE]"]
+            path => ["${ROOT_DIR}/build/libs/esp32boot/${BOOT_LIBS}"]
         }
     ]
 }.
