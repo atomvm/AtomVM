@@ -69,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
 - ESP32 Elixir support is determined automatically from the offset of `boot.avm` in the partiton
 table.
+- ESP32 ports now flash a complete working image using the `idf.py flash` task.
 
 ### Fixed
 
