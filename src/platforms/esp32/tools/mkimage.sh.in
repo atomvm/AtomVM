@@ -19,14 +19,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-build_dir=$(CDPATH=; cd -- "$(dirname -- "$0")" && pwd -P)
-
 report_success()
 {
     echo "============================================="
     echo ""
     echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image written to:"
-    echo "${build_dir}/atomvm-@CONFIG_IDF_TARGET@.img"
+    echo "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@@ATOMVM_FLAVOR@.img"
     exit 0
 }
 
@@ -37,14 +35,12 @@ fail()
     exit 1
 }
 
-if (test "${@}" = "--help"); then
-    escript "${build_dir}/mkimage.erl" --help
-    exit 0;
+if [ "${@}" = "--help" ]; then
+    escript "@CMAKE_BINARY_DIR@/mkimage.erl" --help
+    exit 0
 fi
 
-escript "${build_dir}/mkimage.erl" \
-    --root_dir "${build_dir}/../../../../" \
-    --config "${build_dir}/mkimage.config" \
-    --out "${build_dir}/atomvm-@CONFIG_IDF_TARGET@.img" \
+escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
+    --config "@CMAKE_BINARY_DIR@/mkimage.config" \
+    --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@@ATOMVM_FLAVOR@.img" \
     "$@" && report_success || fail
-

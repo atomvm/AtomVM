@@ -1,0 +1,7 @@
+# Copyright 2017-2025 Davide Bettio <davide@uninstall.it>
+# Copyright 2025 Winford (UncleGrumpy) <winford@object.stream>
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+sdkconfig.defaults
+sdkconfig.old
