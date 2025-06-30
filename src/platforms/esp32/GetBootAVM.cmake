@@ -19,7 +19,6 @@
 #
 
 partition_table_get_partition_info(app_offset "--partition-name main.avm" "offset")
-set(AVM_APP_OFFSET "${app_offset}")
 if ("${app_offset}" STREQUAL "0x210000")
     set(BOOT_LIBS "esp32boot.avm")
 elseif ("${app_offset}" STREQUAL "0x250000")
