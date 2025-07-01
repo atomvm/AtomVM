@@ -44,6 +44,7 @@
     cond_jump_to_label/3,
     jump_to_offset/1,
     if_block/3,
+    if_else_block/4,
     jump_to_offset_if_equal/3,
     jump_to_offset_if_and_equal/4,
     jump_to_offset_if_and_not_equal/4,
@@ -686,6 +687,35 @@ if_block(
         (OffsetAfter - OffsetAfterCond)
     >>),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
+
+-spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) -> state().
+if_else_block(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    Cond,
+    BlockTrueFn,
+    BlockFalseFn
+) ->
+    Offset = StreamModule:offset(Stream0),
+    {State1, ReplaceDelta} = if_block_cond(State0, Cond),
+    OffsetAfterCond = StreamModule:offset(State1#state.stream),
+    State2 = BlockTrueFn(State1),
+    Stream2 = State2#state.stream,
+    ElseJumpOffset = StreamModule:offset(Stream2),
+    {RelocJMPOffset, I} = jit_x86_64_asm:jmp_rel8(-1),
+    Stream3 = StreamModule:append(Stream2, I),
+    OffsetAfter = StreamModule:offset(Stream3),
+    ?ASSERT(OffsetAfter - OffsetAfterCond < 16#80),
+    Stream4 = StreamModule:replace(Stream3, Offset + ReplaceDelta, <<
+        (OffsetAfter - OffsetAfterCond)
+    >>),
+    StateElse = State1#state{stream = Stream4},
+    State3 = BlockFalseFn(StateElse),
+    Stream5 = State3#state.stream,
+    OffsetFinal = StreamModule:offset(Stream5),
+    Stream6 = StreamModule:replace(Stream5, ElseJumpOffset + RelocJMPOffset, <<
+        (OffsetFinal - OffsetAfter)
+    >>),
+    merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
