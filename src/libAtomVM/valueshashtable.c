@@ -30,9 +30,9 @@
 #define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
 #define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
 #else
-#define SMP_RDLOCK(htable)
-#define SMP_WRLOCK(htable)
-#define SMP_UNLOCK(htable)
+#define SMP_RDLOCK(htable) UNUSED(htable)
+#define SMP_WRLOCK(htable) UNUSED(htable)
+#define SMP_UNLOCK(htable) UNUSED(htable)
 #endif
 
 #define DEFAULT_SIZE 8
@@ -40,8 +40,8 @@
 struct HNode
 {
     struct HNode *next;
-    unsigned long key;
-    unsigned long value;
+    uintptr_t key;
+    uintptr_t value;
 };
 
 struct ValuesHashTable *valueshashtable_new()
@@ -65,10 +65,10 @@ struct ValuesHashTable *valueshashtable_new()
     return htable;
 }
 
-int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key, unsigned long value)
+int valueshashtable_insert(struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t value)
 {
     SMP_WRLOCK(hash_table);
-    long index = key % hash_table->capacity;
+    size_t index = key % hash_table->capacity;
 
     struct HNode *node = hash_table->buckets[index];
     if (node) {
@@ -107,15 +107,15 @@ int valueshashtable_insert(struct ValuesHashTable *hash_table, unsigned long key
     return 1;
 }
 
-unsigned long valueshashtable_get_value(const struct ValuesHashTable *hash_table, unsigned long key, unsigned long default_value)
+uintptr_t valueshashtable_get_value(const struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t default_value)
 {
     SMP_RDLOCK(hash_table);
-    long index = key % hash_table->capacity;
+    size_t index = key % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {
         if (node->key == key) {
-            unsigned long result = node->value;
+            uintptr_t result = node->value;
             SMP_UNLOCK(hash_table);
             return result;
         }
@@ -127,10 +127,10 @@ unsigned long valueshashtable_get_value(const struct ValuesHashTable *hash_table
     return default_value;
 }
 
-int valueshashtable_has_key(const struct ValuesHashTable *hash_table, unsigned long key)
+int valueshashtable_has_key(const struct ValuesHashTable *hash_table, uintptr_t key)
 {
     SMP_RDLOCK(hash_table);
-    long index = key % hash_table->capacity;
+    size_t index = key % hash_table->capacity;
 
     const struct HNode *node = hash_table->buckets[index];
     while (node) {

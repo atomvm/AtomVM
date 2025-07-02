@@ -104,8 +104,7 @@ struct I2CData
 
 void i2c_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, i2c_driver_atom);
-    i2c_driver = term_from_atom_index(index);
+    i2c_driver = globalcontext_make_atom(global, i2c_driver_atom);
 }
 
 Context *i2c_driver_create_port(GlobalContext *global, term opts)

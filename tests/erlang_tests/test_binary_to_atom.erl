@@ -23,6 +23,7 @@
 -export([start/0, f/1, g/1, h/1, i/1]).
 
 start() ->
+    ok = test_more_than_255_bytes(),
     f(i(h(g(2)))) + f(i(h(g(10)))) + f(i(h(g(20)))).
 
 f(not_an_atom) ->
@@ -56,3 +57,30 @@ i(A) ->
     catch
         _:_ -> not_an_atom
     end.
+
+test_more_than_255_bytes() ->
+    Suffix = duplicate(<<"-">>, 252, <<>>),
+    Str = <<"アトム"/utf8, Suffix/binary>>,
+    261 = byte_size(Str),
+    _LongAtom = binary_to_atom(id(Str), utf8),
+    % biggest atom is 1020 bytes
+    MoonStr = <<"🌑🌒🌓🌔🌕🌖🌗🌘"/utf8>>,
+    32 = byte_size(MoonStr),
+    Moons256Str = duplicate(MoonStr, 32, <<>>),
+    1024 = byte_size(Moons256Str),
+    <<"🌑"/utf8, Moons255Str/binary>> = Moons256Str,
+    1020 = byte_size(Moons255Str),
+    _LongestAtom = binary_to_atom(id(Moons255Str), utf8),
+    ok =
+        try
+            _ = binary_to_atom(id(<<Str/binary, "o">>), utf8),
+            should_have_raised
+        catch
+            error:system_limit -> ok
+        end.
+
+id(X) ->
+    X.
+
+duplicate(_Binary, 0, Acc) -> Acc;
+duplicate(Binary, N, Acc) -> duplicate(Binary, N - 1, <<Binary/binary, Acc/binary>>).
