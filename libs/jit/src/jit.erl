@@ -1016,15 +1016,30 @@ first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Arity, Rest1} = decode_literal(Rest0),
     {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
     {MSt2, Function} = read_any_xreg(Arity + 1, MMod, MSt1),
-    ?TRACE("OP_APPLY ~p, ~p, ~p\n", [Arity, Module, Function]),
+    ?TRACE("OP_APPLY ~p\n", [Arity]),
     MSt3 = verify_is_atom(Module, 0, MMod, MSt2),
     MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
-    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_APPLY, [
+    MSt5 = MMod:decrement_reductions_and_maybe_schedule_next(MSt4),
+    MSt6 = MMod:call_primitive_with_cp(MSt5, ?PRIM_APPLY, [
         ctx, jit_state, {free, Module}, {free, Function}, Arity
     ]),
-    first_pass(Rest1, MMod, MSt5, State0);
+    first_pass(Rest1, MMod, MSt6, State0);
 % 113
-% first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
+    {Arity, Rest1} = decode_literal(Rest0),
+    {NWords, Rest2} = decode_literal(Rest1),
+    {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
+    {MSt2, Function} = read_any_xreg(Arity + 1, MMod, MSt1),
+    ?TRACE("OP_APPLY_LAST ~p, ~p\n", [Arity, NWords]),
+    MSt3 = verify_is_atom(Module, 0, MMod, MSt2),
+    MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
+    MSt5 = MMod:decrement_reductions_and_maybe_schedule_next(MSt4),
+    MSt6 = MMod:move_to_cp(MSt5, {y_reg, NWords}),
+    MSt7 = MMod:increment_sp(MSt6, NWords + 1),
+    MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_APPLY, [
+        ctx, jit_state, {free, Module}, {free, Function}, Arity
+    ]),
+    first_pass(Rest2, MMod, MSt8, State0);
 % 114
 first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),

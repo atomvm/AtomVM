@@ -1977,7 +1977,7 @@ decrement_reductions_and_maybe_schedule_next(
             (NewOffset - Offset - byte_size(I1) - byte_size(I2) - byte_size(I3)):32/little
         >>
     ),
-    State2#state{stream = Stream4}.
+    merge_used_regs(State2#state{stream = Stream4}, State1#state.used_regs).
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
