@@ -152,6 +152,7 @@
     | {maybe_free_x86_64_register(), '==', 0}
     | {maybe_free_x86_64_register(), '!=', integer()}
     | {'(uint8_t)', maybe_free_x86_64_register(), '==', false}
+    | {'(uint8_t)', maybe_free_x86_64_register(), '!=', false}
     | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
 
 % ctx->e is 0x28
@@ -815,6 +816,25 @@ if_block_cond(
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, byte_size(I1) + RelocJNZOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(uint8_t)', RegOrTuple, '!=', false}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:testb(Reg, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1705,6 +1725,20 @@ move_to_native_register(
         available_regs = [Reg | AvailT],
         used_regs = Used
     } = State,
+    Imm
+) when
+    is_integer(Imm)
+->
+    I1 = jit_x86_64_asm:movq(Imm, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
     {x_reg, X}
 ) when
     X < ?MAX_REG
@@ -1745,7 +1779,7 @@ move_to_native_register(
 -spec move_to_native_register(state(), value(), x86_64_register()) -> state().
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, RegSrc, RegDst
-) when is_atom(RegSrc) ->
+) when is_atom(RegSrc) orelse is_integer(RegSrc) ->
     I = jit_x86_64_asm:movq(RegSrc, RegDst),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
