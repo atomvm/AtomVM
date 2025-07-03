@@ -30,6 +30,15 @@ function(compile_erlang module_name)
     )
 endfunction()
 
+function(compile_assembler module_name)
+    add_custom_command(
+        OUTPUT ${module_name}.beam
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        COMMENT "Compiling ${module_name}.S"
+    )
+endfunction()
+
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 function(generate_hrl out_file def_name in_file)
@@ -518,6 +527,17 @@ compile_erlang(maps_nifs)
 
 compile_erlang(test_raw_raise)
 
+compile_erlang(test_op_bs_create_bin)
+compile_assembler(test_op_bs_create_bin_asm)
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
+    set(OTP25_OR_GREATER_TESTS
+        test_op_bs_create_bin_asm.beam
+    )
+else()
+    set(OTP25_OR_GREATER_TESTS)
+endif()
+
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
 
@@ -1000,4 +1020,8 @@ add_custom_target(erlang_test_modules DEPENDS
     maps_nifs.beam
 
     test_raw_raise.beam
+
+    test_op_bs_create_bin.beam
+
+    ${OTP25_OR_GREATER_TESTS}
 )
