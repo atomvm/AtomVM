@@ -487,11 +487,47 @@ cond_jump_to_label(
     State#state{stream = Stream1, branches = [Reloc | AccBranches]};
 cond_jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    {'(int)', Reg, '==', 0},
+    Label
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:testl(Reg, Reg),
+    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
+    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
+    Sz = byte_size(I1) + byte_size(I2),
+    Reloc = {Label, Offset + Sz + RelocOffset, 32},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
+cond_jump_to_label(
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
     {Reg, '==', Val},
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
+    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
+    Sz = byte_size(I1) + byte_size(I2),
+    Reloc = {Label, Offset + Sz + RelocOffset, 32},
+    Code = <<
+        I1/binary,
+        I2/binary,
+        I3/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
+cond_jump_to_label(
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
+    {'(int)', Reg, '==', Val},
+    Label
+) ->
+    Offset = StreamModule:offset(Stream0),
+    I1 = jit_x86_64_asm:cmpl(Val, Reg),
     {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
     I2 = jit_x86_64_asm:jnz(byte_size(I3)),
     Sz = byte_size(I1) + byte_size(I2),
@@ -689,7 +725,8 @@ if_block(
     >>),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
 
--spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) -> state().
+-spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) ->
+    state().
 if_else_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     Cond,
@@ -760,6 +797,24 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, byte_size(I1) + RelocJNZOffset};
 if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {'(int)', RegOrTuple, '==', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:testl(Reg, Reg),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJNZOffset};
+if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Imm}
 ) when is_integer(Imm) ->
@@ -788,6 +843,25 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpq(Imm, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(int)', RegOrTuple, '==', Imm}
+) when is_integer(Imm) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpl(Imm, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     Code = <<
         I1/binary,
@@ -1079,10 +1153,11 @@ call_func_ptr(
         Stream0,
         SavedRegs
     ),
-    {Stream3, PushCount} =
+    PushOdds = length(SavedRegs) rem 2,
+    Stream3 =
         case FuncPtrTuple of
             {free, _} ->
-                {Stream1, length(SavedRegs)};
+                Stream1;
             {primitive, Primitive} ->
                 PrepCall0 =
                     case Primitive of
@@ -1092,11 +1167,15 @@ call_func_ptr(
                             jit_x86_64_asm:movq(?PRIMITIVE(N), ?NATIVE_INTERFACE_REG)
                     end,
                 PrepCall1 = jit_x86_64_asm:pushq(?NATIVE_INTERFACE_REG),
-                Stream2 = StreamModule:append(Stream1, <<PrepCall0/binary, PrepCall1/binary>>),
-                {Stream2, length(SavedRegs) + 1}
+                StreamModule:append(Stream1, <<PrepCall0/binary, PrepCall1/binary>>)
         end,
+    % x86 64 stack should be aligned to 16 bytes when running callq instruction
+    % It is therefore unaligned and we need to always push an odd number of
+    % registers.
+    % Align stack by pushing ?NATIVE_INTERFACE_REG
+    % ?NATIVE_INTERFACE_REG may have been pushed as the function pointer
     Stream4 =
-        case PushCount rem 2 of
+        case PushOdds of
             1 ->
                 Stream3;
             0 ->
@@ -1115,8 +1194,9 @@ call_func_ptr(
                 <<Call0/binary, Call1/binary>>
         end,
     Stream6 = StreamModule:append(Stream5, Call),
+    % Unalign stack
     Stream7 =
-        case PushCount rem 2 of
+        case PushOdds of
             1 ->
                 Stream6;
             0 ->
@@ -1704,9 +1784,19 @@ move_to_array_element(
     State#state{stream = Stream1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State, Source, Reg, Index
-) when is_integer(Source) ->
+) when ?IS_SINT32_T(Source) ->
     I1 = jit_x86_64_asm:movq(Source, {Index * 8, Reg}),
     Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1};
+move_to_array_element(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    Source,
+    Reg,
+    Index
+) when is_integer(Source) ->
+    I1 = jit_x86_64_asm:movabsq(Source, Temp),
+    I2 = jit_x86_64_asm:movq(Temp, {Index * 8, Reg}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1}.
 
 -spec move_to_native_register(state(), value()) -> {state(), x86_64_register()}.
