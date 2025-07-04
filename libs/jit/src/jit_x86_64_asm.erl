@@ -207,7 +207,7 @@ andq(Imm, {Offset, DestReg}) when ?IS_SINT8_T(Imm) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 1:2, 4:3, MODRM_RM:3, Offset, Imm>>.
 
-cmpl(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+cmpl(Imm, Reg) when ?IS_SINT8_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
     case REX_B of
         % No REX needed for rax..rdi

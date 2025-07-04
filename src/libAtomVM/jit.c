@@ -30,6 +30,7 @@
 #include "nifs.h"
 #include "scheduler.h"
 #include "stacktrace.h"
+#include "term.h"
 #include "utils.h"
 
 #include <math.h>
@@ -1206,6 +1207,113 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, term module, term f
     }
 }
 
+static void *jit_malloc(Context *ctx, JITState *jit_state, size_t sz)
+{
+    void *ptr = malloc(sz);
+    if (IS_NULL_PTR(ptr)) {
+        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+    }
+    return ptr;
+}
+
+static bool sort_kv_pairs(term *kv, int size, GlobalContext *global)
+{
+    int k = size;
+    while (1 < k) {
+        int max_pos = 0;
+        for (int i = 1; i < k; i++) {
+            term t_max = kv[max_pos * 2];
+            term t = kv[i * 2];
+            // TODO: not sure if exact is the right choice here
+            TermCompareResult result = term_compare(t, t_max, TermCompareExact, global);
+            if (result == TermGreaterThan) {
+                max_pos = i;
+            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                return false;
+            }
+        }
+        if (max_pos != k - 1) {
+            term i_key = kv[(k - 1) * 2];
+            term i_val = kv[((k - 1) * 2) + 1];
+            kv[(k - 1) * 2] = kv[max_pos * 2];
+            kv[((k - 1) * 2) + 1] = kv[(max_pos * 2) + 1];
+            kv[max_pos * 2] = i_key;
+            kv[(max_pos * 2) + 1] = i_val;
+        }
+        k--;
+        // kv[k..size] sorted
+    }
+
+    return true;
+}
+
+static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv)
+{
+    size_t src_size = term_get_map_size(src);
+    size_t new_map_size = src_size + new_entries;
+    bool is_shared = new_entries == 0;
+    //
+    //
+    //
+    if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
+        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        return term_invalid_term();
+    }
+    //
+    // Create a new map of the requested size and stitch src
+    // and kv together into new map.  Both src and kv are sorted.
+    //
+    term map = term_alloc_map_maybe_shared(new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term(), &ctx->heap);
+    size_t src_pos = 0;
+    uint32_t kv_pos = 0;
+    for (size_t j = 0; j < new_map_size; j++) {
+        if (src_pos >= src_size) {
+            term new_key = kv[2 * kv_pos];
+            term new_value = kv[(2 * kv_pos) + 1];
+            term_set_map_assoc(map, j, new_key, new_value);
+            kv_pos++;
+        } else if (kv_pos >= num_elements) {
+            term src_key = term_get_map_key(src, src_pos);
+            term src_value = term_get_map_value(src, src_pos);
+            term_set_map_assoc(map, j, src_key, src_value);
+            src_pos++;
+        } else {
+            term src_key = term_get_map_key(src, src_pos);
+            term new_key = kv[2 * kv_pos];
+            // TODO: not sure if exact is the right choice here
+            switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
+                case TermLessThan: {
+                    term src_value = term_get_map_value(src, src_pos);
+                    term_set_map_assoc(map, j, src_key, src_value);
+                    src_pos++;
+                    break;
+                }
+
+                case TermGreaterThan: {
+                    term new_value = kv[(2 * kv_pos) + 1];
+                    term_set_map_assoc(map, j, new_key, new_value);
+                    kv_pos++;
+                    break;
+                }
+
+                case TermEquals: {
+                    term new_value = kv[(2 * kv_pos) + 1];
+                    term_set_map_assoc(map, j, src_key, new_value);
+                    src_pos++;
+                    kv_pos++;
+                    break;
+                }
+
+                case TermCompareMemoryAllocFail: {
+                    set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    return term_invalid_term();
+                }
+            }
+        }
+    }
+    return map;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1269,4 +1377,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_copy_module_str,
     jit_bitstring_copy_binary,
     jit_apply,
+    jit_malloc,
+    free,
+    jit_put_map_assoc,
 };

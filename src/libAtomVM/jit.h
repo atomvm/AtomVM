@@ -122,6 +122,9 @@ struct ModuleNativeInterface
     void (*bitstring_copy_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
     int (*bitstring_copy_binary)(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size);
     Context *(*apply)(Context *ctx, JITState *jit_state, term module, term function, unsigned int arity);
+    void * (*malloc)(Context *ctx, JITState *jit_state, size_t sz);
+    void (*free)(void *ptr);
+    term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
