@@ -669,20 +669,6 @@ size_t intn_bsr(const uint32_t num[], size_t len, intn_integer_sign_t num_sign, 
     return shifted_len;
 }
 
-/*
-    uint32_t last_digit = 0;
-    for (size_t i = initial_zeros; i < out_len - 1; i++) {
-        uint32_t digit = num[i - initial_zeros];
-        if (i - initial_zeros >= counted_digits) {
-            abort();
-        }
-        out[i] = (digit << digit_left_bit_shift) | (last_digit >> right_shift_n);
-        last_digit = digit;
-        fprintf(stderr, "in: %i, (%i), last_digit: %i\n", (int) i - initial_zeros,  (int) i, (int) last_digit);
-    }
-    out[out_len - 1] = (last_digit >> right_shift_n);
-*/
-
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
 {
     int i;
