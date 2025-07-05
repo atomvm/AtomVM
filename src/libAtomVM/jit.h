@@ -132,6 +132,7 @@ struct ModuleNativeInterface
     term (*bitstring_get_utf16)(term src, int flags_value);
     term (*bitstring_get_utf32)(term src, int flags_value);
     term (*term_copy_map)(Context *ctx, term src);
+    term (*stacktrace_build)(Context *ctx);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
