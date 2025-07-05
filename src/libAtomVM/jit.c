@@ -1342,6 +1342,16 @@ static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_
     return map;
 }
 
+static int jit_module_get_fun_arity(Module *fun_module, uint32_t fun_index)
+{
+    uint32_t fun_label;
+    uint32_t fun_arity_and_freeze;
+    uint32_t fun_n_freeze;
+
+    module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
+    return fun_arity_and_freeze - fun_n_freeze;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1409,4 +1419,5 @@ const ModuleNativeInterface module_native_interface = {
     free,
     jit_put_map_assoc,
     jit_bitstring_extract_float,
+    jit_module_get_fun_arity,
 };
