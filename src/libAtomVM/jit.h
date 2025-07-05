@@ -125,6 +125,7 @@ struct ModuleNativeInterface
     void * (*malloc)(Context *ctx, JITState *jit_state, size_t sz);
     void (*free)(void *ptr);
     term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);
+    term (*bitstring_extract_float)(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
