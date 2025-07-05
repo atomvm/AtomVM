@@ -1067,6 +1067,26 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
     return t;
 }
 
+static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
+{
+    avm_float_t value;
+    bool status;
+    switch (n) {
+        case 32:
+            status = bitstring_extract_f32(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            break;
+        case 64:
+            status = bitstring_extract_f64(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            break;
+        default:
+            status = false;
+    }
+    if (UNLIKELY(!status)) {
+        return FALSE_ATOM;
+    }
+    return term_from_float(value, &ctx->heap);
+}
+
 static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
 {
     term binary = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
@@ -1388,4 +1408,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_malloc,
     free,
     jit_put_map_assoc,
+    jit_bitstring_extract_float,
 };

@@ -83,6 +83,7 @@
 -define(PRIM_MALLOC, 62).
 -define(PRIM_FREE, 63).
 -define(PRIM_PUT_MAP_ASSOC, 64).
+-define(PRIM_BITSTRING_EXTRACT_FLOAT, 65).
 
 % Parameters to ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS
 % -define(MEMORY_NO_SHRINK, 0).

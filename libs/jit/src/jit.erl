@@ -1042,7 +1042,40 @@ first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt18 = MMod:free_native_registers(MSt17, [Result]),
     first_pass(Rest7, MMod, MSt18, State0);
 % 118
-% first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {_Live, Rest3} = decode_literal(Rest2),
+    {MSt2, Size, Rest4} = decode_compact_term(Rest3, MMod, MSt1, State0),
+    {Unit, Rest5} = decode_literal(Rest4),
+    {FlagsValue, Rest6} = decode_literal(Rest5),
+    {MSt3, SrcReg} = MMod:move_to_native_register(MSt2, Src),
+    {MSt4, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt3, {free, SrcReg}),
+    {MSt5, SizeReg} = term_to_int(Size, Fail, MMod, MSt4),
+    {MSt6, NumBits} =
+        if
+            is_integer(SizeReg) ->
+                {MSt5, SizeReg * Unit};
+            true ->
+                MSt5M = MMod:mul(MSt5, SizeReg, Unit),
+                {MSt5M, SizeReg}
+        end,
+    {MSt7, BSBinaryReg} = MMod:get_array_element(MSt6, MatchStateRegPtr, 1),
+    {MSt8, BSOffsetReg} = MMod:get_array_element(MSt7, MatchStateRegPtr, 2),
+    {MSt9, Result} = MMod:call_primitive(MSt8, ?PRIM_BITSTRING_EXTRACT_FLOAT, [
+        ctx, {free, BSBinaryReg}, BSOffsetReg, NumBits, {free, FlagsValue}
+    ]),
+    MSt10 = cond_jump_to_label({Result, '==', ?FALSE_ATOM}, Fail, MMod, MSt9),
+    MSt11 = MMod:add(MSt10, BSOffsetReg, NumBits),
+    MSt12 = MMod:free_native_registers(MSt11, [NumBits]),
+    MSt13 = MMod:move_to_array_element(MSt12, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt14 = MMod:free_native_registers(MSt13, [BSOffsetReg, MatchStateRegPtr]),
+    {MSt15, Dest, Rest7} = decode_dest(Rest6, MMod, MSt14),
+    ?TRACE("OP_BS_GET_FLOAT2 ~p,~p,~p,~p,~p,~p,~p\n", [Fail, Src, _Live, Size, Unit, FlagsValue, Dest]),
+    MSt16 = MMod:move_to_vm_register(MSt15, Result, Dest),
+    MSt17 = MMod:free_native_registers(MSt16, [Result]),
+    first_pass(Rest7, MMod, MSt17, State0);
 % 119
 first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
