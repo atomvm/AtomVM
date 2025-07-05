@@ -614,13 +614,15 @@ size_t intn_bsr(const uint32_t num[], size_t len, size_t n, uint32_t *out)
     size_t counted_digits = intn_count_digits(num, len);
     size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
     size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
-    size_t new_bits_len = size_round_to(effective_bits_len - n, digit_bit_size);
 
-    size_t new_digits_count = new_bits_len / digit_bit_size;
-
-    if (new_digits_count > INTN_BSL_MAX_OUT_LEN) {
-        return new_digits_count;
+    if (n > effective_bits_len) {
+        out[0] = 0;
+        return 1;
     }
+
+    ///size_t new_bits_len = size_round_to(effective_bits_len - n, digit_bit_size);
+
+    ////size_t new_digits_count = new_bits_len / digit_bit_size;
 
     size_t discarded = MIN(n / digit_bit_size, len);
 
