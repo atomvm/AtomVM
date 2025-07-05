@@ -128,6 +128,9 @@ struct ModuleNativeInterface
     term (*bitstring_extract_float)(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags);
     int (*module_get_fun_arity)(Module *fun_module, uint32_t fun_index);
     bool (*bitstring_match_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
+    term (*bitstring_get_utf8)(term src);
+    term (*bitstring_get_utf16)(term src, int flags_value);
+    term (*bitstring_get_utf32)(term src, int flags_value);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE

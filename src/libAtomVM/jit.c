@@ -1406,6 +1406,56 @@ static bool jit_bitstring_match_module_str(Context *ctx, JITState *jit_state, te
     return true;
 }
 
+static term jit_bitstring_get_utf8(term src)
+{
+    term src_bin = term_get_match_state_binary(src);
+    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+    uint32_t val = 0;
+    size_t out_size = 0;
+    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
+
+    if (!is_valid) {
+        return term_invalid_term();
+    } else {
+        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+        return term_from_int(val);
+    }
+}
+
+static term jit_bitstring_get_utf16(term src, int flags_value)
+{
+    term src_bin = term_get_match_state_binary(src);
+    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+    int32_t val = 0;
+    size_t out_size = 0;
+    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
+
+    if (!is_valid) {
+        return term_invalid_term();
+    } else {
+        term_set_match_state_offset(src, offset_bits + (out_size * 8));
+        return term_from_int(val);
+    }
+}
+
+static term jit_bitstring_get_utf32(term src, int flags_value)
+{
+    term src_bin = term_get_match_state_binary(src);
+    avm_int_t offset_bits = term_get_match_state_offset(src);
+
+    int32_t val = 0;
+    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
+
+    if (!is_valid) {
+        return term_invalid_term();
+    } else {
+        term_set_match_state_offset(src, offset_bits + 32);
+        return term_from_int(val);
+    }
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1475,4 +1525,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_extract_float,
     jit_module_get_fun_arity,
     jit_bitstring_match_module_str,
+    jit_bitstring_get_utf8,
+    jit_bitstring_get_utf16,
+    jit_bitstring_get_utf32,
 };
