@@ -952,17 +952,17 @@ test_bsr() ->
     <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(250), 16),
     <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(256), 16),
 
-    %Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432987654321">>), 16),
-    %<<"-CAFE1234AABBCCDD98765432988">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(24), 16),
-    %<<"-657F091A555DE66ECC3B2A194D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(29), 16),
-    %<<"-CAFE1234AABBCCDD98765432A">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(32), 16),
-    %<<"-195FC2469557799BB30ECA866">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(35), 16),
-    %<<"-CAFE1234AABBCCDD98766">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(48), 16),
-    %<<"-195FC2469557799BB30ED">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(51), 16),
-    %<<"-CAFE1234AABBCCDDA">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(64), 16),
-    %<<"-D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(128), 16),
-    %<<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(250), 16),
-    %<<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(256), 16),
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"-CAFE1234AABBCCDD98765432988">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(24), 16),
+    <<"-657F091A555DE66ECC3B2A194D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(29), 16),
+    <<"-CAFE1234AABBCCDD98765432A">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(32), 16),
+    <<"-195FC2469557799BB30ECA866">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(35), 16),
+    <<"-CAFE1234AABBCCDD98766">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(48), 16),
+    <<"-195FC2469557799BB30ED">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(51), 16),
+    <<"-CAFE1234AABBCCDDA">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(64), 16),
+    <<"-D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(128), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(250), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(256), 16),
 
     0.
 
