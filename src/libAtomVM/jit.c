@@ -73,6 +73,10 @@ _Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/sr
         }                                                                       \
     }
 
+#ifndef MIN
+#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+#endif
+
 static void destroy_extended_registers(Context *ctx, unsigned int live)
 {
     struct ListHead *item;
@@ -1352,6 +1356,56 @@ static int jit_module_get_fun_arity(Module *fun_module, uint32_t fun_index)
     return fun_arity_and_freeze - fun_n_freeze;
 }
 
+static bool jit_bitstring_match_module_str(Context *ctx, JITState *jit_state, term bs_bin, size_t bs_offset, int str_id, size_t bits)
+{
+    UNUSED(ctx);
+    size_t remaining = 0;
+    const uint8_t *str = module_get_str(jit_state->module, str_id, &remaining);
+
+    if (term_binary_size(bs_bin) * 8 - bs_offset < MIN(remaining * 8, bits)) {
+        return false;
+    }
+
+    if (bits % 8 == 0 && bs_offset % 8 == 0) {
+        avm_int_t bytes = bits / 8;
+        avm_int_t byte_offset = bs_offset / 8;
+
+        if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
+            return false;
+        }
+        return true;
+    }
+
+    // Compare unaligned bits
+    const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
+    uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
+    uint8_t str_bit_offset = 7;
+    size_t remaining_bits = bits;
+    while (remaining_bits > 0) {
+        uint8_t str_ch = *str;
+        uint8_t bin_ch = *bs_str;
+        uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
+        uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
+        if (str_ch_bit ^ bin_ch_bit) {
+            return false;
+        }
+        if (str_bit_offset) {
+            str_bit_offset--;
+        } else {
+            str_bit_offset = 7;
+            str++;
+        }
+        if (bin_bit_offset) {
+            bin_bit_offset--;
+        } else {
+            bin_bit_offset = 7;
+            bs_str++;
+        }
+        remaining_bits--;
+    }
+    return true;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1420,4 +1474,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_put_map_assoc,
     jit_bitstring_extract_float,
     jit_module_get_fun_arity,
+    jit_bitstring_match_module_str,
 };
