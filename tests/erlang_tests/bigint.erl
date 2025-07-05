@@ -951,6 +951,8 @@ test_bsr() ->
     <<"C">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(128), 16),
     <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(250), 16),
     <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(256), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(257), 16),
+    <<"0">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(600), 16),
 
     Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432987654321">>), 16),
     <<"-CAFE1234AABBCCDD98765432988">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(24), 16),
@@ -963,6 +965,8 @@ test_bsr() ->
     <<"-D">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(128), 16),
     <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(250), 16),
     <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(256), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(257), 16),
+    <<"-1">> = erlang:integer_to_binary(Pattern2 bsr ?MODULE:id(600), 16),
 
     0.
 
