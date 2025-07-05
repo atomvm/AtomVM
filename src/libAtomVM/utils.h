@@ -324,9 +324,10 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 
 #ifdef __GNUC__
     #define UNREACHABLE() \
-        __builtin_unreachable()
+        abort()
 #else
-    #define UNREACHABLE(...)
+    #define UNREACHABLE(...) \
+        abort()
 #endif
 
 #if defined(__GNUC__) && !defined(__clang__)
