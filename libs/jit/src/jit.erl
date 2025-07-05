@@ -1004,7 +1004,28 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     Labels1 = [{OffsetRef, Offset} | Labels0],
     first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 115
-% first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Label, Rest1} = decode_label(Rest0),
+    {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {MSt2, ArityTerm, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    ?TRACE("OP_IS_FUNCTION2 ~p,~p,~p\n", [Label, Arg1, ArityTerm]),
+    {MSt3, FuncPtr} = term_is_boxed_with_tag_and_get_ptr(Label, Arg1, ?TERM_BOXED_FUN, MMod, MSt2),
+    {MSt4, Arity} = term_to_int(ArityTerm, Label, MMod, MSt3),
+    {MSt5, ModuleReg} = MMod:get_array_element(MSt4, FuncPtr, 1),
+    {MSt6, IndexOrModuleReg} = MMod:get_array_element(MSt5, FuncPtr, 2),
+    MSt7 = MMod:if_else_block(MSt6, {IndexOrModuleReg, '&', ?TERM_IMMED2_TAG_MASK, '!=', ?TERM_IMMED2_ATOM}, fun(BSt0) ->
+        BSt1 = MMod:shift_right(BSt0, IndexOrModuleReg, 4),
+        {BSt2, FunArity} = MMod:call_primitive(BSt1, ?PRIM_MODULE_GET_FUN_ARITY, [ModuleReg, IndexOrModuleReg]),
+        cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
+    end, fun(BSt0) ->
+        {BSt1, FunArity} = MMod:get_array_element(BSt0, FuncPtr, 3),
+        BSt2 = MMod:shift_right(BSt1, FunArity, 4),
+        cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
+    end),
+    MSt8 = MMod:free_native_registers(MSt7, [FuncPtr, IndexOrModuleReg, ModuleReg, Arity]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt8),
+    first_pass(Rest3, MMod, MSt8, State0);
 % 117
 first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1271,6 +1292,8 @@ first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
 % 132
 % first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
+% 133
+% first_pass(<<?OP_BS_INIT_WRITABLE, Rest0/binary>>, MMod, MSt0, State0) ->
 % 136
 first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1279,6 +1302,8 @@ first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_TRIM ~p, ~p\n", [NWords, _NRemaining]),
     MSt1 = MMod:increment_sp(MSt0, NWords),
     first_pass(Rest2, MMod, MSt1, State0);
+% 138
+% first_pass(<<?OP_BS_GET_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
 % 152
 first_pass(<<?OP_GC_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1399,6 +1424,8 @@ first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt18 = MMod:free_native_registers(MSt17, [PutMapAssocReg, Dest]),
     ?ASSERT_ALL_NATIVE_FREE(MSt18),
     first_pass(Rest6, MMod, MSt18, State0);
+% 155
+% first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
 % 156
 first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2612,12 +2639,20 @@ term_from_catch_label(Dest, Label, MMod, MSt1) ->
     MMod:free_native_registers(MSt5, [Reg, Dest]).
 
 term_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    {MSt2, Reg} = MMod:copy_to_native_register(MSt1, Arg1),
     MSt3 = cond_jump_to_label({Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, MSt2),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
     MSt6 = cond_jump_to_label({{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt5),
     MSt6.
+
+term_is_boxed_with_tag_and_get_ptr(Label, Arg1, BoxedTag, MMod, MSt1) ->
+    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
+    MSt3 = cond_jump_to_label({Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, MSt2),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt5, BoxTagReg} = MMod:get_array_element(MSt4, Reg, 0),
+    MSt6 = cond_jump_to_label({{free, BoxTagReg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt5),
+    {MSt6, Reg}.
 
 term_is_immediate_or_boxed(
     Label, Arg1, ImmediateTag, BoxedTag, MMod, MSt1, #state{labels = Labels0} = State0

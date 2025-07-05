@@ -500,7 +500,7 @@ if_else_block(
     Stream4 = StreamModule:replace(Stream3, Offset + ReplaceDelta, <<
         (OffsetAfter - OffsetAfterCond)
     >>),
-    StateElse = State1#state{stream = Stream4},
+    StateElse = State2#state{stream = Stream4, used_regs = State1#state.used_regs, available_regs = State1#state.available_regs, available_fpregs = State1#state.available_fpregs},
     State3 = BlockFalseFn(StateElse),
     Stream5 = State3#state.stream,
     OffsetFinal = StreamModule:offset(Stream5),
