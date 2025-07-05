@@ -1005,6 +1005,42 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0
     first_pass(Rest2, MMod, MSt6, State0#state{labels = Labels1});
 % 115
 % first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+% 117
+first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {_Live, Rest3} = decode_literal(Rest2),
+    {MSt2, Size, Rest4} = decode_compact_term(Rest3, MMod, MSt1, State0),
+    {Unit, Rest5} = decode_literal(Rest4),
+    {FlagsValue, Rest6} = decode_literal(Rest5),
+    {MSt3, SrcReg} = MMod:move_to_native_register(MSt2, Src),
+    {MSt4, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt3, {free, SrcReg}),
+    {MSt5, SizeReg} = term_to_int(Size, Fail, MMod, MSt4),
+    {MSt6, NumBits} =
+        if
+            is_integer(SizeReg) ->
+                {MSt5, SizeReg * Unit};
+            true ->
+                MSt5M = MMod:mul(MSt5, SizeReg, Unit),
+                {MSt5M, SizeReg}
+        end,
+    {MSt7, BSBinaryReg} = MMod:get_array_element(MSt6, MatchStateRegPtr, 1),
+    {MSt8, BSOffsetReg} = MMod:get_array_element(MSt7, MatchStateRegPtr, 2),
+    {MSt9, Result} = MMod:call_primitive(MSt8, ?PRIM_BITSTRING_EXTRACT_INTEGER, [
+        ctx, jit_state, {free, BSBinaryReg}, BSOffsetReg, NumBits, {free, FlagsValue}
+    ]),
+    MSt10 = handle_error_if({Result, '==', 0}, MMod, MSt9),
+    MSt11 = cond_jump_to_label({Result, '==', ?FALSE_ATOM}, Fail, MMod, MSt10),
+    MSt12 = MMod:add(MSt11, BSOffsetReg, NumBits),
+    MSt13 = MMod:free_native_registers(MSt12, [NumBits]),
+    MSt14 = MMod:move_to_array_element(MSt13, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt15 = MMod:free_native_registers(MSt14, [BSOffsetReg, MatchStateRegPtr]),
+    {MSt16, Dest, Rest7} = decode_dest(Rest6, MMod, MSt15),
+    ?TRACE("OP_BS_GET_INTEGER2 ~p,~p,~p,~p,~p,~p,~p\n", [Fail, Src, _Live, Size, Unit, FlagsValue, Dest]),
+    MSt17 = MMod:move_to_vm_register(MSt16, Result, Dest),
+    MSt18 = MMod:free_native_registers(MSt17, [Result]),
+    first_pass(Rest7, MMod, MSt18, State0);
 % 118
 % first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
 % 119
@@ -1748,32 +1784,33 @@ first_pass(
         end,
     {MSt6, TrimResultReg} = MMod:call_primitive(MSt5, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
     MSt7 = MMod:free_native_registers(MSt6, [TrimResultReg]),
-    {MSt11, BinaryTotalSizeInBytes, AllocSize} =
+    {MSt12, BinaryTotalSizeInBytes, AllocSize} =
         if
             is_integer(BinaryTotalSize) ->
-                {MSt7, (BinaryTotalSize div 8), (BinaryTotalSize div 8) + Alloc};
+                {MSt7, (BinaryTotalSize div 8), term_binary_heap_size((BinaryTotalSize div 8), MMod) + Alloc};
             true ->
                 MSt8 = MMod:shift_right(MSt7, BinaryTotalSize, 3),
-                {MSt9, AllocSizeReg} = MMod:copy_to_native_register(MSt8, BinaryTotalSize),
+                {MSt9, BinaryTotalSize0} = MMod:copy_to_native_register(MSt8, BinaryTotalSize),
+                {MSt10, AllocSizeReg} = term_binary_heap_size({free, BinaryTotalSize0}, MMod, MSt9),
                 case Alloc of
                     0 ->
-                        {MSt9, BinaryTotalSize, AllocSizeReg};
+                        {MSt10, BinaryTotalSize, AllocSizeReg};
                     _ ->
-                        MSt10 = MMod:add(MSt9, AllocSizeReg, Alloc),
-                        {MSt10, BinaryTotalSize, AllocSizeReg}
+                        MSt11 = MMod:add(MSt10, AllocSizeReg, Alloc),
+                        {MSt11, BinaryTotalSize, AllocSizeReg}
                 end
         end,
-    {MSt12, MemoryEnsureFreeReg} = MMod:call_primitive(
-        MSt11, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+    {MSt13, MemoryEnsureFreeReg} = MMod:call_primitive(
+        MSt12, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
             ctx, jit_state, {free, AllocSize}, Live, ?MEMORY_CAN_SHRINK
         ]
     ),
-    MSt13 = handle_error_if({'(uint8_t)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt12),
-    {MSt14, CreatedBin} = MMod:call_primitive(MSt13, ?PRIM_TERM_CREATE_EMPTY_BINARY, [
+    MSt14 = handle_error_if({'(uint8_t)', {free, MemoryEnsureFreeReg}, '==', false}, MMod, MSt13),
+    {MSt15, CreatedBin} = MMod:call_primitive(MSt14, ?PRIM_TERM_CREATE_EMPTY_BINARY, [
         ctx, {free, BinaryTotalSizeInBytes}
     ]),
     % We redo the decoding. Rest7 should still be equal to previous value.
-    {Rest7, MSt15, FinalOffset} = lists:foldl(
+    {Rest7, MSt16, FinalOffset} = lists:foldl(
         fun(_Index, {AccRest0, AccMSt0, AccOffset0}) ->
             {AtomTypeIndex, AccRest1} = decode_atom(AccRest0),
             AtomType = AtomResolver(AtomTypeIndex),
@@ -1798,15 +1835,15 @@ first_pass(
             AccMSt5 = MMod:free_native_registers(AccMSt4, [Flags, Src, Size]),
             {AccRest6, AccMSt5, AccOffset1}
         end,
-        {Rest6, MSt14, 0},
+        {Rest6, MSt15, 0},
         lists:seq(1, NBSegments)
     ),
     ?TRACE("]\n", []),
-    MSt16 = MMod:free_native_registers(MSt15, [FinalOffset]),
-    MSt17 = MMod:move_to_vm_register(MSt16, CreatedBin, Dest),
-    MSt18 = MMod:free_native_registers(MSt17, [CreatedBin, Dest]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt18),
-    first_pass(Rest7, MMod, MSt18, State1);
+    MSt17 = MMod:free_native_registers(MSt16, [FinalOffset]),
+    MSt18 = MMod:move_to_vm_register(MSt17, CreatedBin, Dest),
+    MSt19 = MMod:free_native_registers(MSt18, [CreatedBin, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt19),
+    first_pass(Rest7, MMod, MSt19, State1);
 % 178
 first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3088,3 +3125,36 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
     MMod:if_block(MSt0, Cond, fun(BSt0) ->
         MMod:jump_to_label(BSt0, Label)
     end).
+
+term_binary_heap_size(Size, MMod) when is_integer(Size) ->
+    case MMod:word_size() of
+        4 when Size < ?REFC_BINARY_MIN_32 ->
+            ((Size + 3) bsr 2) + 1;
+        8 when Size < ?REFC_BINARY_MIN_64 ->
+            ((Size + 7) bsr 3) + 1;
+        _ ->
+            ?TERM_BOXED_REFC_BINARY_SIZE
+    end.
+
+term_binary_heap_size({free, Immediate}, MMod, MSt0) when is_integer(Immediate) ->
+    {MSt0, term_binary_heap_size(Immediate, MMod)};
+term_binary_heap_size({free, Reg}, MMod, MSt0) ->
+    MSt1 = case MMod:word_size() of
+        4 ->
+            MMod:if_else_block(MSt0, {Reg, '<', ?REFC_BINARY_MIN_32}, fun(BSt0) ->
+                BSt1 = MMod:add(BSt0, Reg, 3),
+                BSt2 = MMod:shift_right(BSt1, Reg, 2),
+                MMod:add(BSt2, Reg, 1)
+            end, fun(BSt0) ->
+                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE, Reg)
+            end);
+        8 ->
+            MMod:if_else_block(MSt0, {Reg, '<', ?REFC_BINARY_MIN_64}, fun(BSt0) ->
+                BSt1 = MMod:add(BSt0, Reg, 7),
+                BSt2 = MMod:shift_right(BSt1, Reg, 3),
+                MMod:add(BSt2, Reg, 1)
+            end, fun(BSt0) ->
+                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE, Reg)
+            end)
+    end,
+    {MSt1, Reg}.
