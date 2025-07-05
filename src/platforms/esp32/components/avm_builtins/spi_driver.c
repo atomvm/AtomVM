@@ -193,8 +193,7 @@ static void debug_devcfg(spi_device_interface_config_t *devcfg)
 
 void spi_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, spi_driver_atom);
-    spi_driver = term_from_atom_index(index);
+    spi_driver = globalcontext_make_atom(global, spi_driver_atom);
 }
 
 Context *spi_driver_create_port(GlobalContext *global, term opts)
