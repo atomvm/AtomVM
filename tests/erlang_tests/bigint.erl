@@ -55,7 +55,8 @@ start() ->
         big_literals() +
         to_external_term() +
         test_bor() +
-        test_bsl().
+        test_bsl() +
+        test_bsr().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -889,6 +890,23 @@ test_bsl() ->
 
 
     0.
+
+test_bsr() ->
+    erlang:display('bsr'),
+    %% versione negativa
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"CAFE1234AABBCCDD98765432987">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(24), 16),
+    <<"657F091A555DE66ECC3B2A194C">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(29), 16),
+    <<"CAFE1234AABBCCDD987654329">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(32), 16),
+    <<"195FC2469557799BB30ECA865">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(35), 16),
+    <<"CAFE1234AABBCCDD98765">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(48), 16),
+    <<"195FC2469557799BB30EC">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(51), 16),
+    <<"CAFE1234AABBCCDD9">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(64), 16),
+    <<"C">> = erlang:integer_to_binary(Pattern1 bsr ?MODULE:id(128), 16),
+
+    0.
+
+
 
 
 id(X) ->
