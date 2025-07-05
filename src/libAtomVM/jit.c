@@ -39,6 +39,7 @@
 #include "trace.h"
 
 // Verify matching atom index in defaultatoms.hrl
+_Static_assert(ERROR_ATOM_INDEX == 3, "ERROR_ATOM_INDEX is 3 in jit/src/defaultatoms.hrl");
 _Static_assert(BADARG_ATOM_INDEX == 5, "BADARG_ATOM_INDEX is 5 in jit/src/defaultatoms.hrl");
 _Static_assert(BADARITH_ATOM_INDEX == 6, "BADARITH_ATOM_INDEX is 6 in jit/src/defaultatoms.hrl");
 _Static_assert(BADFUN_ATOM_INDEX == 8, "BADFUN_ATOM_INDEX is 8 in jit/src/defaultatoms.hrl");
@@ -47,8 +48,10 @@ _Static_assert(TRY_CLAUSE_ATOM_INDEX == 11, "TRY_CLAUSE_ATOM_INDEX is 11 in jit/
 _Static_assert(BADMATCH_ATOM_INDEX == 31, "BADMATCH_ATOM_INDEX is 31 in jit/src/defaultatoms.hrl");
 _Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in jit/src/defaultatoms.hrl");
 _Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/src/defaultatoms.hrl");
+_Static_assert(THROW_ATOM_INDEX == 34, "THROW_ATOM_INDEX is 34 in jit/src/defaultatoms.hrl");
 _Static_assert(UNSUPPORTED_ATOM_INDEX == 36, "UNSUPPORTED_ATOM_INDEX is 36 in jit/src/defaultatoms.hrl");
 _Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultatoms.hrl");
+_Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 58, "LOWERCASE_EXIT_ATOM_INDEX is 58 in jit/src/defaultatoms.hrl");
 _Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/src/defaultatoms.hrl");
 
 #define HANDLE_ERROR()                                                       \
@@ -1466,6 +1469,11 @@ static term term_copy_map(Context *ctx, term src)
     return map;
 }
 
+static term jit_stacktrace_build(Context *ctx)
+{
+    return stacktrace_build(ctx, ctx->x, 1);
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1539,4 +1547,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
     term_copy_map,
+    jit_stacktrace_build
 };
