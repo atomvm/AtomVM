@@ -1456,6 +1456,16 @@ static term jit_bitstring_get_utf32(term src, int flags_value)
     }
 }
 
+static term term_copy_map(Context *ctx, term src)
+{
+    size_t src_size = term_get_map_size(src);
+    term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
+    for (size_t j = 0;  j < src_size;  ++j) {
+        term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+    }
+    return map;
+}
+
 const ModuleNativeInterface module_native_interface = {
     jit_raise_error,
     jit_return,
@@ -1528,4 +1538,5 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf8,
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
+    term_copy_map,
 };
