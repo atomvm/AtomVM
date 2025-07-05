@@ -126,6 +126,7 @@ struct ModuleNativeInterface
     void (*free)(void *ptr);
     term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);
     term (*bitstring_extract_float)(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags);
+    int (*module_get_fun_arity)(Module *fun_module, uint32_t fun_index);
 };
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
