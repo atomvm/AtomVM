@@ -82,7 +82,7 @@ struct ModuleNativeInterface
     Context *(*raise_error_tuple)(Context *ctx, JITState *jit_state, term error_atom, term arg1);
     term (*term_alloc_fun)(Context *ctx, JITState *jit_state, uint32_t fun_index, uint32_t numfree);
     Context *(*process_signal_messages)(Context *ctx, JITState *jit_state);
-    bool (*mailbox_peek)(Context *ctx, term *result);
+    term (*mailbox_peek)(Context *ctx);
     void (*mailbox_remove_message)(Context *ctx);
     void (*timeout)(Context *ctx);
     void (*mailbox_next)(Context *ctx);
