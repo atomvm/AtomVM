@@ -1646,7 +1646,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
 
         intn_digit_t bigres[INTN_MAX_RES_LEN];
-        size_t bigres_len = intn_bsr(m, m_len, b, bigres);
+        size_t bigres_len = intn_bsr(m, m_len, m_sign, b, bigres);
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
     } else {
