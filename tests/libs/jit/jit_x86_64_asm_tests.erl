@@ -397,3 +397,37 @@ movsd_test_() ->
             <<16#41, 16#F2, 16#0F, 16#10, 16#43, 64>>, jit_x86_64_asm:movsd({64, r11}, xmm8)
         )
     ].
+
+movq_sib_test_() ->
+    [
+        % movq %rax, 0x10(%rdx,%rcx,2)
+        ?_assertEqual(
+            % REX.W, ModRM, SIB, disp8
+            <<16#48, 16#89, 16#44, 16#4A, 16#10>>,
+            jit_x86_64_asm:movq(rax, {16, rdx, rcx, 2})
+        ),
+        % movq %r8, -0x80(%r9,%r10,4)
+        ?_assertEqual(
+            % REX.WRXB, ModRM, SIB, disp32
+            <<16#4F, 16#89, 16#44, 16#91, 16#80>>,
+            jit_x86_64_asm:movq(r8, {-128, r9, r10, 4})
+        ),
+        % movq %r11, 0x7f(%r8,%rdx,8)
+        ?_assertEqual(
+            % REX.WRXB, ModRM, SIB, disp8
+            <<16#4D, 16#89, 16#5C, 16#D0, 16#7F>>,
+            jit_x86_64_asm:movq(r11, {127, r8, rdx, 8})
+        ),
+        % movq %rcx, 0x12345678(%rsi,%rdi,1)
+        ?_assertEqual(
+            % REX.W, ModRM, SIB, disp32
+            <<16#48, 16#89, 16#8C, 16#3E, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:movq(rcx, {305419896, rsi, rdi, 1})
+        ),
+        % movq $95, 0x18(%rax, %rcx, 8)
+        ?_assertEqual(
+            % REX.W, ModRM, SIB, disp32
+            <<16#48, 16#C7, 16#84, 16#C8, 16#18, 16#00, 16#00, 16#00, 16#5F, 16#00, 16#00, 16#00>>,
+            jit_x86_64_asm:movq(95, {16#18, rax, rcx, 8})
+        )
+    ].
