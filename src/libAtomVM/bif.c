@@ -1585,10 +1585,6 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
                 #else
                     return make_maybe_boxed_int(ctx, fail_label, live, result);
                 #endif
-            } else {
-                fprintf(stderr, "was with b: %i, with: ", (int) b);
-                term_display(stderr, arg1, ctx);
-                fprintf(stderr, "\n");
             }
         }
 
@@ -1603,11 +1599,10 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
 
         intn_digit_t bigres[INTN_MAX_RES_LEN];
-        size_t bigres_len;
-        bigres_len = intn_bsl(m, m_len, b, bigres);
-        fprintf(stderr, "bigres: %i\n", (int) bigres_len);
+        size_t bigres_len = intn_bsl(m, m_len, b, bigres);
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+
     } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
@@ -1619,10 +1614,6 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
 
         avm_int_t b = term_to_int(arg2);
-
-        fprintf(stderr, "going to do b: %i, with: ", (int) b);
-        term_display(stderr, arg1, ctx);
-        fprintf(stderr, "\n");
 
         if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
             uint64_t a = (uint64_t) term_maybe_unbox_int64(arg1);
@@ -1649,6 +1640,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         size_t bigres_len = intn_bsr(m, m_len, m_sign, b, bigres);
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+
     } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
