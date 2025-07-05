@@ -1134,6 +1134,37 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt27 = MMod:move_to_vm_register(MSt26, ResultTerm, Dest),
     MSt28 = MMod:free_native_registers(MSt27, [ResultTerm]),
     first_pass(Rest7, MMod, MSt28, State0);
+% 120
+first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {MSt2, Size, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {Unit, Rest4} = decode_literal(Rest3),
+    {_FlagsValue, Rest5} = decode_literal(Rest4),
+    ?TRACE("OP_BS_SKIP_BITS2 ~p, ~p, ~p, ~p, ~p\n", [Fail, Src, Size, Unit, _FlagsValue]),
+    {MSt3, SrcReg} = MMod:move_to_native_register(MSt2, Src),
+    {MSt4, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt3, {free, SrcReg}),
+    {MSt5, SizeReg} = term_to_int(Size, Fail, MMod, MSt4),
+    {MSt6, NumBits} =
+        if
+            is_integer(SizeReg) ->
+                {MSt5, SizeReg * Unit};
+            true ->
+                MSt5M = MMod:mul(MSt5, SizeReg, Unit),
+                {MSt5M, SizeReg}
+        end,
+    {MSt7, BSBinaryReg} = MMod:get_array_element(MSt6, MatchStateRegPtr, 1),
+    {MSt8, BSOffsetReg} = MMod:get_array_element(MSt7, MatchStateRegPtr, 2),
+    MSt9 = MMod:add(MSt8, BSOffsetReg, NumBits),
+    MSt10 = MMod:free_native_registers(MSt9, [NumBits]),
+    {MSt11, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt10),
+    MSt12 = MMod:shift_left(MSt11, BSBinarySize, 3),
+    MSt13 = cond_jump_to_label({BSBinarySize, '<', BSOffsetReg}, Fail, MMod, MSt12),
+    MSt14 = MMod:free_native_registers(MSt13, [BSBinarySize]),
+    MSt15 = MMod:move_to_array_element(MSt14, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt16 = MMod:free_native_registers(MSt15, [BSOffsetReg, MatchStateRegPtr]),
+    first_pass(Rest5, MMod, MSt16, State0);
 % 124
 first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3158,3 +3189,8 @@ term_binary_heap_size({free, Reg}, MMod, MSt0) ->
             end)
     end,
     {MSt1, Reg}.
+
+term_binary_size({free, BinReg}, MMod, MSt0) ->
+    MSt1 = MMod:and_(MSt0, BinReg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt2 = MMod:move_array_element(MSt1, BinReg, 1, BinReg),
+    {MSt2, BinReg}.
