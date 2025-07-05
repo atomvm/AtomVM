@@ -608,7 +608,7 @@ size_t intn_bsl(const uint32_t num[], size_t len, size_t n, uint32_t *out)
         out[initial_zeros + i] = maybe_last_out;
         return initial_zeros + i + 1;
     }
-    
+
     return initial_zeros + i;
 }
 
@@ -654,7 +654,7 @@ size_t intn_bsr(const uint32_t num[], size_t len, intn_integer_sign_t num_sign, 
         return 1;
     }
 
-    size_t shifted_len = size_round_to(effective_bits_len - n, digit_bit_size) / digit_bit_size; 
+    size_t shifted_len = size_round_to(effective_bits_len - n, digit_bit_size) / digit_bit_size;
 
     if (num_sign == IntNPositiveInteger) {
         bsru(num, effective_bits_len, n, 0, out);
