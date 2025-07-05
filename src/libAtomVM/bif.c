@@ -1521,8 +1521,9 @@ static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
 static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *out)
 {
     //
-    if ((n != 0) && (lshift > 64)) {
-        return true;
+    if ((n != 0) && (lshift > 32)) {
+        *out = 0;
+        return (n != 0);
     }
     //
 
@@ -1530,6 +1531,14 @@ static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *o
     *out = res;
     int32_t check = int32_bsr(res, lshift);
     return check != n;
+}
+
+static inline int32_t int32_bsr_safe(int32_t n, unsigned int rshift)
+{
+    if (rshift > 32) {
+        return n < 0 ? -1 : 0;
+    }
+    return int32_bsr(n, rshift);
 }
 #endif
 
@@ -1541,8 +1550,9 @@ static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
 static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
 {
     //
-    if ((n != 0) && (lshift > 64)) {
-        return true;
+    if (lshift > 64) {
+        *out = 0;
+        return (n != 0);
     }
     //
 
@@ -1550,6 +1560,14 @@ static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *o
     *out = res;
     int64_t check = int64_bsr(res, lshift);
     return check != n;
+}
+
+static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
+{
+    if (rshift > 64) {
+        return n < 0 ? -1 : 0;
+    }
+    return int64_bsr(n, rshift);
 }
 
 term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
@@ -1608,7 +1626,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 
         if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
             uint64_t a = (uint64_t) term_maybe_unbox_int64(arg1);
-            int64_t result = (int64_t) (a >> b); //FIX THIS
+            int64_t result = int64_bsr_safe(a, b);
 
             #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
                 return make_maybe_boxed_int64(ctx, fail_label, live, result);
