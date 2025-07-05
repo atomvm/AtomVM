@@ -1291,7 +1291,25 @@ first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0}
     Labels1 = [{OffsetRef1, Offset}, {OffsetRef2, Offset} | Labels0],
     first_pass(Rest2, MMod, MSt11, State0#state{labels = Labels1});
 % 132
-% first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {Bits, Rest3} = decode_literal(Rest2),
+    {Offset, Rest4} = decode_literal(Rest3),
+    ?TRACE("OP_BS_MATCH_STRING ~p,~p,~p,~p\n", [Fail, Src, Bits, Offset]),
+    {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
+    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
+    {MSt4, BSBinaryReg} = MMod:get_array_element(MSt3, MatchStateRegPtr, 1),
+    {MSt5, BSOffsetReg} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
+    {MSt6, MatchResult} = MMod:call_primitive(MSt5, ?PRIM_BITSTRING_MATCH_MODULE_STR, [
+        ctx, jit_state, {free, BSBinaryReg}, BSOffsetReg, Offset, Bits
+    ]),
+    MSt7 = cond_jump_to_label({'(uint8_t)', {free, MatchResult}, '==', false}, Fail, MMod, MSt6),
+    MSt8 = MMod:add(MSt7, BSOffsetReg, Bits),
+    MSt9 = MMod:move_to_array_element(MSt8, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt10 = MMod:free_native_registers(MSt9, [BSOffsetReg, MatchStateRegPtr]),
+    first_pass(Rest4, MMod, MSt10, State0);
 % 133
 % first_pass(<<?OP_BS_INIT_WRITABLE, Rest0/binary>>, MMod, MSt0, State0) ->
 % 136
@@ -3243,17 +3261,18 @@ term_binary_heap_size({free, Reg}, MMod, MSt0) ->
             MMod:if_else_block(MSt0, {Reg, '<', ?REFC_BINARY_MIN_32}, fun(BSt0) ->
                 BSt1 = MMod:add(BSt0, Reg, 3),
                 BSt2 = MMod:shift_right(BSt1, Reg, 2),
-                MMod:add(BSt2, Reg, 1)
+                MMod:add(BSt2, Reg, 1 + ?BINARY_HEADER_SIZE)
             end, fun(BSt0) ->
-                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE, Reg)
+                % pretty sure  + ?BINARY_HEADER_SIZE is too much, same issue in opcodeswitch
+                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE + ?BINARY_HEADER_SIZE, Reg)
             end);
         8 ->
             MMod:if_else_block(MSt0, {Reg, '<', ?REFC_BINARY_MIN_64}, fun(BSt0) ->
                 BSt1 = MMod:add(BSt0, Reg, 7),
                 BSt2 = MMod:shift_right(BSt1, Reg, 3),
-                MMod:add(BSt2, Reg, 1)
+                MMod:add(BSt2, Reg, 1 + ?BINARY_HEADER_SIZE)
             end, fun(BSt0) ->
-                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE, Reg)
+                MMod:move_to_native_register(BSt0, ?TERM_BOXED_REFC_BINARY_SIZE + ?BINARY_HEADER_SIZE, Reg)
             end)
     end,
     {MSt1, Reg}.
