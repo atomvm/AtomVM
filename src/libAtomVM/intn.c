@@ -613,7 +613,8 @@ size_t intn_bsl(const uint32_t num[], size_t len, size_t n, uint32_t *out)
     return initial_zeros + i;
 }
 
-void bsru(const uint32_t num[], size_t effective_bits_len, size_t n, uint32_t last_digit, uint32_t *out)
+void bsru(
+    const uint32_t num[], size_t effective_bits_len, size_t n, uint32_t last_digit, uint32_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8; // 32
 
@@ -643,7 +644,8 @@ void bsru(const uint32_t num[], size_t effective_bits_len, size_t n, uint32_t la
     }
 }
 
-size_t intn_bsr(const uint32_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out)
+size_t intn_bsr(
+    const uint32_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
     size_t counted_digits = intn_count_digits(num, len);
