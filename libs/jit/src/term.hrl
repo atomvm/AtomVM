@@ -66,3 +66,7 @@
 
 -define(TERM_MAP_NOT_FOUND, -1).
 -define(TERM_MAP_MEMORY_ALLOC_FAIL, -2).
+
+-define(REFC_BINARY_MIN_32, 32).
+-define(REFC_BINARY_MIN_64, 64).
+-define(TERM_BOXED_REFC_BINARY_SIZE, 6).
