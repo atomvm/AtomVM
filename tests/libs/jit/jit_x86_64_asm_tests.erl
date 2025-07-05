@@ -133,8 +133,19 @@ testq_test_() ->
     [
         ?_assertEqual(<<16#48, 16#85, 16#C0>>, jit_x86_64_asm:testq(rax, rax)),
         ?_assertEqual(<<16#48, 16#85, 16#C9>>, jit_x86_64_asm:testq(rcx, rcx)),
-        ?_assertEqual(<<16#49, 16#85, 16#C0>>, jit_x86_64_asm:testq(r8, r8)),
-        ?_assertEqual(<<16#49, 16#85, 16#C9>>, jit_x86_64_asm:testq(r9, r9))
+        ?_assertEqual(<<16#48, 16#85, 16#D2>>, jit_x86_64_asm:testq(rdx, rdx)),
+        ?_assertEqual(<<16#48, 16#85, 16#F6>>, jit_x86_64_asm:testq(rsi, rsi)),
+        ?_assertEqual(<<16#48, 16#85, 16#FF>>, jit_x86_64_asm:testq(rdi, rdi)),
+        ?_assertEqual(<<16#4D, 16#85, 16#C0>>, jit_x86_64_asm:testq(r8, r8)),
+        ?_assertEqual(<<16#4D, 16#85, 16#C9>>, jit_x86_64_asm:testq(r9, r9))
+    ].
+
+testl_test_() ->
+    [
+        ?_assertEqual(<<16#85, 16#C1>>, jit_x86_64_asm:testl(rax, rcx)),
+        ?_assertEqual(<<16#41, 16#85, 16#C8>>, jit_x86_64_asm:testl(rcx, r8)),
+        ?_assertEqual(<<16#44, 16#85, 16#C1>>, jit_x86_64_asm:testl(r8, rcx)),
+        ?_assertEqual(<<16#45, 16#85, 16#C0>>, jit_x86_64_asm:testl(r8, r8))
     ].
 
 jnz_test_() ->

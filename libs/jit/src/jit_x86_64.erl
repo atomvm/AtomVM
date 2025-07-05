@@ -36,12 +36,9 @@
     call_primitive/3,
     call_primitive_last/3,
     call_primitive_with_cp/3,
-    handle_error_if_false/2,
-    handle_error_if_zero/2,
     return_if_not_null/2,
     return_if_not_equal/3,
     jump_to_label/2,
-    cond_jump_to_label/3,
     jump_to_offset/1,
     if_block/3,
     if_else_block/4,
@@ -57,7 +54,6 @@
     move_array_element/4,
     move_to_array_element/4,
     copy_to_native_register/2,
-    get_pointer_to_vm_register/2,
     get_array_element/3,
     increment_sp/2,
     set_continuation_to_label/2,
@@ -383,22 +379,6 @@ call_primitive_last(
     Stream3 = StreamModule:append(Stream2, Call),
     State1#state{stream = Stream3, available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
-handle_error_if_false(#state{stream_module = StreamModule, stream = Stream0} = State, Reg) ->
-    I1 = jit_x86_64_asm:testb(Reg, Reg),
-    I3 = jit_x86_64_asm:movq(?PRIMITIVE(?PRIM_HANDLE_ERROR), Reg),
-    I4 = jit_x86_64_asm:jmpq({Reg}),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3) + byte_size(I4)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
-    State#state{stream = Stream1}.
-
-handle_error_if_zero(#state{stream_module = StreamModule, stream = Stream0} = State, Reg) ->
-    I1 = jit_x86_64_asm:testq(Reg, Reg),
-    I3 = jit_x86_64_asm:movq(?PRIMITIVE(?PRIM_HANDLE_ERROR), Reg),
-    I4 = jit_x86_64_asm:jmpq({Reg}),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3) + byte_size(I4)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
-    State#state{stream = Stream1}.
-
 return_if_not_null(
     #state{
         stream_module = StreamModule,
@@ -465,232 +445,6 @@ jump_to_label(
     {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(-4),
     Reloc = {Label, Offset + RelocOffset, 32},
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
-
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {Reg, '==', 0},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:testq(Reg, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {'(int)', Reg, '==', 0},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:testl(Reg, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {Reg, '==', Val},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {'(int)', Reg, '==', Val},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpl(Val, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {'(uint8_t)', Reg, '==', false},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:testb(Reg, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jnz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {'(uint8_t)', Reg, '&', Val},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:testb(Val, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches,
-        available_regs = AvailableRegs0,
-        available_fpregs = AvailableFPRegs0,
-        used_regs = UsedRegs0
-    } = State,
-    {{free, Reg}, '&', Mask, '!=', Val},
-    Label
-) when ?IS_GPR(Reg) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:andq(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpl(Val, Reg),
-    {RelocOffset, I4} = jit_x86_64_asm:jmp_rel32(-4),
-    I3 = jit_x86_64_asm:jz(byte_size(I4)),
-    Sz = byte_size(I1) + byte_size(I2) + byte_size(I3),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary,
-        I4/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
-        AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
-    ),
-    State#state{
-        stream = Stream1,
-        branches = [Reloc | AccBranches],
-        available_regs = AvailableRegs1,
-        available_fpregs = AvailableFPRegs1,
-        used_regs = UsedRegs1
-    };
-cond_jump_to_label(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches,
-        available_regs = [Temp | _]
-    } = State,
-    {Reg, '&', Mask, '!=', Val},
-    Label
-) when ?IS_GPR(Reg) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andq(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpl(Val, Temp),
-    {RelocOffset, I5} = jit_x86_64_asm:jmp_rel32(-4),
-    I4 = jit_x86_64_asm:jz(byte_size(I5)),
-    Sz = byte_size(I1) + byte_size(I2) + byte_size(I3) + byte_size(I4),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary,
-        I4/binary,
-        I5/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {Reg, '!=', Val},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {Reg, '<', 0},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:testq(Reg, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jge(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]};
-cond_jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State,
-    {Reg, '<', Val},
-    Label
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jge(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc = {Label, Offset + Sz + RelocOffset, 32},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
 jump_to_offset(
@@ -768,7 +522,7 @@ if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegA, '<', RegB}
-) when ?IS_GPR(RegA) andalso ?IS_GPR(RegB) ->
+) when ?IS_GPR(RegA) ->
     I1 = jit_x86_64_asm:cmpq(RegB, RegA),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
     Code = <<
@@ -816,14 +570,14 @@ if_block_cond(
     {State2, byte_size(I1) + RelocJNZOffset};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {RegOrTuple, '!=', Imm}
-) when is_integer(Imm) ->
+    {RegOrTuple, '!=', Val}
+) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_x86_64_asm:cmpq(Imm, Reg),
+    I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
         I1/binary,
@@ -835,14 +589,33 @@ if_block_cond(
     {State2, byte_size(I1) + RelocJZOffset};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {RegOrTuple, '==', Imm}
-) when is_integer(Imm) ->
+    {'(int)', RegOrTuple, '!=', Val}
+) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_x86_64_asm:cmpq(Imm, Reg),
+    I1 = jit_x86_64_asm:cmpl(Val, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {RegOrTuple, '==', Val}
+) when is_integer(Val) orelse ?IS_GPR(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     Code = <<
         I1/binary,
@@ -854,14 +627,14 @@ if_block_cond(
     {State2, byte_size(I1) + RelocJZOffset};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(int)', RegOrTuple, '==', Imm}
-) when is_integer(Imm) ->
+    {'(int)', RegOrTuple, '==', Val}
+) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_x86_64_asm:cmpl(Imm, Reg),
+    I1 = jit_x86_64_asm:cmpl(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
     Code = <<
         I1/binary,
@@ -948,7 +721,29 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + byte_size(I2) + RelocJZOffset}.
+    {State2, byte_size(I1) + byte_size(I2) + RelocJZOffset};
+if_block_cond(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State0,
+    {'(uint8_t)', RegOrTuple, '&', Val}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:testb(Val, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, byte_size(I1) + RelocJZOffset}.
 
 if_block_free_reg({free, Reg}, State0) ->
     #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
@@ -1139,7 +934,7 @@ call_func_ptr(
     FreeRegs = lists:flatmap(
         fun
             ({free, {ptr, Reg}}) -> [Reg];
-            ({free, Reg}) -> [Reg];
+            ({free, Reg}) when is_atom(Reg) -> [Reg];
             (_) -> []
         end,
         [FuncPtrTuple | Args]
@@ -1592,57 +1387,6 @@ move_to_vm_register(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
-
-get_pointer_to_vm_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | AvailableT],
-        used_regs = UsedRegs0
-    } = State,
-    {x_reg, X}
-) when
-    X < ?MAX_REG
-->
-    I1 = jit_x86_64_asm:leaq(?X_REG(X), Temp),
-    Stream1 = StreamModule:append(Stream0, I1),
-    {
-        State#state{stream = Stream1, available_regs = AvailableT, used_regs = [Temp | UsedRegs0]},
-        Temp
-    };
-get_pointer_to_vm_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | AvailableT],
-        used_regs = UsedRegs0
-    } = State,
-    {y_reg, 0}
-) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
-    Stream1 = StreamModule:append(Stream0, I1),
-    {
-        State#state{stream = Stream1, available_regs = AvailableT, used_regs = [Temp | UsedRegs0]},
-        Temp
-    };
-get_pointer_to_vm_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | AvailableT],
-        used_regs = UsedRegs0
-    } = State,
-    {y_reg, X}
-) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
-    I2 = jit_x86_64_asm:leaq({X * 8, Temp}, Temp),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    {
-        State#state{stream = Stream1, available_regs = AvailableT, used_regs = [Temp | UsedRegs0]},
-        Temp
-    };
-get_pointer_to_vm_register(State, {ptr, Reg}) ->
-    {State, Reg}.
 
 %% @doc move reg[x] to a vm or native register
 -spec move_array_element(
