@@ -467,7 +467,8 @@ static inline intn_integer_sign_t sign_bitwise(
 }
 
 // normalizes -0 to 0
-static inline size_t count_and_normalize_sign(const intn_digit_t num[], size_t len, intn_integer_sign_t sign, intn_integer_sign_t *out_sign) {
+static inline size_t count_and_normalize_sign(const intn_digit_t num[], size_t len, intn_integer_sign_t sign, intn_integer_sign_t *out_sign)
+{
     size_t count = intn_count_digits(num, len);
     if ((count == 0) && (sign == IntNNegativeInteger)) {
         *out_sign = IntNPositiveInteger;
