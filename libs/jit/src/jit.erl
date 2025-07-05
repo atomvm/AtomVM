@@ -1812,7 +1812,27 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt14),
     first_pass(Rest4, MMod, MSt14, State0);
 % 160
-% first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_STACKTRACE_BUILD, [ctx]),
+    MSt2 = MMod:move_to_vm_register(MSt1, ResultReg, {x_reg, 0}),
+    MSt3 = MMod:free_native_registers(MSt2, [ResultReg]),
+    first_pass(Rest0, MMod, MSt3, State0);
+% 161
+first_pass(<<?OP_RAW_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {MSt1, ExClassReg} = MMod:move_to_native_register(MSt0, {x_reg, 0}),
+    MSt2 = MMod:if_block(MSt1, {ExClassReg, '==', ?ERROR_ATOM}, fun(BSt0) ->
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+    end),
+    MSt3 = MMod:if_block(MSt2, {ExClassReg, '==', ?LOWERCASE_EXIT_ATOM}, fun(BSt0) ->
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+    end),
+    MSt4 = MMod:if_block(MSt3, {{free, ExClassReg}, '==', ?THROW_ATOM}, fun(BSt0) ->
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+    end),
+    MSt5 = MMod:move_to_vm_register(MSt4, ?BADARG_ATOM, {x_reg, 0}),
+    first_pass(Rest0, MMod, MSt5, State0);
 % 162
 first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
