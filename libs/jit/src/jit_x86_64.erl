@@ -53,6 +53,7 @@
     move_to_cp/2,
     move_array_element/4,
     move_to_array_element/4,
+    set_bs/2,
     copy_to_native_register/2,
     get_array_element/3,
     increment_sp/2,
@@ -160,6 +161,8 @@
 -define(X_REG(N), {16#30 + (N * 8), ?CTX_REG}).
 -define(CP, {16#B8, ?CTX_REG}).
 -define(FP_REGS, {16#C0, ?CTX_REG}).
+-define(BS, {16#C8, ?CTX_REG}).
+-define(BS_OFFSET, {16#D0, ?CTX_REG}).
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
 -define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
 -define(JITSTATE_REDUCTIONCOUNT, {16#10, ?JITSTATE_REG}).
@@ -1429,6 +1432,19 @@ move_array_element(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_array_element(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1 | _]} =
+        State,
+    {free, Reg},
+    Index,
+    {y_reg, Y}
+) when is_integer(Index) ->
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
+    I2 = jit_x86_64_asm:movq({Index * 8, Reg}, Reg),
+    I3 = jit_x86_64_asm:movq(Reg, {Y * 8, Temp1}),
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State#state{stream = Stream1};
+move_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State, Reg, Index, Dest
 ) when is_atom(Dest) andalso is_integer(Index) ->
     I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Dest),
@@ -1454,6 +1470,33 @@ move_array_element(
         AvailableRegs0, AvailableFPRegs0, UsedRegs0, IndexReg
     ),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
+    State#state{
+        available_regs = AvailableRegs1,
+        available_fpregs = AvailableFPRegs1,
+        used_regs = UsedRegs1,
+        stream = Stream1
+    };
+move_array_element(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _] = AvailableRegs0,
+        used_regs = UsedRegs0,
+        available_fpregs = AvailableFPRegs0
+    } = State,
+    Reg,
+    {free, IndexReg},
+    {y_reg, Y}
+) when ?IS_GPR(IndexReg) ->
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
+    I2 = jit_x86_64_asm:shlq(3, IndexReg),
+    I3 = jit_x86_64_asm:addq(Reg, IndexReg),
+    I4 = jit_x86_64_asm:movq({0, IndexReg}, IndexReg),
+    I5 = jit_x86_64_asm:movq(IndexReg, {Y * 8, Temp}),
+    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
+        AvailableRegs0, AvailableFPRegs0, UsedRegs0, IndexReg
+    ),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>),
     State#state{
         available_regs = AvailableRegs1,
         available_fpregs = AvailableFPRegs1,
@@ -1904,6 +1947,12 @@ rewrite_cp_offset(
     NewOffset = StreamModule:offset(Stream0) - CodeOffset,
     % Encode ReturnAddrOffset << 2
     Stream1 = StreamModule:replace(Stream0, RewriteOffset, <<(NewOffset bsl 2):32/little>>),
+    State0#state{stream = Stream1}.
+
+set_bs(#state{stream_module = StreamModule, stream = Stream0} = State0, TermReg) ->
+    I1 = jit_x86_64_asm:movq(TermReg, ?BS),
+    I2 = jit_x86_64_asm:movq(0, ?BS_OFFSET),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State0#state{stream = Stream1}.
 
 free_reg(AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
