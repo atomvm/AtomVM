@@ -86,6 +86,7 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     intn_integer_sign_t *out_sign);
 
 size_t intn_bsl(const uint32_t num[], size_t len, size_t n, uint32_t *out);
+size_t intn_bsr(const uint32_t num[], size_t len, size_t n, uint32_t *out);
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
 

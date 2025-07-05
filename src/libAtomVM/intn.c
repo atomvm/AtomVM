@@ -604,6 +604,55 @@ size_t intn_bsl(const uint32_t num[], size_t len, size_t n, uint32_t *out)
     return initial_zeros + i;
 }
 
+size_t intn_bsr(const uint32_t num[], size_t len, size_t n, uint32_t *out)
+{
+    size_t digit_bit_size = sizeof(uint32_t) * 8;
+
+    size_t digit_right_bit_shift = n % 32;
+    size_t left_shift_n = (32 - digit_right_bit_shift);
+
+    size_t counted_digits = intn_count_digits(num, len);
+    size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
+    size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
+    size_t new_bits_len = size_round_to(effective_bits_len - n, digit_bit_size);
+
+    size_t new_digits_count = new_bits_len / digit_bit_size;
+
+    if (new_digits_count > INTN_BSL_MAX_OUT_LEN) {
+        return new_digits_count;
+    }
+
+    size_t discarded = MIN(n / digit_bit_size, len);
+
+    if (left_shift_n == 32) {
+        memcpy(out, num + discarded, (len - discarded) * sizeof(uint32_t));
+        return len - discarded;
+    }
+
+    size_t i;
+    for (i = discarded; i < counted_digits - 1; i++) {
+        uint32_t next_digit = num[i + 1];
+        uint32_t digit = num[i];
+        out[i - discarded] = (digit >> digit_right_bit_shift) | (next_digit << left_shift_n);
+    }
+    uint32_t maybe_last_out = (num[i] >> digit_right_bit_shift);
+
+/*
+    if (initial_zeros + i > new_digits_count) {
+        abort();
+    }
+*/
+
+    if (maybe_last_out) {
+        out[i - discarded] = maybe_last_out;
+        return i - discarded + 1;
+    }
+
+    return i - discarded;
+}
+
+
+
 /*
     uint32_t last_digit = 0;
     for (size_t i = initial_zeros; i < out_len - 1; i++) {
