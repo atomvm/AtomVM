@@ -1512,6 +1512,7 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     }
 }
 
+#if 0
 static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
 {
     return (int32_t) ((n < 0) ? ~(~((uint32_t ) n) >> rshift) : (((uint32_t) n) >> rshift));
@@ -1530,6 +1531,7 @@ static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *o
     int32_t check = int32_bsr(res, lshift);
     return check != n;
 }
+#endif
 
 static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
 {
