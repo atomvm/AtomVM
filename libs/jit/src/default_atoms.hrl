@@ -32,6 +32,7 @@
 -define(IF_CLAUSE_ATOM_INDEX, 33).
 -define(UNSUPPORTED_ATOM_INDEX, 36).
 -define(ALL_ATOM_INDEX, 38).
+-define(BADRECORD_ATOM_INDEX, 77).
 
 -define(FALSE_ATOM, ((?FALSE_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
 -define(TRUE_ATOM, ((?TRUE_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
@@ -56,6 +57,7 @@
     ((?UNSUPPORTED_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)
 ).
 -define(ALL_ATOM, ((?ALL_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
+-define(BADRECORD_ATOM, ((?BADRECORD_ATOM_INDEX bsl ?TERM_IMMED2_TAG_SIZE) bor ?TERM_IMMED2_ATOM)).
 
 -define(DEFAULT_ATOMS, #{
     false => ?FALSE_ATOM,
@@ -70,5 +72,6 @@
     case_clause => ?CASE_CLAUSE_ATOM,
     if_clause => ?IF_CLAUSE_ATOM,
     unsupported => ?UNSUPPORTED_ATOM,
-    all => ?ALL_ATOM
+    all => ?ALL_ATOM,
+    badrecord => ?BADRECORD_ATOM
 }).

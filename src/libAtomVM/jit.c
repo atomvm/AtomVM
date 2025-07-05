@@ -49,6 +49,7 @@ _Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in ji
 _Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/src/defaultatoms.hrl");
 _Static_assert(UNSUPPORTED_ATOM_INDEX == 36, "UNSUPPORTED_ATOM_INDEX is 36 in jit/src/defaultatoms.hrl");
 _Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultatoms.hrl");
+_Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/src/defaultatoms.hrl");
 
 #define HANDLE_ERROR()                                                       \
     ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ctx->x[0]); \
@@ -700,6 +701,13 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
     return ctx;
 }
 
+static term jit_mailbox_peek(Context *ctx)
+{
+    term out = term_invalid_term();
+    mailbox_peek(ctx, &out);
+    return out;
+}
+
 static void jit_mailbox_remove_message(Context *ctx)
 {
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
@@ -1337,7 +1345,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_raise_error_tuple,
     jit_term_alloc_fun,
     jit_process_signal_messages,
-    mailbox_peek,
+    jit_mailbox_peek,
     jit_mailbox_remove_message,
     jit_timeout,
     jit_mailbox_next,

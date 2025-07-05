@@ -27,6 +27,7 @@
     shlq/2,
     shrq/2,
     testb/2,
+    testl/2,
     testq/2,
     jz/1,
     jz_rel8/1,
@@ -173,8 +174,18 @@ testb(Imm, rax) when ?IS_SINT8_T(Imm) ->
 testq(Reg, Reg) when is_atom(Reg) ->
     case x86_64_x_reg(Reg) of
         {0, Index} -> <<16#48, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>;
-        {1, Index} -> <<16#49, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>
+        {1, Index} -> <<16#4D, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>
     end.
+
+testl(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
+    {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
+    Prefix =
+        case {REX_R, REX_B} of
+            {0, 0} -> <<>>;
+            _ -> <<?X86_64_REX(0, REX_R, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#85, (16#C0 bor (MODRM_REG bsl 3) bor MODRM_RM)>>.
 
 jz(Offset) when ?IS_SINT8_T(Offset) ->
     <<16#74, Offset>>.
@@ -256,10 +267,8 @@ imulq(Imm, Reg) when ?IS_SINT32_T(Imm), is_atom(Reg) ->
     REX = 16#48 bor (REX_H bsl 2) bor REX_H,
     <<REX, 16#69, (16#C0 bor (MODRM bsl 3) bor MODRM), Imm:32/little>>;
 imulq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
-    % DestReg for REX.R and ModRM.reg
-    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
-    % SrcReg for REX.B and ModRM.rm
-    {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),
+    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),    % DestReg for REX.R and ModRM.reg
+    {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),      % SrcReg for REX.B and ModRM.rm
     REX = 16#48 bor (REX_R bsl 2) bor REX_B,
     <<REX, 16#0F, 16#AF, (16#C0 bor (MODRM_REG bsl 3) bor MODRM_RM)>>.
 
