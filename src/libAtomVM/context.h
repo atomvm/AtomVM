@@ -563,6 +563,22 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
  */
 bool context_add_monitor(Context *ctx, struct Monitor *new_monitor);
 
+/**
+ * @brief Get catch label from stack
+ *
+ * @param ctx the context being executed
+ * @param mod on output, the module
+ * @return the found label or 0 if no catch label was found in the stack
+ */
+int context_get_catch_label(Context *ctx, Module **mod);
+
+/**
+ * @brief Dump context to stderr
+ *
+ * @param ctx context to dump
+ */
+void context_dump(Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
