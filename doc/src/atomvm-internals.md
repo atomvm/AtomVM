@@ -130,6 +130,10 @@ This section is under construction
 
 AtomVM can run native code present in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1.
 
+AtomVM also features a compiler in jit library that can compile Erlang bytecode to native code. It currently only supports x86-64 with System V ABI (i.e. Linux, macOS). This library is written in Erlang and can compile itself.
+
+At some point, AtomVM will be able to compile Erlang code at runtime using this compiler.
+
 ## The Scheduler
 
 In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) and be modified with [`erlang:system_flag/2`](./apidocs/erlang/estdlib/erlang.md#system_flag2).  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
