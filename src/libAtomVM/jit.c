@@ -20,6 +20,8 @@
 
 #include "jit.h"
 
+#ifndef AVM_NO_JIT
+
 #include "bif.h"
 #include "bitstring.h"
 #include "context.h"
@@ -1552,3 +1554,5 @@ const ModuleNativeInterface module_native_interface = {
     term_copy_map,
     jit_stacktrace_build
 };
+
+#endif
