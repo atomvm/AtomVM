@@ -161,6 +161,22 @@ if (NOT AVM_DISABLE_TASK_DRIVER)
     target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
 endif()
 
+if (NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+    message("JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
+    set(AVM_DISABLE_JIT ON)
+endif()
+
+if (AVM_DISABLE_JIT AND AVM_DISABLE_EMU)
+    message(FATAL_ERROR "Cannot disable both JIT and EMU")
+endif()
+
+if (AVM_DISABLE_JIT)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_JIT)
+endif()
+if (AVM_DISABLE_EMU)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_EMU)
+endif()
+
 if(HAVE_PLATFORM_SMP_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
 endif()
