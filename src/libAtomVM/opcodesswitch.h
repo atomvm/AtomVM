@@ -1365,205 +1365,6 @@ static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
     return true;
 }
 
-static int get_catch_label_and_change_module(Context *ctx, Module **mod)
-{
-    term *ct = ctx->e;
-    term *last_frame = ctx->e;
-
-    while (ct != ctx->heap.heap_end) {
-        if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
-            *mod = globalcontext_get_module_by_index(ctx->global, target_module);
-
-            DEBUG_DUMP_STACK(ctx);
-            ctx->e = last_frame;
-            DEBUG_DUMP_STACK(ctx);
-
-            return target_label;
-
-        } else if (term_is_cp(*ct)) {
-            last_frame = ct + 1;
-        }
-
-        ct++;
-    }
-
-    return 0;
-}
-
-COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
-{
-    Module *mod = globalcontext_get_module_by_index(ctx->global, ((uintptr_t) cp) >> 24);
-    long mod_offset = (cp & 0xFFFFFF) >> 2;
-
-    *cp_mod = mod;
-
-    uint8_t *code = &mod->code->code[0];
-    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
-
-    int i = 1;
-    const uint8_t *l = mod->labels[1];
-    while (mod_offset > l - code) {
-        i++;
-        if (i >= labels_count) {
-            // last label + 1 is reserved for end of module.
-            *label = i;
-            *l_off = 0;
-            return;
-        }
-        l = mod->labels[i];
-    }
-
-    *label = i - 1;
-    *l_off = mod_offset - (mod->labels[*label] - code);
-}
-
-COLD_FUNC static void dump(Context *ctx)
-{
-    GlobalContext *glb = ctx->global;
-
-    fprintf(stderr, "CRASH \n======\n");
-
-    fprintf(stderr, "pid: ");
-    term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
-    fprintf(stderr, "\n");
-
-    fprintf(stderr, "\nStacktrace:\n");
-    term_display(stderr, stacktrace_build(ctx, &ctx->x[2], 3), ctx);
-    fprintf(stderr, "\n\n");
-
-    {
-        Module *cp_mod;
-        int label;
-        int offset;
-        cp_to_mod_lbl_off(ctx->cp, ctx, &cp_mod, &label, &offset);
-        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
-            cp_mod->module_index, label, offset);
-    }
-
-    fprintf(stderr, "x[0]: ");
-    term_display(stderr, ctx->x[0], ctx);
-    fprintf(stderr, "\nx[1]: ");
-    term_display(stderr, ctx->x[1], ctx);
-    fprintf(stderr, "\nx[2]: ");
-    term_display(stderr, ctx->x[2], ctx);
-    fprintf(stderr, "\n\nStack \n-----\n\n");
-
-    term *ct = ctx->e;
-
-    while (ct != ctx->heap.heap_end) {
-        if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            fprintf(stderr, "catch: %i:%i\n", target_label, target_module);
-
-        } else if (term_is_cp(*ct)) {
-            Module *cp_mod;
-            int label;
-            int offset;
-            cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset);
-            fprintf(stderr, "#CP<module: %i, label: %i, offset: %i>\n", cp_mod->module_index, label, offset);
-
-        } else {
-            term_display(stderr, *ct, ctx);
-            fprintf(stderr, "\n");
-        }
-
-        ct++;
-    }
-
-    fprintf(stderr, "\n\nMailbox\n-------\n");
-    mailbox_crashdump(ctx);
-
-    fprintf(stderr, "\n\nMonitors\n--------\n");
-    // Lock processes table to make sure any dying process will not modify monitors
-    struct ListHead *processes_table = synclist_rdlock(&glb->processes_table);
-    UNUSED(processes_table);
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->monitors_head) {
-        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        switch (monitor->monitor_type) {
-            case CONTEXT_MONITOR_LINK_LOCAL: {
-                struct LinkLocalMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
-                fprintf(stderr, "link ");
-                if (link_monitor->unlink_id) {
-                    fprintf(stderr, "(inactive) ");
-                }
-                fprintf(stderr, "to ");
-                term_display(stderr, link_monitor->link_local_process_id, ctx);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_LINK_REMOTE: {
-                struct LinkRemoteMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
-                fprintf(stderr, "remote link ");
-                if (link_monitor->unlink_id) {
-                    fprintf(stderr, "(inactive) ");
-                }
-                fprintf(stderr, "to ");
-                term_display(stderr, link_monitor->node, ctx);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_MONITORING_LOCAL: {
-                struct MonitorLocalMonitor* monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "monitor to ");
-                term_display(stderr, monitoring_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_MONITORED_LOCAL: {
-                struct MonitorLocalMonitor* monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "monitored by ");
-                term_display(stderr, monitored_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_RESOURCE: {
-                struct ResourceContextMonitor* resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-                fprintf(stderr, "monitored by resource %p ref=%lu", resource_monitor->resource_obj, (long unsigned) resource_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-        }
-    }
-    synclist_unlock(&glb->processes_table);
-
-    // If crash is caused by out_of_memory, print more data about memory usage
-    if (ctx->x[0] == ERROR_ATOM && ctx->x[1] == OUT_OF_MEMORY_ATOM) {
-        fprintf(stderr, "\n\nContext memory info\n-------------------\n");
-        fprintf(stderr, "context_size = %zu\n", context_size(ctx));
-        fprintf(stderr, "context_avail_free_memory = %zu\n", context_avail_free_memory(ctx));
-        fprintf(stderr, "heap_size = %zu\n", memory_heap_youngest_size(&ctx->heap));
-        fprintf(stderr, "total_heap_size = %zu\n", memory_heap_memory_size(&ctx->heap));
-        fprintf(stderr, "stack_size = %zu\n", context_stack_size(ctx));
-        fprintf(stderr, "message_queue_len = %zu\n", context_message_queue_len(ctx));
-        fprintf(stderr, "\n\nGlobal memory info\n------------------\n");
-
-        processes_table = synclist_rdlock(&glb->processes_table);
-        size_t process_count = 0;
-        size_t ports_count = 0;
-        LIST_FOR_EACH (item, processes_table) {
-            Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
-            process_count++;
-            if (p->native_handler) {
-                ports_count++;
-            }
-        }
-        synclist_unlock(&glb->processes_table);
-
-        fprintf(stderr, "process_count = %zu\n", process_count);
-        fprintf(stderr, "ports_count = %zu\n", ports_count);
-        fprintf(stderr, "atoms_count = %zu\n", atom_table_count(glb->atom_table));
-        fprintf(stderr, "refc_binary_total_size = %zu\n", refc_binary_total_size(ctx));
-    }
-    fprintf(stderr, "\n\n**End Of Crash Report**\n");
-}
-
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
@@ -7298,7 +7099,7 @@ do_abort:
 
 handle_error:
         {
-            int target_label = get_catch_label_and_change_module(ctx, &mod);
+            int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
                 code = mod->code->code;
                 JUMP_TO_ADDRESS(mod->labels[target_label]);
@@ -7308,7 +7109,7 @@ handle_error:
 
         // Do not print crash dump if reason is normal or shutdown.
         if (x_regs[0] != LOWERCASE_EXIT_ATOM || (x_regs[1] != NORMAL_ATOM && x_regs[1] != SHUTDOWN_ATOM)) {
-            dump(ctx);
+            context_dump(ctx);
         }
 
         if (x_regs[0] == LOWERCASE_EXIT_ATOM) {

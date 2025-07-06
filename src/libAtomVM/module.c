@@ -828,3 +828,43 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
     DECODE_LITERAL(line_ref, ref_pc);
     return module_find_line_ref(mod, line_ref, line, filename_len, filename);
 }
+
+COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *out_mod_offset, GlobalContext *global)
+{
+    Module *mod = globalcontext_get_module_by_index(global, ((uintptr_t) cp) >> 24);
+    long mod_offset = (cp & 0xFFFFFF) >> 2;
+    if (out_mod_offset) {
+        *out_mod_offset = mod_offset;
+    }
+
+    if (cp_mod) {
+        *cp_mod = mod;
+    }
+
+    uint8_t *code = &mod->code->code[0];
+    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
+
+    int i = 1;
+    const uint8_t *l = mod->labels[1];
+    while (mod_offset > l - code) {
+        i++;
+        if (i >= labels_count) {
+            // last label + 1 is reserved for end of module.
+            if (label) {
+                *label = i;
+            }
+            if (l_off) {
+                *l_off = 0;
+            }
+            return;
+        }
+        l = mod->labels[i];
+    }
+
+    if (label) {
+        *label = i - 1;
+    }
+    if (l_off) {
+        *l_off = mod_offset - (mod->labels[*label] - code);
+    }
+}

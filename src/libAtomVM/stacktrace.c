@@ -48,34 +48,6 @@ term stacktrace_exception_class(term stack_info)
 
 #else
 
-static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off, long *mod_offset)
-{
-    int module_index = cp >> 24;
-    Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
-    *mod_offset = (cp & 0xFFFFFF) >> 2;
-
-    *cp_mod = mod;
-
-    uint8_t *code = &mod->code->code[0];
-    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
-
-    int i = 1;
-    const uint8_t *l = mod->labels[1];
-    while (*mod_offset > l - code) {
-        i++;
-        if (i >= labels_count) {
-            // last label + 1 is reserved for end of module.
-            *label = i;
-            *l_off = 0;
-            return;
-        }
-        l = mod->labels[i];
-    }
-
-    *label = i - 1;
-    *l_off = *mod_offset - (mod->labels[*label] - code);
-}
-
 static bool location_sets_append(GlobalContext *global, Module *mod, const uint8_t *filename, size_t filename_len, size_t *total_filename_len, const void ***io_locations_set, size_t *io_locations_set_size)
 {
     const void **locations_set = *io_locations_set;
@@ -131,11 +103,9 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
         if (term_is_cp(*ct)) {
 
             Module *cp_mod;
-            int label;
-            int offset;
             long mod_offset;
 
-            cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset, &mod_offset);
+            module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
                 prev_mod = cp_mod;
@@ -218,11 +188,9 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     while (ct != stack_base) {
         if (term_is_cp(*ct)) {
             Module *cp_mod;
-            int label;
-            int offset;
             long mod_offset;
 
-            cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset, &mod_offset);
+            module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
 
                 prev_mod = cp_mod;
@@ -333,9 +301,8 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 
         Module *cp_mod;
         int label;
-        int offset;
         long mod_offset;
-        cp_to_mod_lbl_off(cp, ctx, &cp_mod, &label, &offset, &mod_offset);
+        module_cp_to_label_offset(cp, &cp_mod, &label, NULL, &mod_offset, ctx->global);
 
         term module_name = module_get_name(cp_mod);
 
