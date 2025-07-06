@@ -855,31 +855,58 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
 bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     size_t i;
-    unsigned int ref_offset;
-    uint32_t line_ref;
-    const uint8_t *ref_pc;
-    if (IS_NULL_PTR(mod->line_refs_offsets)) {
-        return false;
-    }
-    for (i = 0; i < mod->line_refs_offsets_count; i++) {
-        ref_offset = mod->line_refs_offsets[i];
-        if (offset == ref_offset) {
-            ref_pc = &mod->code->code[ref_offset];
-            DECODE_LITERAL(line_ref, ref_pc);
-            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
-        } else if (i == 0 && offset < ref_offset) {
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2 + labels_count * 6;
+        size_t lines_count = READ_16_UNALIGNED(labels_and_lines);
+        if (lines_count == 0) {
             return false;
-        } else if (offset < ref_offset) {
-            ref_offset = mod->line_refs_offsets[i - 1];
-            ref_pc = &mod->code->code[ref_offset];
-            DECODE_LITERAL(line_ref, ref_pc);
-            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
         }
+        labels_and_lines += 2;
+        uint16_t prev_line_ref = 0;
+        for (i = 0; i < lines_count; i++) {
+            uint16_t line_ref = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            uint32_t ref_offset = READ_32_UNALIGNED(labels_and_lines);
+            labels_and_lines += 4;
+            if (offset == ref_offset) {
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            } else if (i == 0 && offset < ref_offset) {
+                return false;
+            } else if (offset < ref_offset) {
+                return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+            }
+            prev_line_ref = line_ref;
+        }
+        return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+    } else {
+        uint32_t line_ref;
+        unsigned int ref_offset;
+        const uint8_t *ref_pc;
+        if (IS_NULL_PTR(mod->line_refs_offsets) || UNLIKELY(mod->line_refs_offsets_count == 0)) {
+            return false;
+        }
+        for (i = 0; i < mod->line_refs_offsets_count; i++) {
+            ref_offset = mod->line_refs_offsets[i];
+            if (offset == ref_offset) {
+                ref_pc = &mod->code->code[ref_offset];
+                DECODE_LITERAL(line_ref, ref_pc);
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            } else if (i == 0 && offset < ref_offset) {
+                return false;
+            } else if (offset < ref_offset) {
+                ref_offset = mod->line_refs_offsets[i - 1];
+                ref_pc = &mod->code->code[ref_offset];
+                DECODE_LITERAL(line_ref, ref_pc);
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            }
+        }
+        ref_offset = mod->line_refs_offsets[i - 1];
+        ref_pc = &mod->code->code[ref_offset];
+        DECODE_LITERAL(line_ref, ref_pc);
+        return module_find_line_ref(mod, line_ref, line, filename_len, filename);
     }
-    ref_offset = mod->line_refs_offsets[i - 1];
-    ref_pc = &mod->code->code[ref_offset];
-    DECODE_LITERAL(line_ref, ref_pc);
-    return module_find_line_ref(mod, line_ref, line, filename_len, filename);
 }
 
 COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *out_mod_offset, GlobalContext *global)
