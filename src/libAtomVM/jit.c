@@ -54,23 +54,19 @@ _Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultato
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 58, "LOWERCASE_EXIT_ATOM_INDEX is 58 in jit/src/defaultatoms.hrl");
 _Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/src/defaultatoms.hrl");
 
-#define HANDLE_ERROR()                                                       \
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ctx->x[0]); \
-    return jit_handle_error(ctx, jit_state);
-
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)    \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset)    \
     if (term_is_invalid_term(return_value)) {            \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {   \
-            HANDLE_ERROR();                              \
+            return jit_handle_error(ctx, jit_state, offset);  \
         } else {                                         \
             return jit_schedule_wait_cp(ctx, jit_state); \
         }                                                \
     }
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)                      \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset)                      \
     if (term_is_invalid_term(return_value)) {                                   \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {                          \
-            HANDLE_ERROR();                                                     \
+            return jit_handle_error(ctx, jit_state, offset);                         \
         } else {                                                                \
             return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
         }                                                                       \
@@ -137,8 +133,11 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
     return scheduler_run(global);
 }
 
-static Context *jit_handle_error(Context *ctx, JITState *jit_state)
+static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
+    if (offset || term_is_invalid_term(ctx->x[2])) {
+        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
+    }
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {
         if (jit_state->module->native_code) {
@@ -184,41 +183,45 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state)
     return jit_terminate_context(ctx, jit_state);
 }
 
-static void set_error(Context *ctx, JITState *jit_state, term error_term)
+static void set_error(Context *ctx, JITState *jit_state, int offset, term error_term)
 {
     ctx->x[0] = ERROR_ATOM;
     ctx->x[1] = error_term;
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, ERROR_ATOM);
+    if (offset) {
+        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ERROR_ATOM);
+    } else {
+        ctx->x[2] = term_invalid_term();
+    }
 }
 
-static Context *jit_raise_error(Context *ctx, JITState *jit_state, term error_type_atom)
+static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, term error_type_atom)
 {
-    set_error(ctx, jit_state, error_type_atom);
-    return jit_handle_error(ctx, jit_state);
+    set_error(ctx, jit_state, offset, error_type_atom);
+    return jit_handle_error(ctx, jit_state, 0);
 }
 
-static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, term error_atom, term arg1)
+static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1)
 {
     // We can gc as we are raising
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
-        return jit_handle_error(ctx, jit_state);
+        set_error(ctx, jit_state, offset, OUT_OF_MEMORY_ATOM);
+        return jit_handle_error(ctx, jit_state, 0);
     }
 
     term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(new_error_tuple, 0, error_atom);
     term_put_tuple_element(new_error_tuple, 1, arg1);
 
-    set_error(ctx, jit_state, new_error_tuple);
-    return jit_handle_error(ctx, jit_state);
+    set_error(ctx, jit_state, offset, new_error_tuple);
+    return jit_handle_error(ctx, jit_state, 0);
 }
 
-static Context *jit_raise(Context *ctx, JITState *jit_state, term stacktrace, term exc_value)
+static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
     ctx->x[0] = stacktrace_exception_class(stacktrace);
     ctx->x[1] = exc_value;
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, 0, stacktrace);
-    return jit_handle_error(ctx, jit_state);
+    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, stacktrace);
+    return jit_handle_error(ctx, jit_state, 0);
 }
 
 static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
@@ -237,18 +240,18 @@ static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
     return scheduler_wait(ctx);
 }
 
-static Context *jit_call_ext(Context *ctx, JITState *jit_state, int arity, int index, int n_words)
+static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words)
 {
     const struct ExportedFunction *func = module_resolve_function(jit_state->module, index, ctx->global);
     if (IS_NULL_PTR(func)) {
-        return jit_raise_error(ctx, jit_state, UNDEF_ATOM);
+        return jit_raise_error(ctx, jit_state, 0, UNDEF_ATOM);
     }
 
     switch (func->type) {
         case NIFFunctionType: {
             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
             ctx->x[0] = return_value;
 
             // We deallocate after (instead of before) as a
@@ -261,7 +264,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int arity, int i
 
             if (ctx->heap.root->next) {
                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                    return jit_raise_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
             }
             if ((long) ctx->cp == -1) {
@@ -324,7 +327,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int arity, int i
                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
                     AVM_ABORT();
             }
-            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
             ctx->x[0] = return_value;
 
             return jit_return(ctx, jit_state);
@@ -354,7 +357,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int arity, int i
                     fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
                     AVM_ABORT();
             }
-            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
             ctx->x[0] = return_value;
 
             return jit_return(ctx, jit_state);
@@ -376,7 +379,7 @@ static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need,
     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + 1)))) {
         TRIM_LIVE_REGS(live);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
     }
@@ -399,7 +402,7 @@ static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
     // Hopefully, we only need x[0]
     if (ctx->heap.root->next) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-            set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
     }
@@ -410,7 +413,7 @@ static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, ter
 {
     TermCompareResult result = term_compare(t, other, opts, ctx->global);
     if (UNLIKELY(result == 0)) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
     return result;
 }
@@ -422,7 +425,7 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
     if (heap_free < heap_need) {
         TRIM_LIVE_REGS(live_registers);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
         // otherwise, there is enough space for the needed heap, but there might
@@ -431,7 +434,7 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
         TRIM_LIVE_REGS(live_registers);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
-            set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
     }
@@ -535,7 +538,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
         if (term_is_atom(recipient_term)) {
             recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
             if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
-                set_error(ctx, jit_state, BADARG_ATOM);
+                set_error(ctx, jit_state, 0, BADARG_ATOM);
                 return false;
             }
         }
@@ -544,7 +547,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
         if (term_is_local_pid_or_port(recipient_term)) {
             local_process_id = term_to_local_process_id(recipient_term);
         } else {
-            set_error(ctx, jit_state, BADARG_ATOM);
+            set_error(ctx, jit_state, 0, BADARG_ATOM);
             return false;
         }
         globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
@@ -585,7 +588,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             }
             case GCSignal: {
                 if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                    set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                     handle_error = true;
                 }
                 break;
@@ -600,7 +603,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 struct TermSignal *trap_answer
                     = CONTAINER_OF(signal_message, struct TermSignal, base);
                 if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {
-                    set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                     handle_error = true;
                 }
                 break;
@@ -608,7 +611,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             case TrapExceptionSignal: {
                 struct ImmediateSignal *trap_exception
                     = CONTAINER_OF(signal_message, struct ImmediateSignal, base);
-                set_error(ctx, jit_state, trap_exception->immediate);
+                set_error(ctx, jit_state, 0, trap_exception->immediate);
                 handle_error = true;
                 break;
             }
@@ -624,7 +627,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 struct TermSignal *group_leader
                     = CONTAINER_OF(signal_message, struct TermSignal, base);
                 if (UNLIKELY(!context_process_signal_set_group_leader(ctx, group_leader))) {
-                    set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                     handle_error = true;
                 }
                 break;
@@ -700,7 +703,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
         return jit_terminate_context(ctx, jit_state);
     }
     if (handle_error) {
-        return jit_handle_error(ctx, jit_state);
+        return jit_handle_error(ctx, jit_state, 0);
     }
     if (context_get_flags(ctx, Trap)) {
         return jit_schedule_wait_cp(ctx, jit_state);
@@ -749,10 +752,10 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
     if (term_is_any_integer(timeout)) {
         t = term_maybe_unbox_int64(timeout);
         if (UNLIKELY(t < 0)) {
-            return jit_raise_error(ctx, jit_state, TIMEOUT_VALUE_ATOM);
+            return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
         }
     } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
-        return jit_raise_error(ctx, jit_state, TIMEOUT_VALUE_ATOM);
+        return jit_raise_error(ctx, jit_state, 0, TIMEOUT_VALUE_ATOM);
     }
 
     Context *r = jit_process_signal_messages(ctx, jit_state);
@@ -849,7 +852,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #define MAXI(A, B) ((A > B) ? (A) : (B))
 #define MINI(A, B) ((A > B) ? (B) : (A))
 
-static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsigned int args_count)
+static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term fun, unsigned int args_count)
 {
     Module *fun_module;
     unsigned int fun_arity;
@@ -864,24 +867,24 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsign
         atom_index_t function_name = term_to_atom_index(index_or_function);
         term return_value;
         if (maybe_call_native(ctx, module_name, function_name, fun_arity, &return_value)) {
-            PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value);
+            PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset);
             ctx->x[0] = return_value;
             if (ctx->heap.root->next) {
                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                    return jit_raise_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 }
             }
             return jit_return(ctx, jit_state);
         } else {
             fun_module = globalcontext_get_module(ctx->global, module_name);
             if (IS_NULL_PTR(fun_module)) {
-                set_error(ctx, jit_state, UNDEF_ATOM);
-                HANDLE_ERROR();
+                set_error(ctx, jit_state, 0, UNDEF_ATOM);
+                return jit_handle_error(ctx, jit_state, 0);
             }
             label = module_search_exported_function(fun_module, function_name, fun_arity);
             if (UNLIKELY(label == 0)) {
-                set_error(ctx, jit_state, UNDEF_ATOM);
-                HANDLE_ERROR();
+                set_error(ctx, jit_state, 0, UNDEF_ATOM);
+                return jit_handle_error(ctx, jit_state, 0);
             }
         }
     } else {
@@ -892,7 +895,7 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, term fun, unsign
         fun_arity = fun_arity_and_freeze - n_freeze;
     }
     if (UNLIKELY(args_count != fun_arity)) {
-        return jit_raise_error(ctx, jit_state, BADARITY_ATOM);
+        return jit_raise_error(ctx, jit_state, 0, BADARITY_ATOM);
     }
     uint32_t lim_freeze = MINI(fun_arity + n_freeze, MAX_REG);
     for (uint32_t i = fun_arity; i < lim_freeze; i++) {
@@ -1016,7 +1019,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
             ctx->x[2] = stacktrace_build(ctx, &ctx->x[2], 3);
             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, ctx->x + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 return false;
             }
             term reason_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -1032,7 +1035,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
         case LOWERCASE_EXIT_ATOM_INDEX: {
             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, ctx->x + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                 return false;
             }
             term exit_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -1049,7 +1052,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
 static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
 {
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, sz, live, ctx->x, flags) != MEMORY_GC_OK)) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         return false;
     }
     return true;
@@ -1069,7 +1072,7 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
     }
     term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
     if (UNLIKELY(term_is_invalid_term(t))) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
     return t;
 }
@@ -1148,13 +1151,13 @@ static int jit_decode_flags_list(Context *ctx, JITState *jit_state, term flags)
                 flags_value |= SignedInteger;
                 break;
             default:
-                set_error(ctx, jit_state, BADARG_ATOM);
+                set_error(ctx, jit_state, 0, BADARG_ATOM);
                 return -1;
         }
         flags = term_get_list_tail(flags);
     }
     if (UNLIKELY(!term_is_nil(flags))) {
-        set_error(ctx, jit_state, BADARG_ATOM);
+        set_error(ctx, jit_state, 0, BADARG_ATOM);
         return -1;
     }
     return flags_value;
@@ -1192,7 +1195,7 @@ static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, ter
 static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size)
 {
     if (offset % 8) {
-        set_error(ctx, jit_state, UNSUPPORTED_ATOM);
+        set_error(ctx, jit_state, 0, UNSUPPORTED_ATOM);
         return -1;
     }
     uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
@@ -1205,31 +1208,31 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
     return binary_size * 8;
 }
 
-static Context *jit_apply(Context *ctx, JITState *jit_state, term module, term function, unsigned int arity)
+static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity)
 {
     atom_index_t module_name = term_to_atom_index(module);
     atom_index_t function_name = term_to_atom_index(function);
 
     term native_return;
     if (maybe_call_native(ctx, module_name, function_name, arity, &native_return)) {
-        PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return);
+        PROCESS_MAYBE_TRAP_RETURN_VALUE(native_return, offset);
         ctx->x[0] = native_return;
         if (ctx->heap.root->next) {
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, ctx->x, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                return jit_raise_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                return jit_raise_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             }
         }
         return jit_return(ctx, jit_state);
     } else {
         Module *target_module = globalcontext_get_module(ctx->global, module_name);
         if (IS_NULL_PTR(target_module)) {
-            set_error(ctx, jit_state, UNDEF_ATOM);
-            HANDLE_ERROR();
+            set_error(ctx, jit_state, 0, UNDEF_ATOM);
+            return jit_handle_error(ctx, jit_state, 0);
         }
         int target_label = module_search_exported_function(target_module, function_name, arity);
         if (target_label == 0) {
-            set_error(ctx, jit_state, UNDEF_ATOM);
-            HANDLE_ERROR();
+            set_error(ctx, jit_state, 0, UNDEF_ATOM);
+            return jit_handle_error(ctx, jit_state, 0);
         }
         jit_state->module = target_module;
         if (jit_state->module->native_code) {
@@ -1246,7 +1249,7 @@ static void *jit_malloc(Context *ctx, JITState *jit_state, size_t sz)
 {
     void *ptr = malloc(sz);
     if (IS_NULL_PTR(ptr)) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
     return ptr;
 }
@@ -1291,7 +1294,7 @@ static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_
     //
     //
     if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
-        set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         return term_invalid_term();
     }
     //
@@ -1340,7 +1343,7 @@ static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_
                 }
 
                 case TermCompareMemoryAllocFail: {
-                    set_error(ctx, jit_state, OUT_OF_MEMORY_ATOM);
+                    set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
                     return term_invalid_term();
                 }
             }

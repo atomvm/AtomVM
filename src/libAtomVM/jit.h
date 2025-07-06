@@ -60,13 +60,13 @@ typedef struct JITState JITState;
 struct ModuleNativeInterface
 {
     // Helpers
-    Context *(*raise_error)(Context *ctx, JITState *jit_state, term error_term);
+    Context *(*raise_error)(Context *ctx, JITState *jit_state, int offset, term error_term);
     Context *(*do_return)(Context *ctx, JITState *jit_state);
     Context *(*schedule_next_cp)(Context *ctx, JITState *jit_state);
     term (*module_get_atom_term_by_id)(JITState *jit_state, int atom_index);
-    Context *(*call_ext)(Context *ctx, JITState *jit_state, int arity, int index, int n_words);
+    Context *(*call_ext)(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words);
     bool (*allocate)(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live);
-    Context *(*handle_error)(Context *ctx, JITState *jit_state);
+    Context *(*handle_error)(Context *ctx, JITState *jit_state, int offset);
     void (*jit_trim_live_regs)(Context *ctx, uint32_t live);
     void *(*get_imported_bif)(JITState *jit_state, uint32_t bif);
     bool (*deallocate)(Context *ctx, JITState *jit_state, uint32_t n_words);
@@ -79,7 +79,7 @@ struct ModuleNativeInterface
     term (*term_alloc_tuple)(Context *ctx, uint32_t size);
     bool (*send)(Context *ctx, JITState *jit_state);
     term *(*extended_register_pointer)(Context *ctx, unsigned int index);
-    Context *(*raise_error_tuple)(Context *ctx, JITState *jit_state, term error_atom, term arg1);
+    Context *(*raise_error_tuple)(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1);
     term (*term_alloc_fun)(Context *ctx, JITState *jit_state, uint32_t fun_index, uint32_t numfree);
     Context *(*process_signal_messages)(Context *ctx, JITState *jit_state);
     term (*mailbox_peek)(Context *ctx);
@@ -88,11 +88,11 @@ struct ModuleNativeInterface
     void (*mailbox_next)(Context *ctx);
     void (*cancel_timeout)(Context *ctx);
     void (*clear_timeout_flag)(Context *ctx);
-    Context *(*raise)(Context *ctx, JITState *jit_state, term stacktrace, term exc_value);
+    Context *(*raise)(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value);
     Context *(*schedule_wait_cp)(Context *ctx, JITState *jit_state);
     Context *(*wait_timeout)(Context *ctx, JITState *jit_state, term timeout, int label);
     Context *(*wait_timeout_trap_handler)(Context *ctx, JITState *jit_state, int label);
-    Context *(*call_fun)(Context *ctx, JITState *jit_state, term fun, unsigned int args_count);
+    Context *(*call_fun)(Context *ctx, JITState *jit_state, int offset, term fun, unsigned int args_count);
     int (*context_get_flags)(Context *ctx, int mask);
     void (*context_ensure_fpregs)(Context *ctx);
     term (*term_from_float)(Context *ctx, avm_float_t f);
@@ -121,7 +121,7 @@ struct ModuleNativeInterface
     avm_int64_t (*term_maybe_unbox_int64)(term i);
     void (*bitstring_copy_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
     int (*bitstring_copy_binary)(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size);
-    Context *(*apply)(Context *ctx, JITState *jit_state, term module, term function, unsigned int arity);
+    Context *(*apply)(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity);
     void * (*malloc)(Context *ctx, JITState *jit_state, size_t sz);
     void (*free)(void *ptr);
     term (*put_map_assoc)(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv);

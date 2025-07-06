@@ -304,8 +304,10 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_X86_64 && ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_VARIANT_PIC) {
-                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset);
-                    mod->native_code = (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->version + offset);
+                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
+                    mod->native_code = (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset);
+                    // Extra function is OP_INT_CALL_END
+                    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * ENDIAN_SWAP_32(native_code->labels);
                     break;
                 }
             }
@@ -314,12 +316,15 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             }
         }
     }
-    uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
-    mod->labels = calloc(num_labels, sizeof(void *));
-    if (IS_NULL_PTR(mod->labels)) {
-        fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
-        module_destroy(mod);
-        return NULL;
+
+    if (mod->native_code == NULL) {
+        uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
+        mod->labels = calloc(num_labels, sizeof(void *));
+        if (IS_NULL_PTR(mod->labels)) {
+            fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
+            module_destroy(mod);
+            return NULL;
+        }
     }
 
     module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
@@ -357,41 +362,43 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    struct ListHead line_refs;
-    list_init(&line_refs);
-    mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
+    if (mod->native_code == NULL) {
+        struct ListHead line_refs;
+        list_init(&line_refs);
+        mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
 
-    // Create the list of offsets if the module has line informations.
-    if (mod->line_refs_table != NULL) {
-        // Compute the size of the list
-        size_t num_offsets = 0;
-        struct ListHead *item = line_refs.next;
-        while (item != &line_refs) {
-            num_offsets++;
-            item = item->next;
-        }
-        if (num_offsets > 0) {
-            mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
-            if (IS_NULL_PTR(mod->line_refs_offsets)) {
-                fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
-            } else {
-                size_t index = 0;
-                item = line_refs.next;
-                while (item != &line_refs) {
-                    struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
-                    mod->line_refs_offsets[index] = offset->offset;
-                    index++;
-                    item = item->next;
+        // Create the list of offsets if the module has line informations.
+        if (mod->line_refs_table != NULL) {
+            // Compute the size of the list
+            size_t num_offsets = 0;
+            struct ListHead *item = line_refs.next;
+            while (item != &line_refs) {
+                num_offsets++;
+                item = item->next;
+            }
+            if (num_offsets > 0) {
+                mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
+                if (IS_NULL_PTR(mod->line_refs_offsets)) {
+                    fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
+                } else {
+                    size_t index = 0;
+                    item = line_refs.next;
+                    while (item != &line_refs) {
+                        struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
+                        mod->line_refs_offsets[index] = offset->offset;
+                        index++;
+                        item = item->next;
+                    }
+                    mod->line_refs_offsets_count = num_offsets;
                 }
-                mod->line_refs_offsets_count = num_offsets;
             }
         }
-    }
-    // Empty the list
-    while (!list_is_empty(&line_refs)) {
-        struct ListHead *item = line_refs.next;
-        list_remove(item);
-        free(item);
+        // Empty the list
+        while (!list_is_empty(&line_refs)) {
+            struct ListHead *item = line_refs.next;
+            list_remove(item);
+            free(item);
+        }
     }
 
     return mod;
@@ -887,30 +894,94 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
         *cp_mod = mod;
     }
 
-    uint8_t *code = &mod->code->code[0];
-    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
-
-    int i = 1;
-    const uint8_t *l = mod->labels[1];
-    while (mod_offset > l - code) {
-        i++;
-        if (i >= labels_count) {
-            // last label + 1 is reserved for end of module.
-            if (label) {
-                *label = i;
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2;
+        uint32_t label_offset = 0;
+        uint16_t label_id = 0;
+        while (labels_count > 0) {
+            uint16_t new_label_id = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            uint32_t new_label_offset = READ_32_UNALIGNED(labels_and_lines);
+            labels_and_lines += 4;
+            if (new_label_offset > mod_offset) {
+                if (label) {
+                    *label = label_id;
+                }
+                if (l_off) {
+                    *l_off = mod_offset - label_offset;
+                }
+                return;
             }
-            if (l_off) {
-                *l_off = 0;
+            if (new_label_offset == mod_offset) {
+                if (label) {
+                    *label = new_label_id;
+                }
+                if (l_off) {
+                    *l_off = mod_offset - new_label_offset;
+                }
+                return;
             }
-            return;
+            label_id = new_label_id;
+            label_offset = new_label_offset;
+            labels_count--;
         }
-        l = mod->labels[i];
-    }
+        if (label) {
+            *label = label_id;
+        }
+        if (l_off) {
+            *l_off = 0;
+        }
+    } else {
+        uint8_t *code = &mod->code->code[0];
+        int labels_count = ENDIAN_SWAP_32(mod->code->labels);
 
-    if (label) {
-        *label = i - 1;
+        int i = 1;
+        const uint8_t *l = mod->labels[1];
+        while (mod_offset > l - code) {
+            i++;
+            if (i >= labels_count) {
+                // last label + 1 is reserved for end of module.
+                if (label) {
+                    *label = i;
+                }
+                if (l_off) {
+                    *l_off = 0;
+                }
+                return;
+            }
+            l = mod->labels[i];
+        }
+
+        if (label) {
+            *label = i - 1;
+        }
+        if (l_off) {
+            *l_off = mod_offset - (mod->labels[*label] - code);
+        }
     }
-    if (l_off) {
-        *l_off = mod_offset - (mod->labels[*label] - code);
+}
+
+uint32_t module_label_code_offset(Module *mod, int label)
+{
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2;
+        while (labels_count > 0) {
+            uint16_t label_id = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            if (label_id == label) {
+                return READ_32_UNALIGNED(labels_and_lines);
+            } else {
+                labels_and_lines += 4;
+            }
+            labels_count--;
+        }
+        return 0;
+    } else {
+        uint8_t *code = &mod->code->code[0];
+        return mod->labels[label] - code;
     }
 }
