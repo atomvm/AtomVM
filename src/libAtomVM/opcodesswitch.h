@@ -55,40 +55,28 @@
 extern "C" {
 #endif
 
-#define COMPACT_LITERAL 0
-#define COMPACT_INTEGER 1
-#define COMPACT_ATOM 2
-#define COMPACT_XREG 3
-#define COMPACT_YREG 4
-#define COMPACT_LABEL 5
-#define COMPACT_EXTENDED 7
-#define COMPACT_LARGE_LITERAL 8
-#define COMPACT_LARGE_INTEGER 9
-#define COMPACT_LARGE_ATOM 10
-#define COMPACT_LARGE_XREG 11
-#define COMPACT_LARGE_YREG 12
-
-// OTP-20+ format
-#define COMPACT_EXTENDED_LIST 0x17
-#define COMPACT_EXTENDED_FP_REGISTER 0x27
-#define COMPACT_EXTENDED_ALLOCATION_LIST 0x37
-#define COMPACT_EXTENDED_LITERAL 0x47
-// https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
-#define COMPACT_EXTENDED_TYPED_REGISTER 0x57
-
-#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS 0
-#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS 1
-#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS 2
-
-#define COMPACT_LARGE_IMM_MASK 0x18
-#define COMPACT_11BITS_VALUE 0x8
-#define COMPACT_NBITS_VALUE 0x18
-
 #ifdef IMPL_EXECUTE_LOOP
+
+#if AVM_NO_JIT
 #define SET_ERROR(error_type_atom)                                      \
     x_regs[0] = ERROR_ATOM;                                             \
     x_regs[1] = error_type_atom;                                        \
     x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+#elif AVM_NO_EMU
+#define SET_ERROR(error_type_atom)                                      \
+    x_regs[0] = ERROR_ATOM;                                             \
+    x_regs[1] = error_type_atom;                                        \
+    x_regs[2] = stacktrace_create_raw(ctx, mod, native_pc - mod->native_code, ERROR_ATOM);
+#else
+#define SET_ERROR(error_type_atom)                                      \
+    x_regs[0] = ERROR_ATOM;                                             \
+    x_regs[1] = error_type_atom;                                        \
+    if (mod->native_code) {                                             \
+        x_regs[2] = stacktrace_create_raw(ctx, mod, native_pc - mod->native_code, ERROR_ATOM); \
+    } else {                                                            \
+        x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
+    }
+#endif
 
 // Override nifs.h RAISE_ERROR macro
 #ifdef RAISE_ERROR
@@ -1012,6 +1000,44 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         goto loop
 #endif
 
+#if AVM_NO_JIT
+
+#define SCHEDULE_NEXT(restore_mod, restore_to) \
+    {                                                                                             \
+        ctx->saved_ip = restore_to;                                                               \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_next(ctx->global, ctx);                                                   \
+        goto schedule_in;                                                                         \
+    }
+
+#define SCHEDULE_WAIT_ANY(restore_mod) \
+    {                                                                                             \
+        ctx->saved_ip = pc;                                                                       \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+
+#define SCHEDULE_WAIT(restore_mod, restore_to) \
+    {                                                                                             \
+        ctx->saved_ip = restore_to;                                                               \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+
+#elif AVM_NO_EMU
+
+#define SCHEDULE_WAIT_ANY(restore_mod) \
+    {                                                                                             \
+        ctx->saved_ip = native_pc;                                                                \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+
+#else
+
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
     {                                                                                             \
         assert(restore_mod->native_code == NULL);                                                 \
@@ -1041,6 +1067,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         ctx = scheduler_wait(ctx);                                                                \
         goto schedule_in;                                                                         \
     }
+
+#endif
 
 
 // We use goto label as values, a GCC extension supported by clang.
@@ -1182,6 +1210,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         }                                                                                       \
     }
 
+#ifndef AVM_NO_EMU
+
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)           \
     if (term_is_invalid_term(return_value)) {                   \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {          \
@@ -1211,6 +1241,26 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         }                                                       \
     }
 
+#if AVM_NO_JIT
+
+#define DO_RETURN()                                                     \
+    {                                                                   \
+        int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
+        if (module_index == prev_mod->module_index) {                   \
+            Module *t = mod;                                            \
+            mod = prev_mod;                                             \
+            prev_mod = t;                                               \
+            code = mod->code->code;                                     \
+        } else if (module_index != mod->module_index) {                 \
+            prev_mod = mod;                                             \
+            mod = globalcontext_get_module_by_index(glb, module_index); \
+            code = mod->code->code;                                     \
+        }                                                               \
+        pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);          \
+    }
+
+#else
+
 #define DO_RETURN()                                                     \
     {                                                                   \
         int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
@@ -1231,6 +1281,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);      \
         }                                                               \
     }
+
+#endif
 
 #define HANDLE_ERROR()                                                  \
     x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
@@ -1281,9 +1333,6 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         TRACE(opcode_name ": " #t " is not a binary or match context.\n"); \
         RAISE_ERROR(BADARG_ATOM);                                          \
     }
-
-#define MAXI(A, B) ((A > B) ? (A) : (B))
-#define MINI(A, B) ((A > B) ? (B) : (A))
 
 #define CALL_FUN(fun, args_count)                             \
     Module *fun_module;                                                 \
@@ -1366,9 +1415,6 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         RAISE_ERROR(BADARG_ATOM);                                       \
     }
 
-
-#ifndef MIN
-#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
@@ -1755,11 +1801,15 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         ctx->saved_module = mod;
 
-        if (mod->native_code == NULL) {
-            ctx->saved_ip = mod->labels[label];
-        } else {
+#ifndef AVM_NO_JIT
+        if (mod->native_code) {
             ctx->saved_ip = module_get_native_entry_point(mod, label);
+        } else {
+#endif
+            ctx->saved_ip = mod->labels[label];
+#ifndef AVM_NO_JIT
         }
+#endif
         scheduler_init_ready(ctx);
     #endif
 
@@ -1788,10 +1838,14 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
 #ifdef IMPL_EXECUTE_LOOP
     const uint8_t *code;
     Module *mod;
-    Module *prev_mod;
     term *x_regs;
+#ifndef AVM_NO_EMU
+    Module *prev_mod;
     const uint8_t *pc;
+#endif
+#ifndef AVM_NO_JIT
     ModuleNativeEntryPoint native_pc;
+#endif
     int remaining_reductions;
 
     Context *ctx = scheduler_run(glb);
@@ -1800,29 +1854,44 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
 schedule_in:
     TRACE("scheduling in, ctx = %p\n", ctx);
     if (ctx == NULL) return 0;
-    mod = ctx->saved_module;
-    prev_mod = mod;
-    code = mod->code->code;
     x_regs = ctx->x;
+    mod = ctx->saved_module;
+#ifndef AVM_NO_EMU
+    prev_mod = mod;
+#endif
     remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
+#if AVM_NO_JIT
+    code = mod->code->code;
+    // set PC
+    pc = (ctx->saved_ip);
+#elif AVM_NO_EMU
+    native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);
+#else
     if (mod->native_code == NULL) {
+        code = mod->code->code;
         // set PC
         pc = (ctx->saved_ip);
         native_pc = NULL;
     } else {
         native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);
     }
+#endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
     // Handle traps.
     if (ctx->restore_trap_handler) {
+#if AVM_NO_JIT
+        goto *ctx->restore_trap_handler;
+#elif AVM_NO_EMU
+        native_pc = ctx->restore_trap_handler;
+#else
         if (mod->native_code == NULL) {
             goto *ctx->restore_trap_handler;
         } else {
             native_pc = ctx->restore_trap_handler;
-            printf("ctx->restore_trap_handler -- native_pc = %p\n", (void *) native_pc);
         }
+#endif
     } else {
         // Handle signals
         PROCESS_SIGNAL_MESSAGES();
@@ -1839,7 +1908,10 @@ schedule_in:
 
     while (1) {
 #ifdef IMPL_EXECUTE_LOOP
+#ifndef AVM_NO_JIT
+#ifndef AVM_NO_EMU
         if (native_pc) {
+#endif
             struct JITState jit_state;
             jit_state.continuation = (void *) -1L;
             jit_state.module = mod;
@@ -1858,21 +1930,32 @@ schedule_in:
             }
             if (jit_state.module != mod) {
                 mod = jit_state.module;
+#ifndef AVM_NO_EMU
                 prev_mod = mod;
+#endif
                 if (mod->native_code == NULL) {
                     code = mod->code->code;
                 }
             }
+#ifndef AVM_NO_EMU
             if (mod->native_code == NULL) {
                 // set PC
                 native_pc = NULL;
                 JUMP_TO_ADDRESS(jit_state.continuation);
             } else {
+#endif
                 native_pc = jit_state.continuation;
+#ifndef AVM_NO_EMU
             }
+#endif
             continue;
+#ifndef AVM_NO_EMU
         }
 #endif
+#endif
+#endif
+
+#ifndef AVM_NO_EMU
 
     TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
 #ifdef IMPL_EXECUTE_LOOP
@@ -2060,7 +2143,9 @@ loop:
                                 mod = jump->target;
                                 code = mod->code->code;
                             }
+#ifndef AVM_NO_JIT
                             native_pc = jump->entry_point;
+#endif
                             continue;
                         }
                         case BIFFunctionType: {
@@ -2199,7 +2284,9 @@ loop:
                                 mod = jump->target;
                                 code = mod->code->code;
                             }
+#ifndef AVM_NO_JIT
                             native_pc = jump->entry_point;
+#endif
                             continue;
                         }
                         case BIFFunctionType: {
@@ -4882,7 +4969,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(BADARG_ATOM);
                     }
 
-                    if (term_binary_size(bs_bin) * 8 - bs_offset < MIN(remaining * 8, bits)) {
+                    if (term_binary_size(bs_bin) * 8 - bs_offset < MINI(remaining * 8, bits)) {
                         TRACE("bs_match_string: failed to match (binary is shorter)\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     } else {
@@ -4890,7 +4977,7 @@ wait_timeout_trap_handler:
                             avm_int_t bytes = bits / 8;
                             avm_int_t byte_offset = bs_offset / 8;
 
-                            if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MIN(remaining, (unsigned int) bytes)) != 0) {
+                            if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MINI(remaining, (unsigned int) bytes)) != 0) {
                                 TRACE("bs_match_string: failed to match\n");
                                 JUMP_TO_ADDRESS(mod->labels[fail]);
                             } else {
@@ -7262,6 +7349,8 @@ bs_match_jump_to_fail:
 
         continue;
 
+#endif
+
 #ifdef IMPL_EXECUTE_LOOP
 do_abort:
         x_regs[0] = ERROR_ATOM;
@@ -7271,6 +7360,13 @@ handle_error:
         {
             int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
+#if AVM_NO_JIT
+                code = mod->code->code;
+                JUMP_TO_ADDRESS(mod->labels[target_label]);
+#elif AVM_NO_EMU
+                native_pc = module_get_native_entry_point(mod, target_label);
+                continue;
+#else
                 if (mod->native_code) {
                     native_pc = module_get_native_entry_point(mod, target_label);
                     continue;
@@ -7279,6 +7375,7 @@ handle_error:
                     code = mod->code->code;
                     JUMP_TO_ADDRESS(mod->labels[target_label]);
                 }
+#endif
             }
         }
 

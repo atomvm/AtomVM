@@ -334,6 +334,9 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
     #define UNREACHABLE(...)
 #endif
 
+#define MAXI(A, B) ((A > B) ? (A) : (B))
+#define MINI(A, B) ((A > B) ? (B) : (A))
+
 #ifdef __cplusplus
 }
 #endif
