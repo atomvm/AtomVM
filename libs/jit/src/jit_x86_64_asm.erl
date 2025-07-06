@@ -262,7 +262,14 @@ testq(Reg, Reg) when is_atom(Reg) ->
     case x86_64_x_reg(Reg) of
         {0, Index} -> <<16#48, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>;
         {1, Index} -> <<16#4D, 16#85, (16#C0 bor (Index bsl 3) bor Index)>>
-    end.
+    end;
+testq(Imm, rax) when ?IS_SINT32_T(Imm) ->
+    % TEST rax, imm32: REX.W 0xA9 imm32
+    <<16#48, 16#A9, Imm:32/little>>;
+testq(Imm, Reg) when is_atom(Reg), Reg =/= rax, ?IS_SINT32_T(Imm) ->
+    % TEST r/m64, imm32: REX.W 0xF7 /0 ModRM imm32
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#F7, 3:2, 0:3, MODRM_RM:3, Imm:32/little>>.
 
 testl(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
     {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
