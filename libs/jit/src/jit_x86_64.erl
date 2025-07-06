@@ -89,7 +89,7 @@
 %% JITState * is rsi
 %% ModuleNativeInterface * is rdx
 %%
-%% rax, r10 and r11 can be used as scratch registers.
+%% rax, r11, r10, r9, r8 and rcx can be used as scratch registers.
 %% rdi / rsi / rdx are pushed to stack before calling a primitive and popped back.
 %% when returning (some push call pop push call pop sequences could be optimized)
 
@@ -916,13 +916,27 @@ jump_to_offset_if_and_not_equal(
         used_regs = UsedRegs
     }}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Shift Reg right by a fixed number of bits, effectively dividing it by 2^Shift
+%% @param State current state
+%% @param Reg register to shift
+%% @param Shift number of bits to shift
+%% @return new state
+%%-----------------------------------------------------------------------------
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
-    is_atom(Reg)
+    ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
     I = jit_x86_64_asm:shrq(Shift, Reg),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Shift Reg left by a fixed number of bits, effectively multiplying it by 2^Shift
+%% @param State current state
+%% @param Reg register to shift
+%% @param Shift number of bits to shift
+%% @return new state
+%%-----------------------------------------------------------------------------
 shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
 ->
@@ -1431,15 +1445,15 @@ move_array_element(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1 | _]} =
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} =
         State,
     {free, Reg},
     Index,
     {y_reg, Y}
 ) when is_integer(Index) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
     I2 = jit_x86_64_asm:movq({Index * 8, Reg}, Reg),
-    I3 = jit_x86_64_asm:movq(Reg, {Y * 8, Temp1}),
+    I3 = jit_x86_64_asm:movq(Reg, {Y * 8, Temp}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
