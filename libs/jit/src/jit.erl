@@ -21,7 +21,7 @@
 -module(jit).
 
 -export([
-    beam_chunk_header/2,
+    beam_chunk_header/3,
     compile/5
 ]).
 
@@ -85,6 +85,7 @@
 -record(state, {
     line_offsets :: [{integer(), integer()}],
     labels :: [{integer() | reference(), integer()}],
+    labels_count :: pos_integer(),
     atom_resolver :: fun((integer()) -> atom()),
     literal_resolver :: fun((integer()) -> any())
 }).
@@ -96,14 +97,15 @@
 -define(ASSERT(Expr), true = Expr).
 
 %%-----------------------------------------------------------------------------
-%% @param   Architecture
-%% @param   Variant
+%% @param   LabelsCount number of labels
+%% @param   Arch code for the architecture
+%% @param   Variant code for the JIT variant
 %% @returns Beam chunk header
 %% @doc     Create the beam chunk header for a single architecture/variant
 %% @end
 %%-----------------------------------------------------------------------------
-beam_chunk_header(Arch, Variant) ->
-    Info = <<?JIT_FORMAT_VERSION:16, 1:16, Arch:16, Variant:16, 0:32>>,
+beam_chunk_header(LabelsCount, Arch, Variant) ->
+    Info = <<LabelsCount:32, ?JIT_FORMAT_VERSION:16, 1:16, Arch:16, Variant:16, 0:32>>,
     <<(byte_size(Info)):32, Info/binary>>.
 
 %% Current variant supposes any entry point (labels or continuation pointer)
@@ -116,16 +118,16 @@ compile(
     MMod,
     MSt0
 ) when OpcodeMax =< ?OPCODE_MAX ->
-    MSt1 = MMod:jump_table(MSt0, LabelsCount),
+    MSt1 = MMod:jump_table(MSt0, LabelsCount + 1),
     State0 = #state{
         line_offsets = [],
         labels = [],
+        labels_count = LabelsCount,
         atom_resolver = AtomResolver,
         literal_resolver = LiteralResolver
     },
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
-    MSt3 = second_pass(MMod, MSt2, State1),
-    {State1#state.line_offsets, MSt3};
+    second_pass(MMod, MSt2, State1);
 compile(
     <<16:32, 0:32, OpcodeMax:32, _LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>>,
     _AtomResolver,
@@ -157,18 +159,20 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [_ModuleAtom, _FunctionName, _Arity]),
     % Implement function clause at the previous label. (TODO: optimize it out to save space)
     MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?FUNCTION_CLAUSE_ATOM
+        ctx, jit_state, offset, ?FUNCTION_CLAUSE_ATOM
     ]),
     first_pass(Rest3, MMod, MSt1, State0);
 % 3
-first_pass(<<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels = AccLabels} = State) ->
+first_pass(
+    <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels = AccLabels, labels_count = LabelsCount} = State
+) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_INT_CALL_END\n", []),
     Offset = MMod:offset(MSt0),
     MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_TERMINATE_CONTEXT, [
         ctx, jit_state
     ]),
-    {State#state{labels = [{0, Offset} | AccLabels]}, MSt1};
+    {State#state{labels = [{LabelsCount, Offset} | AccLabels]}, MSt1};
 % 4
 first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -203,7 +207,9 @@ first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt0, State0) ->
     {Index, Rest2} = decode_literal(Rest1),
     ?TRACE("OP_CALL_EXT ~p, ~p\n", [Arity, Index]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
-    MSt2 = MMod:call_primitive_with_cp(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index, -1]),
+    MSt2 = MMod:call_primitive_with_cp(MSt1, ?PRIM_CALL_EXT, [
+        ctx, jit_state, offset, Arity, Index, -1
+    ]),
     first_pass(Rest2, MMod, MSt2, State0);
 % 8
 first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -213,7 +219,9 @@ first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     {NWords, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_CALL_EXT_LAST ~p, ~p, ~p\n", [Arity, Index, NWords]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
-    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index, NWords]),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [
+        ctx, jit_state, offset, Arity, Index, NWords
+    ]),
     first_pass(Rest3, MMod, MSt2, State0);
 % 9
 first_pass(<<?OP_BIF0, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -822,7 +830,7 @@ first_pass(<<?OP_BADMATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_BADMATCH ~p\n", [Arg1]),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?BADMATCH_ATOM, {free, Arg1}
+        ctx, jit_state, offset, ?BADMATCH_ATOM, {free, Arg1}
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 73
@@ -830,7 +838,7 @@ first_pass(<<?OP_IF_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_IF_END\n", []),
     MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?IF_CLAUSE_ATOM
+        ctx, jit_state, offset, ?IF_CLAUSE_ATOM
     ]),
     first_pass(Rest0, MMod, MSt1, State0);
 % 74
@@ -839,7 +847,7 @@ first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_CASE_END ~p\n", [Arg1]),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?CASE_CLAUSE_ATOM, {free, Arg1}
+        ctx, jit_state, offset, ?CASE_CLAUSE_ATOM, {free, Arg1}
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 75
@@ -851,7 +859,9 @@ first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, FuncReg} = read_any_xreg(ArgsCount, MMod, MSt1),
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, FuncReg),
     {MSt4, State1} = validate_is_function(MMod, MSt3, Reg, State0),
-    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
+    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_CALL_FUN, [
+        ctx, jit_state, offset, Reg, ArgsCount
+    ]),
     first_pass(Rest1, MMod, MSt5, State1);
 % 77
 first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -868,7 +878,7 @@ first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Index, Rest2} = decode_literal(Rest1),
     ?TRACE("OP_CALL_EXT_ONLY ~p, ~p\n", [Arity, Index]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
-    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, Arity, Index, -1]),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, offset, Arity, Index, -1]),
     first_pass(Rest2, MMod, MSt2, State0);
 % 96
 first_pass(<<?OP_FMOVE, ?COMPACT_EXTENDED_FP_REGISTER, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -903,7 +913,7 @@ first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt3, IsNumber} = MMod:call_primitive(MSt2, ?PRIM_TERM_IS_NUMBER, [Reg]),
     MSt4 = MMod:if_block(MSt3, {'(uint8_t)', {free, IsNumber}, '==', false}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, ?BADARITH_ATOM
+            ctx, jit_state, offset, ?BADARITH_ATOM
         ])
     end),
     {{fp_reg, FPRegIndex}, Rest2} = decode_fp_register(Rest1),
@@ -934,10 +944,10 @@ first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt0, State0) ->
 % 102
 first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
-    {Label, Rest1} = decode_label(Rest0),
+    {_Label, Rest1} = decode_label(Rest0),
     {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
     {{fp_reg, FPRegIndex2}, Rest3} = decode_fp_register(Rest2),
-    ?TRACE("OP_FNEGATE ~p, ~p, ~p\n", [Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}]),
+    ?TRACE("OP_FNEGATE ~p, ~p, ~p\n", [_Label, {fp_reg, FPRegIndex1}, {fp_reg, FPRegIndex2}]),
     {MSt1, Reg} = MMod:call_primitive(MSt0, ?PRIM_FNEGATE, [
         ctx, FPRegIndex1, FPRegIndex2
     ]),
@@ -973,7 +983,7 @@ first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_TRY_CASE_END ~p\n", [Arg1]),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?TRY_CLAUSE_ATOM, Arg1
+        ctx, jit_state, offset, ?TRY_CLAUSE_ATOM, Arg1
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 108
@@ -983,7 +993,7 @@ first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, ExcValue, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
     ?TRACE("OP_RAISE ~p, ~p\n", [Stacktrace, ExcValue]),
     MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE, [
-        ctx, jit_state, Stacktrace, ExcValue
+        ctx, jit_state, offset, Stacktrace, ExcValue
     ]),
     first_pass(Rest2, MMod, MSt3, State0);
 % 112
@@ -997,7 +1007,7 @@ first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
     MSt5 = MMod:decrement_reductions_and_maybe_schedule_next(MSt4),
     MSt6 = MMod:call_primitive_with_cp(MSt5, ?PRIM_APPLY, [
-        ctx, jit_state, {free, Module}, {free, Function}, Arity
+        ctx, jit_state, offset, {free, Module}, {free, Function}, Arity
     ]),
     first_pass(Rest1, MMod, MSt6, State0);
 % 113
@@ -1013,7 +1023,7 @@ first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt6 = MMod:move_to_cp(MSt5, {y_reg, NWords}),
     MSt7 = MMod:increment_sp(MSt6, NWords + 1),
     MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_APPLY, [
-        ctx, jit_state, {free, Module}, {free, Function}, Arity
+        ctx, jit_state, offset, {free, Module}, {free, Function}, Arity
     ]),
     first_pass(Rest2, MMod, MSt8, State0);
 % 114
@@ -1153,17 +1163,17 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
         if
             Unit =/= 8 ->
                 MMod:call_primitive_last(MSt6, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?UNSUPPORTED_ATOM
+                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                 ]);
             FlagsValue =/= 0 ->
                 MMod:call_primitive_last(MSt6, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?UNSUPPORTED_ATOM
+                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                 ]);
             true ->
                 MSt6
         end,
     MSt8 = MMod:if_block(MSt7, {BSOffsetReg, '&', 16#7, '!=', 0}, fun(BlockSt) ->
-        MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [ctx, jit_state, ?BADARG_ATOM])
+        MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [ctx, jit_state, offset, ?BADARG_ATOM])
     end),
     MSt9 = MMod:shift_right(MSt8, BSOffsetReg, 3),
     MSt10 = MMod:and_(MSt9, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
@@ -1518,11 +1528,11 @@ first_pass(
 % 154
 first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
-    {Label, Rest1} = decode_label(Rest0),
+    {_Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     {MSt2, Dest, Rest3} = decode_dest(Rest2, MMod, MSt1),
     {Live, Rest4} = decode_literal(Rest3),
-    ?TRACE("OP_PUT_MAP_ASSOC ~p,~p,~p,~p,[", [Label, Src, Dest, Live]),
+    ?TRACE("OP_PUT_MAP_ASSOC ~p,~p,~p,~p,[", [_Label, Src, Dest, Live]),
     {ListSize, Rest5} = decode_extended_list_header(Rest4),
     {MSt3, NewEntriesReg} = MMod:move_to_native_register(MSt2, 0),
     % First iteration to compute size
@@ -1540,7 +1550,7 @@ first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
             ASt4 = MMod:if_block(
                 ASt3, {'(int)', {free, PosReg}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, ?OUT_OF_MEMORY_ATOM
+                        ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                     ])
                 end
             ),
@@ -1599,11 +1609,11 @@ first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
 % 155
 first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
-    {Label, Rest1} = decode_label(Rest0),
+    {_Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     {MSt2, Dest, Rest3} = decode_dest(Rest2, MMod, MSt1),
     {Live, Rest4} = decode_literal(Rest3),
-    ?TRACE("OP_PUT_MAP_EXACT ~p,~p,~p,~p,[", [Label, Src, Dest, Live]),
+    ?TRACE("OP_PUT_MAP_EXACT ~p,~p,~p,~p,[", [_Label, Src, Dest, Live]),
     {ListSize, Rest5} = decode_extended_list_header(Rest4),
     % Make sure every key from list is in src
     NumElements = ListSize div 2,
@@ -1616,13 +1626,13 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
             ]),
             ASt3 = MMod:if_block(ASt2, {'(int)', PosReg, '==', ?TERM_MAP_NOT_FOUND}, fun(BSt0) ->
                 MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ])
             end),
             ASt4 = MMod:if_block(
                 ASt3, {'(int)', {free, PosReg}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, ?OUT_OF_MEMORY_ATOM
+                        ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                     ])
                 end
             ),
@@ -1653,7 +1663,7 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
                 BSt0
             ) ->
                 MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?OUT_OF_MEMORY_ATOM
+                    ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                 ])
             end),
             ASt5 = term_set_map_assoc(
@@ -1692,7 +1702,9 @@ first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt5 = MMod:if_block(MSt4, {'(int)', {free, PosReg1}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(
         BSt0
     ) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [ctx, jit_state, ?OUT_OF_MEMORY_ATOM])
+        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
+        ])
     end),
     {MSt6, Rest5} = lists:foldl(
         fun(_Index, {AccMSt0, AccRest0}) ->
@@ -1708,7 +1720,7 @@ first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, State0) ->
                 AccMSt3, {'(int)', {free, PosReg}, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     % TODO: previous implementation yielded a slightly smaller code as raise block was shared.
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, ?OUT_OF_MEMORY_ATOM
+                        ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                     ])
                 end
             ),
@@ -1733,7 +1745,9 @@ first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt3, PosReg1} = MMod:call_primitive(MSt2, ?PRIM_TERM_FIND_MAP_POS, [ctx, Src, {free, Key1}]),
     MSt4 = cond_jump_to_label({'(int)', PosReg1, '==', ?TERM_MAP_NOT_FOUND}, Label, MMod, MSt3),
     MSt5 = MMod:if_block(MSt4, {'(int)', PosReg1, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [ctx, jit_state, ?OUT_OF_MEMORY_ATOM])
+        MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
+            ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
+        ])
     end),
     {MSt6, SrcReg} = MMod:move_to_native_register(MSt5, Src),
     {MSt7, MapReg} = MMod:copy_to_native_register(MSt6, SrcReg),
@@ -1757,7 +1771,7 @@ first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, State0) ->
                 AccMSt3, {'(int)', PosReg, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(BSt0) ->
                     % TODO: previous implementation yielded a slightly smaller code as raise block was shared.
                     MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, ?OUT_OF_MEMORY_ATOM
+                        ctx, jit_state, offset, ?OUT_OF_MEMORY_ATOM
                     ])
                 end
             ),
@@ -1823,13 +1837,13 @@ first_pass(<<?OP_RAW_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, ExClassReg} = MMod:move_to_native_register(MSt0, {x_reg, 0}),
     MSt2 = MMod:if_block(MSt1, {ExClassReg, '==', ?ERROR_ATOM}, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state, offset])
     end),
     MSt3 = MMod:if_block(MSt2, {ExClassReg, '==', ?LOWERCASE_EXIT_ATOM}, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state, offset])
     end),
     MSt4 = MMod:if_block(MSt3, {{free, ExClassReg}, '==', ?THROW_ATOM}, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state, offset])
     end),
     MSt5 = MMod:move_to_vm_register(MSt4, ?BADARG_ATOM, {x_reg, 0}),
     first_pass(Rest0, MMod, MSt5, State0);
@@ -1993,7 +2007,7 @@ first_pass(<<?OP_BS_START_MATCH4, Rest0/binary>>, MMod, MSt0, #state{labels = La
             true ->
                 % fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
                 MMod:call_primitive_last(MSt7, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ])
         end,
     {MSt9, ContinueOffset} = MMod:offset(MSt8, TokensCont),
@@ -2135,14 +2149,14 @@ first_pass(
         if
             is_integer(BinaryTotalSize) andalso BinaryTotalSize band 16#7 =/= 0 ->
                 MMod:call_primitive_last(MSt4, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?UNSUPPORTED_ATOM
+                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                 ]);
             is_integer(BinaryTotalSize) ->
                 MSt4;
             true ->
                 MMod:if_block(MSt4, {BinaryTotalSize, '&', 16#7, '!=', 0}, fun(BlockSt) ->
                     MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                        ctx, jit_state, ?UNSUPPORTED_ATOM
+                        ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                     ])
                 end)
         end,
@@ -2221,7 +2235,9 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt4 = MMod:decrement_reductions_and_maybe_schedule_next(MSt3),
     {MSt5, Reg} = MMod:move_to_native_register(MSt4, Fun),
     {MSt6, State1} = validate_is_function(MMod, MSt5, Reg, State0),
-    MSt7 = MMod:call_primitive_with_cp(MSt6, ?PRIM_CALL_FUN, [ctx, jit_state, Reg, ArgsCount]),
+    MSt7 = MMod:call_primitive_with_cp(MSt6, ?PRIM_CALL_FUN, [
+        ctx, jit_state, offset, Reg, ArgsCount
+    ]),
     first_pass(Rest3, MMod, MSt7, State1);
 % 180
 first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -2229,7 +2245,7 @@ first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_BADRECORD ~p\n", [Arg1]),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?BADRECORD_ATOM, Arg1
+        ctx, jit_state, offset, ?BADRECORD_ATOM, Arg1
     ]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 181
@@ -2378,7 +2394,7 @@ first_pass_bs_create_bin_compute_size(
                 MSt3;
             is_integer(SizeValue) andalso Fail =:= 0 ->
                 MMod:call_primitive_last(MSt3, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]);
             is_integer(SizeValue) andalso Fail =/= 0 ->
                 MMod:jump_to_label(MSt3, Fail);
@@ -2491,7 +2507,7 @@ first_pass_bs_create_bin_insert_value(
         case Fail of
             0 ->
                 MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]);
             _ ->
                 MMod:jump_to_label(BlockSt, Fail)
@@ -2515,7 +2531,7 @@ first_pass_bs_create_bin_insert_value(
         case Fail of
             0 ->
                 MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]);
             _ ->
                 MMod:jump_to_label(BlockSt, Fail)
@@ -2553,7 +2569,7 @@ first_pass_bs_create_bin_insert_value(
     ]),
     MSt2 = MMod:if_block(MSt1, {SizeValue, '<', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_HANDLE_ERROR, [
-            ctx, jit_state
+            ctx, jit_state, offset
         ])
     end),
     {MSt3, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
@@ -2663,7 +2679,7 @@ first_pass_bs_match_ensure_at_least(
     if
         Stride < 0 ->
             MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-                ctx, jit_state, ?BADARG_ATOM
+                ctx, jit_state, offset, ?BADARG_ATOM
             ]),
             {J0, Rest0, MatchState, MSt1, State0};
         true ->
@@ -2687,7 +2703,7 @@ first_pass_bs_match_ensure_exactly(
     if
         Stride < 0 ->
             MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-                ctx, jit_state, ?BADARG_ATOM
+                ctx, jit_state, offset, ?BADARG_ATOM
             ]),
             {J0, Rest0, MatchState, MSt1, State0};
         true ->
@@ -2758,14 +2774,14 @@ first_pass_bs_match_binary(
                     MSt0, BSOffsetReg, 2#111, 0
                 ),
                 MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]),
                 {MSt3, ContinueOffset} = MMod:offset(MSt2, [JumpToken]),
                 Labels1 = [{OffsetRef, ContinueOffset} | Labels0],
                 {MSt3, Labels1};
             true ->
                 MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]),
                 {MSt1, Labels0}
         end,
@@ -2820,7 +2836,7 @@ do_get_tail(
         MSt0, BSOffsetReg, 2#111, 0
     ),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?BADARG_ATOM
+        ctx, jit_state, offset, ?BADARG_ATOM
     ]),
     {MSt3, ContinueOffset} = MMod:offset(MSt2, [JumpToken]),
     Labels1 = [{OffsetRef, ContinueOffset} | Labels0],
@@ -2963,7 +2979,7 @@ validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
     ),
     ErrorOffset = MMod:offset(MSt1),
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
-        ctx, jit_state, ?BADFUN_ATOM, Reg
+        ctx, jit_state, offset, ?BADFUN_ATOM, Reg
     ]),
     {MSt3, ContinueOffset} = MMod:offset(MSt2, [JumpToken0]),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
@@ -2978,7 +2994,7 @@ validate_is_function(MMod, MSt0, Reg, #state{labels = Labels0} = State0) ->
 verify_is_boxed(MMod, MSt0, Reg) ->
     MMod:if_block(MSt0, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, ?BADARG_ATOM
+            ctx, jit_state, offset, ?BADARG_ATOM
         ])
     end).
 
@@ -2993,7 +3009,7 @@ verify_is_match_state_and_get_ptr(MMod, MSt0, {free, Reg}) ->
             BlockSt
         ) ->
             MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                ctx, jit_state, ?BADARG_ATOM
+                ctx, jit_state, offset, ?BADARG_ATOM
             ])
         end
     ),
@@ -3010,7 +3026,7 @@ verify_is_immediate(Arg1, ImmediateMask, ImmediateTag, 0, MMod, MSt0) ->
     {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
     MMod:if_block(MSt1, {{free, Reg}, '&', ImmediateMask, '!=', ImmediateTag}, fun(BSt0) ->
         MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, ?BADARG_ATOM
+            ctx, jit_state, offset, ?BADARG_ATOM
         ])
     end);
 verify_is_immediate(Arg1, ImmediateMask, ImmediateTag, FailLabel, MMod, MSt0) ->
@@ -3046,7 +3062,7 @@ verify_is_immediate_or_boxed(
     ),
     {MSt7, ErrorOffset} = MMod:offset(MSt6, [JumpToken1]),
     MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, ?BADARG_ATOM
+        ctx, jit_state, offset, ?BADARG_ATOM
     ]),
     {MSt9, ContinueOffset} = MMod:offset(MSt8, [JumpToken0, JumpToken2]),
     Labels1 = [
@@ -3102,7 +3118,7 @@ verify_is_binary(Arg1, FailLabel, MMod, MSt0, #state{labels = Labels0} = State0)
         case FailLabel of
             0 ->
                 MMod:call_primitive_last(MSt10, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]);
             _ ->
                 MMod:jump_to_label(MSt10, FailLabel)
@@ -3121,7 +3137,7 @@ verify_is_binary(Arg1, FailLabel, MMod, MSt0, #state{labels = Labels0} = State0)
 cond_raise_badarg_or_jump_to_fail_label(Cond, 0, MMod, MSt0) ->
     MMod:if_block(MSt0, Cond, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-            ctx, jit_state, ?BADARG_ATOM
+            ctx, jit_state, offset, ?BADARG_ATOM
         ])
     end);
 cond_raise_badarg_or_jump_to_fail_label(Cond, FailLabel, MMod, MSt0) when FailLabel > 0 ->
@@ -3139,7 +3155,7 @@ term_to_int(Term, FailLabel, MMod, MSt0) ->
         case FailLabel of
             0 ->
                 MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARG_ATOM
+                    ctx, jit_state, offset, ?BADARG_ATOM
                 ]);
             _ ->
                 MMod:jump_to_label(BlockSt, FailLabel)
@@ -3174,7 +3190,7 @@ first_pass_float3(Primitive, Rest0, MMod, MSt0, State0) ->
         true ->
             MSt2 = MMod:if_block(MSt1, {'(uint8_t)', {free, Reg}, '==', false}, fun(BlockSt) ->
                 MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, ?BADARITH_ATOM
+                    ctx, jit_state, offset, ?BADARITH_ATOM
                 ])
             end),
             first_pass(Rest4, MMod, MSt2, State0)
@@ -3226,8 +3242,17 @@ memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_tu
     MSt4 = MMod:move_to_vm_register(MSt3, ExtraRootXReg, ExtraRoot),
     {MSt4, ExtraRoot}.
 
-second_pass(MMod, MSt, #state{labels = Labels}) ->
-    MMod:update_branches(MSt, Labels).
+second_pass(MMod, MSt0, #state{labels = Labels0, line_offsets = Lines}) ->
+    % Add extra function that returns labels and line information
+    Offset = MMod:offset(MSt0),
+    Labels1 = [{0, Offset} | Labels0],
+    SortedLabels = lists:keysort(2, [
+        {Label, LabelOffset}
+     || {Label, LabelOffset} <- Labels0, is_integer(Label)
+    ]),
+    SortedLines = lists:keysort(2, Lines),
+    MSt1 = MMod:return_labels_and_lines(MSt0, SortedLabels, SortedLines),
+    MMod:update_branches(MSt1, Labels1).
 
 decode_literal(<<_Value:5, ?COMPACT_LITERAL:3, _Rest/binary>> = Binary) ->
     decode_value64(Binary);
@@ -3362,7 +3387,7 @@ decode_flags_list(L, MMod, MSt0) ->
     {MSt1, FlagsValue} = MMod:call_primitive(MSt0, ?PRIM_DECODE_FLAGS_LIST, [ctx, jit_state, L]),
     MSt2 = MMod:if_block(MSt1, {FlagsValue, '<', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_HANDLE_ERROR, [
-            ctx, jit_state
+            ctx, jit_state, offset
         ])
     end),
     {MSt2, FlagsValue}.
@@ -3512,7 +3537,7 @@ term_get_map_keys(Map, MMod, MSt0) ->
 
 handle_error_if(Cond, MMod, MSt0) ->
     MMod:if_block(MSt0, Cond, fun(BSt0) ->
-        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state])
+        MMod:call_primitive_last(BSt0, ?PRIM_HANDLE_ERROR, [ctx, jit_state, offset])
     end).
 
 cond_jump_to_label(Cond, Label, MMod, MSt0) ->
