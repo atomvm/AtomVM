@@ -3523,9 +3523,9 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
 term_binary_heap_size(Size, MMod) when is_integer(Size) ->
     case MMod:word_size() of
         4 when Size < ?REFC_BINARY_MIN_32 ->
-            ((Size + 3) bsr 2) + 1;
+            ((Size + 3) bsr 2) + 1 + ?BINARY_HEADER_SIZE;
         8 when Size < ?REFC_BINARY_MIN_64 ->
-            ((Size + 7) bsr 3) + 1;
+            ((Size + 7) bsr 3) + 1 + ?BINARY_HEADER_SIZE;
         _ ->
             ?TERM_BOXED_REFC_BINARY_SIZE
     end.
