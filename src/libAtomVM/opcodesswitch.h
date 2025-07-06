@@ -1845,7 +1845,9 @@ schedule_in:
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
+            TRACE("calling native code at %p, ctx = %p\n", native_pc, ctx);
             Context *new_ctx = native_pc(ctx, &jit_state, &module_native_interface);
+            TRACE("returning from native code at %p, ctx = %p, new_ctx = %p\n", native_pc, ctx, new_ctx);
             remaining_reductions = jit_state.remaining_reductions;
             if (UNLIKELY(new_ctx != ctx)) {
                 ctx = new_ctx;
