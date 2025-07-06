@@ -64,10 +64,11 @@ typedef struct Mutex Mutex;
 typedef struct JITState JITState;
 #endif
 
-// Interface to native functions:
+// Interface to native code:
 // Entry point returns the current (or new) context
-// jit_state->remaining_reductions is updated. If it is zero, scheduler
-// resumes in schedule_in, i.e. it assumes ctx was changed.
+// jit_state->remaining_reductions is updated.
+// If returned context is different from passed context, scheduler resumes in
+// schedule_in.
 typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
 
 typedef struct
@@ -95,6 +96,7 @@ typedef struct
     char magic[4];
     uint32_t size;
     uint32_t info_size;
+    uint32_t labels;
     uint16_t version;
     uint16_t architectures_count;
     NativeCodeArch architectures[1];
@@ -384,6 +386,12 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
 bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity);
 
 /**
+ * @brief Get the entry point to native code for a given exported label
+ *
+ * @details This function is used to call native code.
+ * @param module the module
+ * @param exported_label label to get the native entry point to
+ * @return the native entry point
  */
 ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label);
 
@@ -440,6 +448,15 @@ static inline bool module_has_line_chunk(Module *mod)
  * @param global the global context
  */
 void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *mod_offset, GlobalContext *global);
+
+/**
+ * @brief Get the offset of a given label from the beginning of the code, emulated or native
+ *
+ * @param mod the module
+ * @param label the label to get the offset of
+ * @return the offset to the label code
+ */
+uint32_t module_label_code_offset(Module *mod, int label);
 
 #ifdef __cplusplus
 }
