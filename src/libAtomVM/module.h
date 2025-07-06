@@ -78,7 +78,9 @@ typedef struct
     uint32_t info_size;
     uint32_t version;
     uint32_t opcode_max;
+#ifndef AVM_NO_EMU
     uint32_t labels;
+#endif
     uint32_t functions_count;
 
     uint8_t code[1];
@@ -135,7 +137,9 @@ struct Module
     const uint8_t *line_refs_table;
     size_t locations_count;
     const uint8_t *locations_table;
+#ifndef AVM_NO_JIT
     ModuleNativeEntryPoint native_code;
+#endif
 
     unsigned int *line_refs_offsets;
     size_t line_refs_offsets_count;
