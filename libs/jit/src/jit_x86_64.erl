@@ -70,7 +70,8 @@
     decrement_reductions_and_maybe_schedule_next/1,
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
-    call_func_ptr/3
+    call_func_ptr/3,
+    return_labels_and_lines/3
 ]).
 
 -include_lib("jit.hrl").
@@ -353,17 +354,19 @@ call_primitive(
 call_primitive_last(
     #state{
         stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = AvailableRegs0,
-        used_regs = UsedRegs0
+        stream = Stream0
     } = State0,
     Primitive,
     Args
 ) ->
     % We need a register for the function pointer that should not be used as a parameter
+    % Since we're not returning, we can use all scratch registers except
+    % registers used for parameters
     ParamRegs = lists:sublist(?PARAMETER_REGS, length(Args)),
-    [Temp | _] = AvailableRegs0 -- ParamRegs,
-    AvailableRegs1 = AvailableRegs0 -- [Temp],
+    ArgsRegs = args_regs(Args),
+    ScratchRegs = ?AVAILABLE_REGS -- ArgsRegs -- ParamRegs,
+    [Temp | AvailableRegs1] = ScratchRegs,
+    UsedRegs = ?AVAILABLE_REGS -- AvailableRegs1,
     PrepCall =
         case Primitive of
             0 ->
@@ -374,7 +377,7 @@ call_primitive_last(
     Stream1 = StreamModule:append(Stream0, PrepCall),
     State1 = set_args(
         State0#state{
-            stream = Stream1, available_regs = AvailableRegs1, used_regs = [Temp | UsedRegs0]
+            stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
         },
         Args
     ),
@@ -1045,29 +1048,19 @@ set_args(
     #state{stream = Stream0, stream_module = StreamModule, used_regs = UsedRegs} = State0, Args
 ) ->
     ParamRegs = parameter_regs(Args),
-    ArgsRegs = lists:map(
-        fun
-            ({free, {ptr, Reg}}) -> Reg;
-            ({free, Reg}) when is_atom(Reg) -> Reg;
-            ({free, Imm}) when is_integer(Imm) -> imm;
-            (ctx) -> ?CTX_REG;
-            (jit_state) -> ?JITSTATE_REG;
-            (Reg) when is_atom(Reg) -> Reg;
-            (Imm) when is_integer(Imm) -> imm;
-            ({ptr, Reg}) -> Reg;
-            ({x_reg, _}) -> ?CTX_REG;
-            ({y_reg, _}) -> ?CTX_REG;
-            ({fp_reg, _}) -> ?CTX_REG;
-            ({free, {x_reg, _}}) -> ?CTX_REG;
-            ({free, {y_reg, _}}) -> ?CTX_REG;
-            ({free, {fp_reg, _}}) -> ?CTX_REG
-        end,
-        Args
-    ),
+    ArgsRegs = args_regs(Args),
     AvailableScratchGP =
         [rdi, rsi, rdx, rcx, r8, r9, r10, r11] -- ParamRegs -- ArgsRegs -- UsedRegs,
     AvailableScratchFP = ?AVAILABLE_FPREGS -- ParamRegs -- ArgsRegs -- UsedRegs,
-    SetArgsCode = set_args0(Args, ArgsRegs, ParamRegs, AvailableScratchGP, AvailableScratchFP, []),
+    Offset = StreamModule:offset(Stream0),
+    Args1 = [
+        case Arg of
+            offset -> Offset;
+            _ -> Arg
+        end
+     || Arg <- Args
+    ],
+    SetArgsCode = set_args0(Args1, ArgsRegs, ParamRegs, AvailableScratchGP, AvailableScratchFP, []),
     Stream1 = StreamModule:append(Stream0, SetArgsCode),
     NewUsedRegs = lists:foldl(
         fun
@@ -1091,7 +1084,7 @@ parameter_regs(Args) ->
 parameter_regs0([], _, _, Acc) ->
     lists:reverse(Acc);
 parameter_regs0([Special | T], [GPReg | GPRegsT], FPRegs, Acc) when
-    Special =:= ctx orelse Special =:= jit_state
+    Special =:= ctx orelse Special =:= jit_state orelse Special =:= offset
 ->
     parameter_regs0(T, GPRegsT, FPRegs, [GPReg | Acc]);
 parameter_regs0([{free, Free} | T], GPRegs, FPRegs, Acc) ->
@@ -2043,6 +2036,35 @@ set_bs(#state{stream_module = StreamModule, stream = Stream0} = State0, TermReg)
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State0#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @param State current state
+%% @param SortedLabels labels information, sorted by offset
+%% @param SortedLines line information, sorted by offset
+%% @doc Build labels and line tables and encode a function that returns it.
+%% In this case, the function returns the effective address of what immediately
+%% follows.
+%% @end
+%% @return New state
+%%-----------------------------------------------------------------------------
+return_labels_and_lines(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State,
+    SortedLabels,
+    SortedLines
+) ->
+    I2 = jit_x86_64_asm:retq(),
+    {_RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({byte_size(I2), rip}, rax),
+    LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
+    LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
+    Stream1 = StreamModule:append(
+        Stream0,
+        <<I1/binary, I2/binary, (length(SortedLabels)):16, LabelsTable/binary,
+            (length(SortedLines)):16, LinesTable/binary>>
+    ),
+    State#state{stream = Stream1}.
+
 free_reg(AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
     AvailableRegs1 = free_reg0(?AVAILABLE_REGS, AvailableRegs0, Reg, []),
     true = lists:member(Reg, UsedRegs0),
@@ -2060,3 +2082,25 @@ free_reg0([PrevReg | SortedT], [PrevReg | PrevT], Reg, Acc) ->
     free_reg0(SortedT, PrevT, Reg, [PrevReg | Acc]);
 free_reg0([_Other | SortedT], PrevRegs, Reg, Acc) ->
     free_reg0(SortedT, PrevRegs, Reg, Acc).
+
+args_regs(Args) ->
+    lists:map(
+        fun
+            ({free, {ptr, Reg}}) -> Reg;
+            ({free, Reg}) when is_atom(Reg) -> Reg;
+            ({free, Imm}) when is_integer(Imm) -> imm;
+            (offset) -> imm;
+            (ctx) -> ?CTX_REG;
+            (jit_state) -> ?JITSTATE_REG;
+            (Reg) when is_atom(Reg) -> Reg;
+            (Imm) when is_integer(Imm) -> imm;
+            ({ptr, Reg}) -> Reg;
+            ({x_reg, _}) -> ?CTX_REG;
+            ({y_reg, _}) -> ?CTX_REG;
+            ({fp_reg, _}) -> ?CTX_REG;
+            ({free, {x_reg, _}}) -> ?CTX_REG;
+            ({free, {y_reg, _}}) -> ?CTX_REG;
+            ({free, {fp_reg, _}}) -> ?CTX_REG
+        end,
+        Args
+    ).

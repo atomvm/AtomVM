@@ -1752,16 +1752,13 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
             return 0;
         }
 
+        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         ctx->saved_module = mod;
 
         if (mod->native_code == NULL) {
-            ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
             ctx->saved_ip = mod->labels[label];
-            ctx->saved_module = mod;
         } else {
-            ctx->cp = module_address(mod->module_index, 0);
             ctx->saved_ip = module_get_native_entry_point(mod, label);
-            ctx->saved_module = mod;
         }
         scheduler_init_ready(ctx);
     #endif
@@ -1860,7 +1857,9 @@ schedule_in:
             if (jit_state.module != mod) {
                 mod = jit_state.module;
                 prev_mod = mod;
-                code = mod->code->code;
+                if (mod->native_code == NULL) {
+                    code = mod->code->code;
+                }
             }
             if (mod->native_code == NULL) {
                 // set PC
