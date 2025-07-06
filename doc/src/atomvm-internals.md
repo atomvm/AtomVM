@@ -128,7 +128,28 @@ This section is under construction
 
 ## JIT and native code execution
 
-AtomVM can run native code present in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1.
+### Flavors of the emulator
+
+Following BEAM, there are two flavors of the emulator: jit and emu.
+
+JIT is available on some platforms (currently only x86_64) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
+
+Modules can include precompiled code in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1. This native code is executed by the jit-flavor of the emulator as well as the emu flavor if execution of precompiled is enabled.
+
+JIT is an experimental feature and is currently disabled by default. Enabling JIT disables the interpreter.
+JIT can enabled with `-DAVM_DISABLE_JIT=Off`
+
+Execution of precompiled modules can be enabled even if JIT is disabled, with `-DAVM_DISABLE_JIT=On _DAVM_ENABLE_PRECOMPILED=On`
+
+### How JIT works internally
+
+The JIT compiler is written in Erlang and is therefore precompiled. When a process calls a function in a module with no precompiled code, the process is trapped and a message is sent to the `code_server`. The code server then compiles the bytecode to native code and then resumes the trapped process.
+
+JIT compiler is composed of two main interfaces : backend and stream.
+
+A backend implementation is required for each architecture. The backend is called by jit module as it translates bytecodes to machine code. The current single implementation is `jit_x86_64` which is suitable for systems with System V X86 64 ABI.
+
+A stream implementation is responsible for streaming the machine code, especially in the context of low memory. Two implementations currently exist: `jit_stream_binary` that streams assembly code to an Erlang binary, suitable for tests and precompilation on the desktop, and `jit_stream_mmap` that streams assembly code in an `mmap(2)` allocated page, suitable for JIT compilation on Unix.
 
 ## The Scheduler
 
