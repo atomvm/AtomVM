@@ -25,7 +25,6 @@
     new/3,
     stream/1,
     offset/1,
-    offset/2,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -36,15 +35,10 @@
     call_primitive/3,
     call_primitive_last/3,
     call_primitive_with_cp/3,
-    return_if_not_null/2,
-    return_if_not_equal/3,
+    return_if_not_equal_to_ctx/2,
     jump_to_label/2,
-    jump_to_offset/1,
     if_block/3,
     if_else_block/4,
-    jump_to_offset_if_equal/3,
-    jump_to_offset_if_and_equal/4,
-    jump_to_offset_if_and_not_equal/4,
     shift_right/3,
     shift_left/3,
     move_to_vm_register/3,
@@ -60,7 +54,6 @@
     increment_sp/2,
     set_continuation_to_label/2,
     set_continuation_to_offset/1,
-    get_continuation_address/1,
     get_module_index/1,
     and_/3,
     or_/3,
@@ -121,9 +114,11 @@
         Reg =:= xmm5 orelse Reg =:= xmm6 orelse Reg =:= xmm7)
 ).
 
+-type stream() :: any().
+
 -record(state, {
     stream_module :: module(),
-    stream :: any(),
+    stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [],
     available_regs :: [x86_64_register()],
@@ -131,18 +126,12 @@
     used_regs :: [x86_64_register()]
 }).
 
--record(jump_token, {
-    used_regs :: [x86_64_register()]
-}).
-
--type jump_token() :: #jump_token{}.
-
 -type state() :: #state{}.
 -type immediate() :: non_neg_integer().
 -type vm_register() ::
     {x_reg, non_neg_integer()} | {y_reg, non_neg_integer()} | {ptr, x86_64_register()}.
--type value() :: immediate() | vm_register() | x86_64_register().
--type arg() :: ctx | jit_state | value() | {free, value()}.
+-type value() :: immediate() | vm_register() | x86_64_register() | {ptr, x86_64_register()}.
+-type arg() :: ctx | jit_state | offset | value() | {free, value()}.
 
 -type maybe_free_x86_64_register() :: x86_64_register() | {free, x86_64_register()}.
 
@@ -181,10 +170,34 @@
 -define(PARAMETER_REGS, [rdi, rsi, rdx, rcx, r8, r9]).
 -define(PARAMETER_FPREGS, ?AVAILABLE_FPREGS).
 
+%%-----------------------------------------------------------------------------
+%% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
+%% sizeof(uintptr_t)
+%%
+%% C code equivalent is:
+%% #if UINTPTR_MAX == UINT32_MAX
+%%    #define TERM_BYTES 4
+%% #elif UINTPTR_MAX == UINT64_MAX
+%%    #define TERM_BYTES 8
+%% #else
+%%    #error "Term size must be either 32 bit or 64 bit."
+%% #endif
+%%
+%% @end
+%% @return Word size in bytes
+%%-----------------------------------------------------------------------------
 -spec word_size() -> 4 | 8.
 word_size() -> 8.
 
--spec new(any(), module(), any()) -> state().
+%%-----------------------------------------------------------------------------
+%% @doc Create a new backend state for provided variant, module and stream.
+%% @end
+%% @param Variant JIT variant to use (currently ?JIT_VARIANT_PIC)
+%% @param StreamModule module to stream instructions
+%% @param Stream stream state
+%% @return New backend state
+%%-----------------------------------------------------------------------------
+-spec new(any(), module(), stream()) -> state().
 new(_Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
@@ -196,66 +209,66 @@ new(_Variant, StreamModule, Stream) ->
         used_regs = []
     }.
 
--spec stream(state()) -> any().
+%%-----------------------------------------------------------------------------
+%% @doc Access the stream object.
+%% @end
+%% @param State current backend state
+%% @return The stream object
+%%-----------------------------------------------------------------------------
+-spec stream(state()) -> stream().
 stream(#state{stream = Stream}) ->
     Stream.
 
+%%-----------------------------------------------------------------------------
+%% @doc Get the current offset in the stream
+%% @end
+%% @param State current backend state
+%% @return The current offset
+%%-----------------------------------------------------------------------------
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
 
--spec offset(state(), [jump_token()]) -> {state(), non_neg_integer()}.
-offset(
-    #state{
-        available_regs = AvailableRegs0, available_fpregs = AvailableFPRegs0, used_regs = UsedRegs0
-    } = State0,
-    JumpTokens
-) ->
-    Offset = offset(State0),
-    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = lists:foldl(
-        fun(#jump_token{used_regs = JTUsedRegs}, {AccAvail, AccAvailFP, AccUsed}) ->
-            lists:foldl(
-                fun(UsedReg, {AccAvailIn, AccAvailFPIn, AccUsedIn}) ->
-                    case lists:member(UsedReg, AccAvailIn) of
-                        true ->
-                            {lists:delete(UsedReg, AccAvailIn), AccAvailFPIn, [UsedReg | AccUsedIn]};
-                        false ->
-                            case lists:member(UsedReg, AccAvailFPIn) of
-                                true ->
-                                    {AccAvailIn, lists:delete(UsedReg, AccAvailFPIn), [
-                                        UsedReg | AccUsedIn
-                                    ]};
-                                false ->
-                                    {AccAvailIn, AccAvailFPIn, AccUsedIn}
-                            end
-                    end
-                end,
-                {AccAvail, AccAvailFP, AccUsed},
-                JTUsedRegs
-            )
-        end,
-        {AvailableRegs0, AvailableFPRegs0, UsedRegs0},
-        JumpTokens
-    ),
-    {
-        State0#state{
-            available_regs = AvailableRegs1,
-            available_fpregs = AvailableFPRegs1,
-            used_regs = UsedRegs1
-        },
-        Offset
-    }.
-
+%%-----------------------------------------------------------------------------
+%% @doc Emit a debugger of breakpoint instruction. This is used for debugging
+%% and not in production.
+%% @end
+%% @param State current backend state
+%% @return The updated backend state
+%%-----------------------------------------------------------------------------
+-spec debugger(state()) -> state().
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
     Stream1 = StreamModule:append(Stream0, <<16#CC>>),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Return the list of currently used native registers. This is used for
+%% debugging and not in production.
+%% @end
+%% @param State current backend state
+%% @return The list of used registers
+%%-----------------------------------------------------------------------------
 -spec used_regs(state()) -> [x86_64_register()].
 used_regs(#state{used_regs = Used}) -> Used.
 
+%%-----------------------------------------------------------------------------
+%% @doc Return the list of currently available native scratch registers. This
+%% is used for debugging and not in production.
+%% @end
+%% @param State current backend state
+%% @return The list of available registers
+%%-----------------------------------------------------------------------------
 -spec available_regs(state()) -> [x86_64_register()].
 available_regs(#state{available_regs = Available}) -> Available.
 
+%%-----------------------------------------------------------------------------
+%% @doc Free native registers. The passed list of registers can contain
+%% registers, pointer to registers or other values that are ignored.
+%% @end
+%% @param State current backend state
+%% @param Regs list of registers or other values
+%% @return The updated backend state
+%%-----------------------------------------------------------------------------
 -spec free_native_registers(state(), [value()]) -> state().
 free_native_registers(State, []) ->
     State;
@@ -277,15 +290,34 @@ free_native_register(State, {ptr, Reg}) ->
 free_native_register(State, _Other) ->
     State.
 
+%%-----------------------------------------------------------------------------
+%% @doc Assert that all native scratch registers are available. This is used
+%% for debugging and not in production.
+%% @end
+%% @param State current backend state
+%% @return ok
+%%-----------------------------------------------------------------------------
+-spec assert_all_native_free(state()) -> ok.
 assert_all_native_free(#state{
     available_regs = ?AVAILABLE_REGS, available_fpregs = ?AVAILABLE_FPREGS, used_regs = []
 }) ->
     ok.
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit the jump table at the beginning of the module. Branches will be
+%% updated afterwards with update_branches/2. Emit branches for labels from
+%% 0 (special entry for lines and labels information) to LabelsCount included
+%% (special entry for OP_INT_CALL_END).
+%% @end
+%% @param State current backend state
+%% @param LabelsCount number of labels in the module.
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec jump_table(state(), pos_integer()) -> state().
 jump_table(State, LabelsCount) ->
     jump_table0(State, 0, LabelsCount).
 
-jump_table0(State, N, LabelsCount) when N >= LabelsCount ->
+jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
     #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
@@ -298,6 +330,14 @@ jump_table0(
     Stream1 = StreamModule:append(Stream0, I1),
     jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
 
+%%-----------------------------------------------------------------------------
+%% @doc Rewrite stream to update all branches for labels.
+%% @end
+%% @param State current backend state
+%% @param Labels list of tuples with label, offset and size of the branch in bits
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec update_branches(state(), [{non_neg_integer(), non_neg_integer(), non_neg_integer()}]) -> state().
 update_branches(#state{branches = []} = State, _Labels) ->
     State;
 update_branches(
@@ -314,7 +354,17 @@ update_branches(
     end),
     update_branches(State#state{stream = Stream1, branches = BranchesT}, Labels).
 
--spec call_primitive(state(), non_neg_integer(), [any()]) -> {state(), x86_64_register()}.
+%%-----------------------------------------------------------------------------
+%% @doc Emit a call (call with return) to a primitive with arguments. This
+%% function converts arguments and pass them following the backend ABI
+%% convention. It also saves scratch registers we need to preserve.
+%% @end
+%% @param State current backend state
+%% @param Primitive index to the primitive to call
+%% @param Args arguments to pass to the primitive
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec call_primitive(state(), non_neg_integer(), [arg()]) -> {state(), x86_64_register()}.
 call_primitive(
     #state{
         stream_module = StreamModule,
@@ -351,6 +401,16 @@ call_primitive(
             call_func_ptr(State, {primitive, Primitive}, Args)
     end.
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a jump (call without return) to a primitive with arguments. This
+%% function converts arguments and pass them following the backend ABI
+%% convention.
+%% @end
+%% @param State current backend state
+%% @param Primitive index to the primitive to call
+%% @param Args arguments to pass to the primitive
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 call_primitive_last(
     #state{
         stream_module = StreamModule,
@@ -386,7 +446,16 @@ call_primitive_last(
     Stream3 = StreamModule:append(Stream2, Call),
     State1#state{stream = Stream3, available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
-return_if_not_null(
+%%-----------------------------------------------------------------------------
+%% @doc Emit a return of a value if it's not equal to ctx.
+%% This logic is used to break out to the scheduler, typically after signal
+%% messages have been processed.
+%% @end
+%% @param State current backend state
+%% @param Reg register to compare to (should be {free, Reg} as it's always freed)
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+return_if_not_equal_to_ctx(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
@@ -394,36 +463,6 @@ return_if_not_null(
         available_fpregs = AvailableFPRegs0,
         used_regs = UsedRegs0
     } = State,
-    {free, Reg}
-) ->
-    I1 = jit_x86_64_asm:testq(Reg, Reg),
-    I3 =
-        case Reg of
-            rax -> <<>>;
-            _ -> jit_x86_64_asm:movq(Reg, rax)
-        end,
-    I4 = jit_x86_64_asm:retq(),
-    I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
-    {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
-        AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
-    ),
-    State#state{
-        stream = Stream1,
-        available_regs = AvailableRegs1,
-        available_fpregs = AvailableFPRegs1,
-        used_regs = UsedRegs1
-    }.
-
-return_if_not_equal(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = AvailableRegs0,
-        available_fpregs = AvailableFPRegs0,
-        used_regs = UsedRegs0
-    } = State,
-    ctx,
     {free, Reg}
 ) ->
     I1 = jit_x86_64_asm:cmpq(?CTX_REG, Reg),
@@ -445,6 +484,14 @@ return_if_not_equal(
         used_regs = UsedRegs1
     }.
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a jump to a label. The offset of the relocation is saved and will
+%% be updated with `update_branches/2`.
+%% @end
+%% @param State current backend state
+%% @param Label to jump to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State, Label
 ) ->
@@ -454,20 +501,15 @@ jump_to_label(
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
-jump_to_offset(
-    #state{
-        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
-    } = State
-) ->
-    Offset = StreamModule:offset(Stream0),
-    {RelocJMPOffset, I} = jit_x86_64_asm:jmp_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + RelocJMPOffset, 8},
-    Stream1 = StreamModule:append(Stream0, I),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
-        used_regs = UsedRegs
-    }}.
-
+%%-----------------------------------------------------------------------------
+%% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
+%% execute a block.
+%% @end
+%% @param State current backend state
+%% @param Cond condition to test
+%% @param BlockFn function to emit the block that may be executed
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec if_block(state(), condition(), fun((state()) -> state())) -> state().
 if_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
@@ -486,6 +528,16 @@ if_block(
     >>),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit an if else block, i.e. emit a test of a condition and
+%% conditionnally execute a block or another block.
+%% @end
+%% @param State current backend state
+%% @param Cond condition to test
+%% @param BlockTrueFn function to emit the block that is executed if condition is true
+%% @param BlockFalseFn function to emit the block that is executed if condition is false
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) ->
     state().
 if_else_block(
@@ -521,6 +573,7 @@ if_else_block(
     >>),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
+-spec if_block_cond(state(), condition()) -> {state(), non_neg_integer()}.
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
@@ -779,6 +832,7 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, byte_size(I1) + RelocJZOffset}.
 
+-spec if_block_free_reg(x86_64_register() | {free, x86_64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
     #state{available_regs = AvR0, available_fpregs = AvFR0, used_regs = UR0} = State0,
     {AvR1, AvFR1, UR1} = free_reg(AvR0, AvFR0, UR0, Reg),
@@ -790,6 +844,7 @@ if_block_free_reg({free, Reg}, State0) ->
 if_block_free_reg(Reg, State0) when ?IS_GPR(Reg) ->
     State0.
 
+-spec merge_used_regs(state(), [x86_64_register()]) -> state().
 merge_used_regs(#state{used_regs = UR0, available_regs = AvR0, available_fpregs = AvFR0} = State, [
     Reg | T
 ]) ->
@@ -807,139 +862,9 @@ merge_used_regs(#state{used_regs = UR0, available_regs = AvR0, available_fpregs 
 merge_used_regs(State, []) ->
     State.
 
-jump_to_offset_if_equal(
-    #state{
-        stream_module = StreamModule, stream = Stream0, branches = AccBranches, used_regs = UsedRegs
-    } = State,
-    Reg,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJNZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
-        used_regs = UsedRegs
-    }}.
-
-jump_to_offset_if_and_equal(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches
-    } = State0,
-    {free, Reg},
-    Mask,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:andq(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJNZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1, branches = [Reloc | AccBranches]},
-    State2 = free_native_register(State1, Reg),
-    {State2, OffsetRef, #jump_token{used_regs = State2#state.used_regs}};
-jump_to_offset_if_and_equal(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches,
-        available_regs = [Temp | _],
-        used_regs = UsedRegs
-    } = State,
-    Reg,
-    Mask,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andq(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpq(Val, Temp),
-    {RelocJNZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary,
-        I4/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
-        used_regs = UsedRegs
-    }}.
-
-jump_to_offset_if_and_not_equal(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches
-    } = State0,
-    {free, Reg},
-    Mask,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:andq(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJNZOffset, I3} = jit_x86_64_asm:jnz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1, branches = [Reloc | AccBranches]},
-    State2 = free_native_register(State1, Reg),
-    {State2, OffsetRef, #jump_token{used_regs = State2#state.used_regs}};
-jump_to_offset_if_and_not_equal(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = AccBranches,
-        available_regs = [Temp | _],
-        used_regs = UsedRegs
-    } = State,
-    Reg,
-    Mask,
-    Val
-) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andq(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpq(Val, Temp),
-    {RelocJNZOffset, I4} = jit_x86_64_asm:jnz_rel8(-1),
-    OffsetRef = make_ref(),
-    Reloc = {OffsetRef, Offset + byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJNZOffset, 8},
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary,
-        I4/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, branches = [Reloc | AccBranches]}, OffsetRef, #jump_token{
-        used_regs = UsedRegs
-    }}.
-
 %%-----------------------------------------------------------------------------
-%% @doc Shift Reg right by a fixed number of bits, effectively dividing it by 2^Shift
+%% @doc Emit a shift register right by a fixed number of bits, effectively
+%% dividing it by 2^Shift
 %% @param State current state
 %% @param Reg register to shift
 %% @param Shift number of bits to shift
@@ -953,7 +878,8 @@ shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg,
     State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
-%% @doc Shift Reg left by a fixed number of bits, effectively multiplying it by 2^Shift
+%% @doc Emit a shift register left by a fixed number of bits, effectively
+%% multiplying it by 2^Shift
 %% @param State current state
 %% @param Reg register to shift
 %% @param Shift number of bits to shift
@@ -1900,31 +1826,6 @@ set_continuation_to_offset(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, branches = [Reloc | Branches]}, OffsetRef}.
 
-get_continuation_address(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Reg | AvailableT],
-        used_regs = UsedRegs0,
-        branches = Branches
-    } = State
-) ->
-    OffsetRef = make_ref(),
-    Offset = StreamModule:offset(Stream0),
-    {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Reg),
-    Reloc = {OffsetRef, Offset + RewriteLEAOffset, 32},
-    Stream1 = StreamModule:append(Stream0, I1),
-    {
-        State#state{
-            stream = Stream1,
-            branches = [Reloc | Branches],
-            available_regs = AvailableT,
-            used_regs = [Reg | UsedRegs0]
-        },
-        Reg,
-        OffsetRef
-    }.
-
 get_module_index(
     #state{
         stream_module = StreamModule,
@@ -2038,6 +1939,7 @@ call_primitive_with_cp(State0, Primitive, Args) ->
     State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset).
 
+-spec set_cp(state()) -> {state(), non_neg_integer()}.
 set_cp(State0) ->
     % get module index (dynamically)
     {#state{stream_module = StreamModule, stream = Stream0} = State1, Reg} = get_module_index(
