@@ -416,6 +416,22 @@ typedef dreg_t dreg_gc_safe_t;
     DECODE_VALUE32(label, decode_pc);                                                                   \
 }
 
+#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                    \
+{                                                                                                       \
+    if ((*(decode_pc) & 0x7) != COMPACT_ATOM) {                                                         \
+        if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LABEL)) {                                          \
+            fprintf(stderr, "Unexpected operand, expected an atom or label (%x)\n", *(decode_pc));      \
+            AVM_ABORT();                                                                                \
+        }                                                                                               \
+        atom = term_invalid_term();                                                                     \
+        DECODE_VALUE32(label, decode_pc);                                                               \
+    } else {                                                                                            \
+        uint32_t atom_ix;                                                                               \
+        DECODE_VALUE32(atom_ix, decode_pc);                                                             \
+        atom = module_get_atom_term_by_id(mod, atom_ix);                                                \
+    }                                                                                                   \
+}
+
 #define DECODE_LITERAL(literal, decode_pc)                                                              \
 {                                                                                                       \
     if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LITERAL)) {                                            \
@@ -912,6 +928,18 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define DECODE_LABEL(label, decode_pc) \
     DECODE_VALUE(label, decode_pc)
 
+#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                \
+{                                                                                                   \
+    if ((*(decode_pc) & 0x7) != COMPACT_ATOM) {                                                     \
+        atom = term_invalid_term();                                                                 \
+        DECODE_VALUE(label, decode_pc);                                                             \
+    } else {                                                                                        \
+        uint32_t atom_ix;                                                                           \
+        DECODE_VALUE(atom_ix, decode_pc);                                                           \
+        atom = module_get_atom_term_by_id(mod, atom_ix);                                            \
+    }                                                                                               \
+}
+
 #define DECODE_LITERAL(val, decode_pc) \
     DECODE_VALUE(val, decode_pc)
 
@@ -1192,10 +1220,14 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         }                                                \
     }
 
-#define VERIFY_IS_MATCH_STATE(t, opcode_name)                    \
+#define VERIFY_IS_MATCH_STATE(t, opcode_name, label)             \
     if (UNLIKELY(!term_is_match_state(t))) {                     \
         TRACE(opcode_name ": " #t " is not a match context.\n"); \
-        RAISE_ERROR(BADARG_ATOM);                                \
+        if (label == 0) {                                        \
+            RAISE_ERROR(BADARG_ATOM);                            \
+        } else {                                                 \
+            JUMP_TO_LABEL(mod, label);                           \
+        }                                                        \
     }
 
 #define VERIFY_IS_MATCH_OR_BINARY(t, opcode_name)                          \
@@ -4059,7 +4091,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf8/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4096,7 +4128,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf8/4, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx\n", fail, src, arg2, arg3);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4196,7 +4228,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4233,7 +4265,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16");
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4309,7 +4341,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4345,7 +4377,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32");
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32", 0);
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4689,17 +4721,14 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    #ifdef IMPL_EXECUTE_LOOP
-                        TRIM_LIVE_REGS(live);
-                        x_regs[live] = src;
-                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        src = x_regs[live];
-                    #endif
+                    TRIM_LIVE_REGS(live);
+                    x_regs[live] = src;
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    src = x_regs[live];
                     TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
                     } else {
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
@@ -4725,7 +4754,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_position", 0);
 
                     TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
 
@@ -4750,7 +4779,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
@@ -4797,7 +4826,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_set_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_set_position", 0);
                     VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
 
                     avm_int_t pos_val = term_to_int(pos);
@@ -4823,7 +4852,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_match_string");
+                    VERIFY_IS_MATCH_STATE(src, "bs_match_string", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
@@ -4902,7 +4931,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_save2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_save2", 0);
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
@@ -4931,7 +4960,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_restore2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_restore2", 0);
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
@@ -4966,7 +4995,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
                     VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
                     if (flags_value != 0) {
                         TRACE("bs_skip_bits2: neither signed nor native or little endian encoding supported.\n");
@@ -5004,7 +5033,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
 
                     TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
 
@@ -5030,7 +5059,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2", 0);
 
                     TRACE("bs_test_tail2/3, fail=%u src=%p bits=%u\n", (unsigned) fail, (void *) src, (unsigned) bits);
 
@@ -5066,7 +5095,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
                     VERIFY_IS_INTEGER(size,     "bs_get_integer", 0);
 
                     avm_int_t size_val = term_to_int(size);
@@ -5120,7 +5149,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_float");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
                     VERIFY_IS_INTEGER(size,     "bs_get_float", 0);
 
                     avm_int_t size_val = term_to_int(size);
@@ -5186,7 +5215,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2", 0);
 
                     term bs_bin = term_get_match_state_binary(src);
                     avm_int_t bs_offset = term_get_match_state_offset(src);
@@ -6425,18 +6454,9 @@ wait_timeout_trap_handler:
             }
 
             case OP_BS_START_MATCH4: {
-                // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
-                // TODO: figure out what could fail
-                term fail;
-                DECODE_COMPACT_TERM(fail, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                if (!term_is_integer(fail) && !term_is_atom(fail)) {
-                    fprintf(stderr, "Unexpected fail term ");
-                    term_display(stderr, fail, ctx);
-                    fprintf(stderr, "\n");
-                    AVM_ABORT();
-                }
-                #endif
+                term fail_atom;
+                uint32_t fail_label = 0;
+                DECODE_ATOM_OR_LABEL(fail_atom, fail_label, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 #ifdef IMPL_EXECUTE_LOOP
@@ -6456,16 +6476,14 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match4/4, fail=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail, (unsigned) live, (void *) src, T_DEST_REG(dreg));
+                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG(dreg));
 
-                    if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER(dreg, src);
-                        if (term_is_integer(fail)) {
-                            pc = mod->labels[term_to_int(fail)];
-                        } else {
-                            RAISE_ERROR(BADARG_ATOM);
-                        }
+                    // no_fail: we know it's a binary or a match_state
+                    // resume: we know it's a match_state
+                    if (term_is_invalid_term(fail_atom) && !(term_is_binary(src) || term_is_match_state(src))) {
+                        pc = mod->labels[fail_label];
                     } else {
+                        assert(term_is_binary(src) || term_is_match_state(src));
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER(dreg, match_state);
@@ -6983,7 +7001,7 @@ wait_timeout_trap_handler:
                 term match_state;
                 DECODE_COMPACT_TERM(match_state, pc);
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3")
+                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3", fail)
                     term bs_bin = term_get_match_state_binary(match_state);
                     size_t bs_offset = term_get_match_state_offset(match_state);
                 #endif

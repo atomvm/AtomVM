@@ -537,6 +537,7 @@ struct Test tests[] = {
 
     TEST_CASE(test_module_info),
 
+    TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_create_bin),
 
     // noisy tests, keep them at the end
