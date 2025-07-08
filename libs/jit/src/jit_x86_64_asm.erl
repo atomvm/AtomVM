@@ -258,8 +258,17 @@ testb(Reg, Reg) when is_atom(Reg) ->
         {0, Index} -> <<16#84, (16#C0 bor (Index bsl 3) bor Index)>>;
         {1, Index} -> <<16#45, 16#84, (16#C0 bor (Index bsl 3) bor Index)>>
     end;
-testb(Imm, rax) when ?IS_SINT8_T(Imm) ->
-    <<16#A8, Imm>>.
+testb(Imm, rax) when ?IS_UINT8_T(Imm); ?IS_SINT8_T(Imm) ->
+    <<16#A8, Imm>>;
+testb(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg); ?IS_SINT8_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    % TEST r/m8, imm8: 0xF6 /0 ModRM imm8 (REX prefix for r8-r15)
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#F6, 3:2, 0:3, MODRM_RM:3, Imm>>.
 
 testq(Reg, Reg) when is_atom(Reg) ->
     case x86_64_x_reg(Reg) of
