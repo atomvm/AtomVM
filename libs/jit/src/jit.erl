@@ -765,9 +765,9 @@ first_pass(<<?OP_MOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Dest, Rest2} = decode_dest(Rest1, MMod, MSt1),
     ?TRACE("OP_MOVE ~p, ~p\n", [Source, Dest]),
     MSt3 = MMod:move_to_vm_register(MSt2, Source, Dest),
-    MSt4 = MMod:free_native_registers(MSt3, [Source]),
-    MSt5 = MMod:free_native_registers(MSt4, [Dest]),
-    first_pass(Rest2, MMod, MSt5, State0);
+    MSt4 = MMod:free_native_registers(MSt3, [Source, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt4),
+    first_pass(Rest2, MMod, MSt4, State0);
 % 65
 first_pass(<<?OP_GET_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
