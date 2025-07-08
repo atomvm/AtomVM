@@ -120,7 +120,7 @@
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [],
+    branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [x86_64_register()],
     available_fpregs :: [x86_64_register()],
     used_regs :: [x86_64_register()]
@@ -337,7 +337,7 @@ jump_table0(
 %% @param Labels list of tuples with label, offset and size of the branch in bits
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec update_branches(state(), [{non_neg_integer(), non_neg_integer(), non_neg_integer()}]) -> state().
+-spec update_branches(state(), [{non_neg_integer(), non_neg_integer()}]) -> state().
 update_branches(#state{branches = []} = State, _Labels) ->
     State;
 update_branches(
@@ -756,8 +756,18 @@ if_block_cond(
     {Reg, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
     I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andq(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpq(Val, Temp),
+    I2 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Temp);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Temp);
+            true -> jit_x86_64_asm:andq(Mask, Temp)
+        end,
+    I3 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Temp);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Temp);
+            true -> jit_x86_64_asm:cmpq(Val, Temp)
+        end,
     {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
         I1/binary,
@@ -775,8 +785,18 @@ if_block_cond(
     } = State0,
     {{free, Reg} = RegTuple, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
-    I1 = jit_x86_64_asm:andq(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpq(Val, Reg),
+    I1 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Reg);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Reg);
+            true -> jit_x86_64_asm:andq(Mask, Reg)
+        end,
+    I2 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Reg);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Reg);
+            true -> jit_x86_64_asm:cmpq(Val, Reg)
+        end,
     {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
         I1/binary,
@@ -892,6 +912,15 @@ shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, 
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a call to a function pointer with arguments. This function converts
+%% arguments and passes them following the backend ABI convention.
+%% @end
+%% @param State current backend state
+%% @param FuncPtrTuple either {free, Reg} or {primitive, PrimitiveIndex}
+%% @param Args arguments to pass to the function
+%% @return Updated backend state and return register
+%%-----------------------------------------------------------------------------
 -spec call_func_ptr(state(), {free, x86_64_register()} | {primitive, non_neg_integer()}, [arg()]) ->
     {state(), x86_64_register()}.
 call_func_ptr(
