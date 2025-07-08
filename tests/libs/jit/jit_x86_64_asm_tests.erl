@@ -143,14 +143,24 @@ testq_test_() ->
         ?_assertEqual(<<16#48, 16#A9, 1, 0, 0, 0>>, jit_x86_64_asm:testq(1, rax)),
         ?_assertEqual(<<16#48, 16#A9, 127, 0, 0, 0>>, jit_x86_64_asm:testq(127, rax)),
         ?_assertEqual(<<16#48, 16#A9, 128, 255, 255, 255>>, jit_x86_64_asm:testq(-128, rax)),
-        ?_assertEqual(<<16#48, 16#A9, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:testq(16#12345678, rax)),
-        ?_assertEqual(<<16#48, 16#A9, 16#88, 16#A9, 16#CB, 16#ED>>, jit_x86_64_asm:testq(-16#12345678, rax)),
+        ?_assertEqual(
+            <<16#48, 16#A9, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:testq(16#12345678, rax)
+        ),
+        ?_assertEqual(
+            <<16#48, 16#A9, 16#88, 16#A9, 16#CB, 16#ED>>, jit_x86_64_asm:testq(-16#12345678, rax)
+        ),
         % testq imm32, reg (all others, always 4 bytes)
         ?_assertEqual(<<16#48, 16#F7, 16#C1, 127, 0, 0, 0>>, jit_x86_64_asm:testq(127, rcx)),
         ?_assertEqual(<<16#48, 16#F7, 16#C2, 128, 255, 255, 255>>, jit_x86_64_asm:testq(-128, rdx)),
         ?_assertEqual(<<16#49, 16#F7, 16#C0, 42, 0, 0, 0>>, jit_x86_64_asm:testq(42, r8)),
-        ?_assertEqual(<<16#49, 16#F7, 16#C1, 16#78, 16#56, 16#34, 16#12>>, jit_x86_64_asm:testq(16#12345678, r9)),
-        ?_assertEqual(<<16#48, 16#F7, 16#C2, 16#88, 16#A9, 16#CB, 16#ED>>, jit_x86_64_asm:testq(-16#12345678, rdx))
+        ?_assertEqual(
+            <<16#49, 16#F7, 16#C1, 16#78, 16#56, 16#34, 16#12>>,
+            jit_x86_64_asm:testq(16#12345678, r9)
+        ),
+        ?_assertEqual(
+            <<16#48, 16#F7, 16#C2, 16#88, 16#A9, 16#CB, 16#ED>>,
+            jit_x86_64_asm:testq(-16#12345678, rdx)
+        )
     ].
 
 testl_test_() ->
@@ -181,6 +191,16 @@ andq_test_() ->
         ?_assertEqual(<<16#48, 16#83, 16#E0, 16#2A>>, jit_x86_64_asm:andq(42, rax))
     ].
 
+andl_test_() ->
+    [
+        % andl imm8, r32 (no REX)
+        ?_assertEqual(<<16#83, 16#E0, 16#01>>, jit_x86_64_asm:andl(1, rax)),
+        ?_assertEqual(<<16#83, 16#E1, 16#7F>>, jit_x86_64_asm:andl(127, rcx)),
+        % andl imm8, r32 (REX)
+        ?_assertEqual(<<16#41, 16#83, 16#E0, 16#01>>, jit_x86_64_asm:andl(1, r8)),
+        ?_assertEqual(<<16#41, 16#83, 16#E1, 16#7F>>, jit_x86_64_asm:andl(127, r9))
+    ].
+
 cmpq_test_() ->
     [
         ?_assertEqual(<<16#48, 16#39, 16#C1>>, jit_x86_64_asm:cmpq(rax, rcx)),
@@ -209,6 +229,22 @@ cmpq_test_() ->
             <<16#48, 16#81, 16#F8, 16#88, 16#A9, 16#CB, 16#ED>>,
             jit_x86_64_asm:cmpq(-16#12345678, rax)
         )
+    ].
+
+cmpb_test_() ->
+    [
+        % cmpb rax, rax
+        ?_assertEqual(<<16#38, 16#C0>>, jit_x86_64_asm:cmpb(rax, rax)),
+        % cmpb rax, rcx
+        ?_assertEqual(<<16#38, 16#C1>>, jit_x86_64_asm:cmpb(rax, rcx)),
+        % cmpb rcx, rax
+        ?_assertEqual(<<16#38, 16#C8>>, jit_x86_64_asm:cmpb(rcx, rax)),
+        % cmpb r8, rax (REX prefix)
+        ?_assertEqual(<<16#44, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(r8, rax)),
+        % cmpb rax, r8 (REX prefix)
+        ?_assertEqual(<<16#41, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(rax, r8)),
+        % cmpb r8, r9 (REX prefix)
+        ?_assertEqual(<<16#45, 16#38, 16#C1>>, jit_x86_64_asm:cmpb(r8, r9))
     ].
 
 addq_test_() ->
