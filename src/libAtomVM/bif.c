@@ -1372,6 +1372,34 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     return bitshift_helper(ctx, fail_label, live, arg1, arg2, bsr);
 }
 
+static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
+{
+    if (term_is_boxed_integer(arg1)) {
+        switch (term_boxed_size(arg1)) {
+            case 0:
+                //BUG
+                AVM_ABORT();
+
+            case 1: {
+                avm_int_t val = term_unbox_int(arg1);
+                return make_boxed_int(ctx, fail_label, live, ~val);
+            }
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+            case 2: {
+                avm_int64_t val = term_unbox_int64(arg1);
+                return make_boxed_int64(ctx, fail_label, live, ~val);
+            }
+            #endif
+            default:
+                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+        }
+    } else {
+        TRACE("error: arg1: 0x%lx\n", arg1);
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+}
+
 term bif_erlang_bnot_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 {
     UNUSED(live);
@@ -1380,7 +1408,7 @@ term bif_erlang_bnot_1(Context *ctx, uint32_t fail_label, int live, term arg1)
         return ~arg1 | TERM_INTEGER_TAG;
 
     } else {
-        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+        return bnot_boxed_helper(ctx, fail_label, live, arg1);
     }
 }
 

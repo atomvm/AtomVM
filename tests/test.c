@@ -371,6 +371,8 @@ struct Test tests[] = {
     TEST_CASE(literal_test2),
     TEST_CASE(test_extended_literal_large),
 
+    TEST_CASE(bnot64),
+
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_list_eq, 1),
