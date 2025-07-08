@@ -129,6 +129,19 @@ testb_test_() ->
         ?_assertEqual(<<16#45, 16#84, 16#C9>>, jit_x86_64_asm:testb(r9, r9))
     ].
 
+testb_imm_reg_test_() ->
+    [
+        % testb imm8, rax (no REX)
+        ?_assertEqual(<<16#A8, 16#01>>, jit_x86_64_asm:testb(1, rax)),
+        % testb imm8, rcx (no REX)
+        ?_assertEqual(<<16#F6, 16#C1, 16#7F>>, jit_x86_64_asm:testb(127, rcx)),
+        % testb imm8, r8 (REX)
+        ?_assertEqual(<<16#41, 16#F6, 16#C0, 16#01>>, jit_x86_64_asm:testb(1, r8)),
+        % testb imm8, r9 (REX)
+        ?_assertEqual(<<16#41, 16#F6, 16#C1, 16#7F>>, jit_x86_64_asm:testb(127, r9)),
+        ?_assertEqual(<<16#41, 16#F6, 16#C1, 16#80>>, jit_x86_64_asm:testb(128, r9))
+    ].
+
 testq_test_() ->
     [
         ?_assertEqual(<<16#48, 16#85, 16#C0>>, jit_x86_64_asm:testq(rax, rax)),
