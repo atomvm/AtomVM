@@ -318,19 +318,21 @@ andq(Imm, {Offset, DestReg}) when ?IS_SINT8_T(Imm) ->
 andl(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
     % AND r/m32, imm8: 0x83 /4 ModRM imm8 (REX prefix for r8-r15)
-    Prefix = case REX_B of
-        0 -> <<>>;
-        1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
-    end,
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
     <<Prefix/binary, 16#83, 3:2, 4:3, MODRM_RM:3, Imm>>.
 
 andb(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
     % AND r/m8, imm8: 0x80 /4 ModRM imm8 (REX prefix for r8-r15)
-    Prefix = case REX_B of
-        0 -> <<>>;
-        1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
-    end,
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
     <<Prefix/binary, 16#80, 3:2, 4:3, MODRM_RM:3, Imm>>.
 
 cmpb(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
@@ -345,10 +347,11 @@ cmpb(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
 cmpb(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
     % CMP r/m8, imm8: 0x80 /7 ModRM imm8 (REX prefix for r8-r15)
-    Prefix = case REX_B of
-        0 -> <<>>;
-        1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
-    end,
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
     <<Prefix/binary, 16#80, 3:2, 7:3, MODRM_RM:3, Imm>>.
 
 cmpl(Imm, Reg) when ?IS_SINT8_T(Imm), is_atom(Reg) ->

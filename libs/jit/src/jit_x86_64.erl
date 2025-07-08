@@ -756,16 +756,18 @@ if_block_cond(
     {Reg, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
     I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = if
-        is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Temp);
-        is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Temp);
-        true -> jit_x86_64_asm:andq(Mask, Temp)
-    end,
-    I3 = if
-        is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Temp);
-        is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Temp);
-        true -> jit_x86_64_asm:cmpq(Val, Temp)
-    end,
+    I2 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Temp);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Temp);
+            true -> jit_x86_64_asm:andq(Mask, Temp)
+        end,
+    I3 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Temp);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Temp);
+            true -> jit_x86_64_asm:cmpq(Val, Temp)
+        end,
     {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
         I1/binary,
@@ -783,16 +785,18 @@ if_block_cond(
     } = State0,
     {{free, Reg} = RegTuple, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
-    I1 = if
-        is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Reg);
-        is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Reg);
-        true -> jit_x86_64_asm:andq(Mask, Reg)
-    end,
-    I2 = if
-        is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Reg);
-        is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Reg);
-        true -> jit_x86_64_asm:cmpq(Val, Reg)
-    end,
+    I1 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Reg);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Reg);
+            true -> jit_x86_64_asm:andq(Mask, Reg)
+        end,
+    I2 =
+        if
+            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Reg);
+            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Reg);
+            true -> jit_x86_64_asm:cmpq(Val, Reg)
+        end,
     {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
     Code = <<
         I1/binary,
@@ -1040,7 +1044,13 @@ set_args(
         [rdi, rsi, rdx, rcx, r8, r9, r10, r11] -- ParamRegs -- ArgsRegs -- UsedRegs,
     AvailableScratchFP = ?AVAILABLE_FPREGS -- ParamRegs -- ArgsRegs -- UsedRegs,
     Offset = StreamModule:offset(Stream0),
-    Args1 = [case Arg of offset -> Offset; _ -> Arg end || Arg <- Args],
+    Args1 = [
+        case Arg of
+            offset -> Offset;
+            _ -> Arg
+        end
+     || Arg <- Args
+    ],
     SetArgsCode = set_args0(Args1, ArgsRegs, ParamRegs, AvailableScratchGP, AvailableScratchFP, []),
     Stream1 = StreamModule:append(Stream0, SetArgsCode),
     NewUsedRegs = lists:foldl(
@@ -2013,9 +2023,13 @@ return_labels_and_lines(
 ) ->
     I2 = jit_x86_64_asm:retq(),
     {_RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({byte_size(I2), rip}, rax),
-    LabelsTable = << <<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
-    LinesTable = << <<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, (length(SortedLabels)):16, LabelsTable/binary, (length(SortedLines)):16, LinesTable/binary>>),
+    LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
+    LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
+    Stream1 = StreamModule:append(
+        Stream0,
+        <<I1/binary, I2/binary, (length(SortedLabels)):16, LabelsTable/binary,
+            (length(SortedLines)):16, LinesTable/binary>>
+    ),
     State#state{stream = Stream1}.
 
 free_reg(AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
