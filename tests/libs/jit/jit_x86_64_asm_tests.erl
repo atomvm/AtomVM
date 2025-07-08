@@ -242,9 +242,9 @@ cmpb_test_() ->
         % cmpb r8, rax (REX prefix)
         ?_assertEqual(<<16#44, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(r8, rax)),
         % cmpb rax, r8 (REX prefix)
-        ?_assertEqual(<<16#40, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(rax, r8)),
+        ?_assertEqual(<<16#41, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(rax, r8)),
         % cmpb r8, r9 (REX prefix)
-        ?_assertEqual(<<16#45, 16#38, 16#C8>>, jit_x86_64_asm:cmpb(r8, r9))
+        ?_assertEqual(<<16#45, 16#38, 16#C1>>, jit_x86_64_asm:cmpb(r8, r9))
     ].
 
 addq_test_() ->
