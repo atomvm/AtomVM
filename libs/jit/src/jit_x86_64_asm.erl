@@ -38,6 +38,8 @@
     jmp_rel8/1,
     jmp_rel32/1,
     andq/2,
+    andl/2,
+    andb/2,
     cmpl/2,
     cmpq/2,
     addq/2,
@@ -53,7 +55,8 @@
     popq/1,
     jmpq/1,
     retq/0,
-    movsd/2
+    movsd/2,
+    cmpb/2
 ]).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -311,6 +314,45 @@ andq(Imm, DestReg) when ?IS_SINT8_T(Imm) andalso is_atom(DestReg) ->
 andq(Imm, {Offset, DestReg}) when ?IS_SINT8_T(Imm) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 1:2, 4:3, MODRM_RM:3, Offset, Imm>>.
+
+andl(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    % AND r/m32, imm8: 0x83 /4 ModRM imm8 (REX prefix for r8-r15)
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#83, 3:2, 4:3, MODRM_RM:3, Imm>>.
+
+andb(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    % AND r/m8, imm8: 0x80 /4 ModRM imm8 (REX prefix for r8-r15)
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#80, 3:2, 4:3, MODRM_RM:3, Imm>>.
+
+cmpb(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
+    {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
+    Prefix =
+        case {REX_R, REX_B} of
+            {0, 0} -> <<>>;
+            _ -> <<?X86_64_REX(0, REX_R, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#38, (16#C0 bor (MODRM_REG bsl 3) bor MODRM_RM)>>;
+cmpb(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    % CMP r/m8, imm8: 0x80 /7 ModRM imm8 (REX prefix for r8-r15)
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#80, 3:2, 7:3, MODRM_RM:3, Imm>>.
 
 cmpl(Imm, Reg) when ?IS_SINT8_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
