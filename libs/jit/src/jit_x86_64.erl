@@ -136,11 +136,12 @@
 -type maybe_free_x86_64_register() :: x86_64_register() | {free, x86_64_register()}.
 
 -type condition() ::
-    {x86_64_register(), '<', 0}
-    | {maybe_free_x86_64_register(), '==', 0}
+    {maybe_free_x86_64_register(), '<', integer() | x86_64_register()}
+    | {maybe_free_x86_64_register(), '==', integer()}
     | {maybe_free_x86_64_register(), '!=', integer()}
-    | {'(uint8_t)', maybe_free_x86_64_register(), '==', false}
-    | {'(uint8_t)', maybe_free_x86_64_register(), '!=', false}
+    | {'(bool)', maybe_free_x86_64_register(), '==', false}
+    | {'(bool)', maybe_free_x86_64_register(), '!=', false}
+    | {'(int)', maybe_free_x86_64_register(), '!=', integer()}
     | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
 
 % ctx->e is 0x28
@@ -510,7 +511,36 @@ jump_to_label(
 %% @param BlockFn function to emit the block that may be executed
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec if_block(state(), condition(), fun((state()) -> state())) -> state().
+-spec if_block(state(), condition() | {'and', [condition()]}, fun((state()) -> state())) -> state().
+if_block(
+    #state{stream_module = StreamModule} = State0,
+    {'and', CondList},
+    BlockFn
+) ->
+    {Replacements, State1} = lists:foldl(
+        fun(Cond, {AccReplacements, AccState}) ->
+            Offset = StreamModule:offset(AccState#state.stream),
+            {NewAccState, ReplaceDelta} = if_block_cond(AccState, Cond),
+            OffsetAfterCond = StreamModule:offset(NewAccState#state.stream),
+            {[{Offset + ReplaceDelta, OffsetAfterCond} | AccReplacements], NewAccState}
+        end,
+        {[], State0},
+        CondList
+    ),
+    State2 = BlockFn(State1),
+    Stream2 = State2#state.stream,
+    OffsetAfter = StreamModule:offset(Stream2),
+    Stream3 = lists:foldl(
+        fun({ReplacementOffset, OffsetAfterCond}, AccStream) ->
+            ?ASSERT(OffsetAfter - OffsetAfterCond < 16#80),
+            StreamModule:replace(AccStream, ReplacementOffset, <<
+                (OffsetAfter - OffsetAfterCond)
+            >>)
+        end,
+        Stream2,
+        Replacements
+    ),
+    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
 if_block(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     Cond,
@@ -574,32 +604,35 @@ if_else_block(
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
 -spec if_block_cond(state(), condition()) -> {state(), non_neg_integer()}.
-if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
+if_block_cond(#state{stream_module = StreamModule} = State0, Cond) ->
+    {State1, Code, ReplaceDelta} = if_block_cond0(State0, Cond),
+    Stream1 = StreamModule:append(State1#state.stream, Code),
+    State2 = State1#state{stream = Stream1},
+    io:format("[if_block_cond:~p] (used_regs) = ~p\n", [?LINE, used_regs(State2)]),
+    {State2, ReplaceDelta}.
+
+-spec if_block_cond0(state(), condition()) -> {state(), binary(), non_neg_integer()}.
+if_block_cond0(State0, {RegOrTuple, '<', 0}) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1) + RelocJGEOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {RegA, '<', RegB}
-) when ?IS_GPR(RegA) ->
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+if_block_cond0(State0, {RegOrTupleA, '<', RegB}) ->
+    RegA =
+        case RegOrTupleA of
+            {free, RegA0} -> RegA0;
+            RegOrTupleA when is_atom(RegOrTupleA) -> RegOrTupleA
+        end,
     I1 = jit_x86_64_asm:cmpq(RegB, RegA),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1) + RelocJGEOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
-) ->
+    State1 = if_block_free_reg(RegOrTupleA, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
@@ -607,17 +640,9 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJNZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {'(int)', RegOrTuple, '==', 0}
-) ->
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
+if_block_cond0(State0, {'(int)', RegOrTuple, '==', 0}) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
@@ -625,16 +650,10 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:testl(Reg, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJNZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
+if_block_cond0(
+    State0,
     {RegOrTuple, '!=', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
@@ -644,16 +663,10 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(
+    State0,
     {'(int)', RegOrTuple, '!=', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
@@ -663,16 +676,10 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:cmpl(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(
+    State0,
     {RegOrTuple, '==', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
@@ -682,16 +689,10 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(
+    State0,
     {'(int)', RegOrTuple, '==', Val}
 ) when is_integer(Val) orelse ?IS_GPR(Val) ->
     Reg =
@@ -701,17 +702,11 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:cmpl(Val, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(uint8_t)', RegOrTuple, '==', false}
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(
+    State0,
+    {'(bool)', RegOrTuple, '==', false}
 ) ->
     Reg =
         case RegOrTuple of
@@ -720,17 +715,11 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:testb(Reg, Reg),
     {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJNZOffset};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(uint8_t)', RegOrTuple, '!=', false}
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
+if_block_cond0(
+    State0,
+    {'(bool)', RegOrTuple, '!=', false}
 ) ->
     Reg =
         case RegOrTuple of
@@ -739,118 +728,70 @@ if_block_cond(
         end,
     I1 = jit_x86_64_asm:testb(Reg, Reg),
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | _]
-    } = State0,
-    {Reg, '&', Mask, '!=', Val}
-) when ?IS_GPR(Reg) ->
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 =
-        if
-            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Temp);
-            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Temp);
-            true -> jit_x86_64_asm:andq(Mask, Temp)
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT8_T(Mask) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
         end,
-    I3 =
-        if
-            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Temp);
-            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Temp);
-            true -> jit_x86_64_asm:cmpq(Val, Temp)
+    I1 = jit_x86_64_asm:testb(Mask, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT32_T(Mask) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
         end,
-    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary,
-        I4/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State0,
-    {{free, Reg} = RegTuple, '&', Mask, '!=', Val}
-) when ?IS_GPR(Reg) ->
-    I1 =
-        if
-            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:andb(Mask, Reg);
-            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:andl(Mask, Reg);
-            true -> jit_x86_64_asm:andq(Mask, Reg)
-        end,
-    I2 =
-        if
-            is_integer(Mask) andalso ?IS_UINT8_T(Mask) -> jit_x86_64_asm:cmpb(Val, Reg);
-            is_integer(Mask) andalso ?IS_UINT32_T(Mask) -> jit_x86_64_asm:cmpl(Val, Reg);
-            true -> jit_x86_64_asm:cmpq(Val, Reg)
-        end,
+    I1 = jit_x86_64_asm:testl(Mask, Reg),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
+if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
+    I1 = jit_x86_64_asm:andb(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpb(Val, Reg),
     {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary,
-        I3/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + byte_size(I2) + RelocJZOffset};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State0,
-    {RegOrTuple, '&', Val}
-) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 = jit_x86_64_asm:testq(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State0,
-    {'(uint8_t)', RegOrTuple, '&', Val}
-) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 = jit_x86_64_asm:testb(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + RelocJZOffset}.
+    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
+if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) when ?IS_UINT32_T(Mask) ->
+    I1 = jit_x86_64_asm:andl(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpl(Val, Reg),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
+    State1 = if_block_free_reg(RegTuple, State0),
+    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
+if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) ->
+    I1 = jit_x86_64_asm:andq(Mask, Reg),
+    I2 = jit_x86_64_asm:cmpq(Val, Reg),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
+    State1 = if_block_free_reg(RegTuple, State0),
+    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
+if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
+    Temp = hd(State0#state.available_regs),
+    I1 = jit_x86_64_asm:movq(Reg, Temp),
+    I2 = jit_x86_64_asm:andb(Mask, Temp),
+    I3 = jit_x86_64_asm:cmpb(Val, Temp),
+    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
+    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
+if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT32_T(Mask) ->
+    Temp = hd(State0#state.available_regs),
+    I1 = jit_x86_64_asm:movq(Reg, Temp),
+    I2 = jit_x86_64_asm:andl(Mask, Temp),
+    I3 = jit_x86_64_asm:cmpl(Val, Temp),
+    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
+    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
+if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) ->
+    Temp = hd(State0#state.available_regs),
+    I1 = jit_x86_64_asm:movq(Reg, Temp),
+    I2 = jit_x86_64_asm:andq(Mask, Temp),
+    I3 = jit_x86_64_asm:cmpq(Val, Temp),
+    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
+    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset}.
 
 -spec if_block_free_reg(x86_64_register() | {free, x86_64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
@@ -1225,24 +1166,13 @@ move_to_vm_register(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, 0, {y_reg, X}
-) when
-    X < 32
-->
-    Code = <<
-        % movq	    0x28(%rdi), %rax
-        16#48,
-        16#8b,
-        16#47,
-        16#28,
-        % andq	    $0x0, N(%rax)
-        16#48,
-        16#83,
-        16#60,
-        (X * 8),
-        16#00
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    0,
+    {y_reg, Y}
+) ->
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
+    I2 = jit_x86_64_asm:andq(0, {Y * 8, Temp}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_to_vm_register(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
@@ -1254,27 +1184,17 @@ move_to_vm_register(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, N, {y_reg, X}
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
+        State,
+    N,
+    {y_reg, X}
 ) when
     X < 32 andalso is_integer(N)
 ->
-    Code = <<
-        % movq	    0x28(%rdi), %rax
-        16#48,
-        16#8b,
-        16#47,
-        16#28,
-        % movabsq	$N, %rcx
-        16#48,
-        16#b9,
-        N:64/little,
-        % movq      %rcx, M(%rax)
-        16#48,
-        16#89,
-        16#48,
-        (X * 8)
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
+    I2 = jit_x86_64_asm:movabsq(N, Temp2),
+    I3 = jit_x86_64_asm:movq(Temp2, {X * 8, Temp1}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State#state{stream = Stream1};
 move_to_vm_register(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
