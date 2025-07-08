@@ -550,6 +550,80 @@ call_fun_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+move_to_vm_register_test0(State, Source, Dest, Dump) ->
+    State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+move_to_vm_register_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+        end,
+        fun(State0) ->
+            [
+                %% Test: Immediate to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
+                        "   0:	48 c7 47 30 2a 00 00 	movq   $0x2a,0x30(%rdi)\n"
+                        "   7:	00 "
+                    >>)
+                end),
+                %% Test: Immediate to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 99, {ptr, r10}, <<
+                        "   0:	49 c7 42 00 63 00 00 	movq   $0x63,0x0(%r10)\n"
+                        "   7:	00 "
+                    >>)
+                end),
+                %% Test: x_reg to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
+                        "   0:	48 8b 47 38          	mov    0x38(%rdi),%rax\n"
+                        "   4:	48 89 47 40          	mov    %rax,0x40(%rdi)"
+                    >>)
+                end),
+                %% Test: x_reg to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r8}, <<
+                        "   0:	48 8b 47 38          	mov    0x38(%rdi),%rax\n"
+                        "   4:	49 89 00             	mov    %rax,(%r8)"
+                    >>)
+                end),
+                %% Test: ptr to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {ptr, r9}, {x_reg, 3}, <<
+                        "   0:	49 8b 01             	mov    (%r9),%rax\n"
+                        "   3:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                    >>)
+                end),
+                %% Test: x_reg to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   8:	49 89 43 08          	mov    %rax,0x8(%r11)"
+                    >>)
+                end),
+                %% Test: y_reg to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
+                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   4:	48 8b 00             	mov    (%rax),%rax\n"
+                        "   7:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                    >>)
+                end),
+                %% Test: y_reg to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
+                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   4:	48 8b 40 08          	mov    0x8(%rax),%rax\n"
+                        "   8:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                    >>)
+                end)
+            ]
+        end}.
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 

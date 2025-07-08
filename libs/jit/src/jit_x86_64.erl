@@ -1227,6 +1227,15 @@ move_to_vm_register(
     State#state{stream = Stream1};
 move_to_vm_register(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    {ptr, Reg},
+    {x_reg, X}
+) when X < ?MAX_REG ->
+    I1 = jit_x86_64_asm:movq({0, Reg}, Temp),
+    I2 = jit_x86_64_asm:movq(Temp, ?X_REG(X)),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+move_to_vm_register(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     {y_reg, Y},
     {x_reg, X}
 ) when X < ?MAX_REG ->
