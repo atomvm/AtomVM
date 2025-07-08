@@ -31,6 +31,7 @@ start() ->
     ok = isolated(fun test_delete/0),
     ok = isolated(fun test_lookup_element/0),
     ok = isolated(fun test_update_counter/0),
+    ok = isolated(fun test_duplicate_bag/0),
     0.
 
 test_ets_new() ->
@@ -49,20 +50,26 @@ test_ets_new() ->
     assert_badarg(fun() -> ets:new(keypos_test, [{keypos, -1}]) end),
 
     ets:new(type_test, [set]),
-
-    % Unimplemented
-    ets:new(type_test, [ordered_set]),
-    ets:new(type_test, [bag]),
     ets:new(type_test, [duplicate_bag]),
-    ets:new(heir_test, [{heir, self(), []}]),
-    ets:new(heir_test, [{heir, none}]),
-    ets:new(write_conc_test, [{write_concurrency, true}]),
-    ets:new(read_conc_test, [{read_concurrency, true}]),
-    case otp_version() of
-        OTP when OTP >= 23 -> ets:new(decent_counters_test, [{decentralized_counters, true}]);
-        _ -> ok
+
+    % Unimplemented in AtomVM
+    Options = [
+        fun() -> ets:new(type_test, [ordered_set]) end,
+        fun() -> ets:new(type_test, [bag]) end,
+        fun() -> ets:new(heir_test, [{heir, self(), []}]) end,
+        fun() -> ets:new(heir_test, [{heir, none}]) end,
+        fun() -> ets:new(write_conc_test, [{write_concurrency, true}]) end,
+        fun() -> ets:new(read_conc_test, [{read_concurrency, true}]) end,
+        fun() -> ets:new(compressed_test, [compressed]) end
+    ],
+    Otp23Options = [
+        fun() -> ets:new(decent_counters_test, [{decentralized_counters, true}]) end | Options
+    ],
+    case vm_version() of
+        atom -> [assert_badarg(NewF) || NewF <- Otp23Options];
+        {otp, V} when V >= 23 -> [NewF() || NewF <- Otp23Options];
+        {otp, _V} -> [NewF() || NewF <- Options]
     end,
-    ets:new(compressed_test, [compressed]),
     ok.
 
 test_permissions() ->
@@ -227,8 +234,14 @@ test_update_counter() ->
     31 = ets:update_counter(T, key, {4, 10, 39, 31}),
     30 = ets:update_counter(T, key, {4, -10, 30, 30}),
 
+    % {Position, Increment} with non-default position
+    T2 = ets:new(test, [{keypos, 2}]),
+    true = ets:insert(T2, {100, 200}),
+    150 = ets:update_counter(T2, 200, {1, 50}),
+
     TErr = ets:new(test, []),
     true = ets:insert(TErr, {key, 0, not_number}),
+    true = ets:insert(TErr, {0}),
     true = ets:insert(TErr, {not_number, ok}),
     assert_badarg(fun() -> ets:update_counter(TErr, none, 10) end),
     assert_badarg(fun() -> ets:update_counter(TErr, not_number, 10) end),
@@ -237,6 +250,7 @@ test_update_counter() ->
     assert_badarg(fun() -> ets:update_counter(TErr, key, {0, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {-1, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, 0, {1, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {3, 10}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, not_number) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10}) end),
@@ -245,6 +259,49 @@ test_update_counter() ->
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number, 100, 0}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, not_number, 0}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, 100, not_number}) end),
+    ok.
+
+test_duplicate_bag() ->
+    Tid = ets:new(test_duplicate_bag, [duplicate_bag, {keypos, 2}]),
+    T = {ok, foo, 100, extra},
+    T2 = {error, foo, 200},
+    _T3 = {error, foo, 300},
+
+    % true = ets:insert_new(Tid, T),
+    % false = ets:insert_new(Tid, T),
+    true = ets:insert(Tid, T),
+    true = ets:insert(Tid, T),
+    true = ets:insert(Tid, [T, T]),
+    true = ets:insert(Tid, [T2]),
+    true = [T, T, T, T2] == ets:lookup(Tid, foo),
+    % true = ets:member(Tid, foo),
+
+    % % nothing inserted, T exists in table
+    % false = ets:insert_new(Tid, [T, {ok, bar, batat}]),
+    % false = ets:member(Tid, bar),
+
+    [ok, ok, ok, error] = ets:lookup_element(Tid, foo, 1),
+    [foo, foo, foo, foo] = ets:lookup_element(Tid, foo, 2),
+    [100, 100, 100, 200] = ets:lookup_element(Tid, foo, 3),
+    % % some tuples don't have 4 arity
+    ok = assert_badarg(fun() -> ets:lookup_element(Tid, foo, 4) end),
+
+    % % unsupported for duplicate bag
+    ok = assert_badarg(fun() -> ets:update_counter(Tid, foo, 10) end),
+    % ok = assert_badarg(fun() -> ets:update_element(Tid, foo, {1, error}) end),
+
+    % true = ets:delete_object(Tid, {bad, bad}),
+    % true = [T, T, T, T, T2] == ets:lookup(Tid, foo),
+    % true = ets:delete_object(Tid, T),
+    % true = [T2] == ets:lookup(Tid, foo),
+
+    % true = ets:insert(Tid, T3),
+    % % keeps insertion order
+    % true = [T2, T3] == ets:take(Tid, foo),
+
+    % true = ets:delete(Tid),
+    % ok = assert_badarg(fun() -> ets:insert(Tid, T) end),
+
     ok.
 
 %%-----------------------------------------------------------------------------
@@ -290,32 +347,32 @@ isolated(Fun) ->
     end.
 
 assert_badarg(Fun) ->
-    try
-        Fun(),
-        erlang:error(no_throw)
+    try Fun() of
+        R -> erlang:error({no_throw, R})
     catch
         error:badarg ->
             ok;
-        OtherClass:OtherError ->
-            erlang:error({OtherClass, OtherError})
+        C:E ->
+            erlang:error({C, E})
     end.
 
 supports_v4_port_encoding() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            % small utf8 atom
-            true;
-        "BEAM" ->
-            OTP = otp_version(),
-            if
-                OTP < 24 -> false;
-                % v4 is supported but not the default
-                OTP < 26 -> true;
-                % small utf8 atom
-                true -> true
-            end
+    case vm_version() of
+        % small utf8 atom
+        atom -> true;
+        {otp, V} when V < 24 -> false;
+        % v4 is supported but not the default
+        {otp, V} when V < 26 -> true;
+        % small utf8 atom
+        {otp, _} -> true
     end.
 
-otp_version() ->
-    OTPRelease = erlang:system_info(otp_release),
-    list_to_integer(OTPRelease).
+vm_version() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            atom;
+        "BEAM" ->
+            OTPRelease = erlang:system_info(otp_release),
+            Version = list_to_integer(OTPRelease),
+            {otp, Version}
+    end.
