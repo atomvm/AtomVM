@@ -2806,7 +2806,7 @@ term_is_boxed_with_tag_and_get_ptr(Label, Arg1, BoxedTag, MMod, MSt1) ->
     {MSt6, Reg}.
 
 %%-----------------------------------------------------------------------------
-%% @doc Raise tuple {badfun, Arg} if Arg1 is not a function
+%% @doc Raise tuple {badfun, Arg} if Arg is not a function
 %% @param Arg element to test
 %% @param MMod backend module
 %% @param MSt0 backend state
@@ -2845,15 +2845,21 @@ verify_is_binary_or_match_state(Label, Src, MMod, MSt0) ->
     end),
     MMod:free_native_registers(MSt6, [Reg]).
 
+verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, MSt0) when is_atom(Reg) ->
+    MSt1 = verify_is_boxed(MMod, MSt0, Reg, Label),
+    MSt2 = MMod:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt3 = MMod:move_array_element(MSt2, Reg, 0, Reg),
+    cond_raise_badarg_or_jump_to_fail_label(
+        {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt3
+    );
 verify_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
     {MSt2, Reg} = MMod:copy_to_native_register(MSt1, Arg1),
     MSt3 = verify_is_boxed(MMod, MSt2, Reg, Label),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
-    MSt6 = cond_raise_badarg_or_jump_to_fail_label(
+    cond_raise_badarg_or_jump_to_fail_label(
         {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt5
-    ),
-    MSt6.
+    ).
 
 verify_is_boxed(MMod, MSt0, Reg) ->
     verify_is_boxed(MMod, MSt0, Reg, 0).
@@ -2911,10 +2917,9 @@ verify_is_immediate_or_boxed(
         {free, Arg} -> MMod:move_to_native_register(MSt0, Arg);
         _ -> MMod:copy_to_native_register(MSt0, ArgOrTuple)
     end,
-    MSt2 = MMod:if_block(MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, fun(BSt0) ->
-        verify_is_boxed_with_tag(Label, Reg, BoxedTag, MMod, BSt0)
-    end),
-    MMod:free_native_registers(MSt2, [Reg]).
+    MMod:if_block(MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, fun(BSt0) ->
+        verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, BSt0)
+    end).
 
 verify_is_any_integer(Arg1, Fail, MMod, MSt0) ->
     verify_is_immediate_or_boxed(
