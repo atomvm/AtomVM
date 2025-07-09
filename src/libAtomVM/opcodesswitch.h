@@ -4043,7 +4043,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf8/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4080,7 +4080,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf8/4, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx\n", fail, src, arg2, arg3);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4180,7 +4180,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4217,7 +4217,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4293,7 +4293,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4329,7 +4329,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
