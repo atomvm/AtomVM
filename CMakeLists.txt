@@ -27,6 +27,8 @@ find_package(Dialyzer)
 find_package(Erlang)
 find_package(Elixir)
 
+execute_process(COMMAND ${ERL_PATH} -eval "io:put_chars(erlang:system_info(otp_release))" -s init stop -noshell OUTPUT_VARIABLE Erlang_VERSION)
+
 option(AVM_DISABLE_FP "Disable floating point support." OFF)
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
 option(AVM_DISABLE_TASK_DRIVER "Disable task driver support." OFF)
