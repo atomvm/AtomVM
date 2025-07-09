@@ -24,10 +24,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-%% TODO: fix compilation of tests.
--define(JIT_FORMAT_VERSION, 1).
--define(JIT_ARCH_X86_64, 1).
--define(JIT_VARIANT_PIC, 1).
+-include("jit/include/jit.hrl").
 
 -define(CODE_CHUNK_0,
     <<0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 177, 0, 0, 0, 7, 0, 0, 0, 3, 1, 16, 153, 16, 2, 18, 34, 0,
