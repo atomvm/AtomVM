@@ -5036,6 +5036,7 @@ wait_timeout_trap_handler:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 uint32_t live;
+                UNUSED(live);
                 DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
@@ -5088,8 +5089,9 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                term arg2;
-                DECODE_COMPACT_TERM(arg2, pc);
+                uint32_t live;
+                UNUSED(live);
+                DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
                 uint32_t unit;
@@ -5719,7 +5721,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //
-                    // Maybe GC, and reset the src term in case it changed
+                    // Maybe GC
                     //
                     size_t src_size = term_get_map_size(src);
                     size_t new_map_size = src_size + new_entries;
@@ -5847,7 +5849,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //
-                    // Maybe GC, and reset the src term in case it changed
+                    // Maybe GC
                     //
                     size_t src_size = term_get_map_size(src);
                     TRIM_LIVE_REGS(live);
