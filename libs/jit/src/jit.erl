@@ -1373,16 +1373,13 @@ first_pass(<<?OP_BS_GET_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     Rest4 = skip_compact_term(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF8, [{free, Src}]),
-    MSt6 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt5),
-    {MSt7, Dest, Rest5} = decode_dest(Rest4, MMod, MSt6),
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF8, [{free, Src}]),
+    MSt3 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt2),
+    {MSt4, Dest, Rest5} = decode_dest(Rest4, MMod, MSt3),
     ?TRACE("OP_BS_GET_UTF8 ~p,~p,~p\n", [Fail, Src, Dest]),
-    MSt8 = MMod:move_to_vm_register(MSt7, Value, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Value, Dest]),
-    first_pass(Rest5, MMod, MSt9, State0);
+    MSt5 = MMod:move_to_vm_register(MSt4, Value, Dest),
+    MSt6 = MMod:free_native_registers(MSt5, [Value, Dest]),
+    first_pass(Rest5, MMod, MSt6, State0);
 % 139
 first_pass(<<?OP_BS_SKIP_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1390,13 +1387,10 @@ first_pass(<<?OP_BS_SKIP_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     Rest4 = skip_compact_term(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF8, [{free, Src}]),
-    MSt6 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt5),
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF8, [{free, Src}]),
+    MSt3 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt2),
     ?TRACE("OP_BS_SKIP_UTF8 ~p,~p\n", [Fail, Src]),
-    first_pass(Rest4, MMod, MSt6, State0);
+    first_pass(Rest4, MMod, MSt3, State0);
 % 140
 first_pass(<<?OP_BS_GET_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1404,18 +1398,15 @@ first_pass(<<?OP_BS_GET_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     {FlagsValue, Rest4} = decode_literal(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF16, [
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF16, [
         {free, Src}, {free, FlagsValue}
     ]),
-    MSt6 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt5),
-    {MSt7, Dest, Rest5} = decode_dest(Rest4, MMod, MSt6),
+    MSt3 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt2),
+    {MSt4, Dest, Rest5} = decode_dest(Rest4, MMod, MSt3),
     ?TRACE("OP_BS_GET_UTF16 ~p,~p,~p,~p\n", [Fail, Src, FlagsValue, Dest]),
-    MSt8 = MMod:move_to_vm_register(MSt7, Value, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Value, Dest]),
-    first_pass(Rest5, MMod, MSt9, State0);
+    MSt5 = MMod:move_to_vm_register(MSt4, Value, Dest),
+    MSt6 = MMod:free_native_registers(MSt5, [Value, Dest]),
+    first_pass(Rest5, MMod, MSt6, State0);
 % 141
 first_pass(<<?OP_BS_SKIP_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1423,15 +1414,12 @@ first_pass(<<?OP_BS_SKIP_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     {FlagsValue, Rest4} = decode_literal(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF16, [
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF16, [
         {free, Src}, {free, FlagsValue}
     ]),
-    MSt6 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt5),
+    MSt3 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt2),
     ?TRACE("OP_BS_SKIP_UTF16 ~p,~p,~p\n", [Fail, Src, FlagsValue]),
-    first_pass(Rest4, MMod, MSt6, State0);
+    first_pass(Rest4, MMod, MSt3, State0);
 % 142
 first_pass(<<?OP_BS_GET_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1439,18 +1427,15 @@ first_pass(<<?OP_BS_GET_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     {FlagsValue, Rest4} = decode_literal(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF32, [
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF32, [
         {free, Src}, {free, FlagsValue}
     ]),
-    MSt6 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt5),
-    {MSt7, Dest, Rest5} = decode_dest(Rest4, MMod, MSt6),
+    MSt3 = cond_jump_to_label({Value, '==', 0}, Fail, MMod, MSt2),
+    {MSt4, Dest, Rest5} = decode_dest(Rest4, MMod, MSt3),
     ?TRACE("OP_BS_GET_UTF32 ~p,~p,~p,~p\n", [Fail, Src, FlagsValue, Dest]),
-    MSt8 = MMod:move_to_vm_register(MSt7, Value, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Value, Dest]),
-    first_pass(Rest5, MMod, MSt9, State0);
+    MSt5 = MMod:move_to_vm_register(MSt4, Value, Dest),
+    MSt6 = MMod:free_native_registers(MSt5, [Value, Dest]),
+    first_pass(Rest5, MMod, MSt6, State0);
 % 143
 first_pass(<<?OP_BS_SKIP_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1458,15 +1443,12 @@ first_pass(<<?OP_BS_SKIP_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     Rest3 = skip_compact_term(Rest2),
     {FlagsValue, Rest4} = decode_literal(Rest3),
-    {MSt2, SrcReg} = MMod:copy_to_native_register(MSt1, Src),
-    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
-    MSt4 = MMod:free_native_registers(MSt3, [MatchStateRegPtr]),
-    {MSt5, Value} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_GET_UTF32, [
+    {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF32, [
         {free, Src}, {free, FlagsValue}
     ]),
-    MSt6 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt5),
+    MSt3 = cond_jump_to_label({{free, Value}, '==', 0}, Fail, MMod, MSt2),
     ?TRACE("OP_BS_SKIP_UTF32 ~p,~p,~p\n", [Fail, Src, FlagsValue]),
-    first_pass(Rest4, MMod, MSt6, State0);
+    first_pass(Rest4, MMod, MSt3, State0);
 % 152
 first_pass(<<?OP_GC_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
