@@ -24,9 +24,10 @@ find_program(ERL_PATH erl)
 if (ERLC_PATH AND ERL_PATH)
     set(Erlang_FOUND TRUE)
 
-    execute_process(COMMAND ${ERL_PATH} -eval "io:put_chars(erlang:system_info(otp_release))" -s init stop -noshell
-                  OUTPUT_VARIABLE Erlang_VERSION)
-    message("Found Erlang OTP ${Erlang_VERSION}")
+#   execute_process(COMMAND ${ERL_PATH} -eval "io:put_chars(erlang:system_info(otp_release))" -s init stop -noshell
+#                 OUTPUT_VARIABLE Erlang_VERSION)
+#   message("Found Erlang OTP ${Erlang_VERSION}")
+    message("Found Erlang")
 elseif(Erlang_FIND_REQUIRED)
     message(FATAL_ERROR "Erlang or Erlang compiler not found")
 endif()
