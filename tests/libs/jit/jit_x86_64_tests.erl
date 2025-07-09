@@ -620,6 +620,64 @@ move_to_vm_register_test_() ->
                         "   4:	48 8b 40 08          	mov    0x8(%rax),%rax\n"
                         "   8:	48 89 47 48          	mov    %rax,0x48(%rdi)"
                     >>)
+                end),
+                %% Test: Native register to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, rax, {x_reg, 0}, <<
+                        "   0:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                    >>)
+                end),
+                %% Test: Atom register to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, rax, {ptr, r10}, <<
+                        "   0:	49 89 02             	mov    %rax,(%r10)"
+                    >>)
+                end),
+                %% Test: Atom register to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, rax, {y_reg, 0}, <<
+                        "   0:\t48 8b 47 28           mov    0x28(%rdi),%rax\n"
+                        "   4:\t48 89 00              mov    %rax,(%rax)"
+                    >>)
+                end),
+                %% Test: Large immediate to x_reg (movabsq)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 16#123456789abcdef0, {x_reg, 0}, <<
+                        "   0:	48 b8 f0 de bc 9a 78 	movabs $0x123456789abcdef0,%rax\n"
+                        "   7:	56 34 12 \n"
+                        "   a:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                    >>)
+                end),
+                %% Test: Large immediate to ptr (movabsq)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 16#123456789abcdef0, {ptr, r10}, <<
+                        "   0:	48 b8 f0 de bc 9a 78 	movabs $0x123456789abcdef0,%rax\n"
+                        "   7:	56 34 12 \n"
+                        "   a:	49 89 02             	mov    %rax,(%r10)"
+                    >>)
+                end),
+                %% Test: x_reg to y_reg (high index)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
+                        "   0:	48 8b 87 a8 00 00 00 	mov    0xa8(%rdi),%rax\n"
+                        "   7:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   b:	49 89 83 f8 00 00 00 	mov    %rax,0xf8(%r11)"
+                    >>)
+                end),
+                %% Test: y_reg to x_reg (high index)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
+                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   4:	48 8b 80 f8 00 00 00 	mov    0xf8(%rax),%rax\n"
+                        "   b:	48 89 87 a8 00 00 00 	mov    %rax,0xa8(%rdi)"
+                    >>)
+                end),
+                %% Test: Negative immediate to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
+                        "   0:	48 c7 47 30 ff ff ff 	movq   $0xffffffffffffffff,0x30(%rdi)\n"
+                        "   7:	ff "
+                    >>)
                 end)
             ]
         end}.
