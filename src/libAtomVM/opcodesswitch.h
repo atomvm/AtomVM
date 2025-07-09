@@ -973,11 +973,13 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #ifndef TRACE_JUMP
     #define JUMP_TO_ADDRESS(address) \
-        pc = (address)
+        pc = (address); \
+        goto loop
 #else
     #define JUMP_TO_ADDRESS(address)        \
         pc = (address); \
-        fprintf(stderr, "going to jump to %" PRIuPTR "\n", (uintptr_t) (pc - code))
+        fprintf(stderr, "going to jump to %" PRIuPTR "\n", (uintptr_t) (pc - code)); \
+        goto loop
 #endif
 
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
@@ -1160,22 +1162,34 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
     goto handle_error;
 
-#define VERIFY_IS_INTEGER(t, opcode_name)                  \
+#define VERIFY_IS_INTEGER(t, opcode_name, label)           \
     if (UNLIKELY(!term_is_integer(t))) {                   \
         TRACE(opcode_name ": " #t " is not an integer\n"); \
-        RAISE_ERROR(BADARG_ATOM);                          \
+        if (label == 0) {                                  \
+            RAISE_ERROR(BADARG_ATOM);                      \
+        } else {                                           \
+            JUMP_TO_LABEL(mod, label);                     \
+        }                                                  \
     }
 
-#define VERIFY_IS_ANY_INTEGER(t, opcode_name)               \
+#define VERIFY_IS_ANY_INTEGER(t, opcode_name, label)        \
     if (UNLIKELY(!term_is_any_integer(t))) {                \
         TRACE(opcode_name ": " #t " is not any integer\n"); \
-        RAISE_ERROR(BADARG_ATOM);                           \
+        if (label == 0) {                                   \
+            RAISE_ERROR(BADARG_ATOM);                       \
+        } else {                                            \
+            JUMP_TO_LABEL(mod, label);                      \
+        }                                                   \
     }
 
-#define VERIFY_IS_BINARY(t, opcode_name)                 \
+#define VERIFY_IS_BINARY(t, opcode_name, label)          \
     if (UNLIKELY(!term_is_binary(t))) {                  \
         TRACE(opcode_name ": " #t " is not a binary\n"); \
-        RAISE_ERROR(BADARG_ATOM);                        \
+        if (label == 0) {                                \
+            RAISE_ERROR(BADARG_ATOM);                    \
+        } else {                                         \
+            JUMP_TO_LABEL(mod, label);                   \
+        }                                                \
     }
 
 #define VERIFY_IS_MATCH_STATE(t, opcode_name)                    \
@@ -1893,7 +1907,7 @@ schedule_in:
     prev_mod = mod;
     code = mod->code->code;
     x_regs = ctx->x;
-    JUMP_TO_ADDRESS(ctx->saved_ip);
+    pc = (ctx->saved_ip);
     remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
 
 #pragma GCC diagnostic push
@@ -1915,7 +1929,9 @@ schedule_in:
 
     while (1) {
     TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
-
+#ifdef IMPL_EXECUTE_LOOP
+loop:
+#endif
         switch (*pc++) {
             case OP_LABEL: {
                 uint32_t label;
@@ -3861,8 +3877,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src1, "bs_add");
-                    VERIFY_IS_INTEGER(src2, "bs_add");
+                    VERIFY_IS_INTEGER(src1, "bs_add", 0);
+                    VERIFY_IS_INTEGER(src2, "bs_add", 0);
                     avm_int_t src1_val = term_to_int(src1);
                     avm_int_t src2_val = term_to_int(src2);
 
@@ -3892,7 +3908,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init2");
+                    VERIFY_IS_INTEGER(size, "bs_init2", 0);
                     avm_int_t size_val = term_to_int(size);
 
                     TRIM_LIVE_REGS(live);
@@ -3932,7 +3948,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init_bits");
+                    VERIFY_IS_INTEGER(size, "bs_init_bits", 0);
                     avm_int_t size_val = term_to_int(size);
                     if (size_val % 8 != 0) {
                         TRACE("bs_init_bits: size_val (%li) is not evenly divisible by 8\n", size_val);
@@ -3974,7 +3990,7 @@ wait_timeout_trap_handler:
                     TRACE("bs_utf8_size/3");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3");
+                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_utf8_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
                     size_t utf8_size;
@@ -4001,7 +4017,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf8/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4111,7 +4127,7 @@ wait_timeout_trap_handler:
                     TRACE("bs_utf16_size/3");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3");
+                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_utf16_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
                     size_t utf16_size;
@@ -4138,7 +4154,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf16/3 flags=%x, src=0x%lx\n", (int) flags, src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4252,7 +4268,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf32/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4389,9 +4405,9 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_append");
-                    VERIFY_IS_INTEGER(size, "bs_append");
-                    VERIFY_IS_INTEGER(extra, "bs_append");
+                    VERIFY_IS_BINARY(src, "bs_append", 0);
+                    VERIFY_IS_INTEGER(size, "bs_append", 0);
+                    VERIFY_IS_INTEGER(extra, "bs_append", 0);
                     avm_int_t size_val = term_to_int(size);
                     avm_int_t extra_val = term_to_int(extra);
 
@@ -4452,8 +4468,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_private_append");
-                    VERIFY_IS_INTEGER(size, "bs_private_append");
+                    VERIFY_IS_BINARY(src, "bs_private_append", 0);
+                    VERIFY_IS_INTEGER(size, "bs_private_append", 0);
                     avm_int_t size_val = term_to_int(size);
 
                     if (size_val % 8 != 0) {
@@ -4501,8 +4517,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer");
-                    VERIFY_IS_INTEGER(size, "bs_put_integer");
+                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer", 0);
+                    VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
 
                     avm_int64_t src_value = term_maybe_unbox_int64(src);
                     avm_int_t size_value = term_to_int(size);
@@ -4537,7 +4553,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_put_binary");
+                    VERIFY_IS_BINARY(src, "bs_put_binary", 0);
                     unsigned long size_val = 0;
                     if (term_is_integer(size)) {
                         avm_int_t bit_size = term_to_int(size) * unit;
@@ -4782,7 +4798,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_set_position");
-                    VERIFY_IS_INTEGER(pos, "bs_set_position");
+                    VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
 
                     avm_int_t pos_val = term_to_int(pos);
                     TRACE("bs_set_position/2 src=0x%lx pos=%li\n", src, pos_val);
@@ -4951,7 +4967,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2");
-                    VERIFY_IS_INTEGER(size, "bs_skip_bits2");
+                    VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
                     if (flags_value != 0) {
                         TRACE("bs_skip_bits2: neither signed nor native or little endian encoding supported.\n");
                         RAISE_ERROR(UNSUPPORTED_ATOM);
@@ -5050,7 +5066,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_integer");
-                    VERIFY_IS_INTEGER(size,     "bs_get_integer");
+                    VERIFY_IS_INTEGER(size,     "bs_get_integer", 0);
 
                     avm_int_t size_val = term_to_int(size);
 
@@ -5103,7 +5119,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_float");
-                    VERIFY_IS_INTEGER(size,     "bs_get_float");
+                    VERIFY_IS_INTEGER(size,     "bs_get_float", 0);
 
                     avm_int_t size_val = term_to_int(size);
 
@@ -6567,7 +6583,7 @@ wait_timeout_trap_handler:
                         AVM_ABORT();
                     }
                 #endif
-                // Compute binary size in first iteration
+                // Verify parameters and compute binary size in first iteration
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t binary_size = 0;
                 #endif
@@ -6585,61 +6601,104 @@ wait_timeout_trap_handler:
                     term size;
                     DECODE_COMPACT_TERM(size, pc);
                     #ifdef IMPL_EXECUTE_LOOP
-                        avm_int_t src_value = 0;
-                        switch (atom_type) {
-                            case UTF8_ATOM:
-                            case UTF16_ATOM:
-                            case UTF32_ATOM:
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
-                                src_value = term_to_int(src);
-                                break;
-                        }
                         size_t segment_size = 0;
-                        switch (size) {
-                            case UNDEFINED_ATOM: {
+                        switch (atom_type) {
+                            // OTP ignores size for these types
+                            case UTF8_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
                                 // Silently ignore segment_unit != 0
                                 segment_unit = 8;
-                                switch (atom_type) {
-                                    case UTF8_ATOM: {
-                                        if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        }
-                                        break;
+                                avm_int_t src_value = term_to_int(src);
+                                if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
                                     }
-                                    case UTF16_ATOM: {
-                                        if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        }
-                                        break;
-                                    }
-                                    case UTF32_ATOM: {
-                                        segment_size = 4;
-                                        break;
-                                    }
-                                    default:
-                                        // In Erlang/OTP #5281, this is a compile time check
-                                        fprintf(stderr, "Unexpected type %lx for bs_create_bin/6 size undefined\n", (long) atom_type);
-                                        AVM_ABORT();
                                 }
                                 break;
                             }
-                            case ALL_ATOM: {
-                                if (atom_type != BINARY_ATOM && atom_type != APPEND_ATOM && atom_type != PRIVATE_APPEND_ATOM) {
-                                    // In Erlang/OTP #5281, this is a compile time check
-                                    fprintf(stderr, "Unexpected type for bs_create_bin/6 size all\n");
-                                    AVM_ABORT();
-                                }
-                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
-                                // We only support src as a binary of bytes here.
-                                segment_size = term_binary_size(src);
+                            case UTF16_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                                // Silently ignore segment_unit != 0
                                 segment_unit = 8;
+                                avm_int_t src_value = term_to_int(src);
+                                if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                break;
+                            }
+                            case UTF32_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                                // Silently ignore segment_unit != 0
+                                segment_unit = 8;
+                                segment_size = 4;
+                                break;
+                            }
+                            case INTEGER_ATOM: {
+                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6", fail);
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                segment_size = signed_size_value;
+                                break;
+                            }
+                            case STRING_ATOM: {
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                segment_size = signed_size_value;
+                                break;
+                            }
+                            case APPEND_ATOM:
+                            case BINARY_ATOM:
+                            case PRIVATE_APPEND_ATOM: {
+                                VERIFY_IS_BINARY(src, "bs_create_bin/6", fail);
+                                if (size == ALL_ATOM) {
+                                    // We only support src as a binary of bytes here.
+                                    segment_size = term_binary_size(src);
+                                    segment_unit = 8;
+                                } else {
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                    avm_int_t signed_size_value = term_to_int(size);
+                                    if (UNLIKELY(signed_size_value < 0)) {
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
+                                    }
+                                    size_t binary_size = term_binary_size(src);
+                                    if ((size_t) signed_size_value > binary_size) {
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
+                                    }
+                                    segment_size = signed_size_value;
+                                }
                                 break;
                             }
                             default: {
-                                if (UNLIKELY(!term_is_integer(size) || term_to_int(size) < 0)) {
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                segment_size = term_to_int(size);
+                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
+                                RAISE_ERROR(UNSUPPORTED_ATOM);
                             }
                         }
                         binary_size += segment_unit * segment_size;
@@ -6689,11 +6748,9 @@ wait_timeout_trap_handler:
                             case UTF8_ATOM:
                             case UTF16_ATOM:
                             case UTF32_ATOM:
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
                                 src_value = term_to_int(src);
                                 break;
                             case INTEGER_ATOM:
-                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6");
                                 src_value = term_maybe_unbox_int64(src);
                                 break;
                             default:
@@ -6702,13 +6759,7 @@ wait_timeout_trap_handler:
                         switch (atom_type) {
                             case INTEGER_ATOM:
                             case STRING_ATOM:
-                                VERIFY_IS_INTEGER(size, "bs_create_bin/6");
-                                avm_int_t signed_size_value = term_to_int(size);
-                                if (UNLIKELY(signed_size_value < 0)) {
-                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                size_value = (size_t) signed_size_value;
+                                size_value = (size_t) term_to_int(size);
                                 break;
                             default:
                                 break;
@@ -6716,27 +6767,29 @@ wait_timeout_trap_handler:
                         switch (atom_type) {
                             case UTF8_ATOM: {
                                 bool result = bitstring_insert_utf8(t, offset, src_value, &segment_size);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf8 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
+                                // bitstring_utf8_size was called so bitstring_insert_utf8 succeeds
+                                UNUSED(result);
+                                assert(result);
                                 segment_size *= 8;
                                 break;
                             }
                             case UTF16_ATOM: {
                                 bool result = bitstring_insert_utf16(t, offset, src_value, flags_value, &segment_size);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
+                                // bitstring_utf16_size was called so bitstring_insert_utf16 succeeds
+                                UNUSED(result);
+                                assert(result);
                                 segment_size *= 8;
                                 break;
                             }
                             case UTF32_ATOM: {
                                 bool result = bitstring_insert_utf32(t, offset, src_value, flags_value);
                                 if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
+                                    TRACE("bs_create_bin/6: Failed to insert character as utf32 into binary: %i\n", result);
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
                                 }
                                 segment_size = 32;
                                 break;
@@ -6765,12 +6818,12 @@ wait_timeout_trap_handler:
                                     TRACE("bs_create_bin/6: current offset (%li) is not evenly divisible by 8\n", offset);
                                     RAISE_ERROR(UNSUPPORTED_ATOM);
                                 }
-                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
+                                VERIFY_IS_BINARY(src, "bs_create_bin/6", fail);
                                 uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
                                 const uint8_t *bin = (const uint8_t *) term_binary_data(src);
                                 size_t binary_size = term_binary_size(src);
                                 if (size != ALL_ATOM) {
-                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6");
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                     avm_int_t signed_size_value = term_to_int(size);
                                     if (UNLIKELY(signed_size_value < 0)) {
                                         TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
@@ -6778,7 +6831,11 @@ wait_timeout_trap_handler:
                                     }
                                     size_value = (size_t) signed_size_value;
                                     if (size_value > binary_size) {
-                                        RAISE_ERROR(BADARG_ATOM);
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
                                     }
                                     binary_size = size_value;
                                 }
@@ -6786,10 +6843,8 @@ wait_timeout_trap_handler:
                                 segment_size = binary_size * 8;
                                 break;
                             }
-                            default: {
-                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
-                                RAISE_ERROR(UNSUPPORTED_ATOM);
-                            }
+                            default:
+                                UNREACHABLE();
                         }
                         offset += segment_size;
                     }
@@ -6998,7 +7053,7 @@ wait_timeout_trap_handler:
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
                                 // context_clean_registers(ctx, live); // TODO: check if needed
-                                VERIFY_IS_INTEGER(size, "bs_match/3");
+                                VERIFY_IS_INTEGER(size, "bs_match/3", fail);
                                 avm_int_t size_val = term_to_int(size);
                                 avm_int_t increment = size_val * unit;
                                 union maybe_unsigned_int64 value;
@@ -7156,7 +7211,6 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
 bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
-                    continue;
                 #endif
             }
 #endif
@@ -7183,7 +7237,6 @@ handle_error:
             if (target_label) {
                 code = mod->code->code;
                 JUMP_TO_ADDRESS(mod->labels[target_label]);
-                continue;
             }
         }
 
