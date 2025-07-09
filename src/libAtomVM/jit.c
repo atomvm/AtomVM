@@ -56,19 +56,19 @@ _Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultato
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 58, "LOWERCASE_EXIT_ATOM_INDEX is 58 in jit/src/defaultatoms.hrl");
 _Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/src/defaultatoms.hrl");
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset)    \
-    if (term_is_invalid_term(return_value)) {            \
-        if (UNLIKELY(!context_get_flags(ctx, Trap))) {   \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \
+    if (term_is_invalid_term(return_value)) {                 \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {        \
             return jit_handle_error(ctx, jit_state, offset);  \
-        } else {                                         \
-            return jit_schedule_wait_cp(ctx, jit_state); \
-        }                                                \
+        } else {                                              \
+            return jit_schedule_wait_cp(ctx, jit_state);      \
+        }                                                     \
     }
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset)                      \
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset)              \
     if (term_is_invalid_term(return_value)) {                                   \
         if (UNLIKELY(!context_get_flags(ctx, Trap))) {                          \
-            return jit_handle_error(ctx, jit_state, offset);                         \
+            return jit_handle_error(ctx, jit_state, offset);                    \
         } else {                                                                \
             return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
         }                                                                       \
@@ -1386,7 +1386,7 @@ static bool jit_bitstring_match_module_str(Context *ctx, JITState *jit_state, te
 
     // Compare unaligned bits
     const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
-    uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
+    uint8_t bin_bit_offset = 7 - (bs_offset - (8 * (bs_offset / 8)));
     uint8_t str_bit_offset = 7;
     size_t remaining_bits = bits;
     while (remaining_bits > 0) {
@@ -1468,7 +1468,7 @@ static term term_copy_map(Context *ctx, term src)
 {
     size_t src_size = term_get_map_size(src);
     term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
-    for (size_t j = 0;  j < src_size;  ++j) {
+    for (size_t j = 0; j < src_size; ++j) {
         term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
     }
     return map;

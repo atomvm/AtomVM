@@ -24,35 +24,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
-%% TODO: fix compilation of tests.
--define(JIT_VARIANT_PIC, 1).
-
--define(TERM_PRIMARY_MASK, 16#3).
--define(TERM_PRIMARY_BOXED, 16#2).
-% ~3
--define(TERM_PRIMARY_CLEAR_MASK, -4).
-
--define(TERM_IMMED_TAG_MASK, 16#F).
--define(TERM_INTEGER_TAG, 16#F).
-
--define(TERM_BOXED_TAG_MASK, 16#3F).
--define(TERM_BOXED_POSITIVE_INTEGER, 16#8).
--define(TERM_BOXED_FUN, 16#14).
-
--define(FALSE_ATOM_INDEX, 0).
--define(TRUE_ATOM_INDEX, 1).
--define(BADFUN_ATOM_INDEX, 8).
-
--define(FALSE_ATOM, ((?FALSE_ATOM_INDEX bsl 6) bor 16#B)).
--define(TRUE_ATOM, ((?TRUE_ATOM_INDEX bsl 6) bor 16#B)).
--define(BADFUN_ATOM, ((?BADFUN_ATOM_INDEX bsl 6) bor 16#B)).
-
--define(PRIM_CALL_EXT, 4).
--define(PRIM_HANDLE_ERROR, 6).
--define(PRIM_PUT_LIST, 13).
--define(PRIM_EXTENDED_REGISTER_PTR, 18).
--define(PRIM_RAISE_ERROR_TUPLE, 19).
--define(PRIM_CALL_FUN, 32).
+-include("jit/include/jit.hrl").
+-include("jit/src/term.hrl").
+-include("jit/src/default_atoms.hrl").
+-include("jit/src/primitives.hrl").
 
 -define(BACKEND, jit_x86_64).
 
