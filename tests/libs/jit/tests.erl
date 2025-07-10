@@ -22,8 +22,11 @@
 
 -export([start/0]).
 
+% Module is used when running tests with BEAM.
+% When running tests with AtomVM, eunit:start/0 is used instead.
 start() ->
     etest:test([
+        jit_tests,
         jit_x86_64_tests,
         jit_x86_64_asm_tests
     ]).

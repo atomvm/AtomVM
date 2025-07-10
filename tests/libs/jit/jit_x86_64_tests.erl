@@ -657,6 +657,114 @@ move_to_vm_register_test_() ->
             ]
         end}.
 
+move_array_element_test0(State, Reg, Index, Dest, Dump) ->
+    State1 = ?BACKEND:move_array_element(State, Reg, Index, Dest),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+move_array_element_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+        end,
+        fun(State0) ->
+            [
+                %% move_array_element: reg[x] to x_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 2, {x_reg, 0}, <<
+                        "   0:	49 8b 40 10          	mov    0x10(%r8),%rax\n"
+                        "   4:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to ptr
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 3, {ptr, r10}, <<
+                        "   0:	49 8b 40 18          	mov    0x18(%r8),%rax\n"
+                        "   4:	49 89 02             	mov    %rax,(%r10)"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to y_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 1, {y_reg, 2}, <<
+                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   4:	4d 8b 58 08          	mov    0x8(%r8),%r11\n"
+                        "   8:	4c 89 58 10          	mov    %r11,0x10(%rax)"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to atom reg (r10)
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 1, r10, <<
+                        "   0:	4d 8b 50 08          	mov    0x8(%r8),%r10"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to y_reg (high index)
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 7, {y_reg, 31}, <<
+                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   4:	4d 8b 58 38          	mov    0x38(%r8),%r11\n"
+                        "   8:	4c 89 98 f8 00 00 00 	mov    %r11,0xf8(%rax)"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to x_reg (high index)
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
+                        "   0:	49 8b 40 38          	mov    0x38(%r8),%rax\n"
+                        "   4:	48 89 87 a8 00 00 00 	mov    %rax,0xa8(%rdi)"
+                    >>)
+                end)
+            ]
+        end}.
+
+get_array_element_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+        end,
+        fun(State0) ->
+            [
+                %% get_array_element: reg[x] to new native reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	49 8b 40 20          	mov    0x20(%r8),%rax"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual(rax, Reg)
+                end)
+            ]
+        end}.
+
+move_to_array_element_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+        end,
+        fun(State0) ->
+            [
+                %% move_to_array_element/4: x_reg to reg[x]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	49 89 40 10          	mov    %rax,0x10(%r8)"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/5: x_reg to reg[x+offset]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2, 1),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	49 89 40 18          	mov    %rax,0x18(%r8)"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end)
+            ]
+        end}.
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
