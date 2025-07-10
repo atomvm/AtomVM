@@ -149,8 +149,13 @@
 
 -define(WORD_SIZE, 8).
 
+% Following offsets are verified with static asserts in jit.c
 % ctx->e is 0x28
 % ctx->x is 0x30
+% ctx->cp is 0xB8
+% ctx->fr is 0xC0
+% ctx->bs is 0xC8
+% ctx->bs_offset is 0xD0
 -define(CTX_REG, rdi).
 -define(JITSTATE_REG, rsi).
 -define(NATIVE_INTERFACE_REG, rdx).
@@ -162,7 +167,7 @@
 -define(BS_OFFSET, {16#D0, ?CTX_REG}).
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
 -define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
--define(JITSTATE_REDUCTIONCOUNT, {16#10, ?JITSTATE_REG}).
+-define(JITSTATE_REMAINING_REDUCTIONS, {16#10, ?JITSTATE_REG}).
 -define(PRIMITIVE(N), {N * ?WORD_SIZE, ?NATIVE_INTERFACE_REG}).
 -define(MODULE_INDEX(ModuleReg), {0, ModuleReg}).
 
@@ -1835,7 +1840,7 @@ decrement_reductions_and_maybe_schedule_next(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0
 ) ->
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:decl(?JITSTATE_REDUCTIONCOUNT),
+    I1 = jit_x86_64_asm:decl(?JITSTATE_REMAINING_REDUCTIONS),
     {RewriteJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(0),
     {RewriteLEAOffset, I3} = jit_x86_64_asm:leaq_rel32({0, rip}, Temp),
     I4 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
@@ -1871,7 +1876,7 @@ call_only_or_schedule_next(
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:decl(?JITSTATE_REDUCTIONCOUNT),
+    I1 = jit_x86_64_asm:decl(?JITSTATE_REMAINING_REDUCTIONS),
     {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
     I2 = jit_x86_64_asm:jz(byte_size(I3)),
     Sz = byte_size(I1) + byte_size(I2),
