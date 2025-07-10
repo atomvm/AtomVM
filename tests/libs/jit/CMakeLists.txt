@@ -23,7 +23,7 @@ project(test_jit)
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    test_jit
+    jit_tests
     jit_x86_64_tests
     jit_x86_64_asm_tests
 )
