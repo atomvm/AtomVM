@@ -7032,6 +7032,7 @@ wait_timeout_trap_handler:
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
+                                // TODO : determine what this is used for
                                 avm_int_t flags_value;
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode)
                             #endif
