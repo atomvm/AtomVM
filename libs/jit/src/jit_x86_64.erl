@@ -147,13 +147,15 @@
     | {'(int)', maybe_free_x86_64_register(), '!=', integer()}
     | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
 
+-define(WORD_SIZE, 8).
+
 % ctx->e is 0x28
 % ctx->x is 0x30
 -define(CTX_REG, rdi).
 -define(JITSTATE_REG, rsi).
 -define(NATIVE_INTERFACE_REG, rdx).
 -define(Y_REGS, {16#28, ?CTX_REG}).
--define(X_REG(N), {16#30 + (N * 8), ?CTX_REG}).
+-define(X_REG(N), {16#30 + (N * ?WORD_SIZE), ?CTX_REG}).
 -define(CP, {16#B8, ?CTX_REG}).
 -define(FP_REGS, {16#C0, ?CTX_REG}).
 -define(BS, {16#C8, ?CTX_REG}).
@@ -161,7 +163,7 @@
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
 -define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
 -define(JITSTATE_REDUCTIONCOUNT, {16#10, ?JITSTATE_REG}).
--define(PRIMITIVE(N), {N * 8, ?NATIVE_INTERFACE_REG}).
+-define(PRIMITIVE(N), {N * ?WORD_SIZE, ?NATIVE_INTERFACE_REG}).
 -define(MODULE_INDEX(ModuleReg), {0, ModuleReg}).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -191,7 +193,7 @@
 %% @return Word size in bytes
 %%-----------------------------------------------------------------------------
 -spec word_size() -> 4 | 8.
-word_size() -> 8.
+word_size() -> ?WORD_SIZE.
 
 %%-----------------------------------------------------------------------------
 %% @doc Create a new backend state for provided variant, module and stream.
@@ -1256,12 +1258,20 @@ move_to_vm_register(
     Stream1 = (State#state.stream_module):append(State#state.stream, Code),
     State#state{stream = Stream1}.
 
-%% @doc move reg[x] to a vm or native register
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of an array element (reg[x]) to a vm or a native register.
+%% @end
+%% @param State current backend state
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @param Dest vm or native register to move to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec move_array_element(
-    state(),
-    x86_64_register(),
-    non_neg_integer() | x86_64_register(),
-    vm_register() | x86_64_register()
+    State :: state(),
+    Reg :: maybe_free_x86_64_register(),
+    Index :: non_neg_integer() | maybe_free_x86_64_register(),
+    Dest :: vm_register() | x86_64_register()
 ) -> state().
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
@@ -1371,8 +1381,19 @@ move_array_element(
         stream = Stream1
     }.
 
-%% @doc move reg[x] to a vm or native register
--spec get_array_element(state(), x86_64_register(), non_neg_integer()) ->
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of an array element (reg[x]) to a new native register.
+%% @end
+%% @param State current backend state
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec get_array_element(
+    State :: state(),
+    Reg :: x86_64_register(),
+    Index :: non_neg_integer()
+) ->
     {state(), x86_64_register()}.
 get_array_element(
     #state{
@@ -1393,9 +1414,21 @@ get_array_element(
         ElemReg
     }.
 
-%% @doc move an integer, a vm or native register to reg[x]
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of a value (integer, vm register or native register) to an
+%% array element (reg[x])
+%% @end
+%% @param State current backend state
+%% @param Value value to move
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec move_to_array_element(
-    state(), integer() | vm_register() | x86_64_register(), x86_64_register(), non_neg_integer()
+    State :: state(),
+    Value :: integer() | vm_register() | x86_64_register(),
+    Reg :: x86_64_register(),
+    Index :: non_neg_integer()
 ) -> state().
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
@@ -1476,6 +1509,25 @@ move_to_array_element(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of a value (integer, vm register or native register) to an
+%% array element (reg[x+offset])
+%% @end
+%% @param State current backend state
+%% @param Value value to move
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @param Offset additional offset
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+move_to_array_element(
+    State,
+    Source,
+    BaseReg,
+    Index,
+    Offset
+) when is_integer(Index) andalso is_integer(Offset) ->
+    move_to_array_element(State, Source, BaseReg, Index + Offset);
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     {x_reg, X},
@@ -1484,7 +1536,7 @@ move_to_array_element(
     Offset
 ) when X < ?MAX_REG andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
     I1 = jit_x86_64_asm:movq(?X_REG(X), Temp),
-    I2 = jit_x86_64_asm:movq(Temp, {Offset, BaseReg, IndexReg, 8}),
+    I2 = jit_x86_64_asm:movq(Temp, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_to_array_element(
@@ -1496,7 +1548,7 @@ move_to_array_element(
 ) when ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
     I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
     I2 = jit_x86_64_asm:movq({Y * 8, Temp}, Temp),
-    I3 = jit_x86_64_asm:movq(Temp, {Offset, BaseReg, IndexReg, 8}),
+    I3 = jit_x86_64_asm:movq(Temp, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State#state{stream = Stream1};
 move_to_array_element(
@@ -1508,7 +1560,7 @@ move_to_array_element(
 ) when
     ?IS_GPR(Source) andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset)
 ->
-    I1 = jit_x86_64_asm:movq(Source, {Offset, BaseReg, IndexReg, 8}),
+    I1 = jit_x86_64_asm:movq(Source, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_array_element(
@@ -1521,17 +1573,9 @@ move_to_array_element(
     ?IS_SINT32_T(Source) andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso
         is_integer(Offset)
 ->
-    I1 = jit_x86_64_asm:movq(Source, {Offset, BaseReg, IndexReg, 8}),
+    I1 = jit_x86_64_asm:movq(Source, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
     Stream1 = StreamModule:append(Stream0, I1 / binary),
-    State#state{stream = Stream1};
-move_to_array_element(
-    State,
-    Source,
-    BaseReg,
-    IndexReg,
-    Offset
-) when is_integer(IndexReg) andalso is_integer(Offset) andalso Offset div 8 =:= 0 ->
-    move_to_array_element(State, Source, BaseReg, IndexReg + (Offset div 8)).
+    State#state{stream = Stream1}.
 
 -spec move_to_native_register(state(), value()) -> {state(), x86_64_register()}.
 move_to_native_register(State, Reg) when is_atom(Reg) ->
