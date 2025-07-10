@@ -154,6 +154,7 @@ extern const ModuleNativeInterface module_native_interface;
 #define JIT_VARIANT_PIC 1
 
 #ifdef __x86_64__
+#define JIT_ARCH_TARGET JIT_ARCH_X86_64
 #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
 

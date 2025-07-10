@@ -313,7 +313,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
-                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_X86_64 && ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_VARIANT_PIC) {
+                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
                     mod->native_code = (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset);
                     // Extra function is OP_INT_CALL_END
