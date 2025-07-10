@@ -7079,6 +7079,7 @@ wait_timeout_trap_handler:
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
+                                // TODO: rewrite this bit once bitstrings are supported
                                 if (bs_offset % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
                                     RAISE_ERROR(BADARG_ATOM);
