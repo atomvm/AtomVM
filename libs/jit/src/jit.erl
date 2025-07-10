@@ -3442,10 +3442,10 @@ term_binary_size({free, BinReg}, MMod, MSt0) ->
 term_set_map_assoc(MapPtrReg, {free, PosReg}, {free, Key}, {free, Value}, MMod, MSt0) ->
     {MSt1, MapKeysReg} = MMod:get_array_element(MSt0, MapPtrReg, 1),
     MSt2 = term_put_tuple_element({free, MapKeysReg}, PosReg, {free, Key}, MMod, MSt1),
-    MSt3 = MMod:move_to_array_element(MSt2, Value, MapPtrReg, PosReg, 2 * MMod:word_size()),
+    MSt3 = MMod:move_to_array_element(MSt2, Value, MapPtrReg, PosReg, 2),
     MMod:free_native_registers(MSt3, [PosReg, Value]).
 
 term_put_tuple_element({free, TupleReg}, PosReg, {free, Value}, MMod, MSt0) ->
     MSt1 = MMod:and_(MSt0, TupleReg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt2 = MMod:move_to_array_element(MSt1, Value, TupleReg, PosReg, MMod:word_size()),
+    MSt2 = MMod:move_to_array_element(MSt1, Value, TupleReg, PosReg, 1),
     MMod:free_native_registers(MSt2, [TupleReg, Value]).
