@@ -7134,13 +7134,15 @@ wait_timeout_trap_handler:
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
-                                size_t total_bits = term_binary_size(bs_bin) * 8;
-                                size_t tail_bits = total_bits - bs_offset;
-                                if (bs_offset % 8 != 0 || tail_bits % 8 != 0) {
+                                // TODO: rewrite this bit once bitstrings are supported
+                                if (bs_offset % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
-                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
+                                size_t total_bytes = term_binary_size(bs_bin);
+                                size_t bs_offset_bytes = bs_offset / 8;
+                                size_t tail_bytes = total_bytes - bs_offset_bytes;
+                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bytes);
                                 TRIM_LIVE_REGS(live);
                                 x_regs[live] = match_state;
                                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -7148,14 +7150,14 @@ wait_timeout_trap_handler:
                                 }
                                 match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, &ctx->heap, ctx->global);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset_bytes, tail_bytes, &ctx->heap, ctx->global);
                             #endif
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
                                 WRITE_REGISTER(dreg, t);
-                                bs_offset = total_bits;
+                                bs_offset = total_bytes * 8;
                             #endif
                             break;
                         }
