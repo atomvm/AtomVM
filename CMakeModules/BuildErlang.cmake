@@ -26,7 +26,13 @@ macro(pack_archive avm_name)
     foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
-            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams && erlc +debug_info ${PACK_ARCHIVE_ERLC_FLAGS} -o ${CMAKE_CURRENT_BINARY_DIR}/beams -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams
+                && erlc +debug_info ${PACK_ARCHIVE_ERLC_FLAGS}
+                    -o ${CMAKE_CURRENT_BINARY_DIR}/beams
+                    -I ${CMAKE_SOURCE_DIR}/libs/include
+                    -I ${CMAKE_SOURCE_DIR}/libs
+                    -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
             COMMENT "Compiling ${module_name}.erl"
             VERBATIM
