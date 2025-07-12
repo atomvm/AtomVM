@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.7] - Unreleased
 
+### Fixed
+
+- Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
+
 ## [0.6.6] - 2025-06-23
 
 ### Added
