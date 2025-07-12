@@ -3045,7 +3045,7 @@ bif_faillabel_test(0, MMod, MSt0, {free, ResultReg}, {free, Dest}) ->
     MSt2 = MMod:move_to_vm_register(MSt1, ResultReg, Dest),
     MMod:free_native_registers(MSt2, [ResultReg, Dest]).
 
-memory_ensure_free_with_extra_root({x_reg, N} = ExtraRoot, Live, Size, MMod, MSt0) when N =< Live ->
+memory_ensure_free_with_extra_root({x_reg, N} = ExtraRoot, Live, Size, MMod, MSt0) when N < Live ->
     {MSt1, MemoryEnsureFreeReg} = MMod:call_primitive(MSt0, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
         ctx, jit_state, Size, Live, ?MEMORY_CAN_SHRINK
     ]),
