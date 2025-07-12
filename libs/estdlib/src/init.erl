@@ -28,10 +28,22 @@
 -module(init).
 
 -export([
+    boot/1,
     get_argument/1,
     get_plain_arguments/0,
     notify_when_started/1
 ]).
+
+%%-----------------------------------------------------------------------------
+%% @param Args command line arguments
+%% @doc Entry point.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec boot([binary() | atom()]) -> any().
+boot([<<"-s">>, StartupModule]) when is_atom(StartupModule) ->
+    % Until we have boot scripts, we just start kernel application.
+    {ok, _KernelPid} = kernel:start(boot, []),
+    StartupModule:start().
 
 %%-----------------------------------------------------------------------------
 %% @param Flag flag to get values for
