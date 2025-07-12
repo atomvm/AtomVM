@@ -619,7 +619,6 @@ if_block_cond(#state{stream_module = StreamModule} = State0, Cond) ->
     {State1, Code, ReplaceDelta} = if_block_cond0(State0, Cond),
     Stream1 = StreamModule:append(State1#state.stream, Code),
     State2 = State1#state{stream = Stream1},
-    io:format("[if_block_cond:~p] (used_regs) = ~p\n", [?LINE, used_regs(State2)]),
     {State2, ReplaceDelta}.
 
 -spec if_block_cond0(state(), condition()) -> {state(), binary(), non_neg_integer()}.
