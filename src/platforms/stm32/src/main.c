@@ -267,22 +267,11 @@ int main()
 
     Module *mod = module_new_from_iff_binary(glb, startup_beam, startup_beam_size);
     globalcontext_insert_module(glb, mod);
-    Context *ctx = context_new(glb);
-    ctx->leader = 1;
 
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
     fprintf(stdout, "---\n");
 
-    context_execute_loop(ctx, mod, "start", 0);
-
-    term ret_value = ctx->x[0];
-    char *ret_atom_string = interop_atom_to_string(ctx, ret_value);
-    if (ret_atom_string != NULL) {
-        AVM_LOGI(TAG, "Exited with return: %s", ret_atom_string);
-    } else {
-        AVM_LOGI(TAG, "Exited with return value: %lx", (long) term_to_int32(ret_value));
-    }
-    free(ret_atom_string);
+    run_result_t result = globalcontext_run(glb, mod, stdout);
 
     bool reboot_on_not_ok =
 #if defined(CONFIG_REBOOT_ON_NOT_OK)
@@ -290,7 +279,7 @@ int main()
 #else
         false;
 #endif
-    if (reboot_on_not_ok && ret_value != OK_ATOM) {
+    if (reboot_on_not_ok && result != RUN_SUCCESS) {
         AVM_LOGE(TAG, "AtomVM application terminated with non-ok return value.  Rebooting ...");
         scb_reset_system();
     } else {

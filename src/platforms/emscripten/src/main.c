@@ -95,22 +95,15 @@ static int start(void)
         fprintf(stderr, "main module not loaded\n");
         return EXIT_FAILURE;
     }
-    Context *ctx = context_new(global);
-    ctx->leader = 1;
-    context_execute_loop(ctx, main_module, "start", 0);
-    term ret_value = ctx->x[0];
-    fprintf(stdout, "Return value: ");
-    term_display(stdout, ret_value, ctx);
-    fprintf(stdout, "\n");
+
+    run_result_t ret_value = globalcontext_run(global, main_module, stdout);
 
     int status;
-    if (ret_value == OK_ATOM || ret_value == term_from_int(0)) {
+    if (ret_value == RUN_SUCCESS) {
         status = EXIT_SUCCESS;
     } else {
         status = EXIT_FAILURE;
     }
-
-    context_destroy(ctx);
 
     return status;
 }

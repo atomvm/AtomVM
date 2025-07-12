@@ -176,10 +176,7 @@ For more information about deploying the AtomVM image and AtomVM applications to
 An AtomVM application is a collection of BEAM files, aggregated into an AtomVM "Packbeam" (`.avm`) file, and typically deployed (flashed) to some device.  These BEAM files be be compiled from Erlang, Elixir, or any other language that targets the Erlang VM.
 
 ```{attention}
-The return value from the `start/0` function is ignored on the the `generic_unix` platform, most MCU platforms have
-the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the
-[Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this
-is configured.
+The return value from the `start/0` function is printed, ok means success (0 is also accepted for historical reasons), and any other value means failure. The processing of this results depend on platforms, on generic unix for example it determines the exit code. Most MCU platforms have the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the [Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this is configured.
 ```
 
 Here, for example is one of the smallest AtomVM applications you can write:
@@ -204,6 +201,8 @@ prevent the AtomVM from terminating prematurely, e.g.,
 wait_forever() ->
     receive X -> X end.
 ```
+
+The start function actually isn't the first function evaluated by the virtual machine. If the `init` module exists, `init:boot/1` is called and this function calls `start/0`. The `init` module is part of atomvmlib.
 
 ### Packbeam files
 

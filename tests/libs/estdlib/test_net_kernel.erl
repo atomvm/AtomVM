@@ -30,7 +30,6 @@ test() ->
     case has_compatible_erl(Platform) andalso has_epmd(Platform) of
         true ->
             ok = ensure_epmd(Platform),
-            ok = setup(Platform),
             ok = test_ping_from_beam(Platform),
             ok = test_fail_with_wrong_cookie(Platform),
             ok = test_rpc_from_beam(Platform),
@@ -457,13 +456,6 @@ test_is_alive(Platform) ->
     true = is_alive(),
     net_kernel:stop(),
     false = is_alive(),
-    ok.
-
-% On AtomVM, we need to start kernel.
-setup("BEAM") ->
-    ok;
-setup("ATOM") ->
-    {ok, _KernelPid} = kernel:start(normal, []),
     ok.
 
 execute_command("BEAM", Command) ->
