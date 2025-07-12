@@ -6439,15 +6439,17 @@ wait_timeout_trap_handler:
                 #endif
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
+                #ifdef IMPL_EXECUTE_LOOP
+                    TRIM_LIVE_REGS(live);
+                    x_regs[live] = src;
+                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                    src = x_regs[live];
+                #endif
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
