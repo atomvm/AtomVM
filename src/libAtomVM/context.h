@@ -454,6 +454,13 @@ bool context_process_link_exit_signal(Context *ctx, struct TermSignal *signal);
 void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal);
 
 /**
+ * @brief Resume execution after module has been loaded
+ *
+ * @param ctx the context being executed
+ */
+void context_process_code_server_resume_signal(Context *ctx);
+
+/**
  * @brief Get process information.
  *
  * @param ctx the context being executed
