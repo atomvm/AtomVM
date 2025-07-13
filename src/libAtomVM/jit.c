@@ -19,6 +19,7 @@
  */
 
 #include "jit.h"
+#include "memory.h"
 
 #ifndef AVM_NO_JIT
 
@@ -124,6 +125,10 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
 {
     int module_index = ctx->cp >> 24;
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
+    // JIT case
+    assert(mod->native_code != NULL);
+
+    // Native case
     if (mod->native_code == NULL) {
         // return to emulated
         const uint8_t *code = mod->code->code;
@@ -161,7 +166,12 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
             // catch label is in native code.
             jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
         } else {
-            jit_state->continuation = jit_state->module->labels[target_label];
+            // Native case
+            // jit_state->continuation = jit_state->module->labels[target_label];
+
+            // JIT case
+            // (catch label necessarily is native)
+            assert(false);
         }
         return ctx;
     }
@@ -257,6 +267,31 @@ static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
     return scheduler_wait(ctx);
 }
 
+static Context *jit_trap_and_load(Context *ctx, JITState *jit_state, Module *mod, uint32_t label)
+{
+    term code_server_pid = globalcontext_get_registered_process(ctx->global, CODE_SERVER_ATOM_INDEX);
+    int code_server_process_id = 0;
+    if (term_is_local_pid(code_server_pid)) {
+        code_server_process_id = term_to_local_process_id(code_server_pid);
+    } else {
+        set_error(ctx, jit_state, 0, UNDEF_ATOM);
+        return jit_handle_error(ctx, jit_state, 0);
+    }
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3), heap);
+    term code_server_tuple = term_alloc_tuple(3, &heap);
+    term_put_tuple_element(code_server_tuple, 0, LOAD_ATOM);
+    term_put_tuple_element(code_server_tuple, 1, module_get_name(mod));
+    term_put_tuple_element(code_server_tuple, 2, term_from_local_process_id(ctx->process_id));
+    globalcontext_send_message(ctx->global, code_server_process_id, code_server_tuple);
+    END_WITH_STACK_HEAP(heap, ctx->global);
+    ctx->saved_module = mod;
+    ctx->saved_ip = (void *) (uintptr_t) label;
+    context_update_flags(ctx, ~NoFlags, Trap);
+    Context *next_ctx = scheduler_wait(ctx);
+
+    return next_ctx;
+}
+
 static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words)
 {
     const struct ExportedFunction *func = module_resolve_function(jit_state->module, index, ctx->global);
@@ -300,10 +335,25 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                 ctx->e += (n_words + 1);
             }
 
-            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+            // Native case
             // return to emulated
-            jit_state->module = jump->target;
-            jit_state->continuation = jit_state->module->labels[jump->label];
+            // jit_state->module = jump->target;
+            // jit_state->continuation = jit_state->module->labels[jump->label];
+
+            // JIT case
+            SMP_MODULE_LOCK(jit_state->module);
+            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+            if (jump->target->native_code == NULL) {
+                SMP_MODULE_UNLOCK(jit_state->module);
+                return jit_trap_and_load(ctx, jit_state, jump->target, jump->label);
+            } else {
+                // Fix exported function for next call, if any
+                ((struct ModuleFunction *) jump)->entry_point = module_get_native_entry_point(jump->target, jump->label);
+                SMP_MODULE_UNLOCK(jit_state->module);
+
+                jit_state->module = jump->target;
+                jit_state->continuation = jump->entry_point;
+            }
             break;
         }
         case ModuleNativeFunction: {
@@ -312,7 +362,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                 ctx->e += (n_words + 1);
             }
 
-            const struct ModuleNativeFunction *jump = EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func);
+            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
             // clang cannot tail-optimize this, so return to loop to avoid any stack overflow
             // __attribute__((musttail)) return jump->entry_point(ctx, jit_state, &module_native_interface);
             jit_state->module = jump->target;
@@ -704,6 +754,10 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 reprocess_outer = true;
                 break;
             }
+            case CodeServerResumeSignal: {
+                context_process_code_server_resume_signal(ctx);
+                break;
+            }
             case NormalMessage: {
                 UNREACHABLE();
             }
@@ -923,12 +977,17 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         term *ext_reg = jit_extended_register_ptr(ctx, i);
         *ext_reg = boxed_value[i - fun_arity + 3];
     }
-    jit_state->module = fun_module;
-    if (jit_state->module->native_code) {
-        // catch label is in native code.
+    if (fun_module->native_code) {
+        // JIT case
+        jit_state->module = fun_module;
         jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
     } else {
-        jit_state->continuation = jit_state->module->labels[label];
+        // Native case
+        // jit_state->module = fun_module;
+        // jit_state->continuation = jit_state->module->labels[label];
+
+        // JIT case
+        return jit_trap_and_load(ctx, jit_state, fun_module, label);
     }
     return ctx;
 }
@@ -1251,12 +1310,17 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
             set_error(ctx, jit_state, 0, UNDEF_ATOM);
             return jit_handle_error(ctx, jit_state, 0);
         }
-        jit_state->module = target_module;
-        if (jit_state->module->native_code) {
+        if (target_module->native_code) {
             // catch label is in native code.
+            jit_state->module = target_module;
             jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
         } else {
-            jit_state->continuation = jit_state->module->labels[target_label];
+            // Native case
+            // jit_state->module = target_module;
+            // jit_state->continuation = jit_state->module->labels[target_label];
+
+            // JIT case
+            return jit_trap_and_load(ctx, jit_state, target_module, target_label);
         }
         return ctx;
     }

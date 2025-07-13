@@ -514,6 +514,8 @@ static inline term *to_x_reg_ptr(term *xptr)
     return (term *) (((uintptr_t) xptr) & ~((uintptr_t) X_REG_FLAG));
 }
 
+#ifndef AVM_NO_EMU
+
 static dreg_t extended_register_ptr(Context *ctx, unsigned int index)
 {
     struct ListHead *item;
@@ -530,6 +532,8 @@ static dreg_t extended_register_ptr(Context *ctx, unsigned int index)
 
     return &new_ext_reg->value;
 }
+
+#endif
 
 static void destroy_extended_registers(Context *ctx, unsigned int live)
 {
@@ -1187,6 +1191,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     reprocess_outer = true;                                                     \
                     break;                                                                      \
                 }                                                                               \
+                case CodeServerResumeSignal: {                                                  \
+                    context_process_code_server_resume_signal(ctx);                             \
+                    break;                                                                      \
+                }                                                                               \
                 case NormalMessage: {                                                           \
                     UNREACHABLE();                                                              \
                 }                                                                               \
@@ -1418,6 +1426,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
+
+#ifndef AVM_NO_EMU
 struct Int24
 {
     int32_t val24 : 24;
@@ -1476,6 +1486,7 @@ static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
 
     return true;
 }
+#endif
 
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
@@ -1515,6 +1526,8 @@ static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_i
         return maybe_alloc_boxed_integer_fragment(ctx, value);
     }
 }
+
+#ifndef AVM_NO_EMU
 
 static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *compact_term)
 {
@@ -1582,7 +1595,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
     }
 }
 
-term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
+static term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
 {
     uint32_t n_freeze = module_get_fun_freeze(mod, fun_index);
 
@@ -1754,6 +1767,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 #endif
 
+#endif
+
 #ifndef __clang__
 #pragma GCC diagnostic push
 #ifdef __GNUC__
@@ -1913,7 +1928,7 @@ schedule_in:
         if (native_pc) {
 #endif
             struct JITState jit_state;
-            jit_state.continuation = (void *) -1L;
+            jit_state.continuation = NULL;
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
@@ -1923,6 +1938,9 @@ schedule_in:
             remaining_reductions = jit_state.remaining_reductions;
             if (UNLIKELY(new_ctx != ctx)) {
                 ctx = new_ctx;
+                goto schedule_in;
+            }
+            if (IS_NULL_PTR(jit_state.continuation)) {
                 goto schedule_in;
             }
             if (UNLIKELY(remaining_reductions == 0)) {
@@ -2135,7 +2153,7 @@ loop:
                             break;
                         }
                         case ModuleNativeFunction: {
-                            const struct ModuleNativeFunction *jump = EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func);
+                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             ctx->cp = module_address(mod->module_index, pc - code);
                             if (jump->target != mod) {
@@ -2274,7 +2292,7 @@ loop:
                             break;
                         }
                         case ModuleNativeFunction: {
-                            const struct ModuleNativeFunction *jump = EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func);
+                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
                             ctx->cp = ctx->e[n_words];
                             ctx->e += (n_words + 1);
@@ -7352,9 +7370,11 @@ bs_match_jump_to_fail:
 #endif
 
 #ifdef IMPL_EXECUTE_LOOP
+#ifndef AVM_NO_EMU
 do_abort:
         x_regs[0] = ERROR_ATOM;
         x_regs[1] = VM_ABORT_ATOM;
+#endif
 
 handle_error:
         {

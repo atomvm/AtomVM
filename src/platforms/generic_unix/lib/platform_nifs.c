@@ -23,6 +23,7 @@
 #include "atom.h"
 #include "defaultatoms.h"
 #include "interop.h"
+#include "jit_stream_mmap.h"
 #include "memory.h"
 #include "nifs.h"
 #include "otp_crypto.h"
@@ -133,6 +134,12 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return nif;
     }
     nif = otp_ssl_nif_get_nif(nifname);
+#endif
+#ifndef AVM_NO_JIT
+    nif = jit_stream_mmap_get_nif(nifname);
+    if (nif) {
+        return nif;
+    }
 #endif
     return nif;
 }

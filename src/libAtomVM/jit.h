@@ -22,6 +22,7 @@
 #define _JIT_H_
 
 #include "bitstring.h"
+#include "module.h"
 #include "term.h"
 #include "term_typedef.h"
 
@@ -157,6 +158,17 @@ extern const ModuleNativeInterface module_native_interface;
 #define JIT_ARCH_TARGET JIT_ARCH_X86_64
 #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
+
+/**
+ * @brief Return the entry point from a given jit stream
+ *
+ * @details Platform implementing JIT must provide this function which
+ * is called by code_server:set_native_code/2
+ * @param ctx the current context (code_server)
+ * @param jit_stream the jit stream term
+ * @returns the pointer to the first function
+ */
+ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream);
 
 #ifdef __cplusplus
 }
