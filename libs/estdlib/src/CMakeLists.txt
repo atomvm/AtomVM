@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     binary
     calendar
     code
+    code_server
     crypto
     dist_util
     erl_epmd

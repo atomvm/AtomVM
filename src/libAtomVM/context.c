@@ -205,6 +205,7 @@ void context_destroy(Context *ctx)
             case FlushInfoMonitorSignal:
             case LinkExitSignal: // target will not be found when processing this link
             case MonitorDownSignal: // likewise
+            case CodeServerResumeSignal:
                 break;
             case NormalMessage: {
                 UNREACHABLE();
@@ -452,6 +453,18 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
     }
     // If monitor was not found, it was removed and message should not be sent.
     // (flush option removes messages that were already sent)
+}
+
+void context_process_code_server_resume_signal(Context *ctx)
+{
+    uint32_t label = (uint32_t) (uintptr_t) ctx->saved_ip;
+    Module *module = ctx->saved_module;
+    if (module->native_code) {
+        ctx->saved_ip = (ModuleNativeEntryPoint) module_get_native_entry_point(module, label);
+    } else {
+        ctx->saved_ip = module->labels[label];
+    }
+    context_update_flags(ctx, ~Trap, NoFlags);
 }
 
 void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITIZE_SAFE

@@ -194,3 +194,10 @@ X(INIT_ATOM, "\x4", "init")
 X(MONITORED_BY_ATOM, "\xC", "monitored_by")
 
 X(CURRENT_STACKTRACE_ATOM, "\x12", "current_stacktrace")
+
+X(EMU_ATOM, "\x3", "emu")
+X(JIT_ATOM, "\x3", "jit")
+X(EMU_FLAVOR_ATOM, "\xA", "emu_flavor")
+X(CODE_SERVER_ATOM, "\xB", "code_server")
+X(LOAD_ATOM, "\x4", "load")
+X(JIT_X86_64_ATOM, "\xA", "jit_x86_64")
