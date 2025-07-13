@@ -173,7 +173,7 @@ endif()
 if (AVM_DISABLE_JIT)
     target_compile_definitions(libAtomVM PUBLIC AVM_NO_JIT)
 endif()
-if (AVM_DISABLE_EMU)
+if (NOT AVM_ENABLE_NATIVE AND NOT AVM_DISABLE_JIT)
     target_compile_definitions(libAtomVM PUBLIC AVM_NO_EMU)
 endif()
 
