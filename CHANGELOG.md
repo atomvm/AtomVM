@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.7] - Unreleased
 
+### Added
+
+- Added `lists:keysort/2`
+
 ### Fixed
 
 - Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
