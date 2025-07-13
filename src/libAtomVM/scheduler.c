@@ -136,6 +136,7 @@ static void scheduler_process_native_signal_messages(Context *ctx)
             case SetGroupLeaderSignal: // ports can't be group leaders
             case UnlinkRemoteIDSignal: // ports can't be part of distributed links
             case UnlinkRemoteIDAckSignal: // id.
+            case CodeServerResumeSignal: // ports do not wait for code server
                 break;
             case NormalMessage: {
                 UNREACHABLE();

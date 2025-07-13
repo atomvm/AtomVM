@@ -113,14 +113,11 @@ struct ModuleFunction
 {
     struct ExportedFunction base;
     Module *target;
-    int label;
-};
-
-struct ModuleNativeFunction
-{
-    struct ExportedFunction base;
-    Module *target;
-    ModuleNativeEntryPoint entry_point;
+    union
+    {
+        ModuleNativeEntryPoint entry_point;
+        int label;
+    };
 };
 
 #define EXPORTED_FUNCTION_TO_BIF(func) \
@@ -137,8 +134,5 @@ struct ModuleNativeFunction
 
 #define EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func) \
     ((const struct ModuleFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleFunction *) 0)->base)))
-
-#define EXPORTED_FUNCTION_TO_MODULE_NATIVE_FUNCTION(func) \
-    ((const struct ModuleNativeFunction *) (((char *) (func)) - ((unsigned long) &((const struct ModuleNativeFunction *) 0)->base)))
 
 #endif

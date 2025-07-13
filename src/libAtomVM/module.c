@@ -528,7 +528,7 @@ static const struct ExportedFunction *module_create_function(Module *found_modul
 {
 #ifndef AVM_NO_JIT
     if (found_module->native_code) {
-        struct ModuleNativeFunction *mfunc = malloc(sizeof(struct ModuleNativeFunction));
+        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
         if (IS_NULL_PTR(mfunc)) {
             fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
             return NULL;
@@ -884,10 +884,8 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
 bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     size_t i;
-#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
-    if (mod->native_code) {
-#endif
 #ifndef AVM_NO_JIT
+    if (mod->native_code) {
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2 + labels_count * 6;
@@ -912,9 +910,10 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
             prev_line_ref = line_ref;
         }
         return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
-#endif
-#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
     } else {
+#if defined(AVM_NO_EMU)
+        return false;
+#endif
 #endif
 #ifndef AVM_NO_EMU
         uint32_t line_ref;
@@ -943,7 +942,7 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
         DECODE_LITERAL(line_ref, ref_pc);
         return module_find_line_ref(mod, line_ref, line, filename_len, filename);
 #endif
-#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
+#ifndef AVM_NO_JIT
     }
 #endif
 }
@@ -960,10 +959,8 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
         *cp_mod = mod;
     }
 
-#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
-    if (mod->native_code) {
-#endif
 #ifndef AVM_NO_JIT
+    if (mod->native_code) {
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
@@ -1034,7 +1031,7 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
             *l_off = mod_offset - (mod->labels[*label] - code);
         }
 #endif
-#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
+#ifndef AVM_NO_JIT
     }
 #endif
 }

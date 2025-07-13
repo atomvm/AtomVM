@@ -21,8 +21,16 @@
 -module(jit).
 
 -export([
+    stream/0,
+    backend/1,
     beam_chunk_header/3,
     compile/5
+]).
+
+% NIFs
+-export([
+    stream_module/0,
+    backend_module/0
 ]).
 
 -compile([warnings_as_errors]).
@@ -89,6 +97,8 @@
     atom_resolver :: fun((integer()) -> atom()),
     literal_resolver :: fun((integer()) -> any())
 }).
+
+-type stream() :: any().
 
 -define(TRACE(Fmt, Args), io:format(Fmt, Args)).
 %% -define(TRACE(Fmt, Args), ok).
@@ -3449,3 +3459,29 @@ term_put_tuple_element({free, TupleReg}, PosReg, {free, Value}, MMod, MSt0) ->
     MSt1 = MMod:and_(MSt0, TupleReg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt2 = MMod:move_to_array_element(MSt1, Value, TupleReg, PosReg, 1),
     MMod:free_native_registers(MSt2, [TupleReg, Value]).
+
+%% @doc Get the stream module
+%% @return The stream module for jit on this platform
+-spec stream_module() -> module().
+stream_module() ->
+    erlang:nif_error(undefined).
+
+%% @doc Return a new stream for this platform
+%% @return A tuple with the stream module and the stream resource for this platform
+-spec stream() -> {module(), stream()}.
+stream() ->
+    StreamModule = ?MODULE:stream_module(),
+    {StreamModule, StreamModule:new()}.
+
+%% @doc Get the backend module
+%% @return The backend module for jit on this platform
+-spec backend_module() -> module().
+backend_module() ->
+    erlang:nif_error(undefined).
+
+%% @doc Instantiate backend for this platform
+%% @return A tuple with the backend module and the backend state for this platform
+backend({StreamModule, Stream}) ->
+    BackendModule = ?MODULE:backend_module(),
+    BackendState = BackendModule:new(?JIT_VARIANT_PIC, StreamModule, Stream),
+    {BackendModule, BackendState}.

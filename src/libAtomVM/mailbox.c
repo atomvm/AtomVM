@@ -137,6 +137,7 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             free(monitor_signal);
             break;
         }
+        case CodeServerResumeSignal:
         case GCSignal:
             free(m);
             break;
