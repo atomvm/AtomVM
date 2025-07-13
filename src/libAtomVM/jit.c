@@ -34,7 +34,7 @@
 #include "scheduler.h"
 #include "stacktrace.h"
 #include "term.h"
-#include "util.h"
+#include "utils.h"
 
 #include <math.h>
 #include <stddef.h>
