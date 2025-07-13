@@ -32,6 +32,7 @@ set(HEADER_FILES
 )
 
 set(SOURCE_FILES
+    jit_stream_mmap.c
     otp_socket_platform.c
     mapped_file.c
     platform_defaultatoms.c

@@ -25,6 +25,7 @@ include(BuildErlang)
 set(ERLANG_MODULES
     jit
     jit_stream_binary
+    jit_stream_mmap
     jit_x86_64
     jit_x86_64_asm
 )
