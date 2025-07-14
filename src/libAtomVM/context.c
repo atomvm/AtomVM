@@ -457,6 +457,7 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
 
 void context_process_code_server_resume_signal(Context *ctx)
 {
+#ifndef AVM_NO_JIT
     uint32_t label = (uint32_t) (uintptr_t) ctx->saved_ip;
     Module *module = ctx->saved_module;
     if (module->native_code) {
@@ -464,6 +465,7 @@ void context_process_code_server_resume_signal(Context *ctx)
     } else {
         ctx->saved_ip = module->labels[label];
     }
+#endif
     context_update_flags(ctx, ~Trap, NoFlags);
 }
 
