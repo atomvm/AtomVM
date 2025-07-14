@@ -43,6 +43,7 @@
     keyfind/3,
     keymember/3,
     keyreplace/4,
+    keysort/2,
     keystore/4,
     keytake/3,
     foldl/3,
@@ -329,6 +330,17 @@ keyreplace(Key, N, [H | Tail], _OrigL, NewTuple, Acc) when element(N, H) =:= Key
     {value, ?MODULE:reverse(Acc, [NewTuple | Tail])};
 keyreplace(Key, N, [H | Tail], OrigL, NewTuple, Acc) ->
     keyreplace(Key, N, Tail, OrigL, NewTuple, [H | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @param   N           the position in the tuple to compare (1..tuple_size)
+%% @param   L           the list to sort
+%% @returns The list L sorted by Nth element
+%% @doc     Sort a list of tuples by Nth element.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec keysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
+keysort(N, TupleList) ->
+    sort(fun(E1, E2) -> element(N, E1) < element(N, E2) end, TupleList).
 
 %%-----------------------------------------------------------------------------
 %% @param   Key         the key to match
