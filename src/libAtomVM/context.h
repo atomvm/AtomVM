@@ -83,15 +83,24 @@ enum HeapGrowthStrategy
 
 struct Context
 {
+    // JIT compiler expects fields to be at given offset or sizes.
+    // Do not change order or size without bumping the jit version
+
     // First fields matches ErlNifEnv structure.
     GlobalContext *global;
     Heap heap;
     term *e;
+
+    // Following fields offsets are also hard-coded in jit backends
     term x[MAX_REG + 1];
+    term cp;
+    avm_float_t *fr;
+    term bs;
+    size_t bs_offset;
+    // End of hard-coded section
+
     struct ListHead extended_x_regs;
-
     struct ListHead processes_list_head;
-
     struct ListHead processes_table_head;
     int32_t process_id;
 
@@ -99,13 +108,9 @@ struct Context
 
     struct ListHead monitors_head;
 
-    avm_float_t *fr;
-
     size_t min_heap_size;
     size_t max_heap_size;
     enum HeapGrowthStrategy heap_growth_strategy;
-
-    term cp;
 
     // saved state when scheduled out
     Module *saved_module;
@@ -138,9 +143,6 @@ struct Context
     void *platform_data;
 
     term group_leader;
-
-    term bs;
-    size_t bs_offset;
 
     term exit_reason;
 };
