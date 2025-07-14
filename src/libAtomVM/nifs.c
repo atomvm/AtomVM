@@ -3039,10 +3039,12 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
 #endif
     }
     if (key == EMU_FLAVOR_ATOM) {
-#ifndef AVM_NO_JIT
-        return JIT_ATOM;
-#else
+#ifndef AVM_NO_EMU
         return EMU_ATOM;
+#else
+        // Only say jit if emu is disabled. Precompiled execution with jit
+        // disabled should return emu
+        return JIT_ATOM;
 #endif
     }
     return sys_get_info(ctx, key);
