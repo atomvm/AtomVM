@@ -239,7 +239,6 @@ static void jit_stream_mmap_dtor(ErlNifEnv *caller_env, void *obj)
 
 const struct Nif *jit_stream_mmap_get_nif(const char *nifname)
 {
-    printf("jit_stream_mmap_get_nif -- nif = %s\n", nifname);
     if (strcmp("jit:stream_module/0", nifname) == 0) {
         return &jit_stream_module_nif;
     }
