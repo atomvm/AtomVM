@@ -59,6 +59,52 @@ macro(pack_archive avm_name)
     )
 endmacro()
 
+macro(pack_precompiled_archive avm_name)
+    pack_archive(${avm_name} ${ARGN})
+
+    set(multiValueArgs ERLC_FLAGS MODULES)
+    cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
+
+    foreach(arch "x86_64")
+        set(jit_compiler_modules
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}_asm.beam
+        )
+
+        foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
+            add_custom_command(
+                OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/x86_64/${module_name}.beam
+                COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/x86_64/
+                    && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${arch} ${CMAKE_CURRENT_BINARY_DIR}/beams/${arch}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
+                DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam ${jit_compiler_modules}
+                COMMENT "Compiling ${module_name}.beam to ${arch}"
+                VERBATIM
+            )
+            set(pack_precompile_archive_${avm_name}_beams ${pack_precompile_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${arch}/${module_name}.beam)
+        endforeach()
+
+        if(AVM_RELEASE)
+            set(INCLUDE_LINES "")
+        else()
+            set(INCLUDE_LINES "-i")
+        endif()
+
+        add_custom_command(
+            OUTPUT ${avm_name}-${arch}.avm
+            DEPENDS ${pack_precompile_archive_${avm_name}_beams} PackBEAM
+            COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${arch}.avm ${pack_precompile_archive_${avm_name}_beams}
+            COMMENT "Packing archive ${avm_name}-${arch}.avm"
+            VERBATIM
+        )
+        add_custom_target(
+            ${avm_name}_${arch} ALL
+            DEPENDS ${avm_name}-${arch}.avm
+        )
+    endforeach()
+endmacro()
 
 macro(pack_lib avm_name)
 

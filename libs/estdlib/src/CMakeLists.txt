@@ -73,7 +73,7 @@ set(ERLANG_MODULES
     erlang
 )
 
-pack_archive(estdlib ${ERLANG_MODULES})
+pack_precompiled_archive(estdlib ${ERLANG_MODULES})
 
 include(../../../version.cmake)
 
