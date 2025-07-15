@@ -158,8 +158,7 @@ load(Module) ->
                 code_server:set_native_code(Module, Stream1)
             catch
                 T:V:S ->
-                    io:format("~p:~p\n", [T, V]),
-                    io:format("~p\n", [S]),
+                    io:format("===========================================================\nJust in time compilation of module ~p failed.\n~p:~p\n~p\n===========================================================\n", [Module, T, V, S]),
                     undef
             end;
         emu ->
