@@ -1816,13 +1816,16 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
         ctx->saved_module = mod;
 
-#ifndef AVM_NO_JIT
+#if AVM_NO_JIT
+        ctx->saved_ip = mod->labels[label];
+#elif AVM_NO_EMU
+        assert(mod->native_code);
+        ctx->saved_ip = module_get_native_entry_point(mod, label);
+#else
         if (mod->native_code) {
             ctx->saved_ip = module_get_native_entry_point(mod, label);
         } else {
-#endif
             ctx->saved_ip = mod->labels[label];
-#ifndef AVM_NO_JIT
         }
 #endif
         scheduler_init_ready(ctx);
@@ -1926,6 +1929,8 @@ schedule_in:
 #ifndef AVM_NO_JIT
 #ifndef AVM_NO_EMU
         if (native_pc) {
+#else
+        assert(native_pc);
 #endif
             struct JITState jit_state;
             jit_state.continuation = NULL;
