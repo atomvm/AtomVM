@@ -2174,13 +2174,15 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
     if (LIKELY(!encode_to_latin1)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         return term_from_const_binary(atom_data, atom_len, &ctx->heap, glb);
     } else {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         size_t encoded_len = unicode_buf_utf8_len(atom_data, atom_len);
         term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
         char *binary_data = (char *) term_binary_data(binary);
