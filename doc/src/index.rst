@@ -35,6 +35,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    packbeam-format
    api-reference-documentation
    CONTRIBUTING.md
+   C_CODING_STYLE.md
    CHANGELOG.md
 
 .. toctree::
