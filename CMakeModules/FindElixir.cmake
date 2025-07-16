@@ -18,11 +18,14 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-find_program(ELIXIRC_PATH elixirc)
+if (NOT DEFINED Elixir_FOUND)
+    find_program(ELIXIRC_PATH elixirc)
 
-if (ELIXIRC_PATH)
-    message("Found Elixir")
-    set(Elixir_FOUND TRUE)
-elseif(Elixir_FIND_REQUIRED)
-    message(FATAL_ERROR "Elixir compiler not found")
+    if (ELIXIRC_PATH)
+        message("Found Elixir")
+        set(Elixir_FOUND TRUE)
+    elseif(Elixir_FIND_REQUIRED)
+        message(FATAL_ERROR "Elixir compiler not found")
+        set(Elixir_FOUND FALSE)
+    endif()
 endif()
