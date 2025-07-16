@@ -5799,14 +5799,21 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
         return list1;
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx + 1, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(cons);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term result = term_nil();
+    term result;
     if (last_filtered_idx < len - 1) {
+        // GC including new tail which is at last_filtered_idx + 1 (last_filtered_idx was filtered)
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx + 2, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(cons);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         result = cons[last_filtered_idx + 1];
+    } else {
+        // if last_filtered_idx == len -1, tail is nil
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(cons);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        result = term_nil();
     }
 
     for (int i = last_filtered_idx - 1; i >= 0; i--) {
