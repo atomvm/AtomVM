@@ -33,6 +33,7 @@ test() ->
     ok = test_supervisor_order(),
     ok = test_terminate_delete_child(),
     ok = test_terminate_timeout(),
+    ok = test_which_children(),
     ok.
 
 test_basic_supervisor() ->
@@ -256,6 +257,36 @@ test_supervisor_order() ->
         after 1000 ->
             {error, {timeout, ready_2}}
         end,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_which_children() ->
+    % Test with no children
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    [] = supervisor:which_children(SupPid),
+
+    % Add a child and test
+    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+        id => test_child,
+        start => {ping_pong_server, start_link, [self()]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker
+    }),
+
+    % Check which_children returns the child info
+    [{test_child, ChildPid, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
+    true = is_pid(ChildPid),
+
+    % Terminate the child and check it shows as undefined
+    ok = supervisor:terminate_child(SupPid, test_child),
+    [{test_child, undefined, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
+
+    % Delete the child and check empty list
+    ok = supervisor:delete_child(SupPid, test_child),
+    [] = supervisor:which_children(SupPid),
+
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.
