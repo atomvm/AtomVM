@@ -1673,7 +1673,7 @@ static inline term term_alloc_tuple(uint32_t size, Heap *heap)
 /**
  * @brief Replaces the content of a tuple element.
  *
- * @details Destructively replaces the nth element of an existing tuple, it should be used only on newly allocated tuples.
+ * @details Destructively replaces the nth (0-based) element of an existing tuple, it should be used only on newly allocated tuples.
  * @param t the term pointing to the target tuple, fails if not a tuple.
  * @param elem_index the index of the element that will be replaced.
  * @param put_value the term that will be put on the nth tuple element.
@@ -1685,12 +1685,11 @@ static inline void term_put_tuple_element(term t, uint32_t elem_index, term put_
     term *boxed_value = term_to_term_ptr(t);
 
     TERM_DEBUG_ASSERT((size_t) elem_index < term_get_size_from_boxed_header(boxed_value[0]));
-
     boxed_value[elem_index + 1] = put_value;
 }
 
 /**
- * @brief Returns the nth tuple element
+ * @brief Returns the nth (0-based) tuple element
  *
  * @details Returns the nth element for a given tuple pointed by a term.
  * @param t a term that points to a tuple, fails otherwise.
@@ -1704,7 +1703,6 @@ static inline term term_get_tuple_element(term t, int elem_index)
     const term *boxed_value = term_to_const_term_ptr(t);
 
     TERM_DEBUG_ASSERT((size_t) elem_index < term_get_size_from_boxed_header(boxed_value[0]));
-
     return boxed_value[elem_index + 1];
 }
 

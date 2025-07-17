@@ -23,6 +23,7 @@
 
 // #define DEBUG_HEAP_ALLOC
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #ifdef DEBUG_HEAP_ALLOC
