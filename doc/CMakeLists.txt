@@ -132,20 +132,11 @@ if(SPHINX_FOUND)
     message("Doxygen found: ${DOXYGEN_BUILD_EXECUTABLE}")
     message("Sphinx found: ${SPHINX_BUILD_EXECUTABLE}")
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile @ONLY)
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_stylesheet.rts DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
-    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/pdf_template.rtt DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/)
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/apidocs/libatomvm)
     add_custom_target(sphinx-html
         ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -b html -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/html/
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
         COMMENT "Generating Sphinx HTML documentation" VERBATIM
-        DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
-    )
-
-    add_custom_target(sphinx-pdf
-        ${SPHINX_BUILD_EXECUTABLE} -q --doctree-dir ${CMAKE_CURRENT_BINARY_DIR}/doctree -D exclude_patterns=apidocs/libatomvm/** -b rinoh -c ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/src/ ${CMAKE_CURRENT_BINARY_DIR}/pdf/
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMENT "Generating Sphinx PDF documentation" VERBATIM
         DEPENDS ${DOTFILE_TARGETS} ${ERLANG_EDOC_TARGETS}
     )
 
@@ -186,7 +177,7 @@ foreach(LIBAVM_ERL_LIB ${ERLANG_LIBS})
 endforeach(LIBAVM_ERL_LIB)
 
 add_custom_target(doc #ALL
-    DEPENDS sphinx-html sphinx-pdf sphinx-epub
+    DEPENDS sphinx-html sphinx-epub
 )
 
 if (TARGET GitHub_CI_Publish_Docs)
@@ -196,14 +187,6 @@ if (TARGET GitHub_CI_Publish_Docs)
         OUTPUT /home/runner/work/AtomVM/AtomVM/www/doc
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Prepare publish directory structure." VERBATIM
-    )
-
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/pdf)
-    add_custom_command(TARGET sphinx-pdf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/pdf/AtomVM-${DOC_TREE_VERSION}.pdf ${CMAKE_CURRENT_BINARY_DIR}/html/pdf/
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pdf
-        COMMENT "Copying pdf to download location" VERBATIM
-        DEPENDS $ENV{DOC_TREE_VERSION}
     )
 
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/epub)
