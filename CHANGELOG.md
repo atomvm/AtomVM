@@ -52,7 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:module_loaded/1`
 - Added `binary:replace/3`, `binary:replace/4`
 - Added `binary:match/2` and `binary:match/3`
-- Added `supervisor:which_children/1`
 
 ### Changed
 
