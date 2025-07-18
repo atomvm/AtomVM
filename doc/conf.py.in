@@ -238,6 +238,6 @@ today_fmt = "%B %d, %Y"
 
 # -- Options for EPUB output -------------------------------------------------
 
-epub_tocdepth = 3
+epub_tocdepth = 2
 epub_show_urls = 'no'
 epub_basename = project+ '-' +download_version

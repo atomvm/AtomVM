@@ -88,8 +88,9 @@
     restart :: restart(),
     shutdown :: shutdown(),
     type :: child_type(),
-    modules :: modules()
+    modules = [] :: modules()
 }).
+
 -record(state, {restart_strategy :: strategy(), children = [] :: [#child{}]}).
 
 start_link(Module, Args) ->
