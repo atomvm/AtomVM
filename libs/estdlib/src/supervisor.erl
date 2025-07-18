@@ -53,7 +53,7 @@
     | {terminating, permanent | transient | temporary, gen_server:from()}.
 -type shutdown() :: brutal_kill | timeout().
 -type child_type() :: worker | supervisor.
-
+-type modules() :: [module()] | dynamic.
 -type strategy() :: one_for_all | one_for_one.
 -type sup_flags() ::
     #{
@@ -70,7 +70,7 @@
         restart => restart(),
         shutdown => shutdown(),
         type => child_type(),
-        modules => [module()] | dynamic
+        modules => modules()
     }
     | {
         Id :: any(),
@@ -78,7 +78,7 @@
         Restart :: restart(),
         Shutdown :: shutdown(),
         Type :: child_type(),
-        Modules :: [module()] | dynamic
+        Modules :: modules()
     }.
 
 -record(child, {
@@ -87,8 +87,8 @@
     start :: {module(), atom(), [any()] | undefined},
     restart :: restart(),
     shutdown :: shutdown(),
-    type :: child_type,
-    modules = [] :: [module()] | dynamic
+    type :: child_type(),
+    modules :: modules()
 }).
 -record(state, {restart_strategy :: strategy(), children = [] :: [#child{}]}).
 

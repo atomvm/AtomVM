@@ -117,7 +117,7 @@ html_logo = '@CMAKE_CURRENT_SOURCE_DIR@/src/_static/avm_logo_banner.png'
 html_theme_options = {
     'logo_only': True,
     'style_external_links': True,
-    'display_version': True,
+    'version_selector': True,
     'includehidden': False
 }
 
