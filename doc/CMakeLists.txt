@@ -186,7 +186,7 @@ foreach(LIBAVM_ERL_LIB ${ERLANG_LIBS})
 endforeach(LIBAVM_ERL_LIB)
 
 add_custom_target(doc #ALL
-    DEPENDS sphinx-html sphinx-pdf sphinx-epub
+    DEPENDS sphinx-html
 )
 
 if (TARGET GitHub_CI_Publish_Docs)
@@ -196,22 +196,6 @@ if (TARGET GitHub_CI_Publish_Docs)
         OUTPUT /home/runner/work/AtomVM/AtomVM/www/doc
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         COMMENT "Prepare publish directory structure." VERBATIM
-    )
-
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/pdf)
-    add_custom_command(TARGET sphinx-pdf POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/pdf/AtomVM-${DOC_TREE_VERSION}.pdf ${CMAKE_CURRENT_BINARY_DIR}/html/pdf/
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/pdf
-        COMMENT "Copying pdf to download location" VERBATIM
-        DEPENDS $ENV{DOC_TREE_VERSION}
-    )
-
-    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html/epub)
-    add_custom_command(TARGET sphinx-epub POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/epub/AtomVM-${DOC_TREE_VERSION}.epub ${CMAKE_CURRENT_BINARY_DIR}/html/epub/
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/epub
-        COMMENT "Copying epub to download location." VERBATIM
-        DEPENDS $ENV{DOC_TREE_VERSION}
     )
 
     add_custom_command(TARGET sphinx-html POST_BUILD
