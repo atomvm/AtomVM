@@ -4590,18 +4590,6 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    int slots = term_to_int(slots_term);
-
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    x_regs[live] = src;
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    src = x_regs[live];
-                #endif
-
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4615,6 +4603,16 @@ wait_timeout_trap_handler:
                         WRITE_REGISTER(dreg, src);
                         pc = mod->labels[fail];
                     } else {
+                        int slots = term_to_int(slots_term);
+
+                        TRIM_LIVE_REGS(live);
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                        x_regs[live] = src;
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
+
                         term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
 
                         WRITE_REGISTER(dreg, match_state);
@@ -4640,17 +4638,17 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    TRIM_LIVE_REGS(live);
-                    x_regs[live] = src;
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    src = x_regs[live];
                     TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         pc = mod->labels[fail];
                     } else {
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                        TRIM_LIVE_REGS(live);
+                        x_regs[live] = src;
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER_GC_SAFE(dreg, match_state);
@@ -6381,15 +6379,6 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRIM_LIVE_REGS(live);
-                    x_regs[live] = src;
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    src = x_regs[live];
-                #endif
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -6406,6 +6395,14 @@ wait_timeout_trap_handler:
                         pc = mod->labels[fail_label];
                     } else {
                         assert(term_is_binary(src) || term_is_match_state(src));
+
+                        TRIM_LIVE_REGS(live);
+                        x_regs[live] = src;
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER(dreg, match_state);
