@@ -33,7 +33,7 @@
 ).
 
 compile_minimal_x86_64_test() ->
-    Stream0 = jit_stream_binary:new(),
+    Stream0 = jit_stream_binary:new(0),
     <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_0,
     Stream1 = jit_stream_binary:append(
         Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
@@ -42,7 +42,7 @@ compile_minimal_x86_64_test() ->
     {_LabelsCount, Stream3} = jit:compile(
         ?CODE_CHUNK_0, fun(_) -> undefined end, fun(_) -> undefined end, jit_x86_64, Stream2
     ),
-    Stream4 = jit_x86_64:stream(Stream3),
+    {Stream4, _} = jit_x86_64:stream(Stream3),
     <<16:32, LabelsCount:32, ?JIT_FORMAT_VERSION:16, 1:16, ?JIT_ARCH_X86_64:16, ?JIT_VARIANT_PIC:16,
         0:32, Code/binary>> = Stream4,
     {JumpTable, _} = split_binary(Code, (LabelsCount + 1) * 5),

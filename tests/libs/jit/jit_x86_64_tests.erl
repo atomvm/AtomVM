@@ -35,7 +35,7 @@
 % x86_64-elf-objdump -b binary -D dump.bin -M x86-64 -mi386
 
 call_primitive_0_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, rax} = ?BACKEND:call_primitive(State0, 0, [ctx, jit_state]),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -52,7 +52,7 @@ call_primitive_0_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_primitive_1_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, rax} = ?BACKEND:call_primitive(State0, 1, [ctx, jit_state]),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -69,7 +69,7 @@ call_primitive_1_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_primitive_2_args_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, rax} = ?BACKEND:call_primitive(State0, 2, [ctx, 42, 43, 44]),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -89,7 +89,7 @@ call_primitive_2_args_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_primitive_extended_regs_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, RegA} = ?BACKEND:call_primitive(
         State0, ?PRIM_EXTENDED_REGISTER_PTR, [ctx, 19]
     ),
@@ -164,7 +164,7 @@ call_primitive_extended_regs_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_only_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, -1]),
     Stream = ?BACKEND:stream(State2),
@@ -185,7 +185,7 @@ call_ext_only_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_last_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, 10]),
     Stream = ?BACKEND:stream(State2),
@@ -206,7 +206,7 @@ call_ext_last_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_primitive_last_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:call_primitive_last(State0, 0, [ctx, jit_state, 42]),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -218,7 +218,7 @@ call_primitive_last_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 move_to_cp_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:move_to_cp(State0, {y_reg, 0}),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -230,7 +230,7 @@ move_to_cp_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 increment_sp_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:increment_sp(State0, 7),
     Stream = ?BACKEND:stream(State1),
     Dump =
@@ -242,7 +242,7 @@ increment_sp_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_only_or_schedule_next_and_label_relocation_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 2),
     Offset1 = ?BACKEND:offset(State1),
     State2 = ?BACKEND:call_only_or_schedule_next(State1, 2),
@@ -273,7 +273,7 @@ call_only_or_schedule_next_and_label_relocation_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_bif_with_large_literal_integer_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, FuncPtr} = ?BACKEND:call_primitive(State0, 8, [jit_state, 2]),
     {State2, ArgReg} = ?BACKEND:call_primitive(State1, 15, [ctx, 9208452466117618637]),
     {State3, ResultReg} = ?BACKEND:call_func_ptr(State2, {free, FuncPtr}, [
@@ -334,7 +334,7 @@ call_bif_with_large_literal_integer_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 get_list_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
     State2 = ?BACKEND:and_(State1, Reg, -4),
     State3 = ?BACKEND:move_array_element(State2, Reg, 1, {y_reg, 1}),
@@ -355,7 +355,7 @@ get_list_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_integer_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
     Arg1 = {x_reg, 0},
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
@@ -404,7 +404,7 @@ is_integer_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
     State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
@@ -429,7 +429,7 @@ is_boolean_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     State2 = ?BACKEND:call_primitive_with_cp(State1, 4, [ctx, jit_state, 2, 5, -1]),
     ?BACKEND:assert_all_native_free(State2),
@@ -456,7 +456,7 @@ call_ext_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_fun_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new()),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     FuncReg = {x_reg, 0},
     ArgsCount = 0,
@@ -533,7 +533,7 @@ move_to_vm_register_test0(State, Source, Dest, Dump) ->
 move_to_vm_register_test_() ->
     {setup,
         fun() ->
-            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
         end,
         fun(State0) ->
             [
@@ -665,7 +665,7 @@ move_array_element_test0(State, Reg, Index, Dest, Dump) ->
 move_array_element_test_() ->
     {setup,
         fun() ->
-            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
         end,
         fun(State0) ->
             [
@@ -718,7 +718,7 @@ move_array_element_test_() ->
 get_array_element_test_() ->
     {setup,
         fun() ->
-            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
         end,
         fun(State0) ->
             [
@@ -738,7 +738,7 @@ get_array_element_test_() ->
 move_to_array_element_test_() ->
     {setup,
         fun() ->
-            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new())
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
         end,
         fun(State0) ->
             [
