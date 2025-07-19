@@ -45,8 +45,6 @@
 #define ATOMVM_MAP_JIT 0
 #endif
 
-#define JIT_STREAM_MMAP_SIZE (1024 * 1024 * 1024)
-
 static ErlNifResourceType *jit_stream_mmap_resource_type;
 static void jit_stream_mmap_dtor(ErlNifEnv *caller_env, void *obj);
 
@@ -65,14 +63,16 @@ struct JITStreamMMap
 static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-    UNUSED(argv);
+    VALIDATE_VALUE(argv[0], term_is_integer);
+
+    size_t size = term_to_int(argv[0]);
 
     int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | ATOMVM_MAP_JIT;
     int fd = -1;
     int offset = 0;
 
-    uint8_t *addr = (uint8_t *) mmap(0, JIT_STREAM_MMAP_SIZE, prot, flags, fd, offset);
+    uint8_t *addr = (uint8_t *) mmap(0, size, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -84,15 +84,15 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     }
     js->stream_base = addr;
     js->stream_offset = 0;
-    js->stream_size = JIT_STREAM_MMAP_SIZE;
+    js->stream_size = size;
 
 #if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
     pthread_jit_write_protect_np(0);
 #endif
 #if defined(__APPLE__)
-    sys_icache_invalidate(addr, JIT_STREAM_MMAP_SIZE);
+    sys_icache_invalidate(addr, size);
 #elif defined(__GNUC__)
-    __builtin___clear_cache(addr, addr + JIT_STREAM_MMAP_SIZE);
+    __builtin___clear_cache(addr, addr + size);
 #endif
 
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
@@ -265,7 +265,7 @@ const struct Nif *jit_stream_mmap_get_nif(const char *nifname)
     }
     if (strncmp("jit_stream_mmap:", nifname, 16) == 0) {
         const char *rest = nifname + 16;
-        if (strcmp("new/0", rest) == 0) {
+        if (strcmp("new/1", rest) == 0) {
             return &jit_stream_mmap_new_nif;
         }
         if (strcmp("offset/1", rest) == 0) {

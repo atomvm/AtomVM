@@ -154,7 +154,7 @@ load(Module) ->
                         LiteralResolver = fun(Index) ->
                             code_server:literal_resolver(Module, Index)
                         end,
-                        Stream0 = jit:stream(),
+                        Stream0 = jit:stream(jit_mmap_size(byte_size(Code))),
                         {BackendModule, BackendState0} = jit:backend(Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
                             Code, AtomResolver, LiteralResolver, BackendModule, BackendState0
@@ -162,7 +162,9 @@ load(Module) ->
                         Stream1 = BackendModule:stream(BackendState1),
                         code_server:set_native_code(Module, LabelsCount, Stream1),
                         End = erlang:system_time(millisecond),
-                        io:format("~B ms\n", [End - Start])
+                        io:format("~B ms (bytecode: ~B bytes, native code: ~B bytes)\n", [
+                            End - Start, byte_size(Code), BackendModule:offset(BackendState1)
+                        ])
                     catch
                         T:V:S ->
                             io:format(
@@ -181,3 +183,6 @@ load(Module) ->
         emu ->
             ok
     end.
+
+jit_mmap_size(Size) ->
+    Size * 20.

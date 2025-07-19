@@ -21,7 +21,7 @@
 -module(jit).
 
 -export([
-    stream/0,
+    stream/1,
     backend/1,
     beam_chunk_header/3,
     compile/5
@@ -3494,11 +3494,12 @@ stream_module() ->
     erlang:nif_error(undefined).
 
 %% @doc Return a new stream for this platform
+%% @param MaxSize estimation of the maximum size of the stream
 %% @return A tuple with the stream module and the stream resource for this platform
--spec stream() -> {module(), stream()}.
-stream() ->
+-spec stream(MaxSize :: pos_integer()) -> {module(), stream()}.
+stream(MaxSize) ->
     StreamModule = ?MODULE:stream_module(),
-    {StreamModule, StreamModule:new()}.
+    {StreamModule, StreamModule:new(MaxSize)}.
 
 %% @doc Get the backend module
 %% @return The backend module for jit on this platform

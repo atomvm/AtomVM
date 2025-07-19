@@ -55,7 +55,7 @@ compile(Target, Dir, Path) ->
         Literals = parse_literals_chunk(LiteralsChunk),
         LiteralResolver = fun(Index) -> lists:nth(Index + 1, Literals) end,
 
-        Stream0 = jit_stream_binary:new(),
+        Stream0 = jit_stream_binary:new(0),
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
             CodeChunk,
         Stream1 = jit_stream_binary:append(
