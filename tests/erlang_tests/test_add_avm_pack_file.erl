@@ -23,9 +23,10 @@
 -export([start/0]).
 
 start() ->
-    AVM = case erlang:system_info(emu_flavor) of
-        emu -> "code_load/code_load_pack.avm";
-        jit -> "../code_load/code_load_pack-x86_64.avm"
-    end,
+    AVM =
+        case erlang:system_info(emu_flavor) of
+            emu -> "code_load/code_load_pack.avm";
+            jit -> "../code_load/code_load_pack-x86_64.avm"
+        end,
     erlang:display(atomvm:add_avm_pack_file(AVM, [])),
     export_test_module:exported_func(4).
