@@ -77,8 +77,8 @@ macro(pack_precompiled_archive avm_name)
 
             foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
                 add_custom_command(
-                    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/x86_64/${module_name}.beam
-                    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/x86_64/
+                    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${arch}/${module_name}.beam
+                    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${arch}/
                         && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${arch} ${CMAKE_CURRENT_BINARY_DIR}/beams/${arch}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
                     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam ${jit_compiler_modules}
                     COMMENT "Compiling ${module_name}.beam to ${arch}"
