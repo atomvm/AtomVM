@@ -1385,7 +1385,11 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
         new_ctx->saved_ip = module_get_native_entry_point(fun_module, label);
     } else {
 #endif
-        new_ctx->saved_ip = fun_module->labels[label];
+        // Emu case
+        // new_ctx->saved_ip = fun_module->labels[label];
+        if (UNLIKELY(jit_trap_and_load(new_ctx, fun_module, label) != TRAP_AND_LOAD_OK)) {
+            mailbox_send_term_signal(new_ctx, KillSignal, UNDEF_ATOM);
+        }
 #ifndef AVM_NO_JIT
     }
 #endif
@@ -1430,7 +1434,11 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         new_ctx->saved_ip = module_get_native_entry_point(found_module, label);
     } else {
 #endif
-        new_ctx->saved_ip = found_module->labels[label];
+        // Emu case
+        // new_ctx->saved_ip = found_module->labels[label];
+        if (UNLIKELY(jit_trap_and_load(new_ctx, found_module, label) != TRAP_AND_LOAD_OK)) {
+            return UNDEFINED_ATOM;
+        }
 #ifndef AVM_NO_JIT
     }
 #endif
@@ -5568,6 +5576,7 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
 
     term module_name = argv[0];
     Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
@@ -5575,14 +5584,14 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    ModuleNativeEntryPoint entry_point = jit_stream_entry_point(ctx, argv[1]);
+    ModuleNativeEntryPoint entry_point = jit_stream_entry_point(ctx, argv[2]);
     if (IS_NULL_PTR(entry_point)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
     SMP_MODULE_LOCK(mod);
     if (mod->native_code == NULL) {
-        mod->native_code = entry_point;
+        module_set_native_code(mod, term_to_int(argv[1]), entry_point);
     }
     SMP_MODULE_UNLOCK(mod);
 
