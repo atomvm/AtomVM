@@ -460,6 +460,15 @@ void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off,
  */
 uint32_t module_label_code_offset(Module *mod, int label);
 
+/**
+ * @brief set native code for given module, typically after it is jit-compiled
+ *
+ * @param mod the module to set native code for
+ * @param labels_count number of labels
+ * @param entry_point the native entry point
+ */
+void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point);
+
 #ifdef __cplusplus
 }
 #endif
