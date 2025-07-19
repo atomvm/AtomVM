@@ -1061,9 +1061,11 @@ uint32_t module_label_code_offset(Module *mod, int label)
 #endif
 }
 
+#ifndef AVM_NO_JIT
 void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point)
 {
     mod->native_code = entry_point;
     // Extra function is OP_INT_CALL_END
     mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
 }
+#endif
