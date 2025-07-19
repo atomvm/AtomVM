@@ -134,6 +134,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return nif;
     }
     nif = otp_ssl_nif_get_nif(nifname);
+    if (nif) {
+        return nif;
+    }
 #endif
 #ifndef AVM_NO_JIT
     nif = jit_stream_mmap_get_nif(nifname);
