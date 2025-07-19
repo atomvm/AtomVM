@@ -43,7 +43,7 @@ do_main(Argv) ->
                     try
                         Config = load_config(maps:get(config, Opts, "mkimage.config")),
                         BuildDir = get_build_dir(Opts, RootDir),
-                        BootFile = BuildDir ++ "/libs/esp32boot/esp32boot.avm",
+                        BootFile = maps:get(boot, Opts, BuildDir ++ "/libs/esp32boot/esp32boot.avm"),
                         mkimage(
                             RootDir,
                             BuildDir,

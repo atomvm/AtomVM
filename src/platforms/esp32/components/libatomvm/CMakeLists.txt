@@ -35,3 +35,9 @@ target_link_libraries(${COMPONENT_LIB}
     INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
+
+include(../../GetBootAVM.cmake)
+partition_table_get_partition_info(boot_offset "--partition-name boot.avm" "offset")
+
+message(NOTICE "-- Found atomvmlib esp32boot flavor: ${BOOT_LIBS}")
+esptool_py_flash_target_image(flash esp32boot ${boot_offset} ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../build/libs/esp32boot/${BOOT_LIBS}”)
