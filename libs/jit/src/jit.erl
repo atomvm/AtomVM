@@ -1265,6 +1265,25 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt15 = MMod:move_to_array_element(MSt14, BSOffsetReg, MatchStateRegPtr, 2),
     MSt16 = MMod:free_native_registers(MSt15, [BSOffsetReg, MatchStateRegPtr]),
     first_pass(Rest5, MMod, MSt16, State0);
+% 121
+first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {Fail, Rest1} = decode_label(Rest0),
+    {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {Bits, Rest3} = decode_literal(Rest2),
+    ?TRACE("OP_BS_TEST_TAIL2 ~p, ~p, ~p\n", [Fail, Src, Bits]),
+    {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
+    {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, {free, SrcReg}),
+    {MSt4, BSBinaryReg} = MMod:get_array_element(MSt3, MatchStateRegPtr, 1),
+    {MSt5, BSOffsetReg} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
+    MSt6 = MMod:free_native_registers(MSt5, [MatchStateRegPtr]),
+    MSt7 = MMod:add(MSt6, BSOffsetReg, Bits),
+    {MSt8, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt7),
+    MSt9 = MMod:shift_left(MSt8, BSBinarySize, 3),
+    MSt10 = cond_jump_to_label({{free, BSBinarySize}, '!=', BSOffsetReg}, Fail, MMod, MSt9),
+    MSt11 = MMod:free_native_registers(MSt10, [BSOffsetReg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt11),
+    first_pass(Rest3, MMod, MSt11, State0);
 % 124
 first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
