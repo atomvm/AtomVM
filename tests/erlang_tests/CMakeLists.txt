@@ -23,30 +23,34 @@ project (erlang_tests)
 
 macro(jit_precompile module_name)
     if(NOT AVM_DISABLE_JIT)
-        foreach(arch "x86_64")
-            set(jit_compiler_modules
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}.beam
-                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}_asm.beam
-            )
-            add_custom_command(
-                OUTPUT ${arch}/${module_name}.beam
-                COMMAND mkdir -p ${arch}
-                    && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${arch} ${arch}/ ${module_name}.beam
-                DEPENDS ${module_name}.beam ${jit_compiler_modules}
-                COMMENT "Compiling ${module_name}.beam to ${arch}"
-                VERBATIM
-            )
-        endforeach()
+        set(jit_compiler_modules
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
+        )
+        add_custom_command(
+            OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
+            COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
+                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+            DEPENDS ${module_name}.beam ${jit_compiler_modules} jit
+            COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
+            VERBATIM
+        )
     endif()
 endmacro()
 
 function(compile_erlang module_name)
+    if(AVM_DISABLE_JIT)
+        set(erlc_define -DAVM_DISABLE_JIT)
+    else()
+        set(erlc_define "-DAVM_JIT_TARGET_ARCH='${AVM_JIT_TARGET_ARCH}'")
+    endif()
+
     add_custom_command(
         OUTPUT ${module_name}.beam
-        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        COMMAND erlc ${erlc_define} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         COMMENT "Compiling ${module_name}.erl"
     )
@@ -1100,12 +1104,9 @@ set(erlang_test_beams
 )
 
 if(NOT AVM_DISABLE_JIT)
-    set(erlang_test_beams_emu ${erlang_test_beams})
-    foreach(arch "x86_64")
-        set(erlang_test_beams_${arch} ${erlang_test_beams_emu})
-        list(TRANSFORM erlang_test_beams_${arch} PREPEND ${arch}/)
-        list(APPEND erlang_test_beams ${erlang_test_beams_${arch}})
-    endforeach()
+    set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
+    list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
+    list(APPEND erlang_test_beams ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
 endif()
 
 add_custom_target(erlang_test_modules DEPENDS
