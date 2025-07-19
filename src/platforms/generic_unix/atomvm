@@ -29,4 +29,4 @@ then
     exit 1
 fi
 
-exec "${avm_lib}/atomvm/AtomVM" $@ "${avm_lib}/atomvm/atomvmlib.avm"
+exec "${avm_lib}/atomvm/AtomVM" "${avm_lib}/atomvm/atomvmlib@precompiled_suffix@.avm" $@
