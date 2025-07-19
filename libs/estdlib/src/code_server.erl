@@ -72,7 +72,6 @@ handle_cast(_Message, State) ->
 
 %% @hidden
 handle_info({load, Module, TrappedPid}, State) ->
-    io:format("handle_info -- Module = ~p, TrappedPid = ~p\n", [Module, TrappedPid]),
     LoadResult =
         case code_server:is_loaded(Module) of
             true -> ok;
