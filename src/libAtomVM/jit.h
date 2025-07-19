@@ -143,6 +143,12 @@ typedef struct ModuleNativeInterface ModuleNativeInterface;
 
 extern const ModuleNativeInterface module_native_interface;
 
+enum TrapAndLoadResult
+{
+    TRAP_AND_LOAD_OK,
+    TRAP_AND_LOAD_CODE_SERVER_NOT_FOUND
+};
+
 #define JIT_FORMAT_VERSION 1
 
 #define JIT_ARCH_X86_64 1
@@ -169,6 +175,15 @@ extern const ModuleNativeInterface module_native_interface;
  * @returns the pointer to the first function
  */
 ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream);
+
+/**
+ * @brief Trap a process and load module, process shall be resumed at given label.
+ *
+ * @param ctx the process to trap
+ * @param mod the module to load
+ * @param label the label to resume the process to
+ */
+enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t label);
 
 #ifdef __cplusplus
 }

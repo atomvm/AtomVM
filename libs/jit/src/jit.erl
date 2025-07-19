@@ -137,7 +137,8 @@ compile(
         literal_resolver = LiteralResolver
     },
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
-    second_pass(MMod, MSt2, State1);
+    MSt3 = second_pass(MMod, MSt2, State1),
+    {LabelsCount, MSt3};
 compile(
     <<16:32, 0:32, OpcodeMax:32, _LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>>,
     _AtomResolver,
@@ -3093,6 +3094,7 @@ memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_tu
     {MSt4, ExtraRoot}.
 
 second_pass(MMod, MSt0, #state{labels = Labels0, line_offsets = Lines}) ->
+    ?TRACE("SECOND PASS -- ~B lines, ~B labels\n", [length(Lines), length(Labels0)]),
     % Add extra function that returns labels and line information
     Offset = MMod:offset(MSt0),
     Labels1 = [{0, Offset} | Labels0],

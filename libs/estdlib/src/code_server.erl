@@ -38,7 +38,7 @@
     code_chunk/1,
     atom_resolver/2,
     literal_resolver/2,
-    set_native_code/2
+    set_native_code/3
 ]).
 
 % gen_server
@@ -72,7 +72,6 @@ handle_cast(_Message, State) ->
 
 %% @hidden
 handle_info({load, Module, TrappedPid}, State) ->
-    io:format("handle_info -- Module = ~p, TrappedPid = ~p\n", [Module, TrappedPid]),
     LoadResult =
         case code_server:is_loaded(Module) of
             true -> ok;
@@ -130,36 +129,54 @@ literal_resolver(_Module, _Index) ->
 %% @doc Associate a native code stream with a module
 %% @return ok
 %% @param Module module to set the native code of
+%% @param LabelsCount number of labels in the module
 %% @param Stream resource describing the stream containing native code
--spec set_native_code(Module :: module(), Stream :: jit:stream()) -> ok.
-set_native_code(_Module, _Stream) ->
+-spec set_native_code(Module :: module(), LabelsCount :: pos_integer(), Stream :: jit:stream()) ->
+    ok.
+set_native_code(_Module, _LabelsCount, _Stream) ->
     erlang:nif_error(undefined).
 
 %% @doc Load a given module, performing jit compilation.
 %% @return ok
 %% @param Module module to load
--spec load(module()) -> ok.
+-spec load(module()) -> ok | undef.
 load(Module) ->
     case erlang:system_info(emu_flavor) of
         jit ->
-            try
-                Code = code_server:code_chunk(Module),
-                AtomResolver = fun(Index) -> code_server:atom_resolver(Module, Index) end,
-                LiteralResolver = fun(Index) -> code_server:literal_resolver(Module, Index) end,
-                io:format("First atom = ~p\n", [AtomResolver(0)]),
-                Stream0 = jit:stream(),
-                io:format("Stream0 = ~p\n", [Stream0]),
-                {BackendModule, BackendState0} = jit:backend(Stream0),
-                io:format("BackendModule = ~p\n", [BackendModule]),
-                BackendState1 = jit:compile(
-                    Code, AtomResolver, LiteralResolver, BackendModule, BackendState0
-                ),
-                Stream1 = BackendModule:stream(BackendState1),
-                code_server:set_native_code(Module, Stream1)
-            catch
-                T:V:S ->
-                    io:format("===========================================================\nJust in time compilation of module ~p failed.\n~p:~p\n~p\n===========================================================\n", [Module, T, V, S]),
-                    undef
+            % atomvm_heap_growth, fibonacci divides compilation time by two
+            {Pid, Ref} = spawn_opt(
+                fun() ->
+                    try
+                        io:format("Compilation of ~s...", [Module]),
+                        Start = erlang:system_time(millisecond),
+                        Code = code_server:code_chunk(Module),
+                        AtomResolver = fun(Index) -> code_server:atom_resolver(Module, Index) end,
+                        LiteralResolver = fun(Index) ->
+                            code_server:literal_resolver(Module, Index)
+                        end,
+                        Stream0 = jit:stream(),
+                        {BackendModule, BackendState0} = jit:backend(Stream0),
+                        {LabelsCount, BackendState1} = jit:compile(
+                            Code, AtomResolver, LiteralResolver, BackendModule, BackendState0
+                        ),
+                        Stream1 = BackendModule:stream(BackendState1),
+                        code_server:set_native_code(Module, LabelsCount, Stream1),
+                        End = erlang:system_time(millisecond),
+                        io:format("~B ms\n", [End - Start])
+                    catch
+                        T:V:S ->
+                            io:format(
+                                "===========================================================\nJust in time compilation of module ~p failed.\n~p:~p\n~p\n===========================================================\n",
+                                [Module, T, V, S]
+                            ),
+                            exit(undef)
+                    end
+                end,
+                [monitor, {atomvm_heap_growth, fibonacci}]
+            ),
+            receive
+                {'DOWN', Ref, process, Pid, normal} -> ok;
+                {'DOWN', Ref, process, Pid, undef} -> undef
             end;
         emu ->
             ok
