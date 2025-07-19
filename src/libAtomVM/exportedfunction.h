@@ -113,7 +113,8 @@ struct ModuleFunction
 {
     struct ExportedFunction base;
     Module *target;
-    union {
+    union
+    {
         ModuleNativeEntryPoint entry_point;
         int label;
     };

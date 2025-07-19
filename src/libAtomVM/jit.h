@@ -143,7 +143,8 @@ typedef struct ModuleNativeInterface ModuleNativeInterface;
 
 extern const ModuleNativeInterface module_native_interface;
 
-enum TrapAndLoadResult {
+enum TrapAndLoadResult
+{
     TRAP_AND_LOAD_OK,
     TRAP_AND_LOAD_CODE_SERVER_NOT_FOUND
 };
