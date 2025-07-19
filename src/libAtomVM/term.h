@@ -52,7 +52,7 @@ extern "C" {
 #define TERM_PRIMARY_CP 0x0
 #define TERM_PRIMARY_LIST 0x1
 #define TERM_PRIMARY_BOXED 0x2
-// #define TERM_PRIMARY_IMMED 0x3
+#define TERM_PRIMARY_IMMED 0x3
 
 #define TERM_BOXED_VALUE_TAG _Pragma ("TERM_BOXED_VALUE_TAG is deprecated, use TERM_PRIMARY_BOXED instead") TERM_PRIMARY_BOXED
 
