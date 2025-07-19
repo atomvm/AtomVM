@@ -601,7 +601,9 @@ join_1(_Sep, []) ->
 %%-----------------------------------------------------------------------------
 -spec seq(From :: integer(), To :: integer()) -> list().
 seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =< To ->
-    seq_r(From, To, 1, []).
+    seq_r(From, To, 1, []);
+seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =:= To + 1 ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   From    from integer
@@ -623,6 +625,8 @@ seq(From, To, Incr) when
     error(badarg);
 seq(To, To, 0) ->
     [To];
+seq(From, To, Incr) when From =:= To + Incr ->
+    [];
 seq(From, To, Incr) ->
     Last = From + ((To - From) div Incr) * Incr,
     seq_r(From, Last, Incr, []).
