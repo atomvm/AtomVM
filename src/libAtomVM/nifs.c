@@ -174,6 +174,7 @@ static term nif_base64_decode_to_string(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
@@ -715,6 +716,13 @@ static const struct Nif code_ensure_loaded_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
 };
+
+static const struct Nif nif_error_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_nif_error
+};
+
 static const struct Nif lists_reverse_nif =
 {
     .base.type = NIFFunctionType,
@@ -4593,6 +4601,14 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
     }
 
     return result;
+}
+
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    RAISE_ERROR(UNDEF_ATOM);
 }
 
 static term nif_lists_reverse(Context *ctx, int argc, term argv[])
