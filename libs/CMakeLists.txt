@@ -52,12 +52,43 @@ pack_lib(atomvmlib ${ATOMVM_LIBS})
 
 if (Dialyzer_FOUND)
     add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/estdlib.avm PackBEAM
+        COMMAND
+            ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -l ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/estdlib.avm | sed -e 's|^|${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/beams/|g' > ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/eavmlib.avm PackBEAM
+        COMMAND
+            ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -l ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/eavmlib.avm | sed -e 's|^|${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/beams/|g' > ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/alisp.avm PackBEAM
+        COMMAND
+            ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -l ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/alisp.avm | sed -e 's|^|${CMAKE_CURRENT_BINARY_DIR}/alisp/src/beams/|g' > ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt
+    )
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/jit/src/jit.avm PackBEAM
+        COMMAND
+            ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -l ${CMAKE_CURRENT_BINARY_DIR}/jit/src/jit.avm | sed -e 's|^|${CMAKE_CURRENT_BINARY_DIR}/jit/src/beams/|g' | grep -v jit_precompile > ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
+    )
+    add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
-        DEPENDS atomvmlib
-        COMMAND dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
-            -r ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/beams
-            -r ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/beams
-            -r ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/beams
+        DEPENDS
+            ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/estdlib.avm
+            ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/eavmlib.avm
+            ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/alisp.avm
+            ${CMAKE_CURRENT_BINARY_DIR}/jit/src/jit.avm
+            ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt
+            ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt
+            ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt
+            ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
+        COMMAND
+            cat ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
+            |  xargs dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
     )
     add_custom_target(atomvmlib_plt
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
