@@ -33,6 +33,10 @@
     backend_module/0
 ]).
 
+-export_type([
+    stream/0
+]).
+
 -compile([warnings_as_errors]).
 
 -include_lib("jit.hrl").
