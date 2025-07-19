@@ -29,12 +29,15 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
-#include <libkern/OSCacheControl.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+
+#if defined(__APPLE__)
+#include <libkern/OSCacheControl.h>
+#endif
 
 #define JIT_STREAM_MMAP_SIZE (1024 * 1024 * 1024)
 
@@ -78,7 +81,12 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     js->stream_size = JIT_STREAM_MMAP_SIZE;
 
     pthread_jit_write_protect_np(0);
+#if defined(__APPLE__)
     sys_icache_invalidate(addr, JIT_STREAM_MMAP_SIZE);
+#elif defined(__GNUC__)
+    const uint8_t* end = start + JIT_STREAM_MMAP_SIZE;
+    __builtin___clear_cache(addr, end);
+#endif
 
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
     enif_release_resource(js); // decrement refcount after enif_alloc_resource
@@ -217,7 +225,12 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
     }
 
     pthread_jit_write_protect_np(1);
+#if defined(__APPLE__)
     sys_icache_invalidate(js_obj->stream_base, js_obj->stream_size);
+#elif defined(__GNUC__)
+    const uint8_t* end = js_obj->stream_base + js_obj->stream_size;
+    __builtin___clear_cache(addr, end);
+#endif
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
     js_obj->stream_base = NULL;
     return result;
