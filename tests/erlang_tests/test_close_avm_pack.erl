@@ -23,9 +23,13 @@
 -export([start/0]).
 
 -include("code_load/code_load_pack_data.hrl").
+-include("code_load/code_load_pack_data_x86_64.hrl").
 
 start() ->
-    Bin = ?CODE_LOAD_PACK_DATA,
+    Bin = case erlang:system_info(emu_flavor) of
+        emu -> ?CODE_LOAD_PACK_DATA;
+        jit -> ?CODE_LOAD_PACK_DATA_x86_64
+    end,
     _ = atomvm:add_avm_pack_binary(Bin, [{name, mypack}]),
     ok = atomvm:close_avm_pack(mypack, []),
     try export_test_module:exported_func(4) of
