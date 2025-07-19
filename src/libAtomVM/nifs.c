@@ -203,6 +203,7 @@ static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
 static term nif_jit_backend_module(Context *ctx, int argc, term argv[]);
 #endif
@@ -875,6 +876,12 @@ static const struct Nif module_loaded_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_module_loaded
+};
+
+static const struct Nif nif_error_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_nif_error
 };
 
 #ifndef AVM_NO_JIT
@@ -5628,6 +5635,14 @@ static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[])
     Module *module = globalcontext_get_module(ctx->global, module_name_ix);
 
     return module != NULL ? TRUE_ATOM : FALSE_ATOM;
+}
+
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    RAISE_ERROR(UNDEF_ATOM);
 }
 
 #ifndef AVM_NO_JIT

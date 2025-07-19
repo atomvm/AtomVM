@@ -138,6 +138,7 @@ erlang:dist_ctrl_get_data_notification/1, &dist_ctrl_get_data_notification_nif
 erlang:dist_ctrl_get_data/1, &dist_ctrl_get_data_nif
 erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
 erlang:module_loaded/1,&module_loaded_nif
+erlang:nif_error/1,&nif_error_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif
