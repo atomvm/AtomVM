@@ -21,6 +21,28 @@
 cmake_minimum_required (VERSION 3.13)
 project (erlang_tests)
 
+macro(jit_precompile module_name)
+    if(NOT AVM_DISABLE_JIT)
+        foreach(arch "x86_64")
+            set(jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${arch}_asm.beam
+            )
+            add_custom_command(
+                OUTPUT ${arch}/${module_name}.beam
+                COMMAND mkdir -p ${arch}
+                    && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${arch} ${arch}/ ${module_name}.beam
+                DEPENDS ${module_name}.beam ${jit_compiler_modules}
+                COMMENT "Compiling ${module_name}.beam to ${arch}"
+                VERBATIM
+            )
+        endforeach()
+    endif()
+endmacro()
+
 function(compile_erlang module_name)
     add_custom_command(
         OUTPUT ${module_name}.beam
@@ -28,6 +50,7 @@ function(compile_erlang module_name)
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         COMMENT "Compiling ${module_name}.erl"
     )
+    jit_precompile(${module_name})
 endfunction()
 
 function(compile_assembler module_name)
@@ -37,6 +60,7 @@ function(compile_assembler module_name)
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
         COMMENT "Compiling ${module_name}.S"
     )
+    jit_precompile(${module_name})
 endfunction()
 
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
@@ -567,9 +591,7 @@ else()
     set(OTP25_OR_GREATER_TESTS)
 endif()
 
-add_custom_target(erlang_test_modules DEPENDS
-    code_load_files
-
+set(erlang_test_beams
     add.beam
     fact.beam
     mutrec.beam
@@ -1075,4 +1097,19 @@ add_custom_target(erlang_test_modules DEPENDS
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
+)
+
+if(NOT AVM_DISABLE_JIT)
+    set(erlang_test_beams_emu ${erlang_test_beams})
+    foreach(arch "x86_64")
+        set(erlang_test_beams_${arch} ${erlang_test_beams_emu})
+        list(TRANSFORM erlang_test_beams_${arch} PREPEND ${arch}/)
+        list(APPEND erlang_test_beams ${erlang_test_beams_${arch}})
+    endforeach()
+endif()
+
+add_custom_target(erlang_test_modules DEPENDS
+    code_load_files
+
+    ${erlang_test_beams}
 )

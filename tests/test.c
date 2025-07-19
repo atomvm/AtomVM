@@ -687,6 +687,18 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
         perror("Error: ");
         return EXIT_FAILURE;
     }
+#ifndef AVM_NO_JIT
+    if (!beam) {
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+        if (chdir("x86_64") != 0) {
+            perror("Error: ");
+            return EXIT_FAILURE;
+        }
+#else
+#error Unknown JIT target
+#endif
+    }
+#endif
 
     int failed_tests = 0;
 
