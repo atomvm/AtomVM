@@ -52,7 +52,7 @@ endif()
 # JIT & execution of precompiled code
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     if (NOT AVM_DISABLE_JIT)
-        set(AVM_JIT_TARGET_ARCH ${CMAKE_SYSTEM_PROCESSOR})
+        set(AVM_JIT_TARGET_ARCH ${CMAKE_SYSTEM_PROCESSOR} CACHE STRING "Target architecture for JIT" FORCE)
     endif()
 else()
     if (NOT AVM_DISABLE_JIT)

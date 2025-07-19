@@ -113,10 +113,19 @@ macro(pack_precompiled_archive avm_name)
 endmacro()
 
 macro(pack_lib avm_name)
+    if(NOT AVM_DISABLE_JIT)
+        set(pack_lib_${avm_name}_jit_archives ${CMAKE_BINARY_DIR}/libs/jit/src/jit-${AVM_JIT_TARGET_ARCH}.avm)
+        set(pack_lib_${avm_name}_archive_targets jit)
+    endif()
 
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "exavmlib")
             set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        elseif(${archive_name} STREQUAL "estdlib")
+            if (NOT AVM_DISABLE_JIT)
+                set(pack_lib_${avm_name}_jit_archives ${pack_lib_${avm_name}_jit_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}-${AVM_JIT_TARGET_ARCH}.avm)
+            endif()
+            set(pack_lib_${avm_name}_emu_archives ${pack_lib_${avm_name}_emu_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         elseif(${archive_name} STREQUAL "gleam_avm")
             set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         else()
@@ -134,10 +143,19 @@ macro(pack_lib avm_name)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_archives}
-        COMMENT "Packing runnable ${avm_name}.avm"
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_emu_archives} ${pack_lib_${avm_name}_archives}
+        COMMENT "Packing lib ${avm_name}.avm"
         VERBATIM
     )
+    if(NOT AVM_DISABLE_JIT)
+        add_custom_command(
+            OUTPUT ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm
+            DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
+            COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
+            COMMENT "Packing lib ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm"
+            VERBATIM
+        )
+    endif()
     add_custom_command(
         OUTPUT ${avm_name}-pico.uf2
         DEPENDS ${avm_name}.avm UF2Tool
@@ -153,10 +171,14 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
+    set(target_deps ${avm_name}.avm ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
+    if(NOT AVM_DISABLE_JIT)
+        set(target_deps ${target_deps} ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm)
+    endif()
 
     add_custom_target(
         ${avm_name} ALL
-        DEPENDS ${avm_name}.avm ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2
+        DEPENDS ${target_deps}
     )
     if(TARGET ${avm_name}_main)
         add_dependencies(${avm_name} ${avm_name}_main)
@@ -230,7 +252,7 @@ macro(pack_test test_avm_name)
     if(AVM_DISABLE_JIT)
         set(precompiled_suffix "")
     else()
-        set(precompiled_suffix "-x86_64")
+        set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
         set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/jit/src/jit${precompiled_suffix}.avm)
         set(pack_test_${test_avm_name}_archive_targets ${pack_test_${test_avm_name}_archive_targets} jit)
     endif()
