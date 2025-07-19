@@ -101,3 +101,9 @@ install(
     FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.avm
     DESTINATION lib/atomvm
 )
+if(NOT AVM_DISABLE_JIT)
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib-${AVM_JIT_TARGET_ARCH}.avm
+    DESTINATION lib/atomvm/
+)
+endif()
