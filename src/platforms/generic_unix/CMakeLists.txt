@@ -39,6 +39,12 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     endif()
 endif()
 
+if(NOT AVM_DISABLE_JIT)
+include(DefineIfExists)
+define_if_function_exists(AtomVM pthread_jit_write_protect_np "pthread.h" PUBLIC HAVE_PTHREAD_JIT_WRITE_PROTECT_NP)
+define_if_symbol_exists(AtomVM MAP_JIT "sys/mman.h" PUBLIC HAVE_MAP_JIT)
+endif()
+
 add_subdirectory(lib)
 target_include_directories(AtomVM PUBLIC lib/)
 
