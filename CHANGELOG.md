@@ -74,10 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added `lists:keysort/2`
+- Added `lists:merge/2,3`
 
 ### Fixed
 
 - Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
+- Fixed a bug where `lists:seq/2` wouldn't return the empty list in valid cases.
+
+### Changed
+
+- lists sort function now use a stable merge sort implementation instead of quick sort
 
 ## [0.6.6] - 2025-06-23
 
