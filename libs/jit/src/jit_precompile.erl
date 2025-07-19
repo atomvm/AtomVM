@@ -63,7 +63,9 @@ compile(Target, Dir, Path) ->
         ),
         Backend = list_to_atom("jit_" ++ Target),
         Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
-        Stream3 = jit:compile(CodeChunk, AtomResolver, LiteralResolver, Backend, Stream2),
+        {LabelsCount, Stream3} = jit:compile(
+            CodeChunk, AtomResolver, LiteralResolver, Backend, Stream2
+        ),
         NativeCode = Backend:stream(Stream3),
         UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
         {ok, Binary} = beam_lib:build_module(UpdatedChunks),
