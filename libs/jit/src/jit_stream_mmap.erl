@@ -23,7 +23,7 @@
 % Stream implementation using mmap, suitable for generic_unix
 
 -export([
-    new/0,
+    new/1,
     offset/1,
     append/2,
     replace/3,
@@ -41,11 +41,12 @@
 
 %%-----------------------------------------------------------------------------
 %% @returns An empty binary
+%% @param   MaxSize maximum size of the stream
 %% @doc     Create a new stream, i.e. return an empty binary
 %% @end
 %%-----------------------------------------------------------------------------
--spec new() -> stream().
-new() ->
+-spec new(MaxSize :: pos_integer()) -> stream().
+new(_MaxSize) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
