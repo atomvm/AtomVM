@@ -100,11 +100,13 @@
 
 -type stream() :: any().
 
--define(TRACE(Fmt, Args), io:format(Fmt, Args)).
-%% -define(TRACE(Fmt, Args), ok).
+%%-define(TRACE(Fmt, Args), io:format(Fmt, Args)).
+-define(TRACE(Fmt, Args), ok).
 
--define(ASSERT_ALL_NATIVE_FREE(St), MMod:assert_all_native_free(St)).
--define(ASSERT(Expr), true = Expr).
+%%-define(ASSERT_ALL_NATIVE_FREE(St), MMod:assert_all_native_free(St)).
+%%-define(ASSERT(Expr), true = Expr).
+-define(ASSERT_ALL_NATIVE_FREE(St), ok).
+-define(ASSERT(Expr), ok).
 
 %%-----------------------------------------------------------------------------
 %% @param   LabelsCount number of labels
