@@ -23,9 +23,13 @@
 -export([start/0]).
 
 -include("code_load/export_test_module_data.hrl").
+-include("code_load/export_test_module_data_x86_64.hrl").
 
 start() ->
-    Bin = ?EXPORT_TEST_MODULE_DATA,
+    Bin = case erlang:system_info(emu_flavor) of
+        emu -> ?EXPORT_TEST_MODULE_DATA;
+        jit -> ?EXPORT_TEST_MODULE_DATA_x86_64
+    end,
     {error, _} = code:ensure_loaded(export_test_module),
     {module, export_test_module} = code:load_binary(
         export_test_module, "export_test_module.beam", Bin
