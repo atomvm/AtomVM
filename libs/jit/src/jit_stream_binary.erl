@@ -23,7 +23,7 @@
 % Stream implementation using plain binaries, fine on desktop with plenty of RAM.
 
 -export([
-    new/0,
+    new/1,
     offset/1,
     append/2,
     replace/3,
@@ -39,8 +39,8 @@
 %% @doc     Create a new stream, i.e. return an empty binary
 %% @end
 %%-----------------------------------------------------------------------------
--spec new() -> stream().
-new() ->
+-spec new(pos_integer()) -> stream().
+new(_MaxSize) ->
     <<>>.
 
 %%-----------------------------------------------------------------------------
