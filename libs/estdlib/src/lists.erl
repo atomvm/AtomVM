@@ -60,6 +60,7 @@
     join/2,
     seq/2, seq/3,
     sort/1, sort/2,
+    merge/2, merge/3,
     split/2,
     usort/1, usort/2,
     dropwhile/2,
@@ -622,7 +623,9 @@ join_1(_Sep, []) ->
 %%-----------------------------------------------------------------------------
 -spec seq(From :: integer(), To :: integer()) -> list().
 seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =< To ->
-    seq_r(From, To, 1, []).
+    seq_r(From, To, 1, []);
+seq(From, To) when is_integer(From) andalso is_integer(To) andalso From =:= To + 1 ->
+    [].
 
 %%-----------------------------------------------------------------------------
 %% @param   From    from integer
@@ -644,6 +647,8 @@ seq(From, To, Incr) when
     error(badarg);
 seq(To, To, 0) ->
     [To];
+seq(From, To, Incr) when From =:= To + Incr ->
+    [];
 seq(From, To, Incr) ->
     Last = From + ((To - From) div Incr) * Incr,
     seq_r(From, Last, Incr, []).
@@ -672,8 +677,23 @@ sort(List) when is_list(List) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sort(Fun :: fun((T, T) -> boolean()), List :: [T]) -> [T].
-sort(Fun, List) when is_function(Fun), is_list(List) ->
-    quick_sort(Fun, List).
+sort(Fun, List) when is_function(Fun, 2), is_list(List) ->
+    merge_sort(Fun, List).
+
+merge_sort(_Fun, []) ->
+    [];
+merge_sort(_Fun, [_] = L) ->
+    L;
+merge_sort(Fun, List) ->
+    {H1, H2} = merge_sort_split(List, List, []),
+    merge(Fun, merge_sort(Fun, H1), merge_sort(Fun, H2), []).
+
+merge_sort_split([], Half1, Half2) ->
+    {lists:reverse(Half2), Half1};
+merge_sort_split([_], Half1, Half2) ->
+    {lists:reverse(Half2), Half1};
+merge_sort_split([_, _ | T], [H | Half1T], Half2) ->
+    merge_sort_split(T, Half1T, [H | Half2]).
 
 %%-----------------------------------------------------------------------------
 %% @param   N elements non negative Integer
@@ -708,14 +728,39 @@ split(N, [H | T], R) ->
 split(_, [], _) ->
     badarg.
 
-%% Attribution: https://erlang.org/doc/programming_examples/list_comprehensions.html#quick-sort
-%% @private
-quick_sort(Fun, [Pivot | T]) ->
-    quick_sort(Fun, [X || X <- T, Fun(X, Pivot)]) ++
-        [Pivot] ++
-        quick_sort(Fun, [X || X <- T, not Fun(X, Pivot)]);
-quick_sort(_Fun, []) ->
-    [].
+%%-----------------------------------------------------------------------------
+%% @param   List1 first list to merge, previously sorted
+%% @param   List2 second list to merge, previously sorted
+%% @returns Merged list of List1 and List2
+%% @doc     Returns a list formed by merging List1 and List2, following natural
+%%          order. If elements compare equal, element from List1 is picked first
+%% @end
+%%-----------------------------------------------------------------------------
+merge(List1, List2) ->
+    merge(fun lt/2, List1, List2, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun ordering function
+%% @param   List1 first list to merge, previously sorted
+%% @param   List2 second list to merge, previously sorted
+%% @returns Merged list of List1 and List2
+%% @doc     Returns a list formed by merging List1 and List2, following Fun
+%%          order. If elements compare equal, element from List1 is picked first
+%% @end
+%%-----------------------------------------------------------------------------
+merge(Fun, List1, List2) ->
+    merge(Fun, List1, List2, []).
+
+merge(_Fun, [], Right, Acc) ->
+    lists:reverse(Acc, Right);
+merge(_Fun, Left, [], Acc) ->
+    lists:reverse(Acc, Left);
+merge(Fun, [A | As], [B | Bs], Acc) ->
+    % keep sort stable, if B < A, put it first, otherwise keep A first
+    case Fun(B, A) of
+        true -> merge(Fun, [A | As], Bs, [B | Acc]);
+        false -> merge(Fun, As, [B | Bs], [A | Acc])
+    end.
 
 %% @private
 lt(A, B) -> A < B.

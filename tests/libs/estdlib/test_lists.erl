@@ -133,6 +133,34 @@ test_keysort() ->
     ?ASSERT_MATCH(lists:keysort(2, [{foo, 2}, {bar, 1}]), [{bar, 1}, {foo, 2}]),
     ?ASSERT_ERROR(lists:keysort(1, [1, 2])),
     ?ASSERT_ERROR(lists:keysort(3, [{1, bar}, {2, foo}])),
+
+    % Our sort is always stable, but older versions of OTP only have
+    % keysort/2 documented as stable
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {1, z}, {2, b}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {1, z}, {2, c}, {2, b}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {2, b}, {1, z}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {2, b}, {2, a}, {1, z}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+
     ok.
 
 test_keystore() ->
@@ -287,6 +315,8 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(5, 1, -1), [5, 4, 3, 2, 1]),
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
+    ?ASSERT_MATCH(lists:seq(1, 0), []),
+    ?ASSERT_MATCH(lists:seq(1, 0, 1), []),
 
     ?ASSERT_ERROR(lists:seq(foo, 1)),
     ?ASSERT_ERROR(lists:seq(1, bar)),

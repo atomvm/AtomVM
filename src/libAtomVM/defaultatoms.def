@@ -188,3 +188,12 @@ X(BREAK_IGNORED_ATOM, "\xD", "break_ignored")
 
 X(SCOPE_ATOM, "\x5", "scope")
 X(NOMATCH_ATOM, "\x7", "nomatch")
+
+X(INIT_ATOM, "\x4", "init")
+
+X(EMU_ATOM, "\x3", "emu")
+X(JIT_ATOM, "\x3", "jit")
+X(EMU_FLAVOR_ATOM, "\xA", "emu_flavor")
+X(CODE_SERVER_ATOM, "\xB", "code_server")
+X(LOAD_ATOM, "\x4", "load")
+X(JIT_X86_64_ATOM, "\xA", "jit_x86_64")

@@ -42,6 +42,7 @@ set(HEADER_FILES
     globalcontext.h
     iff.h
     interop.h
+    jit.h
     list.h
     listeners.h
     mailbox.h
@@ -89,6 +90,7 @@ set(SOURCE_FILES
     globalcontext.c
     iff.c
     interop.c
+    jit.c
     mailbox.c
     memory.c
     module.c
@@ -157,6 +159,17 @@ if (AVM_DISABLE_SMP)
 endif()
 if (NOT AVM_DISABLE_TASK_DRIVER)
     target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
+endif()
+
+if (NOT AVM_DISABLE_JIT AND AVM_ENABLE_PRECOMPILED)
+    message(FATAL_ERROR "JIT is not disabled but AVM_ENABLE_PRECOMPILED was selected. Please disable jit or do not select precompiled")
+endif()
+
+if (AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_JIT)
+endif()
+if (NOT AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_EMU)
 endif()
 
 if(HAVE_PLATFORM_SMP_H)
