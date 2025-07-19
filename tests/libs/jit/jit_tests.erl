@@ -39,7 +39,7 @@ compile_minimal_x86_64_test() ->
         Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
     ),
     Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
-    Stream3 = jit:compile(
+    {_LabelsCount, Stream3} = jit:compile(
         ?CODE_CHUNK_0, fun(_) -> undefined end, fun(_) -> undefined end, jit_x86_64, Stream2
     ),
     Stream4 = jit_x86_64:stream(Stream3),

@@ -315,9 +315,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
-                    mod->native_code = (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset);
-                    // Extra function is OP_INT_CALL_END
-                    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * ENDIAN_SWAP_32(native_code->labels);
+                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset));
                     break;
                 }
             }
@@ -1061,4 +1059,11 @@ uint32_t module_label_code_offset(Module *mod, int label)
 #ifndef AVM_NO_JIT
     }
 #endif
+}
+
+void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point)
+{
+    mod->native_code = entry_point;
+    // Extra function is OP_INT_CALL_END
+    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
 }

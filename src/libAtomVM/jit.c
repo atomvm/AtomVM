@@ -267,15 +267,14 @@ static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
     return scheduler_wait(ctx);
 }
 
-static Context *jit_trap_and_load(Context *ctx, JITState *jit_state, Module *mod, uint32_t label)
+enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t label)
 {
     term code_server_pid = globalcontext_get_registered_process(ctx->global, CODE_SERVER_ATOM_INDEX);
     int code_server_process_id = 0;
     if (term_is_local_pid(code_server_pid)) {
         code_server_process_id = term_to_local_process_id(code_server_pid);
     } else {
-        set_error(ctx, jit_state, 0, UNDEF_ATOM);
-        return jit_handle_error(ctx, jit_state, 0);
+        return TRAP_AND_LOAD_CODE_SERVER_NOT_FOUND;
     }
     BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3), heap);
     term code_server_tuple = term_alloc_tuple(3, &heap);
@@ -287,9 +286,7 @@ static Context *jit_trap_and_load(Context *ctx, JITState *jit_state, Module *mod
     ctx->saved_module = mod;
     ctx->saved_ip = (void *) (uintptr_t) label;
     context_update_flags(ctx, ~NoFlags, Trap);
-    Context *next_ctx = scheduler_wait(ctx);
-
-    return next_ctx;
+    return TRAP_AND_LOAD_OK;
 }
 
 static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words)
@@ -345,10 +342,15 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
             if (jump->target->native_code == NULL) {
                 SMP_MODULE_UNLOCK(jit_state->module);
-                return jit_trap_and_load(ctx, jit_state, jump->target, jump->label);
+                if (UNLIKELY(jit_trap_and_load(ctx, jump->target, jump->label) != TRAP_AND_LOAD_OK)) {
+                    set_error(ctx, jit_state, 0, UNDEF_ATOM);
+                    return jit_handle_error(ctx, jit_state, 0);
+                }
+                return scheduler_wait(ctx);
             } else {
                 // Fix exported function for next call, if any
                 ((struct ModuleFunction *) jump)->entry_point = module_get_native_entry_point(jump->target, jump->label);
+                ((struct ModuleFunction *) jump)->base.type = ModuleNativeFunction;
                 SMP_MODULE_UNLOCK(jit_state->module);
 
                 jit_state->module = jump->target;
@@ -756,6 +758,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             }
             case CodeServerResumeSignal: {
                 context_process_code_server_resume_signal(ctx);
+                jit_state->continuation = ctx->saved_ip;
                 break;
             }
             case NormalMessage: {
@@ -987,7 +990,11 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
         // jit_state->continuation = jit_state->module->labels[label];
 
         // JIT case
-        return jit_trap_and_load(ctx, jit_state, fun_module, label);
+        if (UNLIKELY(jit_trap_and_load(ctx, fun_module, label) != TRAP_AND_LOAD_OK)) {
+            set_error(ctx, jit_state, 0, UNDEF_ATOM);
+            return jit_handle_error(ctx, jit_state, 0);
+        }
+        return scheduler_wait(ctx);
     }
     return ctx;
 }
@@ -1320,7 +1327,11 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
             // jit_state->continuation = jit_state->module->labels[target_label];
 
             // JIT case
-            return jit_trap_and_load(ctx, jit_state, target_module, target_label);
+            if (UNLIKELY(jit_trap_and_load(ctx, target_module, target_label) != TRAP_AND_LOAD_OK)) {
+                set_error(ctx, jit_state, 0, UNDEF_ATOM);
+                return jit_handle_error(ctx, jit_state, 0);
+            }
+            return scheduler_wait(ctx);
         }
         return ctx;
     }

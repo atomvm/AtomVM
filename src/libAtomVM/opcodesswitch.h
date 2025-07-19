@@ -1075,6 +1075,26 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #endif
 
 
+#if AVM_NO_JIT
+    #define RESUME()                                            \
+    {                                                           \
+        pc = (ctx->saved_ip);                                   \
+    }
+#elif AVM_NO_EMU
+    #define RESUME()                                            \
+    {                                                           \
+        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);   \
+    }
+#else
+    #define RESUME()                                            \
+    if (mod->native_code == NULL) {                             \
+        pc = (ctx->saved_ip);                                   \
+        native_pc = NULL;                                       \
+    } else {                                                    \
+        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);   \
+    }
+#endif
+
 // We use goto label as values, a GCC extension supported by clang.
 
 #define PROCESS_SIGNAL_MESSAGES() \
@@ -1193,6 +1213,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 }                                                                               \
                 case CodeServerResumeSignal: {                                                  \
                     context_process_code_server_resume_signal(ctx);                             \
+                    RESUME();                                                                   \
                     break;                                                                      \
                 }                                                                               \
                 case NormalMessage: {                                                           \

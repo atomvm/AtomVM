@@ -465,6 +465,10 @@ void context_process_code_server_resume_signal(Context *ctx)
     } else {
         ctx->saved_ip = module->labels[label];
     }
+    // Fix CP to OP_INT_CALL_END
+    if (ctx->cp == module_address(module->module_index, 0)) {
+        ctx->cp = module_address(module->module_index, module->end_instruction_ii);
+    }
 #endif
     context_update_flags(ctx, ~Trap, NoFlags);
 }
