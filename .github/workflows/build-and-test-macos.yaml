@@ -65,6 +65,14 @@ jobs:
             fi
         done
 
+    - name: "Workaround for nxdomain random issues"
+      run: |
+        # https://github.com/actions/runner-images/issues/8649#issuecomment-2231240347
+        for host in "$(hostname)" "$(hostname -f)"; do
+          echo -e "$(ipconfig getifaddr en0) $(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
+          dscacheutil -q host -a name $(hostname -f)
+        done
+
     # Builder info
     - name: "System info"
       run: |
