@@ -245,6 +245,8 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(5, 1, -1), [5, 4, 3, 2, 1]),
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
+    ?ASSERT_MATCH(lists:seq(1, 0), []),
+    ?ASSERT_MATCH(lists:seq(1, 0, 1), []),
 
     ?ASSERT_ERROR(lists:seq(foo, 1)),
     ?ASSERT_ERROR(lists:seq(1, bar)),

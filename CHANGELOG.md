@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
+- Fixed a bug where `lists:seq/2` wouldn't return the empty list in valid cases.
 
 ## [0.6.6] - 2025-06-23
 
