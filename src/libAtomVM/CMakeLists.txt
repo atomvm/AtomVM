@@ -161,13 +161,6 @@ if (NOT AVM_DISABLE_TASK_DRIVER)
     target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
 endif()
 
-# JIT & execution of precompiled code
-if (NOT CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-    message("JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
-    set(AVM_DISABLE_JIT ON)
-    set(AVM_ENABLE_PRECOMPILED OFF)
-endif()
-
 if (NOT AVM_DISABLE_JIT AND AVM_ENABLE_PRECOMPILED)
     message(FATAL_ERROR "JIT is not disabled but AVM_ENABLE_PRECOMPILED was selected. Please disable jit or do not select precompiled")
 endif()

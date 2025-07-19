@@ -37,11 +37,9 @@ set(code_load_deps
     code_load_pack_data.hrl
 )
 if(NOT AVM_DISABLE_JIT)
-    foreach(arch "x86_64")
-        generate_hrl(export_test_module_data_${arch}.hrl EXPORT_TEST_MODULE_DATA_${arch} ${arch}/export_test_module.beam)
-        generate_hrl(code_load_pack_data_${arch}.hrl CODE_LOAD_PACK_DATA_${arch} code_load_pack-${arch}.avm)
-        set(code_load_deps ${code_load_deps} export_test_module_data_${arch}.hrl code_load_pack_data_${arch}.hrl)
-    endforeach()
+    generate_hrl(export_test_module_data_${AVM_JIT_TARGET_ARCH}.hrl EXPORT_TEST_MODULE_DATA_${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/export_test_module.beam)
+    generate_hrl(code_load_pack_data_${AVM_JIT_TARGET_ARCH}.hrl CODE_LOAD_PACK_DATA_${AVM_JIT_TARGET_ARCH} code_load_pack-${AVM_JIT_TARGET_ARCH}.avm)
+    set(code_load_deps ${code_load_deps} export_test_module_data_${AVM_JIT_TARGET_ARCH}.hrl code_load_pack_data_${AVM_JIT_TARGET_ARCH}.hrl jit)
 endif()
 
 add_custom_target(code_load_files DEPENDS ${code_load_deps})
