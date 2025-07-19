@@ -39,6 +39,12 @@
 #include <libkern/OSCacheControl.h>
 #endif
 
+#if HAVE_MAP_JIT
+#define ATOMVM_MAP_JIT MAP_JIT
+#else
+#define ATOMVM_MAP_JIT 0
+#endif
+
 #define JIT_STREAM_MMAP_SIZE (1024 * 1024 * 1024)
 
 static ErlNifResourceType *jit_stream_mmap_resource_type;
@@ -62,7 +68,7 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
-    int flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT;
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS | ATOMVM_MAP_JIT;
     int fd = -1;
     int offset = 0;
 
@@ -80,12 +86,13 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     js->stream_offset = 0;
     js->stream_size = JIT_STREAM_MMAP_SIZE;
 
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
     pthread_jit_write_protect_np(0);
+#endif
 #if defined(__APPLE__)
     sys_icache_invalidate(addr, JIT_STREAM_MMAP_SIZE);
 #elif defined(__GNUC__)
-    const uint8_t* end = start + JIT_STREAM_MMAP_SIZE;
-    __builtin___clear_cache(addr, end);
+    __builtin___clear_cache(addr, addr + JIT_STREAM_MMAP_SIZE);
 #endif
 
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
@@ -224,12 +231,13 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
         return NULL;
     }
 
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
     pthread_jit_write_protect_np(1);
+#endif
 #if defined(__APPLE__)
     sys_icache_invalidate(js_obj->stream_base, js_obj->stream_size);
 #elif defined(__GNUC__)
-    const uint8_t* end = js_obj->stream_base + js_obj->stream_size;
-    __builtin___clear_cache(addr, end);
+    __builtin___clear_cache(js_obj->stream_base, js_obj->stream_base + js_obj->stream_size);
 #endif
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
     js_obj->stream_base = NULL;
