@@ -1547,7 +1547,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     } else {
 #endif
 #ifndef AVM_NO_EMU
-        // new_ctx->saved_ip = found_module->labels[label];
+        new_ctx->saved_ip = found_module->labels[label];
 #else
         if (UNLIKELY(jit_trap_and_load(new_ctx, found_module, label) != TRAP_AND_LOAD_OK)) {
             return UNDEFINED_ATOM;
