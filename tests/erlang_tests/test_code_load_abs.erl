@@ -24,9 +24,14 @@
 
 start() ->
     Path =
-        case erlang:system_info(emu_flavor) of
-            emu -> "code_load/export_test_module";
-            jit -> "../code_load/x86_64/export_test_module"
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                case erlang:system_info(emu_flavor) of
+                    emu -> "code_load/export_test_module";
+                    jit -> "../code_load/x86_64/export_test_module"
+                end;
+            "BEAM" ->
+                "code_load/export_test_module"
         end,
     {module, export_test_module} = code:load_abs(Path),
     export_test_module:exported_func(4).
