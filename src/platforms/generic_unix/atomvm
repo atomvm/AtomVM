@@ -28,5 +28,15 @@ then
     "${avm_lib}/atomvm/AtomVM" -h
     exit 1
 fi
+if [ "${nargs}" -eq "1" -a "$1" = "-v" ]
+then
+    "${avm_lib}/atomvm/AtomVM" -v
+    exit 0
+fi
+if [ "${nargs}" -eq "1" -a "$1" = "-h" ]
+then
+    "${avm_lib}/atomvm/AtomVM" -h
+    exit 0
+fi
 
-exec "${avm_lib}/atomvm/AtomVM" "${avm_lib}/atomvm/atomvmlib@precompiled_suffix@.avm" $@
+exec "${avm_lib}/atomvm/AtomVM" "${avm_lib}/atomvm/atomvmlib@precompiled_suffix@.avm" "$@"
