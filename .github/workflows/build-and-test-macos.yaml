@@ -41,6 +41,11 @@ jobs:
         os: ["macos-13", "macos-14", "macos-15"]
         otp: ["24", "25", "26", "27", "28"]
 
+        include:
+        - os: "macos-13"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
     steps:
     # Setup
     - name: "Checkout repo"
@@ -92,7 +97,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
+        cmake -DAVM_WARNINGS_ARE_ERRORS=ON ${{ matrix.cmake_opts_other }} -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
