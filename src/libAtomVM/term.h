@@ -60,6 +60,7 @@ extern "C" {
 #define TERM_PID_TAG 0x3
 #define TERM_PORT_TAG 0x7
 #define TERM_INTEGER_TAG 0xF
+#define TERM_IMMED2_TAG 0xB
 
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
