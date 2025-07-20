@@ -90,7 +90,6 @@ set(SOURCE_FILES
     globalcontext.c
     iff.c
     interop.c
-    jit.c
     mailbox.c
     memory.c
     module.c
@@ -106,6 +105,15 @@ set(SOURCE_FILES
     unicode.c
     valueshashtable.c
 )
+
+if(NOT AVM_DISABLE_JIT)
+    set(HEADER_FILES ${HEADER_FILES}
+        jit.h
+    )
+    set(SOURCE_FILES ${SOURCE_FILES}
+        jit.c
+    )
+endif()
 
 option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" ON)
 if (AVM_PEDANTIC_WARNINGS)
