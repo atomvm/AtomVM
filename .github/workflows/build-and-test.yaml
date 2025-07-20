@@ -290,6 +290,16 @@ jobs:
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
             libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
+        # JIT build
+        - os: "ubuntu-24.04"
+          cc: "cc"
+          cxx: "c++"
+          cflags: ""
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
@@ -421,7 +431,7 @@ jobs:
         valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_estdlib.avm"
-      timeout-minutes: 5
+      timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
