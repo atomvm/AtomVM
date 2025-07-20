@@ -40,19 +40,10 @@ option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_BUILD_RUNTIME_ONLY "Only build the AtomVM runtime" OFF)
 option(COVERAGE "Build for code coverage" OFF)
 
-if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
-    add_subdirectory(src/platforms/generic_unix)
-else()
-    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
-endif()
-
 # JIT & execution of precompiled code
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
     if (NOT AVM_DISABLE_JIT)
-        set(AVM_JIT_TARGET_ARCH ${CMAKE_SYSTEM_PROCESSOR} CACHE STRING "Target architecture for JIT" FORCE)
+        set(AVM_JIT_TARGET_ARCH ${CMAKE_SYSTEM_PROCESSOR})
     endif()
 else()
     if (NOT AVM_DISABLE_JIT)
@@ -60,6 +51,15 @@ else()
         set(AVM_DISABLE_JIT ON CACHE BOOL "Disable just in time compilation." FORCE)
         set(AVM_ENABLE_PRECOMPILED OFF CACHE BOOL "Enable execution of precompiled code, even if JIT is disabled." FORCE)
     endif()
+endif()
+
+if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
+   (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
+    add_subdirectory(src/platforms/generic_unix)
+else()
+    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
 endif()
 
 if(NOT AVM_BUILD_RUNTIME_ONLY)
