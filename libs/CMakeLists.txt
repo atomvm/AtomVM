@@ -27,7 +27,11 @@ add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
-add_subdirectory(jit/src)
+# JIT compiler doesn't compile with OTP < 23
+if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
+    add_subdirectory(jit/src)
+endif()
+
 
 set(ATOMVM_LIBS eavmlib estdlib alisp)
 
@@ -75,20 +79,19 @@ if (Dialyzer_FOUND)
         COMMAND
             ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -l ${CMAKE_CURRENT_BINARY_DIR}/jit/src/jit.avm | sed -e 's|^|${CMAKE_CURRENT_BINARY_DIR}/jit/src/beams/|g' | grep -v jit_precompile > ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
     )
-    add_custom_command(
-        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
-        DEPENDS
-            ${CMAKE_CURRENT_BINARY_DIR}/estdlib/src/estdlib.avm
-            ${CMAKE_CURRENT_BINARY_DIR}/eavmlib/src/eavmlib.avm
-            ${CMAKE_CURRENT_BINARY_DIR}/alisp/src/alisp.avm
-            ${CMAKE_CURRENT_BINARY_DIR}/jit/src/jit.avm
+    set(dialyzer_lists
             ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt
             ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt
             ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt
-            ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
-        COMMAND
-            cat ${CMAKE_CURRENT_BINARY_DIR}/estdlib_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt
-            |  xargs dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
+    )
+    if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
+        set(dialyzer_lists ${dialyzer_lists} ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt)
+    endif()
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
+        DEPENDS ${dialyzer_lists}
+        COMMAND cat ${dialyzer_lists}
+            | xargs dialyzer --build_plt --output_plt ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
     )
     add_custom_target(atomvmlib_plt
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
