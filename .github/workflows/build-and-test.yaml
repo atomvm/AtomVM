@@ -446,6 +446,15 @@ jobs:
         valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
+    - name: "Test: test_jit.avm"
+      timeout-minutes: 10
+      if: matrix.otp != '21' && matrix.otp != '22'
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM tests/libs/jit/test_jit.avm
+        ./src/AtomVM tests/libs/jit/test_jit.avm
+
     - name: "Test: test_alisp.avm"
       timeout-minutes: 10
       working-directory: build

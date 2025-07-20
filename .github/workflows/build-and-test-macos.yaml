@@ -40,6 +40,7 @@ jobs:
       matrix:
         os: ["macos-13", "macos-14", "macos-15"]
         otp: ["24", "25", "26", "27", "28"]
+        cmake_opts_other: [""]
 
         include:
         - os: "macos-13"
@@ -156,6 +157,12 @@ jobs:
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "Test: test_jit.avm"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ./src/AtomVM tests/libs/jit/test_jit.avm
 
     - name: "Test: test_alisp.avm"
       timeout-minutes: 10
