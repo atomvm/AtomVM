@@ -32,7 +32,6 @@ set(HEADER_FILES
 )
 
 set(SOURCE_FILES
-    jit_stream_mmap.c
     otp_socket_platform.c
     mapped_file.c
     platform_defaultatoms.c
@@ -44,6 +43,15 @@ set(SOURCE_FILES
     ../../../libAtomVM/otp_net.c
     ../../../libAtomVM/otp_socket.c
 )
+
+if(NOT AVM_DISABLE_JIT)
+    set(HEADER_FILES ${HEADER_FILES}
+        jit_stream_mmap.h
+    )
+    set(SOURCE_FILES ${SOURCE_FILES}
+        jit_stream_mmap.c
+    )
+endif()
 
 set(
     PLATFORM_LIB_SUFFIX
