@@ -1736,10 +1736,13 @@ move_to_cp(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
-increment_sp(#state{stream_module = StreamModule, stream = Stream0} = State, Offset) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, rax),
-    I2 = jit_x86_64_asm:addq(Offset * 8, rax),
-    I3 = jit_x86_64_asm:movq(rax, ?Y_REGS),
+increment_sp(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | _]} = State,
+    Offset
+) ->
+    I1 = jit_x86_64_asm:movq(?Y_REGS, Reg),
+    I2 = jit_x86_64_asm:addq(Offset * 8, Reg),
+    I3 = jit_x86_64_asm:movq(Reg, ?Y_REGS),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
