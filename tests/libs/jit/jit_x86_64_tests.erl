@@ -602,13 +602,13 @@ move_to_vm_register_test_() ->
                         "   0:	48 89 47 30          	mov    %rax,0x30(%rdi)"
                     >>)
                 end),
-                %% Test: Atom register to ptr
+                %% Test: Native register to ptr
                 ?_test(begin
                     move_to_vm_register_test0(State0, rax, {ptr, r10}, <<
                         "   0:	49 89 02             	mov    %rax,(%r10)"
                     >>)
                 end),
-                %% Test: Atom register to y_reg
+                %% Test: Native register to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, rax, {y_reg, 0}, <<
                         "   0:\t48 8b 47 28           mov    0x28(%rdi),%rax\n"
