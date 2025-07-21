@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
 - Fixed a bug where `lists:seq/2` wouldn't return the empty list in valid cases.
+- bnot operator wasn't supporting boxed integers (integers bigger than 28-bit on 32-bit CPUs, and
+bigger than 60-bit on 64-bit CPUs).
 
 ### Changed
 
