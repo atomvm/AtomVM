@@ -398,7 +398,6 @@ is_boolean_test() ->
     ?BACKEND:assert_all_native_free(State3),
     State4 = ?BACKEND:update_branches(State3, Labels),
     Stream = ?BACKEND:stream(State4),
-%   ok = file:write_file("dump.bin", Stream),
     Dump = <<
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
         "   4:	f1012cff 	cmp	x7, #0x4b\n"
@@ -410,8 +409,34 @@ is_boolean_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_test() ->
-    %% TODO: Implement AArch64 version
-    ok.
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
+    State2 = ?BACKEND:call_primitive_with_cp(State1, 4, [ctx, jit_state, 2, 5, -1]),
+    ?BACKEND:assert_all_native_free(State2),
+    Stream = ?BACKEND:stream(State2),
+    ok = file:write_file("dump.bin", Stream),
+    Dump = <<
+        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   4:	f10004e7 	subs	x7, x7, #0x1\n"
+        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   c:	540000a1 	b.ne	0x20  // b.any\n"
+        "  10:	10000087 	adr	x7, 0x20\n"
+        "  14:	f9000427 	str	x7, [x1, #8]\n"
+        "  18:	f9400847 	ldr	x7, [x2, #16]\n"
+        "  1c:	d61f00e0 	br	x7\n"
+        "  20:	f9400027 	ldr	x7, [x1]\n"
+        "  24:	b94000e7 	ldr	w7, [x7]\n"
+        "  28:	d3689ce7 	lsl	x7, x7, #24\n"
+        "  2c:	d2802610 	mov	x16, #0x130                 	// #304\n"
+        "  30:	aa1000e7 	orr	x7, x7, x16\n"
+        "  34:	f9005c07 	str	x7, [x0, #184]\n"
+        "  38:	f9401047 	ldr	x7, [x2, #32]\n"
+        "  3c:	d2800042 	mov	x2, #0x2                   	// #2\n"
+        "  40:	d28000a3 	mov	x3, #0x5                   	// #5\n"
+        "  44:	92800004 	mov	x4, #0xffffffffffffffff    	// #-1\n"
+        "  48:	d61f00e0 	br	x7"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_fun_test() ->
     %% TODO: Implement AArch64 version
