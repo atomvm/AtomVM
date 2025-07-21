@@ -36,8 +36,6 @@
     movk/3,
     movz/3,
     orr/3,
-    patch_b_offset/2,
-    patch_bcc_offset/2,
     ret/0,
     str/2,
     str_x/3,
@@ -47,6 +45,10 @@
     ldp_x/4,
     subs/3,
     adr/2
+]).
+
+-export_type([
+    cc/0
 ]).
 
 -type aarch64_gpr_register() ::
@@ -67,6 +69,8 @@
     | r14
     | r15
     | xzr.
+
+-type cc() :: eq | ne | cs | cc | mi | pl | vs | vc | hi | ls | ge | lt | gt | le | al | nv.
 
 %% Emit an ADD instruction (AArch64 encoding)
 %% ADD Rd, Rn, #imm - adds immediate value to register
@@ -594,7 +598,7 @@ reg_to_num(sp) -> 31;
 reg_to_num(xzr) -> 31.
 
 %% Emit a conditional branch instruction
--spec bcc(atom(), integer()) -> binary().
+-spec bcc(cc(), integer()) -> binary().
 bcc(Cond, Offset) when is_atom(Cond), is_integer(Offset) ->
     CondNum =
         case Cond of
@@ -768,31 +772,6 @@ tst32(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
                         (16#7200001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little
                     >>
             end
-    end.
-
-%% Patch an unconditional branch (B) instruction with a new offset
-%% Takes the previous 32-bit instruction and a new offset, returns the patched instruction
--spec patch_b_offset(binary(), integer()) -> binary().
-patch_b_offset(<<PrevInstr:32/little>>, NewOffset) when is_integer(NewOffset) ->
-    Opcode = PrevInstr band 16#FC000000,
-    case Opcode of
-        16#14000000 ->
-            <<(16#14000000 bor (NewOffset div 4)):32/little>>;
-        _ ->
-            <<PrevInstr:32/little>>
-    end.
-
-%% Patch a conditional branch (B.cond) instruction with a new offset
-%% Takes the previous 32-bit instruction and a new offset, returns the patched instruction
--spec patch_bcc_offset(binary(), integer()) -> binary().
-patch_bcc_offset(<<PrevInstr:32/little>>, NewOffset) when is_integer(NewOffset) ->
-    Opcode = PrevInstr band 16#FF000000,
-    Cond = PrevInstr band 16#0000000F,
-    case Opcode of
-        16#54000000 ->
-            <<(16#54000000 bor ((NewOffset div 4) bsl 5) bor Cond):32/little>>;
-        _ ->
-            <<PrevInstr:32/little>>
     end.
 
 %% Emit a subtract and set flags (SUBS) instruction (AArch64 encoding)
