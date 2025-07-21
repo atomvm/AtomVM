@@ -365,21 +365,19 @@ is_integer_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump = <<
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	aa0703e8 	mov	x8, x7\n"
-        "   8:	92400d08 	and	x8, x8, #0xf\n"
-        "   c:	f1003d1f 	cmp	x8, #0xf\n"
-        "  10:	54000180 	b.eq	0x40  // b.none\n"
-        "  14:	aa0703e8 	mov	x8, x7\n"
-        "  18:	92400508 	and	x8, x8, #0x3\n"
-        "  1c:	f100091f 	cmp	x8, #0x2\n"
-        "  20:	54000040 	b.eq	0x28  // b.none\n"
-        "  24:	14000047 	b	0x140\n"
-        "  28:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "  2c:	f94000e7 	ldr	x7, [x7]\n"
-        "  30:	924014e7 	and	x7, x7, #0x3f\n"
-        "  34:	f10020ff 	cmp	x7, #0x8\n"
-        "  38:	54000040 	b.eq	0x40  // b.none\n"
-        "  3c:	14000041 	b	0x140"
+        "   4:	92400ce8 	and	x8, x7, #0xf\n"
+        "   8:	f1003d1f 	cmp	x8, #0xf\n"
+        "   c:	54000160 	b.eq	0x38  // b.none\n"
+        "  10:	924004e8 	and	x8, x7, #0x3\n"
+        "  14:	f100091f 	cmp	x8, #0x2\n"
+        "  18:	54000040 	b.eq	0x20  // b.none\n"
+        "  1c:	14000047 	b	0x138\n"
+        "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
+        "  24:	f94000e7 	ldr	x7, [x7]\n"
+        "  28:	924014e7 	and	x7, x7, #0x3f\n"
+        "  2c:	f10020ff 	cmp	x7, #0x8\n"
+        "  30:	54000040 	b.eq	0x38  // b.none\n"
+        "  34:	14000041 	b	0x138"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -414,7 +412,6 @@ call_ext_test() ->
     State2 = ?BACKEND:call_primitive_with_cp(State1, 4, [ctx, jit_state, 2, 5, -1]),
     ?BACKEND:assert_all_native_free(State2),
     Stream = ?BACKEND:stream(State2),
-    ok = file:write_file("dump.bin", Stream),
     Dump = <<
         "   0:	f9400827 	ldr	x7, [x1, #16]\n"
         "   4:	f10004e7 	subs	x7, x7, #0x1\n"
@@ -439,10 +436,78 @@ call_ext_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_fun_test() ->
-    %% TODO: Implement AArch64 version
-    ok.
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
+    FuncReg = {x_reg, 0},
+    ArgsCount = 0,
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, FuncReg),
+    {State3, RegCopy} = ?BACKEND:copy_to_native_register(State2, Reg),
+    State4 = ?BACKEND:if_block(
+        State3, {RegCopy, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BSt0) ->
+            ?BACKEND:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR_TUPLE, [
+                ctx, jit_state, offset, ?BADFUN_ATOM, RegCopy
+            ])
+        end
+    ),
+    State5 = ?BACKEND:and_(State4, RegCopy, ?TERM_PRIMARY_CLEAR_MASK),
+    State6 = ?BACKEND:move_array_element(State5, RegCopy, 0, RegCopy),
+    State7 = ?BACKEND:if_block(
+        State6, {RegCopy, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_FUN}, fun(BSt0) ->
+            ?BACKEND:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR_TUPLE, [
+                ctx, jit_state, offset, ?BADFUN_ATOM, RegCopy
+            ])
+        end
+    ),
+    State8 = ?BACKEND:free_native_registers(State7, [RegCopy]),
+    State9 = ?BACKEND:call_primitive_with_cp(State8, ?PRIM_CALL_FUN, [
+        ctx, jit_state, Reg, ArgsCount
+    ]),
+    ?BACKEND:assert_all_native_free(State9),
+    Stream = ?BACKEND:stream(State9),
+    Dump = <<
+        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   4:	f10004e7 	subs	x7, x7, #0x1\n"
+        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   c:	540000a1 	b.ne	0x20  // b.any\n"
+        "  10:	10000087 	adr	x7, 0x20\n"
+        "  14:	f9000427 	str	x7, [x1, #8]\n"
+        "  18:	f9400847 	ldr	x7, [x2, #16]\n"
+        "  1c:	d61f00e0 	br	x7\n"
+        "  20:	f9401807 	ldr	x7, [x0, #48]\n"
+        "  24:	aa0703e8 	mov	x8, x7\n"
+        "  28:	92400509 	and	x9, x8, #0x3\n"
+        "  2c:	f100093f 	cmp	x9, #0x2\n"
+        "  30:	540000c0 	b.eq	0x48  // b.none\n"
+        "  34:	f9404c47 	ldr	x7, [x2, #152]\n"
+        "  38:	d2800702 	mov	x2, #0x38                  	// #56\n"
+        "  3c:	d2804163 	mov	x3, #0x20b                 	// #523\n"
+        "  40:	aa0803e4 	mov	x4, x8\n"
+        "  44:	d61f00e0 	br	x7\n"
+        "  48:	927ef508 	and	x8, x8, #0xfffffffffffffffc\n"
+        "  4c:	f9400108 	ldr	x8, [x8]\n"
+        "  50:	92401509 	and	x9, x8, #0x3f\n"
+        "  54:	f100513f 	cmp	x9, #0x14\n"
+        "  58:	540000c0 	b.eq	0x70  // b.none\n"
+        "  5c:	f9404c47 	ldr	x7, [x2, #152]\n"
+        "  60:	d2800c02 	mov	x2, #0x60                  	// #96\n"
+        "  64:	d2804163 	mov	x3, #0x20b                 	// #523\n"
+        "  68:	aa0803e4 	mov	x4, x8\n"
+        "  6c:	d61f00e0 	br	x7\n"
+        "  70:	f9400028 	ldr	x8, [x1]\n"
+        "  74:	b9400108 	ldr	w8, [x8]\n"
+        "  78:	d3689d08 	lsl	x8, x8, #24\n"
+        "  7c:	d2804c10 	mov	x16, #0x260                 	// #608\n"
+        "  80:	aa100108 	orr	x8, x8, x16\n"
+        "  84:	f9005c08 	str	x8, [x0, #184]\n"
+        "  88:	f9408048 	ldr	x8, [x2, #256]\n"
+        "  8c:	aa0703e2 	mov	x2, x7\n"
+        "  90:	d2800003 	mov	x3, #0x0                   	// #0\n"
+        "  94:	d61f0100 	br	x8"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 move_to_vm_register_test_() ->
+    %   ok = file:write_file("dump.bin", Stream),
     %% TODO: Implement AArch64 version
     [].
 
