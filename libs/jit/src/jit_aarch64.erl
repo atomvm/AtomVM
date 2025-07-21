@@ -1208,195 +1208,69 @@ set_args1(Arg, Reg) when is_integer(Arg) ->
     %% For now, just use the immediate (may need expansion later)
     jit_aarch64_asm:mov(Reg, Arg).
 
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, 0, {x_reg, X}
-) when
-    X < ?MAX_REG
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move to a vm register (x_reg, y_reg, fpreg or a pointer on x_reg)
+%% from an immediate, a native register or another vm register.
+%% @end
+%% @param State current backend state
+%% @param Src value to move to vm register
+%% @param Dest vm register to move to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec move_to_vm_register(state(), Src :: value() | vm_register(), Dest :: vm_register()) ->
+    state().
+% Native register to VM register
+move_to_vm_register(State0, Src, {x_reg, extra}) when is_atom(Src) ->
+    I1 = jit_aarch64_asm:str(Src, ?X_REG(?MAX_REG)),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State0#state{stream = Stream1};
+move_to_vm_register(State0, Src, {x_reg, X}) when is_atom(Src) ->
+    I1 = jit_aarch64_asm:str(Src, ?X_REG(X)),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State0#state{stream = Stream1};
+move_to_vm_register(State0, Src, {ptr, Reg}) when is_atom(Src) ->
+    I1 = jit_aarch64_asm:str(Src, {Reg, 0}),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State0#state{stream = Stream1};
+move_to_vm_register(#state{available_regs = [Temp | _]} = State0, Src, {y_reg, Y}) when
+    is_atom(Src)
 ->
-    I1 = jit_aarch64_asm:str(xzr, ?X_REG(X)),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, 0, {x_reg, extra}
-) ->
-    I1 = jit_aarch64_asm:str(xzr, ?X_REG(?MAX_REG)),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_vm_register(#state{stream_module = StreamModule, stream = Stream0} = State, 0, {ptr, Reg}) ->
-    I1 = jit_aarch64_asm:str(xzr, {Reg, 0}),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    N,
-    {x_reg, X}
-) when
-    X < ?MAX_REG andalso ?IS_SINT32_T(N)
-->
-    I1 = jit_aarch64_asm:mov(Temp, N),
-    I2 = jit_aarch64_asm:str(Temp, ?X_REG(X)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    N,
-    {ptr, Reg}
-) when
-    ?IS_SINT32_T(N)
-->
-    I1 = jit_aarch64_asm:mov(Temp, N),
-    I2 = jit_aarch64_asm:str(Temp, {Reg, 0}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    N,
-    {x_reg, X}
-) when
-    X < ?MAX_REG andalso is_integer(N)
-->
-    I1 = jit_aarch64_asm:mov(Temp, N),
-    I2 = jit_aarch64_asm:str(Temp, ?X_REG(X)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    N,
-    {ptr, Reg}
-) when
+    I1 = jit_aarch64_asm:ldr(Temp, ?Y_REGS),
+    I2 = jit_aarch64_asm:str(Src, {Temp, Y * 8}),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
+    State0#state{stream = Stream1};
+% Source is an integer
+move_to_vm_register(State, 0, Dest) ->
+    move_to_vm_register(State, xzr, Dest);
+move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, N, Dest) when
     is_integer(N)
 ->
     I1 = jit_aarch64_asm:mov(Temp, N),
-    I2 = jit_aarch64_asm:str(Temp, {Reg, 0}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    0,
-    {y_reg, Y}
-) ->
-    I1 = jit_aarch64_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_aarch64_asm:str(xzr, {Temp, Y * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
-        State,
-    N,
-    {y_reg, Y}
-) when ?IS_SINT32_T(N) ->
-    I1 = jit_aarch64_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_aarch64_asm:mov(Temp2, N),
-    I3 = jit_aarch64_asm:str(Temp2, {Temp1, Y * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
-        State,
-    N,
-    {y_reg, X}
-) when
-    X < 32 andalso is_integer(N)
-->
-    I1 = jit_aarch64_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_aarch64_asm:mov(Temp2, N),
-    I3 = jit_aarch64_asm:str(Temp2, {Temp1, X * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
-    {x_reg, Y}
-) when X < ?MAX_REG andalso Y < ?MAX_REG ->
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
+    State1#state{available_regs = AR0};
+% Source is a VM register
+move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {x_reg, extra}, Dest) ->
+    I1 = jit_aarch64_asm:ldr(Temp, ?X_REG(?MAX_REG)),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
+    State1#state{available_regs = AR0};
+move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {x_reg, X}, Dest) ->
     I1 = jit_aarch64_asm:ldr(Temp, ?X_REG(X)),
-    I2 = jit_aarch64_asm:str(Temp, ?X_REG(Y)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
-    {ptr, Reg}
-) when X < ?MAX_REG ->
-    I1 = jit_aarch64_asm:ldr(Temp, ?X_REG(X)),
-    I2 = jit_aarch64_asm:str(Temp, {Reg, 0}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
-        State,
-    {x_reg, X},
-    {y_reg, Y}
-) when X < ?MAX_REG ->
-    I1 = jit_aarch64_asm:ldr(Temp1, ?X_REG(X)),
-    I2 = jit_aarch64_asm:ldr(Temp2, ?Y_REGS),
-    I3 = jit_aarch64_asm:str(Temp1, {Temp2, Y * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {y_reg, Y},
-    {x_reg, X}
-) when X < ?MAX_REG ->
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
+    State1#state{available_regs = AR0};
+move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {ptr, Reg}, Dest) ->
+    I1 = jit_aarch64_asm:ldr(Temp, {Reg, 0}),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
+    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
+    State1#state{available_regs = AR0};
+move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {y_reg, Y}, Dest) ->
     I1 = jit_aarch64_asm:ldr(Temp, ?Y_REGS),
     I2 = jit_aarch64_asm:ldr(Temp, {Temp, Y * 8}),
-    I3 = jit_aarch64_asm:str(Temp, ?X_REG(X)),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {y_reg, Y},
-    {ptr, Reg}
-) ->
-    I1 = jit_aarch64_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_aarch64_asm:ldr(Temp, {Temp, Y * 8}),
-    I3 = jit_aarch64_asm:str(Temp, {Reg, 0}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
-        State,
-    {y_reg, YS},
-    {y_reg, YD}
-) ->
-    I1 = jit_aarch64_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_aarch64_asm:ldr(Temp2, {Temp1, YS * 8}),
-    I3 = jit_aarch64_asm:str(Temp2, {Temp1, YD * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, Reg, {x_reg, X}
-) when is_atom(Reg) andalso X < ?MAX_REG ->
-    I1 = jit_aarch64_asm:str(Reg, ?X_REG(X)),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, Reg, {ptr, Dest}
-) when is_atom(Reg) ->
-    I1 = jit_aarch64_asm:str(Reg, {Dest, 0}),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, available_regs = [Temp | _], stream = Stream0} = State,
-    Reg,
-    {y_reg, Y}
-) when is_atom(Reg) ->
-    I1 = jit_aarch64_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_aarch64_asm:str(Reg, {Temp, Y * 8}),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_vm_register(
-    #state{stream_module = StreamModule, available_regs = [Temp1, Temp2 | _], stream = Stream0} =
-        State,
-    {ptr, Reg},
-    {y_reg, Y}
-) when ?IS_GPR(Reg) ->
-    I1 = jit_aarch64_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_aarch64_asm:ldr(Temp2, {Reg, 0}),
-    I3 = jit_aarch64_asm:str(Temp2, {Temp1, Y * 8}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
+    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
+    State1#state{available_regs = AR0};
 move_to_vm_register(
     #state{stream_module = StreamModule, available_regs = [Temp | _], stream = Stream0} = State,
     Reg,
@@ -1408,7 +1282,15 @@ move_to_vm_register(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
-%% @doc move reg[x] to a vm or native register
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of an array element (reg[x]) to a vm or a native register.
+%% @end
+%% @param State current backend state
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @param Dest vm or native register to move to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec move_array_element(
     state(),
     aarch64_register(),

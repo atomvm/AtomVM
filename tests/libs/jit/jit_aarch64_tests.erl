@@ -506,10 +506,147 @@ call_fun_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+move_to_vm_register_test1(State, Source, Dest, Dump) ->
+    State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
+    Stream = ?BACKEND:stream(State1),
+    ok = file:write_file("dump.bin", Stream),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+move_to_vm_register_test0(State, Source, Dest, Dump) ->
+    State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 move_to_vm_register_test_() ->
-    %   ok = file:write_file("dump.bin", Stream),
-    %% TODO: Implement AArch64 version
-    [].
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                %% Test: Immediate to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
+                        "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
+                        "   4:	f9001807 	str	x7, [x0, #48]"
+                    >>)
+                end),
+                %% Test: Immediate to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 99, {ptr, r10}, <<
+                        "   0:	d2800c67 	mov	x7, #0x63                  	// #99\n"
+                        "   4:	f9000147 	str	x7, [x10]"
+                    >>)
+                end),
+                %% Test: x_reg to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
+                        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
+                        "   4:	f9002007 	str	x7, [x0, #64]"
+                    >>)
+                end),
+                %% Test: x_reg to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r8}, <<
+                        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
+                        "   4:	f9000107 	str	x7, [x8]"
+                    >>)
+                end),
+                %% Test: ptr to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {ptr, r9}, {x_reg, 3}, <<
+                        "   0:	f9400127 	ldr	x7, [x9]\n"
+                        "   4:	f9002407 	str	x7, [x0, #72]"
+                    >>)
+                end),
+                %% Test: x_reg to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   8:	f9000507 	str	x7, [x8, #8]"
+                    >>)
+                end),
+                %% Test: y_reg to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f94000e7 	ldr	x7, [x7]\n"
+                        "   8:	f9002407 	str	x7, [x0, #72]"
+                    >>)
+                end),
+                %% Test: y_reg to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f94004e7 	ldr	x7, [x7, #8]\n"
+                        "   8:	f9002407 	str	x7, [x0, #72]"
+                    >>)
+                end),
+                %% Test: Native register to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, r10, {x_reg, 0}, <<
+                        "   0:	f900180a 	str	x10, [x0, #48]"
+                    >>)
+                end),
+                %% Test: Native register to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, r9, {ptr, r10}, <<
+                        "   0:	f9000149 	str	x9, [x10]"
+                    >>)
+                end),
+                %% Test: Native register to y_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, r10, {y_reg, 0}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f90000ea 	str	x10, [x7]"
+                    >>)
+                end),
+                %% Test: Large immediate to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 16#123456789abcdef0, {x_reg, 0}, <<
+                        "   0:	d29bde07 	mov	x7, #0xdef0                	// #57072\n"
+                        "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
+                        "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
+                        "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
+                        "  10:	f9001807 	str	x7, [x0, #48]"
+                    >>)
+                end),
+                %% Test: Large immediate to ptr
+                ?_test(begin
+                    move_to_vm_register_test0(State0, 16#123456789abcdef0, {ptr, r10}, <<
+                        "   0:	d29bde07 	mov	x7, #0xdef0                	// #57072\n"
+                        "   4:	f2b35787 	movk	x7, #0x9abc, lsl #16\n"
+                        "   8:	f2cacf07 	movk	x7, #0x5678, lsl #32\n"
+                        "   c:	f2e24687 	movk	x7, #0x1234, lsl #48\n"
+                        "  10:	f9000147 	str	x7, [x10]"
+                    >>)
+                end),
+                %% Test: x_reg to y_reg (high index)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
+                        "   0:	f9405407 	ldr	x7, [x0, #168]\n"
+                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   8:	f9007d07 	str	x7, [x8, #248]"
+                    >>)
+                end),
+                %% Test: y_reg to x_reg (high index)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f9407ce7 	ldr	x7, [x7, #248]\n"
+                        "   8:	f9005407 	str	x7, [x0, #168]"
+                    >>)
+                end),
+                %% Test: Negative immediate to x_reg
+                ?_test(begin
+                    move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
+                        "   0:	92800007 	mov	x7, #0xffffffffffffffff    	// #-1\n"
+                        "   4:	f9001807 	str	x7, [x0, #48]"
+                    >>)
+                end)
+            ]
+        end}.
 
 move_array_element_test_() ->
     %% TODO: Implement AArch64 version
