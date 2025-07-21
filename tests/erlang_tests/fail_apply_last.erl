@@ -53,7 +53,8 @@ try_apply_last(M, F) ->
     try
         ?MODULE:do_apply0(M, F)
     catch
-        _Class:_Reason -> 1
+        _Class:_Reason:Stack ->
+            test_stacktrace(Stack, false, false, 1)
     end.
 
 pad_some_calls() ->
@@ -61,3 +62,16 @@ pad_some_calls() ->
     Y = 2,
     Z = X + Y,
     Z.
+
+% if try_apply_last/2 is in stacktrace, we also want do_apply0/2
+test_stacktrace([], _, _, R) ->
+    R;
+test_stacktrace([{?MODULE, try_apply_last, 2, _} | T], false, DoApply0, R) ->
+    test_stacktrace(T, true, DoApply0, R - 1);
+test_stacktrace([{?MODULE, do_apply0, 2, _} | T], TryApplyLast, false, R) ->
+    test_stacktrace(T, TryApplyLast, true, R + 1);
+test_stacktrace([_ | T], TryApplyLast, DoApply0, R) ->
+    test_stacktrace(T, TryApplyLast, DoApply0, R);
+test_stacktrace(undefined, _, _, R) ->
+    % AVM_CREATE_STACKTRACES=off
+    R.
