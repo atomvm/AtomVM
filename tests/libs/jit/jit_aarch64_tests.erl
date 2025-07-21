@@ -225,8 +225,37 @@ increment_sp_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_only_or_schedule_next_and_label_relocation_test() ->
-    %% TODO: Implement AArch64 version
-    ok.
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    Offset1 = ?BACKEND:offset(State1),
+    State2 = ?BACKEND:call_only_or_schedule_next(State1, 2),
+    Offset2 = ?BACKEND:offset(State2),
+    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    Offset0 = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
+    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
+    Stream = ?BACKEND:stream(State5),
+%   ok = file:write_file("dump.bin", Stream),
+    Dump =
+        <<
+            "   0:	1400000d 	b	0x34\n"
+            "   4:	14000002 	b	0xc\n"
+            "   8:	14000009 	b	0x2c\n"
+            "   c:	f9400827 	ldr	x7, [x1, #16]\n"
+            "  10:	f10004e7 	subs	x7, x7, #0x1\n"
+            "  14:	f9000827 	str	x7, [x1, #16]\n"
+            "  18:	540000a1 	b.ne	0x2c  // b.any\n"
+            "  1c:	10000087 	adr	x7, 0x2c\n"
+            "  20:	f9000427 	str	x7, [x1, #8]\n"
+            "  24:	f9400847 	ldr	x7, [x2, #16]\n"
+            "  28:	d61f00e0 	br	x7\n"
+            "  2c:	f9400047 	ldr	x7, [x2]\n"
+            "  30:	d61f00e0 	br	x7\n"
+            "  34:	f9400447 	ldr	x7, [x2, #8]\n"
+            "  38:	d61f00e0 	br	x7"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -242,7 +271,6 @@ call_bif_with_large_literal_integer_test() ->
     State6 = ?BACKEND:free_native_registers(State5, [ResultReg]),
     ?BACKEND:assert_all_native_free(State6),
     Stream = ?BACKEND:stream(State6),
-%   ok = file:write_file("dump.bin", Stream),
     Dump =
         <<
             "   0:	f9402050 	ldr	x16, [x2, #64]\n"
