@@ -27,7 +27,7 @@
     brk/1,
     cmp/2,
     cmp32/2,
-    and_reg/3,
+    and_/3,
     ldr/2,
     ldr_x/3,
     lsl/3,
@@ -371,13 +371,12 @@ try_encode_single_pattern(Pattern, Size) ->
             Imms =
                 case Size of
                     64 -> OnesCount - 1;
-                    32 -> (1 bsl 5) bor (OnesCount - 1);
-                    16 -> (1 bsl 4) bor (OnesCount - 1);
-                    8 -> (1 bsl 3) bor (OnesCount - 1);
-                    4 -> (1 bsl 2) bor (OnesCount - 1);
-                    2 -> (1 bsl 1) bor (OnesCount - 1)
+                    32 -> OnesCount - 1;
+                    16 -> 2#100000 bor (OnesCount - 1);
+                    8 -> 2#110000 bor (OnesCount - 1);
+                    4 -> 2#111000 bor (OnesCount - 1);
+                    2 -> 2#111100 bor (OnesCount - 1)
                 end,
-
             %% immr is the rotation amount (negate of start position)
             Immr = (-StartPos) band (Size - 1),
 
@@ -666,9 +665,9 @@ cmp32(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
     <<(16#7100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>.
 
 %% Emit an AND instruction (bitwise AND)
--spec and_reg(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register() | integer()) ->
+-spec and_(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register() | integer()) ->
     binary().
-and_reg(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+and_(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
     RmNum = reg_to_num(Rm),
@@ -677,17 +676,19 @@ and_reg(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
     <<
         (16#8A000000 bor (RmNum bsl 16) bor (RnNum bsl 5) bor RdNum):32/little
     >>;
-and_reg(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
+and_(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
-    case Imm of
-        %% special case for #192
-        192 ->
-            <<(16#927A0420 bor (RnNum bsl 5) bor RdNum):32/little>>;
-        _ ->
-            <<
-                (16#92000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little
-            >>
+    case encode_bitmask_immediate(Imm) of
+        {ok, N, Immr, Imms} ->
+            % AND immediate encoding: sf=1(64b) 00(op) 100100 N immr imms Rn Rd
+            Opcode = 16#92000000,
+            Instr =
+                Opcode bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5) bor
+                    RdNum,
+            <<Instr:32/little>>;
+        error ->
+            error({unencodable_immediate, Imm})
     end.
 
 %% Emit a logical shift left instruction
