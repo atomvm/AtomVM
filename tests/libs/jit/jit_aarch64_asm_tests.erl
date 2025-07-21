@@ -147,12 +147,16 @@ cmp32_test_() ->
         ?_assertEqual(<<16#7103001F:32/little>>, jit_aarch64_asm:cmp32(r0, 192))
     ].
 
-and_reg_test_() ->
+and_test_() ->
     [
         % AND reg, reg, reg
-        ?_assertEqual(<<16#8A010020:32/little>>, jit_aarch64_asm:and_reg(r0, r1, r1)),
+        ?_assertEqual(<<16#8A010020:32/little>>, jit_aarch64_asm:and_(r0, r1, r1)),
         % AND reg, reg, imm
-        ?_assertEqual(<<16#927A0420:32/little>>, jit_aarch64_asm:and_reg(r0, r1, 192))
+        ?_assertEqual(<<16#927A0420:32/little>>, jit_aarch64_asm:and_(r0, r1, 192)),
+        ?_assertEqual(<<16#927ff8e7:32/little>>, jit_aarch64_asm:and_(r7, r7, -2)),
+        ?_assertEqual(<<16#9200cc41:32/little>>, jit_aarch64_asm:and_(r1, r2, 16#f0f0f0f0f0f0f0f)),
+        ?_assertEqual(<<16#92603c62:32/little>>, jit_aarch64_asm:and_(r2, r3, 16#ffff00000000)),
+        ?_assertEqual(<<16#92785c83:32/little>>, jit_aarch64_asm:and_(r3, r4, 16#ffffff00))
     ].
 
 lsl_test_() ->
