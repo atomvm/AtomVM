@@ -70,7 +70,7 @@
     | r15
     | xzr.
 
--type cc() :: eq | ne | cs | cc | mi | pl | vs | vc | hi | ls | ge | lt | gt | le | al | nv.
+-type cc() :: eq | ne | cs | cc | mi | pl | vs | vc | hi | ls | ge | lt | gt | le | al | nv.
 
 %% Emit an ADD instruction (AArch64 encoding)
 %% ADD Rd, Rn, #imm - adds immediate value to register
