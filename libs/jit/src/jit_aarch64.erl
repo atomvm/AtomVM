@@ -1467,7 +1467,7 @@ move_array_element(
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0} = State, Reg, Index, Dest
 ) when is_atom(Dest) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Dest),
+    I1 = jit_aarch64_asm:ldr(Dest, {Index * 8, Reg}),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_array_element(

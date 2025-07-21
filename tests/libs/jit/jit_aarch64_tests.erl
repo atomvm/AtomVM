@@ -322,7 +322,6 @@ get_list_test() ->
     State5 = ?BACKEND:free_native_registers(State4, [Reg]),
     ?BACKEND:assert_all_native_free(State5),
     Stream = ?BACKEND:stream(State5),
-    ok = file:write_file("dump.bin", Stream),
     Dump = <<
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
         "   4:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
@@ -336,8 +335,54 @@ get_list_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_integer_test() ->
-    %% TODO: Implement AArch64 version
-    ok.
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Label = 1,
+    Arg1 = {x_reg, 0},
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
+    State2 = ?BACKEND:if_block(
+        State1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(MSt0) ->
+            MSt1 = ?BACKEND:if_block(
+                MSt0, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BSt0) ->
+                    ?BACKEND:jump_to_label(BSt0, Label)
+                end
+            ),
+            MSt2 = ?BACKEND:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+            MSt3 = ?BACKEND:move_array_element(MSt2, Reg, 0, Reg),
+            ?BACKEND:if_block(
+                MSt3,
+                {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                fun(BSt0) ->
+                    ?BACKEND:jump_to_label(BSt0, Label)
+                end
+            )
+        end
+    ),
+    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
+    ?BACKEND:assert_all_native_free(State3),
+    Offset = ?BACKEND:offset(State3),
+    Labels = [{Label, Offset + 16#100}],
+    State4 = ?BACKEND:update_branches(State3, Labels),
+    Stream = ?BACKEND:stream(State4),
+    ok = file:write_file("dump.bin", Stream),
+    Dump = <<
+        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   4:	aa0703e8 	mov	x8, x7\n"
+        "   8:	92400d08 	and	x8, x8, #0xf\n"
+        "   c:	f1003d1f 	cmp	x8, #0xf\n"
+        "  10:	54000180 	b.eq	0x40  // b.none\n"
+        "  14:	aa0703e8 	mov	x8, x7\n"
+        "  18:	92400508 	and	x8, x8, #0x3\n"
+        "  1c:	f100091f 	cmp	x8, #0x2\n"
+        "  20:	54000040 	b.eq	0x28  // b.none\n"
+        "  24:	14000047 	b	0x140\n"
+        "  28:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
+        "  2c:	f94000e7 	ldr	x7, [x7]\n"
+        "  30:	924014e7 	and	x7, x7, #0x3f\n"
+        "  34:	f10020ff 	cmp	x7, #0x8\n"
+        "  38:	54000040 	b.eq	0x40  // b.none\n"
+        "  3c:	14000041 	b	0x140"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_test() ->
     %% TODO: Implement AArch64 version
