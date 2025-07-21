@@ -195,28 +195,6 @@ bcc_test_() ->
         ?_assertEqual(<<16#54000400:32/little>>, jit_aarch64_asm:bcc(eq, 128))
     ].
 
-patch_b_offset_test_() ->
-    [
-        ?_assertEqual(
-            <<16#14000001:32/little>>, jit_aarch64_asm:patch_b_offset(<<16#14000000:32/little>>, 4)
-        ),
-        ?_assertEqual(
-            <<16#14000010:32/little>>, jit_aarch64_asm:patch_b_offset(<<16#14000000:32/little>>, 64)
-        )
-    ].
-
-patch_bcc_offset_test_() ->
-    [
-        ?_assertEqual(
-            <<16#54000400:32/little>>,
-            jit_aarch64_asm:patch_bcc_offset(<<16#54000000:32/little>>, 128)
-        ),
-        ?_assertEqual(
-            <<16#54000020:32/little>>,
-            jit_aarch64_asm:patch_bcc_offset(<<16#54000000:32/little>>, 4)
-        )
-    ].
-
 stp_x_test_() ->
     [
         ?_assertEqual(

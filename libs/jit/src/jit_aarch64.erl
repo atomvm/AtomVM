@@ -536,8 +536,8 @@ if_block(
     {Replacements, State1} = lists:foldl(
         fun(Cond, {AccReplacements, AccState}) ->
             Offset = StreamModule:offset(AccState#state.stream),
-            {NewAccState, ReplaceDelta} = if_block_cond(AccState, Cond),
-            {[Offset + ReplaceDelta | AccReplacements], NewAccState}
+            {NewAccState, CC, ReplaceDelta} = if_block_cond(AccState, Cond),
+            {[{Offset + ReplaceDelta, CC} | AccReplacements], NewAccState}
         end,
         {[], State0},
         CondList
@@ -546,11 +546,10 @@ if_block(
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
     Stream3 = lists:foldl(
-        fun(ReplacementOffset, AccStream) ->
+        fun({ReplacementOffset, CC}, AccStream) ->
             BranchOffset = OffsetAfter - ReplacementOffset,
-            StreamModule:map(Stream2, ReplacementOffset, 4, fun(PrevValue) ->
-                jit_aarch64_asm:patch_bcc_offset(PrevValue, BranchOffset)
-            end)
+            NewBranchInstr = jit_aarch64_asm:bcc(CC, BranchOffset),
+            StreamModule:replace(AccStream, ReplacementOffset, NewBranchInstr)
         end,
         Stream2,
         Replacements
@@ -562,15 +561,14 @@ if_block(
     BlockFn
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {State1, BranchInstrOffset} = if_block_cond(State0, Cond),
+    {State1, CC, BranchInstrOffset} = if_block_cond(State0, Cond),
     State2 = BlockFn(State1),
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
     BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    Stream3 = StreamModule:map(Stream2, Offset + BranchInstrOffset, 4, fun(PrevValue) ->
-        jit_aarch64_asm:patch_bcc_offset(PrevValue, BranchOffset)
-    end),
+    NewBranchInstr = jit_aarch64_asm:bcc(CC, BranchOffset),
+    Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
 
 %%-----------------------------------------------------------------------------
@@ -592,22 +590,20 @@ if_else_block(
     BlockFalseFn
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {State1, BranchInstrOffset} = if_block_cond(State0, Cond),
-    OffsetAfterCond = StreamModule:offset(State1#state.stream),
+    {State1, CC, BranchInstrOffset} = if_block_cond(State0, Cond),
     State2 = BlockTrueFn(State1),
     Stream2 = State2#state.stream,
+    %% Emit unconditional branch to skip the else block (will be replaced)
     ElseJumpOffset = StreamModule:offset(Stream2),
-    %% Emit unconditional branch to skip the else block
-
-    % Placeholder offset, will be patched
-    I = jit_aarch64_asm:b(0),
-    Stream3 = StreamModule:append(Stream2, I),
-    OffsetAfterJump = StreamModule:offset(Stream3),
+    ElseJumpInstr = jit_aarch64_asm:b(0),
+    Stream3 = StreamModule:append(Stream2, ElseJumpInstr),
+    %% Else block starts here.
+    OffsetAfter = StreamModule:offset(Stream3),
     %% Patch the conditional branch to jump to the else block
-    ElseBranchOffset = OffsetAfterJump - (Offset + BranchInstrOffset),
-    Stream4 = StreamModule:map(Stream3, Offset + BranchInstrOffset, 4, fun(PrevValue) ->
-        jit_aarch64_asm:patch_bcc_offset(PrevValue, ElseBranchOffset)
-    end),
+    ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
+    NewBranchInstr = jit_aarch64_asm:bcc(CC, ElseBranchOffset),
+    Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
+    %% Build the else block
     StateElse = State2#state{
         stream = Stream4,
         used_regs = State1#state.used_regs,
@@ -618,13 +614,12 @@ if_else_block(
     Stream5 = State3#state.stream,
     OffsetFinal = StreamModule:offset(Stream5),
     %% Patch the unconditional branch to jump to the end
-    FinalJumpOffset = OffsetFinal - OffsetAfterJump,
-    Stream6 = StreamModule:map(Stream5, ElseJumpOffset, 4, fun(PrevValue) ->
-        jit_aarch64_asm:patch_b_offset(PrevValue, FinalJumpOffset)
-    end),
+    FinalJumpOffset = OffsetFinal - ElseJumpOffset,
+    NewElseJumpInstr = jit_aarch64_asm:b(FinalJumpOffset),
+    Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
--spec if_block_cond(state(), condition()) -> {state(), non_neg_integer()}.
+-spec if_block_cond(state(), condition()) -> {state(), jit_aarch64_asm:cc(), non_neg_integer()}.
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     I1 = jit_aarch64_asm:tst(Reg, Reg),
     % pl = positive or zero (>=0)
@@ -635,7 +630,7 @@ if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1)};
+    {State1, pl, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegA, '<', RegB}
@@ -649,7 +644,7 @@ if_block_cond(
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1)};
+    {State1, ge, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
 ) ->
@@ -668,7 +663,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0, {'(int)', RegOrTuple, '==', 0}
 ) ->
@@ -686,7 +681,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}
@@ -709,7 +704,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, eq, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(int)', RegOrTuple, '!=', Val}
@@ -732,7 +727,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, eq, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', Val}
@@ -755,7 +750,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(int)', RegOrTuple, '==', Val}
@@ -778,7 +773,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(uint8_t)', RegOrTuple, '==', false}
@@ -798,7 +793,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(uint8_t)', RegOrTuple, '!=', false}
@@ -818,7 +813,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, eq, byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -842,7 +837,7 @@ if_block_cond(
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    {State1, byte_size(I1) + byte_size(I2) + byte_size(I3)};
+    {State1, eq, byte_size(I1) + byte_size(I2) + byte_size(I3)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -863,7 +858,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1) + byte_size(I2)};
+    {State2, eq, byte_size(I1) + byte_size(I2)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -886,7 +881,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)};
+    {State2, eq, byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -909,7 +904,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, byte_size(I1)}.
+    {State2, eq, byte_size(I1)}.
 
 -spec if_block_free_reg(aarch64_register() | {free, aarch64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
