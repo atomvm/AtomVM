@@ -825,7 +825,7 @@ if_block_cond(
     % Move Reg to Temp
     I1 = jit_aarch64_asm:orr(Temp, xzr, Reg),
     % AND with mask
-    I2 = jit_aarch64_asm:and_reg(Temp, Temp, Mask),
+    I2 = jit_aarch64_asm:and_(Temp, Temp, Mask),
     % Compare with value
     I3 = jit_aarch64_asm:cmp(Temp, Val),
     I4 = jit_aarch64_asm:bcc(eq, 0),
@@ -846,7 +846,7 @@ if_block_cond(
     {{free, Reg} = RegTuple, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
     % AND with mask
-    I1 = jit_aarch64_asm:and_reg(Reg, Reg, Mask),
+    I1 = jit_aarch64_asm:and_(Reg, Reg, Mask),
     % Compare with value
     I2 = jit_aarch64_asm:cmp(Reg, Val),
     I3 = jit_aarch64_asm:bcc(eq, 0),
@@ -1445,9 +1445,9 @@ move_array_element(
     Index,
     {y_reg, Y}
 ) when is_integer(Index) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp1),
-    I2 = jit_x86_64_asm:movq({Index * 8, Reg}, Temp2),
-    I3 = jit_x86_64_asm:movq(Temp2, {Y * 8, Temp1}),
+    I1 = jit_aarch64_asm:ldr(Temp1, ?Y_REGS),
+    I2 = jit_aarch64_asm:ldr(Temp2, {Index * 8, Reg}),
+    I3 = jit_aarch64_asm:str(Temp2, {Y * 8, Temp1}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
@@ -1722,7 +1722,7 @@ move_to_native_register(
 ) when
     X < ?MAX_REG
 ->
-    I1 = jit_x86_64_asm:movq(?X_REG(X), Reg),
+    I1 = jit_aarch64_asm:ldr(Reg, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(
@@ -1901,7 +1901,7 @@ get_module_index(
     }.
 
 and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm:andq(Val, Reg),
+    I1 = jit_aarch64_asm:and_(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
