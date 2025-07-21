@@ -29,7 +29,8 @@
     cmp32/2,
     and_/3,
     ldr/2,
-    ldr_x/3,
+    ldr_w/2,
+    ldr/3,
     lsl/3,
     lsr/3,
     mov/2,
@@ -38,11 +39,11 @@
     orr/3,
     ret/0,
     str/2,
-    str_x/3,
+    str/3,
     tst/2,
     tst32/2,
-    stp_x/4,
-    ldp_x/4,
+    stp/4,
+    ldp/4,
     subs/3,
     adr/2
 ]).
@@ -117,9 +118,9 @@ br(Reg) when is_atom(Reg) ->
     <<(16#D61F0000 bor (RegNum bsl 5)):32/little>>.
 
 %% Emit a load register (LDR) instruction for 64-bit load from memory (AArch64 encoding)
-%% Dst is destination register atom, Src is {Offset, BaseReg} tuple
--spec ldr(aarch64_gpr_register(), {integer(), aarch64_gpr_register()}) -> binary().
-ldr(Dst, {Offset, BaseReg}) when
+%% Dst is destination register atom, Src is {BaseReg, Offset} tuple
+-spec ldr(aarch64_gpr_register(), {aarch64_gpr_register(), integer()}) -> binary().
+ldr(Dst, {BaseReg, Offset}) when
     is_atom(Dst),
     is_atom(BaseReg),
     is_integer(Offset),
@@ -133,6 +134,25 @@ ldr(Dst, {Offset, BaseReg}) when
     %% 0xf9400000 | (Offset div 8) << 10 | BaseReg << 5 | Dst
     <<
         (16#F9400000 bor ((Offset div 8) bsl 10) bor (BaseRegNum bsl 5) bor DstNum):32/little
+    >>.
+
+%% Emit a load register (LDR) instruction for 32-bit load from memory (AArch64 encoding)
+%% Dst is destination register atom, Src is {BaseReg, Offset} tuple
+-spec ldr_w(aarch64_gpr_register(), {aarch64_gpr_register(), integer()}) -> binary().
+ldr_w(Dst, {BaseReg, Offset}) when
+    is_atom(Dst),
+    is_atom(BaseReg),
+    is_integer(Offset),
+    Offset >= 0,
+    Offset =< 32760,
+    (Offset rem 8) =:= 0
+->
+    DstNum = reg_to_num(Dst),
+    BaseRegNum = reg_to_num(BaseReg),
+    %% AArch64 LDR (immediate) encoding for 64-bit: 11111001010iiiiiiiiiiibbbbbttttt
+    %% 0xf9400000 | (Offset div 8) << 10 | BaseReg << 5 | Dst
+    <<
+        (16#B9400000 bor ((Offset div 4) bsl 10) bor (BaseRegNum bsl 5) bor DstNum):32/little
     >>.
 
 %% Emit a move immediate (MOV) instruction for various immediate sizes (AArch64 encoding)
@@ -438,8 +458,8 @@ orr(DstReg, Rn, Rm) when is_atom(DstReg), is_atom(Rn), is_atom(Rm) ->
     >>.
 
 %% Emit a store register (STR) instruction for 64-bit store to memory
--spec str(aarch64_gpr_register(), {integer(), aarch64_gpr_register()}) -> binary().
-str(SrcReg, {Offset, BaseReg}) when
+-spec str(aarch64_gpr_register(), {aarch64_gpr_register(), integer()}) -> binary().
+str(SrcReg, {BaseReg, Offset}) when
     is_atom(SrcReg),
     is_atom(BaseReg),
     is_integer(Offset),
@@ -456,16 +476,16 @@ str(SrcReg, {Offset, BaseReg}) when
     >>.
 
 %% Emit a store register (STR) instruction for 64-bit store to memory, with store-update (writeback)
--spec str_x
+-spec str
     (aarch64_gpr_register(), {aarch64_gpr_register(), integer()}, '!') -> binary();
     (aarch64_gpr_register(), {aarch64_gpr_register()}, integer()) -> binary().
-str_x(Reg, {Base, Imm}, '!') when
+str(Reg, {Base, Imm}, '!') when
     is_atom(Reg), is_atom(Base), is_integer(Imm), Imm >= -256, Imm < 256, (Imm rem 8) =:= 0
 ->
     RegNum = reg_to_num(Reg),
     BaseNum = reg_to_num(Base),
     <<(16#F8000C00 bor ((Imm band 16#1FF) bsl 12) bor (BaseNum bsl 5) bor RegNum):32/little>>;
-str_x(Reg, {Base}, Imm) when
+str(Reg, {Base}, Imm) when
     is_atom(Reg), is_atom(Base), is_integer(Imm), Imm >= -256, Imm < 256, (Imm rem 8) =:= 0
 ->
     RegNum = reg_to_num(Reg),
@@ -473,16 +493,16 @@ str_x(Reg, {Base}, Imm) when
     <<(16#F8000400 bor ((Imm band 16#1FF) bsl 12) bor (BaseNum bsl 5) bor RegNum):32/little>>.
 
 %% Emit a load register (LDR) instruction for 64-bit store to memory, with store-update (writeback)
--spec ldr_x
+-spec ldr
     (aarch64_gpr_register(), {aarch64_gpr_register(), integer()}, '!') -> binary();
     (aarch64_gpr_register(), {aarch64_gpr_register()}, integer()) -> binary().
-ldr_x(Reg, {Base, Imm}, '!') when
+ldr(Reg, {Base, Imm}, '!') when
     is_atom(Reg), is_atom(Base), is_integer(Imm), Imm >= -256, Imm < 256, (Imm rem 8) =:= 0
 ->
     RegNum = reg_to_num(Reg),
     BaseNum = reg_to_num(Base),
     <<(16#F8400C00 bor ((Imm band 16#1FF) bsl 12) bor (BaseNum bsl 5) bor RegNum):32/little>>;
-ldr_x(Reg, {Base}, Imm) when
+ldr(Reg, {Base}, Imm) when
     is_atom(Reg), is_atom(Base), is_integer(Imm), Imm >= -256, Imm < 256, (Imm rem 8) =:= 0
 ->
     RegNum = reg_to_num(Reg),
@@ -490,15 +510,15 @@ ldr_x(Reg, {Base}, Imm) when
     <<(16#F8400400 bor ((Imm band 16#1FF) bsl 12) bor (BaseNum bsl 5) bor RegNum):32/little>>.
 
 %% Emit a store pair (STP) instruction for 64-bit registers
-%% stp_x(Rn, Rm, {Base}, Imm) -> binary()
-%% stp_x(Rn, Rm, {Base, Imm}, '!') -> binary() (store-update)
--spec stp_x(
+%% stp(Rn, Rm, {Base}, Imm) -> binary()
+%% stp(Rn, Rm, {Base, Imm}, '!') -> binary() (store-update)
+-spec stp(
     aarch64_gpr_register(),
     aarch64_gpr_register(),
     {aarch64_gpr_register()} | {aarch64_gpr_register(), integer()},
     integer() | '!'
 ) -> binary().
-stp_x(Rn, Rm, {Base}, Imm) when
+stp(Rn, Rm, {Base}, Imm) when
     is_atom(Rn),
     is_atom(Rm),
     is_atom(Base),
@@ -515,7 +535,7 @@ stp_x(Rn, Rm, {Base}, Imm) when
     <<
         (16#A8800000 bor ((Imm div 8) bsl 15) bor (BaseNum bsl 5) bor (RmNum bsl 10) bor RnNum):32/little
     >>;
-stp_x(Rn, Rm, {Base, Imm}, '!') when
+stp(Rn, Rm, {Base, Imm}, '!') when
     is_atom(Rn),
     is_atom(Rm),
     is_atom(Base),
@@ -533,10 +553,10 @@ stp_x(Rn, Rm, {Base, Imm}, '!') when
     >>.
 
 %% Emit a load pair (LDP) instruction for 64-bit registers
-%% ldp_x(Rn, Rm, {Base}, Imm) -> binary()
--spec ldp_x(aarch64_gpr_register(), aarch64_gpr_register(), {aarch64_gpr_register()}, integer()) ->
+%% ldp(Rn, Rm, {Base}, Imm) -> binary()
+-spec ldp(aarch64_gpr_register(), aarch64_gpr_register(), {aarch64_gpr_register()}, integer()) ->
     binary().
-ldp_x(Rn, Rm, {Base}, Imm) when
+ldp(Rn, Rm, {Base}, Imm) when
     is_atom(Rn),
     is_atom(Rm),
     is_atom(Base),

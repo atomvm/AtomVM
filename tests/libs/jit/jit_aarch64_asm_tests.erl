@@ -60,8 +60,29 @@ br_test_() ->
 
 ldr_test_() ->
     [
-        ?_assertEqual(<<16#F9400421:32/little>>, jit_aarch64_asm:ldr(r1, {8, r1})),
-        ?_assertEqual(<<16#F9403042:32/little>>, jit_aarch64_asm:ldr(r2, {96, r2}))
+        ?_assertEqual(<<16#F9400421:32/little>>, jit_aarch64_asm:ldr(r1, {r1, 8})),
+        ?_assertEqual(<<16#F9403042:32/little>>, jit_aarch64_asm:ldr(r2, {r2, 96})),
+        % Load-update (writeback) with SP, negative offset
+        ?_assertEqual(
+            <<16#F85F0FE7:32/little>>,
+            jit_aarch64_asm:ldr(r7, {sp, -16}, '!')
+        ),
+        % Load-update (writeback) with SP, positive offset
+        ?_assertEqual(
+            <<16#F8410FE7:32/little>>,
+            jit_aarch64_asm:ldr(r7, {sp, 16}, '!')
+        ),
+        % Load-update (writeback) with SP, zero offset
+        ?_assertEqual(
+            <<16#F84007E7:32/little>>,
+            jit_aarch64_asm:ldr(r7, {sp}, 0)
+        )
+    ].
+
+ldr_w_test_() ->
+    [
+        ?_assertEqual(<<16#b9400821:32/little>>, jit_aarch64_asm:ldr_w(r1, {r1, 8})),
+        ?_assertEqual(<<16#b9406042:32/little>>, jit_aarch64_asm:ldr_w(r2, {r2, 96}))
     ].
 
 mov_test_() ->
@@ -102,30 +123,26 @@ orr_test_() ->
 
 str_test_() ->
     [
-        ?_assertEqual(<<16#F9000421:32/little>>, jit_aarch64_asm:str(r1, {8, r1})),
-        ?_assertEqual(<<16#F9003042:32/little>>, jit_aarch64_asm:str(r2, {96, r2})),
+        ?_assertEqual(<<16#F9000421:32/little>>, jit_aarch64_asm:str(r1, {r1, 8})),
+        ?_assertEqual(<<16#F9003042:32/little>>, jit_aarch64_asm:str(r2, {r2, 96})),
         % str with xzr (zero register) - stores zero to memory
-        ?_assertEqual(<<16#F900001F:32/little>>, jit_aarch64_asm:str(xzr, {0, r0})),
-        ?_assertEqual(<<16#F900043F:32/little>>, jit_aarch64_asm:str(xzr, {8, r1})),
-        ?_assertEqual(<<16#F900085F:32/little>>, jit_aarch64_asm:str(xzr, {16, r2}))
-    ].
-
-str_x_test_() ->
-    [
+        ?_assertEqual(<<16#F900001F:32/little>>, jit_aarch64_asm:str(xzr, {r0, 0})),
+        ?_assertEqual(<<16#F900043F:32/little>>, jit_aarch64_asm:str(xzr, {r1, 8})),
+        ?_assertEqual(<<16#F900085F:32/little>>, jit_aarch64_asm:str(xzr, {r2, 16})),
         % Store-update (writeback) with SP
         ?_assertEqual(
             <<16#F81F0FE7:32/little>>,
-            jit_aarch64_asm:str_x(r7, {sp, -16}, '!')
+            jit_aarch64_asm:str(r7, {sp, -16}, '!')
         ),
         % Store-update (writeback) with SP, positive offset
         ?_assertEqual(
             <<16#F8010FE7:32/little>>,
-            jit_aarch64_asm:str_x(r7, {sp, 16}, '!')
+            jit_aarch64_asm:str(r7, {sp, 16}, '!')
         ),
         % Store-update (writeback) with SP, zero offset
         ?_assertEqual(
             <<16#F80007E7:32/little>>,
-            jit_aarch64_asm:str_x(r7, {sp}, 0)
+            jit_aarch64_asm:str(r7, {sp}, 0)
         )
     ].
 
@@ -199,59 +216,40 @@ bcc_test_() ->
         ?_assertEqual(<<16#54000400:32/little>>, jit_aarch64_asm:bcc(eq, 128))
     ].
 
-stp_x_test_() ->
+stp_test_() ->
     [
         ?_assertEqual(
             <<16#a8815113:32/little>>,
-            jit_aarch64_asm:stp_x(r19, r20, {r8}, 16)
+            jit_aarch64_asm:stp(r19, r20, {r8}, 16)
         ),
         ?_assertEqual(
             <<16#a88153f3:32/little>>,
-            jit_aarch64_asm:stp_x(r19, r20, {sp}, 16)
+            jit_aarch64_asm:stp(r19, r20, {sp}, 16)
         ),
         % Store-update (writeback) variants
         ?_assertEqual(
             <<16#a9bf27e8:32/little>>,
-            jit_aarch64_asm:stp_x(r8, r9, {sp, -16}, '!')
+            jit_aarch64_asm:stp(r8, r9, {sp, -16}, '!')
         ),
         ?_assertEqual(
             <<16#a98127e8:32/little>>,
-            jit_aarch64_asm:stp_x(r8, r9, {sp, 16}, '!')
+            jit_aarch64_asm:stp(r8, r9, {sp, 16}, '!')
         ),
         ?_assertEqual(
             <<16#a98027e8:32/little>>,
-            jit_aarch64_asm:stp_x(r8, r9, {sp, 0}, '!')
+            jit_aarch64_asm:stp(r8, r9, {sp, 0}, '!')
         )
     ].
 
-ldp_x_test_() ->
+ldp_test_() ->
     [
         ?_assertEqual(
             <<16#a8c15113:32/little>>,
-            jit_aarch64_asm:ldp_x(r19, r20, {r8}, 16)
+            jit_aarch64_asm:ldp(r19, r20, {r8}, 16)
         ),
         ?_assertEqual(
             <<16#a8c153f3:32/little>>,
-            jit_aarch64_asm:ldp_x(r19, r20, {sp}, 16)
-        )
-    ].
-
-ldr_x_test_() ->
-    [
-        % Load-update (writeback) with SP, negative offset
-        ?_assertEqual(
-            <<16#F85F0FE7:32/little>>,
-            jit_aarch64_asm:ldr_x(r7, {sp, -16}, '!')
-        ),
-        % Load-update (writeback) with SP, positive offset
-        ?_assertEqual(
-            <<16#F8410FE7:32/little>>,
-            jit_aarch64_asm:ldr_x(r7, {sp, 16}, '!')
-        ),
-        % Load-update (writeback) with SP, zero offset
-        ?_assertEqual(
-            <<16#F84007E7:32/little>>,
-            jit_aarch64_asm:ldr_x(r7, {sp}, 0)
+            jit_aarch64_asm:ldp(r19, r20, {sp}, 16)
         )
     ].
 
