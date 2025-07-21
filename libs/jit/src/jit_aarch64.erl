@@ -822,22 +822,19 @@ if_block_cond(
     } = State0,
     {Reg, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
-    % Move Reg to Temp
-    I1 = jit_aarch64_asm:orr(Temp, xzr, Reg),
     % AND with mask
-    I2 = jit_aarch64_asm:and_(Temp, Temp, Mask),
+    I1 = jit_aarch64_asm:and_(Temp, Reg, Mask),
     % Compare with value
-    I3 = jit_aarch64_asm:cmp(Temp, Val),
-    I4 = jit_aarch64_asm:bcc(eq, 0),
+    I2 = jit_aarch64_asm:cmp(Temp, Val),
+    I3 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
         I1/binary,
         I2/binary,
-        I3/binary,
-        I4/binary
+        I3/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    {State1, eq, byte_size(I1) + byte_size(I2) + byte_size(I3)};
+    {State1, eq, byte_size(I1) + byte_size(I2)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1809,7 +1806,7 @@ copy_to_native_register(
     } = State,
     Reg
 ) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(Reg, SaveReg),
+    I1 = jit_aarch64_asm:mov(SaveReg, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [SaveReg | Used]}, SaveReg};
 copy_to_native_register(
