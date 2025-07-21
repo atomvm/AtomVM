@@ -25,6 +25,11 @@ escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
     --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img" \
     "$@"
 
+if (test ${@} = "--help"); then
+    echo ""
+    exit 0;
+fi
+
 echo "============================================="
 
 echo ""
