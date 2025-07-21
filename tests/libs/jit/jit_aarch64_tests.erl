@@ -363,7 +363,6 @@ is_integer_test() ->
     Labels = [{Label, Offset + 16#100}],
     State4 = ?BACKEND:update_branches(State3, Labels),
     Stream = ?BACKEND:stream(State4),
-    ok = file:write_file("dump.bin", Stream),
     Dump = <<
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
         "   4:	aa0703e8 	mov	x8, x7\n"
@@ -385,8 +384,30 @@ is_integer_test() ->
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_test() ->
-    %% TODO: Implement AArch64 version
-    ok.
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Label = 1,
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
+    Offset = ?BACKEND:offset(State3),
+    Labels = [{Label, Offset + 16#100}],
+    ?BACKEND:assert_all_native_free(State3),
+    State4 = ?BACKEND:update_branches(State3, Labels),
+    Stream = ?BACKEND:stream(State4),
+%   ok = file:write_file("dump.bin", Stream),
+    Dump = <<
+        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   4:	f1012cff 	cmp	x7, #0x4b\n"
+        "   8:	54000080 	b.eq	0x18  // b.none\n"
+        "   c:	f1002cff 	cmp	x7, #0xb\n"
+        "  10:	54000040 	b.eq	0x18  // b.none\n"
+        "  14:	14000041 	b	0x118"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_test() ->
     %% TODO: Implement AArch64 version
