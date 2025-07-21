@@ -352,7 +352,7 @@ jump_table0(
 ) ->
     Offset = StreamModule:offset(Stream0),
     BranchInstr = jit_aarch64_asm:b(0),
-    Reloc = {N, Offset, 32},
+    Reloc = {N, Offset, b},
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
 
@@ -370,14 +370,19 @@ update_branches(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = [{Label, Offset, Size} | BranchesT]
+        branches = [{Label, Offset, Type} | BranchesT]
     } = State,
     Labels
 ) ->
     {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Rel = ((LabelOffset - Offset) div 4),
-    Patched = <<(16#14000000 bor (Rel band 16#03FFFFFF)):32>>,
-    Stream1 = StreamModule:map(Stream0, Offset, Size div 8, fun(_) -> Patched end),
+    Rel = LabelOffset - Offset,
+    NewInstr =
+        case Type of
+            {bcc, CC} -> jit_aarch64_asm:bcc(CC, Rel);
+            {adr, Reg} -> jit_aarch64_asm:adr(Reg, Rel);
+            b -> jit_aarch64_asm:b(Rel)
+        end,
+    Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
     update_branches(State#state{stream = Stream1, branches = BranchesT}, Labels).
 
 %%-----------------------------------------------------------------------------
@@ -507,14 +512,9 @@ jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State, Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    %% Use unconditional branch instruction B
-
     % Placeholder offset, will be patched
-    I1 = jit_aarch64_asm:b(-4),
-    % Offset is at the beginning of the instruction
-    RelocOffset = 0,
-    % AArch64 B instruction uses 26-bit offset
-    Reloc = {Label, Offset + RelocOffset, 26},
+    I1 = jit_aarch64_asm:b(0),
+    Reloc = {Label, Offset, b},
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
@@ -1859,9 +1859,9 @@ set_continuation_to_label(
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Temp),
-    Reloc = {Label, Offset + RewriteLEAOffset, 32},
-    I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
+    I1 = jit_aarch64_asm:adr(Temp, 0),
+    Reloc = {Label, Offset, {adr, Temp}},
+    I2 = jit_aarch64_asm:str(Temp, ?JITSTATE_CONTINUATION),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1, branches = [Reloc | Branches]}.
@@ -1981,19 +1981,24 @@ call_only_or_schedule_next(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = Branches
+        branches = Branches,
+        available_regs = [Temp | _]
     } = State0,
     Label
 ) ->
-    Offset = StreamModule:offset(Stream0),
-    I1 = jit_x86_64_asm:decl(?JITSTATE_REDUCTIONCOUNT),
-    {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jz(byte_size(I3)),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc1 = {Label, Offset + Sz + RewriteJMPOffset, 32},
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1, branches = [Reloc1 | Branches]},
+    % Load reduction count
+    I1 = jit_aarch64_asm:ldr(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    % Decrement reduction count
+    I2 = jit_aarch64_asm:subs(Temp, Temp, 1),
+    % Store back the decremented value
+    I3 = jit_aarch64_asm:str(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
+    BNEOffset = StreamModule:offset(Stream1),
+    % Branch to label if reduction count is not zero
+    I4 = jit_aarch64_asm:bcc(ne, 0),
+    Reloc1 = {Label, BNEOffset, {bcc, ne}},
+    Stream2 = StreamModule:append(Stream1, I4),
+    State1 = State0#state{stream = Stream2, branches = [Reloc1 | Branches]},
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
