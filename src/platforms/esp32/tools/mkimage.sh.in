@@ -37,6 +37,11 @@ fail()
     exit 1
 }
 
+if (test "${@}" = "--help"); then
+    escript "${build_dir}/mkimage.erl" --help
+    exit 0;
+fi
+
 escript "${build_dir}/mkimage.erl" \
     --root_dir "${build_dir}/../../../../" \
     --config "${build_dir}/mkimage.config" \
