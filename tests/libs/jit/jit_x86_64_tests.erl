@@ -691,7 +691,7 @@ move_array_element_test_() ->
                         "   8:	4c 89 58 10          	mov    %r11,0x10(%rax)"
                     >>)
                 end),
-                %% move_array_element: reg[x] to atom reg (r10)
+                %% move_array_element: reg[x] to native reg (r10)
                 ?_test(begin
                     move_array_element_test0(State0, r8, 1, r10, <<
                         "   0:	4d 8b 50 08          	mov    0x8(%r8),%r10"
@@ -710,6 +710,40 @@ move_array_element_test_() ->
                     move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
                         "   0:	49 8b 40 38          	mov    0x38(%r8),%rax\n"
                         "   4:	48 89 87 a8 00 00 00 	mov    %rax,0xa8(%rdi)"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to x_reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {x_reg, 2}, <<
+                        "   0:	49 8b 40 20          	mov    0x20(%r8),%rax\n"
+                        "   4:	48 c1 e0 03          	shl    $0x3,%rax\n"
+                        "   8:	4c 01 c0             	add    %r8,%rax\n"
+                        "   b:	48 8b 00             	mov    (%rax),%rax\n"
+                        "   e:	48 89 47 40          	mov    %rax,0x40(%rdi)\n"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to pointer (large x reg)
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {ptr, r10}, <<
+                        "   0:	49 8b 40 20          	mov    0x20(%r8),%rax\n"
+                        "   4:	48 c1 e0 03          	shl    $0x3,%rax\n"
+                        "   8:	4c 01 c0             	add    %r8,%rax\n"
+                        "   b:	48 8b 00             	mov    (%rax),%rax\n"
+                        "   e:	49 89 02             	mov    %rax,(%r10)"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to y_reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {y_reg, 31}, <<
+                        "   0:	49 8b 40 20          	mov    0x20(%r8),%rax\n"
+                        "   4:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   8:	48 c1 e0 03          	shl    $0x3,%rax\n"
+                        "   c:	4c 01 c0             	add    %r8,%rax\n"
+                        "   f:	48 8b 00             	mov    (%rax),%rax\n"
+                        "  12:	49 89 83 f8 00 00 00 	mov    %rax,0xf8(%r11)"
                     >>)
                 end)
             ]
