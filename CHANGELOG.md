@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `binary:match/2` and `binary:match/3`
 - Added `supervisor:which_children/1`
 - Added ESP32 `-DATOMVM_ELIXIR_SUPPORT=on` configuration option
+- Added support for ESP32 development builds to include NVS partition data at build time
 
 ### Changed
 
