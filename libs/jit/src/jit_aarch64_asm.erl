@@ -20,6 +20,7 @@
 
 -export([
     add/3,
+    add/4,
     b/1,
     bcc/2,
     blr/1,
@@ -83,6 +84,23 @@ add(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =
     %% 0x91000000 | Imm << 10 | Rn << 5 | Rd
     <<(16#91000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>.
 
+%% ADD (shifted register)
+%% ADD Rd, Rn, Rm, {lsl, #amount}
+-spec add(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register(), {lsl, 0..63}) ->
+    binary().
+add(Rd, Rn, Rm, {lsl, Amount}) when
+    is_atom(Rd), is_atom(Rn), is_atom(Rm), is_integer(Amount), Amount >= 0, Amount =< 63
+->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    %% AArch64 ADD (immediate) encoding: 1001000100iiiiiiiiiiiinnnnndddddd
+    %% 0x8B000000 | Rm << 16 | Amount << 10 | Rn << 5 | Rd
+    <<
+        (16#8B000000 bor (RmNum bsl 16) bor ((Amount band 16#3F) bsl 10) bor (RnNum bsl 5) bor
+            RdNum):32/little
+    >>.
+
 %% Emit an unconditional branch (B) to a 32-bit relative offset (AArch64 encoding)
 %% offset is in bytes, relative to the next instruction
 -spec b(integer()) -> binary().
@@ -134,6 +152,25 @@ ldr(Dst, {BaseReg, Offset}) when
     %% 0xf9400000 | (Offset div 8) << 10 | BaseReg << 5 | Dst
     <<
         (16#F9400000 bor ((Offset div 8) bsl 10) bor (BaseRegNum bsl 5) bor DstNum):32/little
+    >>;
+ldr(Xt, {Xn, Xm}) when
+    is_atom(Xt),
+    is_atom(Xn),
+    is_atom(Xm)
+->
+    ldr(Xt, {Xn, Xm, lsl, 0});
+ldr(Xt, {Xn, Xm, lsl, Amount}) when
+    is_atom(Xt),
+    is_atom(Xn),
+    is_atom(Xm),
+    Amount =:= 0 orelse Amount =:= 3
+->
+    XtNum = reg_to_num(Xt),
+    XnNum = reg_to_num(Xn),
+    XmNum = reg_to_num(Xm),
+    S = Amount div 3,
+    <<
+        (16#F8606800 bor (XmNum bsl 16) bor (S bsl 12) bor (XnNum bsl 5) bor XtNum):32/little
     >>.
 
 %% Emit a load register (LDR) instruction for 32-bit load from memory (AArch64 encoding)
