@@ -345,6 +345,7 @@ compile_erlang(literal_test0)
 compile_erlang(literal_test1)
 compile_erlang(literal_test2)
 compile_erlang(test_extended_literal_large)
+compile_erlang(bnot64)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -863,6 +864,8 @@ add_custom_target(erlang_test_modules DEPENDS
     literal_test1.beam
     literal_test2.beam
     test_extended_literal_large.beam
+
+    bnot64.beam
 
     test_list_eq.beam
     test_tuple_eq.beam

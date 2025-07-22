@@ -5302,12 +5302,12 @@ wait_timeout_trap_handler:
                 READ_ANY_XREG(function, arity + 1);
                 TRACE("apply_last/1, module=%lu, function=%lu arity=%i deallocate=%i\n", module, function, arity, n_words);
 
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
-
                 if (UNLIKELY(!term_is_atom(module) || !term_is_atom(function))) {
                     RAISE_ERROR(BADARG_ATOM);
                 }
+
+                ctx->cp = ctx->e[n_words];
+                ctx->e += (n_words + 1);
 
                 atom_index_t module_name = term_to_atom_index(module);
                 atom_index_t function_name = term_to_atom_index(function);
