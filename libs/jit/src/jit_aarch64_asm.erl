@@ -492,7 +492,21 @@ orr(DstReg, Rn, Rm) when is_atom(DstReg), is_atom(Rn), is_atom(Rm) ->
     %% 10101010000mmmmm000000nnnnndddddd (64-bit)
     <<
         (16#AA000000 bor (RmNum bsl 16) bor (RnNum bsl 5) bor DstNum):32/little
-    >>.
+    >>;
+orr(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    case encode_bitmask_immediate(Imm) of
+        {ok, N, Immr, Imms} ->
+            % OR immediate encoding: sf=1(64b) 01(op) 100100 N immr imms Rn Rd
+            Opcode = 16#B2000000,
+            Instr =
+                Opcode bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5) bor
+                    RdNum,
+            <<Instr:32/little>>;
+        error ->
+            error({unencodable_immediate, Imm})
+    end.
 
 %% Emit a store register (STR) instruction for 64-bit store to memory
 -spec str(aarch64_gpr_register(), {aarch64_gpr_register(), integer()}) -> binary().
@@ -510,6 +524,19 @@ str(SrcReg, {BaseReg, Offset}) when
     %% 0xf9000000 | (Offset div 8) << 10 | BaseReg << 5 | SrcReg
     <<
         (16#F9000000 bor ((Offset div 8) bsl 10) bor (BaseNum bsl 5) bor SrcNum):32/little
+    >>;
+str(Xt, {Xn, Xm, lsl, Amount}) when
+    is_atom(Xt),
+    is_atom(Xn),
+    is_atom(Xm),
+    Amount =:= 0 orelse Amount =:= 3
+->
+    XtNum = reg_to_num(Xt),
+    XnNum = reg_to_num(Xn),
+    XmNum = reg_to_num(Xm),
+    S = Amount div 3,
+    <<
+        (16#F8206800 bor (XmNum bsl 16) bor (S bsl 12) bor (XnNum bsl 5) bor XtNum):32/little
     >>.
 
 %% Emit a store register (STR) instruction for 64-bit store to memory, with store-update (writeback)

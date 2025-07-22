@@ -729,13 +729,163 @@ move_array_element_test_() ->
         end}.
 
 get_array_element_test_() ->
-    %% TODO: Implement AArch64 version
-    [].
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                %% get_array_element: reg[x] to new native reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401107 	ldr	x7, [x8, #32]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual(r7, Reg)
+                end)
+            ]
+        end}.
 
 move_to_array_element_test_() ->
-    %% TODO: Implement AArch64 version
-    [].
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                %% move_to_array_element/4: x_reg to reg[x]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9000907 	str	x7, [x8, #16]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/4: x_reg to reg[reg]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, r9),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "  0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/4: ptr to reg[reg]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {ptr, r7}, r8, r9),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f94000e7 	ldr	x7, [x7]\n"
+                        "   4:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/4: y_reg to reg[reg]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {y_reg, 2}, r8, r9),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f94008e7 	ldr	x7, [x7, #16]\n"
+                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/5: x_reg to reg[x+offset]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2, 1),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9000907 	str	x7, [x8, #16]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/5: x_reg to reg[x+offset]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, r9, 1),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	91000508 	add	x8, x8, #0x1\n"
+                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_array_element/5: imm to reg[x+offset]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_array_element(State0, 42, r8, r9, 1),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
+                        "   4:	91000508 	add	x8, x8, #0x1\n"
+                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end)
+            ]
+        end}.
 
+move_to_native_register_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                %% move_to_native_register/3: imm to reg
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, 42, r8),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	d2800548 	mov	x8, #0x2a                  	// #42"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/3: reg to reg
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, r7, r8),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	aa0703e8 	mov	x8, x7"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/3: {ptr, reg} to reg
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, {ptr, r7}, r8),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f94000e8 	ldr	x8, [x7]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/3: {x_reg, x} to reg[reg]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r8),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9402008 	ldr	x8, [x0, #64]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/3: {y_reg, y} to reg[reg]
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r8),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   4:	f9400908 	ldr	x8, [x8, #16]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end)
+            ]
+        end}.
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
