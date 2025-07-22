@@ -157,6 +157,11 @@ str_test_() ->
         ?_assertEqual(
             <<16#F80007E7:32/little>>,
             jit_aarch64_asm:str(r7, {sp}, 0)
+        ),
+        % shift
+        ?_assertEqual(
+            <<16#f8237841:32/little>>,
+            jit_aarch64_asm:str(r1, {r2, r3, lsl, 3})
         )
     ].
 
