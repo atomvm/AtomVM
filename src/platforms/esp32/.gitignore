@@ -5,3 +5,4 @@
 
 sdkconfig.defaults
 sdkconfig.old
+nvs_partition.csv
