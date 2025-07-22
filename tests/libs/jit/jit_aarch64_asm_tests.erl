@@ -28,7 +28,8 @@ add_test_() ->
     [
         ?_assertEqual(<<16#9100e0e7:32/little>>, jit_aarch64_asm:add(r7, r7, 56)),
         ?_assertEqual(<<16#91000000:32/little>>, jit_aarch64_asm:add(r0, r0, 0)),
-        ?_assertEqual(<<16#91000421:32/little>>, jit_aarch64_asm:add(r1, r1, 1))
+        ?_assertEqual(<<16#91000421:32/little>>, jit_aarch64_asm:add(r1, r1, 1)),
+        ?_assertEqual(<<16#8b031041:32/little>>, jit_aarch64_asm:add(r1, r2, r3, {lsl, 4}))
     ].
 
 b_test_() ->
@@ -76,6 +77,19 @@ ldr_test_() ->
         ?_assertEqual(
             <<16#F84007E7:32/little>>,
             jit_aarch64_asm:ldr(r7, {sp}, 0)
+        ),
+        % shift
+        ?_assertEqual(
+            <<16#f8637841:32/little>>,
+            jit_aarch64_asm:ldr(r1, {r2, r3, lsl, 3})
+        ),
+        ?_assertEqual(
+            <<16#f8677907:32/little>>,
+            jit_aarch64_asm:ldr(r7, {r8, r7, lsl, 3})
+        ),
+        ?_assertEqual(
+            <<16#f8636841:32/little>>,
+            jit_aarch64_asm:ldr(r1, {r2, r3})
         )
     ].
 
