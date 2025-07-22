@@ -506,12 +506,6 @@ call_fun_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-move_to_vm_register_test1(State, Source, Dest, Dump) ->
-    State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
-    Stream = ?BACKEND:stream(State1),
-    ok = file:write_file("dump.bin", Stream),
-    ?assertEqual(dump_to_bin(Dump), Stream).
-
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     Stream = ?BACKEND:stream(State1),
@@ -648,9 +642,91 @@ move_to_vm_register_test_() ->
             ]
         end}.
 
+move_array_element_test0(State, Reg, Index, Dest, Dump) ->
+    State1 = ?BACKEND:move_array_element(State, Reg, Index, Dest),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 move_array_element_test_() ->
-    %% TODO: Implement AArch64 version
-    [].
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                %% move_array_element: reg[x] to x_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 2, {x_reg, 0}, <<
+                        "   0:	f9400907 	ldr	x7, [x8, #16]\n"
+                        "   4:	f9001807 	str	x7, [x0, #48]"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to ptr
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 3, {ptr, r10}, <<
+                        "   0:	f9400d07 	ldr	x7, [x8, #24]\n"
+                        "   4:	f9000147 	str	x7, [x10]"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to y_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 1, {y_reg, 2}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f9400508 	ldr	x8, [x8, #8]\n"
+                        "   8:	f90008e8 	str	x8, [x7, #16]"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to native reg (r10)
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 1, r10, <<
+                        "   0:	f940050a 	ldr	x10, [x8, #8]"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to y_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 7, {y_reg, 31}, <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f9401d08 	ldr	x8, [x8, #56]\n"
+                        "   8:	f9007ce8 	str	x8, [x7, #248]"
+                    >>)
+                end),
+                %% move_array_element: reg[x] to x_reg
+                ?_test(begin
+                    move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
+                        "   0:	f9401d07 	ldr	x7, [x8, #56]\n"
+                        "   4:	f9005407 	str	x7, [x0, #168]"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to x_reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {x_reg, 2}, <<
+                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
+                        "   4:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
+                        "   8:	f9002007 	str	x7, [x0, #64]"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to pointer (large x reg)
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {ptr, r10}, <<
+                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
+                        "   4:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
+                        "   8:	f9000147 	str	x7, [x10]"
+                    >>)
+                end),
+                %% move_array_element: reg_x[reg_y] to y_reg
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    move_array_element_test0(State1, r8, {free, Reg}, {y_reg, 31}, <<
+                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
+                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
+                        "   8:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
+                        "   c:	f9007d07 	str	x7, [x8, #248]"
+                    >>)
+                end)
+            ]
+        end}.
 
 get_array_element_test_() ->
     %% TODO: Implement AArch64 version
