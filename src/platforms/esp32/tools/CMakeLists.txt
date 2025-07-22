@@ -61,7 +61,11 @@ endif()
 
 set(ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../..")
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../nvs_partition.csv")
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage_nvs.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
+else()
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
+endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/flash.sh.in ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh @ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.erl ${CMAKE_BINARY_DIR}/mkimage.erl COPYONLY)

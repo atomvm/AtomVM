@@ -1,0 +1,50 @@
+%
+% This file is part of AtomVM.
+%
+% Copyright 2020-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2025 Winford (UncleGrumpy) <winford@object.stream>
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%    http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+%
+% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+%
+
+#{
+    segments => [
+        #{
+            name => "bootloader",
+            offset => "@BOOTLOADER_OFFSET@",
+            path => ["@CMAKE_BINARY_DIR@/bootloader/bootloader.bin"]
+        },
+        #{
+            name => "partition-table",
+            offset => "0x8000",
+            path => ["@CMAKE_BINARY_DIR@/partition_table/partition-table.bin"]
+        },
+        #{
+            name => "nvs",
+            offset => "0x9000",
+            path => ["@CMAKE_BINARY_DIR@/nvs.bin"]
+        },
+        #{
+            name => "AtomVM Virtual Machine",
+            offset => "0x10000",
+            path => ["@CMAKE_BINARY_DIR@/atomvm-esp32.bin"]
+        },
+        #{
+            name => "AtomVM Boot and Core BEAM Library",
+            offset =>  "0x1D0000",
+            path => ["@ROOT_DIR@/build/libs/esp32boot/@BOOT_LIBS@"]
+        }
+    ]
+}.
