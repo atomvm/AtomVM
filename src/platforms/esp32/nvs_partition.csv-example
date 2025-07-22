@@ -1,0 +1,4 @@
+key,type,encoding,value
+network,namespace,,
+ssid,data,string,"NETWORK_NAME"
+psk,data,string,"PASSWORD"

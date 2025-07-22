@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 - Added `sys`
 - Added ESP32 `-DATOMVM_ELIXIR_SUPPORT=on` configuration option
+- Added support for ESP32 development builds to include NVS partition data at build time
 
 ### Changed
 

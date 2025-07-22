@@ -304,6 +304,71 @@ partitions and the flash partitions layout see [Flash Layout](#flash-layout) bel
 
 To build a single binary image file see [Building a Release Image](#building-a-release-image), below.
 
+#### NVS Partition Provisioning
+
+For streamlining deployment of images for an environment developers may pre-provision NVS partition
+data. This is done by creating a file in the AtomVM/src/platforms/esp32 directory named
+`nvs_partition.csv`, an example called `nvs_partition.csv-example` is provided in the same
+directory. If this file exists it will be included by the mkimage.sh script in the build directory.
+The partition is not included in the `idf.py flash` task so that settings made by applications can
+be retained. To update changes or restore to the defaults defined in `nvs_partition.csv` delete the
+generated `build/nvs.bin` file (if present) and execute the command `idf.py nvs-flash`.
+
+This is a more detailed example, with explanations of the structure:
+
+```{csv}
+key,type,encoding,value
+network,namespace,,
+ssid,data,binary,"NETWORK_NAME"
+psk,data,binary,"PASSWORD"
+settings,namespace,,
+feature0,data,binary,"1"
+extra_feature,data,binary,"0"
+token,file,binary,/path/to/file
+```
+
+Let's break this down line by line:
+
+```csv
+key,type,encoding,value
+```
+This is the header describing the columns. It is important that there is no whitespace at the end of each line
+and none separating the commas (`,`) throughout this file.
+
+```csv
+network,namespace,,
+```
+The first entry should have a "key" name and have type "namespace". The namespaces are the same
+used to look up the keys with
+[esp:nvs_get_binary/2 (or /3)](./apidocs/erlang/eavmlib/esp.md#nvs_get_binary2). Note that the
+`encoding` and `value` are empty.
+
+```csv
+ssid,data,binary,"NETWORK_NAME"
+...
+```
+The keys must use encoding type `binary` as this is the only type currently supported by AtomVM.
+
+```csv
+settings,namespace,,
+...
+```
+Multiple namespaces may be used for separation, followed by their keys.
+
+```csv
+token,file,binary,/path/to/file
+```
+External file contents may be included
+
+The initial values flashed to the `nvs` partition may be changed by applications using
+[esp:nvs_put_binary/3](./apidocs/erlang/eavmlib/esp.md#nvs_put_binary3). If you wish to make
+changes to the partition data and re-flash without rebuilding and flashing the entire AtomVM build
+you may delete the generated `build/nvs.bin` file and run `idf.py nvs-flash`, this will regenerate
+and flash the `nvs` partition.
+
+For more information about the format of this file see Espressif's
+[documentation for the NVS generator file format](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_partition_gen.html#csv-file-format).
+
 ### Running tests for ESP32
 
 Tests for ESP32 are run on the desktop (or CI) using qemu.
