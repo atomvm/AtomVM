@@ -117,3 +117,7 @@ if (NOT ("${BOOT_LIBS}" STREQUAL "NONE"))
         esptool_py_flash_target_image(flash boot.avm "${lib_offset}" "${BOOT_LIB_PATH}")
     endif()
 endif()
+
+if (EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/nvs_partition.csv")
+    nvs_create_partition_image(nvs "${CMAKE_CURRENT_SOURCE_DIR}/nvs_partition.csv")
+endif()
