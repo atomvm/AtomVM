@@ -161,8 +161,8 @@
     {aarch64_register(), '<', 0}
     | {maybe_free_aarch64_register(), '==', 0}
     | {maybe_free_aarch64_register(), '!=', integer()}
-    | {'(uint8_t)', maybe_free_aarch64_register(), '==', false}
-    | {'(uint8_t)', maybe_free_aarch64_register(), '!=', false}
+    | {'(bool)', maybe_free_aarch64_register(), '==', false}
+    | {'(bool)', maybe_free_aarch64_register(), '!=', false}
     | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', 0}.
 
 % ctx->e is 0x28
@@ -776,7 +776,7 @@ if_block_cond(
     {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(uint8_t)', RegOrTuple, '==', false}
+    {'(bool)', RegOrTuple, '==', false}
 ) ->
     Reg =
         case RegOrTuple of
@@ -796,7 +796,7 @@ if_block_cond(
     {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(uint8_t)', RegOrTuple, '!=', false}
+    {'(bool)', RegOrTuple, '!=', false}
 ) ->
     Reg =
         case RegOrTuple of
@@ -884,7 +884,7 @@ if_block_cond(
         stream_module = StreamModule,
         stream = Stream0
     } = State0,
-    {'(uint8_t)', RegOrTuple, '&', Val}
+    {'(bool)', RegOrTuple, '&', Val}
 ) ->
     Reg =
         case RegOrTuple of
@@ -1196,16 +1196,12 @@ set_args1({ptr, Source}, Reg) ->
     jit_aarch64_asm:ldr(Reg, {Source, 0});
 set_args1({y_reg, X}, Reg) ->
     [
-        jit_aarch64_asm:mov(Reg, ?Y_REGS),
-        jit_aarch64_asm:mov(Reg, {X * 8, Reg})
+        jit_aarch64_asm:ldr(Reg, ?Y_REGS),
+        jit_aarch64_asm:ldr(Reg, {Reg, X * 8})
     ];
 set_args1(ArgReg, Reg) when ?IS_GPR(ArgReg) ->
     jit_aarch64_asm:mov(Reg, ArgReg);
-set_args1(Arg, Reg) when is_integer(Arg) andalso Arg >= -16#80000000 andalso Arg < 16#80000000 ->
-    jit_aarch64_asm:mov(Reg, Arg);
 set_args1(Arg, Reg) when is_integer(Arg) ->
-    %% For large immediates, we need a more complex sequence in AArch64
-    %% For now, just use the immediate (may need expansion later)
     jit_aarch64_asm:mov(Reg, Arg).
 
 %%-----------------------------------------------------------------------------
@@ -1452,140 +1448,66 @@ get_array_element(
     state(), integer() | vm_register() | aarch64_register(), aarch64_register(), non_neg_integer()
 ) -> state().
 move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    ValueReg,
     Reg,
     Index
-) when X < ?MAX_REG andalso ?IS_GPR(Reg) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?X_REG(X), Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq(Temp, {Index * 8, Reg}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
+) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso is_integer(Index) ->
+    I1 = jit_aarch64_asm:str(ValueReg, {Reg, Index * 8}),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State0#state{stream = Stream1};
 move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    ValueReg,
     Reg,
     IndexReg
-) when X < ?MAX_REG andalso ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?X_REG(X), Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq(Temp, {0, Reg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
+) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
+    I1 = jit_aarch64_asm:str(ValueReg, {Reg, IndexReg, lsl, 3}),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State0#state{stream = Stream1};
 move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {ptr, Source},
+    State0,
+    Value,
     Reg,
     Index
 ) ->
-    I1 = jit_x86_64_asm_unimplemented:movq({0, Source}, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq(Temp, {Index * 8, Reg}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} =
-        State,
-    {y_reg, Y},
-    Reg,
-    Index
-) when ?IS_GPR(Reg) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?Y_REGS, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq({Y * 8, Temp}, Temp),
-    I3 = jit_x86_64_asm_unimplemented:movq(Temp, {Index * 8, Reg}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} =
-        State,
-    {y_reg, Y},
-    Reg,
-    IndexReg
-) when ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?Y_REGS, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq({Y * 8, Temp}, Temp),
-    I3 = jit_x86_64_asm_unimplemented:movq(Temp, {0, Reg, IndexReg, 8}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0} = State, Source, Reg, Index
-) when ?IS_GPR(Source) andalso ?IS_GPR(Reg) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(Source, {Index * 8, Reg}),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0} = State, Source, Reg, Index
-) when ?IS_SINT32_T(Source) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(Source, {Index * 8, Reg}),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    Source,
-    Reg,
-    Index
-) when is_integer(Source) andalso is_integer(Index) ->
-    I1 = jit_x86_64_asm_unimplemented:movabsq(Source, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq(Temp, {Index * 8, Reg}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1}.
+    {State1, Temp} = copy_to_native_register(State0, Value),
+    State2 = move_to_array_element(State1, Temp, Reg, Index),
+    free_native_register(State2, Temp).
 
 move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
-    BaseReg,
-    IndexReg,
-    Offset
-) when X < ?MAX_REG andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?X_REG(X), Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq(Temp, {Offset, BaseReg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {y_reg, Y},
-    BaseReg,
-    IndexReg,
-    Offset
-) when ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?Y_REGS, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movq({Y * 8, Temp}, Temp),
-    I3 = jit_x86_64_asm_unimplemented:movq(Temp, {Offset, BaseReg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0} = State,
-    Source,
-    BaseReg,
-    IndexReg,
-    Offset
-) when
-    ?IS_GPR(Source) andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset)
-->
-    I1 = jit_x86_64_asm_unimplemented:movq(Source, {Offset, BaseReg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0} = State,
-    Source,
-    BaseReg,
-    IndexReg,
-    Offset
-) when
-    ?IS_SINT32_T(Source) andalso ?IS_GPR(BaseReg) andalso ?IS_GPR(IndexReg) andalso
-        is_integer(Offset)
-->
-    I1 = jit_x86_64_asm_unimplemented:movq(Source, {Offset, BaseReg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, I1 / binary),
-    State#state{stream = Stream1};
-move_to_array_element(
     State,
-    Source,
+    Value,
     BaseReg,
     IndexReg,
     Offset
 ) when is_integer(IndexReg) andalso is_integer(Offset) andalso Offset div 8 =:= 0 ->
-    move_to_array_element(State, Source, BaseReg, IndexReg + (Offset div 8)).
+    move_to_array_element(State, Value, BaseReg, IndexReg + (Offset div 8));
+move_to_array_element(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    ValueReg,
+    BaseReg,
+    IndexReg,
+    Offset
+) when ?IS_GPR(ValueReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
+    I1 = jit_aarch64_asm:add(Temp, BaseReg, Offset),
+    I2 = jit_aarch64_asm:str(ValueReg, {BaseReg, IndexReg, lsl, 3}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+move_to_array_element(
+    State0,
+    Value,
+    BaseReg,
+    IndexReg,
+    Offset
+) ->
+    {State1, ValueReg} = copy_to_native_register(State0, Value),
+    [Temp | _] = State1#state.available_regs,
+    I1 = jit_aarch64_asm:add(Temp, BaseReg, Offset),
+    I2 = jit_aarch64_asm:str(ValueReg, {BaseReg, IndexReg, lsl, 3}),
+    Stream1 = (State1#state.stream_module):append(State1#state.stream, <<I1/binary, I2/binary>>),
+    State2 = State1#state{stream = Stream1},
+    free_native_register(State2, ValueReg).
 
 -spec move_to_native_register(state(), value()) -> {state(), aarch64_register()}.
 move_to_native_register(State, Reg) when is_atom(Reg) ->
@@ -1593,7 +1515,7 @@ move_to_native_register(State, Reg) when is_atom(Reg) ->
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}
 ) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq({0, Reg}, Reg),
+    I1 = jit_aarch64_asm:ldr(Reg, {Reg, 0}),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1}, Reg};
 move_to_native_register(
@@ -1607,7 +1529,7 @@ move_to_native_register(
 ) when
     is_integer(Imm)
 ->
-    I1 = jit_x86_64_asm_unimplemented:movq(Imm, Reg),
+    I1 = jit_aarch64_asm:mov(Reg, Imm),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(
@@ -1633,8 +1555,8 @@ move_to_native_register(
     } = State,
     {y_reg, Y}
 ) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?Y_REGS, Reg),
-    I2 = jit_x86_64_asm_unimplemented:movq({Y * 8, Reg}, Reg),
+    I1 = jit_aarch64_asm:ldr(Reg, ?Y_REGS),
+    I2 = jit_aarch64_asm:ldr(Reg, {Reg, Y * 8}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [Reg | Used]}, Reg};
@@ -1658,13 +1580,13 @@ move_to_native_register(
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, RegSrc, RegDst
 ) when is_atom(RegSrc) orelse is_integer(RegSrc) ->
-    I = jit_x86_64_asm_unimplemented:movq(RegSrc, RegDst),
+    I = jit_aarch64_asm:mov(RegDst, RegSrc),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}, RegDst
-) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq({0, Reg}, RegDst),
+) when ?IS_GPR(Reg) ->
+    I1 = jit_aarch64_asm:ldr(RegDst, {Reg, 0}),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_native_register(
@@ -1672,14 +1594,14 @@ move_to_native_register(
 ) when
     X < ?MAX_REG
 ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?X_REG(X), RegDst),
+    I1 = jit_aarch64_asm:ldr(RegDst, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, {y_reg, Y}, RegDst
 ) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?Y_REGS, RegDst),
-    I2 = jit_x86_64_asm_unimplemented:movq({Y * 8, RegDst}, RegDst),
+    I1 = jit_aarch64_asm:ldr(RegDst, ?Y_REGS),
+    I2 = jit_aarch64_asm:ldr(RegDst, {RegDst, Y * 8}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
@@ -1720,7 +1642,7 @@ copy_to_native_register(
     } = State,
     {ptr, Reg}
 ) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq({0, Reg}, SaveReg),
+    I1 = jit_aarch64_asm:ldr(SaveReg, {Reg, 0}),
     Stream1 = StreamModule:append(Stream0, I1),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [SaveReg | Used]}, SaveReg};
 copy_to_native_register(State, Reg) ->
@@ -1805,8 +1727,17 @@ and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) -
     State#state{stream = Stream1}.
 
 or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm_unimplemented:orq(Val, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
+    Stream1 =
+        try
+            I = jit_aarch64_asm:orr(Reg, Reg, Val),
+            StreamModule:append(Stream0, I)
+        catch
+            error:{unencodable_immediate, Val} ->
+                [Temp | _] = State#state.available_regs,
+                I1 = jit_aarch64_asm:mov(Temp, Val),
+                I2 = jit_aarch64_asm:orr(Reg, Reg, Temp),
+                StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
+        end,
     State#state{stream = Stream1}.
 
 add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
@@ -1960,8 +1891,8 @@ return_labels_and_lines(
     SortedLabels,
     SortedLines
 ) ->
-    I2 = jit_x86_64_asm_unimplemented:retq(),
-    {_RewriteLEAOffset, I1} = jit_x86_64_asm_unimplemented:leaq_rel32({byte_size(I2), rip}, rax),
+    I1 = jit_aarch64_asm:adr(r0, 8),
+    I2 = jit_aarch64_asm:ret(),
     LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
     LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
     Stream1 = StreamModule:append(
