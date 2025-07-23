@@ -39,7 +39,7 @@ struct EtsHashTable
 
 typedef enum EtsHashtableOptions
 {
-    EtsHashtableAllowOverwrite = 1
+    EtsHashtableAllowOverwrite = (1 << 0),
 } EtsHashtableOptions;
 
 typedef enum EtsHashtableStatus
@@ -52,11 +52,13 @@ typedef enum EtsHashtableStatus
 struct EtsHashTable *ets_hashtable_new();
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global);
 
-EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
-term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
-bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keypos, GlobalContext *global);
-struct HNode *ets_hashtable_new_node(term entry, int keypos);
+struct HNode *ets_hashtable_new_node(term entry, int key_index);
+struct HNode *ets_hashtable_new_node_from_list(term old_tuples_or_tuple, term new_tuple, size_t key_index);
 void ets_hashtable_free_node(struct HNode *node, GlobalContext *global);
+
+EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);
+term ets_hashtable_lookup(struct EtsHashTable *hash_table, term key, GlobalContext *global);
+bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, GlobalContext *global);
 
 #ifdef __cplusplus
 }
