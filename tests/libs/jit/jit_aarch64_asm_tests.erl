@@ -99,6 +99,16 @@ ldr_w_test_() ->
         ?_assertEqual(<<16#b9406042:32/little>>, jit_aarch64_asm:ldr_w(r2, {r2, 96}))
     ].
 
+ldr_d_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#fd40001e:32/little>>, "ldr d30, [x0]"), jit_aarch64_asm:ldr_d(v30, {r0, 0})
+        ),
+        ?_assertEqual(
+            asm(<<16#fd400420:32/little>>, "ldr d0, [x1, #8]"), jit_aarch64_asm:ldr_d(v0, {r1, 8})
+        )
+    ].
+
 mov_test_() ->
     [
         % mov immediate - simple cases
@@ -202,8 +212,12 @@ lsl_test_() ->
 
 lsr_test_() ->
     [
-        ?_assertEqual(asm(<<16#D340FC00:32/little>>, "lsr x0, x0, 0"), jit_aarch64_asm:lsr(r0, r0, 0)),
-        ?_assertEqual(asm(<<16#D340FC01:32/little>>, "lsr x1, x0, 0"), jit_aarch64_asm:lsr(r1, r0, 0)),
+        ?_assertEqual(
+            asm(<<16#D340FC00:32/little>>, "lsr x0, x0, 0"), jit_aarch64_asm:lsr(r0, r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#D340FC01:32/little>>, "lsr x1, x0, 0"), jit_aarch64_asm:lsr(r1, r0, 0)
+        ),
         ?_assertEqual(<<16#D360FC00:32/little>>, jit_aarch64_asm:lsr(r0, r0, 32))
     ].
 
@@ -218,7 +232,9 @@ tst_test_() ->
         ?_assertEqual(asm(<<16#f240003f:32/little>>, "tst x1, #1"), jit_aarch64_asm:tst(r1, 1)),
         ?_assertEqual(asm(<<16#f27c005f:32/little>>, "tst x2, #16"), jit_aarch64_asm:tst(r2, 16)),
         ?_assertEqual(asm(<<16#f2401c7f:32/little>>, "tst x3, #255"), jit_aarch64_asm:tst(r3, 255)),
-        ?_assertEqual(asm(<<16#f240249f:32/little>>, "tst x4, #1023"), jit_aarch64_asm:tst(r4, 1023)),
+        ?_assertEqual(
+            asm(<<16#f240249f:32/little>>, "tst x4, #1023"), jit_aarch64_asm:tst(r4, 1023)
+        ),
         ?_assertEqual(asm(<<16#f24014bf:32/little>>, "tst x5, #63"), jit_aarch64_asm:tst(r5, 63)),
         ?_assertEqual(asm(<<16#f27b00df:32/little>>, "tst x6, #32"), jit_aarch64_asm:tst(r6, 32)),
         ?_assertEqual(asm(<<16#f27a00ff:32/little>>, "tst x7, #64"), jit_aarch64_asm:tst(r7, 64)),
@@ -230,12 +246,18 @@ tst_w_test_() ->
         ?_assertEqual(asm(<<16#6a01001f:32/little>>, "tst w0, w1"), jit_aarch64_asm:tst_w(r0, r1)),
         ?_assertEqual(asm(<<16#7200003f:32/little>>, "tst w1, #1"), jit_aarch64_asm:tst_w(r1, 1)),
         ?_assertEqual(asm(<<16#721c005f:32/little>>, "tst w2, #16"), jit_aarch64_asm:tst_w(r2, 16)),
-        ?_assertEqual(asm(<<16#72001c7f:32/little>>, "tst w3, #255"), jit_aarch64_asm:tst_w(r3, 255)),
-        ?_assertEqual(asm(<<16#7200249f:32/little>>, "tst w4, #1023"), jit_aarch64_asm:tst_w(r4, 1023)),
+        ?_assertEqual(
+            asm(<<16#72001c7f:32/little>>, "tst w3, #255"), jit_aarch64_asm:tst_w(r3, 255)
+        ),
+        ?_assertEqual(
+            asm(<<16#7200249f:32/little>>, "tst w4, #1023"), jit_aarch64_asm:tst_w(r4, 1023)
+        ),
         ?_assertEqual(asm(<<16#720014bf:32/little>>, "tst w5, #63"), jit_aarch64_asm:tst_w(r5, 63)),
         ?_assertEqual(asm(<<16#721b00df:32/little>>, "tst w6, #32"), jit_aarch64_asm:tst_w(r6, 32)),
         ?_assertEqual(asm(<<16#721a00ff:32/little>>, "tst w7, #64"), jit_aarch64_asm:tst_w(r7, 64)),
-        ?_assertEqual(asm(<<16#721e051f:32/little>>, "tst w8, #0xc"), jit_aarch64_asm:tst_w(r8, 16#c))
+        ?_assertEqual(
+            asm(<<16#721e051f:32/little>>, "tst w8, #0xc"), jit_aarch64_asm:tst_w(r8, 16#c)
+        )
     ].
 
 bcc_test_() ->
@@ -310,22 +332,30 @@ adr_test_() ->
 
 asm(Bin, Str) ->
     case erlang:system_info(machine) of
-        "ATOM" -> Bin;
+        "ATOM" ->
+            Bin;
         "BEAM" ->
             case os:cmd("which aarch64-elf-as") of
-                [] -> Bin;
+                [] ->
+                    Bin;
                 _ ->
                     ok = file:write_file("test.S", Str ++ "\n"),
-                    Dump = os:cmd("aarch64-elf-as -c test.S -o test.o && aarch64-elf-objdump -D test.o"),
+                    Dump = os:cmd(
+                        "aarch64-elf-as -c test.S -o test.o && aarch64-elf-objdump -D test.o"
+                    ),
                     DumpBin = list_to_binary(Dump),
                     DumpLines = binary:split(DumpBin, <<"\n">>, [global]),
                     AsmBin = asm_lines(DumpLines, <<>>),
                     if
-                        AsmBin =:= Bin -> ok;
+                        AsmBin =:= Bin ->
+                            ok;
                         true ->
-                            io:format("-------------------------------------------\n"
-                            "~s\n"
-                            "-------------------------------------------\n", [Dump])
+                            io:format(
+                                "-------------------------------------------\n"
+                                "~s\n"
+                                "-------------------------------------------\n",
+                                [Dump]
+                            )
                     end,
                     ?assertEqual(AsmBin, Bin),
                     Bin
@@ -342,7 +372,8 @@ asm_lines([_OtherLine | T], Acc) ->
 asm_lines([], Acc) ->
     Acc.
 
-hex_to_bin(<<>>, Acc) -> Acc;
+hex_to_bin(<<>>, Acc) ->
+    Acc;
 hex_to_bin(HexStr, Acc) ->
     [HexChunk, Rest] = binary:split(HexStr, <<" ">>),
     NumBits = byte_size(HexChunk) * 4,

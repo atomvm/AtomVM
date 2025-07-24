@@ -838,6 +838,58 @@ move_to_native_register_test_() ->
         end,
         fun(State0) ->
             [
+                %% move_to_native_register/2: imm
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, 42),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r7, Reg),
+                    Dump = <<
+                        "   0:	d2800547 	mov	x7, #0x2a                  	// #42"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: {ptr, reg}
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {ptr, r6}),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r6, Reg),
+                    Dump = <<
+                        "   0:	f94000c6 	ldr	x6, [x6]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: {x_reg, N}
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 3}),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r7, Reg),
+                    Dump = <<
+                        "   0:	f9402407 	ldr	x7, [x0, #72]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: {y_reg, N}
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {y_reg, 3}),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r7, Reg),
+                    Dump = <<
+                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+                        "   4:	f9400ce7 	ldr	x7, [x7, #24]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: {fp_reg, N}
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {fp_reg, 3}),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(v0, Reg),
+                    Dump = <<
+                        "   0:	f9406007 	ldr	x7, [x0, #192]\n"
+                        "   4:	fd400ce0 	ldr	d0, [x7, #24]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
                 %% move_to_native_register/3: imm to reg
                 ?_test(begin
                     State1 = ?BACKEND:move_to_native_register(State0, 42, r8),
@@ -881,6 +933,16 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:	f9401408 	ldr	x8, [x0, #40]\n"
                         "   4:	f9400908 	ldr	x8, [x8, #16]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: {fp_reg, N}
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, {fp_reg, 3}, v0),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9406007 	ldr	x7, [x0, #192]\n"
+                        "   4:	fd400ce0 	ldr	d0, [x7, #24]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
