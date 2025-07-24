@@ -44,6 +44,7 @@
     movz/3,
     orr/3,
     ret/0,
+    nop/0,
     str/2,
     str/3,
     tst/2,
@@ -871,6 +872,12 @@ ret() ->
     %% AArch64 RET encoding: RET (defaults to X30/LR)
     %% 11010110010111110000001111000000
     <<16#D65F03C0:32/little>>.
+
+%% Emit a NOP instruction
+-spec nop() -> binary().
+nop() ->
+    %% 11010101000000110010000000011111
+    <<16#d503201f:32/little>>.
 
 %% Emit a test instruction (bitwise AND, discarding result)
 -spec tst(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
