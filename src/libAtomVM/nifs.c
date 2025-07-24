@@ -5678,6 +5678,8 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
 
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64
     return JIT_X86_64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+    return JIT_AARCH64_ATOM;
 #else
 #error Unknown JIT target
 #endif
