@@ -21,6 +21,10 @@
 -export([
     add/3,
     add/4,
+    sub/3,
+    sub/4,
+    mul/3,
+    madd/4,
     b/1,
     bcc/2,
     blr/1,
@@ -101,7 +105,9 @@ add(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =
     RnNum = reg_to_num(Rn),
     %% AArch64 ADD (immediate) encoding: 1001000100iiiiiiiiiiiinnnnndddddd
     %% 0x91000000 | Imm << 10 | Rn << 5 | Rd
-    <<(16#91000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>.
+    <<(16#91000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>;
+add(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+    add(Rd, Rn, Rm, {lsl, 0}).
 
 %% ADD (shifted register)
 %% ADD Rd, Rn, Rm, {lsl, #amount}
@@ -918,6 +924,28 @@ subs(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
     %% AArch64 SUBS (register): 11101011000mmmmm000000nnnnndddddd
     <<(16#EB000000 bor (RmNum bsl 16) bor (RnNum bsl 5) bor RdNum):32/little>>.
 
+-spec sub(aarch64_gpr_register(), aarch64_gpr_register(), integer() | aarch64_gpr_register()) ->
+    binary().
+sub(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    <<(16#D1000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>;
+sub(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+    sub(Rd, Rn, Rm, {lsl, 0}).
+
+-spec sub(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register(), {lsl, 0..63}) ->
+    binary().
+sub(Rd, Rn, Rm, {lsl, Amount}) when
+    is_atom(Rd), is_atom(Rn), is_atom(Rm), is_integer(Amount), Amount >= 0, Amount =< 63
+->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    <<
+        (16#CB000000 bor (RmNum bsl 16) bor ((Amount band 16#3F) bsl 10) bor (RnNum bsl 5) bor
+            RdNum):32/little
+    >>.
+
 %% Emit an ADR (PC-relative address) instruction (AArch64 encoding)
 %% Dst is destination register atom, Offset is signed immediate (in bytes, -1MB..+1MB)
 -spec adr(aarch64_gpr_register(), integer()) -> binary().
@@ -927,3 +955,20 @@ adr(Dst, Imm) when is_atom(Dst), is_integer(Imm), Imm >= -1048576, Imm =< 104857
     ImmHi = Imm bsr 2,
     Word = (16#10000000) bor (ImmLo bsl 29) bor ((ImmHi band 16#7FFFF) bsl 5) bor DstNum,
     <<Word:32/little>>.
+
+-spec mul(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register()) -> binary().
+mul(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+    madd(Rd, Rn, Rm, xzr).
+
+-spec madd(
+    aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register()
+) -> binary().
+madd(Rd, Rn, Rm, Ra) when is_atom(Rd), is_atom(Rn), is_atom(Rm), is_atom(Ra) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    RaNum = reg_to_num(Ra),
+    <<
+        (16#9B000000 bor (RmNum bsl 16) bor (RaNum bsl 10) bor (RnNum bsl 5) bor
+            RdNum):32/little
+    >>.
