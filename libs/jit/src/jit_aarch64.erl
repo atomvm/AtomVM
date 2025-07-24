@@ -672,7 +672,7 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_aarch64_asm:tst32(Reg, Reg),
+    I1 = jit_aarch64_asm:tst_w(Reg, Reg),
     I2 = jit_aarch64_asm:bcc(ne, 0),
     Code = <<
         I1/binary,
@@ -784,7 +784,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     % Test low 8 bits
-    I1 = jit_aarch64_asm:tst32(Reg, 16#FF),
+    I1 = jit_aarch64_asm:tst_w(Reg, 16#FF),
     I2 = jit_aarch64_asm:bcc(ne, 0),
     Code = <<
         I1/binary,
@@ -804,7 +804,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     % Test low 8 bits
-    I1 = jit_aarch64_asm:tst32(Reg, 16#FF),
+    I1 = jit_aarch64_asm:tst_w(Reg, 16#FF),
     I2 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
         I1/binary,
@@ -892,7 +892,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     % Test 8-bit value
-    I1 = jit_aarch64_asm:tst32(Reg, Val),
+    I1 = jit_aarch64_asm:tst_w(Reg, Val),
     I2 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
         I1/binary,
