@@ -58,8 +58,15 @@ compile(Target, Dir, Path) ->
         Stream0 = jit_stream_binary:new(0),
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
             CodeChunk,
+
+        Arch =
+            case Target of
+                "x86_64" -> ?JIT_ARCH_X86_64;
+                "aarch64" -> ?JIT_ARCH_AARCH64
+            end,
+
         Stream1 = jit_stream_binary:append(
-            Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+            Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
         ),
         Backend = list_to_atom("jit_" ++ Target),
         Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
