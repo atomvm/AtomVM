@@ -26,10 +26,53 @@
 
 add_test_() ->
     [
-        ?_assertEqual(<<16#9100e0e7:32/little>>, jit_aarch64_asm:add(r7, r7, 56)),
-        ?_assertEqual(<<16#91000000:32/little>>, jit_aarch64_asm:add(r0, r0, 0)),
-        ?_assertEqual(<<16#91000421:32/little>>, jit_aarch64_asm:add(r1, r1, 1)),
-        ?_assertEqual(<<16#8b031041:32/little>>, jit_aarch64_asm:add(r1, r2, r3, {lsl, 4}))
+        ?_assertEqual(
+            asm(<<16#9100e0e7:32/little>>, "add x7, x7, #56"), jit_aarch64_asm:add(r7, r7, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#91000000:32/little>>, "add x0, x0, #0"), jit_aarch64_asm:add(r0, r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#91000421:32/little>>, "add x1, x1, #1"), jit_aarch64_asm:add(r1, r1, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#8b031041:32/little>>, "add x1, x2, x3, lsl #4"),
+            jit_aarch64_asm:add(r1, r2, r3, {lsl, 4})
+        ),
+        ?_assertEqual(
+            asm(<<16#8b030041:32/little>>, "add x1, x2, x3"), jit_aarch64_asm:add(r1, r2, r3)
+        )
+    ].
+
+sub_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#d100e0e7:32/little>>, "sub x7, x7, #56"), jit_aarch64_asm:sub(r7, r7, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#d1000000:32/little>>, "sub x0, x0, #0"), jit_aarch64_asm:sub(r0, r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#d1000421:32/little>>, "sub x1, x1, #1"), jit_aarch64_asm:sub(r1, r1, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#cb031041:32/little>>, "sub x1, x2, x3, lsl #4"),
+            jit_aarch64_asm:sub(r1, r2, r3, {lsl, 4})
+        ),
+        ?_assertEqual(
+            asm(<<16#cb030041:32/little>>, "sub x1, x2, x3"), jit_aarch64_asm:sub(r1, r2, r3)
+        )
+    ].
+
+madd_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#9b037c41:32/little>>, "mul x1, x2, x3"), jit_aarch64_asm:mul(r1, r2, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#9b031041:32/little>>, "madd x1, x2, x3, x4"),
+            jit_aarch64_asm:madd(r1, r2, r3, r4)
+        )
     ].
 
 b_test_() ->

@@ -948,6 +948,81 @@ move_to_native_register_test_() ->
                 end)
             ]
         end}.
+
+mul_test0(State0, Reg, Imm, Dump) ->
+    State1 = ?BACKEND:mul(State0, Reg, Imm),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+mul_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    mul_test0(State0, r2, 2, <<
+                        "0:	d37ff842 	lsl	x2, x2, #1"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 3, <<
+                        "   0:	d37ff847 	lsl	x7, x2, #1\n"
+                        "   4:	8b0200e2 	add	x2, x7, x2"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 4, <<
+                        "0:	d37ef442 	lsl	x2, x2, #2"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 5, <<
+                        "   0:	d37ef447 	lsl	x7, x2, #2\n"
+                        "   4:	8b0200e2 	add	x2, x7, x2"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 6, <<
+                        "   0:	d37ff847 	lsl	x7, x2, #1\n"
+                        "   4:	8b0200e2 	add	x2, x7, x2\n"
+                        "   8:	d37ff842 	lsl	x2, x2, #1"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 7, <<
+                        "   0:	d37df047 	lsl	x7, x2, #3\n"
+                        "   4:	cb0200e2 	sub	x2, x7, x2"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 8, <<
+                        "0:	d37df042 	lsl	x2, x2, #3"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 9, <<
+                        "   0:	d37df047 	lsl	x7, x2, #3\n"
+                        "   4:	8b0200e2 	add	x2, x7, x2"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 10, <<
+                        "   0:	d37ef447 	lsl	x7, x2, #2\n"
+                        "   4:	8b0200e2 	add	x2, x7, x2\n"
+                        "   8:	d37ff842 	lsl	x2, x2, #1"
+                    >>)
+                end),
+                ?_test(begin
+                    mul_test0(State0, r2, 11, <<
+                        "   0:	d2800167 	mov	x7, #0xb                   	// #11\n"
+                        "   4:	9b077c42 	mul	x2, x2, x7"
+                    >>)
+                end)
+            ]
+        end}.
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
