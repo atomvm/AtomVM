@@ -1741,12 +1741,12 @@ or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     State#state{stream = Stream1}.
 
 add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm_unimplemented:addq(Val, Reg),
+    I1 = jit_aarch64_asm:add(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm_unimplemented:subq(Val, Reg),
+    I1 = jit_aarch64_asm:sub(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
@@ -1754,19 +1754,56 @@ mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
     shift_left(State, Reg, 1);
+mul(#state{available_regs = [Temp | _]} = State, Reg, 3) ->
+    I1 = jit_aarch64_asm:lsl(Temp, Reg, 1),
+    I2 = jit_aarch64_asm:add(Reg, Temp, Reg),
+    Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
 mul(State, Reg, 4) ->
     shift_left(State, Reg, 2);
+mul(#state{available_regs = [Temp | _]} = State, Reg, 5) ->
+    I1 = jit_aarch64_asm:lsl(Temp, Reg, 2),
+    I2 = jit_aarch64_asm:add(Reg, Temp, Reg),
+    Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+mul(State0, Reg, 6) ->
+    State1 = mul(State0, Reg, 3),
+    mul(State1, Reg, 2);
+mul(#state{available_regs = [Temp | _]} = State, Reg, 7) ->
+    I1 = jit_aarch64_asm:lsl(Temp, Reg, 3),
+    I2 = jit_aarch64_asm:sub(Reg, Temp, Reg),
+    Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
 mul(State, Reg, 8) ->
     shift_left(State, Reg, 3);
+mul(#state{available_regs = [Temp | _]} = State, Reg, 9) ->
+    I1 = jit_aarch64_asm:lsl(Temp, Reg, 3),
+    I2 = jit_aarch64_asm:add(Reg, Temp, Reg),
+    Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+mul(State0, Reg, 10) ->
+    State1 = mul(State0, Reg, 5),
+    mul(State1, Reg, 2);
+mul(#state{available_regs = [Temp | _]} = State, Reg, 15) ->
+    I1 = jit_aarch64_asm:lsl(Temp, Reg, 4),
+    I2 = jit_aarch64_asm:sub(Reg, Temp, Reg),
+    Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
 mul(State, Reg, 16) ->
     shift_left(State, Reg, 4);
 mul(State, Reg, 32) ->
     shift_left(State, Reg, 5);
 mul(State, Reg, 64) ->
     shift_left(State, Reg, 6);
-mul(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm_unimplemented:imulq(Val, Reg),
-    Stream1 = StreamModule:append(Stream0, I1),
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    Reg,
+    Val
+) ->
+    % multiply by decomposing by power of 2
+    I1 = jit_aarch64_asm:mov(Temp, Val),
+    I2 = jit_aarch64_asm:mul(Reg, Reg, Temp),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1}.
 
 -spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
