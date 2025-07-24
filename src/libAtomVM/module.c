@@ -315,7 +315,8 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
-                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset));
+                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
+                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
                     break;
                 }
             }
