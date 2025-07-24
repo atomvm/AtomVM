@@ -1840,9 +1840,9 @@ decrement_reductions_and_maybe_schedule_next(
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
-    {State1, RewriteOffset} = set_cp(State0),
+    {State1, RewriteOffset, RewriteSize} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
-    rewrite_cp_offset(State2, RewriteOffset).
+    rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
 
 call_only_or_schedule_next(
     #state{
@@ -1870,11 +1870,11 @@ call_only_or_schedule_next(
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
 call_primitive_with_cp(State0, Primitive, Args) ->
-    {State1, RewriteOffset} = set_cp(State0),
+    {State1, RewriteOffset, RewriteSize} = set_cp(State0),
     State2 = call_primitive_last(State1, Primitive, Args),
-    rewrite_cp_offset(State2, RewriteOffset).
+    rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
 
--spec set_cp(state()) -> {state(), non_neg_integer()}.
+-spec set_cp(state()) -> {state(), non_neg_integer(), 4 | 8}.
 set_cp(State0) ->
     % get module index (dynamically)
     {#state{stream_module = StreamModule, stream = Stream0} = State1, Reg} = get_module_index(
@@ -1883,30 +1883,40 @@ set_cp(State0) ->
     Offset = StreamModule:offset(Stream0),
     % build cp with module_index << 24
     I1 = jit_aarch64_asm:lsl(Reg, Reg, 24),
-    I2 = jit_aarch64_asm:mov(?IP0_REG, 0),
+    if
+        Offset >= 16250 ->
+            I2 = jit_aarch64_asm:nop(),
+            I3 = jit_aarch64_asm:nop(),
+            RewriteSize = 8;
+        true ->
+            I2 = jit_aarch64_asm:nop(),
+            I3 = <<>>,
+            RewriteSize = 4
+    end,
     MOVOffset = Offset + byte_size(I1),
-    I3 = jit_aarch64_asm:orr(Reg, Reg, ?IP0_REG),
-    I4 = jit_aarch64_asm:str(Reg, ?CP),
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    I4 = jit_aarch64_asm:orr(Reg, Reg, ?IP0_REG),
+    I5 = jit_aarch64_asm:str(Reg, ?CP),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State2 = State1#state{stream = Stream1},
     State3 = free_native_register(State2, Reg),
-    {State3, MOVOffset}.
+    {State3, MOVOffset, RewriteSize}.
 
--spec rewrite_cp_offset(state(), non_neg_integer()) -> state().
+-spec rewrite_cp_offset(state(), non_neg_integer(), 4 | 8) -> state().
 rewrite_cp_offset(
     #state{stream_module = StreamModule, stream = Stream0, offset = CodeOffset} = State0,
-    RewriteOffset
+    RewriteOffset,
+    _RewriteSize
 ) ->
     NewOffset = StreamModule:offset(Stream0) - CodeOffset,
     NewMoveInstr = jit_aarch64_asm:mov(?IP0_REG, NewOffset bsl 2),
-    ?ASSERT(byte_size(NewMoveInstr) =:= 4),
+    ?ASSERT(byte_size(NewMoveInstr) =< _RewriteSize),
     Stream1 = StreamModule:replace(Stream0, RewriteOffset, NewMoveInstr),
     State0#state{stream = Stream1}.
 
 set_bs(#state{stream_module = StreamModule, stream = Stream0} = State0, TermReg) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(TermReg, ?BS),
-    I2 = jit_x86_64_asm_unimplemented:movq(0, ?BS_OFFSET),
+    I1 = jit_aarch64_asm:str(TermReg, ?BS),
+    I2 = jit_aarch64_asm:str(xzr, ?BS_OFFSET),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State0#state{stream = Stream1}.
 
