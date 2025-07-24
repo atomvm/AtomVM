@@ -379,6 +379,8 @@ struct Test tests[] = {
     TEST_CASE(literal_test2),
     TEST_CASE(test_extended_literal_large),
 
+    TEST_CASE(bnot64),
+
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_list_eq, 1),
@@ -406,6 +408,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
+    TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
@@ -548,6 +551,9 @@ struct Test tests[] = {
 
     TEST_CASE(test_module_info),
     TEST_CASE(erlang_module_loaded),
+
+    TEST_CASE(test_op_bs_start_match),
+    TEST_CASE(test_op_bs_create_bin),
 
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),

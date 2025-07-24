@@ -396,6 +396,18 @@ static inline bool module_has_line_chunk(Module *mod)
     return mod->line_refs_table != NULL;
 }
 
+/*
+ * @brief Get the module, offset, label and label offset from module start from a continuation pointer.
+ *
+ * @param cp continuation pointer to parse
+ * @param cp_mod if not null, set to found module
+ * @param label if not null, set to found label
+ * @param l_off if not null, set to offset of label from module start
+ * @param mod_offset if not null, set to offset of cp from module start
+ * @param global the global context
+ */
+void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *mod_offset, GlobalContext *global);
+
 #ifdef __cplusplus
 }
 #endif

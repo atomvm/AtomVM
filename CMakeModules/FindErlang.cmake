@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2019 Riccardo Binetti <rbino@gmx.com>
+# Copyright 2025 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,14 +18,15 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-if (NOT DEFINED Elixir_FOUND)
-    find_program(ELIXIRC_PATH elixirc)
+find_program(ERLC_PATH erlc)
+find_program(ERL_PATH erl)
 
-    if (ELIXIRC_PATH)
-        message("Found Elixir")
-        set(Elixir_FOUND TRUE)
-    elseif(Elixir_FIND_REQUIRED)
-        message(FATAL_ERROR "Elixir compiler not found")
-        set(Elixir_FOUND FALSE)
-    endif()
+if (ERLC_PATH AND ERL_PATH)
+    set(Erlang_FOUND TRUE)
+
+    execute_process(COMMAND ${ERL_PATH} -eval "io:put_chars(erlang:system_info(otp_release))" -s init stop -noshell
+                  OUTPUT_VARIABLE Erlang_VERSION)
+    message("Found Erlang OTP ${Erlang_VERSION}")
+elseif(Erlang_FIND_REQUIRED)
+    message(FATAL_ERROR "Erlang or Erlang compiler not found")
 endif()

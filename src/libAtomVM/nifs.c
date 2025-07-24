@@ -195,6 +195,7 @@ static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
@@ -830,6 +831,12 @@ static const struct Nif module_loaded_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_module_loaded
+};
+
+static const struct Nif nif_error_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_nif_error
 };
 
 static const struct Nif lists_reverse_nif =
@@ -2191,13 +2198,15 @@ static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
     if (LIKELY(!encode_to_latin1)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         return term_from_const_binary(atom_data, atom_len, &ctx->heap, glb);
     } else {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(atom_len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         size_t encoded_len = unicode_buf_utf8_len(atom_data, atom_len);
         term binary = term_create_uninitialized_binary(encoded_len, &ctx->heap, glb);
         char *binary_data = (char *) term_binary_data(binary);
@@ -5460,6 +5469,14 @@ static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[])
     return module != NULL ? TRUE_ATOM : FALSE_ATOM;
 }
 
+static term nif_erlang_nif_error(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    RAISE_ERROR(UNDEF_ATOM);
+}
+
 static term nif_lists_reverse(Context *ctx, int argc, term argv[])
 {
     // Compared to erlang version, compute the length of the list and allocate
@@ -5845,14 +5862,21 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
         return list1;
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx + 1, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(cons);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term result = term_nil();
+    term result;
     if (last_filtered_idx < len - 1) {
+        // GC including new tail which is at last_filtered_idx + 1 (last_filtered_idx was filtered)
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx + 2, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(cons);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         result = cons[last_filtered_idx + 1];
+    } else {
+        // if last_filtered_idx == len -1, tail is nil
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, (last_filtered_idx + 1) * CONS_SIZE, last_filtered_idx, cons, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            free(cons);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        result = term_nil();
     }
 
     for (int i = last_filtered_idx - 1; i >= 0; i--) {

@@ -10,5 +10,3 @@ sphinx-rtd-theme
 gitpython
 breathe
 pygments
-rinohtype
-pillow

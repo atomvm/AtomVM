@@ -30,6 +30,15 @@ function(compile_erlang module_name)
     )
 endfunction()
 
+function(compile_assembler module_name)
+    add_custom_command(
+        OUTPUT ${module_name}.beam
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        COMMENT "Compiling ${module_name}.S"
+    )
+endfunction()
+
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 function(generate_hrl out_file def_name in_file)
@@ -336,6 +345,7 @@ compile_erlang(literal_test0)
 compile_erlang(literal_test1)
 compile_erlang(literal_test2)
 compile_erlang(test_extended_literal_large)
+compile_erlang(bnot64)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -360,6 +370,7 @@ compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
 compile_erlang(test_gc)
@@ -535,7 +546,28 @@ compile_erlang(test_raw_raise)
 compile_erlang(test_ets)
 compile_erlang(test_node)
 
+compile_erlang(test_op_bs_start_match)
+compile_assembler(test_op_bs_start_match_asm)
+compile_erlang(test_op_bs_create_bin)
+compile_assembler(test_op_bs_create_bin_asm)
+
 compile_erlang(bigint)
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
+    set(OTP23_OR_GREATER_TESTS
+        test_op_bs_start_match_asm.beam
+    )
+else()
+    set(OTP23_OR_GREATER_TESTS)
+endif()
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
+    set(OTP25_OR_GREATER_TESTS
+        test_op_bs_create_bin_asm.beam
+    )
+else()
+    set(OTP25_OR_GREATER_TESTS)
+endif()
 
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
@@ -835,6 +867,8 @@ add_custom_target(erlang_test_modules DEPENDS
     literal_test2.beam
     test_extended_literal_large.beam
 
+    bnot64.beam
+
     test_list_eq.beam
     test_tuple_eq.beam
     test_tuple_list_eq.beam
@@ -858,6 +892,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bs.beam
     test_bs_int.beam
     test_bs_int_unaligned.beam
+    test_bs_start_match_live.beam
     test_bs_utf.beam
     test_catch.beam
     test_gc.beam
@@ -1037,5 +1072,11 @@ add_custom_target(erlang_test_modules DEPENDS
     test_ets.beam
     test_node.beam
 
+    test_op_bs_start_match.beam
+    test_op_bs_create_bin.beam
+
     bigint.beam
+
+    ${OTP23_OR_GREATER_TESTS}
+    ${OTP25_OR_GREATER_TESTS}
 )

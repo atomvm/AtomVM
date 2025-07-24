@@ -222,19 +222,7 @@ html_sidebars = {
 
 # POPULATE LINKS TO OTHER FORMATS/DOWNLOADS
 html_context['downloads'] = list()
-html_context['downloads'].append( ('pdf', '/' +download_version+ '/pdf/' +project+ '-' +download_version+ '.pdf') )
 html_context['downloads'].append( ('epub', '/' +download_version+ '/epub/' +project+ '-' +download_version+ '.epub') )
-
-# -- Options for PDF output -------------------------------------------------
-
-rinoh_documents = [dict(
-  doc=master_doc,
-  target=project+ '-' +download_version,
-  logo='@CMAKE_CURRENT_SOURCE_DIR@/src/_static/AtomVM-logo.png',
-  template='pdf_template.rtt'
-)]
-
-today_fmt = "%B %d, %Y"
 
 # -- Options for EPUB output -------------------------------------------------
 

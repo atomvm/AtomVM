@@ -952,7 +952,7 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
     boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
     boxed_value[1] = (term) size;
     boxed_value[2] = (term) is_const ? RefcBinaryIsConst : RefcNoFlags;
-    term ret = ((term) boxed_value) | TERM_BOXED_VALUE_TAG;
+    term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     if (is_const) {
         boxed_value[3] = (term) NULL;
         // TODO Consider making const refc binaries 4 words instead of 6
@@ -996,7 +996,7 @@ term term_alloc_sub_binary(term binary_or_state, size_t offset, size_t len, Heap
     boxed[2] = (term) offset;
     boxed[3] = binary;
 
-    return ((term) boxed) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed) | TERM_PRIMARY_BOXED;
 }
 
 term term_get_map_assoc(term map, term key, GlobalContext *glb)

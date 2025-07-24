@@ -416,6 +416,22 @@ typedef dreg_t dreg_gc_safe_t;
     DECODE_VALUE32(label, decode_pc);                                                                   \
 }
 
+#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                    \
+{                                                                                                       \
+    if ((*(decode_pc) & 0x7) != COMPACT_ATOM) {                                                         \
+        if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LABEL)) {                                          \
+            fprintf(stderr, "Unexpected operand, expected an atom or label (%x)\n", *(decode_pc));      \
+            AVM_ABORT();                                                                                \
+        }                                                                                               \
+        atom = term_invalid_term();                                                                     \
+        DECODE_VALUE32(label, decode_pc);                                                               \
+    } else {                                                                                            \
+        uint32_t atom_ix;                                                                               \
+        DECODE_VALUE32(atom_ix, decode_pc);                                                             \
+        atom = module_get_atom_term_by_id(mod, atom_ix);                                                \
+    }                                                                                                   \
+}
+
 #define DECODE_LITERAL(literal, decode_pc)                                                              \
 {                                                                                                       \
     if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LITERAL)) {                                            \
@@ -911,6 +927,18 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define DECODE_LABEL(label, decode_pc) \
     DECODE_VALUE(label, decode_pc)
 
+#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                \
+{                                                                                                   \
+    if ((*(decode_pc) & 0x7) != COMPACT_ATOM) {                                                     \
+        atom = term_invalid_term();                                                                 \
+        DECODE_VALUE(label, decode_pc);                                                             \
+    } else {                                                                                        \
+        uint32_t atom_ix;                                                                           \
+        DECODE_VALUE(atom_ix, decode_pc);                                                           \
+        atom = module_get_atom_term_by_id(mod, atom_ix);                                            \
+    }                                                                                               \
+}
+
 #define DECODE_LITERAL(val, decode_pc) \
     DECODE_VALUE(val, decode_pc)
 
@@ -972,11 +1000,13 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #ifndef TRACE_JUMP
     #define JUMP_TO_ADDRESS(address) \
-        pc = (address)
+        pc = (address); \
+        goto loop
 #else
     #define JUMP_TO_ADDRESS(address)        \
         pc = (address); \
-        fprintf(stderr, "going to jump to %" PRIuPTR "\n", (uintptr_t) (pc - code))
+        fprintf(stderr, "going to jump to %" PRIuPTR "\n", (uintptr_t) (pc - code)); \
+        goto loop
 #endif
 
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
@@ -1184,28 +1214,44 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
     goto handle_error;
 
-#define VERIFY_IS_INTEGER(t, opcode_name)                  \
+#define VERIFY_IS_INTEGER(t, opcode_name, label)           \
     if (UNLIKELY(!term_is_integer(t))) {                   \
         TRACE(opcode_name ": " #t " is not an integer\n"); \
-        RAISE_ERROR(BADARG_ATOM);                          \
+        if (label == 0) {                                  \
+            RAISE_ERROR(BADARG_ATOM);                      \
+        } else {                                           \
+            JUMP_TO_LABEL(mod, label);                     \
+        }                                                  \
     }
 
-#define VERIFY_IS_ANY_INTEGER(t, opcode_name)               \
+#define VERIFY_IS_ANY_INTEGER(t, opcode_name, label)        \
     if (UNLIKELY(!term_is_any_integer(t))) {                \
         TRACE(opcode_name ": " #t " is not any integer\n"); \
-        RAISE_ERROR(BADARG_ATOM);                           \
+        if (label == 0) {                                   \
+            RAISE_ERROR(BADARG_ATOM);                       \
+        } else {                                            \
+            JUMP_TO_LABEL(mod, label);                      \
+        }                                                   \
     }
 
-#define VERIFY_IS_BINARY(t, opcode_name)                 \
+#define VERIFY_IS_BINARY(t, opcode_name, label)          \
     if (UNLIKELY(!term_is_binary(t))) {                  \
         TRACE(opcode_name ": " #t " is not a binary\n"); \
-        RAISE_ERROR(BADARG_ATOM);                        \
+        if (label == 0) {                                \
+            RAISE_ERROR(BADARG_ATOM);                    \
+        } else {                                         \
+            JUMP_TO_LABEL(mod, label);                   \
+        }                                                \
     }
 
-#define VERIFY_IS_MATCH_STATE(t, opcode_name)                    \
+#define VERIFY_IS_MATCH_STATE(t, opcode_name, label)             \
     if (UNLIKELY(!term_is_match_state(t))) {                     \
         TRACE(opcode_name ": " #t " is not a match context.\n"); \
-        RAISE_ERROR(BADARG_ATOM);                                \
+        if (label == 0) {                                        \
+            RAISE_ERROR(BADARG_ATOM);                            \
+        } else {                                                 \
+            JUMP_TO_LABEL(mod, label);                           \
+        }                                                        \
     }
 
 #define VERIFY_IS_MATCH_OR_BINARY(t, opcode_name)                          \
@@ -1363,205 +1409,6 @@ static bool sort_kv_pairs(struct kv_pair *kv, int size, GlobalContext *global)
     return true;
 }
 
-static int get_catch_label_and_change_module(Context *ctx, Module **mod)
-{
-    term *ct = ctx->e;
-    term *last_frame = ctx->e;
-
-    while (ct != ctx->heap.heap_end) {
-        if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            TRACE("- found catch: label: %i, module: %i\n", target_label, target_module);
-            *mod = globalcontext_get_module_by_index(ctx->global, target_module);
-
-            DEBUG_DUMP_STACK(ctx);
-            ctx->e = last_frame;
-            DEBUG_DUMP_STACK(ctx);
-
-            return target_label;
-
-        } else if (term_is_cp(*ct)) {
-            last_frame = ct + 1;
-        }
-
-        ct++;
-    }
-
-    return 0;
-}
-
-COLD_FUNC static void cp_to_mod_lbl_off(term cp, Context *ctx, Module **cp_mod, int *label, int *l_off)
-{
-    Module *mod = globalcontext_get_module_by_index(ctx->global, ((uintptr_t) cp) >> 24);
-    long mod_offset = (cp & 0xFFFFFF) >> 2;
-
-    *cp_mod = mod;
-
-    uint8_t *code = &mod->code->code[0];
-    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
-
-    int i = 1;
-    const uint8_t *l = mod->labels[1];
-    while (mod_offset > l - code) {
-        i++;
-        if (i >= labels_count) {
-            // last label + 1 is reserved for end of module.
-            *label = i;
-            *l_off = 0;
-            return;
-        }
-        l = mod->labels[i];
-    }
-
-    *label = i - 1;
-    *l_off = mod_offset - (mod->labels[*label] - code);
-}
-
-COLD_FUNC static void dump(Context *ctx)
-{
-    GlobalContext *glb = ctx->global;
-
-    fprintf(stderr, "CRASH \n======\n");
-
-    fprintf(stderr, "pid: ");
-    term_display(stderr, term_from_local_process_id(ctx->process_id), ctx);
-    fprintf(stderr, "\n");
-
-    fprintf(stderr, "\nStacktrace:\n");
-    term_display(stderr, stacktrace_build(ctx, &ctx->x[2], 3), ctx);
-    fprintf(stderr, "\n\n");
-
-    {
-        Module *cp_mod;
-        int label;
-        int offset;
-        cp_to_mod_lbl_off(ctx->cp, ctx, &cp_mod, &label, &offset);
-        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
-            cp_mod->module_index, label, offset);
-    }
-
-    fprintf(stderr, "x[0]: ");
-    term_display(stderr, ctx->x[0], ctx);
-    fprintf(stderr, "\nx[1]: ");
-    term_display(stderr, ctx->x[1], ctx);
-    fprintf(stderr, "\nx[2]: ");
-    term_display(stderr, ctx->x[2], ctx);
-    fprintf(stderr, "\n\nStack \n-----\n\n");
-
-    term *ct = ctx->e;
-
-    while (ct != ctx->heap.heap_end) {
-        if (term_is_catch_label(*ct)) {
-            int target_module;
-            int target_label = term_to_catch_label_and_module(*ct, &target_module);
-            fprintf(stderr, "catch: %i:%i\n", target_label, target_module);
-
-        } else if (term_is_cp(*ct)) {
-            Module *cp_mod;
-            int label;
-            int offset;
-            cp_to_mod_lbl_off(*ct, ctx, &cp_mod, &label, &offset);
-            fprintf(stderr, "#CP<module: %i, label: %i, offset: %i>\n", cp_mod->module_index, label, offset);
-
-        } else {
-            term_display(stderr, *ct, ctx);
-            fprintf(stderr, "\n");
-        }
-
-        ct++;
-    }
-
-    fprintf(stderr, "\n\nMailbox\n-------\n");
-    mailbox_crashdump(ctx);
-
-    fprintf(stderr, "\n\nMonitors\n--------\n");
-    // Lock processes table to make sure any dying process will not modify monitors
-    struct ListHead *processes_table = synclist_rdlock(&glb->processes_table);
-    UNUSED(processes_table);
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &ctx->monitors_head) {
-        struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-        switch (monitor->monitor_type) {
-            case CONTEXT_MONITOR_LINK_LOCAL: {
-                struct LinkLocalMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
-                fprintf(stderr, "link ");
-                if (link_monitor->unlink_id) {
-                    fprintf(stderr, "(inactive) ");
-                }
-                fprintf(stderr, "to ");
-                term_display(stderr, link_monitor->link_local_process_id, ctx);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_LINK_REMOTE: {
-                struct LinkRemoteMonitor* link_monitor = CONTAINER_OF(monitor, struct LinkRemoteMonitor, monitor);
-                fprintf(stderr, "remote link ");
-                if (link_monitor->unlink_id) {
-                    fprintf(stderr, "(inactive) ");
-                }
-                fprintf(stderr, "to ");
-                term_display(stderr, link_monitor->node, ctx);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_MONITORING_LOCAL: {
-                struct MonitorLocalMonitor* monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "monitor to ");
-                term_display(stderr, monitoring_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_MONITORED_LOCAL: {
-                struct MonitorLocalMonitor* monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "monitored by ");
-                term_display(stderr, monitored_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-            case CONTEXT_MONITOR_RESOURCE: {
-                struct ResourceContextMonitor* resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-                fprintf(stderr, "monitored by resource %p ref=%lu", resource_monitor->resource_obj, (long unsigned) resource_monitor->ref_ticks);
-                fprintf(stderr, "\n");
-                break;
-            }
-        }
-    }
-    synclist_unlock(&glb->processes_table);
-
-    // If crash is caused by out_of_memory, print more data about memory usage
-    if (ctx->x[0] == ERROR_ATOM && ctx->x[1] == OUT_OF_MEMORY_ATOM) {
-        fprintf(stderr, "\n\nContext memory info\n-------------------\n");
-        fprintf(stderr, "context_size = %zu\n", context_size(ctx));
-        fprintf(stderr, "context_avail_free_memory = %zu\n", context_avail_free_memory(ctx));
-        fprintf(stderr, "heap_size = %zu\n", memory_heap_youngest_size(&ctx->heap));
-        fprintf(stderr, "total_heap_size = %zu\n", memory_heap_memory_size(&ctx->heap));
-        fprintf(stderr, "stack_size = %zu\n", context_stack_size(ctx));
-        fprintf(stderr, "message_queue_len = %zu\n", context_message_queue_len(ctx));
-        fprintf(stderr, "\n\nGlobal memory info\n------------------\n");
-
-        processes_table = synclist_rdlock(&glb->processes_table);
-        size_t process_count = 0;
-        size_t ports_count = 0;
-        LIST_FOR_EACH (item, processes_table) {
-            Context *p = GET_LIST_ENTRY(item, Context, processes_table_head);
-            process_count++;
-            if (p->native_handler) {
-                ports_count++;
-            }
-        }
-        synclist_unlock(&glb->processes_table);
-
-        fprintf(stderr, "process_count = %zu\n", process_count);
-        fprintf(stderr, "ports_count = %zu\n", ports_count);
-        fprintf(stderr, "atoms_count = %zu\n", atom_table_count(glb->atom_table));
-        fprintf(stderr, "refc_binary_total_size = %zu\n", refc_binary_total_size(ctx));
-    }
-    fprintf(stderr, "\n\n**End Of Crash Report**\n");
-}
-
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
@@ -1709,7 +1556,7 @@ term make_fun(Context *ctx, const Module *mod, int fun_index, term argv[])
         boxed_func[i] = *ext_reg;
     }
 
-    return ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+    return ((term) boxed_func) | TERM_PRIMARY_BOXED;
 }
 
 static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index_t function_name, int arity,
@@ -1997,7 +1844,7 @@ schedule_in:
     prev_mod = mod;
     code = mod->code->code;
     x_regs = ctx->x;
-    JUMP_TO_ADDRESS(ctx->saved_ip);
+    pc = (ctx->saved_ip);
     remaining_reductions = DEFAULT_REDUCTIONS_AMOUNT;
 
 #pragma GCC diagnostic push
@@ -2019,7 +1866,9 @@ schedule_in:
 
     while (1) {
     TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
-
+#ifdef IMPL_EXECUTE_LOOP
+loop:
+#endif
         switch (*pc++) {
             case OP_LABEL: {
                 uint32_t label;
@@ -4045,8 +3894,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src1, "bs_add");
-                    VERIFY_IS_INTEGER(src2, "bs_add");
+                    VERIFY_IS_INTEGER(src1, "bs_add", 0);
+                    VERIFY_IS_INTEGER(src2, "bs_add", 0);
                     avm_int_t src1_val = term_to_int(src1);
                     avm_int_t src2_val = term_to_int(src2);
 
@@ -4076,7 +3925,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init2");
+                    VERIFY_IS_INTEGER(size, "bs_init2", 0);
                     avm_int_t size_val = term_to_int(size);
 
                     TRIM_LIVE_REGS(live);
@@ -4116,7 +3965,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init_bits");
+                    VERIFY_IS_INTEGER(size, "bs_init_bits", 0);
                     avm_int_t size_val = term_to_int(size);
                     if (size_val % 8 != 0) {
                         TRACE("bs_init_bits: size_val (%li) is not evenly divisible by 8\n", size_val);
@@ -4158,7 +4007,7 @@ wait_timeout_trap_handler:
                     TRACE("bs_utf8_size/3");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3");
+                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_utf8_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
                     size_t utf8_size;
@@ -4185,7 +4034,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf8/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4227,7 +4076,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf8/5, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4264,7 +4113,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf8/4, fail=%i src=0x%lx arg2=0x%lx arg3=0x%lx\n", fail, src, arg2, arg3);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf8");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4295,7 +4144,7 @@ wait_timeout_trap_handler:
                     TRACE("bs_utf16_size/3");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3");
+                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_utf16_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
                     size_t utf16_size;
@@ -4322,7 +4171,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf16/3 flags=%x, src=0x%lx\n", (int) flags, src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4364,7 +4213,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf16");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4401,7 +4250,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf16/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf16");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4436,7 +4285,7 @@ wait_timeout_trap_handler:
                     }
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3");
+                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3", 0);
                     avm_int_t src_value = term_to_int(src);
                     TRACE("bs_put_utf32/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
                     if (UNLIKELY(!term_is_binary(ctx->bs))) {
@@ -4477,7 +4326,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_utf32");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4513,7 +4362,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf32/5, fail=%i src=0x%lx arg2=0x%lx flags=0x%lx\n", fail, src, arg2, flags);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_utf32");
+                    assert(term_is_match_state(src));
 
                     term src_bin = term_get_match_state_binary(src);
                     avm_int_t offset_bits = term_get_match_state_offset(src);
@@ -4573,9 +4422,9 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_append");
-                    VERIFY_IS_INTEGER(size, "bs_append");
-                    VERIFY_IS_INTEGER(extra, "bs_append");
+                    VERIFY_IS_BINARY(src, "bs_append", 0);
+                    VERIFY_IS_INTEGER(size, "bs_append", 0);
+                    VERIFY_IS_INTEGER(extra, "bs_append", 0);
                     avm_int_t size_val = term_to_int(size);
                     avm_int_t extra_val = term_to_int(extra);
 
@@ -4636,8 +4485,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_private_append");
-                    VERIFY_IS_INTEGER(size, "bs_private_append");
+                    VERIFY_IS_BINARY(src, "bs_private_append", 0);
+                    VERIFY_IS_INTEGER(size, "bs_private_append", 0);
                     avm_int_t size_val = term_to_int(size);
 
                     if (size_val % 8 != 0) {
@@ -4685,8 +4534,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer");
-                    VERIFY_IS_INTEGER(size, "bs_put_integer");
+                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer", 0);
+                    VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
 
                     avm_int64_t src_value = term_maybe_unbox_int64(src);
                     avm_int_t size_value = term_to_int(size);
@@ -4721,7 +4570,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_put_binary");
+                    VERIFY_IS_BINARY(src, "bs_put_binary", 0);
                     unsigned long size_val = 0;
                     if (term_is_integer(size)) {
                         avm_int_t bit_size = term_to_int(size) * unit;
@@ -4806,18 +4655,6 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    int slots = term_to_int(slots_term);
-
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    x_regs[live] = src;
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    src = x_regs[live];
-                #endif
-
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
@@ -4831,6 +4668,16 @@ wait_timeout_trap_handler:
                         WRITE_REGISTER(dreg, src);
                         pc = mod->labels[fail];
                     } else {
+                        int slots = term_to_int(slots_term);
+
+                        TRIM_LIVE_REGS(live);
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                        x_regs[live] = src;
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
+
                         term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
 
                         WRITE_REGISTER(dreg, match_state);
@@ -4856,20 +4703,17 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    #ifdef IMPL_EXECUTE_LOOP
+                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
+                    if (!(term_is_binary(src) || term_is_match_state(src))) {
+                        pc = mod->labels[fail];
+                    } else {
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
                         TRIM_LIVE_REGS(live);
                         x_regs[live] = src;
                         if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                         src = x_regs[live];
-                    #endif
-                    TRACE("bs_start_match3/4, fail=%i src=0x%lx live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
-                    if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER_GC_SAFE(dreg, src);
-                        pc = mod->labels[fail];
-                    } else {
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER_GC_SAFE(dreg, match_state);
@@ -4893,7 +4737,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_position", 0);
 
                     TRACE("bs_get_position/3 src=0x%lx dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
 
@@ -4918,7 +4762,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
@@ -4965,8 +4809,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_set_position");
-                    VERIFY_IS_INTEGER(pos, "bs_set_position");
+                    VERIFY_IS_MATCH_STATE(src, "bs_set_position", 0);
+                    VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
 
                     avm_int_t pos_val = term_to_int(pos);
                     TRACE("bs_set_position/2 src=0x%lx pos=%li\n", src, pos_val);
@@ -4991,7 +4835,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_match_string");
+                    VERIFY_IS_MATCH_STATE(src, "bs_match_string", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     term bs_bin = term_get_match_state_binary(src);
@@ -5070,7 +4914,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_save2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_save2", 0);
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
@@ -5099,7 +4943,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_restore2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_restore2", 0);
 
                     avm_int_t index_val;
                     if (index == START_ATOM) {
@@ -5134,8 +4978,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2");
-                    VERIFY_IS_INTEGER(size, "bs_skip_bits2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
+                    VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
                     if (flags_value != 0) {
                         TRACE("bs_skip_bits2: neither signed nor native or little endian encoding supported.\n");
                         RAISE_ERROR(UNSUPPORTED_ATOM);
@@ -5172,7 +5016,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
 
                     TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
 
@@ -5198,7 +5042,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2", 0);
 
                     TRACE("bs_test_tail2/3, fail=%u src=%p bits=%u\n", (unsigned) fail, (void *) src, (unsigned) bits);
 
@@ -5220,6 +5064,7 @@ wait_timeout_trap_handler:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 uint32_t live;
+                UNUSED(live);
                 DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
@@ -5233,8 +5078,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer");
-                    VERIFY_IS_INTEGER(size,     "bs_get_integer");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
+                    VERIFY_IS_INTEGER(size,     "bs_get_integer", 0);
 
                     avm_int_t size_val = term_to_int(size);
 
@@ -5272,8 +5117,9 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                term arg2;
-                DECODE_COMPACT_TERM(arg2, pc);
+                uint32_t live;
+                UNUSED(live);
+                DECODE_LITERAL(live, pc);
                 term size;
                 DECODE_COMPACT_TERM(size, pc);
                 uint32_t unit;
@@ -5286,8 +5132,8 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_float");
-                    VERIFY_IS_INTEGER(size,     "bs_get_float");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
+                    VERIFY_IS_INTEGER(size,     "bs_get_float", 0);
 
                     avm_int_t size_val = term_to_int(size);
 
@@ -5352,7 +5198,7 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2");
+                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2", 0);
 
                     term bs_bin = term_get_match_state_binary(src);
                     avm_int_t bs_offset = term_get_match_state_offset(src);
@@ -5521,12 +5367,12 @@ wait_timeout_trap_handler:
                 READ_ANY_XREG(function, arity + 1);
                 TRACE("apply_last/1, module=%lu, function=%lu arity=%i deallocate=%i\n", module, function, arity, n_words);
 
-                ctx->cp = ctx->e[n_words];
-                ctx->e += (n_words + 1);
-
                 if (UNLIKELY(!term_is_atom(module) || !term_is_atom(function))) {
                     RAISE_ERROR(BADARG_ATOM);
                 }
+
+                ctx->cp = ctx->e[n_words];
+                ctx->e += (n_words + 1);
 
                 atom_index_t module_name = term_to_atom_index(module);
                 atom_index_t function_name = term_to_atom_index(function);
@@ -5903,7 +5749,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //
-                    // Maybe GC, and reset the src term in case it changed
+                    // Maybe GC
                     //
                     size_t src_size = term_get_map_size(src);
                     size_t new_map_size = src_size + new_entries;
@@ -6031,7 +5877,7 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     //
-                    // Maybe GC, and reset the src term in case it changed
+                    // Maybe GC
                     //
                     size_t src_size = term_get_map_size(src);
                     TRIM_LIVE_REGS(live);
@@ -6595,27 +6441,11 @@ wait_timeout_trap_handler:
             }
 
             case OP_BS_START_MATCH4: {
-                // fail since OTP 23 might be either 'no_fail', 'resume' or a fail label
-                // TODO: figure out what could fail
-                term fail;
-                DECODE_COMPACT_TERM(fail, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                if (!term_is_integer(fail) && !term_is_atom(fail)) {
-                    fprintf(stderr, "Unexpected fail term ");
-                    term_display(stderr, fail, ctx);
-                    fprintf(stderr, "\n");
-                    AVM_ABORT();
-                }
-                #endif
+                term fail_atom;
+                uint32_t fail_label = 0;
+                DECODE_ATOM_OR_LABEL(fail_atom, fail_label, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
@@ -6626,16 +6456,22 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match4/4, fail=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail, (unsigned) live, (void *) src, T_DEST_REG(dreg));
+                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG(dreg));
 
-                    if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER(dreg, src);
-                        if (term_is_integer(fail)) {
-                            pc = mod->labels[term_to_int(fail)];
-                        } else {
-                            RAISE_ERROR(BADARG_ATOM);
-                        }
+                    // no_fail: we know it's a binary or a match_state
+                    // resume: we know it's a match_state
+                    if (term_is_invalid_term(fail_atom) && !(term_is_binary(src) || term_is_match_state(src))) {
+                        pc = mod->labels[fail_label];
                     } else {
+                        assert(term_is_binary(src) || term_is_match_state(src));
+
+                        TRIM_LIVE_REGS(live);
+                        x_regs[live] = src;
+                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        src = x_regs[live];
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
                         WRITE_REGISTER(dreg, match_state);
@@ -6674,7 +6510,7 @@ wait_timeout_trap_handler:
                 }
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    term fun = ((term) boxed_func) | TERM_BOXED_VALUE_TAG;
+                    term fun = ((term) boxed_func) | TERM_PRIMARY_BOXED;
                     WRITE_REGISTER(dreg, fun);
                 #endif
                 break;
@@ -6755,7 +6591,7 @@ wait_timeout_trap_handler:
                         AVM_ABORT();
                     }
                 #endif
-                // Compute binary size in first iteration
+                // Verify parameters and compute binary size in first iteration
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t binary_size = 0;
                 #endif
@@ -6773,61 +6609,104 @@ wait_timeout_trap_handler:
                     term size;
                     DECODE_COMPACT_TERM(size, pc);
                     #ifdef IMPL_EXECUTE_LOOP
-                        avm_int_t src_value = 0;
-                        switch (atom_type) {
-                            case UTF8_ATOM:
-                            case UTF16_ATOM:
-                            case UTF32_ATOM:
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
-                                src_value = term_to_int(src);
-                                break;
-                        }
                         size_t segment_size = 0;
-                        switch (size) {
-                            case UNDEFINED_ATOM: {
+                        switch (atom_type) {
+                            // OTP ignores size for these types
+                            case UTF8_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
                                 // Silently ignore segment_unit != 0
                                 segment_unit = 8;
-                                switch (atom_type) {
-                                    case UTF8_ATOM: {
-                                        if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        }
-                                        break;
+                                avm_int_t src_value = term_to_int(src);
+                                if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
                                     }
-                                    case UTF16_ATOM: {
-                                        if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        }
-                                        break;
-                                    }
-                                    case UTF32_ATOM: {
-                                        segment_size = 4;
-                                        break;
-                                    }
-                                    default:
-                                        // In Erlang/OTP #5281, this is a compile time check
-                                        fprintf(stderr, "Unexpected type %lx for bs_create_bin/6 size undefined\n", (long) atom_type);
-                                        AVM_ABORT();
                                 }
                                 break;
                             }
-                            case ALL_ATOM: {
-                                if (atom_type != BINARY_ATOM && atom_type != APPEND_ATOM && atom_type != PRIVATE_APPEND_ATOM) {
-                                    // In Erlang/OTP #5281, this is a compile time check
-                                    fprintf(stderr, "Unexpected type for bs_create_bin/6 size all\n");
-                                    AVM_ABORT();
-                                }
-                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
-                                // We only support src as a binary of bytes here.
-                                segment_size = term_binary_size(src);
+                            case UTF16_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                                // Silently ignore segment_unit != 0
                                 segment_unit = 8;
+                                avm_int_t src_value = term_to_int(src);
+                                if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                break;
+                            }
+                            case UTF32_ATOM: {
+                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                                // Silently ignore segment_unit != 0
+                                segment_unit = 8;
+                                segment_size = 4;
+                                break;
+                            }
+                            case INTEGER_ATOM: {
+                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6", fail);
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                segment_size = signed_size_value;
+                                break;
+                            }
+                            case STRING_ATOM: {
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                segment_size = signed_size_value;
+                                break;
+                            }
+                            case APPEND_ATOM:
+                            case BINARY_ATOM:
+                            case PRIVATE_APPEND_ATOM: {
+                                VERIFY_IS_BINARY(src, "bs_create_bin/6", fail);
+                                if (size == ALL_ATOM) {
+                                    // We only support src as a binary of bytes here.
+                                    segment_size = term_binary_size(src);
+                                    segment_unit = 8;
+                                } else {
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                    avm_int_t signed_size_value = term_to_int(size);
+                                    if (UNLIKELY(signed_size_value < 0)) {
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
+                                    }
+                                    size_t binary_size = term_binary_size(src);
+                                    if ((size_t) signed_size_value > binary_size) {
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
+                                    }
+                                    segment_size = signed_size_value;
+                                }
                                 break;
                             }
                             default: {
-                                if (UNLIKELY(!term_is_integer(size) || term_to_int(size) < 0)) {
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                segment_size = term_to_int(size);
+                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
+                                RAISE_ERROR(UNSUPPORTED_ATOM);
                             }
                         }
                         binary_size += segment_unit * segment_size;
@@ -6877,11 +6756,9 @@ wait_timeout_trap_handler:
                             case UTF8_ATOM:
                             case UTF16_ATOM:
                             case UTF32_ATOM:
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6");
                                 src_value = term_to_int(src);
                                 break;
                             case INTEGER_ATOM:
-                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6");
                                 src_value = term_maybe_unbox_int64(src);
                                 break;
                             default:
@@ -6890,13 +6767,7 @@ wait_timeout_trap_handler:
                         switch (atom_type) {
                             case INTEGER_ATOM:
                             case STRING_ATOM:
-                                VERIFY_IS_INTEGER(size, "bs_create_bin/6");
-                                avm_int_t signed_size_value = term_to_int(size);
-                                if (UNLIKELY(signed_size_value < 0)) {
-                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                size_value = (size_t) signed_size_value;
+                                size_value = (size_t) term_to_int(size);
                                 break;
                             default:
                                 break;
@@ -6904,27 +6775,29 @@ wait_timeout_trap_handler:
                         switch (atom_type) {
                             case UTF8_ATOM: {
                                 bool result = bitstring_insert_utf8(t, offset, src_value, &segment_size);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf8 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
+                                // bitstring_utf8_size was called so bitstring_insert_utf8 succeeds
+                                UNUSED(result);
+                                assert(result);
                                 segment_size *= 8;
                                 break;
                             }
                             case UTF16_ATOM: {
                                 bool result = bitstring_insert_utf16(t, offset, src_value, flags_value, &segment_size);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
+                                // bitstring_utf16_size was called so bitstring_insert_utf16 succeeds
+                                UNUSED(result);
+                                assert(result);
                                 segment_size *= 8;
                                 break;
                             }
                             case UTF32_ATOM: {
                                 bool result = bitstring_insert_utf32(t, offset, src_value, flags_value);
                                 if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf16 into binary: %i\n", result);
-                                    RAISE_ERROR(BADARG_ATOM);
+                                    TRACE("bs_create_bin/6: Failed to insert character as utf32 into binary: %i\n", result);
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
                                 }
                                 segment_size = 32;
                                 break;
@@ -6953,12 +6826,11 @@ wait_timeout_trap_handler:
                                     TRACE("bs_create_bin/6: current offset (%li) is not evenly divisible by 8\n", offset);
                                     RAISE_ERROR(UNSUPPORTED_ATOM);
                                 }
-                                VERIFY_IS_BINARY(src, "bs_create_bin/6");
                                 uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
                                 const uint8_t *bin = (const uint8_t *) term_binary_data(src);
                                 size_t binary_size = term_binary_size(src);
                                 if (size != ALL_ATOM) {
-                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6");
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                     avm_int_t signed_size_value = term_to_int(size);
                                     if (UNLIKELY(signed_size_value < 0)) {
                                         TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
@@ -6966,7 +6838,11 @@ wait_timeout_trap_handler:
                                     }
                                     size_value = (size_t) signed_size_value;
                                     if (size_value > binary_size) {
-                                        RAISE_ERROR(BADARG_ATOM);
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
                                     }
                                     binary_size = size_value;
                                 }
@@ -6974,10 +6850,8 @@ wait_timeout_trap_handler:
                                 segment_size = binary_size * 8;
                                 break;
                             }
-                            default: {
-                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
-                                RAISE_ERROR(UNSUPPORTED_ATOM);
-                            }
+                            default:
+                                UNREACHABLE();
                         }
                         offset += segment_size;
                     }
@@ -7115,7 +6989,7 @@ wait_timeout_trap_handler:
                 term match_state;
                 DECODE_COMPACT_TERM(match_state, pc);
                 #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3")
+                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3", fail)
                     term bs_bin = term_get_match_state_binary(match_state);
                     size_t bs_offset = term_get_match_state_offset(match_state);
                 #endif
@@ -7186,7 +7060,7 @@ wait_timeout_trap_handler:
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
                                 // context_clean_registers(ctx, live); // TODO: check if needed
-                                VERIFY_IS_INTEGER(size, "bs_match/3");
+                                VERIFY_IS_INTEGER(size, "bs_match/3", fail);
                                 avm_int_t size_val = term_to_int(size);
                                 avm_int_t increment = size_val * unit;
                                 union maybe_unsigned_int64 value;
@@ -7218,6 +7092,7 @@ wait_timeout_trap_handler:
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
+                                // TODO : determine what this is used for
                                 avm_int_t flags_value;
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode)
                             #endif
@@ -7265,13 +7140,15 @@ wait_timeout_trap_handler:
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
-                                size_t total_bits = term_binary_size(bs_bin) * 8;
-                                size_t tail_bits = total_bits - bs_offset;
-                                if (bs_offset % 8 != 0 || tail_bits % 8 != 0) {
+                                // TODO: rewrite this bit once bitstrings are supported
+                                if (bs_offset % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
-                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bits / 8);
+                                size_t total_bytes = term_binary_size(bs_bin);
+                                size_t bs_offset_bytes = bs_offset / 8;
+                                size_t tail_bytes = total_bytes - bs_offset_bytes;
+                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bytes);
                                 TRIM_LIVE_REGS(live);
                                 x_regs[live] = match_state;
                                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -7279,14 +7156,14 @@ wait_timeout_trap_handler:
                                 }
                                 match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, tail_bits / 8, &ctx->heap, ctx->global);
+                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset_bytes, tail_bytes, &ctx->heap, ctx->global);
                             #endif
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
                                 WRITE_REGISTER(dreg, t);
-                                bs_offset = total_bits;
+                                bs_offset = total_bytes * 8;
                             #endif
                             break;
                         }
@@ -7344,7 +7221,6 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
 bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
-                    continue;
                 #endif
             }
 #endif
@@ -7367,17 +7243,16 @@ do_abort:
 
 handle_error:
         {
-            int target_label = get_catch_label_and_change_module(ctx, &mod);
+            int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
                 code = mod->code->code;
                 JUMP_TO_ADDRESS(mod->labels[target_label]);
-                continue;
             }
         }
 
         // Do not print crash dump if reason is normal or shutdown.
         if (x_regs[0] != LOWERCASE_EXIT_ATOM || (x_regs[1] != NORMAL_ATOM && x_regs[1] != SHUTDOWN_ATOM)) {
-            dump(ctx);
+            context_dump(ctx);
         }
 
         if (x_regs[0] == LOWERCASE_EXIT_ATOM) {
