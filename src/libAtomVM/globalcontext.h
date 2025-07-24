@@ -90,6 +90,13 @@ struct RefcBinaryQueueItem
     struct RefcBinary *refc;
 };
 
+typedef enum run_result_t
+{
+    RUN_SUCCESS = 0,
+    RUN_MEMORY_FAILURE = 1,
+    RUN_RESULT_NOT_OK = 2,
+} run_result_t;
+
 struct GlobalContext
 {
     struct ListHead ready_processes;
@@ -511,6 +518,21 @@ Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name
  * found.
  */
 Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name);
+
+/**
+ * @brief Run a given start module.
+ *
+ * @details This function will create a new context and call init:boot/1
+ * to execute the passed start module. If init module is not found, it will
+ * fallback to calling start module:start/0 directly. It will also
+ * print the result to out_f, typically stdout. It will return RUN_SUCCESS if
+ * result is ok or 0, an error code otherwise.
+ * @param global the global context
+ * @param start_module the start module
+ * @param out_f file to print the result to, or NULL
+ * @returns RUN_SUCCESS or an error code
+ */
+run_result_t globalcontext_run(GlobalContext *global, Module *start_module, FILE *out_f);
 
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)

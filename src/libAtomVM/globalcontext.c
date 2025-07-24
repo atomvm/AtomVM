@@ -719,3 +719,42 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index)
     SMP_RWLOCK_UNLOCK(global->modules_lock);
     return result;
 }
+
+run_result_t globalcontext_run(GlobalContext *glb, Module *startup_module, FILE *out_f)
+{
+    Context *ctx = context_new(glb);
+    ctx->leader = 1;
+    Module *init_module = globalcontext_get_module(glb, INIT_ATOM_INDEX);
+    if (IS_NULL_PTR(init_module)) {
+        context_execute_loop(ctx, startup_module, "start", 0);
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(2) + LIST_SIZE(2, 0)) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Unable to allocate arguments.\n");
+            return RUN_MEMORY_FAILURE;
+        }
+        term s_opt = term_from_literal_binary("-s", strlen("-s"), &ctx->heap, glb);
+        term list = term_list_prepend(module_get_name(startup_module), term_nil(), &ctx->heap);
+        ctx->x[0] = term_list_prepend(s_opt, list, &ctx->heap);
+
+        context_execute_loop(ctx, init_module, "boot", 1);
+    }
+
+    term ret_value = ctx->x[0];
+    if (out_f) {
+        fprintf(out_f, "Return value: ");
+        term_display(out_f, ret_value, ctx);
+        fprintf(out_f, "\n");
+    }
+
+    run_result_t result;
+    // ok or 0. 0 is required for running tests for emscripten
+    if (ret_value == OK_ATOM || ret_value == term_from_int(0)) {
+        result = RUN_SUCCESS;
+    } else {
+        result = RUN_RESULT_NOT_OK;
+    }
+
+    context_destroy(ctx);
+
+    return result;
+}
