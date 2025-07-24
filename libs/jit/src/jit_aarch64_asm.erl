@@ -42,7 +42,7 @@
     str/2,
     str/3,
     tst/2,
-    tst32/2,
+    tst_w/2,
     stp/4,
     ldp/4,
     subs/3,
@@ -355,7 +355,7 @@ orr_immediate(Dst, N, Immr, Imms) when
 
 %% Encode a value as AArch64 bitmask immediate
 %% Returns {ok, N, Immr, Imms} if encodable, error otherwise
--spec encode_bitmask_immediate(integer()) -> {ok, integer(), integer(), integer()} | error.
+-spec encode_bitmask_immediate(integer()) -> {ok, 0..1, integer(), integer()} | error.
 encode_bitmask_immediate(Value) when is_integer(Value) ->
     %% Convert to 64-bit unsigned
     UnsignedValue = Value band 16#FFFFFFFFFFFFFFFF,
@@ -363,6 +363,20 @@ encode_bitmask_immediate(Value) when is_integer(Value) ->
     %% Try different pattern sizes (64, 32, 16, 8, 4, 2)
     PatternSizes = [64, 32, 16, 8, 4, 2],
     try_pattern_sizes(UnsignedValue, PatternSizes).
+
+%% Encode a value as AArch64 bitmask immediate for 32 bits values
+%% Returns {ok, Immr, Imms} if encodable, error otherwise
+-spec encode_bitmask_immediate_w(integer()) -> {ok, integer(), integer()} | error.
+encode_bitmask_immediate_w(Value) when is_integer(Value) ->
+    %% Convert to 64-bit unsigned
+    UnsignedValue = Value band 16#FFFFFFFFFFFFFFFF,
+
+    %% Try different pattern sizes (32, 16, 8, 4, 2)
+    PatternSizes = [32, 16, 8, 4, 2],
+    case try_pattern_sizes(UnsignedValue, PatternSizes) of
+        {ok, 0, Immr, Imms} -> {ok, Immr, Imms};
+        error -> error
+    end.
 
 %% Try encoding with different pattern sizes
 -spec try_pattern_sizes(integer(), [integer()]) -> {ok, integer(), integer(), integer()} | error.
@@ -817,46 +831,30 @@ tst(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
     <<(16#EA00001F bor (RmNum bsl 16) bor (RnNum bsl 5)):32/little>>;
 tst(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     RnNum = reg_to_num(Rn),
-    case Imm of
-        %% special case for #16
-        16 ->
-            <<(16#F27C001F bor (RnNum bsl 5)):32/little>>;
+    case encode_bitmask_immediate(Imm) of
+        {ok, N, Immr, Imms} ->
+            <<
+                (16#F200001F bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5)):32/little
+            >>;
         _ ->
-            if
-                Imm band (Imm - 1) =:= 0, Imm > 0, Imm =< 16#8000000000000000 ->
-                    BitPos = trunc(math:log2(Imm)),
-                    <<(16#F200001F bor (BitPos bsl 16) bor (RnNum bsl 5)):32/little>>;
-                true ->
-                    <<
-                        (16#F200001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little
-                    >>
-            end
+            error({unencodable_immediate, Imm})
     end.
 
 %% Emit a 32-bit test instruction (bitwise AND, discarding result)
--spec tst32(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
-tst32(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
+-spec tst_w(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
+tst_w(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
     RnNum = reg_to_num(Rn),
     RmNum = reg_to_num(Rm),
     %% AArch64 TST (32-bit shifted register) encoding: TST Wn, Wm
     %% This is ANDS WZR, Wn, Wm: 01101010000mmmmm000000nnnnn11111
     <<(16#6A00001F bor (RmNum bsl 16) bor (RnNum bsl 5)):32/little>>;
-tst32(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
+tst_w(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     RnNum = reg_to_num(Rn),
-    case Imm of
-        %% special case for #16
-        16 ->
-            <<(16#721C001F bor (RnNum bsl 5)):32/little>>;
+    case encode_bitmask_immediate_w(Imm) of
+        {ok, Immr, Imms} ->
+            <<(16#7200001F bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5)):32/little>>;
         _ ->
-            if
-                Imm band (Imm - 1) =:= 0, Imm > 0, Imm =< 16#80000000 ->
-                    BitPos = trunc(math:log2(Imm)),
-                    <<(16#7200001F bor (BitPos bsl 16) bor (RnNum bsl 5)):32/little>>;
-                true ->
-                    <<
-                        (16#7200001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little
-                    >>
-            end
+            error({unencodable_immediate, Imm})
     end.
 
 %% Emit a subtract and set flags (SUBS) instruction (AArch64 encoding)
