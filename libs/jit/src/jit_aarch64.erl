@@ -131,8 +131,8 @@
         Reg =:= r15)
 ).
 -define(IS_FPR(Reg),
-    (Reg =:= d0 orelse Reg =:= d1 orelse Reg =:= d2 orelse Reg =:= d3 orelse Reg =:= d4 orelse
-        Reg =:= d5 orelse Reg =:= d6 orelse Reg =:= d7)
+    (Reg =:= v0 orelse Reg =:= v1 orelse Reg =:= v2 orelse Reg =:= v3 orelse Reg =:= v4 orelse
+        Reg =:= v5 orelse Reg =:= v6 orelse Reg =:= v7)
 ).
 
 -type stream() :: any().
@@ -192,9 +192,9 @@
 -define(IS_UINT32_T(X), is_integer(X) andalso X >= 0 andalso X < 16#100000000).
 
 -define(AVAILABLE_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6]).
--define(AVAILABLE_FPREGS, [d0, d1, d2, d3, d4, d5, d6, d7]).
+-define(AVAILABLE_FPREGS, [v0, v1, v2, v3, v4, v5, v6, v7]).
 -define(PARAMETER_REGS, [r0, r1, r2, r3, r4, r5]).
--define(PARAMETER_FPREGS, [d0, d1, d2, d3, d4, d5]).
+-define(PARAMETER_FPREGS, [v0, v1, v2, v3, v4, v5]).
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
@@ -1570,8 +1570,8 @@ move_to_native_register(
     } = State,
     {fp_reg, F}
 ) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?FP_REGS, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movsd({F * 8, Temp}, FPReg),
+    I1 = jit_aarch64_asm:ldr(Temp, ?FP_REGS),
+    I2 = jit_aarch64_asm:ldr_d(FPReg, {Temp, F * 8}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_fpregs = AvailFT, used_regs = [FPReg | Used]}, FPReg}.
@@ -1614,8 +1614,8 @@ move_to_native_register(
     {fp_reg, F},
     RegDst
 ) ->
-    I1 = jit_x86_64_asm_unimplemented:movq(?FP_REGS, Temp),
-    I2 = jit_x86_64_asm_unimplemented:movsd({F * 8, Temp}, RegDst),
+    I1 = jit_aarch64_asm:ldr(Temp, ?FP_REGS),
+    I2 = jit_aarch64_asm:ldr_d(RegDst, {Temp, F * 8}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
