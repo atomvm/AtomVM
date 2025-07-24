@@ -47,6 +47,12 @@
 
 #ifndef AVM_NO_JIT
 #include "jit_stream_mmap.h"
+#include <pthread.h>
+#include <sys/mman.h>
+
+#if defined(__APPLE__)
+#include <libkern/OSCacheControl.h>
+#endif
 #endif
 
 #include <fcntl.h>
@@ -806,4 +812,25 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
 
+#endif
+
+#ifndef AVM_NO_JIT
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+{
+#if defined(__APPLE__) && defined(__arm64__)
+    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+    if (native_code_mmap == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for native code");
+        return NULL;
+    }
+    pthread_jit_write_protect_np(0);
+    memcpy(native_code_mmap, native_code, size);
+    pthread_jit_write_protect_np(1);
+    sys_icache_invalidate(native_code_mmap, size);
+    return (ModuleNativeEntryPoint) (native_code_mmap + offset);
+#else
+    UNUSED(size);
+    return (ModuleNativeEntryPoint) (native_code + offset);
+#endif
+}
 #endif

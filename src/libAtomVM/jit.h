@@ -163,6 +163,11 @@ enum TrapAndLoadResult
 #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
 
+#ifdef __arm64__
+#define JIT_ARCH_TARGET JIT_ARCH_AARCH64
+#define JIT_JUMPTABLE_ENTRY_SIZE 4
+#endif
+
 /**
  * @brief Return the entry point from a given jit stream
  *
