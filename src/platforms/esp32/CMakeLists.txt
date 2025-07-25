@@ -51,6 +51,19 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
+## Configure partition table based on boot flavor
+if (${ATOMVM_ELIXIR_SUPPORT})
+    set(AVM_PARTITION_TABLE_FILENAME "partitions-elixir.csv")
+else()
+    set(AVM_PARTITION_TABLE_FILENAME "partitions.csv")
+endif()
+
+if (${ATOMVM_RELEASE})
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.release-defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
+else()
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
+endif()
+
 project(atomvm-esp32)
 
 # esp-idf does not use compile_feature but instead sets version in
@@ -70,3 +83,19 @@ option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 
 add_subdirectory(tools)
+
+include(GetBootAVM.cmake)
+message(NOTICE "-- Configuring atomvmlib esp32boot flavor: ${BOOT_LIBS}")
+if (NOT ("${BOOT_LIBS}" STREQUAL "NONE"))
+    set(BOOT_LIB_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/libs/esp32boot/${BOOT_LIBS}")
+    if (NOT EXISTS "${BOOT_LIB_PATH}")
+        message(ERROR "A generic_unix build must be done first in the top level AtomVM/build directory! \n\
+        Consult https://doc.atomvm.org/main/build-instructions.html for build instructions.")
+    endif()
+    partition_table_get_partition_info(lib_offset "--partition-name boot.avm" "offset")
+    esptool_py_flash_target_image(flash boot.avm "${lib_offset}" "${BOOT_LIB_PATH}")
+endif()
+
+if (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/nvs_partition.csv)
+    nvs_create_partition_image(nvs ${CMAKE_CURRENT_SOURCE_DIR}/nvs_partition.csv)
+endif()

@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `binary:replace/3`, `binary:replace/4`
 - Added `binary:match/2` and `binary:match/3`
 - Added `supervisor:which_children/1`
+- Added ESP32 `-DATOMVM_ELIXIR_SUPPORT=on` configuration option
+- Added support for ESP32 development builds to include NVS partition data at build time
 
 ### Changed
 
@@ -63,6 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entry point now is `init:boot/1` if it exists. It starts the kernel application and calls `start/0` from the
   identified startup module. Users who started kernel application (typically for distribution) must no longer
   do it. Startint `net_kernel` is still required.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
+- ESP32 Elixir support is determined automatically from the offset of `boot.avm` in the partiton
+table.
+- ESP32 ports now flash a complete working image using the `idf.py flash` task.
 
 ### Fixed
 
