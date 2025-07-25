@@ -36,7 +36,6 @@ start() ->
 
 distribution_start(Address) ->
     {ok, _EPMDPid} = epmd:start_link([]),
-    {ok, _KernelPid} = kernel:start(normal, []),
     {X, Y, Z, T} = Address,
     Node = list_to_atom(lists:flatten(io_lib:format("atomvm@~B.~B.~B.~B", [X, Y, Z, T]))),
     {ok, _NetKernelPid} = net_kernel:start(Node, #{name_domain => longnames}),
