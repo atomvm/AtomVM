@@ -470,101 +470,101 @@ unsigned long memory_estimate_usage(term t)
     }
 
     while (!temp_stack_is_empty(&temp_stack)) {
-        if (term_is_atom(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_integer(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nil(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_local_pid(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_local_port(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nonempty_list(t)) {
-            acc += 2;
-            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
-                // TODO: handle failed malloc
-                AVM_ABORT();
-            }
-            t = term_get_list_head(t);
-
-        } else if (term_is_tuple(t)) {
-            int tuple_size = term_get_tuple_arity(t);
-            acc += tuple_size + 1;
-
-            if (tuple_size > 0) {
-                for (int i = 1; i < tuple_size; i++) {
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                }
-                t = term_get_tuple_element(t, 0);
-
-            } else {
-                t = term_nil();
-            }
-
-        } else if (term_is_map(t)) {
-            int map_size = term_get_map_size(t);
-            acc += term_map_size_in_terms(map_size);
-            if (map_size > 0) {
-                for (int i = 1; i < map_size; i++) {
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                }
-                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+        switch (t & TERM_PRIMARY_MASK) {
+            case TERM_PRIMARY_IMMED:
+                t = temp_stack_pop(&temp_stack);
+                break;
+            case TERM_PRIMARY_LIST:
+                acc += 2;
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
                     // TODO: handle failed malloc
                     AVM_ABORT();
                 }
-                t = term_get_map_key(t, 0);
+                t = term_get_list_head(t);
+                break;
+            case TERM_PRIMARY_BOXED: {
+                const term *boxed_value = term_to_const_term_ptr(t);
+                term boxed_value_0 = boxed_value[0];
+                switch (boxed_value_0 & TERM_BOXED_TAG_MASK) {
+                    case TERM_BOXED_TUPLE: {
+                        int tuple_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += tuple_size + 1;
 
-            } else {
-                t = term_nil();
-            }
+                        if (tuple_size > 0) {
+                            for (int i = 1; i < tuple_size; i++) {
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                            }
+                            t = term_get_tuple_element(t, 0);
 
-        } else if (term_is_function(t)) {
-            int boxed_size = term_boxed_size(t);
-            acc += boxed_size + 1;
-            const term *boxed_value = term_to_const_term_ptr(t);
+                        } else {
+                            t = term_nil();
+                        }
+                    } break;
 
-            // We skip the first two elements:
-            // First is either a module atom or a pointer to a Module
-            // Second is either a function atom or a function index
-            // Third would be arity as a term int (external function) or
-            // the first argument (if built with make_fun3) which we should
-            // estimate.
-            for (int i = 2; i < boxed_size; i++) {
-                if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
-                    // TODO: handle failed malloc
-                    AVM_ABORT();
+                    case TERM_BOXED_MAP: {
+                        int map_size = term_get_map_size(t);
+                        acc += term_map_size_in_terms(map_size);
+                        if (map_size > 0) {
+                            for (int i = 1; i < map_size; i++) {
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                            }
+                            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+                                // TODO: handle failed malloc
+                                AVM_ABORT();
+                            }
+                            t = term_get_map_key(t, 0);
+
+                        } else {
+                            t = term_nil();
+                        }
+                    } break;
+
+                    case TERM_BOXED_FUN: {
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+
+                        // We skip the first two elements:
+                        // First is either a module atom or a pointer to a Module
+                        // Second is either a function atom or a function index
+                        // Third would be arity as a term int (external function) or
+                        // the first argument (if built with make_fun3) which we should
+                        // estimate.
+                        for (int i = 2; i < boxed_size; i++) {
+                            if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
+                                // TODO: handle failed malloc
+                                AVM_ABORT();
+                            }
+                        }
+                        t = boxed_value[2];
+                    } break;
+
+                    case TERM_BOXED_SUB_BINARY: {
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+                        t = term_get_sub_binary_ref(t);
+                    } break;
+
+                    default: {
+                        // Default type of boxed terms
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+                        t = temp_stack_pop(&temp_stack);
+                    }
                 }
-            }
-            t = boxed_value[2];
+            } break;
 
-        } else if (term_is_sub_binary(t)) {
-            acc += term_boxed_size(t) + 1;
-            t = term_get_sub_binary_ref(t);
-
-        } else if (term_is_boxed(t)) {
-            // Default type of boxed terms
-            acc += term_boxed_size(t) + 1;
-            t = temp_stack_pop(&temp_stack);
-
-        } else {
-            fprintf(stderr, "bug: found unknown term type: 0x%" TERM_X_FMT "\n", t);
-            AVM_ABORT();
+            default:
+                UNREACHABLE();
         }
     }
 
