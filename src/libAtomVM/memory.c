@@ -627,7 +627,7 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                     break;
 
                 case TERM_BOXED_NEGATIVE_INTEGER:
-                    TRACE("- Found boxed pos int.\n");
+                    TRACE("- Found boxed neg int.\n");
                     break;
 
                 case TERM_BOXED_REF:
