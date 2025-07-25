@@ -289,6 +289,12 @@ TEST_CASE("test_file", "[test_run]")
 }
 #endif
 
+TEST_CASE("test_list_to_atom", "[test_run]")
+{
+    term ret_value = avm_test_case("test_list_to_atom.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_list_to_binary", "[test_run]")
 {
     term ret_value = avm_test_case("test_list_to_binary.beam");
