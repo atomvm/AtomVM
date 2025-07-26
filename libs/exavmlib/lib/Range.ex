@@ -89,6 +89,39 @@ defmodule Range do
             "got: #{inspect(first)}..#{inspect(last)}"
   end
 
+  if Version.match?(System.version(), "~> 1.12") do
+    @doc """
+    Returns the size of `range`. Available Elixir 1.12 and later.
+
+    ## Examples
+
+        iex> Range.size(1..10)
+        10
+        iex> Range.size(1..10//2)
+        5
+        iex> Range.size(1..10//3)
+        4
+        iex> Range.size(1..10//-1)
+        0
+
+        iex> Range.size(10..1//-1)
+        10
+        iex> Range.size(10..1//-2)
+        5
+        iex> Range.size(10..1//-3)
+        4
+        iex> Range.size(10..1//1)
+        0
+
+    """
+    @doc since: "0.7.0"
+    @spec size(t) :: non_neg_integer
+    def size(range)
+    def size(first..last//step) when step > 0 and first > last, do: 0
+    def size(first..last//step) when step < 0 and first < last, do: 0
+    def size(first..last//step), do: abs(div(last - first, step)) + 1
+  end
+
   @doc """
   Checks if two ranges are disjoint.
 
