@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
+- Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
 
 ## [0.6.7] - Unreleased
 
