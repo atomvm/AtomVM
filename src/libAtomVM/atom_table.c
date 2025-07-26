@@ -388,11 +388,13 @@ enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, c
 
     if (opts & AtomTableCopyAtom) {
         uint8_t *buf = malloc(atom_len);
-        if (IS_NULL_PTR(buf)) {
-            SMP_UNLOCK(table);
-            return AtomTableEnsureAtomAllocFail;
+        if (atom_len > 0) {
+            if (IS_NULL_PTR(buf)) {
+                SMP_UNLOCK(table);
+                return AtomTableEnsureAtomAllocFail;
+            }
+            memcpy(buf, atom_data, atom_len);
         }
-        memcpy(buf, atom_data, atom_len);
         atom_data = buf;
     }
 
