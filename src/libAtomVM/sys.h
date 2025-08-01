@@ -284,6 +284,18 @@ void sys_init_platform(GlobalContext *global);
  */
 void sys_free_platform(GlobalContext *global);
 
+/**
+ * @brief Map precompiled native code to a module entry point.
+ *
+ * @details If mmap module is executable, returns native_code + offset.
+ * Otherwise (Apple Silicon) copy it to an executable buffer. Only implemented
+ * on platforms with JIT.
+ * @param native_code pointer to native code chunk
+ * @param size size of native code chunk
+ * @param offset offset to the module entry point
+ */
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset);
+
 #ifdef __cplusplus
 }
 #endif
