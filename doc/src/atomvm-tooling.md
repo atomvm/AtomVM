@@ -32,6 +32,12 @@ To use the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugi
 * (optional) A serial console program such as [minicom](https://en.wikipedia.org/wiki/Minicom) or [screen](https://en.wikipedia.org/wiki/GNU_Screen), to view console output from a device.
 * (recommended) For rp2040 and rp2350, [`picotool`](https://github.com/raspberrypi/picotool) for software resets on Raspberry Pi Pico. (optionally used if found in PATH to disconnect active `screen` sessions, which normally prevent flashing)
 
+If you have upgraded OTP on your develoment machine to Erlang/OTP 28 you will experience problems when you try to run rebar3. In order to fix these issues you should:
+
+1. Download (at least) rebar 3.25.0, compile (with Erlang/OTP 28) and install it
+2. rm -rf ~/.cache/rebar3
+3. rm -rf ${Project}/_build/ ${Project}/rebar.lock
+
 ### Erlang Example Program
 
 To see this plugin in action, we will clone the [`atomvm_examples`](https://github.com/atomvm/atomvm_examples) Github repository, and build and run the most simple
