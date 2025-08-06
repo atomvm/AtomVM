@@ -21,12 +21,11 @@ Two examples are provided:
 
 ## Starting and stopping distribution
 
-Distribution has to be started programmatically. Following Erlang/OTP, distribution relies on `kernel` which needs to be started.
+Distribution has to be started programmatically. Following Erlang/OTP, distribution relies on `kernel` which is started by `init:boot/1`.
 
 The following lines will start distribution on Unix systems with long name `atomvm@127.0.0.1`.
 
 ```erlang
-{ok, _KernelPid} = kernel:start(normal, []),
 {ok, _NetKernelPid} = net_kernel:start('atomvm@127.0.0.1', #{name_domain => longnames}),
 ok = net_kernel:set_cookie(<<"AtomVM">>).
 ```
@@ -83,6 +82,7 @@ Distribution implementation is (very) partial. The most basic features are avail
 - I/O distribution ("group leader").
 
 RPC (remote procedure call) from Erlang/OTP to AtomVM is also supported.
-Shell is not supported yet.
+
+Shell requires several OTP standard library modules. See [the example project](https://github.com/pguyot/atomvm_shell).
 
 Please do not hesitate to file issues or pull requests for additional features.
