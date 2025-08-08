@@ -752,6 +752,24 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
     return gpio_digital_read(argv[0]);
 }
 
+static term nif_gpio_wakeup_enable(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    if ((argv[1] != LOW_ATOM) && (argv[1] != HIGH_ATOM)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    avm_int_t gpio = term_to_int(argv[0]);
+    gpio_int_type_t int_type = (argv[1] == LOW_ATOM) ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL;
+
+    esp_err_t ret = gpio_wakeup_enable(gpio, int_type);
+
+    return (ret == ESP_OK) ? OK_ATOM : ERROR_ATOM;
+}
+
 static const struct Nif gpio_init_nif =
 {
     .base.type = NIFFunctionType,
@@ -804,6 +822,12 @@ static const struct Nif gpio_digital_write_nif =
 static const struct Nif gpio_digital_read_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_digital_read
+};
+
+static const struct Nif gpio_wakeup_enable_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_wakeup_enable
 };
 
 const struct Nif *gpio_nif_get_nif(const char *nifname)
@@ -869,6 +893,10 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
     if (strcmp("Elixir.GPIO:digital_read/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_digital_read_nif;
+    }
+    if (strcmp("gpio:wakeup_enable/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_wakeup_enable_nif;
     }
 
     return NULL;
