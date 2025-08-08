@@ -38,6 +38,10 @@
     sleep_enable_ulp_wakeup/0,
     deep_sleep/0,
     deep_sleep/1,
+    light_sleep/0,
+    gpio_wakeup_enable/2,
+    sleep_enable_gpio_wakeup/0,
+    sleep_enable_timer_wakeup_us/1,
     mount/4,
     umount/1,
     nvs_fetch_binary/2,
@@ -270,6 +274,47 @@ sleep_enable_ulp_wakeup() ->
 %%-----------------------------------------------------------------------------
 -spec deep_sleep() -> no_return().
 deep_sleep() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Put the esp32 into light sleep.
+%% This function returns ok on success after the sleep.
+%% Program is NOT restarted and wake up reason can be inspected to determine how
+%% the esp32 was woken up.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec light_sleep() -> ok | error.
+light_sleep() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Configure given GPIO as light sleep wakeup pin
+%% @param   GPIONum the GPIO number
+%% @param   logic level, either low or high that triggers the wakeup condition
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec gpio_wakeup_enable(GPIONum :: non_neg_integer(), Level :: low | high) -> ok | error.
+gpio_wakeup_enable(_GPIONum, _Level) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Enable waking up from light sleep using a configured GPIO
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_gpio_wakeup() -> ok | error.
+sleep_enable_gpio_wakeup() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @doc Enable waking up from light sleep using a timer
+%% @param time before wakeup in microseconds
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_enable_timer_wakeup_us(SleepUS :: non_neg_integer()) -> ok | error.
+sleep_enable_timer_wakeup_us(_SleepUS) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
