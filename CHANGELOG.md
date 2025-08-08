@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `lists:keysort/2`
 - Added `lists:merge/2,3`
+- [ESP32] Added support to light sleep (`esp:light_sleep/0`) and to GPIO and timer wakeup from
+light sleep.
 
 ### Fixed
 
