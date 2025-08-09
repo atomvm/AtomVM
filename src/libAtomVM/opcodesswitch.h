@@ -1300,6 +1300,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             }                                                           \
         }                                                               \
     } else {                                                            \
+        if (term_is_atom(boxed_value[1])) {                             \
+            SET_ERROR(UNDEF_ATOM);                                      \
+            HANDLE_ERROR();                                             \
+        }                                                               \
         fun_module = (Module *) boxed_value[1];                         \
         uint32_t fun_index = term_to_int(index_or_function);            \
         uint32_t fun_arity_and_freeze;                                  \
@@ -6948,6 +6952,7 @@ wait_timeout_trap_handler:
                                 size_t unsigned_stride = (size_t) stride;
                                 if ((bs_bin_size * 8) - bs_offset < unsigned_stride) {
                                     TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
+printf("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
                                     goto bs_match_jump_to_fail;
                                 }
                             #endif
@@ -7113,10 +7118,12 @@ wait_timeout_trap_handler:
                                 union maybe_unsigned_int64 matched_value;
                                 bool status = bitstring_extract_integer(bs_bin, bs_offset, size, 0, &matched_value);
                                 if (UNLIKELY(!status)) {
+printf("bs_match/3: error extracting integer for =:=.\n");
                                     TRACE("bs_match/3: error extracting integer for =:=.\n");
                                     goto bs_match_jump_to_fail;
                                 }
                                 if (matched_value.s != pattern_value) {
+printf("bs_match/3: =:= : value doesn't match %lu != %lu\n", (unsigned long) pattern_value, (unsigned long) matched_value.s);
                                     TRACE("bs_match/3: =:= : value doesn't match %lu != %lu\n", (unsigned long) pattern_value, (unsigned long) matched_value.s);
                                     goto bs_match_jump_to_fail;
                                 }
