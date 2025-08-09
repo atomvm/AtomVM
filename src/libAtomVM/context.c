@@ -492,6 +492,19 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             }
             break;
         }
+        case MONITORED_BY_ATOM: {
+            struct ListHead *item;
+            ret_size = TUPLE_SIZE(2);
+            LIST_FOR_EACH (item, &ctx->monitors_head) {
+                struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+                if (monitor->monitor_type == CONTEXT_MONITOR_MONITORED_LOCAL) {
+                    ret_size += CONS_SIZE;
+                } else if (monitor->monitor_type == CONTEXT_MONITOR_RESOURCE) {
+                    ret_size += CONS_SIZE + TERM_BOXED_RESOURCE_SIZE;
+                }
+            }
+            break;
+        }
         default:
             if (out != NULL) {
                 *out = BADARG_ATOM;
@@ -577,6 +590,24 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                         term external_pid = term_make_external_process_id(link->node, link->pid_number, link->pid_serial, link->creation, heap);
                         list = term_list_prepend(external_pid, list, heap);
                     }
+                }
+            }
+            term_put_tuple_element(ret, 1, list);
+            break;
+        }
+        // pids of monitoring processes / resources
+        case MONITORED_BY_ATOM: {
+            term_put_tuple_element(ret, 0, MONITORED_BY_ATOM);
+            term list = term_nil();
+            struct ListHead *item;
+            LIST_FOR_EACH (item, &ctx->monitors_head) {
+                struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
+                if (monitor->monitor_type == CONTEXT_MONITOR_MONITORED_LOCAL) {
+                    struct MonitorLocalMonitor *monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+                    list = term_list_prepend(monitored_monitor->monitor_obj, list, heap);
+                } else if (monitor->monitor_type == CONTEXT_MONITOR_RESOURCE) {
+                    struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
+                    list = term_list_prepend(term_from_resource(resource_monitor->resource_obj, heap), list, heap);
                 }
             }
             term_put_tuple_element(ret, 1, list);
