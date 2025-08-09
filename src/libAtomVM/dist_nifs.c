@@ -414,12 +414,13 @@ static term nif_erlang_dist_ctrl_get_data(Context *ctx, int argc, term argv[])
 
 term dist_monitor(struct DistConnection *conn_obj, term from_pid, term target_proc, term monitor_ref, Context *ctx)
 {
-    if (term_is_atom(target_proc)) {
-        target_proc = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
-    }
     int target_process_id = 0;
-    if (term_is_local_pid(target_proc)) {
-        target_process_id = term_to_local_process_id(target_proc);
+    term target_process_pid = target_proc;
+    if (term_is_atom(target_process_pid)) {
+        target_process_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_process_pid));
+    }
+    if (term_is_local_pid(target_process_pid)) {
+        target_process_id = term_to_local_process_id(target_process_pid);
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
