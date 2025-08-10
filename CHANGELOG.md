@@ -53,6 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `binary:replace/3`, `binary:replace/4`
 - Added `binary:match/2` and `binary:match/3`
 - Added `supervisor:which_children/1`
+- Added `monitored_by` in `process_info/2`
 
 ### Changed
 
@@ -72,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
 - Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
+- Fix a memory leak in distribution when a BEAM node would monitor a process by name.
 
 ## [0.6.7] - Unreleased
 
