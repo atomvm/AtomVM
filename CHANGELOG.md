@@ -92,6 +92,7 @@ integer (this never happens with integers < 28 bits)
 - Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
 used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
 network. (See issue #1094)
+- Fixed possible memory corruption when doing binary matching.
 
 ### Changed
 
