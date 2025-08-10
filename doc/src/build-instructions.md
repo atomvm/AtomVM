@@ -64,7 +64,7 @@ Source code is organized as follows:
 
 * `src`  Contains the core AtomVM virtual machine source code;
 * `lib`  Contains the Erlang and Elixir core library source code;
-* `tools` Contains AtomVM tooling, including the `PackBEAM` executable, as well as build support tooling;
+* `tools` Contains build support tooling;
 * `examples` Contains sample programs for demonstration purposes;
 * `tests` Contains test code run as part of test qualification;
 * `doc` Contains documentation source code and content.
@@ -73,11 +73,17 @@ The `src` directory is broken up into the core platform-independent AtomVM libra
 
 ## External dependencies
 
+### `packbeam`
+
+AtomVM depends on `packbeam`. It is used to pack beams as well as assets into AtomVM pack format, `.avm`. `packbeam` source code is downloaded automatically by `rebar3` from `hex` mirrors, and it is then escriptized.
+
+It is possible to use a local copy of `packbeam` source code by setting `PACKBEAM_PATH` variable to a path to a source checkout of [`atomvm_packbeam`](https://github.com/atomvm/atomvm_packbeam) when invoking CMake.
+
 ### `uf2tool`
 
-AtomVM depends on `uf2tool`. It is used to pack both native and Erlang/Elixir/Gleam code for RP2. uf2tool is downloaded automatically by `rebar3` from `hex` mirrors.
+AtomVM depends on `uf2tool`. It is used to pack both native and Erlang/Elixir/Gleam code for RP2. `uf2tool` source code is downloaded automatically by `rebar3` from `hex` mirrors.
 
-It is possible to use a local copy of uf2tool by setting `UF2TOOL_PATH` variable to a path to a source checkout of [`uf2tool`](https://github.com/pguyot/uf2tool) when invoking CMake.
+It is possible to use a local copy of `uf2tool` source code by setting `UF2TOOL_PATH` variable to a path to a source checkout of [`uf2tool`](https://github.com/pguyot/uf2tool) when invoking CMake.
 
 ## Platform Specific Build Instructions
 
