@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018-2020 Davide Bettio <davide@uninstall.it>
+# Copyright 2025 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,41 +21,36 @@
 cmake_minimum_required (VERSION 3.13)
 project (PackBEAM)
 
-set(PACKBEAM_SOURCES
-    packbeam.c
+set(PACKBEAM_PATH "" CACHE PATH "Path to PackBEAM source tree. If unset, hex package will be used")
+
+if(NOT PACKBEAM_PATH STREQUAL "")
+    file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/_checkouts)
+    file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/packbeam)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${PACKBEAM_PATH} ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/packbeam)
+endif()
+
+find_program(REBAR3 rebar3)
+if(NOT REBAR3)
+    message(FATAL_ERROR "rebar3 is required but was not found")
+endif()
+
+add_custom_command(
+    OUTPUT packbeam
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config ${CMAKE_CURRENT_BINARY_DIR}/rebar.config
+    COMMAND ${REBAR3} escriptize
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/_build/default/bin/packbeam ${CMAKE_CURRENT_BINARY_DIR}/packbeam
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    VERBATIM
 )
 
-add_executable(PackBEAM ${PACKBEAM_SOURCES})
-target_compile_features(PackBEAM PUBLIC c_std_11)
-if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(PackBEAM PUBLIC -Wall -pedantic -Wextra -ggdb)
-endif()
-
-find_package(ZLIB)
-if (ZLIB_FOUND)
-    target_compile_definitions(PackBEAM PUBLIC WITH_ZLIB)
-    target_link_libraries(PackBEAM PRIVATE ${ZLIB_LIBRARIES})
-endif (ZLIB_FOUND)
-
-if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "FreeBSD") OR
-   (${CMAKE_SYSTEM_NAME} STREQUAL "DragonFly"))
-    target_include_directories(PackBEAM PRIVATE ../../src/platforms/generic_unix/lib)
-else()
-    message(FATAL_ERROR "Unsupported platform: ${CMAKE_SYSTEM_NAME}")
-endif()
-set(
-    PLATFORM_LIB_SUFFIX
-    ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
+add_custom_target(
+    PackBEAM ALL
+    DEPENDS packbeam
 )
-target_link_libraries(PackBEAM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-target_include_directories(PackBEAM PUBLIC ../../src/libAtomVM)
-target_link_libraries(PackBEAM PRIVATE libAtomVM)
-
-if (COVERAGE)
-    include(CodeCoverage)
-    append_coverage_compiler_flags_to_target(PackBEAM)
-    append_coverage_linker_flags_to_target(PackBEAM)
-endif()
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/packbeam
+    DESTINATION bin
+    PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+)

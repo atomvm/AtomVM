@@ -102,6 +102,10 @@ jobs:
       with:
         submodules: 'recursive'
 
+    - name: "Git config safe.directory"
+      if: matrix.container
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
     - name: "Switch to archive.debian.org"
       if: matrix.archive == 'true'
       run: |
