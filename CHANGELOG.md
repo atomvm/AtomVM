@@ -54,6 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `binary:match/2` and `binary:match/3`
 - Added `supervisor:which_children/1`
 - Added `monitored_by` in `process_info/2`
+- Added `erlang:md5`
 
 ### Changed
 
