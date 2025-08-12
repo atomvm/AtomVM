@@ -106,6 +106,7 @@ allowing applications to use scan results or other means to decide when and wher
 - ESP32 Elixir support is determined automatically from the offset of `boot.avm` in the partition
 table.
 - ESP32 ports now flash a complete working image using the `idf.py flash` task.
+- ESP32 platform now uses reproducible builds.
 
 ### Fixed
 
