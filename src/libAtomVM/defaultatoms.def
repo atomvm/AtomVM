@@ -194,3 +194,6 @@ X(INIT_ATOM, "\x4", "init")
 X(MONITORED_BY_ATOM, "\xC", "monitored_by")
 
 X(CURRENT_STACKTRACE_ATOM, "\x12", "current_stacktrace")
+
+X(KEY_ATOM, "\x3", "key")
+X(VALUE_ATOM, "\x5", "value")

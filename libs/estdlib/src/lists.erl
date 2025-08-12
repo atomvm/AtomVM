@@ -42,6 +42,7 @@
     foreach/2,
     keydelete/3,
     keyfind/3,
+    keysearch/3,
     keymember/3,
     keyreplace/4,
     keysort/2,
@@ -135,11 +136,7 @@ last([_H | T]) -> last(T).
 %%-----------------------------------------------------------------------------
 -spec member(E :: term(), L :: list()) -> boolean().
 member(_, []) ->
-    false;
-member(E, [E | _]) ->
-    true;
-member(E, [_ | T]) ->
-    member(E, T).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   E the member to delete
@@ -256,6 +253,15 @@ keydelete(K, I, [H | T], L2) when is_tuple(H) ->
 keydelete(K, I, [H | T], L2) ->
     keydelete(K, I, T, [H | L2]).
 
+-spec keysearch(Key, N, TupleList) -> {value, Tuple} | false when
+      Key :: term(),
+      N :: pos_integer(),
+      TupleList :: [Tuple],
+      Tuple :: tuple().
+
+keysearch(_, _, _) ->
+    erlang:nif_error(undef).
+
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
 %% @param   I the position in the tuple to compare (1..tuple_size)
@@ -265,22 +271,8 @@ keydelete(K, I, [H | T], L2) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec keyfind(K :: term(), I :: pos_integer(), L :: list(tuple())) -> tuple() | false.
-keyfind(_K, _I, []) ->
-    false;
-keyfind(K, I, [H | T]) when is_tuple(H) ->
-    case I =< tuple_size(H) of
-        true ->
-            case element(I, H) of
-                K ->
-                    H;
-                _ ->
-                    keyfind(K, I, T)
-            end;
-        false ->
-            keyfind(K, I, T)
-    end;
-keyfind(K, I, [_H | T]) ->
-    keyfind(K, I, T).
+keyfind(_K, _I, _L) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   K the key to match
@@ -292,21 +284,7 @@ keyfind(K, I, [_H | T]) ->
 %%-----------------------------------------------------------------------------
 -spec keymember(K :: term(), I :: pos_integer(), L :: list(tuple())) -> boolean().
 keymember(_K, _I, []) ->
-    false;
-keymember(K, I, [H | T]) when is_tuple(H) ->
-    case I =< tuple_size(H) of
-        true ->
-            case element(I, H) of
-                K ->
-                    true;
-                _ ->
-                    keymember(K, I, T)
-            end;
-        false ->
-            keymember(K, I, T)
-    end;
-keymember(K, I, [_H | T]) ->
-    keymember(K, I, T).
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   K           the key to match
