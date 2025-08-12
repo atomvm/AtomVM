@@ -176,6 +176,7 @@ static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_memory(Context *ctx, int argc, term argv[]);
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[]);
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[]);
+static term nif_erlang_list_to_bitstring_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_unlink(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_binary(Context *ctx, int argc, term argv[]);
 static term nif_atomvm_add_avm_pack_file(Context *ctx, int argc, term argv[]);
@@ -196,12 +197,17 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
+static term nif_lists_keyfind(Context *ctx, int argc, term argv[]);
+static term nif_lists_keymember(Context *ctx, int argc, term argv[]);
+static term nif_lists_keysearch(Context *ctx, int argc, term argv[]);
+static term nif_lists_member(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
 static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
 static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
+
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
@@ -867,6 +873,26 @@ static const struct Nif erlang_lists_subtract_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_lists_subtract
+};
+static const struct Nif lists_member_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_member
+};
+static const struct Nif lists_keymember_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_keymember
+};
+static const struct Nif lists_keyfind_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_keyfind
+};
+static const struct Nif lists_keysearch_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_lists_keysearch
+};
+static const struct Nif list_to_bitstring_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_list_to_bitstring_1
 };
 static const struct Nif zlib_compress_nif =
 {
@@ -5840,6 +5866,118 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
 
     free(cons);
     return result;
+}
+
+
+static term nif_lists_member(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+    term elem = argv[0];
+    term list = argv[1];
+    VALIDATE_VALUE(list, term_is_list);
+
+    int proper;
+    term_list_length(list, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    while (!term_is_nil(list)) {
+        term head = term_get_list_head(list);
+
+        TermCompareResult cmp_result = term_compare(head, elem, TermCompareExact, ctx->global);
+
+        if (cmp_result == TermEquals) {
+            return TRUE_ATOM;
+        }
+
+        if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        list = term_get_list_tail(list);
+    }
+
+    return FALSE_ATOM;
+}
+
+static term nif_lists_keymember(Context *ctx, int argc, term argv[])
+{
+    term result = nif_lists_keyfind(ctx, argc, argv);
+    return result == FALSE_ATOM ? FALSE_ATOM : TRUE_ATOM;
+}
+
+static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+    term key = argv[0];
+    term n = argv[1];
+    term tuple_list = argv[2];
+
+    if (!term_is_integer(n) || !term_is_list(tuple_list)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int n_pos = term_to_int(n);
+
+    if (n_pos <= 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int proper;
+    term_list_length(tuple_list, &proper);
+    if (UNLIKELY(!proper)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    while (!term_is_nil(tuple_list)) {
+        term tuple = term_get_list_head(tuple_list);
+
+        if (!term_is_tuple(tuple)) {
+            tuple_list = term_get_list_tail(tuple_list);
+            continue;
+        }
+
+        int tuple_size = term_get_tuple_arity(tuple);
+
+        if (n_pos > tuple_size) {
+            tuple_list = term_get_list_tail(tuple_list);
+            continue;
+        }
+
+        term nth_element = term_get_tuple_element(tuple, n_pos - 1);
+
+        TermCompareResult cmp_result = term_compare(nth_element, key, TermCompareExact, ctx->global);
+
+        if (cmp_result == TermEquals) {
+            return tuple;
+        }
+        if (UNLIKELY(cmp_result == TermCompareMemoryAllocFail)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        tuple_list = term_get_list_tail(tuple_list);
+    }
+
+    return FALSE_ATOM;
+}
+
+static term nif_lists_keysearch(Context *ctx, int argc, term argv[])
+{
+    term found_value = nif_lists_keyfind(ctx, argc, argv);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &found_value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result_tuple, 0, VALUE_ATOM);
+    term_put_tuple_element(result_tuple, 1, found_value);
+    return found_value == FALSE_ATOM ? FALSE_ATOM : result_tuple;
+}
+
+static term nif_erlang_list_to_bitstring_1(Context *ctx, int argc, term argv[])
+{
+    //  TODO: implement proper list_to_bitstring function when the bitstrings are supported
+    return nif_erlang_list_to_binary_1(ctx, argc, argv);
 }
 
 #ifdef WITH_ZLIB

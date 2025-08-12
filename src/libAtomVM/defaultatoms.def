@@ -192,3 +192,6 @@ X(NOMATCH_ATOM, "\x7", "nomatch")
 X(INIT_ATOM, "\x4", "init")
 
 X(MONITORED_BY_ATOM, "\xC", "monitored_by")
+
+X(KEY_ATOM, "\x3", "key")
+X(VALUE_ATOM, "\x5", "value")
