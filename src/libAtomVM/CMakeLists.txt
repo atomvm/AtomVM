@@ -166,6 +166,10 @@ if(HAVE_PLATFORM_ATOMIC_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_ATOMIC_H)
 endif()
 
+if (AVM_PRINT_PROCESS_CRASH_DUMPS)
+    target_compile_definitions(libAtomVM PUBLIC AVM_PRINT_PROCESS_CRASH_DUMPS)
+endif()
+
 # Platforms that run select in a task must set this option
 if(AVM_SELECT_IN_TASK)
     target_compile_definitions(libAtomVM PUBLIC AVM_SELECT_IN_TASK)
