@@ -1300,6 +1300,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             }                                                           \
         }                                                               \
     } else {                                                            \
+        if (term_is_atom(boxed_value[1])) {                             \
+            SET_ERROR(UNDEF_ATOM);                                      \
+            HANDLE_ERROR();                                             \
+        }                                                               \
         fun_module = (Module *) boxed_value[1];                         \
         uint32_t fun_index = term_to_int(index_or_function);            \
         uint32_t fun_arity_and_freeze;                                  \
@@ -4590,17 +4594,17 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
+                GC_SAFE_DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match2/5\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match2/5, fail=%i src=0x%lx live=%u arg3=0x%lx dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG(dreg));
+                    TRACE("bs_start_match2/5, fail=%i src=0x%lx live=%u arg3=0x%lx dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER(dreg, src);
+                        WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
                     } else {
                         int slots = term_to_int(slots_term);
@@ -4615,7 +4619,7 @@ wait_timeout_trap_handler:
 
                         term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
 
-                        WRITE_REGISTER(dreg, match_state);
+                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
                 #endif
                 break;
@@ -6379,15 +6383,15 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
+                GC_SAFE_DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match4/4\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG(dreg));
+                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG_GC_SAFE(dreg));
 
                     // no_fail: we know it's a binary or a match_state
                     // resume: we know it's a match_state
@@ -6405,7 +6409,7 @@ wait_timeout_trap_handler:
                         src = x_regs[live];
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
-                        WRITE_REGISTER(dreg, match_state);
+                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
                 #endif
                 break;
