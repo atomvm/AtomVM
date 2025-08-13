@@ -20,6 +20,10 @@ predicate isTermType(Type t) {
     (
         t instanceof TypedefType
         and isTermType(t.(TypedefType).getBaseType())
+    ) or
+    (
+        t instanceof SpecifiedType
+        and isTermType(t.(SpecifiedType).getBaseType())
     )
 }
 

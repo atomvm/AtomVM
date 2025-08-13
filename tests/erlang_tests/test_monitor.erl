@@ -32,6 +32,8 @@ start() ->
     ok = test_monitor_demonitor_flush_info_false(),
     ok = test_monitor_self(),
     ok = test_monitor_demonitor_from_other(),
+    ok = test_monitor_registered(),
+    ok = test_monitor_registered_noproc(),
     0.
 
 test_monitor_normal() ->
@@ -81,6 +83,35 @@ test_monitor_noproc() ->
     ok =
         receive
             {'DOWN', Ref, process, Pid, noproc} -> ok;
+            Other -> {unexpected, Other}
+        after 5000 -> timeout
+        end,
+    ok.
+
+test_monitor_registered() ->
+    Pid = spawn_opt(fun() -> normal_loop() end, []),
+    true = register(name, Pid),
+    Ref = monitor(process, name),
+    Pid ! {self(), quit},
+    ok =
+        receive
+            {Pid, finished} -> ok;
+            Other1 -> {unexpected, Other1}
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            {'DOWN', Ref, process, {name, nonode@nohost}, normal} -> ok;
+            Other2 -> {unexpected, Other2}
+        after 5000 -> timeout
+        end,
+    ok.
+
+test_monitor_registered_noproc() ->
+    Ref = monitor(process, foobar),
+    ok =
+        receive
+            {'DOWN', Ref, process, {foobar, nonode@nohost}, noproc} -> ok;
             Other -> {unexpected, Other}
         after 5000 -> timeout
         end,
