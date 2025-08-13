@@ -505,6 +505,10 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             }
             break;
         }
+        case CURRENT_STACKTRACE_ATOM: {
+            ret_size = TUPLE_SIZE(2);
+            break;
+        }
         default:
             if (out != NULL) {
                 *out = BADARG_ATOM;
@@ -611,6 +615,14 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                 }
             }
             term_put_tuple_element(ret, 1, list);
+            break;
+        }
+
+        case CURRENT_STACKTRACE_ATOM: {
+            term_put_tuple_element(ret, 0, CURRENT_STACKTRACE_ATOM);
+            // FIXME: since it's not possible how to build stacktrace here with the current API,
+            // this mock implementation returns an empty list
+            term_put_tuple_element(ret, 1, term_nil());
             break;
         }
 
