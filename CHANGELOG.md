@@ -93,6 +93,7 @@ integer (this never happens with integers < 28 bits)
 used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
 network. (See issue #1094)
 - Fixed possible memory corruption when doing binary matching.
+- Fixed an issue related to binary matching and more precisely endianness of bit skipping with OTP 25 and lower
 
 ### Changed
 

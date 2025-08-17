@@ -4995,10 +4995,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
                     VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
-                    if (flags_value != 0) {
-                        TRACE("bs_skip_bits2: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
+                    // Ignore flags value as skipping bits is the same whatever the endianness
                     avm_int_t size_val = term_to_int(size);
 
                     TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) size_val, (unsigned) unit, (int) flags_value);
