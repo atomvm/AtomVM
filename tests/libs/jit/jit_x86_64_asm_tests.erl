@@ -337,7 +337,7 @@ cmpl_test_() ->
         ?_assertEqual(<<16#41, 16#83, 16#FB, 16#42>>, jit_x86_64_asm:cmpl(16#42, r11))
     ].
 
-orq_test() ->
+orq_test_() ->
     [
         ?_assertEqual(<<16#48, 16#83, 16#C8, 16#01>>, jit_x86_64_asm:orq(1, rax)),
         ?_assertEqual(<<16#49, 16#83, 16#C8, 16#42>>, jit_x86_64_asm:orq(16#42, r8)),
@@ -349,12 +349,14 @@ orq_test() ->
         ?_assertEqual(<<16#48, 16#83, 16#CE, 16#42>>, jit_x86_64_asm:orq(16#42, rsi)),
         ?_assertEqual(<<16#48, 16#83, 16#CF, 16#42>>, jit_x86_64_asm:orq(16#42, rdi)),
         % Test for orq with a 32-bit immediate value
-        ?_assertEqual(<<16#48, 16#0D, 16#12345678/little>>, jit_x86_64_asm:orq(16#12345678, rax)),
         ?_assertEqual(
-            <<16#48, 16#81, 16#C9, 16#12345678/little>>, jit_x86_64_asm:orq(16#12345678, rcx)
+            <<16#48, 16#0D, 16#12345678:32/little>>, jit_x86_64_asm:orq(16#12345678, rax)
         ),
         ?_assertEqual(
-            <<16#49, 16#81, 16#C8, 16#12345678/little>>, jit_x86_64_asm:orq(16#12345678, r8)
+            <<16#48, 16#81, 16#C9, 16#12345678:32/little>>, jit_x86_64_asm:orq(16#12345678, rcx)
+        ),
+        ?_assertEqual(
+            <<16#49, 16#81, 16#C8, 16#12345678:32/little>>, jit_x86_64_asm:orq(16#12345678, r8)
         )
     ].
 
