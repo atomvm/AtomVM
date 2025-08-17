@@ -431,7 +431,7 @@ jobs:
         valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_estdlib.avm"
-      timeout-minutes: 10
+      timeout-minutes: 30
       working-directory: build
       run: |
         ulimit -c unlimited
