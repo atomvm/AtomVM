@@ -4511,7 +4511,7 @@ wait_timeout_trap_handler:
                     // TODO: further investigate unit.
                     // We currently do not support unaligned binaries, unit seems to be equal to 1 binary comprehensions
                     size_t src_size = term_binary_size(src);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_NO_GC) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, src_pc)
