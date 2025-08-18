@@ -47,6 +47,14 @@ jobs:
           otp: "28"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
 
+        - os: "macos-14"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
+        - os: "macos-15"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
     steps:
     # Setup
     - name: "Checkout repo"
