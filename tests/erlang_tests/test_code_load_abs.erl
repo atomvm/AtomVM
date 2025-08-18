@@ -22,14 +22,19 @@
 
 -export([start/0]).
 
+-ifdef(AVM_DISABLE_JIT).
+path() ->
+    "code_load/export_test_module".
+-else.
+path() ->
+    "../code_load/" ++ atom_to_list(?AVM_JIT_TARGET_ARCH) ++ "/export_test_module".
+-endif.
+
 start() ->
     Path =
         case erlang:system_info(machine) of
             "ATOM" ->
-                case erlang:system_info(emu_flavor) of
-                    emu -> "code_load/export_test_module";
-                    jit -> "../code_load/x86_64/export_test_module"
-                end;
+                path();
             "BEAM" ->
                 "code_load/export_test_module"
         end,

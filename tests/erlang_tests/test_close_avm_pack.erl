@@ -28,10 +28,22 @@
 load_pack_data() ->
     ?CODE_LOAD_PACK_DATA.
 -else.
+-if(?AVM_JIT_TARGET_ARCH == aarch64).
+-include("code_load/code_load_pack_data_aarch64.hrl").
+
+load_pack_data() ->
+    ?CODE_LOAD_PACK_DATA_aarch64.
+-elif(?AVM_JIT_TARGET_ARCH == x86_64).
 -include("code_load/code_load_pack_data_x86_64.hrl").
 
 load_pack_data() ->
     ?CODE_LOAD_PACK_DATA_x86_64.
+-else.
+-include("code_load/code_load_pack_data_x86_64.hrl").
+
+load_pack_data() ->
+    ?CODE_LOAD_PACK_DATA_x86_64.
+-endif.
 -endif.
 
 start() ->

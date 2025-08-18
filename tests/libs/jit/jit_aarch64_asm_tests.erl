@@ -79,6 +79,7 @@ b_test_() ->
     [
         ?_assertEqual(<<16#14000000:32/little>>, jit_aarch64_asm:b(0)),
         ?_assertEqual(<<16#14000004:32/little>>, jit_aarch64_asm:b(16)),
+        ?_assertEqual(<<16#17fffff0:32/little>>, jit_aarch64_asm:b(-64)),
         ?_assertEqual(<<16#14000001:32/little>>, jit_aarch64_asm:b(4))
     ].
 
@@ -307,6 +308,7 @@ bcc_test_() ->
     [
         ?_assertEqual(<<16#54000000:32/little>>, jit_aarch64_asm:bcc(eq, 0)),
         ?_assertEqual(<<16#54000001:32/little>>, jit_aarch64_asm:bcc(ne, 0)),
+        ?_assertEqual(<<16#54fffe01:32/little>>, jit_aarch64_asm:bcc(ne, -64)),
         ?_assertEqual(<<16#54000400:32/little>>, jit_aarch64_asm:bcc(eq, 128))
     ].
 
