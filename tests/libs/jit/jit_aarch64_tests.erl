@@ -808,23 +808,29 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, r9, 1),
-                    Stream = ?BACKEND:stream(State1),
+                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
+                    State2 = setelement(8, State1, [r8, r9]),
+                    [r8, r9] = ?BACKEND:used_regs(State2),
+                    State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
+                    Stream = ?BACKEND:stream(State3),
                     Dump = <<
                         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	91000508 	add	x8, x8, #0x1\n"
-                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                        "   4:	9100052a 	add	x10, x9, #0x1\n"
+                        "   8:	f82a7907 	str	x7, [x8, x10, lsl #3]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, 42, r8, r9, 1),
-                    Stream = ?BACKEND:stream(State1),
+                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
+                    State2 = setelement(8, State1, [r8, r9]),
+                    [r8, r9] = ?BACKEND:used_regs(State2),
+                    State3 = ?BACKEND:move_to_array_element(State2, 42, r8, r9, 1),
+                    Stream = ?BACKEND:stream(State3),
                     Dump = <<
                         "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	91000508 	add	x8, x8, #0x1\n"
-                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                        "   4:	9100052a 	add	x10, x9, #0x1\n"
+                        "   8:	f82a7907 	str	x7, [x8, x10, lsl #3]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)

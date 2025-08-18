@@ -107,6 +107,8 @@ add(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =
     %% AArch64 ADD (immediate) encoding: 1001000100iiiiiiiiiiiinnnnndddddd
     %% 0x91000000 | Imm << 10 | Rn << 5 | Rd
     <<(16#91000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>;
+add(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
+    error({unencodable_immediate, Imm});
 add(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
     add(Rd, Rn, Rm, {lsl, 0}).
 
@@ -133,14 +135,15 @@ add(Rd, Rn, Rm, {lsl, Amount}) when
 b(Offset) when is_integer(Offset) ->
     %% AArch64 B encoding: 0b000101 | imm26 | 00000
     %% imm26 is (Offset / 4) signed, fits in 26 bits
-    <<(16#14000000 bor (Offset div 4)):32/little>>.
+    Offset26 = Offset div 4,
+    <<(16#14000000 bor (Offset26 band 16#3FFFFFF)):32/little>>.
 
 %% Emit a breakpoint (BRK) instruction with immediate (AArch64 encoding)
 %% imm is a 16-bit immediate value (usually 0 for debuggers)
 -spec brk(integer()) -> binary().
 brk(Imm) when is_integer(Imm), Imm >= 0, Imm =< 16#FFFF ->
     %% AArch64 BRK encoding: 11010100 00100000 00000000 iiiiiiii iiiiiiii
-    %% 0xd4200000 | (Imm << 5)
+    %% 0xd4200000 | Imm << 5
     <<(16#D4200000 bor ((Imm band 16#FFFF) bsl 5)):32/little>>.
 
 %% Emit a branch with link register (BLR) instruction (AArch64 encoding)
@@ -253,20 +256,20 @@ mov_immediate(Dst, Imm) when Imm < 0, Imm >= -16#FFFF ->
     <<(16#92800000 bor (((-Imm - 1) band 16#FFFF) bsl 5) bor DstNum):32/little>>;
 mov_immediate(Dst, Imm) when Imm >= 0 ->
     %% Complex positive immediate - build with MOVZ + MOVK sequence
-    build_positive_immediate(Dst, Imm);
+    build_positive_immediate(Dst, <<Imm:64>>);
 mov_immediate(Dst, Imm) when Imm < 0 ->
     %% Complex negative immediate - try MOVN approach first
-    build_negative_immediate(Dst, Imm).
+    build_negative_immediate(Dst, <<Imm:64>>).
 
 %% Build positive immediate using MOVZ + MOVK sequence
--spec build_positive_immediate(aarch64_gpr_register(), integer()) -> binary().
-build_positive_immediate(Dst, Imm) ->
+-spec build_positive_immediate(aarch64_gpr_register(), binary()) -> binary().
+build_positive_immediate(Dst, <<Imm4:16, Imm3:16, Imm2:16, Imm1:16>> = ImmB) ->
     %% First try simple MOVZ/MOVK sequence for values with few non-zero chunks
     Chunks = [
-        Imm band 16#FFFF,
-        (Imm bsr 16) band 16#FFFF,
-        (Imm bsr 32) band 16#FFFF,
-        (Imm bsr 48) band 16#FFFF
+        Imm1,
+        Imm2,
+        Imm3,
+        Imm4
     ],
     NonZeroChunks = length([C || C <- Chunks, C =/= 0]),
 
@@ -276,7 +279,7 @@ build_positive_immediate(Dst, Imm) ->
             build_immediate_sequence(Dst, Chunks);
         true ->
             %% For complex values, try bitmask immediate first
-            case encode_bitmask_immediate(Imm) of
+            case encode_bitmask_immediate(ImmB) of
                 {ok, N, Immr, Imms} ->
                     %% Use ORR immediate (MOV Rd, #imm is ORR Rd, XZR, #imm)
                     orr_immediate(Dst, N, Immr, Imms);
@@ -287,16 +290,16 @@ build_positive_immediate(Dst, Imm) ->
     end.
 
 %% Build negative immediate using MOVN or fallback to positive approach
--spec build_negative_immediate(aarch64_gpr_register(), integer()) -> binary().
-build_negative_immediate(Dst, Imm) ->
+-spec build_negative_immediate(aarch64_gpr_register(), binary()) -> binary().
+build_negative_immediate(Dst, ImmB) ->
     %% First try to encode as bitmask immediate with ORR
-    case encode_bitmask_immediate(Imm) of
+    case encode_bitmask_immediate(ImmB) of
         {ok, N, Immr, Imms} ->
             %% Use ORR immediate (MOV Rd, #imm is ORR Rd, XZR, #imm)
             orr_immediate(Dst, N, Immr, Imms);
         error ->
             %% Fallback to multi-instruction sequence
-            build_positive_immediate(Dst, Imm band 16#FFFFFFFFFFFFFFFF)
+            build_positive_immediate(Dst, ImmB)
     end.
 
 %% Build instruction sequence from chunks
@@ -396,31 +399,25 @@ orr_immediate(Dst, N, Immr, Imms) when
 
 %% Encode a value as AArch64 bitmask immediate
 %% Returns {ok, N, Immr, Imms} if encodable, error otherwise
--spec encode_bitmask_immediate(integer()) -> {ok, 0..1, integer(), integer()} | error.
-encode_bitmask_immediate(Value) when is_integer(Value) ->
-    %% Convert to 64-bit unsigned
-    UnsignedValue = Value band 16#FFFFFFFFFFFFFFFF,
-
+-spec encode_bitmask_immediate(binary()) -> {ok, 0..1, integer(), integer()} | error.
+encode_bitmask_immediate(Value) when byte_size(Value) =:= 8 ->
     %% Try different pattern sizes (64, 32, 16, 8, 4, 2)
     PatternSizes = [64, 32, 16, 8, 4, 2],
-    try_pattern_sizes(UnsignedValue, PatternSizes).
+    try_pattern_sizes(Value, PatternSizes).
 
 %% Encode a value as AArch64 bitmask immediate for 32 bits values
 %% Returns {ok, Immr, Imms} if encodable, error otherwise
--spec encode_bitmask_immediate_w(integer()) -> {ok, integer(), integer()} | error.
-encode_bitmask_immediate_w(Value) when is_integer(Value) ->
-    %% Convert to 64-bit unsigned
-    UnsignedValue = Value band 16#FFFFFFFFFFFFFFFF,
-
+-spec encode_bitmask_immediate_w(binary()) -> {ok, integer(), integer()} | error.
+encode_bitmask_immediate_w(Value) when byte_size(Value) =:= 4 ->
     %% Try different pattern sizes (32, 16, 8, 4, 2)
     PatternSizes = [32, 16, 8, 4, 2],
-    case try_pattern_sizes(UnsignedValue, PatternSizes) of
+    case try_pattern_sizes(Value, PatternSizes) of
         {ok, 0, Immr, Imms} -> {ok, Immr, Imms};
         error -> error
     end.
 
 %% Try encoding with different pattern sizes
--spec try_pattern_sizes(integer(), [integer()]) -> {ok, integer(), integer(), integer()} | error.
+-spec try_pattern_sizes(binary(), [integer()]) -> {ok, integer(), integer(), integer()} | error.
 try_pattern_sizes(_, []) ->
     error;
 try_pattern_sizes(Value, [Size | Rest]) ->
@@ -430,36 +427,16 @@ try_pattern_sizes(Value, [Size | Rest]) ->
     end.
 
 %% Try to encode value with a specific pattern size
--spec try_encode_pattern_size(integer(), integer()) ->
+-spec try_encode_pattern_size(binary(), integer()) ->
     {ok, integer(), integer(), integer()} | error.
 try_encode_pattern_size(Value, Size) ->
-    %% Extract the pattern of the given size
-    Mask = (1 bsl Size) - 1,
-    Pattern = Value band Mask,
-
-    %% Check if the value is just this pattern repeated
-    case is_repeating_pattern(Value, Pattern, Size) of
-        true -> try_encode_single_pattern(Pattern, Size);
-        false -> error
+    <<Rest:(byte_size(Value) * 8 - Size), Pattern:Size>> = Value,
+    if
+        Value =:= <<Pattern:Size, Rest:(byte_size(Value) * 8 - Size)>> ->
+            try_encode_single_pattern(Pattern, Size);
+        true ->
+            error
     end.
-
-%% Check if value consists of pattern repeated
--spec is_repeating_pattern(integer(), integer(), integer()) -> boolean().
-is_repeating_pattern(Value, Pattern, Size) ->
-    is_repeating_pattern(Value, Pattern, Size, 0).
-
-is_repeating_pattern(0, 0, _, _) ->
-    true;
-is_repeating_pattern(Value, Pattern, Size, Pos) when Pos < 64 ->
-    Mask = (1 bsl Size) - 1,
-    CurrentPattern = (Value bsr Pos) band Mask,
-    case CurrentPattern of
-        Pattern when (Value bsr (Pos + Size)) =:= 0 -> true;
-        Pattern -> is_repeating_pattern(Value, Pattern, Size, Pos + Size);
-        _ -> false
-    end;
-is_repeating_pattern(_, _, _, _) ->
-    false.
 
 %% Try to encode a single pattern as bitmask immediate
 -spec try_encode_single_pattern(integer(), integer()) ->
@@ -551,7 +528,7 @@ orr(DstReg, Rn, Rm) when is_atom(DstReg), is_atom(Rn), is_atom(Rm) ->
 orr(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
-    case encode_bitmask_immediate(Imm) of
+    case encode_bitmask_immediate(<<Imm:64>>) of
         {ok, N, Immr, Imms} ->
             % OR immediate encoding: sf=1(64b) 01(op) 100100 N immr imms Rn Rd
             Opcode = 16#B2000000,
@@ -784,7 +761,8 @@ bcc(Cond, Offset) when is_atom(Cond), is_integer(Offset) ->
             % Never
             nv -> 15
         end,
-    <<(16#54000000 bor ((Offset div 4) bsl 5) bor CondNum):32/little>>.
+    Offset19 = Offset div 4,
+    <<(16#54000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor CondNum):32/little>>.
 
 %% Emit a compare instruction
 -spec cmp(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
@@ -798,7 +776,14 @@ cmp(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
     RnNum = reg_to_num(Rn),
     %% AArch64 CMP (immediate) encoding: CMP Rn, #imm
     %% This is SUBS XZR, Rn, #imm: 1111000100iiiiiiiiiiiinnnnn11111
-    <<(16#F100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>.
+    <<(16#F100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>;
+cmp(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
+    %% For large immediates, load into a temporary register and compare
+    %% Use r16 as temporary register (caller-saved)
+    TempReg = r16,
+    LoadInstr = build_positive_immediate(TempReg, <<Imm:64>>),
+    CmpInstr = cmp(Rn, TempReg),
+    <<LoadInstr/binary, CmpInstr/binary>>.
 
 %% Emit a 32-bit compare instruction
 -spec cmp32(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
@@ -812,7 +797,13 @@ cmp32(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
     RnNum = reg_to_num(Rn),
     %% AArch64 CMP (32-bit immediate) encoding: CMP Wn, #imm
     %% This is SUBS WZR, Wn, #imm: 0111000100iiiiiiiiiiiinnnnn11111
-    <<(16#7100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>.
+    <<(16#7100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>;
+cmp32(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm < 0, Imm >= -4095 ->
+    RnNum = reg_to_num(Rn),
+    %% For negative immediates, use ADD form: CMP Wn, #(-imm) becomes ADDS WZR, Wn, #(-imm)
+    %% AArch64 ADDS (32-bit immediate) encoding: 0011000100iiiiiiiiiiiinnnnn11111
+    PosImm = -Imm,
+    <<(16#3100001F bor ((PosImm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>.
 
 %% Emit an AND instruction (bitwise AND)
 -spec and_(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register() | integer()) ->
@@ -829,7 +820,7 @@ and_(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
 and_(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
-    case encode_bitmask_immediate(Imm) of
+    case encode_bitmask_immediate(<<Imm:64>>) of
         {ok, N, Immr, Imms} ->
             % AND immediate encoding: sf=1(64b) 00(op) 100100 N immr imms Rn Rd
             Opcode = 16#92000000,
@@ -889,7 +880,7 @@ tst(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
     <<(16#EA00001F bor (RmNum bsl 16) bor (RnNum bsl 5)):32/little>>;
 tst(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     RnNum = reg_to_num(Rn),
-    case encode_bitmask_immediate(Imm) of
+    case encode_bitmask_immediate(<<Imm:64>>) of
         {ok, N, Immr, Imms} ->
             <<
                 (16#F200001F bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5)):32/little
@@ -908,7 +899,7 @@ tst_w(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
     <<(16#6A00001F bor (RmNum bsl 16) bor (RnNum bsl 5)):32/little>>;
 tst_w(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     RnNum = reg_to_num(Rn),
-    case encode_bitmask_immediate_w(Imm) of
+    case encode_bitmask_immediate_w(<<Imm:32>>) of
         {ok, Immr, Imms} ->
             <<(16#7200001F bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5)):32/little>>;
         _ ->
