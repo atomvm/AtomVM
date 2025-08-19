@@ -74,6 +74,7 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
 
     uint8_t *addr = (uint8_t *) mmap(0, size, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for JIT");
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -86,15 +87,6 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     js->stream_base = addr;
     js->stream_offset = 0;
     js->stream_size = size;
-
-#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
-    pthread_jit_write_protect_np(0);
-#endif
-#if defined(__APPLE__)
-    sys_icache_invalidate(addr, size);
-#elif defined(__GNUC__)
-    __builtin___clear_cache(addr, addr + size);
-#endif
 
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
     enif_release_resource(js); // decrement refcount after enif_alloc_resource
@@ -129,7 +121,13 @@ static term nif_jit_stream_mmap_append(Context *ctx, int argc, term argv[])
     const uint8_t *binary_data = (const uint8_t *) term_binary_data(argv[1]);
     assert(js_obj->stream_offset + binary_size < js_obj->stream_size);
 
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(0);
+#endif
     memcpy(js_obj->stream_base + js_obj->stream_offset, binary_data, binary_size);
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(1);
+#endif
     js_obj->stream_offset += binary_size;
 
     return argv[0];
@@ -155,7 +153,13 @@ static term nif_jit_stream_mmap_replace(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(0);
+#endif
     memcpy(js_obj->stream_base + offset, binary_data, binary_size);
+#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
+    pthread_jit_write_protect_np(1);
+#endif
 
     return argv[0];
 }
@@ -232,9 +236,6 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
         return NULL;
     }
 
-#if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
-    pthread_jit_write_protect_np(1);
-#endif
 #if defined(__APPLE__)
     sys_icache_invalidate(js_obj->stream_base, js_obj->stream_size);
 #elif defined(__GNUC__)
