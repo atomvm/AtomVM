@@ -3426,7 +3426,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_SET_TUPLE_ELEMENT: {
                 term new_element;
                 DECODE_COMPACT_TERM(new_element, pc);
@@ -3452,7 +3451,6 @@ wait_timeout_trap_handler:
 #endif
                 break;
             }
-#endif
 
             case OP_PUT_LIST: {
 
