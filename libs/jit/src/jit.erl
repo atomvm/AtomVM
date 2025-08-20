@@ -2485,9 +2485,11 @@ first_pass_bs_create_bin_insert_value(
 first_pass_bs_create_bin_insert_value(
     integer, Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    {MSt1, FlagsValue} = decode_flags_list(Flags, MMod, MSt0),
+    % term_to_int can raise a badarg and use a temp register for this, start
+    % with it.
+    {MSt1, SizeValue} = term_to_int(Size, Fail, MMod, MSt0),
     {MSt2, SrcValue} = term_maybe_unbox_int64(Src, MMod, MSt1),
-    {MSt3, SizeValue} = term_to_int(Size, Fail, MMod, MSt2),
+    {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
     MSt4 = MMod:mul(MSt3, SizeValue, SegmentUnit),
     {MSt5, BoolResult} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_INSERT_INTEGER, [
         CreatedBin, Offset, {free, SrcValue}, SizeValue, {free, FlagsValue}
