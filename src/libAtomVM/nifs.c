@@ -99,6 +99,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split(Context *ctx, int argc, term argv[]);
 static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_binary_match(Context *ctx, int argc, term argv[]);
+static term nif_file_native_name_encoding(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
@@ -275,6 +276,12 @@ static const struct Nif binary_match_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_match
+};
+
+static const struct Nif file_native_name_encoding_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_file_native_name_encoding
 };
 
 static const struct Nif make_ref_nif =
@@ -5840,6 +5847,27 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
 
     free(cons);
     return result;
+}
+
+
+static bool env_equals(const char *env_var, const char *value)
+{
+    const char *env_value = getenv(env_var);
+    if (env_value == NULL) {
+        return false;
+    }
+    return strstr(env_value, value) != NULL;
+}
+
+static term nif_file_native_name_encoding(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx)
+    UNUSED(argc)
+    UNUSED(argv)
+    if (env_equals("LC_ALL", "UTF-8") || env_equals("LC_CTYPE", "UTF-8") || env_equals("LANG", "UTF-8")) {
+        return UTF8_ATOM;
+    }
+    return LATIN1_ATOM;
 }
 
 #ifdef WITH_ZLIB
