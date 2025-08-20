@@ -810,9 +810,20 @@ first_pass(<<?OP_GET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, Source),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, Element + 1, Dest),
-    MSt6 = MMod:free_native_registers(MSt5, [Reg]),
-    MSt7 = MMod:free_native_registers(MSt6, [Dest]),
-    first_pass(Rest3, MMod, MSt7, State0);
+    MSt6 = MMod:free_native_registers(MSt5, [Reg, Dest]),
+    first_pass(Rest3, MMod, MSt6, State0);
+% 67
+first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {MSt1, NewElement, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
+    {MSt2, Tuple, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
+    {Position, Rest3} = decode_literal(Rest2),
+    ?TRACE("OP_SET_TUPLE_ELEMENT ~p, ~p, ~p\n", [Source, Element, Dest]),
+    {MSt3, Reg} = MMod:move_to_native_register(MSt2, Tuple),
+    MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt5 = MMod:move_to_array_element(MSt4, NewElement, Reg, Position + 1),
+    MSt6 = MMod:free_native_registers(MSt5, [NewElement, Reg]),
+    first_pass(Rest3, MMod, MSt6, State0);
 % 69
 first_pass(<<?OP_PUT_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
