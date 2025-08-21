@@ -28,14 +28,14 @@ start() ->
 
     [Id1, LastTok1] = binary:split(Rest1, <<".">>),
     [Uniq1, <<"">>] = binary:split(LastTok1, <<">">>),
-    _ = erlang:binary_to_integer(Id1),
-    _ = erlang:binary_to_integer(Uniq1),
+    0 = erlang:binary_to_integer(Id1),
+    Uniq = erlang:binary_to_integer(Uniq1),
 
     [Id2, LastTok2] = binary:split(Rest2, <<".">>),
     [Uniq2, <<"">>] = binary:split(LastTok2, <<">">>),
 
-    _ = erlang:binary_to_integer(Id2),
-    _ = erlang:binary_to_integer(Uniq2),
+    1 = erlang:binary_to_integer(Id2),
+    Uniq = erlang:binary_to_integer(Uniq2),
 
     <<"fun erlang:integer_to_list/1">> = ?MODULE:fun_to_bin(
         erlang:binary_to_term(erlang:list_to_binary(?MODULE:get_fun_bytes()))
