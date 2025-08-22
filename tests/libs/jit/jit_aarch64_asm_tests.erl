@@ -331,7 +331,62 @@ bcc_test_() ->
         ?_assertEqual(<<16#54000000:32/little>>, jit_aarch64_asm:bcc(eq, 0)),
         ?_assertEqual(<<16#54000001:32/little>>, jit_aarch64_asm:bcc(ne, 0)),
         ?_assertEqual(<<16#54fffe01:32/little>>, jit_aarch64_asm:bcc(ne, -64)),
-        ?_assertEqual(<<16#54000400:32/little>>, jit_aarch64_asm:bcc(eq, 128))
+        ?_assertEqual(
+            asm(<<16#54000400:32/little>>, "b.eq 128"),
+            jit_aarch64_asm:bcc(eq, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000402:32/little>>, "b.cs 128"),
+            jit_aarch64_asm:bcc(cs, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000403:32/little>>, "b.cc 128"),
+            jit_aarch64_asm:bcc(cc, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000404:32/little>>, "b.mi 128"),
+            jit_aarch64_asm:bcc(mi, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000405:32/little>>, "b.pl 128"),
+            jit_aarch64_asm:bcc(pl, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000406:32/little>>, "b.vs 128"),
+            jit_aarch64_asm:bcc(vs, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000408:32/little>>, "b.hi 128"),
+            jit_aarch64_asm:bcc(hi, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#54000409:32/little>>, "b.ls 128"),
+            jit_aarch64_asm:bcc(ls, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040a:32/little>>, "b.ge 128"),
+            jit_aarch64_asm:bcc(ge, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040b:32/little>>, "b.lt 128"),
+            jit_aarch64_asm:bcc(lt, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040c:32/little>>, "b.gt 128"),
+            jit_aarch64_asm:bcc(gt, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040d:32/little>>, "b.le 128"),
+            jit_aarch64_asm:bcc(le, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040e:32/little>>, "b.al 128"),
+            jit_aarch64_asm:bcc(al, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#5400040f:32/little>>, "b.nv 128"),
+            jit_aarch64_asm:bcc(nv, 128)
+        )
     ].
 
 stp_test_() ->
