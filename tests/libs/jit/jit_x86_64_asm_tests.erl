@@ -86,13 +86,125 @@ movq_test_() ->
         ?_assertEqual(
             <<16#48, 16#c7, 16#87, 16#80, 0, 0, 0, 16#ef, 16#06, 0, 0>>,
             jit_x86_64_asm:movq(16#6EF, {16#80, rdi})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 89 44 0a 00  mov     %rax,0x0(%rdx,%rcx,1)">>),
+            jit_x86_64_asm:movq(rax, {0, rdx, rcx, 1})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 89 44 4a 00  mov     %rax,0x0(%rdx,%rcx,2)">>),
+            jit_x86_64_asm:movq(rax, {0, rdx, rcx, 2})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 89 44 8a 00  mov     %rax,0x0(%rdx,%rcx,4)">>),
+            jit_x86_64_asm:movq(rax, {0, rdx, rcx, 4})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 89 44 ca 00  mov     %rax,0x0(%rdx,%rcx,8)">>),
+            jit_x86_64_asm:movq(rax, {0, rdx, rcx, 8})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  48 89 84 4a 80 00 00    mov     %rax,0x80(%rdx,%rcx,2)\n"
+                    "7:  00"
+                >>
+            ),
+            jit_x86_64_asm:movq(rax, {128, rdx, rcx, 2})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  48 89 84 8a 80 00 00    mov     %rax,0x80(%rdx,%rcx,4)\n"
+                    "7:  00"
+                >>
+            ),
+            jit_x86_64_asm:movq(rax, {128, rdx, rcx, 4})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  48 89 84 ca 80 00 00    mov     %rax,0x80(%rdx,%rcx,8)\n"
+                    "7:  00"
+                >>
+            ),
+            jit_x86_64_asm:movq(rax, {128, rdx, rcx, 8})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:	 48 c7 84 0a 80 00 00    movq    $0x42,0x80(%rdx,%rcx,1)\n"
+                    "7:  00 42 00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movq(16#42, {128, rdx, rcx, 1})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  48 c7 84 4a 80 00 00    movq    $0x42,0x80(%rdx,%rcx,2)\n"
+                    "7:  00 42 00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movq(16#42, {128, rdx, rcx, 2})
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  48 c7 84 8a 80 00 00    movq    $0x42,0x80(%rdx,%rcx,4)\n"
+                    "7:  00 42 00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movq(16#42, {128, rdx, rcx, 4})
         )
     ].
 
 movabsq_test_() ->
     [
         ?_assertEqual(
-            <<16#48, 16#B8, 16#12345678:64/little>>, jit_x86_64_asm:movabsq(16#12345678, rax)
+            dump_to_bin(
+                <<
+                    "0:  48 b8 78 56 34 12 00 	movabs $0x12345678,%rax\n"
+                    "7:  00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movabsq(16#12345678, rax)
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  49 b8 78 56 34 12 00 	movabs $0x12345678,%r8\n"
+                    "7:  00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movabsq(16#12345678, r8)
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  49 b9 78 56 34 12 00 	movabs $0x12345678,%r9\n"
+                    "7:  00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movabsq(16#12345678, r9)
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  49 ba 78 56 34 12 00 	movabs $0x12345678,%r10\n"
+                    "7:  00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movabsq(16#12345678, r10)
+        ),
+        ?_assertEqual(
+            dump_to_bin(
+                <<
+                    "0:  49 bb 78 56 34 12 00 	movabs $0x12345678,%r11\n"
+                    "7:  00 00 00"
+                >>
+            ),
+            jit_x86_64_asm:movabsq(16#12345678, r11)
         )
     ].
 
@@ -201,7 +313,19 @@ jmp_rel32_test_() ->
 
 andq_test_() ->
     [
-        ?_assertEqual(<<16#48, 16#83, 16#E0, 16#2A>>, jit_x86_64_asm:andq(42, rax))
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 83 e0 42     and     $0x42,%rax">>),
+            jit_x86_64_asm:andq(16#42, rax)
+        ),
+        % Test andq with offset addressing
+        ?_assertEqual(
+            dump_to_bin(<<"0:   48 83 62 10 42  andq    $0x42,0x10(%rdx)">>),
+            jit_x86_64_asm:andq(16#42, {16, rdx})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:   49 83 60 08 7f  andq    $0x7f,0x8(%r8)">>),
+            jit_x86_64_asm:andq(16#7F, {8, r8})
+        )
     ].
 
 andl_test_() ->
@@ -257,7 +381,17 @@ cmpb_test_() ->
         % cmpb rax, r8 (REX prefix)
         ?_assertEqual(<<16#41, 16#38, 16#C0>>, jit_x86_64_asm:cmpb(rax, r8)),
         % cmpb r8, r9 (REX prefix)
-        ?_assertEqual(<<16#45, 16#38, 16#C1>>, jit_x86_64_asm:cmpb(r8, r9))
+        ?_assertEqual(<<16#45, 16#38, 16#C1>>, jit_x86_64_asm:cmpb(r8, r9)),
+        % cmpb Imm, Reg
+        ?_assertEqual(
+            dump_to_bin(<<"0:  80 f9 42     cmp     $0x42,%cl">>), jit_x86_64_asm:cmpb(16#42, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:  80 f9 ff     cmp     $0xff,%cl">>), jit_x86_64_asm:cmpb(16#ff, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0:  41 80 f9 42  cmp     $0x42,%r9b">>), jit_x86_64_asm:cmpb(16#42, r9)
+        )
     ].
 
 addq_test_() ->
@@ -440,25 +574,57 @@ leaq_test_() ->
 
 movsd_test_() ->
     [
-        % movsd xmm0, [rax]
-        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#00>>, jit_x86_64_asm:movsd({0, rax}, xmm0)),
-        % movsd xmm1, [rcx]
-        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#09>>, jit_x86_64_asm:movsd({0, rcx}, xmm1)),
-        % movsd xmm0, [r8]
-        ?_assertEqual(<<16#41, 16#F2, 16#0F, 16#10, 16#00>>, jit_x86_64_asm:movsd({0, r8}, xmm0)),
-        % movsd xmm8, [r11]
-        ?_assertEqual(<<16#41, 16#F2, 16#0F, 16#10, 16#43>>, jit_x86_64_asm:movsd({0, r11}, xmm8)),
-        % movsd xmm0, 8([rax])
-        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#40, 8>>, jit_x86_64_asm:movsd({8, rax}, xmm0)),
-        % movsd xmm1, 16([rcx])
-        ?_assertEqual(<<16#F2, 16#0F, 16#10, 16#49, 16>>, jit_x86_64_asm:movsd({16, rcx}, xmm1)),
-        % movsd xmm0, 32([r8])
         ?_assertEqual(
-            <<16#41, 16#F2, 16#0F, 16#10, 16#40, 32>>, jit_x86_64_asm:movsd({32, r8}, xmm0)
+            dump_to_bin(<<"0:	f2 0f 10 00          	movsd  (%rax),%xmm0">>),
+            jit_x86_64_asm:movsd({0, rax}, xmm0)
         ),
-        % movsd xmm8, 64([r11])
         ?_assertEqual(
-            <<16#41, 16#F2, 16#0F, 16#10, 16#43, 64>>, jit_x86_64_asm:movsd({64, r11}, xmm8)
+            dump_to_bin(<<"4:	f2 0f 10 09          	movsd  (%rcx),%xmm1">>),
+            jit_x86_64_asm:movsd({0, rcx}, xmm1)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"8:	f2 0f 10 12          	movsd  (%rdx),%xmm2">>),
+            jit_x86_64_asm:movsd({0, rdx}, xmm2)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"c:	f2 0f 10 1e          	movsd  (%rsi),%xmm3">>),
+            jit_x86_64_asm:movsd({0, rsi}, xmm3)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"10:	f2 0f 10 27          	movsd  (%rdi),%xmm4">>),
+            jit_x86_64_asm:movsd({0, rdi}, xmm4)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"14:	f2 0f 10 28          	movsd  (%rax),%xmm5">>),
+            jit_x86_64_asm:movsd({0, rax}, xmm5)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"18:	f2 0f 10 31          	movsd  (%rcx),%xmm6">>),
+            jit_x86_64_asm:movsd({0, rcx}, xmm6)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"1c:	f2 0f 10 3a          	movsd  (%rdx),%xmm7">>),
+            jit_x86_64_asm:movsd({0, rdx}, xmm7)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"20:	f2 41 0f 10 00       	movsd  (%r8),%xmm0">>),
+            jit_x86_64_asm:movsd({0, r8}, xmm0)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"4d:	f2 0f 10 40 08       	movsd  0x8(%rax),%xmm0">>),
+            jit_x86_64_asm:movsd({8, rax}, xmm0)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"52:	f2 0f 10 48 10       	movsd  0x10(%rax),%xmm1">>),
+            jit_x86_64_asm:movsd({16, rax}, xmm1)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"57:	f2 41 0f 10 40 20    	movsd  0x20(%r8),%xmm0">>),
+            jit_x86_64_asm:movsd({32, r8}, xmm0)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"5d:	f2 41 0f 10 43 40    	movsd  0x40(%r11),%xmm0">>),
+            jit_x86_64_asm:movsd({64, r11}, xmm0)
         )
     ].
 
@@ -495,3 +661,146 @@ movq_sib_test_() ->
             jit_x86_64_asm:movq(95, {16#18, rax, rcx, 8})
         )
     ].
+
+jz_test_() ->
+    [
+        ?_assertEqual(dump_to_bin(<<"2: 74 fc   je     0 <x>">>), jit_x86_64_asm:jz(-4))
+    ].
+
+jz_rel8_test_() ->
+    [
+        ?_assertEqual({1, dump_to_bin(<<"2: 74 fc   je     0 <x>">>)}, jit_x86_64_asm:jz_rel8(-4))
+    ].
+
+jge_test_() ->
+    [
+        ?_assertEqual(dump_to_bin(<<"8: 7d f6   jge    0 <x>">>), jit_x86_64_asm:jge(-10))
+    ].
+
+jge_rel8_test_() ->
+    [
+        ?_assertEqual({1, dump_to_bin(<<"8: 7d f6   jge    0 <x>">>)}, jit_x86_64_asm:jge_rel8(-10))
+    ].
+
+jmp_rel8_test_() ->
+    [
+        ?_assertEqual({1, dump_to_bin(<<"0: eb 05   jmp    7 <x>">>)}, jit_x86_64_asm:jmp_rel8(5))
+    ].
+
+andb_test_() ->
+    [
+        ?_assertEqual(
+            dump_to_bin(<<"0: 24 01        and $0x1,%al">>), jit_x86_64_asm:andb(1, rax)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 24 80        and $0x80,%al">>), jit_x86_64_asm:andb(128, rax)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 24 ff        and $0xff,%al">>), jit_x86_64_asm:andb(-1, rax)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 24 ff        and $0xff,%al">>), jit_x86_64_asm:andb(255, rax)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 80 e1 7f     and $0x7f,%cl">>), jit_x86_64_asm:andb(127, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 80 e1 80     and $0x80,%cl">>), jit_x86_64_asm:andb(128, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 80 e1 ff     and $0xff,%cl">>), jit_x86_64_asm:andb(-1, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 80 e1 ff     and $0xff,%cl">>), jit_x86_64_asm:andb(255, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 41 80 e0 01  and $0x1,%r8b">>), jit_x86_64_asm:andb(1, r8)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 41 80 e1 7f  and $0x7f,%r9b">>), jit_x86_64_asm:andb(127, r9)
+        )
+    ].
+
+subq_test_() ->
+    [
+        ?_assertEqual(
+            dump_to_bin(<<"0: 48 29 c1     sub  %rax,%rcx">>), jit_x86_64_asm:subq(rax, rcx)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 49 29 c2     sub  %rax,%r10">>), jit_x86_64_asm:subq(rax, r10)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: 4c 29 c1     sub  %r8,%rcx">>), jit_x86_64_asm:subq(r8, rcx)
+        )
+    ].
+
+decl_test_() ->
+    [
+        ?_assertEqual(
+            dump_to_bin(<<"0: ff 4e 10     decl 0x10(%rsi)">>), jit_x86_64_asm:decl({16, rsi})
+        )
+    ].
+
+orq_rel32_test_() ->
+    [
+        ?_assertEqual(
+            {2, dump_to_bin(<<"0:  48 0d 78 56 34 12     or  $0x12345678,%rax">>)},
+            jit_x86_64_asm:orq_rel32(16#12345678, rax)
+        ),
+        ?_assertEqual(
+            {3, dump_to_bin(<<"0:  48 81 c9 78 56 34 12  or  $0x12345678,%rcx">>)},
+            jit_x86_64_asm:orq_rel32(16#12345678, rcx)
+        ),
+        ?_assertEqual(
+            {3, dump_to_bin(<<"0:  49 81 c8 78 56 34 12  or  $0x12345678,%r8">>)},
+            jit_x86_64_asm:orq_rel32(16#12345678, r8)
+        )
+    ].
+
+retq_test_() ->
+    [
+        ?_assertEqual(dump_to_bin(<<"0:	c3  retq">>), jit_x86_64_asm:retq())
+    ].
+
+dump_to_bin(Dump) ->
+    dump_to_bin0(Dump, addr, []).
+
+dump_to_bin0(<<N, Tail/binary>>, addr, Acc) when
+    (N >= $0 andalso N =< $9) orelse (N >= $a andalso N =< $f)
+->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<$\n, Tail/binary>>, addr, Acc) ->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<$\ , Tail/binary>>, addr, Acc) ->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<$\t, Tail/binary>>, addr, Acc) ->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<$:, Tail/binary>>, addr, Acc) ->
+    dump_to_bin0(Tail, pre_hex, Acc);
+dump_to_bin0(<<$\ , Tail/binary>>, pre_hex, Acc) ->
+    dump_to_bin0(Tail, pre_hex, Acc);
+dump_to_bin0(<<$\t, Tail/binary>>, pre_hex, Acc) ->
+    dump_to_bin0(Tail, pre_hex, Acc);
+dump_to_bin0(Bin, pre_hex, Acc) ->
+    dump_to_bin0(Bin, hex, Acc);
+dump_to_bin0(<<$\ , $\ , Tail/binary>>, hex, Acc) ->
+    dump_to_bin0(Tail, instr, Acc);
+dump_to_bin0(<<$\t, Tail/binary>>, hex, Acc) ->
+    dump_to_bin0(Tail, instr, Acc);
+dump_to_bin0(<<$\ , Tail/binary>>, hex, Acc) ->
+    dump_to_bin0(Tail, hex, Acc);
+dump_to_bin0(<<$\n, Tail/binary>>, hex, Acc) ->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<D1, D2, Tail/binary>>, hex, Acc) when
+    ((D1 >= $0 andalso D1 =< $9) orelse (D1 >= $a andalso D1 =< $f)) andalso
+        ((D2 >= $0 andalso D2 =< $9) orelse (D2 >= $a andalso D2 =< $f))
+->
+    dump_to_bin0(Tail, hex, [list_to_integer([D1, D2], 16) | Acc]);
+dump_to_bin0(<<_Other, Tail/binary>>, hex, Acc) ->
+    dump_to_bin0(Tail, instr, Acc);
+dump_to_bin0(<<$\n, Tail/binary>>, instr, Acc) ->
+    dump_to_bin0(Tail, addr, Acc);
+dump_to_bin0(<<_Other, Tail/binary>>, instr, Acc) ->
+    dump_to_bin0(Tail, instr, Acc);
+dump_to_bin0(<<>>, _, Acc) ->
+    list_to_binary(lists:reverse(Acc)).
