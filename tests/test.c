@@ -329,7 +329,7 @@ struct Test tests[] = {
     TEST_CASE(test_binary_match),
 
     TEST_CASE(test_zlib_compress),
-    TEST_CASE(test_prim_file_getcwd),
+    TEST_CASE(test_file_get_cwd),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 

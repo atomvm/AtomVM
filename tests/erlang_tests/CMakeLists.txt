@@ -298,7 +298,7 @@ compile_erlang(test_binary_match)
 
 compile_erlang(test_zlib_compress)
 
-compile_erlang(test_prim_file_getcwd)
+compile_erlang(test_file_get_cwd)
 
 compile_erlang(plusone)
 compile_erlang(plusone2)
@@ -818,7 +818,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_zlib_compress.beam
 
-    test_prim_file_getcwd.beam
+    test_file_get_cwd.beam
 
     plusone.beam
     plusone2.beam

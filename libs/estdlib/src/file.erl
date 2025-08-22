@@ -17,21 +17,9 @@
 %
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
+-module(file).
 
--module(test_prim_file_getcwd).
+-export([get_cwd/0]).
 
--export([start/0]).
-
-start() ->
-    ok = test_getcwd(),
-    0.
-
-test_getcwd() ->
-    {ok, Path} = prim_file:get_cwd(),
-    true = is_valid_path(Path),
-    ok.
-
-is_valid_path(<<"/", _/binary>>) ->
-    true;
-is_valid_path(_) ->
-    false.
+get_cwd() ->
+    erlang:nif_error(undefined).

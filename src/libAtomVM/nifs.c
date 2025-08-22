@@ -101,7 +101,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split(Context *ctx, int argc, term argv[]);
 static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_binary_match(Context *ctx, int argc, term argv[]);
-static term nif_prim_file_get_cwd_0(Context *ctx, int argc, term argv[]);
+static term nif_file_get_cwd_0(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
@@ -280,10 +280,10 @@ static const struct Nif binary_match_nif =
     .nif_ptr = nif_binary_match
 };
 
-static const struct Nif prim_file_get_cwd_nif =
+static const struct Nif file_get_cwd_nif =
 {
     .base.type = NIFFunctionType,
-    .nif_ptr = nif_prim_file_get_cwd_0
+    .nif_ptr = nif_file_get_cwd_0
 };
 
 static const struct Nif make_ref_nif =
@@ -5852,7 +5852,7 @@ static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[])
 }
 
 
-static term nif_prim_file_get_cwd_0(Context *ctx, int argc, term argv[])
+static term nif_file_get_cwd_0(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc)
     UNUSED(argv)
