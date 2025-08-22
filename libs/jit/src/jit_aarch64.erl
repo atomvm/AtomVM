@@ -1836,11 +1836,11 @@ decrement_reductions_and_maybe_schedule_next(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0
 ) ->
     % Load reduction count
-    I1 = jit_aarch64_asm:ldr(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    I1 = jit_aarch64_asm:ldr_w(Temp, ?JITSTATE_REDUCTIONCOUNT),
     % Decrement reduction count
     I2 = jit_aarch64_asm:subs(Temp, Temp, 1),
     % Store back the decremented value
-    I3 = jit_aarch64_asm:str(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    I3 = jit_aarch64_asm:str_w(Temp, ?JITSTATE_REDUCTIONCOUNT),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
     % Branch if reduction count is not zero
@@ -1879,11 +1879,11 @@ call_only_or_schedule_next(
     Label
 ) ->
     % Load reduction count
-    I1 = jit_aarch64_asm:ldr(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    I1 = jit_aarch64_asm:ldr_w(Temp, ?JITSTATE_REDUCTIONCOUNT),
     % Decrement reduction count
     I2 = jit_aarch64_asm:subs(Temp, Temp, 1),
     % Store back the decremented value
-    I3 = jit_aarch64_asm:str(Temp, ?JITSTATE_REDUCTIONCOUNT),
+    I3 = jit_aarch64_asm:str_w(Temp, ?JITSTATE_REDUCTIONCOUNT),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
     % Branch to label if reduction count is not zero
