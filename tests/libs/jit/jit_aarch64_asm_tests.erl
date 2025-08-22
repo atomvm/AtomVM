@@ -139,8 +139,30 @@ ldr_test_() ->
 
 ldr_w_test_() ->
     [
-        ?_assertEqual(<<16#b9400821:32/little>>, jit_aarch64_asm:ldr_w(r1, {r1, 8})),
-        ?_assertEqual(<<16#b9406042:32/little>>, jit_aarch64_asm:ldr_w(r2, {r2, 96}))
+        ?_assertEqual(
+            asm(<<16#b9400821:32/little>>, "ldr w1, [x1, 8]"), jit_aarch64_asm:ldr_w(r1, {r1, 8})
+        ),
+        ?_assertEqual(
+            asm(<<16#b9406042:32/little>>, "ldr w2, [x2, 96]"), jit_aarch64_asm:ldr_w(r2, {r2, 96})
+        ),
+        ?_assertEqual(
+            asm(<<16#b97ffc60:32/little>>, "ldr w0, [x3, 16380]"),
+            jit_aarch64_asm:ldr_w(r0, {r3, 16380})
+        )
+    ].
+
+str_w_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#b9000821:32/little>>, "str w1, [x1, 8]"), jit_aarch64_asm:str_w(r1, {r1, 8})
+        ),
+        ?_assertEqual(
+            asm(<<16#b9006042:32/little>>, "str w2, [x2, 96]"), jit_aarch64_asm:str_w(r2, {r2, 96})
+        ),
+        ?_assertEqual(
+            asm(<<16#b93ffc60:32/little>>, "str w0, [x3, 16380]"),
+            jit_aarch64_asm:str_w(r0, {r3, 16380})
+        )
     ].
 
 ldr_d_test_() ->
