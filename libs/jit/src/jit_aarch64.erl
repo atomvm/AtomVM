@@ -824,24 +824,16 @@ if_block_cond(
 ) when ?IS_GPR(Reg) ->
     % AND with mask
     OffsetBefore = StreamModule:offset(Stream0),
-    Stream1 =
-        try
-            I = jit_aarch64_asm:and_(Temp, Reg, Mask),
-            StreamModule:append(Stream0, I)
-        catch
-            error:{unencodable_immediate, Val} ->
-                MoveI = jit_aarch64_asm:mov(Temp, Mask),
-                AndI = jit_aarch64_asm:and_(Temp, Reg, Temp),
-                StreamModule:append(Stream0, <<MoveI/binary, AndI/binary>>)
-        end,
+    State1 = op_imm(State0, and_, Temp, Reg, Mask),
+    Stream1 = State1#state.stream,
     % Compare with value
     I2 = jit_aarch64_asm:cmp(Temp, Val),
     Stream2 = StreamModule:append(Stream1, I2),
     OffsetAfter = StreamModule:offset(Stream2),
     I3 = jit_aarch64_asm:bcc(eq, 0),
     Stream3 = StreamModule:append(Stream2, I3),
-    State1 = State0#state{stream = Stream3},
-    {State1, eq, OffsetAfter - OffsetBefore};
+    State2 = State1#state{stream = Stream3},
+    {State2, eq, OffsetAfter - OffsetBefore};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1728,47 +1720,40 @@ get_module_index(
         Reg
     }.
 
-and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, Reg, Reg, Val) ->
     Stream1 =
         try
-            I = jit_aarch64_asm:and_(Reg, Reg, Val),
+            I = jit_aarch64_asm:Op(Reg, Reg, Val),
             StreamModule:append(Stream0, I)
         catch
             error:{unencodable_immediate, Val} ->
                 [Temp | _] = State#state.available_regs,
                 I1 = jit_aarch64_asm:mov(Temp, Val),
-                I2 = jit_aarch64_asm:and_(Reg, Reg, Temp),
+                I2 = jit_aarch64_asm:Op(Reg, Reg, Temp),
                 StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
+        end,
+    State#state{stream = Stream1};
+op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, RegA, RegB, Val) ->
+    Stream1 =
+        try
+            I = jit_aarch64_asm:Op(RegA, RegB, Val),
+            StreamModule:append(Stream0, I)
+        catch
+            error:{unencodable_immediate, Val} ->
+                MoveI = jit_aarch64_asm:mov(RegA, Val),
+                AndI = jit_aarch64_asm:Op(RegA, RegB, RegA),
+                StreamModule:append(Stream0, <<MoveI/binary, AndI/binary>>)
         end,
     State#state{stream = Stream1}.
 
-or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    Stream1 =
-        try
-            I = jit_aarch64_asm:orr(Reg, Reg, Val),
-            StreamModule:append(Stream0, I)
-        catch
-            error:{unencodable_immediate, Val} ->
-                [Temp | _] = State#state.available_regs,
-                I1 = jit_aarch64_asm:mov(Temp, Val),
-                I2 = jit_aarch64_asm:orr(Reg, Reg, Temp),
-                StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
-        end,
-    State#state{stream = Stream1}.
+and_(State, Reg, Val) ->
+    op_imm(State, and_, Reg, Reg, Val).
 
-add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    Stream1 =
-        try
-            I = jit_aarch64_asm:add(Reg, Reg, Val),
-            StreamModule:append(Stream0, I)
-        catch
-            error:{unencodable_immediate, Val} ->
-                [Temp | _] = State#state.available_regs,
-                I1 = jit_aarch64_asm:mov(Temp, Val),
-                I2 = jit_aarch64_asm:add(Reg, Reg, Temp),
-                StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
-        end,
-    State#state{stream = Stream1}.
+or_(State, Reg, Val) ->
+    op_imm(State, orr, Reg, Reg, Val).
+
+add(State, Reg, Val) ->
+    op_imm(State, add, Reg, Reg, Val).
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_aarch64_asm:sub(Reg, Reg, Val),
