@@ -41,7 +41,7 @@ call_primitive_0_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "0:	f9400050 	ldr	x16, [x2]\n"
+            "   0:	f9400050 	ldr	x16, [x2]\n"
             "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
             "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
             "   c:	d63f0200 	blr	x16\n"
@@ -58,7 +58,7 @@ call_primitive_1_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "0:	f9400450 	ldr	x16, [x2, #8]\n"
+            "   0:	f9400450 	ldr	x16, [x2, #8]\n"
             "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
             "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
             "   c:	d63f0200 	blr	x16\n"
@@ -149,20 +149,22 @@ call_primitive_extended_regs_test() ->
 call_ext_only_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
-    State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, -1]),
+    State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, -1]),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
         "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   8:	b9001027 	str	w7, [x1, #16]\n"
         "   c:	540000a1 	b.ne	0x20  // b.any\n"
         "  10:	10000087 	adr	x7, 0x20\n"
         "  14:	f9000427 	str	x7, [x1, #8]\n"
         "  18:	f9400847 	ldr	x7, [x2, #16]\n"
         "  1c:	d61f00e0 	br	x7\n"
         "  20:	f9401047 	ldr	x7, [x2, #32]\n"
-        "  24:	92800002 	mov	x2, #0xffffffffffffffff    	// #-1\n"
-        "  28:	d61f00e0 	br	x7"
+        "  24:	d2800042 	mov	x2, #0x2                   	// #2\n"
+        "  28:	d2800043 	mov	x3, #0x2                   	// #2\n"
+        "  2c:	92800004 	mov	x4, #0xffffffffffffffff    	// #-1\n"
+        "  30:	d61f00e0 	br	x7"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -172,9 +174,9 @@ call_ext_last_test() ->
     State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, 2, 2, 10]),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
         "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   8:	b9001027 	str	w7, [x1, #16]\n"
         "   c:	540000a1 	b.ne	0x20  // b.any\n"
         "  10:	10000087 	adr	x7, 0x20\n"
         "  14:	f9000427 	str	x7, [x1, #8]\n"
@@ -241,9 +243,9 @@ call_only_or_schedule_next_and_label_relocation_test() ->
             "   0:	1400000d 	b	0x34\n"
             "   4:	14000002 	b	0xc\n"
             "   8:	14000009 	b	0x2c\n"
-            "   c:	f9400827 	ldr	x7, [x1, #16]\n"
+            "   c:	b9401027 	ldr	w7, [x1, #16]\n"
             "  10:	f10004e7 	subs	x7, x7, #0x1\n"
-            "  14:	f9000827 	str	x7, [x1, #16]\n"
+            "  14:	b9001027 	str	w7, [x1, #16]\n"
             "  18:	540000a1 	b.ne	0x2c  // b.any\n"
             "  1c:	10000087 	adr	x7, 0x2c\n"
             "  20:	f9000427 	str	x7, [x1, #8]\n"
@@ -413,9 +415,9 @@ call_ext_test() ->
     ?BACKEND:assert_all_native_free(State2),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
         "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   8:	b9001027 	str	w7, [x1, #16]\n"
         "   c:	540000a1 	b.ne	0x20  // b.any\n"
         "  10:	10000087 	adr	x7, 0x20\n"
         "  14:	f9000427 	str	x7, [x1, #8]\n"
@@ -465,9 +467,9 @@ call_fun_test() ->
     ?BACKEND:assert_all_native_free(State9),
     Stream = ?BACKEND:stream(State9),
     Dump = <<
-        "   0:	f9400827 	ldr	x7, [x1, #16]\n"
+        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
         "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	f9000827 	str	x7, [x1, #16]\n"
+        "   8:	b9001027 	str	w7, [x1, #16]\n"
         "   c:	540000a1 	b.ne	0x20  // b.any\n"
         "  10:	10000087 	adr	x7, 0x20\n"
         "  14:	f9000427 	str	x7, [x1, #8]\n"
