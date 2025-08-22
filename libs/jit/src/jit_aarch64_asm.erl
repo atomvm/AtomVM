@@ -46,6 +46,7 @@
     ret/0,
     nop/0,
     str/2,
+    str_w/2,
     str/3,
     tst/2,
     tst_w/2,
@@ -225,13 +226,11 @@ ldr_w(Dst, {BaseReg, Offset}) when
     is_atom(BaseReg),
     is_integer(Offset),
     Offset >= 0,
-    Offset =< 32760,
-    (Offset rem 8) =:= 0
+    Offset =< 16380,
+    (Offset rem 4) =:= 0
 ->
     DstNum = reg_to_num(Dst),
     BaseRegNum = reg_to_num(BaseReg),
-    %% AArch64 LDR (immediate) encoding for 64-bit: 11111001010iiiiiiiiiiibbbbbttttt
-    %% 0xf9400000 | (Offset div 8) << 10 | BaseReg << 5 | Dst
     <<
         (16#B9400000 bor ((Offset div 4) bsl 10) bor (BaseRegNum bsl 5) bor DstNum):32/little
     >>.
@@ -587,6 +586,22 @@ str(Reg, {Base}, Imm) when
     RegNum = reg_to_num(Reg),
     BaseNum = reg_to_num(Base),
     <<(16#F8000400 bor ((Imm band 16#1FF) bsl 12) bor (BaseNum bsl 5) bor RegNum):32/little>>.
+
+%% Emit a store register (STR) instruction for 32-bit store to memory
+-spec str_w(aarch64_gpr_register(), {aarch64_gpr_register(), integer()}) -> binary().
+str_w(Src, {BaseReg, Offset}) when
+    is_atom(Src),
+    is_atom(BaseReg),
+    is_integer(Offset),
+    Offset >= 0,
+    Offset =< 16380,
+    (Offset rem 4) =:= 0
+->
+    SrcNum = reg_to_num(Src),
+    BaseRegNum = reg_to_num(BaseReg),
+    <<
+        (16#B9000000 bor ((Offset div 4) bsl 10) bor (BaseRegNum bsl 5) bor SrcNum):32/little
+    >>.
 
 %% Emit a load register (LDR) instruction for 64-bit store to memory, with store-update (writeback)
 -spec ldr
