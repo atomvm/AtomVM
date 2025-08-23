@@ -139,13 +139,15 @@
 -type maybe_free_x86_64_register() :: x86_64_register() | {free, x86_64_register()}.
 
 -type condition() ::
-    {maybe_free_x86_64_register(), '<', integer() | x86_64_register()}
+    {x86_64_register(), '<', integer()}
+    | {maybe_free_x86_64_register(), '<', x86_64_register()}
     | {maybe_free_x86_64_register(), '==', integer()}
-    | {maybe_free_x86_64_register(), '!=', integer()}
+    | {maybe_free_x86_64_register(), '!=', x86_64_register() | integer()}
+    | {'(int)', maybe_free_x86_64_register(), '==', integer()}
+    | {'(int)', maybe_free_x86_64_register(), '!=', x86_64_register() | integer()}
     | {'(bool)', maybe_free_x86_64_register(), '==', false}
     | {'(bool)', maybe_free_x86_64_register(), '!=', false}
-    | {'(int)', maybe_free_x86_64_register(), '!=', integer()}
-    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', 0}.
+    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', integer()}.
 
 -define(WORD_SIZE, 8).
 
@@ -626,10 +628,16 @@ if_block_cond0(State0, {Reg, '<', 0}) when is_atom(Reg) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
     {State0, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
-if_block_cond0(State0, {RegA, '<', ValueB}) when is_atom(RegA) ->
-    I1 = jit_x86_64_asm:cmpq(ValueB, RegA),
+if_block_cond0(State0, {RegOrTuple, '<', Value}) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpq(Value, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
-    {State0, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
 if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
     Reg =
         case RegOrTuple of
