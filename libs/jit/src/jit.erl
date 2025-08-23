@@ -1271,11 +1271,10 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt10 = MMod:free_native_registers(MSt9, [NumBits]),
     {MSt11, BSBinarySize} = term_binary_size({free, BSBinaryReg}, MMod, MSt10),
     MSt12 = MMod:shift_left(MSt11, BSBinarySize, 3),
-    MSt13 = cond_jump_to_label({BSBinarySize, '<', BSOffsetReg}, Fail, MMod, MSt12),
-    MSt14 = MMod:free_native_registers(MSt13, [BSBinarySize]),
-    MSt15 = MMod:move_to_array_element(MSt14, BSOffsetReg, MatchStateRegPtr, 2),
-    MSt16 = MMod:free_native_registers(MSt15, [BSOffsetReg, MatchStateRegPtr]),
-    first_pass(Rest5, MMod, MSt16, State0);
+    MSt13 = cond_jump_to_label({{free, BSBinarySize}, '<', BSOffsetReg}, Fail, MMod, MSt12),
+    MSt14 = MMod:move_to_array_element(MSt13, BSOffsetReg, MatchStateRegPtr, 2),
+    MSt15 = MMod:free_native_registers(MSt14, [BSOffsetReg, MatchStateRegPtr]),
+    first_pass(Rest5, MMod, MSt15, State0);
 % 121
 first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
