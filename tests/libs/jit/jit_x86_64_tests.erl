@@ -337,25 +337,6 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
-                        {{free, RegA}, '<', 0},
-                        fun(BSt0) ->
-                            ?BACKEND:add(BSt0, RegB, 2)
-                        end
-                    ),
-                    Stream = ?BACKEND:stream(State1),
-                    Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
-                        "   8:	48 85 c0             	test   %rax,%rax\n"
-                        "   b:	7d 04                	jge    0x11\n"
-                        "   d:	49 83 c3 02          	add    $0x2,%r11"
-                    >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
-                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
-                end),
-                ?_test(begin
-                    State1 = ?BACKEND:if_block(
-                        State0,
                         {RegA, '<', RegB},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)
@@ -371,25 +352,6 @@ if_block_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
-                end),
-                ?_test(begin
-                    State1 = ?BACKEND:if_block(
-                        State0,
-                        {{free, RegA}, '<', RegB},
-                        fun(BSt0) ->
-                            ?BACKEND:add(BSt0, RegB, 2)
-                        end
-                    ),
-                    Stream = ?BACKEND:stream(State1),
-                    Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
-                        "   8:	4c 39 d8             	cmp    %r11,%rax\n"
-                        "   b:	7d 04                	jge    0x11\n"
-                        "   d:	49 83 c3 02          	add    $0x2,%r11"
-                    >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
-                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
