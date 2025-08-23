@@ -325,6 +325,13 @@ andq_test_() ->
         ?_assertEqual(
             dump_to_bin(<<"0:   49 83 60 08 7f  andq    $0x7f,0x8(%r8)">>),
             jit_x86_64_asm:andq(16#7F, {8, r8})
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<
+                "   0:	48 83 a7 90 00 00 00 	andq   $0x0,0x90(%rdi)\n"
+                "   7:	00"
+            >>),
+            jit_x86_64_asm:andq(0, {16#90, rdi})
         )
     ].
 

@@ -750,31 +750,9 @@ if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT8_T(Mask) 
     {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
-if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT32_T(Mask) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 = jit_x86_64_asm:testl(Mask, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
     I1 = jit_x86_64_asm:andb(Mask, Reg),
     I2 = jit_x86_64_asm:cmpb(Val, Reg),
-    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
-    State1 = if_block_free_reg(RegTuple, State0),
-    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
-if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) when ?IS_UINT32_T(Mask) ->
-    I1 = jit_x86_64_asm:andl(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpl(Val, Reg),
-    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
-    State1 = if_block_free_reg(RegTuple, State0),
-    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
-if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) ->
-    I1 = jit_x86_64_asm:andq(Mask, Reg),
-    I2 = jit_x86_64_asm:cmpq(Val, Reg),
     {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
     State1 = if_block_free_reg(RegTuple, State0),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
@@ -783,22 +761,6 @@ if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andb(Mask, Temp),
     I3 = jit_x86_64_asm:cmpb(Val, Temp),
-    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
-    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
-if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT32_T(Mask) ->
-    Temp = hd(State0#state.available_regs),
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andl(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpl(Val, Temp),
-    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
-    {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-        byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset};
-if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) ->
-    Temp = hd(State0#state.available_regs),
-    I1 = jit_x86_64_asm:movq(Reg, Temp),
-    I2 = jit_x86_64_asm:andq(Mask, Temp),
-    I3 = jit_x86_64_asm:cmpq(Val, Temp),
     {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
     {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
         byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset}.
@@ -1459,16 +1421,6 @@ move_to_array_element(
     State#state{stream = Stream1};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
-    {x_reg, X},
-    Reg,
-    IndexReg
-) when X < ?MAX_REG andalso ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
-    I1 = jit_x86_64_asm:movq(?X_REG(X), Temp),
-    I2 = jit_x86_64_asm:movq(Temp, {0, Reg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     {ptr, Source},
     Reg,
     Index
@@ -1487,19 +1439,6 @@ move_to_array_element(
     I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
     I2 = jit_x86_64_asm:movq({Y * 8, Temp}, Temp),
     I3 = jit_x86_64_asm:movq(Temp, {Index * 8, Reg}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} =
-        State,
-    {y_reg, Y},
-    Reg,
-    IndexReg
-) when ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, Temp),
-    I2 = jit_x86_64_asm:movq({Y * 8, Temp}, Temp),
-    I3 = jit_x86_64_asm:movq(Temp, {0, Reg, IndexReg, 8}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
@@ -1661,53 +1600,12 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_fpregs = AvailFT, used_regs = [FPReg | Used]}, FPReg}.
 
--spec move_to_native_register(state(), value(), x86_64_register()) -> state().
+-spec move_to_native_register(state(), integer() | x86_64_register(), x86_64_register()) -> state().
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, RegSrc, RegDst
 ) when is_atom(RegSrc) orelse is_integer(RegSrc) ->
     I = jit_x86_64_asm:movq(RegSrc, RegDst),
     Stream1 = StreamModule:append(Stream0, I),
-    State#state{stream = Stream1};
-move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}, RegDst
-) when is_atom(Reg) ->
-    I1 = jit_x86_64_asm:movq({0, Reg}, RegDst),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_native_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State,
-    {x_reg, X},
-    RegDst
-) when
-    X < ?MAX_REG
-->
-    I1 = jit_x86_64_asm:movq(?X_REG(X), RegDst),
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1};
-move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {y_reg, Y}, RegDst
-) ->
-    I1 = jit_x86_64_asm:movq(?Y_REGS, RegDst),
-    I2 = jit_x86_64_asm:movq({Y * 8, RegDst}, RegDst),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_native_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | _]
-    } = State,
-    {fp_reg, F},
-    RegDst
-) ->
-    I1 = jit_x86_64_asm:movq(?FP_REGS, Temp),
-    I2 = jit_x86_64_asm:movsd({F * 8, Temp}, RegDst),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
 -spec copy_to_native_register(state(), value()) -> {state(), x86_64_register()}.
