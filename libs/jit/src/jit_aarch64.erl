@@ -158,12 +158,15 @@
     {free, aarch64_register()} | aarch64_register().
 
 -type condition() ::
-    {aarch64_register(), '<', 0}
-    | {maybe_free_aarch64_register(), '==', 0}
-    | {maybe_free_aarch64_register(), '!=', integer()}
+    {aarch64_register(), '<', integer()}
+    | {maybe_free_aarch64_register(), '<', aarch64_register()}
+    | {maybe_free_aarch64_register(), '==', integer()}
+    | {maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
+    | {'(int)', maybe_free_aarch64_register(), '==', integer()}
+    | {'(int)', maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
     | {'(bool)', maybe_free_aarch64_register(), '==', false}
     | {'(bool)', maybe_free_aarch64_register(), '!=', false}
-    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', 0}.
+    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -518,6 +521,21 @@ jump_to_label(
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
+%% @private
+-spec rewrite_branch_instruction(
+    jit_aarch64_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()}, integer()
+) -> binary().
+rewrite_branch_instruction({cbnz, Reg}, Offset) ->
+    jit_aarch64_asm:cbnz(Reg, Offset);
+rewrite_branch_instruction({cbnz_w, Reg}, Offset) ->
+    jit_aarch64_asm:cbnz_w(Reg, Offset);
+rewrite_branch_instruction({tbz, Reg, Bit}, Offset) ->
+    jit_aarch64_asm:tbz(Reg, Bit, Offset);
+rewrite_branch_instruction({tbnz, Reg, Bit}, Offset) ->
+    jit_aarch64_asm:tbnz(Reg, Bit, Offset);
+rewrite_branch_instruction(CC, Offset) when is_atom(CC) ->
+    jit_aarch64_asm:bcc(CC, Offset).
+
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
 %% execute a block.
@@ -567,7 +585,7 @@ if_block(
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
     BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_aarch64_asm:bcc(CC, BranchOffset),
+    NewBranchInstr = rewrite_branch_instruction(CC, BranchOffset),
     Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
 
@@ -601,7 +619,7 @@ if_else_block(
     OffsetAfter = StreamModule:offset(Stream3),
     %% Patch the conditional branch to jump to the else block
     ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = jit_aarch64_asm:bcc(CC, ElseBranchOffset),
+    NewBranchInstr = rewrite_branch_instruction(CC, ElseBranchOffset),
     Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
     %% Build the else block
     StateElse = State2#state{
@@ -619,23 +637,41 @@ if_else_block(
     Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
--spec if_block_cond(state(), condition()) -> {state(), jit_aarch64_asm:cc(), non_neg_integer()}.
+-spec if_block_cond(state(), condition()) ->
+    {
+        state(),
+        jit_aarch64_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()},
+        non_neg_integer()
+    }.
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
-    I1 = jit_aarch64_asm:tst(Reg, Reg),
-    % pl = positive or zero (>=0)
-    I2 = jit_aarch64_asm:bcc(pl, 0),
+    I = jit_aarch64_asm:tbz(Reg, 63, 0),
+    Stream1 = StreamModule:append(Stream0, I),
+    State1 = State0#state{stream = Stream1},
+    {State1, {tbz, Reg, 63}, 0};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {Reg, '<', Val}
+) when is_atom(Reg), is_integer(Val) ->
+    I1 = jit_aarch64_asm:cmp(Reg, Val),
+    % ge = greater than or equal
+    I2 = jit_aarch64_asm:bcc(ge, 0),
     Code = <<
         I1/binary,
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
-    {State1, pl, byte_size(I1)};
+    {State1, ge, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {RegA, '<', RegB}
-) when ?IS_GPR(RegA) ->
-    I1 = jit_aarch64_asm:cmp(RegA, RegB),
+    {RegOrTuple, '<', RegB}
+) when is_atom(RegB) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_aarch64_asm:cmp(Reg, RegB),
     % ge = greater than or equal
     I2 = jit_aarch64_asm:bcc(ge, 0),
     Code = <<
@@ -653,17 +689,11 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_aarch64_asm:tst(Reg, Reg),
-    % ne = not equal
-    I2 = jit_aarch64_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    I = jit_aarch64_asm:cbnz(Reg, 0),
+    Stream1 = StreamModule:append(Stream0, I),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, ne, byte_size(I1)};
+    {State2, {cbnz, Reg}, 0};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0, {'(int)', RegOrTuple, '==', 0}
 ) ->
@@ -672,7 +702,21 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 = jit_aarch64_asm:tst_w(Reg, Reg),
+    I = jit_aarch64_asm:cbnz_w(Reg, 0),
+    Stream1 = StreamModule:append(Stream0, I),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {cbnz_w, Reg}, 0};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {'(int)', RegOrTuple, '==', Val}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_aarch64_asm:cmp_w(Reg, Val),
     I2 = jit_aarch64_asm:bcc(ne, 0),
     Code = <<
         I1/binary,
@@ -691,11 +735,7 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 =
-        case Val of
-            V when is_integer(V) -> jit_aarch64_asm:cmp(Reg, V);
-            V when is_atom(V) -> jit_aarch64_asm:cmp(Reg, V)
-        end,
+    I1 = jit_aarch64_asm:cmp(Reg, Val),
     I2 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
         I1/binary,
@@ -708,17 +748,13 @@ if_block_cond(
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(int)', RegOrTuple, '!=', Val}
-) when is_integer(Val) orelse ?IS_GPR(Val) ->
+) when is_integer(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 =
-        case Val of
-            V when is_integer(V) -> jit_aarch64_asm:cmp32(Reg, V);
-            V when is_atom(V) -> jit_aarch64_asm:cmp32(Reg, V)
-        end,
+    I1 = jit_aarch64_asm:cmp_w(Reg, Val),
     I2 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
         I1/binary,
@@ -731,40 +767,13 @@ if_block_cond(
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', Val}
-) when is_integer(Val) orelse ?IS_GPR(Val) ->
+) when is_integer(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I1 =
-        case Val of
-            V when is_integer(V) -> jit_aarch64_asm:cmp(Reg, V);
-            V when is_atom(V) -> jit_aarch64_asm:cmp(Reg, V)
-        end,
-    I2 = jit_aarch64_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, ne, byte_size(I1)};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(int)', RegOrTuple, '==', Val}
-) when is_integer(Val) orelse ?IS_GPR(Val) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 =
-        case Val of
-            V when is_integer(V) -> jit_aarch64_asm:cmp32(Reg, V);
-            V when is_atom(V) -> jit_aarch64_asm:cmp32(Reg, V)
-        end,
+    I1 = jit_aarch64_asm:cmp(Reg, Val),
     I2 = jit_aarch64_asm:bcc(ne, 0),
     Code = <<
         I1/binary,
@@ -783,17 +792,12 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    % Test low 8 bits
-    I1 = jit_aarch64_asm:tst_w(Reg, 16#FF),
-    I2 = jit_aarch64_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    % Test lowest bit
+    I = jit_aarch64_asm:tbnz(Reg, 0, 0),
+    Stream1 = StreamModule:append(Stream0, I),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, ne, byte_size(I1)};
+    {State2, {tbnz, Reg, 0}, 0};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(bool)', RegOrTuple, '!=', false}
@@ -803,17 +807,44 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    % Test low 8 bits
-    I1 = jit_aarch64_asm:tst_w(Reg, 16#FF),
+    % Test lowest bit
+    I = jit_aarch64_asm:tbz(Reg, 0, 0),
+    Stream1 = StreamModule:append(Stream0, I),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {tbz, Reg, 0}, 0};
+if_block_cond(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _]
+    } = State0,
+    {RegOrTuple, '&', Val, '!=', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % Test bits
+    TestCode =
+        try
+            jit_aarch64_asm:tst(Reg, Val)
+        catch
+            error:{unencodable_immediate, Val} ->
+                TestCode0 = jit_aarch64_asm:mov(Temp, Val),
+                TestCode1 = jit_aarch64_asm:tst(Reg, Temp),
+                <<TestCode0/binary, TestCode1/binary>>
+        end,
     I2 = jit_aarch64_asm:bcc(eq, 0),
     Code = <<
-        I1/binary,
+        TestCode/binary,
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(I1)};
+    {State2, eq, byte_size(TestCode)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -853,53 +884,7 @@ if_block_cond(
     Stream3 = StreamModule:append(Stream2, I3),
     State3 = State1#state{stream = Stream3},
     State4 = if_block_free_reg(RegTuple, State3),
-    {State4, eq, OffsetAfter - OffsetBefore};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State0,
-    {RegOrTuple, '&', Val}
-) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    % Test bits
-    I1 = jit_aarch64_asm:tst(Reg, Val),
-    I2 = jit_aarch64_asm:bcc(eq, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(I1)};
-if_block_cond(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State0,
-    {'(bool)', RegOrTuple, '&', Val}
-) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    % Test 8-bit value
-    I1 = jit_aarch64_asm:tst_w(Reg, Val),
-    I2 = jit_aarch64_asm:bcc(eq, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(I1)}.
+    {State4, eq, OffsetAfter - OffsetBefore}.
 
 -spec if_block_free_reg(aarch64_register() | {free, aarch64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
