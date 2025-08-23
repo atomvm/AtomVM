@@ -250,13 +250,11 @@ cmp_test_() ->
         ?_assertEqual(<<16#F103001F:32/little>>, jit_aarch64_asm:cmp(r0, 192))
     ].
 
-cmp32_test_() ->
+cmp_w_test_() ->
     [
-        % cmp32 reg, reg
-        ?_assertEqual(<<16#6B01001F:32/little>>, jit_aarch64_asm:cmp32(r0, r1)),
-        % cmp32 reg, imm
-        ?_assertEqual(<<16#7100001F:32/little>>, jit_aarch64_asm:cmp32(r0, 0)),
-        ?_assertEqual(<<16#7103001F:32/little>>, jit_aarch64_asm:cmp32(r0, 192))
+        % cmp_w reg, imm
+        ?_assertEqual(<<16#7100001F:32/little>>, jit_aarch64_asm:cmp_w(r0, 0)),
+        ?_assertEqual(<<16#7103001F:32/little>>, jit_aarch64_asm:cmp_w(r0, 192))
     ].
 
 and_test_() ->
@@ -386,6 +384,54 @@ bcc_test_() ->
         ?_assertEqual(
             asm(<<16#5400040f:32/little>>, "b.nv 128"),
             jit_aarch64_asm:bcc(nv, 128)
+        )
+    ].
+
+cbnz_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#b5000401:32/little>>, "cbnz x1, 128"),
+            jit_aarch64_asm:cbnz(r1, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#35000402:32/little>>, "cbnz w2, 128"),
+            jit_aarch64_asm:cbnz_w(r2, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#b5fffc03:32/little>>, "cbnz x3, -128"),
+            jit_aarch64_asm:cbnz(r3, -128)
+        )
+    ].
+
+tbz_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#b6f80400:32/little>>, "tbz x0, #63, 128"),
+            jit_aarch64_asm:tbz(r0, 63, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#36180400:32/little>>, "tbz x0, #3, 128"),
+            jit_aarch64_asm:tbz(r0, 3, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#363ffc03:32/little>>, "tbz x3, #7, -128"),
+            jit_aarch64_asm:tbz(r3, 7, -128)
+        )
+    ].
+
+tbnz_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#37000400:32/little>>, "tbnz x0, #0, 128"),
+            jit_aarch64_asm:tbnz(r0, 0, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#37180400:32/little>>, "tbnz x0, #3, 128"),
+            jit_aarch64_asm:tbnz(r0, 3, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#373ffc03:32/little>>, "tbnz x3, #7, -128"),
+            jit_aarch64_asm:tbnz(r3, 7, -128)
         )
     ].
 

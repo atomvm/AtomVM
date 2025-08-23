@@ -30,8 +30,12 @@
     blr/1,
     br/1,
     brk/1,
+    cbnz/2,
+    cbnz_w/2,
+    tbz/3,
+    tbnz/3,
     cmp/2,
-    cmp32/2,
+    cmp_w/2,
     and_/3,
     ldr/2,
     ldr_w/2,
@@ -779,6 +783,39 @@ bcc(Cond, Offset) when is_atom(Cond), is_integer(Offset) ->
     Offset19 = Offset div 4,
     <<(16#54000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor CondNum):32/little>>.
 
+%% Emit a compare and branch on non-zero
+-spec cbnz(aarch64_gpr_register(), integer()) -> binary().
+cbnz(Rt, Offset) when is_integer(Offset) ->
+    RtNum = reg_to_num(Rt),
+    Offset19 = Offset div 4,
+    <<(16#B5000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor RtNum):32/little>>.
+
+-spec cbnz_w(aarch64_gpr_register(), integer()) -> binary().
+cbnz_w(Rt, Offset) when is_integer(Offset) ->
+    RtNum = reg_to_num(Rt),
+    Offset19 = Offset div 4,
+    <<(16#35000000 bor ((Offset19 band 16#7FFFF) bsl 5) bor RtNum):32/little>>.
+
+%% Emit a test bit and branch if zero
+-spec tbz(aarch64_gpr_register(), 0..63, integer()) -> binary().
+tbz(Rt, Bit, Offset) when Offset >= -32768 andalso Offset < 32768 ->
+    RtNum = reg_to_num(Rt),
+    Offset14 = Offset div 4,
+    <<
+        ((Bit band 32 bsl 26) bor 16#36000000 bor (Bit band 31 bsl 19) bor
+            ((Offset14 band 16#3FFF) bsl 5) bor RtNum):32/little
+    >>.
+
+%% Emit a test bit and branch if not zero
+-spec tbnz(aarch64_gpr_register(), 0..63, integer()) -> binary().
+tbnz(Rt, Bit, Offset) when Offset >= -32768 andalso Offset < 32768 ->
+    RtNum = reg_to_num(Rt),
+    Offset14 = Offset div 4,
+    <<
+        ((Bit band 32 bsl 26) bor 16#37000000 bor (Bit band 31 bsl 19) bor
+            ((Offset14 band 16#3FFF) bsl 5) bor RtNum):32/little
+    >>.
+
 %% Emit a compare instruction
 -spec cmp(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
 cmp(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
@@ -801,19 +838,13 @@ cmp(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     <<LoadInstr/binary, CmpInstr/binary>>.
 
 %% Emit a 32-bit compare instruction
--spec cmp32(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
-cmp32(Rn, Rm) when is_atom(Rn), is_atom(Rm) ->
-    RnNum = reg_to_num(Rn),
-    RmNum = reg_to_num(Rm),
-    %% AArch64 CMP (32-bit shifted register) encoding: CMP Wn, Wm
-    %% This is SUBS WZR, Wn, Wm: 01101011000mmmmm000000nnnnn11111
-    <<(16#6B00001F bor (RmNum bsl 16) bor (RnNum bsl 5)):32/little>>;
-cmp32(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
+-spec cmp_w(aarch64_gpr_register(), aarch64_gpr_register() | integer()) -> binary().
+cmp_w(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =< 4095 ->
     RnNum = reg_to_num(Rn),
     %% AArch64 CMP (32-bit immediate) encoding: CMP Wn, #imm
     %% This is SUBS WZR, Wn, #imm: 0111000100iiiiiiiiiiiinnnnn11111
     <<(16#7100001F bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5)):32/little>>;
-cmp32(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm < 0, Imm >= -4095 ->
+cmp_w(Rn, Imm) when is_atom(Rn), is_integer(Imm), Imm < 0, Imm >= -4095 ->
     RnNum = reg_to_num(Rn),
     %% For negative immediates, use ADD form: CMP Wn, #(-imm) becomes ADDS WZR, Wn, #(-imm)
     %% AArch64 ADDS (32-bit immediate) encoding: 0011000100iiiiiiiiiiiinnnnn11111
