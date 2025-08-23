@@ -447,7 +447,7 @@ jobs:
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_jit.avm"
-      timeout-minutes: 10
+      timeout-minutes: 30
       if: matrix.otp != '21' && matrix.otp != '22'
       working-directory: build
       run: |
