@@ -171,6 +171,11 @@ enum TrapAndLoadResult
 #define JIT_JUMPTABLE_ENTRY_SIZE 4
 #endif
 
+#ifdef __arm__
+#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
+#define JIT_JUMPTABLE_ENTRY_SIZE 8
+#endif
+
 #ifndef JIT_ARCH_TARGET
 #error Unknown JIT target
 #endif

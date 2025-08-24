@@ -767,7 +767,7 @@ shift_right_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
             "   2:	08ff      	lsrs	r7, r7, #3"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -779,7 +779,7 @@ shift_left_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
             "   2:	00ff      	lsls	r7, r7, #3"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -1135,13 +1135,13 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, 0}, <<
                         "   0:	2700      	movs	r7, #0\n"
-                        "   2:	6307      	str	r7, [r0, #48]	; 0x30"
+                        "   2:	6187      	str	r7, [r0, #24]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, extra}, <<
                         "   0:	2700      	movs	r7, #0\n"
-                        "   2:	6707      	str	r7, [r0, #112]	; 0x70"
+                        "   2:	6587      	str	r7, [r0, #88]	; 0x58"
                     >>)
                 end),
                 ?_test(begin
@@ -1152,14 +1152,14 @@ move_to_vm_register_test_() ->
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 2}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	2600      	movs	r6, #0\n"
                         "   4:	60be      	str	r6, [r7, #8]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 20}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	2600      	movs	r6, #0\n"
                         "   4:	653e      	str	r6, [r7, #80]	; 0x50"
                     >>)
@@ -1168,25 +1168,25 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
                         "   0:	272a      	movs	r7, #42	; 0x2a\n"
-                        "   2:	6307      	str	r7, [r0, #48]	; 0x30"
+                        "   2:	6187      	str	r7, [r0, #24]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, extra}, <<
                         "   0:	272a      	movs	r7, #42	; 0x2a\n"
-                        "   2:	6707      	str	r7, [r0, #112]	; 0x70"
+                        "   2:	6587      	str	r7, [r0, #88]	; 0x58"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 2}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	262a      	movs	r6, #42	; 0x2a\n"
                         "   4:	60be      	str	r6, [r7, #8]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 20}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	262a      	movs	r6, #42	; 0x2a\n"
                         "   4:	653e      	str	r6, [r7, #80]	; 0x50"
                     >>)
@@ -1201,14 +1201,14 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
-                        "   0:	6b47      	ldr	r7, [r0, #52]	; 0x34\n"
-                        "   2:	6387      	str	r7, [r0, #56]	; 0x38"
+                        "   0:	69c7      	ldr	r7, [r0, #28]\n"
+                        "   2:	6207      	str	r7, [r0, #32]"
                     >>)
                 end),
                 %% Test: x_reg to ptr
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r1}, <<
-                        "   0:	6b47      	ldr	r7, [r0, #52]	; 0x34\n"
+                        "   0:	69c7      	ldr	r7, [r0, #28]\n"
                         "   2:	600f      	str	r7, [r1, #0]"
                     >>)
                 end),
@@ -1216,42 +1216,42 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, {ptr, r4}, {x_reg, 3}, <<
                         "   0:	6827      	ldr	r7, [r4, #0]\n"
-                        "   2:	63c7      	str	r7, [r0, #60]	; 0x3c"
+                        "   2:	6247      	str	r7, [r0, #36]	; 0x24"
                     >>)
                 end),
                 %% Test: x_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
-                        "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
-                        "   2:	6a86      	ldr	r6, [r0, #40]	; 0x28\n"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	6946      	ldr	r6, [r0, #20]\n"
                         "   4:	6077      	str	r7, [r6, #4]"
                     >>)
                 end),
                 %% Test: y_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	683f      	ldr	r7, [r7, #0]\n"
-                        "   4:	63c7      	str	r7, [r0, #60]	; 0x3c"
+                        "   4:	6247      	str	r7, [r0, #36]	; 0x24"
                     >>)
                 end),
                 %% Test: y_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	687f      	ldr	r7, [r7, #4]\n"
-                        "   4:	63c7      	str	r7, [r0, #60]	; 0x3c"
+                        "   4:	6247      	str	r7, [r0, #36]	; 0x24"
                     >>)
                 end),
                 %% Test: Native register to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r5, {x_reg, 0}, <<
-                        "   0:	6305      	str	r5, [r0, #48]	; 0x30"
+                        "   0:	6185      	str	r5, [r0, #24]"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, r6, {x_reg, extra}, <<
-                        "   0:	6706      	str	r6, [r0, #112]	; 0x70"
+                        "   0:	6586      	str	r6, [r0, #88]	; 0x58"
                     >>)
                 end),
                 %% Test: Native register to ptr
@@ -1263,7 +1263,7 @@ move_to_vm_register_test_() ->
                 %% Test: Native register to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r1, {y_reg, 0}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	6039      	str	r1, [r7, #0]"
                     >>)
                 end),
@@ -1272,9 +1272,9 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, 16#12345678, {x_reg, 0}, <<
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
-                        "   4:	5678      	.word	0x12345678\n"
-                        "   6:	1234      	\n"
-                        "   8:	6307      	str	r7, [r0, #48]	; 0x30"
+                        "   4:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   6:	1234      	asrs	r4, r6, #8\n"
+                        "   8:	6187      	str	r7, [r0, #24]"
                     >>)
                 end),
                 %% Test: Large immediate to x_reg (32-bit literal pool, unaligned case)
@@ -1289,9 +1289,9 @@ move_to_vm_register_test_() ->
                         "   2:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   4:	e002      	b.n	0xc\n"
                         "   6:	0000      	movs	r0, r0\n"
-                        "   8:	5678      	.word	0x12345678\n"
-                        "   a:	1234      	\n"
-                        "   c:	6307      	str	r7, [r0, #48]	; 0x30"
+                        "   8:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   a:	1234      	asrs	r4, r6, #8\n"
+                        "   c:	6187      	str	r7, [r0, #24]"
                     >>),
                     ?assertEqual(Expected, Stream)
                 end),
@@ -1299,18 +1299,18 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, 16#12345678, {x_reg, extra}, <<
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
-                        "   4:	5678      	.word	0x12345678\n"
-                        "   6:	1234      	\n"
-                        "   8:	6707      	str	r7, [r0, #112]	; 0x70"
+                        "   4:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   6:	1234      	asrs	r4, r6, #8\n"
+                        "   8:	6587      	str	r7, [r0, #88]	; 0x58"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#12345678, {y_reg, 2}, <<
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
-                        "   4:	5678      	.word	0x12345678\n"
-                        "   6:	1234      	\n"
-                        "   8:	6a86      	ldr	r6, [r0, #40]	; 0x28\n"
+                        "   4:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   6:	1234      	asrs	r4, r6, #8\n"
+                        "   8:	6946      	ldr	r6, [r0, #20]\n"
                         "   a:	60b7      	str	r7, [r6, #8]"
                     >>)
                 end),
@@ -1318,9 +1318,9 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, 16#12345678, {y_reg, 20}, <<
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
-                        "   4:	5678      	.word	0x12345678\n"
-                        "   6:	1234      	\n"
-                        "   8:	6a86      	ldr	r6, [r0, #40]	; 0x28\n"
+                        "   4:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   6:	1234      	asrs	r4, r6, #8\n"
+                        "   8:	6946      	ldr	r6, [r0, #20]\n"
                         "   a:	6537      	str	r7, [r6, #80]	; 0x50"
                     >>)
                 end),
@@ -1329,25 +1329,25 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, 16#12345678, {ptr, r3}, <<
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
-                        "   4:	5678      	.word	0x12345678\n"
-                        "   6:	1234      	\n"
+                        "   4:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   6:	1234      	asrs	r4, r6, #8\n"
                         "   8:	601f      	str	r7, [r3, #0]"
                     >>)
                 end),
                 %% Test: x_reg to y_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
-                        "   0:	6ec7      	ldr	r7, [r0, #108]	; 0x6c\n"
-                        "   2:	6a86      	ldr	r6, [r0, #40]	; 0x28\n"
+                        "   0:	6d47      	ldr	r7, [r0, #84]	; 0x54\n"
+                        "   2:	6946      	ldr	r6, [r0, #20]\n"
                         "   4:	67f7      	str	r7, [r6, #124]	; 0x7c"
                     >>)
                 end),
                 %% Test: y_reg to x_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	6fff      	ldr	r7, [r7, #124]	; 0x7c\n"
-                        "   4:	66c7      	str	r7, [r0, #108]	; 0x6c"
+                        "   4:	6547      	str	r7, [r0, #84]	; 0x54"
                     >>)
                 end),
                 %% Test: Negative immediate to x_reg
@@ -1356,7 +1356,7 @@ move_to_vm_register_test_() ->
                         "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
                         "   2:	e001      	b.n	0x8\n"
                         "   4:	ffff ffff 			; <UNDEFINED> instruction: 0xffffffff\n"
-                        "   8:	6307      	str	r7, [r0, #48]	; 0x30"
+                        "   8:	6187      	str	r7, [r0, #24]"
                     >>)
                 end)
             ]
@@ -1590,7 +1590,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	6bc7      	ldr	r7, [r0, #60]	; 0x3c"
+                        "   0:	6a47      	ldr	r7, [r0, #36]	; 0x24"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
@@ -1600,7 +1600,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	6a87      	ldr	r7, [r0, #40]	; 0x28\n"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
                         "   2:	68ff      	ldr	r7, [r7, #12]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
@@ -1648,7 +1648,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r3),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6b83      	ldr	r3, [r0, #56]	; 0x38"
+                        "   0:	6a03      	ldr	r3, [r0, #32]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
@@ -1657,7 +1657,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6a81      	ldr	r1, [r0, #40]	; 0x28\n"
+                        "   0:	6941      	ldr	r1, [r0, #20]\n"
                         "   2:	6889      	ldr	r1, [r1, #8]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)

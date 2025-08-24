@@ -83,6 +83,17 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_aarch64.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_aarch64.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_aarch64.erl");
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x30 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in jit/src/jit_armv6m.erl");
+
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_armv6m.erl");
 #else
 #error Unknown jit target
 #endif
