@@ -277,15 +277,15 @@ move_to_cp_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-increment_sp_test_DISABLED() ->
+increment_sp_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:increment_sp(State0, 7),
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	f9401407 	ldr	x7, [x0, #40]\n"
-            "   4:	9100e0e7 	add	x7, x7, #0x38\n"
-            "   8:	f9001407 	str	x7, [x0, #40]"
+            "   0:	6947      	ldr	r7, [r0, #20]\n"
+            "   2:	371c      	adds	r7, #28\n"
+            "   4:	6147      	str	r7, [r0, #20]"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
