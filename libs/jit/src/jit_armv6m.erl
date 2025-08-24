@@ -1849,38 +1849,38 @@ mul(State, _Reg, 1) ->
 mul(State, Reg, 2) ->
     shift_left(State, Reg, 1);
 mul(#state{available_regs = [Temp | _]} = State, Reg, 3) ->
-    I1 = jit_armv6m_asm:lsl(Temp, Reg, 1),
-    I2 = jit_armv6m_asm:add(Reg, Temp, Reg),
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 1),
+    I2 = jit_armv6m_asm:adds(Reg, Temp, Reg),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mul(State, Reg, 4) ->
     shift_left(State, Reg, 2);
 mul(#state{available_regs = [Temp | _]} = State, Reg, 5) ->
-    I1 = jit_armv6m_asm:lsl(Temp, Reg, 2),
-    I2 = jit_armv6m_asm:add(Reg, Temp, Reg),
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 2),
+    I2 = jit_armv6m_asm:adds(Reg, Temp, Reg),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mul(State0, Reg, 6) ->
     State1 = mul(State0, Reg, 3),
     mul(State1, Reg, 2);
 mul(#state{available_regs = [Temp | _]} = State, Reg, 7) ->
-    I1 = jit_armv6m_asm:lsl(Temp, Reg, 3),
-    I2 = jit_armv6m_asm:sub(Reg, Temp, Reg),
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 3),
+    I2 = jit_armv6m_asm:subs(Reg, Temp, Reg),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mul(State, Reg, 8) ->
     shift_left(State, Reg, 3);
 mul(#state{available_regs = [Temp | _]} = State, Reg, 9) ->
-    I1 = jit_armv6m_asm:lsl(Temp, Reg, 3),
-    I2 = jit_armv6m_asm:add(Reg, Temp, Reg),
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 3),
+    I2 = jit_armv6m_asm:adds(Reg, Temp, Reg),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mul(State0, Reg, 10) ->
     State1 = mul(State0, Reg, 5),
     mul(State1, Reg, 2);
 mul(#state{available_regs = [Temp | _]} = State, Reg, 15) ->
-    I1 = jit_armv6m_asm:lsl(Temp, Reg, 4),
-    I2 = jit_armv6m_asm:sub(Reg, Temp, Reg),
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 4),
+    I2 = jit_armv6m_asm:subs(Reg, Temp, Reg),
     Stream1 = (State#state.stream_module):append(State#state.stream, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mul(State, Reg, 16) ->
@@ -1890,15 +1890,16 @@ mul(State, Reg, 32) ->
 mul(State, Reg, 64) ->
     shift_left(State, Reg, 6);
 mul(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
     Reg,
     Val
 ) ->
     % multiply by decomposing by power of 2
-    I1 = jit_armv6m_asm:mov(Temp, Val),
-    I2 = jit_armv6m_asm:mul(Reg, Reg, Temp),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1}.
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:muls(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{stream = Stream2, available_regs = [Temp | State1#state.available_regs]}.
 
 -spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 decrement_reductions_and_maybe_schedule_next(
