@@ -880,7 +880,7 @@ bitwise_and_optimization_test_() ->
         end)
     ].
 
-if_else_block_test_DISABLED() ->
+if_else_block_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg1} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
     {State2, Reg2} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
@@ -897,13 +897,13 @@ if_else_block_test_DISABLED() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-            "   8:	f100ecff 	cmp	x7, #0x3b\n"
-            "   c:	54000061 	b.ne	0x18  // b.any\n"
-            "  10:	91000908 	add	x8, x8, #0x2\n"
-            "  14:	14000002 	b	0x1c\n"
-            "  18:	91001108 	add	x8, x8, #0x4"
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
+            "   6:	d101      	bne.n	0xc\n"
+            "   8:	3602      	adds	r6, #2\n"
+            "   a:	e000      	b.n	0xe\n"
+            "   c:	3604      	adds	r6, #4"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
