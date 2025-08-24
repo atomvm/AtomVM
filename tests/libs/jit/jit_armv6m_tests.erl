@@ -760,27 +760,27 @@ if_else_block_test_DISABLED() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_right_test_DISABLED() ->
+shift_right_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
     State2 = ?BACKEND:shift_right(State1, Reg, 3),
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	d343fce7 	lsr	x7, x7, #3"
+            "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+            "   2:	08ff      	lsrs	r7, r7, #3"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_left_test_DISABLED() ->
+shift_left_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
     State2 = ?BACKEND:shift_left(State1, Reg, 3),
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	d37df0e7 	lsl	x7, x7, #3"
+            "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+            "   2:	00ff      	lsls	r7, r7, #3"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
