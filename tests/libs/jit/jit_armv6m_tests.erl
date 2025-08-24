@@ -711,12 +711,10 @@ if_block_test_() ->
                     Dump = <<
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                        "   4:	1c3d      	adds	r5, r7, #0\n"
-                        "   6:	240f      	movs	r4, #15\n"
-                        "   8:	4025      	ands	r5, r4\n"
-                        "   a:	2d0f      	cmp	r5, #15\n"
-                        "   c:	d000      	beq.n	0x10\n"
-                        "   e:	3602      	adds	r6, #2"
+                        "   4:	43fd      	mvns	r5, r7\n"
+                        "   6:	072d      	lsls	r5, r5, #28\n"
+                        "   8:	d000      	beq.n	0xc\n"
+                        "   a:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -733,9 +731,57 @@ if_block_test_() ->
                     Dump = <<
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                        "   4:	250f      	movs	r5, #15\n"
+                        "   4:	43ff      	mvns	r7, r7\n"
+                        "   6:	073f      	lsls	r7, r7, #28\n"
+                        "   8:	d000      	beq.n	0xc\n"
+                        "   a:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {RegA, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	1c3d      	adds	r5, r7, #0\n"
+                        "   6:	243f      	movs	r4, #63	; 0x3f\n"
+                        "   8:	4025      	ands	r5, r4\n"
+                        "   a:	2d08      	cmp	r5, #8\n"
+                        "   c:	d000      	beq.n	0x10\n"
+                        "   e:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {
+                            {free, RegA},
+                            '&',
+                            ?TERM_BOXED_TAG_MASK,
+                            '!=',
+                            ?TERM_BOXED_POSITIVE_INTEGER
+                        },
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	253f      	movs	r5, #63	; 0x3f\n"
                         "   6:	402f      	ands	r7, r5\n"
-                        "   8:	2f0f      	cmp	r7, #15\n"
+                        "   8:	2f08      	cmp	r7, #8\n"
                         "   a:	d000      	beq.n	0xe\n"
                         "   c:	3602      	adds	r6, #2"
                     >>,
@@ -994,7 +1040,7 @@ get_list_test_DISABLED() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-is_integer_test_DISABLED() ->
+is_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
     Arg1 = {x_reg, 0},
@@ -1024,20 +1070,24 @@ is_integer_test_DISABLED() ->
     State4 = ?BACKEND:update_branches(State3, Labels),
     Stream = ?BACKEND:stream(State4),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	92400ce8 	and	x8, x7, #0xf\n"
-        "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	54000160 	b.eq	0x38  // b.none\n"
-        "  10:	924004e8 	and	x8, x7, #0x3\n"
-        "  14:	f100091f 	cmp	x8, #0x2\n"
-        "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	14000047 	b	0x138\n"
-        "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e7 	and	x7, x7, #0x3f\n"
-        "  2c:	f10020ff 	cmp	x7, #0x8\n"
-        "  30:	54000040 	b.eq	0x38  // b.none\n"
-        "  34:	14000041 	b	0x138"
+        "0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	43fe      	mvns	r6, r7\n"
+        "   4:	0736      	lsls	r6, r6, #28\n"
+        "   6:	d00d      	beq.n	0x24\n"
+        "   8:	1c3e      	adds	r6, r7, #0\n"
+        "   a:	2503      	movs	r5, #3\n"
+        "   c:	402e      	ands	r6, r5\n"
+        "   e:	2e02      	cmp	r6, #2\n"
+        "  10:	d000      	beq.n	0x14\n"
+        "  12:	e087      	b.n	0x124\n"
+        "  14:	2603      	movs	r6, #3\n"
+        "  16:	43b7      	bics	r7, r6\n"
+        "  18:	683f      	ldr	r7, [r7, #0]\n"
+        "  1a:	263f      	movs	r6, #63	; 0x3f\n"
+        "  1c:	4037      	ands	r7, r6\n"
+        "  1e:	2f08      	cmp	r7, #8\n"
+        "  20:	d000      	beq.n	0x24\n"
+        "  22:	e07f      	b.n	0x124"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1077,32 +1127,28 @@ is_number_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	1c3e      	adds	r6, r7, #0\n"
-        "   4:	250f      	movs	r5, #15\n"
-        "   6:	402e      	ands	r6, r5\n"
-        "   8:	2e0f      	cmp	r6, #15\n"
-        "   a:	d015      	beq.n	0x38\n"
-        "   c:	1c3e      	adds	r6, r7, #0\n"
-        "   e:	2503      	movs	r5, #3\n"
-        "  10:	402e      	ands	r6, r5\n"
-        "  12:	2e02      	cmp	r6, #2\n"
-        "  14:	d000      	beq.n	0x18\n"
-        "  16:	e08f      	b.n	0x138\n"
-        "  18:	4e00      	ldr	r6, [pc, #0]	; (0x1c)\n"
-        "  1a:	e001      	b.n	0x20\n"
-        "  1c:	fffc ffff 			; <UNDEFINED> instruction: 0xfffcffff\n"
-        "  20:	4037      	ands	r7, r6\n"
-        "  22:	683f      	ldr	r7, [r7, #0]\n"
-        "  24:	1c3e      	adds	r6, r7, #0\n"
-        "  26:	253f      	movs	r5, #63	; 0x3f\n"
-        "  28:	402e      	ands	r6, r5\n"
-        "  2a:	2e08      	cmp	r6, #8\n"
-        "  2c:	d004      	beq.n	0x38\n"
-        "  2e:	263f      	movs	r6, #63	; 0x3f\n"
-        "  30:	4037      	ands	r7, r6\n"
-        "  32:	2f18      	cmp	r7, #24\n"
-        "  34:	d000      	beq.n	0x38\n"
-        "  36:	e07f      	b.n	0x138"
+        "   2:	43fe      	mvns	r6, r7\n"
+        "   4:	0736      	lsls	r6, r6, #28\n"
+        "   6:	d012      	beq.n	0x2e\n"
+        "   8:	1c3e      	adds	r6, r7, #0\n"
+        "   a:	2503      	movs	r5, #3\n"
+        "   c:	402e      	ands	r6, r5\n"
+        "   e:	2e02      	cmp	r6, #2\n"
+        "  10:	d000      	beq.n	0x14\n"
+        "  12:	e08c      	b.n	0x12e\n"
+        "  14:	2603      	movs	r6, #3\n"
+        "  16:	43b7      	bics	r7, r6\n"
+        "  18:	683f      	ldr	r7, [r7, #0]\n"
+        "  1a:	1c3e      	adds	r6, r7, #0\n"
+        "  1c:	253f      	movs	r5, #63	; 0x3f\n"
+        "  1e:	402e      	ands	r6, r5\n"
+        "  20:	2e08      	cmp	r6, #8\n"
+        "  22:	d004      	beq.n	0x2e\n"
+        "  24:	263f      	movs	r6, #63	; 0x3f\n"
+        "  26:	4037      	ands	r7, r6\n"
+        "  28:	2f18      	cmp	r7, #24\n"
+        "  2a:	d000      	beq.n	0x2e\n"
+        "  2c:	e07f      	b.n	0x12e"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
