@@ -198,6 +198,7 @@
 -define(AVAILABLE_FPREGS, [v0, v1, v2, v3, v4, v5, v6, v7]).
 -define(PARAMETER_REGS, [r0, r1, r2, r3, r4, r5]).
 -define(PARAMETER_FPREGS, [v0, v1, v2, v3, v4, v5]).
+-define(SCRATCH_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6, r17]).
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
@@ -1061,7 +1062,7 @@ set_args(
     ParamRegs = parameter_regs(Args),
     ArgsRegs = args_regs(Args),
     AvailableScratchGP =
-        [rdi, rsi, rdx, rcx, r8, r9, r10, r11] -- ParamRegs -- ArgsRegs -- UsedRegs,
+        ?SCRATCH_REGS -- ParamRegs -- ArgsRegs -- UsedRegs,
     AvailableScratchFP = ?AVAILABLE_FPREGS -- ParamRegs -- ArgsRegs -- UsedRegs,
     Offset = StreamModule:offset(Stream0),
     Args1 = [
