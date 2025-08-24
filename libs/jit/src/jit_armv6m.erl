@@ -823,6 +823,38 @@ if_block_cond(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
+        available_regs = [Temp | _]
+    } = State0,
+    {Reg, '&', 16#F, '!=', 16#F}
+) when ?IS_GPR(Reg) ->
+    % Special case Reg & ?TERM_IMMED_TAG_MASK != ?TERM_INTEGER_TAG
+    I1 = jit_armv6m_asm:mvns(Temp, Reg),
+    % 32 - 4
+    I2 = jit_armv6m_asm:lsls(Temp, Temp, 28),
+    I3 = jit_armv6m_asm:bcc(eq, 0),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
+    State1 = State0#state{stream = Stream1},
+    {State1, eq, byte_size(I1) + byte_size(I2)};
+if_block_cond(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State0,
+    {{free, Reg} = RegTuple, '&', 16#F, '!=', 16#F}
+) when ?IS_GPR(Reg) ->
+    % Special case Reg & ?TERM_IMMED_TAG_MASK != ?TERM_INTEGER_TAG
+    I1 = jit_armv6m_asm:mvns(Reg, Reg),
+    % 32 - 4
+    I2 = jit_armv6m_asm:lsls(Reg, Reg, 28),
+    I3 = jit_armv6m_asm:bcc(eq, 0),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
+    State1 = State0#state{stream = Stream1},
+    State2 = if_block_free_reg(RegTuple, State1),
+    {State2, eq, byte_size(I1) + byte_size(I2)};
+if_block_cond(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
         available_regs = [Temp | AT]
     } = State0,
     {Reg, '&', Mask, '!=', Val}
@@ -1709,6 +1741,20 @@ get_module_index(
         Reg
     }.
 
+%% @doc Perform an AND of a register with an immediate.
+%% JIT currentl calls this with two values: ?TERM_PRIMARY_CLEAR_MASK (-4) to
+%% clear bits and ?TERM_BOXED_TAG_MASK (0x3F). We can avoid any literal pool
+%% by using BICS for -4.
+and_(
+    #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
+    Reg,
+    Val
+) when Val < 0 andalso Val >= -256 ->
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, bnot (Val)),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:bics(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{available_regs = [Temp | AT], stream = Stream2};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
     Reg,
