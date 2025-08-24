@@ -1,0 +1,546 @@
+%
+% This file is part of AtomVM.
+%
+% Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%    http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+%
+% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+%
+
+-module(jit_armv6m_asm_tests).
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+-endif.
+
+adds_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#3038:16/little>>, "adds r0, #56"), jit_armv6m_asm:adds(r0, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#3038:16/little>>, "adds r0, r0, #56"), jit_armv6m_asm:adds(r0, r0, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#3000:16/little>>, "adds r0, #0"), jit_armv6m_asm:adds(r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#3101:16/little>>, "adds r1, #1"), jit_armv6m_asm:adds(r1, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#1C42:16/little>>, "adds r2, r0, #1"), jit_armv6m_asm:adds(r2, r0, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#18c9:16/little>>, "adds r1, r1, r3"), jit_armv6m_asm:adds(r1, r1, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#1850:16/little>>, "adds r0, r2, r1"), jit_armv6m_asm:adds(r0, r2, r1)
+        )
+    ].
+
+subs_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#3f38:16/little>>, "subs r7, #56"), jit_armv6m_asm:subs(r7, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#3f38:16/little>>, "subs r7, r7, #56"), jit_armv6m_asm:subs(r7, r7, 56)
+        ),
+        ?_assertEqual(
+            asm(<<16#3800:16/little>>, "subs r0, #0"), jit_armv6m_asm:subs(r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#1e42:16/little>>, "subs r2, r0, #1"), jit_armv6m_asm:subs(r2, r0, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#1ad1:16/little>>, "subs r1, r2, r3"), jit_armv6m_asm:subs(r1, r2, r3)
+        )
+    ].
+
+muls_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#4359:16/little>>, "muls r1, r3"), jit_armv6m_asm:muls(r1, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#4348:16/little>>, "muls r0, r1"), jit_armv6m_asm:muls(r0, r1)
+        )
+    ].
+
+b_test_() ->
+    [
+        %% Thumb B (unconditional) encoding tests - ARMv6-M 16-bit only
+        ?_assertEqual(
+            asm(<<16#E7FE:16/little>>, "b .+0"), jit_armv6m_asm:b(0)
+        ),
+        ?_assertEqual(
+            asm(<<16#E006:16/little>>, "b .+16"), jit_armv6m_asm:b(16)
+        ),
+        ?_assertEqual(
+            asm(<<16#E7DE:16/little>>, "b .-64"), jit_armv6m_asm:b(-64)
+        ),
+        ?_assertEqual(
+            asm(<<16#E000:16/little>>, "b .+4"), jit_armv6m_asm:b(4)
+        ),
+        ?_assertEqual(
+            asm(<<16#E3FF:16/little>>, "b .+2050"), jit_armv6m_asm:b(2050)
+        ),
+        ?_assertEqual(
+            asm(<<16#E400:16/little>>, "b .-2044"), jit_armv6m_asm:b(-2044)
+        ),
+        %% Test error cases for offsets too large for ARMv6-M
+        ?_assertError({unencodable_offset, 2052}, jit_armv6m_asm:b(2052)),
+        ?_assertError({unencodable_offset, -2046}, jit_armv6m_asm:b(-2046))
+    ].
+
+blx_test_() ->
+    [
+        %% Thumb BLX (register) encoding tests
+        ?_assertEqual(
+            asm(<<16#4780:16/little>>, "blx r0"), jit_armv6m_asm:blx(r0)
+        ),
+        ?_assertEqual(
+            asm(<<16#4788:16/little>>, "blx r1"), jit_armv6m_asm:blx(r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#47E8:16/little>>, "blx r13"), jit_armv6m_asm:blx(r13)
+        )
+    ].
+
+bx_test_() ->
+    [
+        %% Thumb BX (branch exchange) encoding tests
+        ?_assertEqual(
+            asm(<<16#4700:16/little>>, "bx r0"), jit_armv6m_asm:bx(r0)
+        ),
+        ?_assertEqual(
+            asm(<<16#4708:16/little>>, "bx r1"), jit_armv6m_asm:bx(r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#4768:16/little>>, "bx r13"), jit_armv6m_asm:bx(r13)
+        )
+    ].
+
+ldr_test_() ->
+    [
+        %% ARMv6-M Thumb LDR immediate offset (0-124, multiple of 4)
+        ?_assertEqual(
+            asm(<<16#6889:16/little>>, "ldr r1, [r1, #8]"),
+            jit_armv6m_asm:ldr(r1, {r1, 8})
+        ),
+        ?_assertEqual(
+            asm(<<16#6982:16/little>>, "ldr r2, [r0, #24]"),
+            jit_armv6m_asm:ldr(r2, {r0, 24})
+        ),
+        %% SP-relative load (0-1020, multiple of 4)
+        ?_assertEqual(
+            asm(<<16#9f00:16/little>>, "ldr r7, [sp, #0]"),
+            jit_armv6m_asm:ldr(r7, {sp, 0})
+        ),
+        ?_assertEqual(
+            asm(<<16#9801:16/little>>, "ldr r0, [sp, #4]"),
+            jit_armv6m_asm:ldr(r0, {sp, 4})
+        ),
+        %% PC-relative load (0-1020, multiple of 4)
+        ?_assertEqual(
+            asm(<<16#4a18:16/little>>, "ldr r2, [pc, #96]"),
+            jit_armv6m_asm:ldr(r2, {pc, 96})
+        ),
+        %% Register offset
+        ?_assertEqual(
+            asm(<<16#58d1:16/little>>, "ldr r1, [r2, r3]"),
+            jit_armv6m_asm:ldr(r1, {r2, r3})
+        )
+    ].
+
+movs_test_() ->
+    [
+        %% ARMv6-M Thumb MOVS instructions (sets flags)
+        %% MOVS immediate (8-bit only, 0-255)
+        ?_assertEqual(
+            asm(<<16#2000:16/little>>, "movs r0, #0"),
+            jit_armv6m_asm:movs(r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#2101:16/little>>, "movs r1, #1"),
+            jit_armv6m_asm:movs(r1, 1)
+        ),
+        ?_assertEqual(
+            asm(<<16#22ff:16/little>>, "movs r2, #255"),
+            jit_armv6m_asm:movs(r2, 255)
+        ),
+        %% MOVS register - low registers only (r0-r7)
+        ?_assertEqual(
+            asm(<<16#0008:16/little>>, "movs r0, r1"),
+            jit_armv6m_asm:movs(r0, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#001a:16/little>>, "movs r2, r3"),
+            jit_armv6m_asm:movs(r2, r3)
+        )
+    ].
+
+mov_test_() ->
+    [
+        %% ARMv6-M Thumb MOV instructions (no flags, for high registers)
+        %% MOV register - requires at least one high register (r8-r15)
+        ?_assertEqual(
+            asm(<<16#4680:16/little>>, "mov r8, r0"),
+            jit_armv6m_asm:mov(r8, r0)
+        ),
+        ?_assertEqual(
+            asm(<<16#4640:16/little>>, "mov r0, r8"),
+            jit_armv6m_asm:mov(r0, r8)
+        ),
+        ?_assertEqual(
+            asm(<<16#46c8:16/little>>, "mov r8, r9"),
+            jit_armv6m_asm:mov(r8, r9)
+        )
+    ].
+
+str_test_() ->
+    [
+        %% ARMv6-M Thumb STR immediate offset (0-124, multiple of 4)
+        ?_assertEqual(
+            asm(<<16#6089:16/little>>, "str r1, [r1, #8]"),
+            jit_armv6m_asm:str(r1, {r1, 8})
+        ),
+        ?_assertEqual(
+            asm(<<16#6182:16/little>>, "str r2, [r0, #24]"),
+            jit_armv6m_asm:str(r2, {r0, 24})
+        ),
+        %% SP-relative store (0-1020, multiple of 4)
+        ?_assertEqual(
+            asm(<<16#9700:16/little>>, "str r7, [sp, #0]"),
+            jit_armv6m_asm:str(r7, {sp, 0})
+        ),
+        ?_assertEqual(
+            asm(<<16#9001:16/little>>, "str r0, [sp, #4]"),
+            jit_armv6m_asm:str(r0, {sp, 4})
+        ),
+        %% Register offset
+        ?_assertEqual(
+            asm(<<16#50d1:16/little>>, "str r1, [r2, r3]"),
+            jit_armv6m_asm:str(r1, {r2, r3})
+        )
+    ].
+
+cmp_test_() ->
+    [
+        %% ARMv6-M Thumb CMP register (low registers only)
+        ?_assertEqual(
+            asm(<<16#4288:16/little>>, "cmp r0, r1"),
+            jit_armv6m_asm:cmp(r0, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#42bb:16/little>>, "cmp r3, r7"),
+            jit_armv6m_asm:cmp(r3, r7)
+        ),
+        %% ARMv6-M Thumb CMP immediate (8-bit, 0-255, low registers only)
+        ?_assertEqual(
+            asm(<<16#2800:16/little>>, "cmp r0, #0"),
+            jit_armv6m_asm:cmp(r0, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#2805:16/little>>, "cmp r0, #5"),
+            jit_armv6m_asm:cmp(r0, 5)
+        ),
+        ?_assertEqual(
+            asm(<<16#2fff:16/little>>, "cmp r7, #255"),
+            jit_armv6m_asm:cmp(r7, 255)
+        )
+    ].
+
+ands_test_() ->
+    [
+        %% ARMv6-M Thumb ANDS register (2-operand: Rd = Rd AND Rm)
+        ?_assertEqual(
+            asm(<<16#4008:16/little>>, "ands r0, r1"),
+            jit_armv6m_asm:ands(r0, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#4011:16/little>>, "ands r1, r2"),
+            jit_armv6m_asm:ands(r1, r2)
+        ),
+        ?_assertEqual(
+            asm(<<16#401a:16/little>>, "ands r2, r3"),
+            jit_armv6m_asm:ands(r2, r3)
+        )
+    ].
+
+orrs_test_() ->
+    [
+        %% ARMv6-M Thumb ORRS register (2-operand: Rd = Rd OR Rm, sets flags)
+        ?_assertEqual(
+            asm(<<16#4308:16/little>>, "orrs r0, r1"),
+            jit_armv6m_asm:orrs(r0, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#4311:16/little>>, "orrs r1, r2"),
+            jit_armv6m_asm:orrs(r1, r2)
+        ),
+        ?_assertEqual(
+            asm(<<16#431a:16/little>>, "orrs r2, r3"),
+            jit_armv6m_asm:orrs(r2, r3)
+        )
+    ].
+
+lsls_test_() ->
+    [
+        %% ARMv6-M Thumb LSLS immediate shift (1-31)
+        ?_assertEqual(
+            asm(<<16#0148:16/little>>, "lsls r0, r1, #5"),
+            jit_armv6m_asm:lsls(r0, r1, 5)
+        ),
+        ?_assertEqual(
+            asm(<<16#0212:16/little>>, "lsls r2, r2, #8"),
+            jit_armv6m_asm:lsls(r2, r2, 8)
+        ),
+        %% LSLS register shift
+        ?_assertEqual(
+            asm(<<16#409a:16/little>>, "lsls r2, r3"),
+            jit_armv6m_asm:lsls(r2, r3)
+        )
+    ].
+
+lsrs_test_() ->
+    [
+        %% ARMv6-M Thumb LSRS immediate shift (1-32)
+        ?_assertEqual(
+            asm(<<16#0948:16/little>>, "lsrs r0, r1, #5"),
+            jit_armv6m_asm:lsrs(r0, r1, 5)
+        ),
+        ?_assertEqual(
+            asm(<<16#0a12:16/little>>, "lsrs r2, r2, #8"),
+            jit_armv6m_asm:lsrs(r2, r2, 8)
+        ),
+        %% LSRS register shift
+        ?_assertEqual(
+            asm(<<16#40da:16/little>>, "lsrs r2, r3"),
+            jit_armv6m_asm:lsrs(r2, r3)
+        )
+    ].
+
+tst_test_() ->
+    [
+        %% ARMv6-M Thumb TST instructions (register only, low registers)
+        %% TST Rn, Rm - test bits (performs Rn & Rm, updates flags)
+        ?_assertEqual(
+            asm(<<16#4208:16/little>>, "tst r0, r1"),
+            jit_armv6m_asm:tst(r0, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#421a:16/little>>, "tst r2, r3"),
+            jit_armv6m_asm:tst(r2, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#4239:16/little>>, "tst r1, r7"),
+            jit_armv6m_asm:tst(r1, r7)
+        )
+    ].
+
+bcc_test_() ->
+    [
+        %% Thumb conditional branch encoding tests - ARMv6-M 16-bit only
+        ?_assertEqual(
+            asm(<<16#D0FE:16/little>>, "beq .+0"), jit_armv6m_asm:bcc(eq, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#D1FE:16/little>>, "bne .+0"), jit_armv6m_asm:bcc(ne, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#D1DE:16/little>>, "bne .-64"), jit_armv6m_asm:bcc(ne, -64)
+        ),
+        ?_assertEqual(
+            asm(<<16#D03E:16/little>>, "beq .+128"), jit_armv6m_asm:bcc(eq, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D23E:16/little>>, "bcs .+128"), jit_armv6m_asm:bcc(cs, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D33E:16/little>>, "bcc .+128"), jit_armv6m_asm:bcc(cc, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D43E:16/little>>, "bmi .+128"), jit_armv6m_asm:bcc(mi, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D53E:16/little>>, "bpl .+128"), jit_armv6m_asm:bcc(pl, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D63E:16/little>>, "bvs .+128"), jit_armv6m_asm:bcc(vs, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D83E:16/little>>, "bhi .+128"), jit_armv6m_asm:bcc(hi, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D93E:16/little>>, "bls .+128"), jit_armv6m_asm:bcc(ls, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#DA3E:16/little>>, "bge .+128"), jit_armv6m_asm:bcc(ge, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#DB3E:16/little>>, "blt .+128"), jit_armv6m_asm:bcc(lt, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#DC3E:16/little>>, "bgt .+128"), jit_armv6m_asm:bcc(gt, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#DD3E:16/little>>, "ble .+128"), jit_armv6m_asm:bcc(le, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#E03E:16/little>>, "bal .+128"), jit_armv6m_asm:bcc(al, 128)
+        ),
+        ?_assertEqual(
+            asm(<<16#D07F:16/little>>, "beq .+258"), jit_armv6m_asm:bcc(eq, 258)
+        ),
+        ?_assertEqual(
+            asm(<<16#D180:16/little>>, "bne .-252"), jit_armv6m_asm:bcc(ne, -252)
+        ),
+        %% Test error cases for offsets too large for ARMv6-M
+        ?_assertError({unencodable_offset, 260}, jit_armv6m_asm:bcc(eq, 260)),
+        ?_assertError({unencodable_offset, -254}, jit_armv6m_asm:bcc(ne, -254))
+    ].
+
+adr_test_() ->
+    [
+        %% ARMv6-M Thumb ADR (PC-relative address) - implemented as ADD Rd, PC, #imm
+        %% adr(Rd, N) means "Rd = current_PC + N" where PC is instruction address
+        %% Range: 4-1024, must be multiple of 4
+        ?_assertEqual(
+            asm(<<16#a000:16/little>>, "adr r0, .+4"),
+            jit_armv6m_asm:adr(r0, 4)
+        ),
+        ?_assertEqual(
+            asm(<<16#a101:16/little>>, "adr r1, .+8"),
+            jit_armv6m_asm:adr(r1, 8)
+        ),
+        ?_assertEqual(
+            asm(<<16#a202:16/little>>, "adr r2, .+12"),
+            jit_armv6m_asm:adr(r2, 12)
+        ),
+        ?_assertEqual(
+            asm(<<16#a708:16/little>>, "adr r7, .+36"),
+            jit_armv6m_asm:adr(r7, 36)
+        ),
+        %% Test maximum offset value (1024 bytes)
+        ?_assertEqual(
+            asm(<<16#a0ff:16/little>>, "adr r0, .+1024"),
+            jit_armv6m_asm:adr(r0, 1024)
+        )
+    ].
+
+push_test_() ->
+    [
+        %% ARMv6-M Thumb PUSH instruction (low registers + optional LR)
+        %% Single register push
+        ?_assertEqual(
+            asm(<<16#b401:16/little>>, "push {r0}"),
+            jit_armv6m_asm:push([r0])
+        ),
+        %% Multiple register push
+        ?_assertEqual(
+            asm(<<16#b407:16/little>>, "push {r0, r1, r2}"),
+            jit_armv6m_asm:push([r0, r1, r2])
+        ),
+        %% Push with LR
+        ?_assertEqual(
+            asm(<<16#b500:16/little>>, "push {lr}"),
+            jit_armv6m_asm:push([lr])
+        ),
+        %% Push registers + LR
+        ?_assertEqual(
+            asm(<<16#b507:16/little>>, "push {r0, r1, r2, lr}"),
+            jit_armv6m_asm:push([r0, r1, r2, lr])
+        )
+    ].
+
+pop_test_() ->
+    [
+        %% ARMv6-M Thumb POP instruction (low registers + optional PC)
+        %% Single register pop
+        ?_assertEqual(
+            asm(<<16#bc01:16/little>>, "pop {r0}"),
+            jit_armv6m_asm:pop([r0])
+        ),
+        %% Multiple register pop
+        ?_assertEqual(
+            asm(<<16#bc07:16/little>>, "pop {r0, r1, r2}"),
+            jit_armv6m_asm:pop([r0, r1, r2])
+        ),
+        %% Pop with PC
+        ?_assertEqual(
+            asm(<<16#bd00:16/little>>, "pop {pc}"),
+            jit_armv6m_asm:pop([pc])
+        ),
+        %% Pop registers + PC
+        ?_assertEqual(
+            asm(<<16#bd07:16/little>>, "pop {r0, r1, r2, pc}"),
+            jit_armv6m_asm:pop([r0, r1, r2, pc])
+        )
+    ].
+
+asm(Bin, Str) ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            Bin;
+        "BEAM" ->
+            case os:cmd("which arm-elf-as") of
+                [] ->
+                    Bin;
+                _ ->
+                    ok = file:write_file(
+                        "test.S", ".arch armv6-m\n.thumb\n.syntax unified\n" ++ Str ++ "\n"
+                    ),
+                    Dump = os:cmd(
+                        "arm-elf-as -c test.S -o test.o && arm-elf-objdump -j .text -D test.o"
+                    ),
+                    DumpBin = list_to_binary(Dump),
+                    DumpLines = binary:split(DumpBin, <<"\n">>, [global]),
+                    AsmBin = asm_lines(DumpLines, <<>>),
+                    if
+                        AsmBin =:= Bin ->
+                            ok;
+                        true ->
+                            io:format(
+                                "-------------------------------------------\n"
+                                "~s\n"
+                                "-------------------------------------------\n",
+                                [Dump]
+                            )
+                    end,
+                    ?assertEqual(AsmBin, Bin),
+                    Bin
+            end
+    end.
+
+asm_lines([<<" ", Tail/binary>> | T], Acc) ->
+    [_Offset, HexStr0] = binary:split(Tail, <<":\t">>),
+    [HexStr, _] = binary:split(HexStr0, <<"\t">>),
+    AssembledBin = hex_to_bin(HexStr, <<>>),
+    asm_lines(T, <<Acc/binary, AssembledBin/binary>>);
+asm_lines([_OtherLine | T], Acc) ->
+    asm_lines(T, Acc);
+asm_lines([], Acc) ->
+    Acc.
+
+hex_to_bin(<<>>, Acc) ->
+    Acc;
+hex_to_bin(<<" ", Tail/binary>>, Acc) ->
+    hex_to_bin(Tail, Acc);
+hex_to_bin(HexStr, Acc) ->
+    [HexChunk, Rest] = binary:split(HexStr, <<" ">>),
+    NumBits = byte_size(HexChunk) * 4,
+    HexVal = binary_to_integer(HexChunk, 16),
+    NewAcc = <<Acc/binary, HexVal:NumBits/little>>,
+    hex_to_bin(Rest, NewAcc).
