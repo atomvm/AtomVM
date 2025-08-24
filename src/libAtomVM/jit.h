@@ -158,14 +158,21 @@ enum TrapAndLoadResult
 
 #define JIT_VARIANT_PIC 1
 
+#ifndef AVM_NO_JIT
+
 #ifdef __x86_64__
 #define JIT_ARCH_TARGET JIT_ARCH_X86_64
 #define JIT_JUMPTABLE_ENTRY_SIZE 5
 #endif
 
-#ifdef __arm64__
+#if defined(__arm64__) || defined(__aarch64__)
 #define JIT_ARCH_TARGET JIT_ARCH_AARCH64
 #define JIT_JUMPTABLE_ENTRY_SIZE 4
+#endif
+
+#ifndef JIT_ARCH_TARGET
+#error Unknown JIT target
+#endif
 #endif
 
 /**
