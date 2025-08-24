@@ -1019,24 +1019,25 @@ call_bif_with_large_literal_integer_test_DISABLED() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-get_list_test_DISABLED() ->
+get_list_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:and_(State1, Reg, -4),
+    State2 = ?BACKEND:and_(State1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     State3 = ?BACKEND:move_array_element(State2, Reg, 1, {y_reg, 1}),
     State4 = ?BACKEND:move_array_element(State3, Reg, 0, {y_reg, 0}),
     State5 = ?BACKEND:free_native_registers(State4, [Reg]),
     ?BACKEND:assert_all_native_free(State5),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "   8:	f9401408 	ldr	x8, [x0, #40]\n"
-        "   c:	f94004e9 	ldr	x9, [x7, #8]\n"
-        "  10:	f9000509 	str	x9, [x8, #8]\n"
-        "  14:	f9401408 	ldr	x8, [x0, #40]\n"
-        "  18:	f94000e9 	ldr	x9, [x7]\n"
-        "  1c:	f9000109 	str	x9, [x8]"
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	2603      	movs	r6, #3\n"
+        "   4:	43b7      	bics	r7, r6\n"
+        "   6:	6946      	ldr	r6, [r0, #20]\n"
+        "   8:	687d      	ldr	r5, [r7, #4]\n"
+        "   a:	6075      	str	r5, [r6, #4]\n"
+        "   c:	6946      	ldr	r6, [r0, #20]\n"
+        "   e:	683d      	ldr	r5, [r7, #0]\n"
+        "  10:	6035      	str	r5, [r6, #0]"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
