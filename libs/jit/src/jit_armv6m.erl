@@ -1382,10 +1382,11 @@ move_array_element(
     {free, IndexReg},
     {x_reg, X}
 ) when X < ?MAX_REG andalso is_atom(IndexReg) ->
-    I1 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg, lsl, 2}),
-    I2 = jit_armv6m_asm:str(IndexReg, ?X_REG(X)),
+    I1 = jit_armv6m_asm:lsls(IndexReg, IndexReg, 2),
+    I2 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg}),
+    I3 = jit_armv6m_asm:str(IndexReg, ?X_REG(X)),
     {AvailableRegs1, UsedRegs1} = free_reg(AvailableRegs0, UsedRegs0, IndexReg),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State#state{
         available_regs = AvailableRegs1,
         used_regs = UsedRegs1,
@@ -1402,12 +1403,13 @@ move_array_element(
     {free, IndexReg},
     {ptr, PtrReg}
 ) when is_atom(IndexReg) ->
-    I1 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg, lsl, 2}),
-    I2 = jit_armv6m_asm:str(IndexReg, {PtrReg, 0}),
+    I1 = jit_armv6m_asm:lsls(IndexReg, IndexReg, 2),
+    I2 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg}),
+    I3 = jit_armv6m_asm:str(IndexReg, {PtrReg, 0}),
     {AvailableRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, UsedRegs0, IndexReg
     ),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State#state{
         available_regs = AvailableRegs1,
         used_regs = UsedRegs1,
@@ -1423,15 +1425,16 @@ move_array_element(
     Reg,
     {free, IndexReg},
     {y_reg, Y}
-) when ?IS_GPR(IndexReg) ->
-    I1 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg, lsl, 2}),
-    I3 = jit_armv6m_asm:str(IndexReg, {Temp, Y * 4}),
+) when is_atom(IndexReg) ->
+    I1 = jit_armv6m_asm:lsls(IndexReg, IndexReg, 2),
+    I2 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
+    I3 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg}),
+    I4 = jit_armv6m_asm:str(IndexReg, {Temp, Y * 4}),
     {AvailableRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, UsedRegs0, IndexReg
     ),
     Stream1 = StreamModule:append(
-        Stream0, <<I1/binary, I2/binary, I3/binary>>
+        Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>
     ),
     State#state{
         available_regs = AvailableRegs1,
@@ -1592,7 +1595,10 @@ move_to_native_register(
     I3 = jit_armv6m_asm:ldr(RegB, {RegB, F * 8 + 4}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    {State#state{stream = Stream1, available_regs = AvailT, used_regs = [RegB, RegA | Used]}, {fp, RegA, RegB}}.
+    {
+        State#state{stream = Stream1, available_regs = AvailT, used_regs = [RegB, RegA | Used]},
+        {fp, RegA, RegB}
+    }.
 
 -spec move_to_native_register(state(), value(), armv6m_register()) -> state().
 move_to_native_register(
