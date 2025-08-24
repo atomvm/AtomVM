@@ -1367,7 +1367,7 @@ move_array_element_test0(State, Reg, Index, Dest, Dump) ->
     Stream = ?BACKEND:stream(State1),
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-move_array_element_test_DISABLED_() ->
+move_array_element_test_() ->
     {setup,
         fun() ->
             ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
@@ -1376,79 +1376,82 @@ move_array_element_test_DISABLED_() ->
             [
                 %% move_array_element: reg[x] to x_reg
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 2, {x_reg, 0}, <<
-                        "   0:	f9400907 	ldr	x7, [x8, #16]\n"
-                        "   4:	f9001807 	str	x7, [x0, #48]"
+                    move_array_element_test0(State0, r3, 2, {x_reg, 0}, <<
+                        "   0:	689f      	ldr	r7, [r3, #8]\n"
+                        "   2:	6187      	str	r7, [r0, #24]"
                     >>)
                 end),
                 %% move_array_element: reg[x] to ptr
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 3, {ptr, r10}, <<
-                        "   0:	f9400d07 	ldr	x7, [x8, #24]\n"
-                        "   4:	f9000147 	str	x7, [x10]"
+                    move_array_element_test0(State0, r3, 3, {ptr, r5}, <<
+                        "   0:	68df      	ldr	r7, [r3, #12]\n"
+                        "   2:	602f      	str	r7, [r5, #0]"
                     >>)
                 end),
                 %% move_array_element: reg[x] to y_reg
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 1, {y_reg, 2}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
-                        "   4:	f9400508 	ldr	x8, [x8, #8]\n"
-                        "   8:	f90008e8 	str	x8, [x7, #16]"
+                    move_array_element_test0(State0, r3, 1, {y_reg, 2}, <<
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	685e      	ldr	r6, [r3, #4]\n"
+                        "   4:	60be      	str	r6, [r7, #8]"
                     >>)
                 end),
-                %% move_array_element: reg[x] to native reg (r10)
+                %% move_array_element: reg[x] to native reg (r5)
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 1, r10, <<
-                        "   0:	f940050a 	ldr	x10, [x8, #8]"
+                    move_array_element_test0(State0, r3, 1, r5, <<
+                        "   0:	685d      	ldr	r5, [r3, #4]"
                     >>)
                 end),
                 %% move_array_element: reg[x] to y_reg
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 7, {y_reg, 31}, <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
-                        "   4:	f9401d08 	ldr	x8, [x8, #56]\n"
-                        "   8:	f9007ce8 	str	x8, [x7, #248]"
+                    move_array_element_test0(State0, r3, 7, {y_reg, 31}, <<
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	69de      	ldr	r6, [r3, #28]\n"
+                        "   4:	67fe      	str	r6, [r7, #124]	; 0x7c"
                     >>)
                 end),
                 %% move_array_element: reg[x] to x_reg
                 ?_test(begin
-                    move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
-                        "   0:	f9401d07 	ldr	x7, [x8, #56]\n"
-                        "   4:	f9005407 	str	x7, [x0, #168]"
+                    move_array_element_test0(State0, r3, 7, {x_reg, 15}, <<
+                        "   0:	69df      	ldr	r7, [r3, #28]\n"
+                        "   2:	6547      	str	r7, [r0, #84]	; 0x54"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to x_reg
                 ?_test(begin
-                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
-                    move_array_element_test0(State1, r8, {free, Reg}, {x_reg, 2}, <<
-                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
-                        "   4:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
-                        "   8:	f9002007 	str	x7, [x0, #64]"
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r3, 4),
+                    move_array_element_test0(State1, r3, {free, Reg}, {x_reg, 2}, <<
+                        "   0:	691f      	ldr	r7, [r3, #16]\n"
+                        "   2:	00bf      	lsls	r7, r7, #2\n"
+                        "   4:	59df      	ldr	r7, [r3, r7]\n"
+                        "   6:	6207      	str	r7, [r0, #32]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to pointer (large x reg)
                 ?_test(begin
-                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
-                    move_array_element_test0(State1, r8, {free, Reg}, {ptr, r10}, <<
-                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
-                        "   4:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
-                        "   8:	f9000147 	str	x7, [x10]"
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r3, 4),
+                    move_array_element_test0(State1, r3, {free, Reg}, {ptr, r5}, <<
+                        "   0:	691f      	ldr	r7, [r3, #16]\n"
+                        "   2:	00bf      	lsls	r7, r7, #2\n"
+                        "   4:	59df      	ldr	r7, [r3, r7]\n"
+                        "   6:	602f      	str	r7, [r5, #0]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to y_reg
                 ?_test(begin
-                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
-                    move_array_element_test0(State1, r8, {free, Reg}, {y_reg, 31}, <<
-                        "   0:	f9401107 	ldr	x7, [x8, #32]\n"
-                        "   4:	f9401408 	ldr	x8, [x0, #40]\n"
-                        "   8:	f8677907 	ldr	x7, [x8, x7, lsl #3]\n"
-                        "   c:	f9007d07 	str	x7, [x8, #248]"
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r3, 4),
+                    move_array_element_test0(State1, r3, {free, Reg}, {y_reg, 31}, <<
+                        "   0:	691f      	ldr	r7, [r3, #16]\n"
+                        "   2:	00bf      	lsls	r7, r7, #2\n"
+                        "   4:	6946      	ldr	r6, [r0, #20]\n"
+                        "   6:	59df      	ldr	r7, [r3, r7]\n"
+                        "   8:	67f7      	str	r7, [r6, #124]	; 0x7c"
                     >>)
                 end)
             ]
         end}.
 
-get_array_element_test_DISABLED_() ->
+get_array_element_test_() ->
     {setup,
         fun() ->
             ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
@@ -1457,10 +1460,10 @@ get_array_element_test_DISABLED_() ->
             [
                 %% get_array_element: reg[x] to new native reg
                 ?_test(begin
-                    {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
+                    {State1, Reg} = ?BACKEND:get_array_element(State0, r4, 4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401107 	ldr	x7, [x8, #32]"
+                        "   0:	6927      	ldr	r7, [r4, #16]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual(r7, Reg)
