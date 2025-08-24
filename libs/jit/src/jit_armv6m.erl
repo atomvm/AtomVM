@@ -1478,13 +1478,15 @@ move_to_array_element(
     Stream1 = StreamModule:append(Stream0, I1),
     State0#state{stream = Stream1};
 move_to_array_element(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
     ValueReg,
     Reg,
     IndexReg
 ) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso ?IS_GPR(IndexReg) ->
-    I1 = jit_armv6m_asm:str(ValueReg, {Reg, IndexReg, lsl, 2}),
-    Stream1 = StreamModule:append(Stream0, I1),
+    I1 = jit_armv6m_asm:mov(Temp, IndexReg),
+    I2 = jit_armv6m_asm:lsls(Temp, Temp, 2),
+    I3 = jit_armv6m_asm:str(ValueReg, {Reg, Temp}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State0#state{stream = Stream1};
 move_to_array_element(
     State0,
@@ -1511,9 +1513,10 @@ move_to_array_element(
     IndexReg,
     Offset
 ) when ?IS_GPR(ValueReg) andalso ?IS_GPR(IndexReg) andalso is_integer(Offset) ->
-    I1 = jit_armv6m_asm:add(Temp, IndexReg, Offset),
-    I2 = jit_armv6m_asm:str(ValueReg, {BaseReg, Temp, lsl, 2}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    I1 = jit_armv6m_asm:adds(Temp, IndexReg, Offset),
+    I2 = jit_armv6m_asm:lsls(Temp, Temp, 2),
+    I3 = jit_armv6m_asm:str(ValueReg, {BaseReg, Temp}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     State#state{stream = Stream1};
 move_to_array_element(
     State0,
@@ -1524,9 +1527,12 @@ move_to_array_element(
 ) ->
     {State1, ValueReg} = copy_to_native_register(State0, Value),
     [Temp | _] = State1#state.available_regs,
-    I1 = jit_armv6m_asm:add(Temp, IndexReg, Offset),
-    I2 = jit_armv6m_asm:str(ValueReg, {BaseReg, Temp, lsl, 2}),
-    Stream1 = (State1#state.stream_module):append(State1#state.stream, <<I1/binary, I2/binary>>),
+    I1 = jit_armv6m_asm:adds(Temp, IndexReg, Offset),
+    I2 = jit_armv6m_asm:lsls(Temp, Temp, 2),
+    I3 = jit_armv6m_asm:str(ValueReg, {BaseReg, Temp}),
+    Stream1 = (State1#state.stream_module):append(
+        State1#state.stream, <<I1/binary, I2/binary, I3/binary>>
+    ),
     State2 = State1#state{stream = Stream1},
     free_native_register(State2, ValueReg).
 
