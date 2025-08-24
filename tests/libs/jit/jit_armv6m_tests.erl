@@ -265,15 +265,15 @@ return_if_not_equal_to_ctx_test_DISABLED_() ->
             ]
         end}.
 
-move_to_cp_test_DISABLED() ->
+move_to_cp_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:move_to_cp(State0, {y_reg, 0}),
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	f9401407 	ldr	x7, [x0, #40]\n"
-            "   4:	f94000e7 	ldr	x7, [x7]\n"
-            "   8:	f9005c07 	str	x7, [x0, #184]"
+            "   0:	6947      	ldr	r7, [r0, #20]\n"
+            "   2:	683f      	ldr	r7, [r7, #0]\n"
+            "   4:	65c7      	str	r7, [r0, #92]	; 0x5c"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
