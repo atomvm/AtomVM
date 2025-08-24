@@ -289,7 +289,7 @@ increment_sp_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-if_block_test_DISABLED_() ->
+if_block_test_() ->
     {setup,
         fun() ->
             State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -309,10 +309,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	b6f80047 	tbz	x7, #63, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f00      	cmp	r7, #0\n"
+                        "   6:	d500      	bpl.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -327,11 +328,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	eb0800ff 	cmp	x7, x8\n"
-                        "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	42b7      	cmp	r7, r6\n"
+                        "   6:	da00      	bge.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -346,10 +347,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	b5000047 	cbnz	x7, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f00      	cmp	r7, #0\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -364,10 +366,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	b5000047 	cbnz	x7, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f00      	cmp	r7, #0\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -382,10 +385,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	35000047 	cbnz	w7, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f00      	cmp	r7, #0\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -400,10 +404,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	35000047 	cbnz	w7, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f00      	cmp	r7, #0\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -418,11 +423,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f100ecff 	cmp	x7, #0x3b\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
+                        "   6:	d000      	beq.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -437,11 +442,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f100ecff 	cmp	x7, #0x3b\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
+                        "   6:	d000      	beq.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -456,11 +461,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	7100a8ff 	cmp	w7, #0x2a\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
+                        "   6:	d000      	beq.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -475,11 +480,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	7100a8ff 	cmp	w7, #0x2a\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
+                        "   6:	d000      	beq.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -494,11 +499,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f100ecff 	cmp	x7, #0x3b\n"
-                        "   c:	54000041 	b.ne	0x14  // b.any\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -513,11 +518,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f100ecff 	cmp	x7, #0x3b\n"
-                        "   c:	54000041 	b.ne	0x14  // b.any\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -532,11 +537,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	7100a8ff 	cmp	w7, #0x2a\n"
-                        "   c:	54000041 	b.ne	0x14  // b.any\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -551,11 +556,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	7100a8ff 	cmp	w7, #0x2a\n"
-                        "   c:	54000041 	b.ne	0x14  // b.any\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -570,10 +575,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	37000047 	tbnz	w7, #0, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	07fd      	lsls	r5, r7, #31\n"
+                        "   6:	d400      	bmi.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -588,10 +594,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	37000047 	tbnz	w7, #0, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	07fd      	lsls	r5, r7, #31\n"
+                        "   6:	d400      	bmi.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -606,10 +613,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	36000047 	tbz	w7, #0, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	07fd      	lsls	r5, r7, #31\n"
+                        "   6:	d500      	bpl.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -624,10 +632,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	36000047 	tbz	w7, #0, 0x10\n"
-                        "   c:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	07fd      	lsls	r5, r7, #31\n"
+                        "   6:	d500      	bpl.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -642,11 +651,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f24008ff 	tst	x7, #0x7\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	077d      	lsls	r5, r7, #29\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -661,12 +670,12 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	d28000a9 	mov	x9, #0x5                   	// #5\n"
-                        "   c:	ea0900ff 	tst	x7, x9\n"
-                        "  10:	54000040 	b.eq	0x18  // b.none\n"
-                        "  14:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2505      	movs	r5, #5\n"
+                        "   6:	422f      	tst	r7, r5\n"
+                        "   8:	d000      	beq.n	0xc\n"
+                        "   a:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -681,11 +690,11 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	f24008ff 	tst	x7, #0x7\n"
-                        "   c:	54000040 	b.eq	0x14  // b.none\n"
-                        "  10:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	077d      	lsls	r5, r7, #29\n"
+                        "   6:	d100      	bne.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -700,12 +709,13 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	92400ce9 	and	x9, x7, #0xf\n"
-                        "   c:	f1003d3f 	cmp	x9, #0xf\n"
-                        "  10:	54000040 	b.eq	0x18  // b.none\n"
-                        "  14:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	250f      	movs	r5, #15\n"
+                        "   6:	402d      	ands	r5, r5\n"
+                        "   8:	2d0f      	cmp	r5, #15\n"
+                        "   a:	d000      	beq.n	0xe\n"
+                        "   c:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -720,18 +730,108 @@ if_block_test_DISABLED_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
-                        "   8:	92400ce7 	and	x7, x7, #0xf\n"
-                        "   c:	f1003cff 	cmp	x7, #0xf\n"
-                        "  10:	54000040 	b.eq	0x18  // b.none\n"
-                        "  14:	91000908 	add	x8, x8, #0x2"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	250f      	movs	r5, #15\n"
+                        "   6:	402f      	ands	r7, r5\n"
+                        "   8:	2f0f      	cmp	r7, #15\n"
+                        "   a:	d000      	beq.n	0xe\n"
+                        "   c:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end)
             ]
         end}.
+
+%% Test coverage for bitwise AND optimization paths
+bitwise_and_optimization_test_() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 6}),
+    {State2, RegB} = ?BACKEND:move_to_native_register(State1, {x_reg, 7}),
+    [
+        %% Test optimized case: 16#3 (low bits mask, 2 bits) - lsls r5, r7, #30
+        ?_test(begin
+            State3 = ?BACKEND:if_block(
+                State2,
+                {RegA, '&', 16#3, '!=', 0},
+                fun(BSt0) ->
+                    ?BACKEND:add(BSt0, RegB, 2)
+                end
+            ),
+            Stream = ?BACKEND:stream(State3),
+            Dump = <<
+                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   4:	07bd      	lsls	r5, r7, #30\n"
+                "   6:	d100      	bne.n	0xa\n"
+                "   8:	3602      	adds	r6, #2"
+            >>,
+            ?assertEqual(dump_to_bin(Dump), Stream),
+            ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State3))
+        end),
+        %% Test optimized case: 16#F (low bits mask, 4 bits) - lsls r5, r7, #28
+        ?_test(begin
+            State3 = ?BACKEND:if_block(
+                State2,
+                {RegA, '&', 16#F, '!=', 0},
+                fun(BSt0) ->
+                    ?BACKEND:add(BSt0, RegB, 2)
+                end
+            ),
+            Stream = ?BACKEND:stream(State3),
+            Dump = <<
+                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   4:	073d      	lsls	r5, r7, #28\n"
+                "   6:	d100      	bne.n	0xa\n"
+                "   8:	3602      	adds	r6, #2"
+            >>,
+            ?assertEqual(dump_to_bin(Dump), Stream),
+            ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State3))
+        end),
+        %% Test optimized case: 16#3F (low bits mask, 6 bits) - lsls r5, r7, #26
+        ?_test(begin
+            State3 = ?BACKEND:if_block(
+                State2,
+                {RegA, '&', 16#3F, '!=', 0},
+                fun(BSt0) ->
+                    ?BACKEND:add(BSt0, RegB, 2)
+                end
+            ),
+            Stream = ?BACKEND:stream(State3),
+            Dump = <<
+                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   4:	06bd      	lsls	r5, r7, #26\n"
+                "   6:	d100      	bne.n	0xa\n"
+                "   8:	3602      	adds	r6, #2"
+            >>,
+            ?assertEqual(dump_to_bin(Dump), Stream),
+            ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State3))
+        end),
+        %% Test non-optimized case: 5 (neither single bit nor low bits mask) - mov+tst
+        ?_test(begin
+            State3 = ?BACKEND:if_block(
+                State2,
+                {RegA, '&', 5, '!=', 0},
+                fun(BSt0) ->
+                    ?BACKEND:add(BSt0, RegB, 2)
+                end
+            ),
+            Stream = ?BACKEND:stream(State3),
+            Dump = <<
+                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
+                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   4:	2505      	movs	r5, #5\n"
+                "   6:	422f      	tst	r7, r5\n"
+                "   8:	d000      	beq.n	0xc\n"
+                "   a:	3602      	adds	r6, #2"
+            >>,
+            ?assertEqual(dump_to_bin(Dump), Stream),
+            ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State3))
+        end)
+    ].
 
 if_else_block_test_DISABLED() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
