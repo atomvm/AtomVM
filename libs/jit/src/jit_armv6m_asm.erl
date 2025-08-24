@@ -289,9 +289,21 @@ movs(Rd, Rm) when
             error({movs_requires_low_registers, {Rd, Rm}})
     end.
 
-%% ARMv6-M Thumb MOV instruction (no flags, for high registers)
--spec mov(arm_gpr_register(), arm_gpr_register()) -> binary().
-%% MOV register - at least one register must be high (r8-r15)
+%% ARMv6-M Thumb MOV instruction - handle both immediate and register moves
+-spec mov(arm_gpr_register(), arm_gpr_register() | integer()) -> binary().
+%% MOV immediate (using MOVS for low registers with immediate 0-255)
+mov(Rd, Imm) when is_atom(Rd), is_integer(Imm), Imm >= 0, Imm =< 255 ->
+    RdNum = reg_to_num(Rd),
+    case RdNum =< 7 of
+        true ->
+            %% Use MOVS for low registers with immediate
+            movs(Rd, Imm);
+        false ->
+            %% For high registers, need to use a different approach
+            %% ARMv6-M doesn't support immediate moves to high registers directly
+            error({unsupported_immediate_to_high_register, Rd, Imm})
+    end;
+%% MOV register - handle both high and low register cases
 mov(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
     RdNum = reg_to_num(Rd),
     RmNum = reg_to_num(Rm),
@@ -312,7 +324,8 @@ mov(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
             RmLow = RmNum band 7,
             <<(16#4600 bor (D bsl 7) bor (M bsl 6) bor (RmLow bsl 3) bor RdLow):16/little>>;
         false ->
-            error({mov_requires_high_register, {Rd, Rm}})
+            %% For low registers, use ADDS Rd, Rm, #0 (ARMv6-M standard practice)
+            adds(Rd, Rm, 0)
     end.
 
 %% ARMv6-M Thumb STR immediate offset (0-124, multiple of 4)
