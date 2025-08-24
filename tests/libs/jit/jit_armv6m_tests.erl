@@ -1095,7 +1095,7 @@ is_number_test_DISABLED() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-is_boolean_test_DISABLED() ->
+is_boolean_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
@@ -1111,12 +1111,12 @@ is_boolean_test_DISABLED() ->
     State4 = ?BACKEND:update_branches(State3, Labels),
     Stream = ?BACKEND:stream(State4),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	f1012cff 	cmp	x7, #0x4b\n"
-        "   8:	54000080 	b.eq	0x18  // b.none\n"
-        "   c:	f1002cff 	cmp	x7, #0xb\n"
-        "  10:	54000040 	b.eq	0x18  // b.none\n"
-        "  14:	14000041 	b	0x118"
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   4:	d002      	beq.n	0xc\n"
+        "   6:	2f0b      	cmp	r7, #11\n"
+        "   8:	d000      	beq.n	0xc\n"
+        "   a:	e07f      	b.n	0x10c"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
