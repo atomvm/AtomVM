@@ -30,6 +30,7 @@
     bx/1,
     cmp/2,
     ands/2,
+    bics/2,
     orrs/2,
     ldr/2,
     lsls/2,
@@ -38,6 +39,7 @@
     lsrs/3,
     mov/2,
     movs/2,
+    mvns/2,
     str/2,
     tst/2,
     stp/4,
@@ -289,6 +291,21 @@ movs(Rd, Rm) when
             error({movs_requires_low_registers, {Rd, Rm}})
     end.
 
+%% MVNS bitwise NOT
+-spec mvns(arm_gpr_register(), arm_gpr_register()) -> binary().
+mvns(Rd, Rm) when
+    is_atom(Rd), is_atom(Rm)
+->
+    RdNum = reg_to_num(Rd),
+    RmNum = reg_to_num(Rm),
+    case RdNum =< 7 andalso RmNum =< 7 of
+        true ->
+            %% Thumb MOVS register: 0000000000mmmdddd
+            <<(16#43D0 bor (RmNum bsl 3) bor RdNum):16/little>>;
+        false ->
+            error({mvns_requires_low_registers, {Rd, Rm}})
+    end.
+
 %% ARMv6-M Thumb MOV instruction - handle both immediate and register moves
 -spec mov(arm_gpr_register(), arm_gpr_register() | integer()) -> binary().
 %% MOV immediate (using MOVS for low registers with immediate 0-255)
@@ -517,6 +534,21 @@ ands(Rd, Rm) when
     RmNum = reg_to_num(Rm),
     %% Thumb ANDS (2-operand): 0100000000mmmddd
     <<(16#4000 bor (RmNum bsl 3) bor RdNum):16/little>>.
+
+%% Emit an BICS instruction (bitwise AND with complement)
+-spec bics(arm_gpr_register(), arm_gpr_register()) -> binary().
+bics(Rd, Rm) when
+    is_atom(Rd),
+    is_atom(Rm),
+    Rd =/= sp,
+    Rd =/= pc,
+    Rm =/= sp,
+    Rm =/= pc
+->
+    RdNum = reg_to_num(Rd),
+    RmNum = reg_to_num(Rm),
+    %% Thumb ANDS (2-operand): 0100000000mmmddd
+    <<(16#4380 bor (RmNum bsl 3) bor RdNum):16/little>>.
 
 %% ARMv6-M Thumb ORRS instruction (register only - sets flags)
 -spec orrs(arm_gpr_register(), arm_gpr_register()) -> binary().
