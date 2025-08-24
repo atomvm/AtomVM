@@ -22,6 +22,7 @@
 
 -define(JIT_ARCH_X86_64, 1).
 -define(JIT_ARCH_AARCH64, 2).
+-define(JIT_ARCH_ARMV6M, 3).
 
 -define(JIT_VARIANT_PIC, 1).
 
