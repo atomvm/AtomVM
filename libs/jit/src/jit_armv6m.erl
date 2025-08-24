@@ -640,10 +640,13 @@ if_else_block(
         non_neg_integer()
     }.
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
-    I = jit_armv6m_asm:tbz(Reg, 63, 0),
-    Stream1 = StreamModule:append(Stream0, I),
+    %% Compare register with 0
+    I1 = jit_armv6m_asm:cmp(Reg, 0),
+    %% Branch if positive (N flag clear)
+    I2 = jit_armv6m_asm:bcc(pl, 0),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State1 = State0#state{stream = Stream1},
-    {State1, {tbz, Reg, 63}, 0};
+    {State1, pl, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {Reg, '<', Val}
@@ -685,43 +688,19 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    I = jit_armv6m_asm:cbnz(Reg, 0),
-    Stream1 = StreamModule:append(Stream0, I),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, {cbnz, Reg}, 0};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0, {'(int)', RegOrTuple, '==', 0}
-) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I = jit_armv6m_asm:cbnz_w(Reg, 0),
-    Stream1 = StreamModule:append(Stream0, I),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, {cbnz_w, Reg}, 0};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(int)', RegOrTuple, '==', Val}
-) when is_integer(Val) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 = jit_armv6m_asm:cmp_w(Reg, Val),
+    %% Compare register with 0
+    I1 = jit_armv6m_asm:cmp(Reg, 0),
+    %% Branch if not equal
     I2 = jit_armv6m_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, ne, byte_size(I1)};
+%% Delegate (int) forms to regular forms since we only have 32-bit words
+if_block_cond(State, {'(int)', RegOrTuple, '==', 0}) ->
+    if_block_cond(State, {RegOrTuple, '==', 0});
+if_block_cond(State, {'(int)', RegOrTuple, '==', Val}) when is_integer(Val) ->
+    if_block_cond(State, {RegOrTuple, '==', Val});
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}
@@ -741,25 +720,8 @@ if_block_cond(
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, eq, byte_size(I1)};
-if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {'(int)', RegOrTuple, '!=', Val}
-) when is_integer(Val) ->
-    Reg =
-        case RegOrTuple of
-            {free, Reg0} -> Reg0;
-            RegOrTuple -> RegOrTuple
-        end,
-    I1 = jit_armv6m_asm:cmp_w(Reg, Val),
-    I2 = jit_armv6m_asm:bcc(eq, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = if_block_free_reg(RegOrTuple, State0),
-    State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(I1)};
+if_block_cond(State, {'(int)', RegOrTuple, '!=', Val}) when is_integer(Val) ->
+    if_block_cond(State, {RegOrTuple, '!=', Val});
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', Val}
@@ -780,7 +742,11 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, ne, byte_size(I1)};
 if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _]
+    } = State0,
     {'(bool)', RegOrTuple, '==', false}
 ) ->
     Reg =
@@ -788,14 +754,21 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    % Test lowest bit
-    I = jit_armv6m_asm:tbnz(Reg, 0, 0),
-    Stream1 = StreamModule:append(Stream0, I),
+    % Test bit 0: shift bit 0 to MSB and branch if positive (bit was 0/false)
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 31),
+    % branch if negative (bit was 1/true)
+    I2 = jit_armv6m_asm:bcc(mi, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, {tbnz, Reg, 0}, 0};
+    {State2, mi, byte_size(I1)};
 if_block_cond(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _]
+    } = State0,
     {'(bool)', RegOrTuple, '!=', false}
 ) ->
     Reg =
@@ -803,12 +776,15 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    % Test lowest bit
-    I = jit_armv6m_asm:tbz(Reg, 0, 0),
-    Stream1 = StreamModule:append(Stream0, I),
+    % Test bit 0: shift bit 0 to MSB and branch if negative (bit was 1/true)
+    I1 = jit_armv6m_asm:lsls(Temp, Reg, 31),
+    % branch if positive (bit was 0/false)
+    I2 = jit_armv6m_asm:bcc(pl, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, {tbz, Reg, 0}, 0};
+    {State2, pl, byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -822,25 +798,27 @@ if_block_cond(
             {free, Reg0} -> Reg0;
             RegOrTuple -> RegOrTuple
         end,
-    % Test bits
-    TestCode =
-        try
-            jit_armv6m_asm:tst(Reg, Val)
-        catch
-            error:{unencodable_immediate, Val} ->
+    % Test bits - optimize for low bits masks that can use lsls
+    {TestCode, BranchCond} =
+        case bit_test_optimization(Val) of
+            {low_bits_mask, BitCount} ->
+                % Low bits mask: use lsls to shift high bits away
+                ShiftAmount = 32 - BitCount,
+                TestCode0 = jit_armv6m_asm:lsls(Temp, Reg, ShiftAmount),
+                % branch if not zero (any low bit was set)
+                {TestCode0, ne};
+            no_optimization ->
+                % General case: use mov+tst
                 TestCode0 = jit_armv6m_asm:mov(Temp, Val),
                 TestCode1 = jit_armv6m_asm:tst(Reg, Temp),
-                <<TestCode0/binary, TestCode1/binary>>
+                {<<TestCode0/binary, TestCode1/binary>>, eq}
         end,
-    I2 = jit_armv6m_asm:bcc(eq, 0),
-    Code = <<
-        TestCode/binary,
-        I2/binary
-    >>,
+    I2 = jit_armv6m_asm:bcc(BranchCond, 0),
+    Code = <<TestCode/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(TestCode)};
+    {State2, BranchCond, byte_size(TestCode)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -851,16 +829,19 @@ if_block_cond(
 ) when ?IS_GPR(Reg) ->
     % AND with mask
     OffsetBefore = StreamModule:offset(Stream0),
-    State1 = op_imm(State0, and_, Temp, Reg, Mask),
-    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:mov(Temp, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State1 = State0#state{stream = Stream1},
+    State2 = and_(State0, Temp, Mask),
+    Stream2 = State2#state.stream,
     % Compare with value
     I2 = jit_armv6m_asm:cmp(Temp, Val),
-    Stream2 = StreamModule:append(Stream1, I2),
-    OffsetAfter = StreamModule:offset(Stream2),
+    Stream3 = StreamModule:append(Stream2, I2),
+    OffsetAfter = StreamModule:offset(Stream3),
     I3 = jit_armv6m_asm:bcc(eq, 0),
-    Stream3 = StreamModule:append(Stream2, I3),
-    State2 = State1#state{stream = Stream3},
-    {State2, eq, OffsetAfter - OffsetBefore};
+    Stream4 = StreamModule:append(Stream3, I3),
+    State3 = State1#state{stream = Stream4},
+    {State3, eq, OffsetAfter - OffsetBefore};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -892,6 +873,19 @@ if_block_free_reg({free, Reg}, State0) ->
     };
 if_block_free_reg(Reg, State0) when ?IS_GPR(Reg) ->
     State0.
+
+%% Helper function to determine if a bit test can be optimized using lsls
+-spec bit_test_optimization(non_neg_integer()) ->
+    {low_bits_mask, non_neg_integer()} | no_optimization.
+% ?TERM_PRIMARY_MASK
+bit_test_optimization(16#3) -> {low_bits_mask, 2};
+%
+bit_test_optimization(16#7) -> {low_bits_mask, 3};
+% ?TERM_IMMED_TAG_MASK
+bit_test_optimization(16#F) -> {low_bits_mask, 4};
+% ?TERM_BOXED_TAG_MASK or ?TERM_IMMED2_TAG_MASK
+bit_test_optimization(16#3F) -> {low_bits_mask, 6};
+bit_test_optimization(_) -> no_optimization.
 
 -spec merge_used_regs(state(), [armv6m_register()]) -> state().
 merge_used_regs(#state{used_regs = UR0, available_regs = AvR0} = State, [
@@ -1757,40 +1751,39 @@ get_module_index(
         Reg
     }.
 
-op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, Reg, Reg, Val) ->
+and_(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    Reg,
+    Val
+) ->
+    I1 = jit_armv6m_asm:mov(Temp, Val),
+    I2 = jit_armv6m_asm:ands(Reg, Temp),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1}.
+
+or_(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    Reg,
+    Val
+) ->
+    I1 = jit_armv6m_asm:mov(Temp, Val),
+    I2 = jit_armv6m_asm:orrs(Reg, Temp),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1}.
+
+add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     Stream1 =
         try
-            I = jit_armv6m_asm:Op(Reg, Reg, Val),
+            I = jit_armv6m_asm:adds(Reg, Val),
             StreamModule:append(Stream0, I)
         catch
             error:{unencodable_immediate, Val} ->
                 [Temp | _] = State#state.available_regs,
                 I1 = jit_armv6m_asm:mov(Temp, Val),
-                I2 = jit_armv6m_asm:Op(Reg, Reg, Temp),
+                I2 = jit_armv6m_asm:adds(Reg, Temp),
                 StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
         end,
-    State#state{stream = Stream1};
-op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, RegA, RegB, Val) ->
-    Stream1 =
-        try
-            I = jit_armv6m_asm:Op(RegA, RegB, Val),
-            StreamModule:append(Stream0, I)
-        catch
-            error:{unencodable_immediate, Val} ->
-                MoveI = jit_armv6m_asm:mov(RegA, Val),
-                AndI = jit_armv6m_asm:Op(RegA, RegB, RegA),
-                StreamModule:append(Stream0, <<MoveI/binary, AndI/binary>>)
-        end,
     State#state{stream = Stream1}.
-
-and_(State, Reg, Val) ->
-    op_imm(State, and_, Reg, Reg, Val).
-
-or_(State, Reg, Val) ->
-    op_imm(State, orr, Reg, Reg, Val).
-
-add(State, Reg, Val) ->
-    op_imm(State, add, Reg, Reg, Val).
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_armv6m_asm:sub(Reg, Reg, Val),
