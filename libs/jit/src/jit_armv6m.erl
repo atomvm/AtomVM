@@ -1682,7 +1682,7 @@ increment_sp(
     Offset
 ) ->
     I1 = jit_armv6m_asm:ldr(Reg, ?Y_REGS),
-    I2 = jit_armv6m_asm:add(Reg, Reg, Offset * 4),
+    I2 = jit_armv6m_asm:adds(Reg, Offset * 4),
     I3 = jit_armv6m_asm:str(Reg, ?Y_REGS),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
