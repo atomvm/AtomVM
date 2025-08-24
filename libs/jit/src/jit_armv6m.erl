@@ -823,7 +823,7 @@ if_block_cond(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        available_regs = [Temp | _]
+        available_regs = [Temp | AT]
     } = State0,
     {Reg, '&', Mask, '!=', Val}
 ) when ?IS_GPR(Reg) ->
@@ -832,7 +832,7 @@ if_block_cond(
     I1 = jit_armv6m_asm:mov(Temp, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State1 = State0#state{stream = Stream1},
-    State2 = and_(State0, Temp, Mask),
+    State2 = and_(State1#state{available_regs = AT}, Temp, Mask),
     Stream2 = State2#state.stream,
     % Compare with value
     I2 = jit_armv6m_asm:cmp(Temp, Val),
@@ -840,7 +840,7 @@ if_block_cond(
     OffsetAfter = StreamModule:offset(Stream3),
     I3 = jit_armv6m_asm:bcc(eq, 0),
     Stream4 = StreamModule:append(Stream3, I3),
-    State3 = State1#state{stream = Stream4},
+    State3 = State2#state{stream = Stream4, available_regs = [Temp | State2#state.available_regs]},
     {State3, eq, OffsetAfter - OffsetBefore};
 if_block_cond(
     #state{
@@ -1219,51 +1219,9 @@ move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, N, Dest
 move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, N, Dest) when
     is_integer(N)
 ->
-    StreamModule = State0#state.stream_module,
-    Stream0 = State0#state.stream,
-    CurrentOffset = StreamModule:offset(Stream0),
-
-    %% Calculate where literal will be placed (must be word-aligned)
-    %% After LDR (2 bytes) + Branch (2 bytes) = 4 bytes from current position
-    OffsetAfterInstructions = CurrentOffset + 4,
-    %% Find next word-aligned position for literal
-    LiteralPosition =
-        case OffsetAfterInstructions rem 4 of
-            % Already aligned
-            0 -> OffsetAfterInstructions;
-            % Add 2 bytes padding to align
-            _ -> OffsetAfterInstructions + 2
-        end,
-    PaddingNeeded = LiteralPosition - OffsetAfterInstructions,
-
-    %% Calculate LDR PC-relative offset
-    %% PC = (current_instruction_address & ~3) + 4
-    LdrInstructionAddr = CurrentOffset,
-    LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
-    LiteralOffset = LiteralPosition - LdrPC,
-
-    %% Generate: ldr rTemp, [pc, #LiteralOffset]  ; Load from literal
-    I1 = jit_armv6m_asm:ldr(Temp, {pc, LiteralOffset}),
-    %% Calculate branch offset
-    %% Branch is at CurrentOffset + 2, need to jump past literal
-    BranchPosition = CurrentOffset + 2,
-    % After the 4-byte literal
-    TargetPosition = LiteralPosition + 4,
-    BranchOffset = TargetPosition - BranchPosition,
-    I2 = jit_armv6m_asm:b(BranchOffset),
-    %% Generate padding if needed (just zeros)
-    Padding =
-        case PaddingNeeded of
-            0 -> <<>>;
-            % 2 bytes of padding
-            2 -> <<0:16>>
-        end,
-    %% Generate: .word N  ; The 32-bit literal
-    I3 = <<N:32/little>>,
-
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, I3/binary>>),
-    State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
-    State1#state{available_regs = AR0};
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, N),
+    State2 = move_to_vm_register(State1, Temp, Dest),
+    State2#state{available_regs = AR0};
 % Source is a VM register
 move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {x_reg, extra}, Dest) ->
     I1 = jit_armv6m_asm:ldr(Temp, ?X_REG(?MAX_REG)),
@@ -1752,37 +1710,87 @@ get_module_index(
     }.
 
 and_(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
     Reg,
     Val
 ) ->
-    I1 = jit_armv6m_asm:mov(Temp, Val),
-    I2 = jit_armv6m_asm:ands(Reg, Temp),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1}.
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:ands(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{available_regs = [Temp | AT], stream = Stream2}.
 
 or_(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
+    #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
     Reg,
     Val
 ) ->
-    I1 = jit_armv6m_asm:mov(Temp, Val),
-    I2 = jit_armv6m_asm:orrs(Reg, Temp),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State#state{stream = Stream1}.
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:orrs(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{available_regs = [Temp | AT], stream = Stream2}.
 
-add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    Stream1 =
-        try
-            I = jit_armv6m_asm:adds(Reg, Val),
-            StreamModule:append(Stream0, I)
-        catch
-            error:{unencodable_immediate, Val} ->
-                [Temp | _] = State#state.available_regs,
-                I1 = jit_armv6m_asm:mov(Temp, Val),
-                I2 = jit_armv6m_asm:adds(Reg, Temp),
-                StreamModule:append(Stream0, <<I1/binary, I2/binary>>)
+add(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, Val) ->
+    try jit_armv6m_asm:adds(Reg, Val) of
+        I ->
+            Stream1 = StreamModule:append(Stream0, I),
+            State0#state{stream = Stream1}
+    catch
+        error:{unencodable_immediate, Val} ->
+            [Temp | AT] = State0#state.available_regs,
+            State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+            Stream1 = State1#state.stream,
+            I = jit_armv6m_asm:adds(Reg, Temp),
+            Stream2 = StreamModule:append(Stream1, I),
+            State1#state{available_regs = [Temp | AT], stream = Stream2}
+    end.
+
+mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
+    Val >= 0 andalso Val =< 255
+->
+    I = jit_armv6m_asm:mov(Reg, Val),
+    Stream1 = StreamModule:append(Stream0, I),
+    State#state{stream = Stream1};
+mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+    %% Use a literal pool with a branch instruction (branch-over pattern)
+    %% Calculate where literal will be placed (must be word-aligned)
+    %% After LDR (2 bytes) + Branch (2 bytes) = 4 bytes from current position
+    CurrentOffset = StreamModule:offset(Stream0),
+    OffsetAfterInstructions = CurrentOffset + 4,
+    %% Find next word-aligned position for literal
+    LiteralPosition =
+        case OffsetAfterInstructions rem 4 of
+            % Already aligned
+            0 -> OffsetAfterInstructions;
+            % Add 2 bytes padding to align
+            _ -> OffsetAfterInstructions + 2
         end,
+    PaddingNeeded = LiteralPosition - OffsetAfterInstructions,
+
+    %% Calculate LDR PC-relative offset
+    %% PC = (current_instruction_address & ~3) + 4
+    LdrInstructionAddr = CurrentOffset,
+    LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
+    LiteralOffset = LiteralPosition - LdrPC,
+
+    %% Generate: ldr rTemp, [pc, #LiteralOffset]  ; Load from literal
+    I1 = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
+    %% Calculate branch offset
+    %% Branch is at CurrentOffset + 2, need to jump past literal
+    BranchPosition = CurrentOffset + 2,
+    % After the 4-byte literal
+    TargetPosition = LiteralPosition + 4,
+    BranchOffset = TargetPosition - BranchPosition,
+    I2 = jit_armv6m_asm:b(BranchOffset),
+    %% Generate padding if needed (just zeros)
+    Padding =
+        case PaddingNeeded of
+            0 -> <<>>;
+            % 2 bytes of padding
+            2 -> <<0:16>>
+        end,
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
     State#state{stream = Stream1}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
