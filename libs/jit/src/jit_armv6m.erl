@@ -162,13 +162,12 @@
 -define(CTX_REG, r0).
 -define(JITSTATE_REG, r1).
 -define(NATIVE_INTERFACE_REG, r2).
-%% ARMv6-M uses 4-byte word size, so adjust all offsets
--define(Y_REGS, {?CTX_REG, 16#28}).
--define(X_REG(N), {?CTX_REG, 16#30 + (N * 4)}).
--define(CP, {?CTX_REG, 16#B8}).
--define(FP_REGS, {?CTX_REG, 16#C0}).
--define(BS, {?CTX_REG, 16#C8}).
--define(BS_OFFSET, {?CTX_REG, 16#D0}).
+-define(Y_REGS, {?CTX_REG, 16#14}).
+-define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
+-define(CP, {?CTX_REG, 16#5C}).
+-define(FP_REGS, {?CTX_REG, 16#60}).
+-define(BS, {?CTX_REG, 16#64}).
+-define(BS_OFFSET, {?CTX_REG, 16#68}).
 -define(JITSTATE_MODULE, {?JITSTATE_REG, 0}).
 -define(JITSTATE_CONTINUATION, {?JITSTATE_REG, 16#4}).
 -define(JITSTATE_REDUCTIONCOUNT, {?JITSTATE_REG, 16#8}).
