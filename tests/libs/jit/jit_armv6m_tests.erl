@@ -1471,7 +1471,7 @@ get_array_element_test_() ->
             ]
         end}.
 
-move_to_array_element_test_DISABLED_() ->
+move_to_array_element_test_() ->
     {setup,
         fun() ->
             ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
@@ -1480,80 +1480,88 @@ move_to_array_element_test_DISABLED_() ->
             [
                 %% move_to_array_element/4: x_reg to reg[x]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2),
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, 2),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9000907 	str	x7, [x8, #16]"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	609f      	str	r7, [r3, #8]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/4: x_reg to reg[reg]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, r9),
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, r4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "  0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	1c26      	adds	r6, r4, #0\n"
+                        "   4:	00b6      	lsls	r6, r6, #2\n"
+                        "   6:	519f      	str	r7, [r3, r6]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/4: ptr to reg[reg]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {ptr, r7}, r8, r9),
+                    State1 = ?BACKEND:move_to_array_element(State0, {ptr, r7}, r3, r4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f94000e7 	ldr	x7, [x7]\n"
-                        "   4:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                        "   0:	683f      	ldr	r7, [r7, #0]\n"
+                        "   2:	1c26      	adds	r6, r4, #0\n"
+                        "   4:	00b6      	lsls	r6, r6, #2\n"
+                        "   6:	519f      	str	r7, [r3, r6]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/4: y_reg to reg[reg]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {y_reg, 2}, r8, r9),
+                    State1 = ?BACKEND:move_to_array_element(State0, {y_reg, 2}, r3, r4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
-                        "   4:	f94008e7 	ldr	x7, [x7, #16]\n"
-                        "   8:	f8297907 	str	x7, [x8, x9, lsl #3]"
+                        "   0:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	68bf      	ldr	r7, [r7, #8]\n"
+                        "   4:	1c26      	adds	r6, r4, #0\n"
+                        "   6:	00b6      	lsls	r6, r6, #2\n"
+                        "   8:	519f      	str	r7, [r3, r6]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2, 1),
+                    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, 2, 1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9000907 	str	x7, [x8, #16]"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	609f      	str	r7, [r3, #8]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(8, State1, [r8, r9]),
-                    [r8, r9] = ?BACKEND:used_regs(State2),
-                    State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
+                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
+                    State2 = setelement(7, State1, [r3, r4]),
+                    [r3, r4] = ?BACKEND:used_regs(State2),
+                    State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
                     Dump = <<
-                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	9100052a 	add	x10, x9, #0x1\n"
-                        "   8:	f82a7907 	str	x7, [x8, x10, lsl #3]"
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	1c66      	adds	r6, r4, #1\n"
+                        "   4:	00b6      	lsls	r6, r6, #2\n"
+                        "   6:	519f      	str	r7, [r3, r6]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(8, State1, [r8, r9]),
-                    [r8, r9] = ?BACKEND:used_regs(State2),
-                    State3 = ?BACKEND:move_to_array_element(State2, 42, r8, r9, 1),
+                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
+                    State2 = setelement(7, State1, [r3, r4]),
+                    [r3, r4] = ?BACKEND:used_regs(State2),
+                    State3 = ?BACKEND:move_to_array_element(State2, 42, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
                     Dump = <<
-                        "   0:	d2800547 	mov	x7, #0x2a                  	// #42\n"
-                        "   4:	9100052a 	add	x10, x9, #0x1\n"
-                        "   8:	f82a7907 	str	x7, [x8, x10, lsl #3]"
+                        "   0:	272a      	movs	r7, #42	; 0x2a\n"
+                        "   2:	1c66      	adds	r6, r4, #1\n"
+                        "   4:	00b6      	lsls	r6, r6, #2\n"
+                        "   6:	519f      	str	r7, [r3, r6]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
