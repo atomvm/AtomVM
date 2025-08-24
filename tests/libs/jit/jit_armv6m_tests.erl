@@ -711,11 +711,12 @@ if_block_test_() ->
                     Dump = <<
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                        "   4:	250f      	movs	r5, #15\n"
-                        "   6:	402d      	ands	r5, r5\n"
-                        "   8:	2d0f      	cmp	r5, #15\n"
-                        "   a:	d000      	beq.n	0xe\n"
-                        "   c:	3602      	adds	r6, #2"
+                        "   4:	1c3d      	adds	r5, r7, #0\n"
+                        "   6:	240f      	movs	r4, #15\n"
+                        "   8:	4025      	ands	r5, r4\n"
+                        "   a:	2d0f      	cmp	r5, #15\n"
+                        "   c:	d000      	beq.n	0x10\n"
+                        "   e:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
@@ -1045,7 +1046,7 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
         MMod:jump_to_label(BSt0, Label)
     end).
 
-is_number_test_DISABLED() ->
+is_number_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
     Arg1 = {x_reg, 0},
@@ -1075,23 +1076,33 @@ is_number_test_DISABLED() ->
     State4 = ?BACKEND:update_branches(State3, Labels),
     Stream = ?BACKEND:stream(State4),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	92400ce8 	and	x8, x7, #0xf\n"
-        "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	540001c0 	b.eq	0x44  // b.none\n"
-        "  10:	924004e8 	and	x8, x7, #0x3\n"
-        "  14:	f100091f 	cmp	x8, #0x2\n"
-        "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	1400004a 	b	0x144\n"
-        "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e8 	and	x8, x7, #0x3f\n"
-        "  2c:	f100211f 	cmp	x8, #0x8\n"
-        "  30:	540000a0 	b.eq	0x44  // b.none\n"
-        "  34:	924014e7 	and	x7, x7, #0x3f\n"
-        "  38:	f10060ff 	cmp	x7, #0x18\n"
-        "  3c:	54000040 	b.eq	0x44  // b.none\n"
-        "  40:	14000041 	b	0x144"
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	1c3e      	adds	r6, r7, #0\n"
+        "   4:	250f      	movs	r5, #15\n"
+        "   6:	402e      	ands	r6, r5\n"
+        "   8:	2e0f      	cmp	r6, #15\n"
+        "   a:	d015      	beq.n	0x38\n"
+        "   c:	1c3e      	adds	r6, r7, #0\n"
+        "   e:	2503      	movs	r5, #3\n"
+        "  10:	402e      	ands	r6, r5\n"
+        "  12:	2e02      	cmp	r6, #2\n"
+        "  14:	d000      	beq.n	0x18\n"
+        "  16:	e08f      	b.n	0x138\n"
+        "  18:	4e00      	ldr	r6, [pc, #0]	; (0x1c)\n"
+        "  1a:	e001      	b.n	0x20\n"
+        "  1c:	fffc ffff 			; <UNDEFINED> instruction: 0xfffcffff\n"
+        "  20:	4037      	ands	r7, r6\n"
+        "  22:	683f      	ldr	r7, [r7, #0]\n"
+        "  24:	1c3e      	adds	r6, r7, #0\n"
+        "  26:	253f      	movs	r5, #63	; 0x3f\n"
+        "  28:	402e      	ands	r6, r5\n"
+        "  2a:	2e08      	cmp	r6, #8\n"
+        "  2c:	d004      	beq.n	0x38\n"
+        "  2e:	263f      	movs	r6, #63	; 0x3f\n"
+        "  30:	4037      	ands	r7, r6\n"
+        "  32:	2f18      	cmp	r7, #24\n"
+        "  34:	d000      	beq.n	0x38\n"
+        "  36:	e07f      	b.n	0x138"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1895,7 +1906,7 @@ dump_to_bin0(<<H1, H2, H3, H4, $\s, H5, H6, H7, H8, Sp, Rest/binary>>, hex, Acc)
 ->
     InstrA = list_to_integer([H1, H2, H3, H4], 16),
     InstrB = list_to_integer([H5, H6, H7, H8], 16),
-    dump_to_bin0(Rest, instr, [<<InstrA:16/little>>, <<InstrB:16/little>> | Acc]);
+    dump_to_bin0(Rest, instr, [<<InstrB:16/little>>, <<InstrA:16/little>> | Acc]);
 %% Handle 16-bit ARM32 Thumb instructions (4 hex digits)
 dump_to_bin0(<<H1, H2, H3, H4, Sp, Rest/binary>>, hex, Acc) when
     (Sp =:= $\t orelse Sp =:= $\s) andalso
