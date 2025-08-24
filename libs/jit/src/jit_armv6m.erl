@@ -934,7 +934,7 @@ merge_used_regs(State, []) ->
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
-    I = jit_armv6m_asm:lsr(Reg, Reg, Shift),
+    I = jit_armv6m_asm:lsrs(Reg, Reg, Shift),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
 
@@ -949,7 +949,7 @@ shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg,
 shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
 ->
-    I = jit_armv6m_asm:lsl(Reg, Reg, Shift),
+    I = jit_armv6m_asm:lsls(Reg, Reg, Shift),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
 
