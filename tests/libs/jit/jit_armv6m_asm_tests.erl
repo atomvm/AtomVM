@@ -68,6 +68,25 @@ subs_test_() ->
         )
     ].
 
+sub_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#B082:16/little>>, "sub sp, #8"), jit_armv6m_asm:sub(sp, 8)
+        ),
+        ?_assertEqual(
+            asm(<<16#B082:16/little>>, "sub sp, sp, #8"), jit_armv6m_asm:sub(sp, sp, 8)
+        ),
+        ?_assertEqual(
+            asm(<<16#B080:16/little>>, "sub sp, #0"), jit_armv6m_asm:sub(sp, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#B084:16/little>>, "sub sp, #16"), jit_armv6m_asm:sub(sp, 16)
+        ),
+        ?_assertEqual(
+            asm(<<16#B0FF:16/little>>, "sub sp, #508"), jit_armv6m_asm:sub(sp, 508)
+        )
+    ].
+
 muls_test_() ->
     [
         ?_assertEqual(
@@ -206,6 +225,18 @@ mov_test_() ->
         ?_assertEqual(
             asm(<<16#46c8:16/little>>, "mov r8, r9"),
             jit_armv6m_asm:mov(r8, r9)
+        ),
+        ?_assertEqual(
+            asm(<<16#46c0:16/little>>, "mov r8, r8"),
+            jit_armv6m_asm:mov(r8, r8)
+        ),
+        ?_assertEqual(
+            asm(<<16#4619:16/little>>, "mov r1, r3"),
+            jit_armv6m_asm:mov(r1, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#46c0:16/little>>, "nop"),
+            jit_armv6m_asm:nop()
         )
     ].
 
@@ -293,6 +324,42 @@ orrs_test_() ->
         ?_assertEqual(
             asm(<<16#431a:16/little>>, "orrs r2, r3"),
             jit_armv6m_asm:orrs(r2, r3)
+        )
+    ].
+
+bics_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#4391:16/little>>, "bics r1, r2"),
+            jit_armv6m_asm:bics(r1, r2)
+        ),
+        ?_assertEqual(
+            asm(<<16#43a3:16/little>>, "bics r3, r4"),
+            jit_armv6m_asm:bics(r3, r4)
+        )
+    ].
+
+negs_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#4251:16/little>>, "negs r1, r2"),
+            jit_armv6m_asm:negs(r1, r2)
+        ),
+        ?_assertEqual(
+            asm(<<16#4263:16/little>>, "negs r3, r4"),
+            jit_armv6m_asm:negs(r3, r4)
+        )
+    ].
+
+rsbs_test_() ->
+    [
+        ?_assertEqual(
+            asm(<<16#4251:16/little>>, "rsbs r1, r2, 0"),
+            jit_armv6m_asm:rsbs(r1, r2, 0)
+        ),
+        ?_assertEqual(
+            asm(<<16#4263:16/little>>, "rsbs r3, r4, 0"),
+            jit_armv6m_asm:rsbs(r3, r4, 0)
         )
     ].
 
