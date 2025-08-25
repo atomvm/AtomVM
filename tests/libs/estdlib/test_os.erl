@@ -29,12 +29,22 @@ test() ->
     ok.
 
 test_os_getenv() ->
-    true =
+    ok =
         case atomvm:platform() of
-            generic_unix ->
-                is_list(os:getenv("PATH"));
-            _ ->
-                true
+            generic_unix -> validate_path(os:getenv("PATH"));
+            _ -> ok
         end,
-    false = os:getenv("NON_EXISTENT_PATH_VAR"),
+    false = os:getenv("NON_EXISTENT_VAR"),
+    false = os:getenv("ZAŻÓŁĆ_GĘŚLĄ_JAŹŃ"),
+    false = os:getenv(""),
+    ok =
+        try
+            os:getenv(not_a_string)
+        catch
+            error:badarg -> ok;
+            Class:Reason:Stacktrace -> erlang:raise(Class, Reason, Stacktrace)
+        end,
     ok.
+
+validate_path("/" ++ _Rest) -> ok;
+validate_path(_String) -> error.

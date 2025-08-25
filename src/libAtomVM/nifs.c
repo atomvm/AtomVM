@@ -1818,47 +1818,41 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
     int ok;
     const char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
     if (UNLIKELY(!ok)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
 #ifndef AVM_NO_SMP
     smp_spinlock_lock(&ctx->global->env_spinlock);
 #endif
 
-    const char *env_var_value_tmp = getenv(env_var);
+    char *env_var_value = getenv(env_var);
 
-    if (IS_NULL_PTR(env_var_value_tmp)) {
-        result = FALSE_ATOM;
-        goto nif_os_getenv_1_unlock_return;
+    if (IS_NULL_PTR(env_var_value)) {
+#ifndef AVM_NO_SMP
+        smp_spinlock_unlock(&ctx->global->env_spinlock);
+#endif
+        return FALSE_ATOM;
     }
 
-    size_t env_value_len = strlen(env_var_value_tmp);
-    char *env_var_value = malloc(env_value_len + 1);
-
-    if (UNLIKELY(IS_NULL_PTR(env_var_value))) {
-        result = OUT_OF_MEMORY_ATOM;
-        goto nif_os_getenv_1_unlock_return;
-    }
-
-    strcpy(env_var_value, env_var_value_tmp);
+    env_var_value = strdup(env_var_value);
 
 #ifndef AVM_NO_SMP
     smp_spinlock_unlock(&ctx->global->env_spinlock);
 #endif
 
+    if (UNLIKELY(IS_NULL_PTR(env_var_value))) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    size_t env_value_len = strlen(env_var_value);
+
     if (UNLIKELY(memory_ensure_free_opt(ctx, LIST_SIZE(env_value_len, 1), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(env_var_value);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     result = interop_bytes_to_list(env_var_value, env_value_len, &ctx->heap);
     free(env_var_value);
-    return result;
-
-nif_os_getenv_1_unlock_return:
-#ifndef AVM_NO_SMP
-    smp_spinlock_unlock(&ctx->global->env_spinlock);
-#endif
-
     return result;
 }
 

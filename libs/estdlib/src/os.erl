@@ -27,6 +27,6 @@
 %% @doc     Get an environment variable value if defined
 %% @end
 %%-----------------------------------------------------------------------------
--spec getenv(Name :: string()) -> string() | false.
+-spec getenv(Name :: nonempty_string()) -> nonempty_string() | false.
 getenv(_VarName) ->
     erlang:nif_error(undefined).
