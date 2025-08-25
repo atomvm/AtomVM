@@ -1816,7 +1816,7 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(env_var_list, term_is_list);
 
     int ok;
-    const char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
+    char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
     if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -1826,6 +1826,7 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
 #endif
 
     char *env_var_value = getenv(env_var);
+    free(env_var);
 
     if (IS_NULL_PTR(env_var_value)) {
 #ifndef AVM_NO_SMP
