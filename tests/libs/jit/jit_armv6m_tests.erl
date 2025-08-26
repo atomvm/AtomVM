@@ -139,7 +139,7 @@ call_primitive_6_args_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_primitive_extended_regs_test_DISABLED() ->
+call_primitive_extended_regs_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, RegA} = ?BACKEND:call_primitive(State0, ?PRIM_EXTENDED_REGISTER_PTR, [ctx, 19]),
     {State2, RegB} = ?BACKEND:call_primitive(State1, ?PRIM_EXTENDED_REGISTER_PTR, [ctx, 20]),
@@ -151,50 +151,34 @@ call_primitive_extended_regs_test_DISABLED() ->
     State6 = ?BACKEND:free_native_registers(State5, [ResultReg, {ptr, RegC}]),
     ?BACKEND:assert_all_native_free(State6),
     Stream = ?BACKEND:stream(State6),
-    Dump =
-        <<
-            "\n"
-            "   0:	f9404850 	ldr	x16, [x2, #144]\n"
-            "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "   c:	d2800261 	mov	x1, #0x13                  	// #19\n"
-            "  10:	d63f0200 	blr	x16\n"
-            "  14:	aa0003e7 	mov	x7, x0\n"
-            "  18:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  1c:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  20:	f9404850 	ldr	x16, [x2, #144]\n"
-            "  24:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "  28:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "  2c:	f81f0fe7 	str	x7, [sp, #-16]!\n"
-            "  30:	d2800281 	mov	x1, #0x14                  	// #20\n"
-            "  34:	d63f0200 	blr	x16\n"
-            "  38:	aa0003e8 	mov	x8, x0\n"
-            "  3c:	f84107e7 	ldr	x7, [sp], #16\n"
-            "  40:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  44:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  48:	f9404850 	ldr	x16, [x2, #144]\n"
-            "  4c:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "  50:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "  54:	a9bf1fe8 	stp	x8, x7, [sp, #-16]!\n"
-            "  58:	d2800261 	mov	x1, #0x13                  	// #19\n"
-            "  5c:	d63f0200 	blr	x16\n"
-            "  60:	aa0003e9 	mov	x9, x0\n"
-            "  64:	a8c11fe8 	ldp	x8, x7, [sp], #16\n"
-            "  68:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  6c:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  70:	f9403450 	ldr	x16, [x2, #104]\n"
-            "  74:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "  78:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "  7c:	f81f0fe9 	str	x9, [sp, #-16]!\n"
-            "  80:	f94000e1 	ldr	x1, [x7]\n"
-            "  84:	f9400102 	ldr	x2, [x8]\n"
-            "  88:	d63f0200 	blr	x16\n"
-            "  8c:	aa0003e7 	mov	x7, x0\n"
-            "  90:	f84107e9 	ldr	x9, [sp], #16\n"
-            "  94:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  98:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  9c:	f9000127 	str	x7, [x9]\n"
-        >>,
+    Dump = <<
+        "   0:	6c97      	ldr	r7, [r2, #72]	; 0x48\n"
+        "   2:	b405      	push	{r0, r2}\n"
+        "   4:	2113      	movs	r1, #19\n"
+        "   6:	47b8      	blx	r7\n"
+        "   8:	4607      	mov	r7, r0\n"
+        "   a:	bc05      	pop	{r0, r2}\n"
+        "   c:	6c96      	ldr	r6, [r2, #72]	; 0x48\n"
+        "   e:	b485      	push	{r0, r2, r7}\n"
+        "  10:	2114      	movs	r1, #20\n"
+        "  12:	47b0      	blx	r6\n"
+        "  14:	4606      	mov	r6, r0\n"
+        "  16:	bc85      	pop	{r0, r2, r7}\n"
+        "  18:	6c95      	ldr	r5, [r2, #72]	; 0x48\n"
+        "  1a:	b4c5      	push	{r0, r2, r6, r7}\n"
+        "  1c:	2113      	movs	r1, #19\n"
+        "  1e:	47a8      	blx	r5\n"
+        "  20:	4605      	mov	r5, r0\n"
+        "  22:	bcc5      	pop	{r0, r2, r6, r7}\n"
+        "  24:	6b54      	ldr	r4, [r2, #52]	; 0x34\n"
+        "  26:	b425      	push	{r0, r2, r5}\n"
+        "  28:	6839      	ldr	r1, [r7, #0]\n"
+        "  2a:	6832      	ldr	r2, [r6, #0]\n"
+        "  2c:	47a0      	blx	r4\n"
+        "  2e:	4604      	mov	r4, r0\n"
+        "  30:	bc25      	pop	{r0, r2, r5}\n"
+        "  32:	602c      	str	r4, [r5, #0]"
+    >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 call_ext_only_test() ->
@@ -346,7 +330,7 @@ call_primitive_last_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-return_if_not_equal_to_ctx_test_DISABLED_() ->
+return_if_not_equal_to_ctx_test_() ->
     {setup,
         fun() ->
             ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
@@ -364,17 +348,16 @@ return_if_not_equal_to_ctx_test_DISABLED_() ->
                     Stream = ?BACKEND:stream(State2),
                     Dump =
                         <<
-                            "   0:	f9405450 	ldr	x16, [x2, #168]\n"
-                            "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-                            "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-                            "   c:	d63f0200 	blr	x16\n"
-                            "  10:	aa0003e7 	mov	x7, x0\n"
-                            "  14:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-                            "  18:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-                            "  1c:	eb0000ff 	cmp	x7, x0\n"
-                            "  20:	54000060 	b.eq	0x2c  // b.none\n"
-                            "  24:	aa0703e0 	mov	x0, x7\n"
-                            "  28:	d65f03c0 	ret"
+                            "   0:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
+                            "   2:	b405      	push	{r0, r2}\n"
+                            "   4:	9900      	ldr	r1, [sp, #0]\n"
+                            "   6:	47b8      	blx	r7\n"
+                            "   8:	4607      	mov	r7, r0\n"
+                            "   a:	bc05      	pop	{r0, r2}\n"
+                            "   c:	4287      	cmp	r7, r0\n"
+                            "   e:	d001      	beq.n	0x14\n"
+                            "  10:	4638      	mov	r0, r7\n"
+                            "  12:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
@@ -391,18 +374,17 @@ return_if_not_equal_to_ctx_test_DISABLED_() ->
                     Stream = ?BACKEND:stream(State3),
                     Dump =
                         <<
-                            "   0:	f9405450 	ldr	x16, [x2, #168]\n"
-                            "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-                            "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-                            "   c:	d63f0200 	blr	x16\n"
-                            "  10:	aa0003e7 	mov	x7, x0\n"
-                            "  14:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-                            "  18:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-                            "  1c:	aa0703e8 	mov	x8, x7\n"
-                            "  20:	eb00011f 	cmp	x8, x0\n"
-                            "  24:	54000060 	b.eq	0x30  // b.none\n"
-                            "  28:	aa0803e0 	mov	x0, x8\n"
-                            "  2c:	d65f03c0 	ret"
+                            "   0:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
+                            "   2:	b405      	push	{r0, r2}\n"
+                            "   4:	9900      	ldr	r1, [sp, #0]\n"
+                            "   6:	47b8      	blx	r7\n"
+                            "   8:	4607      	mov	r7, r0\n"
+                            "   a:	bc05      	pop	{r0, r2}\n"
+                            "   c:	463e      	mov	r6, r7\n"
+                            "   e:	4286      	cmp	r6, r0\n"
+                            "  10:	d001      	beq.n	0x16\n"
+                            "  12:	4630      	mov	r0, r6\n"
+                            "  14:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
@@ -1075,7 +1057,7 @@ shift_left_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_only_or_schedule_next_and_label_relocation_test_DISABLED() ->
+call_only_or_schedule_next_and_label_relocation_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 2),
     Offset1 = ?BACKEND:offset(State1),
@@ -1089,28 +1071,45 @@ call_only_or_schedule_next_and_label_relocation_test_DISABLED() ->
     Stream = ?BACKEND:stream(State5),
     Dump =
         <<
-            "   0:	1400000d 	b	0x34\n"
-            "   4:	14000002 	b	0xc\n"
-            "   8:	14000009 	b	0x2c\n"
-            "   c:	b9401027 	ldr	w7, [x1, #16]\n"
-            "  10:	f10004e7 	subs	x7, x7, #0x1\n"
-            "  14:	b9001027 	str	w7, [x1, #16]\n"
-            "  18:	540000a1 	b.ne	0x2c  // b.any\n"
-            "  1c:	10000087 	adr	x7, 0x2c\n"
-            "  20:	f9000427 	str	x7, [x1, #8]\n"
-            "  24:	f9400847 	ldr	x7, [x2, #16]\n"
-            "  28:	d61f00e0 	br	x7\n"
-            "  2c:	f9400047 	ldr	x7, [x2]\n"
-            "  30:	d61f00e0 	br	x7\n"
-            "  34:	f9400447 	ldr	x7, [x2, #8]\n"
-            "  38:	d61f00e0 	br	x7"
+            "   0:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   2:	e018      	b.n	0x36\n"
+            "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   6:	e001      	b.n	0xc\n"
+            "   8:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   a:	e00f      	b.n	0x2c\n"
+            "   c:	9e00      	ldr	r6, [sp, #0]\n"
+            "   e:	68b7      	ldr	r7, [r6, #8]\n"
+            "  10:	3f01      	subs	r7, #1\n"
+            "  12:	60b7      	str	r7, [r6, #8]\n"
+            "  14:	d10a      	bne.n	0x2c\n"
+            "  16:	9e00      	ldr	r6, [sp, #0]\n"
+            "  18:	a701      	add	r7, pc, #4	; (adr r7, 0x20)\n"
+            "  1a:	6077      	str	r7, [r6, #4]\n"
+            "  1c:	e001      	b.n	0x22\n"
+            "  1e:	0000      	movs	r0, r0\n"
+            "  20:	e7f2      	b.n	0x8\n"
+            "  22:	6897      	ldr	r7, [r2, #8]\n"
+            "  24:	9e05      	ldr	r6, [sp, #20]\n"
+            "  26:	9705      	str	r7, [sp, #20]\n"
+            "  28:	46b6      	mov	lr, r6\n"
+            "  2a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  2c:	6817      	ldr	r7, [r2, #0]\n"
+            "  2e:	9e05      	ldr	r6, [sp, #20]\n"
+            "  30:	9705      	str	r7, [sp, #20]\n"
+            "  32:	46b6      	mov	lr, r6\n"
+            "  34:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  36:	6857      	ldr	r7, [r2, #4]\n"
+            "  38:	9e05      	ldr	r6, [sp, #20]\n"
+            "  3a:	9705      	str	r7, [sp, #20]\n"
+            "  3c:	46b6      	mov	lr, r6\n"
+            "  3e:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_bif_with_large_literal_integer_test_DISABLED() ->
+call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, FuncPtr} = ?BACKEND:call_primitive(State0, 8, [jit_state, 2]),
-    {State2, ArgReg} = ?BACKEND:call_primitive(State1, 15, [ctx, 9208452466117618637]),
+    {State2, ArgReg} = ?BACKEND:call_primitive(State1, 15, [ctx, 998238357]),
     {State3, ResultReg} = ?BACKEND:call_func_ptr(State2, {free, FuncPtr}, [
         ctx, 0, 1, {free, {x_reg, 0}}, {free, ArgReg}
     ]),
@@ -1123,43 +1122,40 @@ call_bif_with_large_literal_integer_test_DISABLED() ->
     Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:	f9402050 	ldr	x16, [x2, #64]\n"
-            "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "   c:	aa0103e0 	mov	x0, x1\n"
-            "  10:	d2800041 	mov	x1, #0x2                   	// #2\n"
-            "  14:	d63f0200 	blr	x16\n"
-            "  18:	aa0003e7 	mov	x7, x0\n"
-            "  1c:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  20:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  24:	f9403c50 	ldr	x16, [x2, #120]\n"
-            "  28:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "  2c:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "  30:	f81f0fe7 	str	x7, [sp, #-16]!\n"
-            "  34:	d29579a1 	mov	x1, #0xabcd                	// #43981\n"
-            "  38:	f2b7c041 	movk	x1, #0xbe02, lsl #16\n"
-            "  3c:	f2dfd741 	movk	x1, #0xfeba, lsl #32\n"
-            "  40:	f2eff941 	movk	x1, #0x7fca, lsl #48\n"
-            "  44:	d63f0200 	blr	x16\n"
-            "  48:	aa0003e8 	mov	x8, x0\n"
-            "  4c:	f84107e7 	ldr	x7, [sp], #16\n"
-            "  50:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  54:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  58:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
-            "  5c:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
-            "  60:	d2800001 	mov	x1, #0x0                   	// #0\n"
-            "  64:	d2800022 	mov	x2, #0x1                   	// #1\n"
-            "  68:	f9401803 	ldr	x3, [x0, #48]\n"
-            "  6c:	aa0803e4 	mov	x4, x8\n"
-            "  70:	d63f00e0 	blr	x7\n"
-            "  74:	aa0003e7 	mov	x7, x0\n"
-            "  78:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
-            "  7c:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
-            "  80:	b5000087 	cbnz	x7, 0x90\n"
-            "  84:	f9401847 	ldr	x7, [x2, #48]\n"
-            "  88:	d2801102 	mov	x2, #0x88                  	// #136\n"
-            "  8c:	d61f00e0 	br	x7\n"
-            "  90:	f9001807 	str	x7, [x0, #48]"
+            "   0:	6a17      	ldr	r7, [r2, #32]\n"
+            "   2:	b405      	push	{r0, r2}\n"
+            "   4:	9800      	ldr	r0, [sp, #0]\n"
+            "   6:	2102      	movs	r1, #2\n"
+            "   8:	47b8      	blx	r7\n"
+            "   a:	4607      	mov	r7, r0\n"
+            "   c:	bc05      	pop	{r0, r2}\n"
+            "   e:	6bd6      	ldr	r6, [r2, #60]	; 0x3c\n"
+            "  10:	b485      	push	{r0, r2, r7}\n"
+            "  12:	4901      	ldr	r1, [pc, #4]	; (0x18)\n"
+            "  14:	e002      	b.n	0x1c\n"
+            "  16:	0000      	movs	r0, r0\n"
+            "  18:	e895 3b7f 	ldmia.w	r5, {r0, r1, r2, r3, r4, r5, r6, r8, r9, fp, ip, sp}\n"
+            "  1c:	47b0      	blx	r6\n"
+            "  1e:	4606      	mov	r6, r0\n"
+            "  20:	bc85      	pop	{r0, r2, r7}\n"
+            "  22:	b405      	push	{r0, r2}\n"
+            "  24:	b082      	sub	sp, #8\n"
+            "  26:	9600      	str	r6, [sp, #0]\n"
+            "  28:	2100      	movs	r1, #0\n"
+            "  2a:	2201      	movs	r2, #1\n"
+            "  2c:	6983      	ldr	r3, [r0, #24]\n"
+            "  2e:	47b8      	blx	r7\n"
+            "  30:	4607      	mov	r7, r0\n"
+            "  32:	bc05      	pop	{r0, r2}\n"
+            "  34:	2f00      	cmp	r7, #0\n"
+            "  36:	d105      	bne.n	0x44\n"
+            "  38:	6997      	ldr	r7, [r2, #24]\n"
+            "  3a:	223a      	movs	r2, #58	; 0x3a\n"
+            "  3c:	9e05      	ldr	r6, [sp, #20]\n"
+            "  3e:	9705      	str	r7, [sp, #20]\n"
+            "  40:	46b6      	mov	lr, r6\n"
+            "  42:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  44:	6187      	str	r7, [r0, #24]"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1323,36 +1319,53 @@ is_boolean_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_ext_test_DISABLED() ->
+call_ext_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     State2 = ?BACKEND:call_primitive_with_cp(State1, 4, [ctx, jit_state, 2, 5, -1]),
     ?BACKEND:assert_all_native_free(State2),
     Stream = ?BACKEND:stream(State2),
     Dump = <<
-        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
-        "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	b9001027 	str	w7, [x1, #16]\n"
-        "   c:	540000a1 	b.ne	0x20  // b.any\n"
-        "  10:	10000087 	adr	x7, 0x20\n"
-        "  14:	f9000427 	str	x7, [x1, #8]\n"
-        "  18:	f9400847 	ldr	x7, [x2, #16]\n"
-        "  1c:	d61f00e0 	br	x7\n"
-        "  20:	f9400027 	ldr	x7, [x1]\n"
-        "  24:	b94000e7 	ldr	w7, [x7]\n"
-        "  28:	d3689ce7 	lsl	x7, x7, #24\n"
-        "  2c:	d2802610 	mov	x16, #0x130                 	// #304\n"
-        "  30:	aa1000e7 	orr	x7, x7, x16\n"
-        "  34:	f9005c07 	str	x7, [x0, #184]\n"
-        "  38:	f9401047 	ldr	x7, [x2, #32]\n"
-        "  3c:	d2800042 	mov	x2, #0x2                   	// #2\n"
-        "  40:	d28000a3 	mov	x3, #0x5                   	// #5\n"
-        "  44:	92800004 	mov	x4, #0xffffffffffffffff    	// #-1\n"
-        "  48:	d61f00e0 	br	x7"
+        "   0:	9e00      	ldr	r6, [sp, #0]\n"
+        "   2:	68b7      	ldr	r7, [r6, #8]\n"
+        "   4:	3f01      	subs	r7, #1\n"
+        "   6:	60b7      	str	r7, [r6, #8]\n"
+        "   8:	d107      	bne.n	0x1a\n"
+        "   a:	a703      	add	r7, pc, #12	; (adr r7, 0x18)\n"
+        "   c:	6077      	str	r7, [r6, #4]\n"
+        "   e:	6897      	ldr	r7, [r2, #8]\n"
+        "  10:	9e05      	ldr	r6, [sp, #20]\n"
+        "  12:	9705      	str	r7, [sp, #20]\n"
+        "  14:	46b6      	mov	lr, r6\n"
+        "  16:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  18:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  1a:	9e00      	ldr	r6, [sp, #0]\n"
+        "  1c:	6837      	ldr	r7, [r6, #0]\n"
+        "  1e:	683f      	ldr	r7, [r7, #0]\n"
+        "  20:	063f      	lsls	r7, r7, #24\n"
+        "  22:	4d07      	ldr	r5, [pc, #28]	; (0x40)\n"
+        "  24:	432f      	orrs	r7, r5\n"
+        "  26:	65c7      	str	r7, [r0, #92]	; 0x5c\n"
+        "  28:	6917      	ldr	r7, [r2, #16]\n"
+        "  2a:	2202      	movs	r2, #2\n"
+        "  2c:	2305      	movs	r3, #5\n"
+        "  2e:	2500      	movs	r5, #0\n"
+        "  30:	426d      	negs	r5, r5\n"
+        "  32:	4639      	mov	r1, r7\n"
+        "  34:	9f05      	ldr	r7, [sp, #20]\n"
+        "  36:	46be      	mov	lr, r7\n"
+        "  38:	9f04      	ldr	r7, [sp, #16]\n"
+        "  3a:	9504      	str	r5, [sp, #16]\n"
+        "  3c:	9105      	str	r1, [sp, #20]\n"
+        "  3e:	9e03      	ldr	r6, [sp, #12]\n"
+        "  40:	bd32      	pop	{r1, r4, r5, pc}\n"
+        "  42:	0000      	movs	r0, r0\n"
+        "  44:	0108      	lsls	r0, r1, #4\n"
+        "  46:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-call_fun_test_DISABLED() ->
+call_fun_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
     FuncReg = {x_reg, 0},
@@ -1382,44 +1395,82 @@ call_fun_test_DISABLED() ->
     ?BACKEND:assert_all_native_free(State9),
     Stream = ?BACKEND:stream(State9),
     Dump = <<
-        "   0:	b9401027 	ldr	w7, [x1, #16]\n"
-        "   4:	f10004e7 	subs	x7, x7, #0x1\n"
-        "   8:	b9001027 	str	w7, [x1, #16]\n"
-        "   c:	540000a1 	b.ne	0x20  // b.any\n"
-        "  10:	10000087 	adr	x7, 0x20\n"
-        "  14:	f9000427 	str	x7, [x1, #8]\n"
-        "  18:	f9400847 	ldr	x7, [x2, #16]\n"
-        "  1c:	d61f00e0 	br	x7\n"
-        "  20:	f9401807 	ldr	x7, [x0, #48]\n"
-        "  24:	aa0703e8 	mov	x8, x7\n"
-        "  28:	92400509 	and	x9, x8, #0x3\n"
-        "  2c:	f100093f 	cmp	x9, #0x2\n"
-        "  30:	540000c0 	b.eq	0x48  // b.none\n"
-        "  34:	f9404c47 	ldr	x7, [x2, #152]\n"
-        "  38:	d2800702 	mov	x2, #0x38                  	// #56\n"
-        "  3c:	d2804163 	mov	x3, #0x20b                 	// #523\n"
-        "  40:	aa0803e4 	mov	x4, x8\n"
-        "  44:	d61f00e0 	br	x7\n"
-        "  48:	927ef508 	and	x8, x8, #0xfffffffffffffffc\n"
-        "  4c:	f9400108 	ldr	x8, [x8]\n"
-        "  50:	92401509 	and	x9, x8, #0x3f\n"
-        "  54:	f100513f 	cmp	x9, #0x14\n"
-        "  58:	540000c0 	b.eq	0x70  // b.none\n"
-        "  5c:	f9404c47 	ldr	x7, [x2, #152]\n"
-        "  60:	d2800c02 	mov	x2, #0x60                  	// #96\n"
-        "  64:	d2804163 	mov	x3, #0x20b                 	// #523\n"
-        "  68:	aa0803e4 	mov	x4, x8\n"
-        "  6c:	d61f00e0 	br	x7\n"
-        "  70:	f9400028 	ldr	x8, [x1]\n"
-        "  74:	b9400108 	ldr	w8, [x8]\n"
-        "  78:	d3689d08 	lsl	x8, x8, #24\n"
-        "  7c:	d2804c10 	mov	x16, #0x260                 	// #608\n"
-        "  80:	aa100108 	orr	x8, x8, x16\n"
-        "  84:	f9005c08 	str	x8, [x0, #184]\n"
-        "  88:	f9408048 	ldr	x8, [x2, #256]\n"
-        "  8c:	aa0703e2 	mov	x2, x7\n"
-        "  90:	d2800003 	mov	x3, #0x0                   	// #0\n"
-        "  94:	d61f0100 	br	x8"
+        "   0:	9e00      	ldr	r6, [sp, #0]\n"
+        "   2:	68b7      	ldr	r7, [r6, #8]\n"
+        "   4:	3f01      	subs	r7, #1\n"
+        "   6:	60b7      	str	r7, [r6, #8]\n"
+        "   8:	d107      	bne.n	0x1a\n"
+        "   a:	a703      	add	r7, pc, #12	; (adr r7, 0x18)\n"
+        "   c:	6077      	str	r7, [r6, #4]\n"
+        "   e:	6897      	ldr	r7, [r2, #8]\n"
+        "  10:	9e05      	ldr	r6, [sp, #20]\n"
+        "  12:	9705      	str	r7, [sp, #20]\n"
+        "  14:	46b6      	mov	lr, r6\n"
+        "  16:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  18:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  1a:	6987      	ldr	r7, [r0, #24]\n"
+        "  1c:	463e      	mov	r6, r7\n"
+        "  1e:	4635      	mov	r5, r6\n"
+        "  20:	2403      	movs	r4, #3\n"
+        "  22:	4025      	ands	r5, r4\n"
+        "  24:	2d02      	cmp	r5, #2\n"
+        "  26:	d00e      	beq.n	0x46\n"
+        "  28:	6cd7      	ldr	r7, [r2, #76]	; 0x4c\n"
+        "  2a:	222a      	movs	r2, #42	; 0x2a\n"
+        "  2c:	4b00      	ldr	r3, [pc, #0]	; (0x30)\n"
+        "  2e:	e001      	b.n	0x34\n"
+        "  30:	020b      	lsls	r3, r1, #8\n"
+        "  32:	0000      	movs	r0, r0\n"
+        "  34:	4635      	mov	r5, r6\n"
+        "  36:	4639      	mov	r1, r7\n"
+        "  38:	9f05      	ldr	r7, [sp, #20]\n"
+        "  3a:	46be      	mov	lr, r7\n"
+        "  3c:	9f04      	ldr	r7, [sp, #16]\n"
+        "  3e:	9504      	str	r5, [sp, #16]\n"
+        "  40:	9105      	str	r1, [sp, #20]\n"
+        "  42:	9e03      	ldr	r6, [sp, #12]\n"
+        "  44:	bd32      	pop	{r1, r4, r5, pc}\n"
+        "  46:	2503      	movs	r5, #3\n"
+        "  48:	43ae      	bics	r6, r5\n"
+        "  4a:	6836      	ldr	r6, [r6, #0]\n"
+        "  4c:	4635      	mov	r5, r6\n"
+        "  4e:	243f      	movs	r4, #63	; 0x3f\n"
+        "  50:	4025      	ands	r5, r4\n"
+        "  52:	2d14      	cmp	r5, #20\n"
+        "  54:	d00f      	beq.n	0x76\n"
+        "  56:	6cd7      	ldr	r7, [r2, #76]	; 0x4c\n"
+        "  58:	2258      	movs	r2, #88	; 0x58\n"
+        "  5a:	4b01      	ldr	r3, [pc, #4]	; (0x60)\n"
+        "  5c:	e002      	b.n	0x64\n"
+        "  5e:	0000      	movs	r0, r0\n"
+        "  60:	020b      	lsls	r3, r1, #8\n"
+        "  62:	0000      	movs	r0, r0\n"
+        "  64:	4635      	mov	r5, r6\n"
+        "  66:	4639      	mov	r1, r7\n"
+        "  68:	9f05      	ldr	r7, [sp, #20]\n"
+        "  6a:	46be      	mov	lr, r7\n"
+        "  6c:	9f04      	ldr	r7, [sp, #16]\n"
+        "  6e:	9504      	str	r5, [sp, #16]\n"
+        "  70:	9105      	str	r1, [sp, #20]\n"
+        "  72:	9e03      	ldr	r6, [sp, #12]\n"
+        "  74:	bd32      	pop	{r1, r4, r5, pc}\n"
+        "  76:	9d00      	ldr	r5, [sp, #0]\n"
+        "  78:	682e      	ldr	r6, [r5, #0]\n"
+        "  7a:	6836      	ldr	r6, [r6, #0]\n"
+        "  7c:	0636      	lsls	r6, r6, #24\n"
+        "  7e:	4c04      	ldr	r4, [pc, #16]	; (0x90)\n"
+        "  80:	4326      	orrs	r6, r4\n"
+        "  82:	65c6      	str	r6, [r0, #92]	; 0x5c\n"
+        "  84:	2680      	movs	r6, #128	; 0x80\n"
+        "  86:	5996      	ldr	r6, [r2, r6]\n"
+        "  88:	463a      	mov	r2, r7\n"
+        "  8a:	2300      	movs	r3, #0\n"
+        "  8c:	9f05      	ldr	r7, [sp, #20]\n"
+        "  8e:	9605      	str	r6, [sp, #20]\n"
+        "  90:	46be      	mov	lr, r7\n"
+        "  92:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  94:	0250      	lsls	r0, r2, #9\n"
+        "  96:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 

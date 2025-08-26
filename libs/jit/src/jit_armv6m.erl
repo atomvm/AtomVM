@@ -201,7 +201,7 @@
 %% - r12: intra-procedure call scratch
 %% - r13 (SP), r14 (LR), r15 (PC): special purpose
 %% Reorder to match AArch64 test expectations (r7 first)
--define(AVAILABLE_REGS, [r7, r6, r5, r4, r3, r1, r12]).
+-define(AVAILABLE_REGS, [r7, r6, r5, r4, r3, r1]).
 -define(PARAMETER_REGS, [r0, r1, r2, r3]).
 -define(SCRATCH_REGS, [r7, r6, r5, r4, r3, r2, r1, r0, r12]).
 
@@ -359,9 +359,13 @@ jump_table0(
     LabelsCount
 ) ->
     Offset = StreamModule:offset(Stream0),
+    % Create 4-byte jump table entry: prolog (push) + unconditional branch
+    PushInstr = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
     BranchInstr = jit_armv6m_asm:b(0),
-    Reloc = {N, Offset, b},
-    Stream1 = StreamModule:append(Stream0, BranchInstr),
+    % Branch is after push
+    Reloc = {N, Offset + byte_size(PushInstr), b},
+    JumpEntry = <<PushInstr/binary, BranchInstr/binary>>,
+    Stream1 = StreamModule:append(Stream0, JumpEntry),
     jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
@@ -638,8 +642,8 @@ return_if_not_equal_to_ctx(
             % Move to r0 (return register)
             _ -> jit_armv6m_asm:mov(r0, Reg)
         end,
-    I4 = jit_armv6m_asm:ret(),
-    I2 = jit_armv6m_asm:bcc(eq, 4 + byte_size(I3) + byte_size(I4)),
+    I4 = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
+    I2 = jit_armv6m_asm:bcc(eq, 2 + byte_size(I3) + byte_size(I4)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
     {AvailableRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, UsedRegs0, Reg
@@ -1932,20 +1936,59 @@ set_continuation_to_label(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        available_regs = [Temp, TempJitState | _],
-        branches = Branches
+        available_regs = [Temp, TempJitState | _]
     } = State,
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_armv6m_asm:adr(Temp, 0),
-    Reloc = {Label, Offset, {adr, Temp}},
-    % Load jit_state pointer from stack, then store continuation
-    I2a = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
-    I2b = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
-    Code = <<I1/binary, I2a/binary, I2b/binary>>,
+    % Load jit_state pointer from stack
+    I1 = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
+
+    % We'll place the aligned block right after: I1 + adr + str + skip_branch + padding
+
+    % adr instruction size
+    I2Size = 2,
+    % str instruction size
+    I3Size = 2,
+    % skip branch instruction size
+    I4Size = 2,
+
+    % Position where aligned block would start (before padding)
+    AlignedBlockOffsetBase = Offset + byte_size(I1) + I2Size + I3Size + I4Size,
+    PaddingNeeded = (4 - (AlignedBlockOffsetBase rem 4)) rem 4,
+    AlignedBlockOffsetAligned = AlignedBlockOffsetBase + PaddingNeeded,
+
+    % adr instruction will be at: Offset + byte_size(I1)
+    AdrInstructionOffset = Offset + byte_size(I1),
+    % For adr, PC is aligned down to 4-byte boundary (no +4 needed)
+    AdrPC = AdrInstructionOffset band (bnot 3),
+    % Calculate the correct adr offset to point to the branch instruction
+    AdrOffset = AlignedBlockOffsetAligned - AdrPC,
+    I2 = jit_armv6m_asm:adr(Temp, AdrOffset),
+    I3 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
+
+    % Skip over aligned block
+
+    % aligned block size + padding
+    SkipOffset = 4 + PaddingNeeded,
+    I4 = jit_armv6m_asm:b(SkipOffset),
+
+    % Padding if needed
+    Padding =
+        case PaddingNeeded of
+            0 -> <<>>;
+            2 -> <<0:16>>
+        end,
+
+    % Aligned block: branch to jump table entry (we know the address directly)
+    JumpTableEntryOffset = Label * 4,
+    AlignedBlockBranchOffset = AlignedBlockOffsetAligned,
+    BranchOffset = JumpTableEntryOffset - AlignedBlockBranchOffset,
+    I5 = jit_armv6m_asm:b(BranchOffset),
+
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, Padding/binary, I5/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | Branches]}.
+    State#state{stream = Stream1}.
 
 set_continuation_to_offset(
     #state{
@@ -2158,7 +2201,6 @@ mul(
     Stream2 = StreamModule:append(Stream1, I),
     State1#state{stream = Stream2, available_regs = [Temp | State1#state.available_regs]}.
 
--spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 %%
 %% Analysis of AArch64 pattern and ARM Thumb mapping:
 %%
@@ -2179,6 +2221,7 @@ mul(
 %% When reductions == 0, we schedule next process, and when we resume, we execute the prolog
 %% then continue to the function body.
 %%
+-spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 decrement_reductions_and_maybe_schedule_next(
     #state{
         stream_module = StreamModule, stream = Stream0, available_regs = [Temp, TempJitState | _]
@@ -2238,9 +2281,9 @@ decrement_reductions_and_maybe_schedule_next(
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
-    {State1, RewriteOffset, RewriteSize} = set_cp(State0),
+    {State1, RewriteOffset, TempReg} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
-    rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
+    rewrite_cp_offset(State2, RewriteOffset, TempReg).
 
 call_only_or_schedule_next(
     #state{
@@ -2270,49 +2313,74 @@ call_only_or_schedule_next(
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
 call_primitive_with_cp(State0, Primitive, Args) ->
-    {State1, RewriteOffset, RewriteSize} = set_cp(State0),
+    {State1, RewriteOffset, TempReg} = set_cp(State0),
     State2 = call_primitive_last(State1, Primitive, Args),
-    rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
+    rewrite_cp_offset(State2, RewriteOffset, TempReg).
 
--spec set_cp(state()) -> {state(), non_neg_integer(), 4 | 8}.
+-spec set_cp(state()) -> {state(), non_neg_integer(), armv6m_register()}.
 set_cp(State0) ->
     % get module index (dynamically)
-    {#state{stream_module = StreamModule, stream = Stream0} = State1, Reg} = get_module_index(
+    {
+        #state{stream_module = StreamModule, stream = Stream0, available_regs = AvailRegs} = State1,
+        Reg
+    } = get_module_index(
         State0
     ),
+    % Get a temporary register from available registers
+    [TempReg | _] = AvailRegs,
+
     Offset = StreamModule:offset(Stream0),
     % build cp with module_index << 24
-    I1 = jit_armv6m_asm:lsl(Reg, Reg, 24),
-    if
-        Offset >= 16250 ->
-            I2 = jit_armv6m_asm:nop(),
-            I3 = jit_armv6m_asm:nop(),
-            RewriteSize = 8;
-        true ->
-            I2 = jit_armv6m_asm:nop(),
-            I3 = <<>>,
-            RewriteSize = 4
-    end,
+    I1 = jit_armv6m_asm:lsls(Reg, Reg, 24),
+    % Emit a single nop as placeholder for offset load instruction
+    I2 = jit_armv6m_asm:nop(),
     MOVOffset = Offset + byte_size(I1),
-    I4 = jit_armv6m_asm:orr(Reg, Reg, ?IP_REG),
-    I5 = jit_armv6m_asm:str(Reg, ?CP),
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
+    % OR the module index with the offset (loaded in temp register)
+    I3 = jit_armv6m_asm:orrs(Reg, TempReg),
+    I4 = jit_armv6m_asm:str(Reg, ?CP),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State2 = State1#state{stream = Stream1},
     State3 = free_native_register(State2, Reg),
-    {State3, MOVOffset, RewriteSize}.
+    {State3, MOVOffset, TempReg}.
 
--spec rewrite_cp_offset(state(), non_neg_integer(), 4 | 8) -> state().
+-spec rewrite_cp_offset(state(), non_neg_integer(), armv6m_register()) -> state().
 rewrite_cp_offset(
     #state{stream_module = StreamModule, stream = Stream0, offset = CodeOffset} = State0,
     RewriteOffset,
-    _RewriteSize
+    TempReg
 ) ->
     NewOffset = StreamModule:offset(Stream0) - CodeOffset,
-    NewMoveInstr = jit_armv6m_asm:movs(?IP_REG, NewOffset bsl 2),
-    ?ASSERT(byte_size(NewMoveInstr) =< _RewriteSize),
-    Stream1 = StreamModule:replace(Stream0, RewriteOffset, NewMoveInstr),
-    State0#state{stream = Stream1}.
+    OffsetImm = NewOffset bsl 2,
+
+    % Check if offset fits in movs immediate (0-255)
+    {NewMoveInstr, Stream1} =
+        if
+            OffsetImm =< 255 ->
+                {jit_armv6m_asm:movs(TempReg, OffsetImm), Stream0};
+            true ->
+                % Need to emit literal pool with proper alignment
+                CurrentOffset = StreamModule:offset(Stream0),
+                % Ensure 4-byte alignment for literal pool
+                AlignedOffset = (CurrentOffset + 3) band (bnot 3),
+                PaddingSize = AlignedOffset - CurrentOffset,
+                Padding = binary:copy(<<0>>, PaddingSize),
+
+                % Emit the 32-bit literal
+                Literal = <<OffsetImm:32/little>>,
+                StreamWithLiteral = StreamModule:append(
+                    StreamModule:append(Stream0, Padding), Literal
+                ),
+
+                % Compute PC-relative offset for ldr instruction
+                % PC is (RewriteOffset + 4) aligned to 4-byte boundary, literal is at AlignedOffset
+                PCValue = (RewriteOffset + 4 + 3) band (bnot 3),
+                PCRelOffset = AlignedOffset - PCValue,
+                LdrInstr = jit_armv6m_asm:ldr(TempReg, {pc, PCRelOffset}),
+                {LdrInstr, StreamWithLiteral}
+        end,
+    Stream2 = StreamModule:replace(Stream1, RewriteOffset, NewMoveInstr),
+    State0#state{stream = Stream2}.
 
 set_bs(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
