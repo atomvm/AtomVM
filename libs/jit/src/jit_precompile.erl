@@ -70,6 +70,7 @@ compile(Target, Dir, Path) ->
             case Target of
                 "x86_64" -> ?JIT_ARCH_X86_64;
                 "aarch64" -> ?JIT_ARCH_AARCH64;
+                "armv6m" -> ?JIT_ARCH_ARMV6M;
                 _ -> error({unsupported_target, Target})
             end,
 
