@@ -69,7 +69,8 @@ compile(Target, Dir, Path) ->
         Arch =
             case Target of
                 "x86_64" -> ?JIT_ARCH_X86_64;
-                "aarch64" -> ?JIT_ARCH_AARCH64
+                "aarch64" -> ?JIT_ARCH_AARCH64;
+                "armv6m" -> ?JIT_ARCH_ARMV6M
             end,
 
         Stream1 = jit_stream_binary:append(

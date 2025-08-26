@@ -890,6 +890,25 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {{free, RegA}, '<', RegB},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	42b7      	cmp	r7, r6\n"
+                        "   6:	da00      	bge.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {
                             {free, RegA},
                             '&',
@@ -1800,6 +1819,15 @@ move_array_element_test_() ->
                         "   6:	59df      	ldr	r7, [r3, r7]\n"
                         "   8:	67f7      	str	r7, [r6, #124]	; 0x7c"
                     >>)
+                end),
+                %% move_array_element with integer index and x_reg destination
+                ?_test(begin
+                    {State1, BaseReg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+                    move_array_element_test0(State1, BaseReg, 2, {x_reg, 5}, <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	68be      	ldr	r6, [r7, #8]\n"
+                        "   4:	62c6      	str	r6, [r0, #44]	; 0x2c"
+                    >>)
                 end)
             ]
         end}.
@@ -2124,6 +2152,32 @@ mul_test_() ->
             ]
         end}.
 
+%% Test set_args1 with y_reg pattern
+set_args1_y_reg_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    % Call primitive with y_reg argument to trigger {y_reg, X} pattern in set_args1
+    % This mirrors: {MSt2, Value} = MMod:call_primitive(MSt1, ?PRIM_BITSTRING_GET_UTF8, [{free, Src}])
+    % but with {y_reg, 5} instead of {free, Src}
+    {State1, _ResultReg} = ?BACKEND:call_primitive(State0, ?PRIM_BITSTRING_GET_UTF8, [
+        {y_reg, 5}
+    ]),
+
+    Stream = ?BACKEND:stream(State1),
+    % Expected disassembly for loading from y_reg and calling primitive
+    Dump = <<
+        "   0:	2744      	movs	r7, #68	; 0x44\n"
+        "   2:	00bf      	lsls	r7, r7, #2\n"
+        "   4:	59d7      	ldr	r7, [r2, r7]\n"
+        "   6:	b405      	push	{r0, r2}\n"
+        "   8:	6940      	ldr	r0, [r0, #20]\n"
+        "   a:	6a80      	ldr	r0, [r0, #40]	; 0x28\n"
+        "   c:	47b8      	blx	r7\n"
+        "   e:	4607      	mov	r7, r0\n"
+        "  10:	bc05      	pop	{r0, r2}"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
@@ -2179,3 +2233,20 @@ dump_to_bin0(<<_Other, Tail/binary>>, instr, Acc) ->
     dump_to_bin0(Tail, instr, Acc);
 dump_to_bin0(<<>>, _, Acc) ->
     list_to_binary(lists:reverse(Acc)).
+
+%% Test set_continuation_to_offset function
+set_continuation_to_offset_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    % Test set_continuation_to_offset - should generate ADR, LDR, and STR instructions
+    {State1, _OffsetRef} = ?BACKEND:set_continuation_to_offset(State0),
+
+    Stream = ?BACKEND:stream(State1),
+
+    % Expected: adr temp to 0, ldr jitstate from stack, str temp to continuation
+    Dump = <<
+        "   0:	a700      	add	r7, pc, #0	; (adr r7, 0 <set_continuation_to_offset_test+0x0>)\n"
+        "   2:	9901      	ldr	r1, [sp, #4]\n"
+        "   4:	6187      	str	r7, [r0, #24]"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
