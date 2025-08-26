@@ -180,8 +180,6 @@
 
 %% Link register
 -define(LR_REG, r14).
-%% Intra-procedure call scratch register
--define(IP_REG, r12).
 
 %% Stack offset for function prolog: push {r1,r4,r5,r6,r7,lr}
 %% r1 (JITSTATE_REG) is at SP+0 after push
@@ -391,7 +389,6 @@ update_branches(
     NewInstr =
         case Type of
             {bcc, CC} -> jit_armv6m_asm:bcc(CC, Rel);
-            {adr, Reg} -> jit_armv6m_asm:adr(Reg, Rel);
             b -> jit_armv6m_asm:b(Rel)
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
@@ -410,11 +407,17 @@ load_primitive_ptr(Primitive, TargetReg) ->
             jit_armv6m_asm:ldr(TargetReg, {?NATIVE_INTERFACE_REG, 0});
         N when N * 4 =< 124 ->
             jit_armv6m_asm:ldr(TargetReg, {?NATIVE_INTERFACE_REG, N * 4});
-        N ->
-            % For large offsets, load offset into TargetReg then use register addressing
+        N when N * 4 < 256 ->
+            % Can encode N * 4 directly in movs instruction (8-bit immediate limit)
             I1 = jit_armv6m_asm:movs(TargetReg, N * 4),
             I2 = jit_armv6m_asm:ldr(TargetReg, {?NATIVE_INTERFACE_REG, TargetReg}),
-            <<I1/binary, I2/binary>>
+            <<I1/binary, I2/binary>>;
+        N ->
+            % For very large primitive numbers, load N and shift left by 2 (multiply by 4)
+            I1 = jit_armv6m_asm:movs(TargetReg, N),
+            I2 = jit_armv6m_asm:lsls(TargetReg, TargetReg, 2),
+            I3 = jit_armv6m_asm:ldr(TargetReg, {?NATIVE_INTERFACE_REG, TargetReg}),
+            <<I1/binary, I2/binary, I3/binary>>
     end.
 
 %%-----------------------------------------------------------------------------
@@ -672,21 +675,6 @@ jump_to_label(
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
 
-%% @private
--spec rewrite_branch_instruction(
-    jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()}, integer()
-) -> binary().
-rewrite_branch_instruction({cbnz, Reg}, Offset) ->
-    jit_armv6m_asm:cbnz(Reg, Offset);
-rewrite_branch_instruction({cbnz_w, Reg}, Offset) ->
-    jit_armv6m_asm:cbnz_w(Reg, Offset);
-rewrite_branch_instruction({tbz, Reg, Bit}, Offset) ->
-    jit_armv6m_asm:tbz(Reg, Bit, Offset);
-rewrite_branch_instruction({tbnz, Reg, Bit}, Offset) ->
-    jit_armv6m_asm:tbnz(Reg, Bit, Offset);
-rewrite_branch_instruction(CC, Offset) when is_atom(CC) ->
-    jit_armv6m_asm:bcc(CC, Offset).
-
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
 %% execute a block.
@@ -736,7 +724,7 @@ if_block(
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
     BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = rewrite_branch_instruction(CC, BranchOffset),
+    NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
     Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
     merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
 
@@ -770,7 +758,7 @@ if_else_block(
     OffsetAfter = StreamModule:offset(Stream3),
     %% Patch the conditional branch to jump to the else block
     ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
-    NewBranchInstr = rewrite_branch_instruction(CC, ElseBranchOffset),
+    NewBranchInstr = jit_armv6m_asm:bcc(CC, ElseBranchOffset),
     Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
     %% Build the else block
     StateElse = State2#state{
@@ -1129,7 +1117,7 @@ shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, 
 %% @param Args arguments to pass to the function
 %% @return Updated backend state and return register
 %%-----------------------------------------------------------------------------
--spec call_func_ptr(state(), {free, armv6m_register()} | {primitive, non_neg_integer()}, [arg()]) ->
+-spec call_func_ptr(state(), {free, armv6m_register()}, [arg()]) ->
     {state(), armv6m_register()}.
 call_func_ptr(
     #state{
@@ -1138,17 +1126,16 @@ call_func_ptr(
         available_regs = AvailableRegs0,
         used_regs = UsedRegs0
     } = State0,
-    FuncPtrTuple,
+    {free, FuncPtrReg},
     Args
 ) ->
     FreeRegs = lists:flatmap(
         fun
-            ({free, ?IP_REG}) -> [];
             ({free, {ptr, Reg}}) -> [Reg];
             ({free, Reg}) when is_atom(Reg) -> [Reg];
             (_) -> []
         end,
-        [FuncPtrTuple | Args]
+        [{free, FuncPtrReg} | Args]
     ),
     UsedRegs1 = UsedRegs0 -- FreeRegs,
     SavedRegs = [?CTX_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
@@ -1158,25 +1145,9 @@ call_func_ptr(
     State1 = set_args(State0#state{stream = Stream1}, Args),
     #state{stream = Stream2} = State1,
 
-    {FuncPtrReg, Stream3} =
-        case FuncPtrTuple of
-            {free, Reg} ->
-                {Reg, Stream2};
-            {primitive, Primitive} ->
-                % We use r16 for the address.
-                PrepCall =
-                    case Primitive of
-                        0 ->
-                            jit_armv6m_asm:ldr(?IP_REG, {?NATIVE_INTERFACE_REG, 0});
-                        N ->
-                            jit_armv6m_asm:ldr(?IP_REG, {?NATIVE_INTERFACE_REG, N * 4})
-                    end,
-                {?IP_REG, StreamModule:append(Stream2, PrepCall)}
-        end,
-
     % Call the function pointer (using BLX for call with return)
     Call = jit_armv6m_asm:blx(FuncPtrReg),
-    Stream4 = StreamModule:append(Stream3, Call),
+    Stream4 = StreamModule:append(Stream2, Call),
 
     % If r0 is in used regs, save it to another temporary register
     FreeGPRegs = FreeRegs -- (FreeRegs -- ?AVAILABLE_REGS),
@@ -1974,11 +1945,7 @@ set_continuation_to_label(
     I4 = jit_armv6m_asm:b(SkipOffset),
 
     % Padding if needed
-    Padding =
-        case PaddingNeeded of
-            0 -> <<>>;
-            2 -> <<0:16>>
-        end,
+    Padding = <<0:(PaddingNeeded * 8)>>,
 
     % Aligned block: branch to jump table entry (we know the address directly)
     JumpTableEntryOffset = Label * 4,
@@ -2130,12 +2097,7 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     BranchOffset = TargetPosition - BranchPosition,
     I2 = jit_armv6m_asm:b(BranchOffset),
     %% Generate padding if needed (just zeros)
-    Padding =
-        case PaddingNeeded of
-            0 -> <<>>;
-            % 2 bytes of padding
-            2 -> <<0:16>>
-        end,
+    Padding = <<0:(PaddingNeeded * 8)>>,
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
     State#state{stream = Stream1}.
 
@@ -2364,7 +2326,7 @@ rewrite_cp_offset(
                 % Ensure 4-byte alignment for literal pool
                 AlignedOffset = (CurrentOffset + 3) band (bnot 3),
                 PaddingSize = AlignedOffset - CurrentOffset,
-                Padding = binary:copy(<<0>>, PaddingSize),
+                Padding = <<0:(PaddingSize * 8)>>,
 
                 % Emit the 32-bit literal
                 Literal = <<OffsetImm:32/little>>,
