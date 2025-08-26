@@ -1338,6 +1338,78 @@ is_boolean_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+%% Test OP_WAIT_TIMEOUT pattern that uses set_continuation_to_offset and continuation_entry_point
+wait_timeout_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    Label = 42,
+    {State1, OffsetRef0} = ?BACKEND:set_continuation_to_offset(State0),
+    {State2, TimeoutReg} = ?BACKEND:move_to_native_register(State1, 5000),
+    State3 = ?BACKEND:call_primitive_last(State2, ?PRIM_WAIT_TIMEOUT, [
+        ctx, jit_state, {free, TimeoutReg}, Label
+    ]),
+    Offset0 = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:continuation_entry_point(State3),
+    {State5, ResultReg0} = ?BACKEND:call_primitive(State4, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+        ctx, jit_state
+    ]),
+    State6 = ?BACKEND:return_if_not_equal_to_ctx(State5, {free, ResultReg0}),
+    % ?WAITING_TIMEOUT_EXPIRED
+    {State7, ResultReg1} = ?BACKEND:call_primitive(State6, ?PRIM_CONTEXT_GET_FLAGS, [ctx, 2]),
+    State8 = ?BACKEND:if_block(State7, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
+        ?BACKEND:call_primitive_last(BlockSt, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
+            ctx, jit_state, Label
+        ])
+    end),
+    State9 = ?BACKEND:update_branches(State8, [{OffsetRef0, Offset0}]),
+
+    Stream = ?BACKEND:stream(State9),
+    Dump = <<
+        "   0:	a707      	add	r7, pc, #28	; (adr r7, 0x20)\n"
+        "   2:	9e00      	ldr	r6, [sp, #0]\n"
+        "   4:	6077      	str	r7, [r6, #4]\n"
+        "   6:	4f01      	ldr	r7, [pc, #4]	; (0xc)\n"
+        "   8:	e002      	b.n	0x10\n"
+        "   a:	0000      	movs	r0, r0\n"
+        "   c:	1388      	asrs	r0, r1, #14\n"
+        "   e:	0000      	movs	r0, r0\n"
+        "  10:	6f96      	ldr	r6, [r2, #120]	; 0x78\n"
+        "  12:	463a      	mov	r2, r7\n"
+        "  14:	232a      	movs	r3, #42	; 0x2a\n"
+        "  16:	9f05      	ldr	r7, [sp, #20]\n"
+        "  18:	9605      	str	r6, [sp, #20]\n"
+        "  1a:	46be      	mov	lr, r7\n"
+        "  1c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  1e:	0000      	movs	r0, r0\n"
+        "  20:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  22:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
+        "  24:	b405      	push	{r0, r2}\n"
+        "  26:	9900      	ldr	r1, [sp, #0]\n"
+        "  28:	47b8      	blx	r7\n"
+        "  2a:	4607      	mov	r7, r0\n"
+        "  2c:	bc05      	pop	{r0, r2}\n"
+        "  2e:	4287      	cmp	r7, r0\n"
+        "  30:	d001      	beq.n	0x36\n"
+        "  32:	4638      	mov	r0, r7\n"
+        "  34:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  36:	2784      	movs	r7, #132	; 0x84\n"
+        "  38:	59d7      	ldr	r7, [r2, r7]\n"
+        "  3a:	b405      	push	{r0, r2}\n"
+        "  3c:	2102      	movs	r1, #2\n"
+        "  3e:	47b8      	blx	r7\n"
+        "  40:	4607      	mov	r7, r0\n"
+        "  42:	bc05      	pop	{r0, r2}\n"
+        "  44:	2f00      	cmp	r7, #0\n"
+        "  46:	d105      	bne.n	0x54\n"
+        "  48:	6fd7      	ldr	r7, [r2, #124]	; 0x7c\n"
+        "  4a:	222a      	movs	r2, #42	; 0x2a\n"
+        "  4c:	9e05      	ldr	r6, [sp, #20]\n"
+        "  4e:	9705      	str	r7, [sp, #20]\n"
+        "  50:	46b6      	mov	lr, r6\n"
+        "  52:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_ext_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
@@ -2233,20 +2305,3 @@ dump_to_bin0(<<_Other, Tail/binary>>, instr, Acc) ->
     dump_to_bin0(Tail, instr, Acc);
 dump_to_bin0(<<>>, _, Acc) ->
     list_to_binary(lists:reverse(Acc)).
-
-%% Test set_continuation_to_offset function
-set_continuation_to_offset_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-
-    % Test set_continuation_to_offset - should generate ADR, LDR, and STR instructions
-    {State1, _OffsetRef} = ?BACKEND:set_continuation_to_offset(State0),
-
-    Stream = ?BACKEND:stream(State1),
-
-    % Expected: adr temp to 0, ldr jitstate from stack, str temp to continuation
-    Dump = <<
-        "   0:	a700      	add	r7, pc, #0	; (adr r7, 0 <set_continuation_to_offset_test+0x0>)\n"
-        "   2:	9901      	ldr	r1, [sp, #4]\n"
-        "   4:	6187      	str	r7, [r0, #24]"
-    >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).

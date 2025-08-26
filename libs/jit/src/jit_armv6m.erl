@@ -389,6 +389,8 @@ update_branches(
     NewInstr =
         case Type of
             {bcc, CC} -> jit_armv6m_asm:bcc(CC, Rel);
+            {adr, Reg} when Rel rem 4 =:= 0 -> jit_armv6m_asm:adr(Reg, Rel);
+            {adr, Reg} when Rel rem 4 =:= 2 -> jit_armv6m_asm:adr(Reg, Rel + 2);
             b -> jit_armv6m_asm:b(Rel)
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
@@ -1967,7 +1969,7 @@ set_continuation_to_offset(
 ) ->
     OffsetRef = make_ref(),
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_armv6m_asm:adr(Temp, 0),
+    I1 = jit_armv6m_asm:adr(Temp, 4),
     Reloc = {OffsetRef, Offset, {adr, Temp}},
     % Load jit_state pointer from stack, then store continuation
     I2a = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
@@ -1979,8 +1981,22 @@ set_continuation_to_offset(
 %% @doc Implement a continuation entry point.
 %% TODO: push r4-r7 and lr
 -spec continuation_entry_point(#state{}) -> #state{}.
-continuation_entry_point(State) ->
-    State.
+continuation_entry_point(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State
+) ->
+    % Align if required.
+    Offset = StreamModule:offset(Stream0),
+    Stream1 =
+        case Offset rem 4 of
+            0 -> Stream0;
+            2 -> StreamModule:append(Stream0, <<0:16>>)
+        end,
+    Prolog = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
+    Stream2 = StreamModule:append(Stream1, Prolog),
+    State#state{stream = Stream2}.
 
 get_module_index(
     #state{
