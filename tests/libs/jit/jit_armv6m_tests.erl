@@ -1091,39 +1091,209 @@ call_only_or_schedule_next_and_label_relocation_test() ->
     Dump =
         <<
             "   0:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-            "   2:	e018      	b.n	0x36\n"
+            "   2:	e019      	b.n	0x38\n"
             "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   6:	e001      	b.n	0xc\n"
             "   8:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-            "   a:	e00f      	b.n	0x2c\n"
+            "   a:	e010      	b.n	0x2e\n"
             "   c:	9e00      	ldr	r6, [sp, #0]\n"
             "   e:	68b7      	ldr	r7, [r6, #8]\n"
             "  10:	3f01      	subs	r7, #1\n"
             "  12:	60b7      	str	r7, [r6, #8]\n"
-            "  14:	d10a      	bne.n	0x2c\n"
-            "  16:	9e00      	ldr	r6, [sp, #0]\n"
-            "  18:	a701      	add	r7, pc, #4	; (adr r7, 0x20)\n"
-            "  1a:	6077      	str	r7, [r6, #4]\n"
-            "  1c:	e001      	b.n	0x22\n"
-            "  1e:	0000      	movs	r0, r0\n"
-            "  20:	e7f2      	b.n	0x8\n"
-            "  22:	6897      	ldr	r7, [r2, #8]\n"
-            "  24:	9e05      	ldr	r6, [sp, #20]\n"
-            "  26:	9705      	str	r7, [sp, #20]\n"
-            "  28:	46b6      	mov	lr, r6\n"
-            "  2a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  2c:	6817      	ldr	r7, [r2, #0]\n"
-            "  2e:	9e05      	ldr	r6, [sp, #20]\n"
-            "  30:	9705      	str	r7, [sp, #20]\n"
-            "  32:	46b6      	mov	lr, r6\n"
-            "  34:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  36:	6857      	ldr	r7, [r2, #4]\n"
-            "  38:	9e05      	ldr	r6, [sp, #20]\n"
-            "  3a:	9705      	str	r7, [sp, #20]\n"
-            "  3c:	46b6      	mov	lr, r6\n"
-            "  3e:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+            "  14:	d000      	beq.n	0x18\n"
+            "  16:	e00a      	b.n	0x2e\n"
+            "  18:	2620      	movs	r6, #32\n"
+            "  1a:	4276      	negs	r6, r6\n"
+            "  1c:	a702      	add	r7, pc, #8	; (adr r7, 0x28)\n"
+            "  1e:	19f6      	adds	r6, r6, r7\n"
+            "  20:	9f00      	ldr	r7, [sp, #0]\n"
+            "  22:	607e      	str	r6, [r7, #4]\n"
+            "  24:	6897      	ldr	r7, [r2, #8]\n"
+            "  26:	9e05      	ldr	r6, [sp, #20]\n"
+            "  28:	9705      	str	r7, [sp, #20]\n"
+            "  2a:	46b6      	mov	lr, r6\n"
+            "  2c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  2e:	6817      	ldr	r7, [r2, #0]\n"
+            "  30:	9e05      	ldr	r6, [sp, #20]\n"
+            "  32:	9705      	str	r7, [sp, #20]\n"
+            "  34:	46b6      	mov	lr, r6\n"
+            "  36:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  38:	6857      	ldr	r7, [r2, #4]\n"
+            "  3a:	9e05      	ldr	r6, [sp, #20]\n"
+            "  3c:	9705      	str	r7, [sp, #20]\n"
+            "  3e:	46b6      	mov	lr, r6\n"
+            "  40:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test with different alignment (unaligned start)
+call_only_or_schedule_next_and_label_relocation_unaligned_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    %% First do a 2-byte instruction to create unaligned start
+    State1 = ?BACKEND:move_to_vm_register(State0, r1, {ptr, r3}),
+    State2 = ?BACKEND:jump_table(State1, 2),
+    Offset1 = ?BACKEND:offset(State2),
+    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
+    Offset2 = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:call_primitive_last(State3, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    Offset0 = ?BACKEND:offset(State4),
+    State5 = ?BACKEND:call_primitive_last(State4, 1, [ctx, jit_state]),
+    State6 = ?BACKEND:update_branches(State5, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	6019      	str	r1, [r3, #0]\n"
+            "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   4:	e019      	b.n	0x3a\n"
+            "   6:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   8:	e001      	b.n	0xe\n"
+            "   a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+            "   c:	e010      	b.n	0x30\n"
+            "   e:	9e00      	ldr	r6, [sp, #0]\n"
+            "  10:	68b7      	ldr	r7, [r6, #8]\n"
+            "  12:	3f01      	subs	r7, #1\n"
+            "  14:	60b7      	str	r7, [r6, #8]\n"
+            "  16:	d000      	beq.n	0x1a\n"
+            "  18:	e00a      	b.n	0x30\n"
+            "  1a:	2624      	movs	r6, #36	; 0x24\n"
+            "  1c:	4276      	negs	r6, r6\n"
+            "  1e:	a703      	add	r7, pc, #12	; (adr r7, 0x2c)\n"
+            "  20:	19f6      	adds	r6, r6, r7\n"
+            "  22:	9f00      	ldr	r7, [sp, #0]\n"
+            "  24:	607e      	str	r6, [r7, #4]\n"
+            "  26:	6897      	ldr	r7, [r2, #8]\n"
+            "  28:	9e05      	ldr	r6, [sp, #20]\n"
+            "  2a:	9705      	str	r7, [sp, #20]\n"
+            "  2c:	46b6      	mov	lr, r6\n"
+            "  2e:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  30:	6817      	ldr	r7, [r2, #0]\n"
+            "  32:	9e05      	ldr	r6, [sp, #20]\n"
+            "  34:	9705      	str	r7, [sp, #20]\n"
+            "  36:	46b6      	mov	lr, r6\n"
+            "  38:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  3a:	6857      	ldr	r7, [r2, #4]\n"
+            "  3c:	9e05      	ldr	r6, [sp, #20]\n"
+            "  3e:	9705      	str	r7, [sp, #20]\n"
+            "  40:	46b6      	mov	lr, r6\n"
+            "  42:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test with large gap (256+ bytes) to force mov_immediate path
+call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    % Add large padding by emitting many move_to_native_register operations
+    % This creates a large gap between the jump table and the actual function bodies
+    % Each operation emits ~2 bytes, so 128 operations = ~256 bytes
+    StatePadded = lists:foldl(
+        fun(_, S) ->
+            ?BACKEND:move_to_native_register(S, {x_reg, 2}, r3)
+        end,
+        State1,
+        lists:seq(1, 128)
+    ),
+    Offset1 = ?BACKEND:offset(StatePadded),
+    State2 = ?BACKEND:call_only_or_schedule_next(StatePadded, 2),
+    Offset2 = ?BACKEND:offset(State2),
+    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    Offset0 = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
+    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
+    Stream = ?BACKEND:stream(State5),
+    % Extract the final section starting at 0x10c to verify the literal pool pattern
+    Dump = <<
+        " 10c:	9e00      	ldr	r6, [sp, #0]\n"
+        " 10e:	68b7      	ldr	r7, [r6, #8]\n"
+        " 110:	3f01      	subs	r7, #1\n"
+        " 112:	60b7      	str	r7, [r6, #8]\n"
+        " 114:	d000      	beq.n	0x118\n"
+        " 116:	e00c      	b.n	0x132\n"
+        " 118:	4e00      	ldr	r6, [pc, #0]	; (0x11c)\n"
+        " 11a:	e001      	b.n	0x120\n"
+        " 11c:	fee0 ffff 	mcr2	15, 7, pc, cr0, cr15, {7}	; <UNPREDICTABLE>\n"
+        " 120:	a701      	add	r7, pc, #4	; (adr r7, 0x128)\n"
+        " 122:	19f6      	adds	r6, r6, r7\n"
+        " 124:	9f00      	ldr	r7, [sp, #0]\n"
+        " 126:	607e      	str	r6, [r7, #4]\n"
+        " 128:	6897      	ldr	r7, [r2, #8]\n"
+        " 12a:	9e05      	ldr	r6, [sp, #20]\n"
+        " 12c:	9705      	str	r7, [sp, #20]\n"
+        " 12e:	46b6      	mov	lr, r6\n"
+        " 130:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 132:	6817      	ldr	r7, [r2, #0]\n"
+        " 134:	9e05      	ldr	r6, [sp, #20]\n"
+        " 136:	9705      	str	r7, [sp, #20]\n"
+        " 138:	46b6      	mov	lr, r6\n"
+        " 13a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 13c:	6857      	ldr	r7, [r2, #4]\n"
+        " 13e:	9e05      	ldr	r6, [sp, #20]\n"
+        " 140:	9705      	str	r7, [sp, #20]\n"
+        " 142:	46b6      	mov	lr, r6\n"
+        " 144:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+    >>,
+    {_, RelevantBinary} = split_binary(Stream, 16#10c),
+    ?assertEqual(dump_to_bin(Dump), RelevantBinary).
+
+%% Test with large gap (256+ bytes) and different alignment to force literal pool path
+call_only_or_schedule_next_and_label_relocation_large_gap_unaligned_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    % Add large padding by emitting many move_to_native_register operations
+    % This creates a large gap between the jump table and the rest of the code
+    % Use 127 operations (instead of 128) to create different alignment
+    StatePadded = lists:foldl(
+        fun(_, S) ->
+            ?BACKEND:move_to_native_register(S, {x_reg, 2}, r3)
+        end,
+        State1,
+        lists:seq(1, 127)
+    ),
+    Offset1 = ?BACKEND:offset(StatePadded),
+    State2 = ?BACKEND:call_only_or_schedule_next(StatePadded, 2),
+    Offset2 = ?BACKEND:offset(State2),
+    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    Offset0 = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
+    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
+    Stream = ?BACKEND:stream(State5),
+    % Extract the final section starting at 0x10a to verify the literal pool pattern with different alignment
+    Dump = <<
+        " 10a:	9e00      	ldr	r6, [sp, #0]\n"
+        " 10c:	68b7      	ldr	r7, [r6, #8]\n"
+        " 10e:	3f01      	subs	r7, #1\n"
+        " 110:	60b7      	str	r7, [r6, #8]\n"
+        " 112:	d000      	beq.n	0x116\n"
+        " 114:	e00d      	b.n	0x132\n"
+        " 116:	4e01      	ldr	r6, [pc, #4]	; (0x11c)\n"
+        " 118:	e002      	b.n	0x120\n"
+        " 11a:	0000      	movs	r0, r0\n"
+        " 11c:	fee0 ffff 	mcr2	15, 7, pc, cr0, cr15, {7}	; <UNPREDICTABLE>\n"
+        " 120:	a701      	add	r7, pc, #4	; (adr r7, 0x128)\n"
+        " 122:	19f6      	adds	r6, r6, r7\n"
+        " 124:	9f00      	ldr	r7, [sp, #0]\n"
+        " 126:	607e      	str	r6, [r7, #4]\n"
+        " 128:	6897      	ldr	r7, [r2, #8]\n"
+        " 12a:	9e05      	ldr	r6, [sp, #20]\n"
+        " 12c:	9705      	str	r7, [sp, #20]\n"
+        " 12e:	46b6      	mov	lr, r6\n"
+        " 130:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 132:	6817      	ldr	r7, [r2, #0]\n"
+        " 134:	9e05      	ldr	r6, [sp, #20]\n"
+        " 136:	9705      	str	r7, [sp, #20]\n"
+        " 138:	46b6      	mov	lr, r6\n"
+        " 13a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 13c:	6857      	ldr	r7, [r2, #4]\n"
+        " 13e:	9e05      	ldr	r6, [sp, #20]\n"
+        " 140:	9705      	str	r7, [sp, #20]\n"
+        " 142:	46b6      	mov	lr, r6\n"
+        " 144:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+    >>,
+    {_, RelevantBinary} = split_binary(Stream, 16#10a),
+    ?assertEqual(dump_to_bin(Dump), RelevantBinary).
 
 call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1550,7 +1720,7 @@ call_ext_test() ->
         "  28:	6917      	ldr	r7, [r2, #16]\n"
         "  2a:	2202      	movs	r2, #2\n"
         "  2c:	2305      	movs	r3, #5\n"
-        "  2e:	2500      	movs	r5, #0\n"
+        "  2e:	2501      	movs	r5, #1\n"
         "  30:	426d      	negs	r5, r5\n"
         "  32:	4639      	mov	r1, r7\n"
         "  34:	9f05      	ldr	r7, [sp, #20]\n"
@@ -1908,7 +2078,7 @@ move_to_vm_register_test_() ->
                 %% Test: Negative immediate to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
-                        "   0:	2700      	movs	r7, #0\n"
+                        "   0:	2701      	movs	r7, #1\n"
                         "   2:	427f      	negs	r7, r7\n"
                         "   4:	6187      	str	r7, [r0, #24]"
                     >>)
@@ -2154,8 +2324,31 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	2729      	movs	r7, #41	; 0x29\n"
+                        "   0:	272a      	movs	r7, #42	; 0x2a\n"
                         "   2:	427f      	negs	r7, r7"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: -255 (boundary case)
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, -255),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r7, Reg),
+                    Dump = <<
+                        "   0:	27ff      	movs	r7, #255	; 0xff\n"
+                        "   2:	427f      	negs	r7, r7"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% move_to_native_register/2: -256 (boundary case, should use literal pool)
+                ?_test(begin
+                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, -256),
+                    Stream = ?BACKEND:stream(State1),
+                    ?assertEqual(r7, Reg),
+                    Dump = <<
+                        "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
+                        "   2:	e001      	b.n	0x8\n"
+                        "   4:	ff00 ffff 	vmaxnm.f32	<illegal reg q7.5>, q8, <illegal reg q15.5>"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),

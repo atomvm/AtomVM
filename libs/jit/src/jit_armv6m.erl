@@ -388,7 +388,6 @@ update_branches(
     Rel = LabelOffset - Offset,
     NewInstr =
         case Type of
-            {bcc, CC} -> jit_armv6m_asm:bcc(CC, Rel);
             {adr, Reg} when Rel rem 4 =:= 0 -> jit_armv6m_asm:adr(Reg, Rel);
             {adr, Reg} when Rel rem 4 =:= 2 -> jit_armv6m_asm:adr(Reg, Rel + 2);
             b -> jit_armv6m_asm:b(Rel)
@@ -1923,55 +1922,47 @@ set_continuation_to_label(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        available_regs = [Temp, TempJitState | _]
+        available_regs = [Temp1, Temp2 | _]
     } = State,
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    % Load jit_state pointer from stack
-    I1 = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
-
-    % We'll place the aligned block right after: I1 + adr + str + skip_branch + padding
-
-    % adr instruction size
-    I2Size = 2,
-    % str instruction size
-    I3Size = 2,
-    % skip branch instruction size
-    I4Size = 2,
-
-    % Position where aligned block would start (before padding)
-    AlignedBlockOffsetBase = Offset + byte_size(I1) + I2Size + I3Size + I4Size,
-    PaddingNeeded = (4 - (AlignedBlockOffsetBase rem 4)) rem 4,
-    AlignedBlockOffsetAligned = AlignedBlockOffsetBase + PaddingNeeded,
-
-    % adr instruction will be at: Offset + byte_size(I1)
-    AdrInstructionOffset = Offset + byte_size(I1),
-    % For adr, PC is aligned down to 4-byte boundary (no +4 needed)
-    AdrPC = AdrInstructionOffset band (bnot 3),
-    % Calculate the correct adr offset to point to the branch instruction
-    AdrOffset = AlignedBlockOffsetAligned - AdrPC,
-    I2 = jit_armv6m_asm:adr(Temp, AdrOffset),
-    I3 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
-
-    % Skip over aligned block
-
-    % aligned block size + padding
-    SkipOffset = 4 + PaddingNeeded,
-    I4 = jit_armv6m_asm:b(SkipOffset),
-
-    % Padding if needed
-    Padding = <<0:(PaddingNeeded * 8)>>,
-
-    % Aligned block: branch to jump table entry (we know the address directly)
+    % Calculate jump table entry offset
     JumpTableEntryOffset = Label * 4,
-    AlignedBlockBranchOffset = AlignedBlockOffsetAligned,
-    BranchOffset = JumpTableEntryOffset - AlignedBlockBranchOffset,
-    I5 = jit_armv6m_asm:b(BranchOffset),
 
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, Padding/binary, I5/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1}.
+    % Assume mov_immediate will be at most 10 bytes
+    MaxMovImmediateSize = 10,
+    EstimatedAdrOffset = Offset + MaxMovImmediateSize,
+    % +4 for adr base, +4 for minimum adr offset
+    EstimatedAdrPC = (EstimatedAdrOffset band (bnot 3)) + 4 + 4,
+    RelativeOffset = JumpTableEntryOffset - EstimatedAdrPC,
+
+    % Generate mov_immediate with the relative offset
+    State1 = mov_immediate(State, Temp2, RelativeOffset),
+    Stream1 = State1#state.stream,
+    ActualMovImmediateSize = StreamModule:offset(Stream1) - Offset,
+
+    % Calculate where adr instruction will actually be
+    ActualAdrOffset = Offset + ActualMovImmediateSize,
+    ActualAdrPC = (ActualAdrOffset band (bnot 3)) + 4,
+
+    % Calculate the correct adr offset: ActualAdrPC + (AdrOffset - 4) + RelativeOffset = JumpTableEntryOffset
+    % So: AdrOffset = JumpTableEntryOffset - ActualAdrPC - RelativeOffset + 4
+    AdrOffset = JumpTableEntryOffset - ActualAdrPC - RelativeOffset + 4,
+    % Ensure adr offset is multiple of 4 and within range
+    AdrOffset = ((AdrOffset + 3) div 4) * 4,
+
+    % Get PC address using adr
+    I1 = jit_armv6m_asm:adr(Temp1, AdrOffset),
+
+    % Add PC + offset, load jit_state, and store continuation
+    I2 = jit_armv6m_asm:adds(Temp2, Temp2, Temp1),
+    I3 = jit_armv6m_asm:ldr(Temp1, {sp, ?STACK_OFFSET_JITSTATE}),
+    I4 = jit_armv6m_asm:str(Temp2, ?JITSTATE_CONTINUATION(Temp1)),
+
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State1#state{stream = Stream2}.
 
 set_continuation_to_offset(
     #state{
@@ -2089,9 +2080,9 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
 mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
-    Val >= -256 andalso Val < 0
+    Val >= -255 andalso Val < 0
 ->
-    I1 = jit_armv6m_asm:movs(Reg, bnot (Val)),
+    I1 = jit_armv6m_asm:movs(Reg, -Val),
     I2 = jit_armv6m_asm:negs(Reg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
@@ -2295,12 +2286,18 @@ call_only_or_schedule_next(
     % Store back the decremented value
     I3 = jit_armv6m_asm:str(Temp, ?JITSTATE_REDUCTIONCOUNT(TempJitState)),
     Stream1 = StreamModule:append(Stream0, <<I0/binary, I1/binary, I2/binary, I3/binary>>),
-    BNEOffset = StreamModule:offset(Stream1),
-    % Branch to label if reduction count is not zero
-    I4 = jit_armv6m_asm:bcc(ne, 0),
-    Reloc1 = {Label, BNEOffset, {bcc, ne}},
-    Stream2 = StreamModule:append(Stream1, I4),
-    State1 = State0#state{stream = Stream2, branches = [Reloc1 | Branches]},
+    % Use trampoline technique: branch if zero (eq) to skip over the long branch
+    % If not zero, we want to continue execution at Label
+    % If zero, we want to fall through to scheduling code
+
+    % Skip over the unconditional branch (2 bytes)
+    I4 = jit_armv6m_asm:bcc(eq, 4),
+    % Unconditional branch to label (will be patched later)
+    I5 = jit_armv6m_asm:b(0),
+    LongBranchOffset = StreamModule:offset(Stream1) + byte_size(I4),
+    LongBranchReloc = {Label, LongBranchOffset, b},
+    Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary>>),
+    State1 = State0#state{stream = Stream2, branches = [LongBranchReloc | Branches]},
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
