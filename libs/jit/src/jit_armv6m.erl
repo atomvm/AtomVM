@@ -1223,14 +1223,22 @@ set_args_push_stack(
             undefined ->
                 % 5 arguments: no 6th arg to handle
                 State0#state{stream = Stream1};
-            {free, Reg6} ->
-                % 6 arguments: Arg6 is already in register, store directly and free
+            {free, Reg6} when is_atom(Reg6) ->
+                % 6 arguments: Arg6 is already in native register, store directly and free
                 I2 = jit_armv6m_asm:str(Reg6, {sp, 4}),
                 StreamB = StreamModule:append(Stream1, I2),
                 free_native_register(State0#state{stream = StreamB}, Reg6);
             _ ->
                 % 6 arguments: store Arg6 at sp+4
-                {StateA, Reg6} = move_to_native_register(State0#state{stream = Stream1}, Arg6),
+                % Handle {free, NonNativeReg} by unwrapping
+                ActualArg6 =
+                    case Arg6 of
+                        {free, InnerArg6} -> InnerArg6;
+                        Other6 -> Other6
+                    end,
+                {StateA, Reg6} = move_to_native_register(
+                    State0#state{stream = Stream1}, ActualArg6
+                ),
                 StreamA = StateA#state.stream,
                 I2 = jit_armv6m_asm:str(Reg6, {sp, 4}),
                 StreamB = StreamModule:append(StreamA, I2),
@@ -1240,14 +1248,20 @@ set_args_push_stack(
     % Handle Arg5 (always present, always goes at sp+0)
     State2 =
         case Arg5 of
-            {free, Reg5} ->
-                % Arg5 is already in register, store directly and free
+            {free, Reg5} when is_atom(Reg5) ->
+                % Arg5 is already in native register, store directly and free
                 I3 = jit_armv6m_asm:str(Reg5, {sp, 0}),
                 Stream3 = StreamModule:append(State1#state.stream, I3),
                 free_native_register(State1#state{stream = Stream3}, Reg5);
             _ ->
                 % Move Arg5 to register, store, and free
-                {StateTemp, Reg5} = move_to_native_register(State1, Arg5),
+                % Handle {free, NonNativeReg} by unwrapping
+                ActualArg5 =
+                    case Arg5 of
+                        {free, InnerArg5} -> InnerArg5;
+                        Other5 -> Other5
+                    end,
+                {StateTemp, Reg5} = move_to_native_register(State1, ActualArg5),
                 StreamTemp = StateTemp#state.stream,
                 I3 = jit_armv6m_asm:str(Reg5, {sp, 0}),
                 Stream3 = StreamModule:append(StreamTemp, I3),
@@ -2388,13 +2402,24 @@ return_labels_and_lines(
     SortedLabels,
     SortedLines
 ) ->
-    I1 = jit_armv6m_asm:adr(r0, 8),
-    I2 = jit_armv6m_asm:ret(),
+    % Check if current offset is 4-byte aligned
+    CurrentOffset = StreamModule:offset(Stream0),
+
+    {I1, Padding} =
+        case CurrentOffset rem 4 of
+            0 ->
+                % Aligned - use offset 4
+                {jit_armv6m_asm:adr(r0, 4), <<>>};
+            _ ->
+                % Unaligned - use offset 8 with 2-byte padding
+                {jit_armv6m_asm:adr(r0, 8), <<0:16>>}
+        end,
+    I2 = jit_armv6m_asm:bx(lr),
     LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
     LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
     Stream1 = StreamModule:append(
         Stream0,
-        <<I1/binary, I2/binary, (length(SortedLabels)):16, LabelsTable/binary,
+        <<I1/binary, I2/binary, Padding/binary, (length(SortedLabels)):16, LabelsTable/binary,
             (length(SortedLines)):16, LinesTable/binary>>
     ),
     State#state{stream = Stream1}.

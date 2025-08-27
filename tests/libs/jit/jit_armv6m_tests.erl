@@ -1410,6 +1410,116 @@ wait_timeout_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+%% Test return_labels_and_lines/3 function
+return_labels_and_lines_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    % Test return_labels_and_lines with some sample labels and lines
+
+    % {Label, Offset} pairs
+    SortedLabels = [{1, 16}, {2, 32}],
+    % {Line, Offset} pairs
+    SortedLines = [{10, 16}, {20, 32}],
+
+    State1 = ?BACKEND:return_labels_and_lines(State0, SortedLabels, SortedLines),
+    Stream = ?BACKEND:stream(State1),
+
+    % Should have generated adr + bx lr + labels table + lines table
+    % adr = 4 bytes, bx = 2 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
+    % Total minimum: 30 bytes
+    ?assert(byte_size(Stream) >= 30),
+
+    % Expected: adr r0, <offset> + bx lr + labels table + lines table
+    % The data tables start at offset 4, so adr should be adr r0, 4 not adr r0, 8
+    Dump = <<
+        "   0:	a000      	add	r0, pc, #0	; (adr r0, 0x4)\n"
+        "   2:	4770      	bx	lr\n"
+        "   4:	0200      	lsls	r0, r0, #8\n"
+        "   6:	0100      	lsls	r0, r0, #4\n"
+        "   8:	0000      	movs	r0, r0\n"
+        "   a:	1000      	asrs	r0, r0, #32\n"
+        "   c:	0200      	lsls	r0, r0, #8\n"
+        "   e:	0000      	movs	r0, r0\n"
+        "  10:	2000      	movs	r0, #0\n"
+        "  12:	0200      	lsls	r0, r0, #8\n"
+        "  14:	0a00      	lsrs	r0, r0, #8\n"
+        "  16:	0000      	movs	r0, r0\n"
+        "  18:	1000      	asrs	r0, r0, #32\n"
+        "  1a:	1400      	asrs	r0, r0, #16\n"
+        "  1c:	0000      	movs	r0, r0\n"
+        "  1e:	2000      	movs	r0, #0"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test return_labels_and_lines/3 with unaligned offset - should fail
+return_labels_and_lines_unaligned_test() ->
+    % Create a new state with a 2-byte instruction already in the stream
+    % to simulate starting at an odd offset (offset 2 instead of 0)
+    PaddingInstruction = jit_armv6m_asm:bx(lr),
+    TempState = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    TempStream = jit_stream_binary:append(?BACKEND:stream(TempState), PaddingInstruction),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
+
+    % Test return_labels_and_lines with some sample labels and lines
+    SortedLabels = [{1, 16}, {2, 32}],
+    SortedLines = [{10, 16}, {20, 32}],
+
+    State1 = ?BACKEND:return_labels_and_lines(State0, SortedLabels, SortedLines),
+    Stream = ?BACKEND:stream(State1),
+
+    Dump = <<
+        "   0:	4770      	bx	lr\n"
+        "2:	a001      	add	r0, pc, #4	; (adr r0, 0x8)\n"
+        "4:	4770      	bx	lr\n"
+        "6:	0000      	movs	r0, r0\n"
+        "8:	0200      	lsls	r0, r0, #8\n"
+        "a:	0100      	lsls	r0, r0, #4\n"
+        "c:	0000      	movs	r0, r0\n"
+        "e:	1000      	asrs	r0, r0, #32\n"
+        "10:	0200      	lsls	r0, r0, #8\n"
+        "12:	0000      	movs	r0, r0\n"
+        "14:	2000      	movs	r0, #0\n"
+        "16:	0200      	lsls	r0, r0, #8\n"
+        "18:	0a00      	lsrs	r0, r0, #8\n"
+        "1a:	0000      	movs	r0, r0\n"
+        "1c:	1000      	asrs	r0, r0, #32\n"
+        "1e:	1400      	asrs	r0, r0, #16\n"
+        "20:	0000      	movs	r0, r0\n"
+        "22:	2000      	movs	r0, #0"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test call_primitive with {free, {x_reg, X}} that causes the jit_precompile bug
+gc_bif2_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, FuncPtr} = ?BACKEND:call_primitive(State0, ?PRIM_GET_IMPORTED_BIF, [jit_state, 42]),
+    {State2, _ResultReg} = ?BACKEND:call_func_ptr(State1, {free, FuncPtr}, [
+        ctx, 0, 3, {y_reg, 0}, {free, {x_reg, 0}}
+    ]),
+
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	6a17      	ldr	r7, [r2, #32]\n"
+        "   2:	b405      	push	{r0, r2}\n"
+        "   4:	9800      	ldr	r0, [sp, #0]\n"
+        "   6:	212a      	movs	r1, #42	; 0x2a\n"
+        "   8:	47b8      	blx	r7\n"
+        "   a:	4607      	mov	r7, r0\n"
+        "   c:	bc05      	pop	{r0, r2}\n"
+        "   e:	b405      	push	{r0, r2}\n"
+        "  10:	b082      	sub	sp, #8\n"
+        "  12:	6986      	ldr	r6, [r0, #24]\n"
+        "  14:	9600      	str	r6, [sp, #0]\n"
+        "  16:	2100      	movs	r1, #0\n"
+        "  18:	2203      	movs	r2, #3\n"
+        "  1a:	6943      	ldr	r3, [r0, #20]\n"
+        "  1c:	681b      	ldr	r3, [r3, #0]\n"
+        "  1e:	47b8      	blx	r7\n"
+        "  20:	4607      	mov	r7, r0\n"
+        "  22:	bc05      	pop	{r0, r2}"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_ext_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
