@@ -125,6 +125,8 @@ struct Context
     // Ports support
     native_handler_f native_handler;
 
+    uint64_t reductions;
+
     unsigned int leader : 1;
     unsigned int has_min_heap_size : 1;
     unsigned int has_max_heap_size : 1;
