@@ -2569,6 +2569,16 @@ set_args1_y_reg_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+%% Test debugger function
+debugger_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:debugger(State0),
+    Stream = ?BACKEND:stream(State1),
+    Dump = <<
+        "   0:	be00      	bkpt	0x0000"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
