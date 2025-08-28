@@ -340,6 +340,23 @@ assert_all_native_free(#state{
 %% updated afterwards with update_branches/2. Emit branches for labels from
 %% 0 (special entry for lines and labels information) to LabelsCount included
 %% (special entry for OP_INT_CALL_END).
+%%
+%% On this platform, the jump table is composed of
+%% ```
+%% ldr r3, offset_to_label_0
+%% b common
+%% ldr r3, offset_to_label_1
+%% b common
+%% ...
+%% offset_to_label_0: dword (32 bits with offset)
+%% offset_to_label_1: dword (32 bits with offset)
+%% ...
+%% common:
+%%   push {r1, r4, r5, r6, r7, lr}
+%%   add pc, pc, r3
+%% ```
+%% so each entry can be anywhere (we're not limited by b's range)
+%%
 %% @end
 %% @param State current backend state
 %% @param LabelsCount number of labels in the module.
@@ -350,21 +367,75 @@ jump_table(State, LabelsCount) ->
     jump_table0(State, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
-    State;
+    % After all jump table entries, emit the common handler and offset data
+    emit_jump_table_common_and_data(State, LabelsCount);
 jump_table0(
     #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
     N,
     LabelsCount
 ) ->
     Offset = StreamModule:offset(Stream0),
-    % Create 4-byte jump table entry: prolog (push) + unconditional branch
-    PushInstr = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
-    BranchInstr = jit_armv6m_asm:b(0),
-    % Branch is after push
-    Reloc = {N, Offset + byte_size(PushInstr), b},
-    JumpEntry = <<PushInstr/binary, BranchInstr/binary>>,
+    % Calculate offsets at emit time:
+    % Layout: [entries] [common_handler] [data]
+
+    % 4 bytes per entry
+    EntriesSize = (LabelsCount + 1) * 4,
+    % push (2 bytes) + add pc, pc, r3 (2 bytes)
+    CommonHandlerSize = 4,
+
+    % Offset to common handler from current branch instruction (branch is at entry+2)
+    CommonHandlerOffset = EntriesSize - (N * 4) - 2,
+
+    % Offset to data from current ldr instruction
+
+    % PC when ldr executes
+    CurrentPC = Offset + 4,
+    DataOffset = Offset + EntriesSize + CommonHandlerSize + (N * 4) - CurrentPC,
+
+    % Create jump table entry with calculated offsets
+    LdrInstr = jit_armv6m_asm:ldr(r3, {pc, DataOffset}),
+    % branch offset in bytes
+    BranchInstr = jit_armv6m_asm:b(CommonHandlerOffset),
+    JumpEntry = <<LdrInstr/binary, BranchInstr/binary>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
-    jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
+
+    % No relocations needed since we calculated everything at emit time
+    jump_table0(State#state{stream = Stream1, branches = Branches}, N + 1, LabelsCount).
+
+%%-----------------------------------------------------------------------------
+%% @doc Emit the common handler and offset data for the jump table.
+%% @end
+%%-----------------------------------------------------------------------------
+emit_jump_table_common_and_data(
+    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    LabelsCount
+) ->
+    % Emit common handler: push {r1, r4, r5, r6, r7, lr} + add pc, pc, r3
+    CommonHandlerOffset = StreamModule:offset(Stream0),
+    PushInstr = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
+    AddInstrOffset = CommonHandlerOffset + byte_size(PushInstr),
+    % indirect jump using loaded offset
+    AddInstr = jit_armv6m_asm:add(pc, r3),
+    CommonHandler = <<PushInstr/binary, AddInstr/binary>>,
+    Stream1 = StreamModule:append(Stream0, CommonHandler),
+
+    % Emit offset data (32-bit offsets for each label, will be updated by update_branches/2)
+    {Stream2, NewBranches} = lists:foldl(
+        fun(N, {StreamAcc, BranchesAcc}) ->
+            Offset = StreamModule:offset(StreamAcc),
+            % Each data entry is a 32-bit offset that will be patched by update_branches/2
+
+            % placeholder, will be updated
+            DataEntry = <<0:32/little>>,
+            StreamNext = StreamModule:append(StreamAcc, DataEntry),
+            % Add relocation for this data entry, including the add instruction offset
+            DataReloc = {N, Offset, {jump_table_data, AddInstrOffset}},
+            {StreamNext, [DataReloc | BranchesAcc]}
+        end,
+        {Stream1, Branches},
+        lists:seq(0, LabelsCount)
+    ),
+    State#state{stream = Stream2, branches = NewBranches}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -390,7 +461,15 @@ update_branches(
         case Type of
             {adr, Reg} when Rel rem 4 =:= 0 -> jit_armv6m_asm:adr(Reg, Rel);
             {adr, Reg} when Rel rem 4 =:= 2 -> jit_armv6m_asm:adr(Reg, Rel + 2);
-            b -> jit_armv6m_asm:b(Rel)
+            b ->
+                jit_armv6m_asm:b(Rel);
+            {jump_table_data, AddInstrOffset} ->
+                % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
+
+                % PC when add instruction executes
+                AddPC = AddInstrOffset + 4,
+                RelativeOffset = LabelOffset - AddPC,
+                <<RelativeOffset:32/little>>
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
     update_branches(State#state{stream = Stream1, branches = BranchesT}, Labels).
@@ -1964,6 +2043,10 @@ set_continuation_to_label(
     Stream2 = StreamModule:append(Stream1, Code),
     State1#state{stream = Stream2}.
 
+%% @doc Set the contination to a given offset
+%% Return a reference so the offset will be updated with update_branches
+%% This is only used with OP_WAIT_TIMEOUT and the offset is after the current
+%% code and not too far, so on Thumb we can use adr instruction.
 set_continuation_to_offset(
     #state{
         stream_module = StreamModule,

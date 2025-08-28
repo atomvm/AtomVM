@@ -49,6 +49,27 @@ adds_test_() ->
         )
     ].
 
+add_test_() ->
+    [
+        %% ARMv6-M Thumb ADD instructions (register, high registers supported)
+        %% ADD Rd, Rm - adds register value to register (supports PC)
+        ?_assertEqual(
+            asm(<<16#449f:16/little>>, "add pc, r3"), jit_armv6m_asm:add(pc, r3)
+        ),
+        ?_assertEqual(
+            asm(<<16#4440:16/little>>, "add r0, r8"), jit_armv6m_asm:add(r0, r8)
+        ),
+        ?_assertEqual(
+            asm(<<16#4488:16/little>>, "add r8, r1"), jit_armv6m_asm:add(r8, r1)
+        ),
+        ?_assertEqual(
+            asm(<<16#44c9:16/little>>, "add r9, r9"), jit_armv6m_asm:add(r9, r9)
+        ),
+        ?_assertEqual(
+            asm(<<16#4419:16/little>>, "add r1, r3"), jit_armv6m_asm:add(r1, r3)
+        )
+    ].
+
 subs_test_() ->
     [
         ?_assertEqual(
