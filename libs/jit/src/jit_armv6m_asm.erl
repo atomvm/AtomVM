@@ -19,6 +19,7 @@
 -module(jit_armv6m_asm).
 
 -export([
+    add/2,
     adds/2,
     adds/3,
     sub/2,
@@ -147,6 +148,20 @@ cond_to_num(nv) -> 15.
     (Reg =:= r0 orelse Reg =:= r1 orelse Reg =:= r2 orelse Reg =:= r3 orelse Reg =:= r4 orelse
         Reg =:= r5 orelse Reg =:= r6 orelse Reg =:= r7)
 ).
+
+%% Emit an ADD instruction (Thumb encoding, high register form)
+%% ADD Rd, Rm - adds register value to register (supports high registers including PC)
+%% Encoding: 01000100 DN RmNum[3:0] RdLow3[2:0]
+-spec add(arm_gpr_register(), arm_gpr_register()) -> binary().
+add(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
+    RdNum = reg_to_num(Rd),
+    RmNum = reg_to_num(Rm),
+    % Extract bit 3 of Rd
+    DN = (RdNum bsr 3) band 1,
+    RdLow3 = RdNum band 7,
+    % Build 16-bit instruction: 01000100 DN RmNum[3:0] RdLow3[2:0]
+    Instr = (2#01000100 bsl 8) bor (DN bsl 7) bor (RmNum bsl 3) bor RdLow3,
+    <<Instr:16/little>>.
 
 %% Emit an ADDS instruction (Thumb encoding)
 %% ADDS Rd, #imm - adds immediate value to register and sets flags (2-operand form)
