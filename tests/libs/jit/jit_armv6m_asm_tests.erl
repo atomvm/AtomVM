@@ -578,6 +578,25 @@ pop_test_() ->
         )
     ].
 
+bkpt_test_() ->
+    [
+        %% BKPT #0
+        ?_assertEqual(
+            asm(<<16#be00:16/little>>, "bkpt #0"),
+            jit_armv6m_asm:bkpt(0)
+        ),
+        %% BKPT #1
+        ?_assertEqual(
+            asm(<<16#be01:16/little>>, "bkpt #1"),
+            jit_armv6m_asm:bkpt(1)
+        ),
+        %% BKPT #255
+        ?_assertEqual(
+            asm(<<16#beff:16/little>>, "bkpt #255"),
+            jit_armv6m_asm:bkpt(255)
+        )
+    ].
+
 asm(Bin, Str) ->
     case erlang:system_info(machine) of
         "ATOM" ->

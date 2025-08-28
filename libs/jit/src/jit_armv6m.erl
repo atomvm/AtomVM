@@ -270,7 +270,7 @@ offset(#state{stream_module = StreamModule, stream = Stream}) ->
 %%-----------------------------------------------------------------------------
 -spec debugger(state()) -> state().
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
-    Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:brk(0)),
+    Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:bkpt(0)),
     State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
