@@ -29,6 +29,7 @@
     muls/2,
     b/1,
     bcc/2,
+    bkpt/1,
     blx/1,
     bx/1,
     cmp/2,
@@ -227,6 +228,13 @@ bx(Reg) when is_atom(Reg) ->
     %% Thumb BX (branch exchange) encoding: 010001110mmmm000
     %% This branches to register without setting LR
     <<(16#4700 bor (RegNum bsl 3)):16/little>>.
+
+%% Emit a BKPT (breakpoint) instruction
+-spec bkpt(byte()) -> binary().
+bkpt(Imm) when is_integer(Imm), Imm >= 0, Imm =< 16#FF ->
+    %% ARM Thumb BKPT encoding: 1011 1110 iiii iiii
+    %% where iiii iiii is the 8-bit immediate value
+    <<(16#BE00 bor (Imm band 16#FF)):16/little>>.
 
 %% Emit a load register (LDR) instruction
 -spec ldr(arm_gpr_register(), {arm_gpr_register(), integer()}) -> binary().
