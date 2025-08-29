@@ -19,7 +19,7 @@
 %
 -module(jit_precompile).
 
--export([start/0]).
+-export([start/0, compile/3]).
 
 -include_lib("jit.hrl").
 
