@@ -1110,6 +1110,29 @@ if_block_cond(
     State2 = State1#state{stream = Stream1},
     {State2, ne, byte_size(I1)};
 if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {RegOrTuple, '==', Val}
+) when is_integer(Val) ->
+    Offset0 = StreamModule:offset(Stream0),
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    Offset1 = StreamModule:offset(Stream1),
+    I1 = jit_armv6m_asm:cmp(Reg, Temp),
+    I2 = jit_armv6m_asm:bcc(ne, 0),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, ne, Offset1 - Offset0 + byte_size(I1)};
+if_block_cond(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
