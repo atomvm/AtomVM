@@ -2639,6 +2639,74 @@ move_to_native_register_test_() ->
             ]
         end}.
 
+add_test0(State0, Reg, Imm, Dump) ->
+    State1 = ?BACKEND:add(State0, Reg, Imm),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+add_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    add_test0(State0, r2, 2, <<
+                        "   0:	3202      	adds	r2, #2"
+                    >>)
+                end),
+                ?_test(begin
+                    add_test0(State0, r2, 256, <<
+                        "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
+                        "   2:	e001      	b.n	0x8\n"
+                        "   4:	0100      	lsls	r0, r0, #4\n"
+                        "   6:	0000      	movs	r0, r0\n"
+                        "   8:	19d2      	adds	r2, r2, r7"
+                    >>)
+                end),
+                ?_test(begin
+                    add_test0(State0, r2, r3, <<
+                        "   0:	18d2      	adds	r2, r2, r3"
+                    >>)
+                end)
+            ]
+        end}.
+
+sub_test0(State0, Reg, Imm, Dump) ->
+    State1 = ?BACKEND:sub(State0, Reg, Imm),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+sub_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    sub_test0(State0, r2, 2, <<
+                        "   0:	3a02      	subs	r2, #2"
+                    >>)
+                end),
+                ?_test(begin
+                    sub_test0(State0, r2, 256, <<
+                        "   0:	4f00      	ldr	r7, [pc, #0]	; (0x4)\n"
+                        "   2:	e001      	b.n	0x8\n"
+                        "   4:	0100      	lsls	r0, r0, #4\n"
+                        "   6:	0000      	movs	r0, r0\n"
+                        "   8:	1bd2      	subs	r2, r2, r7"
+                    >>)
+                end),
+                ?_test(begin
+                    sub_test0(State0, r2, r3, <<
+                        "   0:	1ad2      	subs	r2, r2, r3"
+                    >>)
+                end)
+            ]
+        end}.
+
 mul_test0(State0, Reg, Imm, Dump) ->
     State1 = ?BACKEND:mul(State0, Reg, Imm),
     Stream = ?BACKEND:stream(State1),
