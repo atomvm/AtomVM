@@ -165,16 +165,6 @@ str_w_test_() ->
         )
     ].
 
-ldr_d_test_() ->
-    [
-        ?_assertEqual(
-            asm(<<16#fd40001e:32/little>>, "ldr d30, [x0]"), jit_aarch64_asm:ldr_d(v30, {r0, 0})
-        ),
-        ?_assertEqual(
-            asm(<<16#fd400420:32/little>>, "ldr d0, [x1, #8]"), jit_aarch64_asm:ldr_d(v0, {r1, 8})
-        )
-    ].
-
 mov_test_() ->
     [
         % mov immediate - simple cases

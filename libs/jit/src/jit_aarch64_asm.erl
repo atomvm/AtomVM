@@ -39,7 +39,6 @@
     and_/3,
     ldr/2,
     ldr_w/2,
-    ldr_d/2,
     ldr/3,
     lsl/3,
     lsr/3,
@@ -98,8 +97,6 @@
     | r30
     | sp
     | xzr.
-
--type aarch64_simd_register() :: v0 | v1 | v2 | v3 | v4 | v5 | v6 | v7 | v30 | v31.
 
 -type cc() :: eq | ne | cs | cc | mi | pl | vs | vc | hi | ls | ge | lt | gt | le | al | nv.
 
@@ -205,21 +202,6 @@ ldr(Xt, {Xn, Xm, lsl, Amount}) when
     S = Amount div 3,
     <<
         (16#F8606800 bor (XmNum bsl 16) bor (S bsl 12) bor (XnNum bsl 5) bor XtNum):32/little
-    >>.
-
--spec ldr_d(aarch64_simd_register(), {aarch64_gpr_register(), integer()}) -> binary().
-ldr_d(Dt, {Rn, Offset}) when
-    is_atom(Dt),
-    is_atom(Rn),
-    is_integer(Offset),
-    Offset >= 0,
-    Offset =< 32760,
-    (Offset rem 8) =:= 0
-->
-    DtNum = simd_reg_to_num(Dt),
-    RnNum = reg_to_num(Rn),
-    <<
-        (16#FD400000 bor ((Offset div 8) bsl 10) bor (RnNum bsl 5) bor DtNum):32/little
     >>.
 
 %% Emit a load register (LDR) instruction for 32-bit load from memory (AArch64 encoding)
@@ -730,17 +712,6 @@ reg_to_num(r30) -> 30;
 reg_to_num(sp) -> 31;
 %% Zero register (XZR) is also r31
 reg_to_num(xzr) -> 31.
-
-simd_reg_to_num(v0) -> 0;
-simd_reg_to_num(v1) -> 1;
-simd_reg_to_num(v2) -> 2;
-simd_reg_to_num(v3) -> 3;
-simd_reg_to_num(v4) -> 4;
-simd_reg_to_num(v5) -> 5;
-simd_reg_to_num(v6) -> 6;
-simd_reg_to_num(v7) -> 7;
-simd_reg_to_num(v30) -> 30;
-simd_reg_to_num(v31) -> 31.
 
 %% Emit a conditional branch instruction
 -spec bcc(cc(), integer()) -> binary().
