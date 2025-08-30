@@ -1093,7 +1093,7 @@ if_block_cond(State, {'(int)', RegOrTuple, '!=', Val}) when is_integer(Val) ->
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '==', Val}
-) when is_integer(Val) ->
+) when is_integer(Val) andalso Val >= 0 andalso Val =< 255 ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
@@ -2292,20 +2292,18 @@ or_(
     Stream2 = StreamModule:append(Stream1, I),
     State1#state{available_regs = [Temp | AT], stream = Stream2}.
 
-add(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, Val) ->
-    try jit_armv6m_asm:adds(Reg, Val) of
-        I ->
-            Stream1 = StreamModule:append(Stream0, I),
-            State0#state{stream = Stream1}
-    catch
-        error:{unencodable_immediate, Val} ->
-            [Temp | AT] = State0#state.available_regs,
-            State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
-            Stream1 = State1#state.stream,
-            I = jit_armv6m_asm:adds(Reg, Temp),
-            Stream2 = StreamModule:append(Stream1, I),
-            State1#state{available_regs = [Temp | AT], stream = Stream2}
-    end.
+add(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, Val) when
+    (Val >= 0 andalso Val =< 255) orelse is_atom(Val)
+->
+    I = jit_armv6m_asm:adds(Reg, Reg, Val),
+    Stream1 = StreamModule:append(Stream0, I),
+    State0#state{stream = Stream1};
+add(#state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0, Reg, Val) ->
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:adds(Reg, Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{available_regs = [Temp | AT], stream = Stream2}.
 
 mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     Val >= 0 andalso Val =< 255
@@ -2356,10 +2354,18 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
     State#state{stream = Stream1}.
 
-sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_armv6m_asm:sub(Reg, Reg, Val),
+sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
+    (Val >= 0 andalso Val =< 255) orelse is_atom(Val)
+->
+    I1 = jit_armv6m_asm:subs(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1}.
+    State#state{stream = Stream1};
+sub(#state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0, Reg, Val) ->
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:subs(Reg, Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    State1#state{available_regs = [Temp | AT], stream = Stream2}.
 
 mul(State, _Reg, 1) ->
     State;
