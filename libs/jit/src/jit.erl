@@ -900,14 +900,12 @@ first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
 first_pass(<<?OP_FMOVE, ?COMPACT_EXTENDED_FP_REGISTER, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FPRegIndex, Rest1} = decode_literal(Rest0),
-    FPReg = {fp_reg, FPRegIndex},
     {MSt1, Dest, Rest2} = decode_dest(Rest1, MMod, MSt0),
-    ?TRACE("OP_FMOVE ~p, ~p\n", [FPReg, Dest]),
-    {MSt2, FPUReg} = MMod:move_to_native_register(MSt1, FPReg),
-    {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_FROM_FLOAT, [ctx, {free, FPUReg}]),
-    MSt4 = MMod:move_to_vm_register(MSt3, ResultReg, Dest),
-    MSt5 = MMod:free_native_registers(MSt4, [ResultReg, Dest]),
-    first_pass(Rest2, MMod, MSt5, State0);
+    ?TRACE("OP_FMOVE {fp_reg, ~p}, ~p\n", [FPReg, Dest]),
+    {MSt2, ResultReg} = MMod:call_primitive(MSt1, ?PRIM_TERM_FROM_FLOAT, [ctx, FPRegIndex]),
+    MSt3 = MMod:move_to_vm_register(MSt2, ResultReg, Dest),
+    MSt4 = MMod:free_native_registers(MSt3, [ResultReg, Dest]),
+    first_pass(Rest2, MMod, MSt4, State0);
 first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),

@@ -1001,9 +1001,9 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
     return ctx;
 }
 
-static term jit_term_from_float(Context *ctx, avm_float_t f)
+static term jit_term_from_float(Context *ctx, int freg)
 {
-    return term_from_float(f, &ctx->heap);
+    return term_from_float(ctx->fr[freg], &ctx->heap);
 }
 
 static void jit_term_conv_to_float(Context *ctx, term t, int freg)
