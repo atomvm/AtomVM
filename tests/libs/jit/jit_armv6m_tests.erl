@@ -43,7 +43,7 @@ call_primitive_0_test() ->
         <<
             "   0:	6817      	ldr	r7, [r2, #0]\n"
             "   2:	b405      	push	{r0, r2}\n"
-            "   4:	9900      	ldr	r1, [sp, #0]\n"
+            "   4:	9902      	ldr	r1, [sp, #8]\n"
             "   6:	47b8      	blx	r7\n"
             "   8:	4607      	mov	r7, r0\n"
             "   a:	bc05      	pop	{r0, r2}"
@@ -59,7 +59,7 @@ call_primitive_1_test() ->
         <<
             "   0:	6857      	ldr	r7, [r2, #4]\n"
             "   2:	b405      	push	{r0, r2}\n"
-            "   4:	9900      	ldr	r1, [sp, #0]\n"
+            "   4:	9902      	ldr	r1, [sp, #8]\n"
             "   6:	47b8      	blx	r7\n"
             "   8:	4607      	mov	r7, r0\n"
             "   a:	bc05      	pop	{r0, r2}"
@@ -130,7 +130,7 @@ call_primitive_6_args_test() ->
             "  10:	9601      	str	r6, [sp, #4]\n"
             "  12:	2608      	movs	r6, #8\n"
             "  14:	9600      	str	r6, [sp, #0]\n"
-            "  16:	9900      	ldr	r1, [sp, #0]\n"
+            "  16:	9902      	ldr	r1, [sp, #8]\n"
             "  18:	463a      	mov	r2, r7\n"
             "  1a:	2340      	movs	r3, #64	; 0x40\n"
             "  1c:	47a8      	blx	r5\n"
@@ -350,7 +350,7 @@ return_if_not_equal_to_ctx_test_() ->
                         <<
                             "   0:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
                             "   2:	b405      	push	{r0, r2}\n"
-                            "   4:	9900      	ldr	r1, [sp, #0]\n"
+                            "   4:	9902      	ldr	r1, [sp, #8]\n"
                             "   6:	47b8      	blx	r7\n"
                             "   8:	4607      	mov	r7, r0\n"
                             "   a:	bc05      	pop	{r0, r2}\n"
@@ -376,7 +376,7 @@ return_if_not_equal_to_ctx_test_() ->
                         <<
                             "   0:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
                             "   2:	b405      	push	{r0, r2}\n"
-                            "   4:	9900      	ldr	r1, [sp, #0]\n"
+                            "   4:	9902      	ldr	r1, [sp, #8]\n"
                             "   6:	47b8      	blx	r7\n"
                             "   8:	4607      	mov	r7, r0\n"
                             "   a:	bc05      	pop	{r0, r2}\n"
@@ -1375,7 +1375,7 @@ call_bif_with_large_literal_integer_test() ->
         <<
             "   0:	6a17      	ldr	r7, [r2, #32]\n"
             "   2:	b405      	push	{r0, r2}\n"
-            "   4:	9800      	ldr	r0, [sp, #0]\n"
+            "   4:	9802      	ldr	r0, [sp, #8]\n"
             "   6:	2102      	movs	r1, #2\n"
             "   8:	47b8      	blx	r7\n"
             "   a:	4607      	mov	r7, r0\n"
@@ -1762,7 +1762,7 @@ wait_timeout_test() ->
         "  20:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  22:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
         "  24:	b405      	push	{r0, r2}\n"
-        "  26:	9900      	ldr	r1, [sp, #0]\n"
+        "  26:	9902      	ldr	r1, [sp, #8]\n"
         "  28:	47b8      	blx	r7\n"
         "  2a:	4607      	mov	r7, r0\n"
         "  2c:	bc05      	pop	{r0, r2}\n"
@@ -1882,7 +1882,7 @@ gc_bif2_test() ->
     Dump = <<
         "   0:	6a17      	ldr	r7, [r2, #32]\n"
         "   2:	b405      	push	{r0, r2}\n"
-        "   4:	9800      	ldr	r0, [sp, #0]\n"
+        "   4:	9802      	ldr	r0, [sp, #8]\n"
         "   6:	212a      	movs	r1, #42	; 0x2a\n"
         "   8:	47b8      	blx	r7\n"
         "   a:	4607      	mov	r7, r0\n"
@@ -2867,6 +2867,136 @@ call_func_ptr_stack_alignment_test() ->
             "   e:	bced      	pop	{r0, r2, r3, r5, r6, r7}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test for register exhaustion issue in call_func_ptr with 5+ arguments
+%% When all registers are used and we call a function with 5+ args,
+%% set_args needs temporary registers but none are available
+call_func_ptr_register_exhaustion_test_() ->
+    {setup,
+        fun() ->
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+            % Allocate all available registers to simulate register pressure
+            {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+            {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+            {State4, r4} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+            {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+            {State6, r1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
+            State6
+        end,
+        fun(State6) ->
+            [
+                ?_test(begin
+                    {State7, _ResultReg} = ?BACKEND:call_func_ptr(
+                        State6,
+                        {free, r6},
+                        [ctx, jit_state, {free, r3}, 3, 1]
+                    ),
+                    Stream = ?BACKEND:stream(State7),
+                    Dump =
+                        <<
+                            "   0:	6987      	ldr	r7, [r0, #24]\n"
+                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
+                            "   e:	b082      	sub	sp, #8\n"
+                            "  10:	2101      	movs	r1, #1\n"
+                            "  12:	9100      	str	r1, [sp, #0]\n"
+                            "  14:	9906      	ldr	r1, [sp, #24]\n"
+                            "  16:	461a      	mov	r2, r3\n"
+                            "  18:	2303      	movs	r3, #3\n"
+                            "  1a:	47b0      	blx	r6\n"
+                            "  1c:	4606      	mov	r6, r0\n"
+                            "  1e:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                        >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                ?_test(begin
+                    {State7, _ResultReg} = ?BACKEND:call_func_ptr(
+                        State6,
+                        {free, r6},
+                        [ctx, jit_state, {free, r3}, 1, r1]
+                    ),
+                    Stream = ?BACKEND:stream(State7),
+                    Dump =
+                        <<
+                            "   0:	6987      	ldr	r7, [r0, #24]\n"
+                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
+                            "   e:	b082      	sub	sp, #8\n"
+                            "  10:	9100      	str	r1, [sp, #0]\n"
+                            "  12:	9906      	ldr	r1, [sp, #24]\n"
+                            "  14:	461a      	mov	r2, r3\n"
+                            "  16:	2301      	movs	r3, #1\n"
+                            "  18:	47b0      	blx	r6\n"
+                            "  1a:	4606      	mov	r6, r0\n"
+                            "  1c:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                        >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                ?_test(begin
+                    {State7, ResultReg} = ?BACKEND:call_func_ptr(
+                        State6,
+                        {free, r6},
+                        [ctx, jit_state, {free, r3}, r1, 1]
+                    ),
+                    Stream = ?BACKEND:stream(State7),
+                    Dump =
+                        <<
+                            "   0:	6987      	ldr	r7, [r0, #24]\n"
+                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
+                            "   e:	b082      	sub	sp, #8\n"
+                            "  10:	2101      	movs	r1, #1\n"
+                            "  12:	9100      	str	r1, [sp, #0]\n"
+                            "  14:	9906      	ldr	r1, [sp, #24]\n"
+                            "  16:	461a      	mov	r2, r3\n"
+                            "  18:	460b      	mov	r3, r1\n"
+                            "  1a:	47b0      	blx	r6\n"
+                            "  1c:	4606      	mov	r6, r0\n"
+                            "  1e:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                        >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual(r6, ResultReg)
+                end),
+                ?_test(begin
+                    {State7, _ResultReg} = ?BACKEND:call_func_ptr(
+                        State6,
+                        {free, r1},
+                        [r6, r3]
+                    ),
+                    Stream = ?BACKEND:stream(State7),
+                    Dump =
+                        <<
+                            "   0:	6987      	ldr	r7, [r0, #24]\n"
+                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   c:	b4ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7}\n"
+                            "   e:	4630      	mov	r0, r6\n"
+                            "  10:	4619      	mov	r1, r3\n"
+                            "  12:	4788      	blx	r1\n"
+                            "  14:	9001      	str	r0, [sp, #4]\n"
+                            "  16:	bcff      	pop	{r0, r1, r2, r3, r4, r5, r6, r7}"
+                        >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end)
+            ]
+        end}.
 
 dump_to_bin0(<<N, $:, Tail/binary>>, addr, Acc) when ?IS_HEX_DIGIT(N) ->
     dump_to_bin0(Tail, hex, Acc);
