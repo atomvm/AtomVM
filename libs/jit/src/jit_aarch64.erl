@@ -1636,20 +1636,6 @@ move_to_native_register(
     I2 = jit_aarch64_asm:ldr(RegDst, {RegDst, Y * 8}),
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1};
-move_to_native_register(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        available_regs = [Temp | _]
-    } = State,
-    {fp_reg, F},
-    RegDst
-) ->
-    I1 = jit_aarch64_asm:ldr(Temp, ?FP_REGS),
-    I2 = jit_aarch64_asm:ldr_d(RegDst, {Temp, F * 8}),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
 -spec copy_to_native_register(state(), value()) -> {state(), aarch64_register()}.
