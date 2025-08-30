@@ -2573,17 +2573,6 @@ move_to_native_register_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
-                %% move_to_native_register/2: {fp_reg, N} - DISABLED for ARMv6-M (no FPU)
-                %% ?_test(begin
-                %%     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {fp_reg, 3}),
-                %%     Stream = ?BACKEND:stream(State1),
-                %%     ?assertEqual(v0, Reg),
-                %%     Dump = <<
-                %%         "   0:	f9406007 	ldr	x7, [x0, #192]\n"
-                %%         "   4:	fd400ce0 	ldr	d0, [x7, #24]"
-                %%     >>,
-                %%     ?assertEqual(dump_to_bin(Dump), Stream)
-                %% end),
                 %% move_to_native_register/3: imm to reg
                 ?_test(begin
                     State1 = ?BACKEND:move_to_native_register(State0, 42, r6),
@@ -2627,6 +2616,23 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:	6941      	ldr	r1, [r0, #20]\n"
                         "   2:	6889      	ldr	r1, [r1, #8]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                %% Test: ptr with offset to fp_reg (term_to_float)
+                ?_test(begin
+                    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+                    State2 = ?BACKEND:move_to_vm_register(
+                        State1, {free, {ptr, RegA, 1}}, {fp_reg, 3}
+                    ),
+                    Stream = ?BACKEND:stream(State2),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	6e06      	ldr	r6, [r0, #96]	; 0x60\n"
+                        "   4:	68bd      	ldr	r5, [r7, #8]\n"
+                        "   6:	61b5      	str	r5, [r6, #24]\n"
+                        "   8:	68fd      	ldr	r5, [r7, #12]\n"
+                        "   a:	61f5      	str	r5, [r6, #28]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
