@@ -1337,10 +1337,18 @@ move_to_vm_register_test_() ->
                 end),
                 %% Test: ptr with offset to fp_reg (term_to_float)
                 ?_test(begin
-                    move_to_vm_register_test0(State0, {free, {ptr, r9, 1}}, {fp_reg, 3}, <<
-                        "   0:	f9400127 	ldr	x7, [x9]\n"
-                        "   4:	f9002407 	str	x7, [x0, #72]"
-                    >>)
+                    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+                    State2 = ?BACKEND:move_to_vm_register(
+                        State1, {free, {ptr, RegA, 1}}, {fp_reg, 3}
+                    ),
+                    Stream = ?BACKEND:stream(State2),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f94004e7 	ldr	x7, [x7, #8]\n"
+                        "   8:	f9406008 	ldr	x8, [x0, #192]\n"
+                        "   c:	f9000d07 	str	x7, [x8, #24]"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
             ]
         end}.
@@ -1512,7 +1520,7 @@ move_to_array_element_test_() ->
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
                     State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(8, State1, [r8, r9]),
+                    State2 = setelement(7, State1, [r8, r9]),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -1526,7 +1534,7 @@ move_to_array_element_test_() ->
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
                     State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(8, State1, [r8, r9]),
+                    State2 = setelement(7, State1, [r8, r9]),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -1585,17 +1593,6 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:	f9401407 	ldr	x7, [x0, #40]\n"
                         "   4:	f9400ce7 	ldr	x7, [x7, #24]"
-                    >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
-                end),
-                %% move_to_native_register/2: {fp_reg, N}
-                ?_test(begin
-                    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {fp_reg, 3}),
-                    Stream = ?BACKEND:stream(State1),
-                    ?assertEqual(v0, Reg),
-                    Dump = <<
-                        "   0:	f9406007 	ldr	x7, [x0, #192]\n"
-                        "   4:	fd400ce0 	ldr	d0, [x7, #24]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
