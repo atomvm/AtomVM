@@ -159,25 +159,25 @@ call_primitive_extended_regs_test() ->
         "   8:	4607      	mov	r7, r0\n"
         "   a:	bc05      	pop	{r0, r2}\n"
         "   c:	6c96      	ldr	r6, [r2, #72]	; 0x48\n"
-        "   e:	b485      	push	{r0, r2, r7}\n"
+        "   e:	b4c5      	push	{r0, r2, r6, r7}\n"
         "  10:	2114      	movs	r1, #20\n"
         "  12:	47b0      	blx	r6\n"
-        "  14:	4606      	mov	r6, r0\n"
-        "  16:	bc85      	pop	{r0, r2, r7}\n"
-        "  18:	6c95      	ldr	r5, [r2, #72]	; 0x48\n"
-        "  1a:	b4c5      	push	{r0, r2, r6, r7}\n"
+        "  14:	4605      	mov	r5, r0\n"
+        "  16:	bcc5      	pop	{r0, r2, r6, r7}\n"
+        "  18:	6c96      	ldr	r6, [r2, #72]	; 0x48\n"
+        "  1a:	b4a5      	push	{r0, r2, r5, r7}\n"
         "  1c:	2113      	movs	r1, #19\n"
-        "  1e:	47a8      	blx	r5\n"
-        "  20:	4605      	mov	r5, r0\n"
-        "  22:	bcc5      	pop	{r0, r2, r6, r7}\n"
+        "  1e:	47b0      	blx	r6\n"
+        "  20:	4606      	mov	r6, r0\n"
+        "  22:	bca5      	pop	{r0, r2, r5, r7}\n"
         "  24:	6b54      	ldr	r4, [r2, #52]	; 0x34\n"
-        "  26:	b425      	push	{r0, r2, r5}\n"
+        "  26:	b455      	push	{r0, r2, r4, r6}\n"
         "  28:	6839      	ldr	r1, [r7, #0]\n"
-        "  2a:	6832      	ldr	r2, [r6, #0]\n"
+        "  2a:	682a      	ldr	r2, [r5, #0]\n"
         "  2c:	47a0      	blx	r4\n"
-        "  2e:	4604      	mov	r4, r0\n"
-        "  30:	bc25      	pop	{r0, r2, r5}\n"
-        "  32:	602c      	str	r4, [r5, #0]"
+        "  2e:	4607      	mov	r7, r0\n"
+        "  30:	bc55      	pop	{r0, r2, r4, r6}\n"
+        "  32:	6037      	str	r7, [r6, #0]"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1381,17 +1381,17 @@ call_bif_with_large_literal_integer_test() ->
             "   a:	4607      	mov	r7, r0\n"
             "   c:	bc05      	pop	{r0, r2}\n"
             "   e:	6bd6      	ldr	r6, [r2, #60]	; 0x3c\n"
-            "  10:	b485      	push	{r0, r2, r7}\n"
+            "  10:	b4c5      	push	{r0, r2, r6, r7}\n"
             "  12:	4901      	ldr	r1, [pc, #4]	; (0x18)\n"
             "  14:	e002      	b.n	0x1c\n"
             "  16:	0000      	movs	r0, r0\n"
             "  18:	e895 3b7f 	ldmia.w	r5, {r0, r1, r2, r3, r4, r5, r6, r8, r9, fp, ip, sp}\n"
             "  1c:	47b0      	blx	r6\n"
-            "  1e:	4606      	mov	r6, r0\n"
-            "  20:	bc85      	pop	{r0, r2, r7}\n"
+            "  1e:	4605      	mov	r5, r0\n"
+            "  20:	bcc5      	pop	{r0, r2, r6, r7}\n"
             "  22:	b405      	push	{r0, r2}\n"
             "  24:	b082      	sub	sp, #8\n"
-            "  26:	9600      	str	r6, [sp, #0]\n"
+            "  26:	9500      	str	r5, [sp, #0]\n"
             "  28:	2100      	movs	r1, #0\n"
             "  2a:	2201      	movs	r2, #1\n"
             "  2c:	6983      	ldr	r3, [r0, #24]\n"
@@ -2844,6 +2844,29 @@ dump_to_bin(Dump) ->
 -define(IS_HEX_DIGIT(C),
     ((C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) orelse (C >= $A andalso C =< $F))
 ).
+
+%% Test for stack alignment issue in call_func_ptr
+%% When we have an odd number of saved registers, the stack becomes misaligned
+%% before the function call, violating ARM AAPCS which requires 8-byte alignment
+call_func_ptr_stack_alignment_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, r4} = ?BACKEND:call_func_ptr(State3, {free, r3}, [42]),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+            "   6:	b4ed      	push	{r0, r2, r3, r5, r6, r7}\n"
+            "   8:	202a      	movs	r0, #42	; 0x2a\n"
+            "   a:	4798      	blx	r3\n"
+            "   c:	4604      	mov	r4, r0\n"
+            "   e:	bced      	pop	{r0, r2, r3, r5, r6, r7}"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 dump_to_bin0(<<N, $:, Tail/binary>>, addr, Acc) when ?IS_HEX_DIGIT(N) ->
     dump_to_bin0(Tail, hex, Acc);
