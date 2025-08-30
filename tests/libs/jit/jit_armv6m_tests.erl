@@ -2630,16 +2630,6 @@ move_to_native_register_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
-                %% move_to_native_register/3: {fp_reg, N} - DISABLED for ARMv6-M (no FPU)
-                %% ?_test(begin
-                %%     State1 = ?BACKEND:move_to_native_register(State0, {fp_reg, 3}, v0),
-                %%     Stream = ?BACKEND:stream(State1),
-                %%     Dump = <<
-                %%         "   0:	f9406007 	ldr	x7, [x0, #192]\n"
-                %%         "   4:	fd400ce0 	ldr	d0, [x7, #24]"
-                %%     >>,
-                %%     ?assertEqual(dump_to_bin(Dump), Stream)
-                %% end)
             ]
         end}.
 
