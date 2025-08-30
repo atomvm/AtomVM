@@ -1736,17 +1736,22 @@ move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {y_reg,
     Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
     State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
     State1#state{available_regs = AR0};
+% term_to_float
 move_to_vm_register(
-    #state{stream_module = StreamModule, available_regs = [Temp | _], stream = Stream0} = State,
-    {fp, RegA, RegB},
+    #state{stream_module = StreamModule, available_regs = [Temp1, Temp2 | _], stream = Stream0} =
+        State0,
+    {free, {ptr, Reg, 1}},
     {fp_reg, F}
 ) ->
-    I1 = jit_armv6m_asm:ldr(Temp, ?FP_REGS),
-    I2 = jit_armv6m_asm:str(RegA, {Temp, F * 8}),
-    I2 = jit_armv6m_asm:str(RegB, {Temp, F * 8 + 4}),
-    Code = <<I1/binary, I2/binary>>,
+    I1 = jit_armv6m_asm:ldr(Temp1, ?FP_REGS),
+    I2 = jit_armv6m_asm:ldr(Temp2, {Reg, 8}),
+    I3 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8}),
+    I4 = jit_armv6m_asm:ldr(Temp2, {Reg, 12}),
+    I5 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8 + 4}),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1}.
+    State1 = free_native_register(State0, Reg),
+    State1#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a move of an array element (reg[x]) to a vm or a native register.
