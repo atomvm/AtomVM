@@ -1090,47 +1090,53 @@ call_only_or_schedule_next_and_label_relocation_test() ->
     Stream = ?BACKEND:stream(State8),
     Dump =
         <<
-            "   0:	4b03      	ldr	r3, [pc, #12]\n"
+            "   0:	4b03      	ldr	r3, [pc, #12]	; (0x10)\n"
             "   2:	e003      	b.n	0xc\n"
-            "   4:	4b04      	ldr	r3, [pc, #16]\n"
+            "   4:	4b04      	ldr	r3, [pc, #16]	; (0x18)\n"
             "   6:	e001      	b.n	0xc\n"
-            "   8:	4b05      	ldr	r3, [pc, #20]\n"
+            "   8:	4b05      	ldr	r3, [pc, #20]	; (0x20)\n"
             "   a:	e7ff      	b.n	0xc\n"
             "   c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   e:	449f      	add	pc, r3\n"
-            "  10:	0036      	movs	r6, r6\n"
+            "  10:	0042      	lsls	r2, r0, #1\n"
             "  12:	0000      	movs	r0, r0\n"
             "  14:	000a      	movs	r2, r1\n"
             "  16:	0000      	movs	r0, r0\n"
-            "  18:	002c      	movs	r4, r5\n"
+            "  18:	0036      	movs	r6, r6\n"
             "  1a:	0000      	movs	r0, r0\n"
             "  1c:	9e00      	ldr	r6, [sp, #0]\n"
             "  1e:	68b7      	ldr	r7, [r6, #8]\n"
             "  20:	3f01      	subs	r7, #1\n"
             "  22:	60b7      	str	r7, [r6, #8]\n"
-            "  24:	d000      	beq.n	0x28\n"
-            "  26:	e00a      	b.n	0x3e\n"
-            "  28:	2630      	movs	r6, #48\n"
-            "  2a:	4276      	negs	r6, r6\n"
-            "  2c:	a702      	add	r7, pc, #8\n"
-            "  2e:	19f6      	adds	r6, r6, r7\n"
-            "  30:	9f00      	ldr	r7, [sp, #0]\n"
-            "  32:	607e      	str	r6, [r7, #4]\n"
-            "  34:	6897      	ldr	r7, [r2, #8]\n"
-            "  36:	9e05      	ldr	r6, [sp, #20]\n"
-            "  38:	9705      	str	r7, [sp, #20]\n"
-            "  3a:	46b6      	mov	lr, r6\n"
-            "  3c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  3e:	6817      	ldr	r7, [r2, #0]\n"
-            "  40:	9e05      	ldr	r6, [sp, #20]\n"
-            "  42:	9705      	str	r7, [sp, #20]\n"
-            "  44:	46b6      	mov	lr, r6\n"
-            "  46:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  48:	6857      	ldr	r7, [r2, #4]\n"
+            "  24:	d004      	beq.n	0x30\n"
+            "  26:	e00f      	b.n	0x48\n"
+            "  28:	46c0      	nop			; (mov r8, r8)\n"
+            "  2a:	46c0      	nop			; (mov r8, r8)\n"
+            "  2c:	46c0      	nop			; (mov r8, r8)\n"
+            "  2e:	46c0      	nop			; (mov r8, r8)\n"
+            "  30:	2638      	movs	r6, #56	; 0x38\n"
+            "  32:	4276      	negs	r6, r6\n"
+            "  34:	a702      	add	r7, pc, #8	; (adr r7, 0x40)\n"
+            "  36:	19f6      	adds	r6, r6, r7\n"
+            "  38:	9f00      	ldr	r7, [sp, #0]\n"
+            "  3a:	607e      	str	r6, [r7, #4]\n"
+            "  3c:	6897      	ldr	r7, [r2, #8]\n"
+            "  3e:	9e05      	ldr	r6, [sp, #20]\n"
+            "  40:	9705      	str	r7, [sp, #20]\n"
+            "  42:	46b6      	mov	lr, r6\n"
+            "  44:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  46:	46c0      	nop			; (mov r8, r8)\n"
+            "  48:	6817      	ldr	r7, [r2, #0]\n"
             "  4a:	9e05      	ldr	r6, [sp, #20]\n"
             "  4c:	9705      	str	r7, [sp, #20]\n"
             "  4e:	46b6      	mov	lr, r6\n"
-            "  50:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+            "  50:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  52:	46c0      	nop			; (mov r8, r8)\n"
+            "  54:	6857      	ldr	r7, [r2, #4]\n"
+            "  56:	9e05      	ldr	r6, [sp, #20]\n"
+            "  58:	9705      	str	r7, [sp, #20]\n"
+            "  5a:	46b6      	mov	lr, r6\n"
+            "  5c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1152,47 +1158,54 @@ call_only_or_schedule_next_and_label_relocation_unaligned_test() ->
     Dump =
         <<
             "   0:	6019      	str	r1, [r3, #0]\n"
-            "   2:	4b03      	ldr	r3, [pc, #12]\n"
+            "   2:	4b03      	ldr	r3, [pc, #12]	; (0x10)\n"
             "   4:	e003      	b.n	0xe\n"
-            "   6:	4b04      	ldr	r3, [pc, #16]\n"
+            "   6:	4b04      	ldr	r3, [pc, #16]	; (0x18)\n"
             "   8:	e001      	b.n	0xe\n"
-            "   a:	4b05      	ldr	r3, [pc, #20]\n"
+            "   a:	4b05      	ldr	r3, [pc, #20]	; (0x20)\n"
             "   c:	e7ff      	b.n	0xe\n"
             "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  10:	449f      	add	pc, r3\n"
-            "  12:	0036      	movs	r6, r6\n"
+            "  12:	0044      	lsls	r4, r0, #1\n"
             "  14:	0000      	movs	r0, r0\n"
-            "  16:	000a      	movs	r2, r1\n"
+            "  16:	000c      	movs	r4, r1\n"
             "  18:	0000      	movs	r0, r0\n"
-            "  1a:	002c      	movs	r4, r5\n"
+            "  1a:	0038      	movs	r0, r7\n"
             "  1c:	0000      	movs	r0, r0\n"
-            "  1e:	9e00      	ldr	r6, [sp, #0]\n"
-            "  20:	68b7      	ldr	r7, [r6, #8]\n"
-            "  22:	3f01      	subs	r7, #1\n"
-            "  24:	60b7      	str	r7, [r6, #8]\n"
-            "  26:	d000      	beq.n	0x2a\n"
-            "  28:	e00a      	b.n	0x40\n"
-            "  2a:	2634      	movs	r6, #52\n"
-            "  2c:	4276      	negs	r6, r6\n"
-            "  2e:	a703      	add	r7, pc, #12\n"
-            "  30:	19f6      	adds	r6, r6, r7\n"
-            "  32:	9f00      	ldr	r7, [sp, #0]\n"
-            "  34:	607e      	str	r6, [r7, #4]\n"
-            "  36:	6897      	ldr	r7, [r2, #8]\n"
-            "  38:	9e05      	ldr	r6, [sp, #20]\n"
-            "  3a:	9705      	str	r7, [sp, #20]\n"
-            "  3c:	46b6      	mov	lr, r6\n"
-            "  3e:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  40:	6817      	ldr	r7, [r2, #0]\n"
+            "  1e:	46c0      	nop			; (mov r8, r8)\n"
+            "  20:	9e00      	ldr	r6, [sp, #0]\n"
+            "  22:	68b7      	ldr	r7, [r6, #8]\n"
+            "  24:	3f01      	subs	r7, #1\n"
+            "  26:	60b7      	str	r7, [r6, #8]\n"
+            "  28:	d004      	beq.n	0x34\n"
+            "  2a:	e00f      	b.n	0x4c\n"
+            "  2c:	46c0      	nop			; (mov r8, r8)\n"
+            "  2e:	46c0      	nop			; (mov r8, r8)\n"
+            "  30:	46c0      	nop			; (mov r8, r8)\n"
+            "  32:	46c0      	nop			; (mov r8, r8)\n"
+            "  34:	263c      	movs	r6, #60	; 0x3c\n"
+            "  36:	4276      	negs	r6, r6\n"
+            "  38:	a702      	add	r7, pc, #8	; (adr r7, 0x44)\n"
+            "  3a:	19f6      	adds	r6, r6, r7\n"
+            "  3c:	9f00      	ldr	r7, [sp, #0]\n"
+            "  3e:	607e      	str	r6, [r7, #4]\n"
+            "  40:	6897      	ldr	r7, [r2, #8]\n"
             "  42:	9e05      	ldr	r6, [sp, #20]\n"
             "  44:	9705      	str	r7, [sp, #20]\n"
             "  46:	46b6      	mov	lr, r6\n"
             "  48:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  4a:	6857      	ldr	r7, [r2, #4]\n"
-            "  4c:	9e05      	ldr	r6, [sp, #20]\n"
-            "  4e:	9705      	str	r7, [sp, #20]\n"
-            "  50:	46b6      	mov	lr, r6\n"
-            "  52:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+            "  4a:	46c0      	nop			; (mov r8, r8)\n"
+            "  4c:	6817      	ldr	r7, [r2, #0]\n"
+            "  4e:	9e05      	ldr	r6, [sp, #20]\n"
+            "  50:	9705      	str	r7, [sp, #20]\n"
+            "  52:	46b6      	mov	lr, r6\n"
+            "  54:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  56:	46c0      	nop			; (mov r8, r8)\n"
+            "  58:	6857      	ldr	r7, [r2, #4]\n"
+            "  5a:	9e05      	ldr	r6, [sp, #20]\n"
+            "  5c:	9705      	str	r7, [sp, #20]\n"
+            "  5e:	46b6      	mov	lr, r6\n"
+            "  60:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1221,34 +1234,40 @@ call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
     Stream = ?BACKEND:stream(State8),
     % Extract the final section starting at 0x11c to verify the literal pool pattern
     Dump = <<
-        " 11c:	9e00      	ldr	r6, [sp, #0]\n"
+        "11c:	9e00      	ldr	r6, [sp, #0]\n"
         " 11e:	68b7      	ldr	r7, [r6, #8]\n"
         " 120:	3f01      	subs	r7, #1\n"
         " 122:	60b7      	str	r7, [r6, #8]\n"
-        " 124:	d000      	beq.n	0x128\n"
-        " 126:	e00c      	b.n	0x142\n"
-        " 128:	4e00      	ldr	r6, [pc, #0]	; (0x12c)\n"
-        " 12a:	e001      	b.n	0x130\n"
-        " 12c:	fed0 ffff 	mrc2	15, 6, pc, cr0, cr15, {7}\n"
-        " 130:	a701      	add	r7, pc, #4	; (adr r7, 0x138)\n"
-        " 132:	19f6      	adds	r6, r6, r7\n"
-        " 134:	9f00      	ldr	r7, [sp, #0]\n"
-        " 136:	607e      	str	r6, [r7, #4]\n"
-        " 138:	6897      	ldr	r7, [r2, #8]\n"
-        " 13a:	9e05      	ldr	r6, [sp, #20]\n"
-        " 13c:	9705      	str	r7, [sp, #20]\n"
-        " 13e:	46b6      	mov	lr, r6\n"
-        " 140:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        " 142:	6817      	ldr	r7, [r2, #0]\n"
-        " 144:	9e05      	ldr	r6, [sp, #20]\n"
-        " 146:	9705      	str	r7, [sp, #20]\n"
-        " 148:	46b6      	mov	lr, r6\n"
-        " 14a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        " 14c:	6857      	ldr	r7, [r2, #4]\n"
+        " 124:	d004      	beq.n	0x130\n"
+        " 126:	e011      	b.n	0x14c\n"
+        " 128:	46c0      	nop			; (mov r8, r8)\n"
+        " 12a:	46c0      	nop			; (mov r8, r8)\n"
+        " 12c:	46c0      	nop			; (mov r8, r8)\n"
+        " 12e:	46c0      	nop			; (mov r8, r8)\n"
+        " 130:	4e00      	ldr	r6, [pc, #0]	; (0x134)\n"
+        " 132:	e001      	b.n	0x138\n"
+        " 134:	fec8 ffff 	mcr2	15, 6, pc, cr8, cr15, {7}	; <UNPREDICTABLE>\n"
+        " 138:	a701      	add	r7, pc, #4	; (adr r7, 0x140)\n"
+        " 13a:	19f6      	adds	r6, r6, r7\n"
+        " 13c:	9f00      	ldr	r7, [sp, #0]\n"
+        " 13e:	607e      	str	r6, [r7, #4]\n"
+        " 140:	6897      	ldr	r7, [r2, #8]\n"
+        " 142:	9e05      	ldr	r6, [sp, #20]\n"
+        " 144:	9705      	str	r7, [sp, #20]\n"
+        " 146:	46b6      	mov	lr, r6\n"
+        " 148:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 14a:	46c0      	nop			; (mov r8, r8)\n"
+        " 14c:	6817      	ldr	r7, [r2, #0]\n"
         " 14e:	9e05      	ldr	r6, [sp, #20]\n"
         " 150:	9705      	str	r7, [sp, #20]\n"
         " 152:	46b6      	mov	lr, r6\n"
-        " 154:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+        " 154:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 156:	46c0      	nop			; (mov r8, r8)\n"
+        " 158:	6857      	ldr	r7, [r2, #4]\n"
+        " 15a:	9e05      	ldr	r6, [sp, #20]\n"
+        " 15c:	9705      	str	r7, [sp, #20]\n"
+        " 15e:	46b6      	mov	lr, r6\n"
+        " 160:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
     >>,
     {_, RelevantBinary} = split_binary(Stream, 16#11c),
     ?assertEqual(dump_to_bin(Dump), RelevantBinary).
@@ -1278,35 +1297,41 @@ call_only_or_schedule_next_and_label_relocation_large_gap_unaligned_test() ->
     Stream = ?BACKEND:stream(State8),
     % Extract the final section starting at 0x11a to verify the literal pool pattern with different alignment
     Dump = <<
-        " 11a:	9e00      	ldr	r6, [sp, #0]\n"
-        " 11c:	68b7      	ldr	r7, [r6, #8]\n"
-        " 11e:	3f01      	subs	r7, #1\n"
-        " 120:	60b7      	str	r7, [r6, #8]\n"
-        " 122:	d000      	beq.n	0x126\n"
-        " 124:	e00d      	b.n	0x142\n"
-        " 126:	4e01      	ldr	r6, [pc, #4]	; (0x12c)\n"
-        " 128:	e002      	b.n	0x130\n"
-        " 12a:	0000      	movs	r0, r0\n"
-        " 12c:	fed0 ffff 	mrc2	15, 6, pc, cr0, cr15, {7}\n"
-        " 130:	a701      	add	r7, pc, #4	; (adr r7, 0x138)\n"
-        " 132:	19f6      	adds	r6, r6, r7\n"
-        " 134:	9f00      	ldr	r7, [sp, #0]\n"
-        " 136:	607e      	str	r6, [r7, #4]\n"
-        " 138:	6897      	ldr	r7, [r2, #8]\n"
-        " 13a:	9e05      	ldr	r6, [sp, #20]\n"
-        " 13c:	9705      	str	r7, [sp, #20]\n"
-        " 13e:	46b6      	mov	lr, r6\n"
-        " 140:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        " 142:	6817      	ldr	r7, [r2, #0]\n"
-        " 144:	9e05      	ldr	r6, [sp, #20]\n"
-        " 146:	9705      	str	r7, [sp, #20]\n"
-        " 148:	46b6      	mov	lr, r6\n"
-        " 14a:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        " 14c:	6857      	ldr	r7, [r2, #4]\n"
+        " 11a:	46c0      	nop			; (mov r8, r8)\n"
+        " 11c:	9e00      	ldr	r6, [sp, #0]\n"
+        " 11e:	68b7      	ldr	r7, [r6, #8]\n"
+        " 120:	3f01      	subs	r7, #1\n"
+        " 122:	60b7      	str	r7, [r6, #8]\n"
+        " 124:	d004      	beq.n	0x130\n"
+        " 126:	e011      	b.n	0x14c\n"
+        " 128:	46c0      	nop			; (mov r8, r8)\n"
+        " 12a:	46c0      	nop			; (mov r8, r8)\n"
+        " 12c:	46c0      	nop			; (mov r8, r8)\n"
+        " 12e:	46c0      	nop			; (mov r8, r8)\n"
+        " 130:	4e00      	ldr	r6, [pc, #0]	; (0x134)\n"
+        " 132:	e001      	b.n	0x138\n"
+        " 134:	fec8 ffff 	mcr2	15, 6, pc, cr8, cr15, {7}	; <UNPREDICTABLE>\n"
+        " 138:	a701      	add	r7, pc, #4	; (adr r7, 0x140)\n"
+        " 13a:	19f6      	adds	r6, r6, r7\n"
+        " 13c:	9f00      	ldr	r7, [sp, #0]\n"
+        " 13e:	607e      	str	r6, [r7, #4]\n"
+        " 140:	6897      	ldr	r7, [r2, #8]\n"
+        " 142:	9e05      	ldr	r6, [sp, #20]\n"
+        " 144:	9705      	str	r7, [sp, #20]\n"
+        " 146:	46b6      	mov	lr, r6\n"
+        " 148:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 14a:	46c0      	nop			; (mov r8, r8)\n"
+        " 14c:	6817      	ldr	r7, [r2, #0]\n"
         " 14e:	9e05      	ldr	r6, [sp, #20]\n"
         " 150:	9705      	str	r7, [sp, #20]\n"
         " 152:	46b6      	mov	lr, r6\n"
-        " 154:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+        " 154:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        " 156:	46c0      	nop			; (mov r8, r8)\n"
+        " 158:	6857      	ldr	r7, [r2, #4]\n"
+        " 15a:	9e05      	ldr	r6, [sp, #20]\n"
+        " 15c:	9705      	str	r7, [sp, #20]\n"
+        " 15e:	46b6      	mov	lr, r6\n"
+        " 160:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
     >>,
     {_, RelevantBinary} = split_binary(Stream, 16#11a),
     ?assertEqual(dump_to_bin(Dump), RelevantBinary).
@@ -1411,29 +1436,36 @@ is_integer_test() ->
     ),
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State4 = ?BACKEND:add_label(State3, Label, 16#100),
     State5 = ?BACKEND:update_branches(State4),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	43fe      	mvns	r6, r7\n"
         "   4:	0736      	lsls	r6, r6, #28\n"
-        "   6:	d00d      	beq.n	0x24\n"
+        "   6:	d015      	beq.n	0x34\n"
         "   8:	463e      	mov	r6, r7\n"
         "   a:	2503      	movs	r5, #3\n"
         "   c:	402e      	ands	r6, r5\n"
         "   e:	2e02      	cmp	r6, #2\n"
-        "  10:	d000      	beq.n	0x14\n"
-        "  12:	e087      	b.n	0x124\n"
-        "  14:	2603      	movs	r6, #3\n"
-        "  16:	43b7      	bics	r7, r6\n"
-        "  18:	683f      	ldr	r7, [r7, #0]\n"
-        "  1a:	263f      	movs	r6, #63	; 0x3f\n"
-        "  1c:	4037      	ands	r7, r6\n"
-        "  1e:	2f08      	cmp	r7, #8\n"
-        "  20:	d000      	beq.n	0x24\n"
-        "  22:	e07f      	b.n	0x124"
+        "  10:	d004      	beq.n	0x1c\n"
+        "  12:	e075      	b.n	0x100\n"
+        "  14:	46c0      	nop			; (mov r8, r8)\n"
+        "  16:	46c0      	nop			; (mov r8, r8)\n"
+        "  18:	46c0      	nop			; (mov r8, r8)\n"
+        "  1a:	46c0      	nop			; (mov r8, r8)\n"
+        "  1c:	2603      	movs	r6, #3\n"
+        "  1e:	43b7      	bics	r7, r6\n"
+        "  20:	683f      	ldr	r7, [r7, #0]\n"
+        "  22:	263f      	movs	r6, #63	; 0x3f\n"
+        "  24:	4037      	ands	r7, r6\n"
+        "  26:	2f08      	cmp	r7, #8\n"
+        "  28:	d004      	beq.n	0x34\n"
+        "  2a:	e069      	b.n	0x100\n"
+        "  2c:	46c0      	nop			; (mov r8, r8)\n"
+        "  2e:	46c0      	nop			; (mov r8, r8)\n"
+        "  30:	46c0      	nop			; (mov r8, r8)\n"
+        "  32:	46c0      	nop			; (mov r8, r8)"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1468,34 +1500,42 @@ is_number_test() ->
     ),
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State4 = ?BACKEND:add_label(State3, Label, 16#100),
     State5 = ?BACKEND:update_branches(State4),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	43fe      	mvns	r6, r7\n"
         "   4:	0736      	lsls	r6, r6, #28\n"
-        "   6:	d012      	beq.n	0x2e\n"
+        "   6:	d01b      	beq.n	0x40\n"
         "   8:	463e      	mov	r6, r7\n"
         "   a:	2503      	movs	r5, #3\n"
         "   c:	402e      	ands	r6, r5\n"
         "   e:	2e02      	cmp	r6, #2\n"
-        "  10:	d000      	beq.n	0x14\n"
-        "  12:	e08c      	b.n	0x12e\n"
-        "  14:	2603      	movs	r6, #3\n"
-        "  16:	43b7      	bics	r7, r6\n"
-        "  18:	683f      	ldr	r7, [r7, #0]\n"
-        "  1a:	463e      	mov	r6, r7\n"
-        "  1c:	253f      	movs	r5, #63	; 0x3f\n"
-        "  1e:	402e      	ands	r6, r5\n"
-        "  20:	2e08      	cmp	r6, #8\n"
-        "  22:	d004      	beq.n	0x2e\n"
-        "  24:	263f      	movs	r6, #63	; 0x3f\n"
-        "  26:	4037      	ands	r7, r6\n"
-        "  28:	2f18      	cmp	r7, #24\n"
-        "  2a:	d000      	beq.n	0x2e\n"
-        "  2c:	e07f      	b.n	0x12e"
+        "  10:	d004      	beq.n	0x1c\n"
+        "  12:	e075      	b.n	0x100\n"
+        "  14:	46c0      	nop			; (mov r8, r8)\n"
+        "  16:	46c0      	nop			; (mov r8, r8)\n"
+        "  18:	46c0      	nop			; (mov r8, r8)\n"
+        "  1a:	46c0      	nop			; (mov r8, r8)\n"
+        "  1c:	2603      	movs	r6, #3\n"
+        "  1e:	43b7      	bics	r7, r6\n"
+        "  20:	683f      	ldr	r7, [r7, #0]\n"
+        "  22:	463e      	mov	r6, r7\n"
+        "  24:	253f      	movs	r5, #63	; 0x3f\n"
+        "  26:	402e      	ands	r6, r5\n"
+        "  28:	2e08      	cmp	r6, #8\n"
+        "  2a:	d009      	beq.n	0x40\n"
+        "  2c:	263f      	movs	r6, #63	; 0x3f\n"
+        "  2e:	4037      	ands	r7, r6\n"
+        "  30:	2f18      	cmp	r7, #24\n"
+        "  32:	d005      	beq.n	0x40\n"
+        "  34:	e064      	b.n	0x100\n"
+        "  36:	46c0      	nop			; (mov r8, r8)\n"
+        "  38:	46c0      	nop			; (mov r8, r8)\n"
+        "  3a:	46c0      	nop			; (mov r8, r8)\n"
+        "  3c:	46c0      	nop			; (mov r8, r8)\n"
+        "  3e:	46c0      	nop			; (mov r8, r8)"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1510,17 +1550,148 @@ is_boolean_test() ->
     end),
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State4 = ?BACKEND:add_label(State3, Label, 16#100),
     State5 = ?BACKEND:update_branches(State4),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
-        "   4:	d002      	beq.n	0xc\n"
+        "   4:	d006      	beq.n	0x14\n"
         "   6:	2f0b      	cmp	r7, #11\n"
-        "   8:	d000      	beq.n	0xc\n"
-        "   a:	e07f      	b.n	0x10c"
+        "   8:	d004      	beq.n	0x14\n"
+        "   a:	e079      	b.n	0x100\n"
+        "   c:	46c0      	nop			; (mov r8, r8)\n"
+        "   e:	46c0      	nop			; (mov r8, r8)\n"
+        "  10:	46c0      	nop			; (mov r8, r8)\n"
+        "  12:	46c0      	nop			; (mov r8, r8)"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Label = 1,
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
+    ?BACKEND:assert_all_native_free(State3),
+    State4 = ?BACKEND:add_label(State3, Label, 16#1000),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
+    Dump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   4:	d006      	beq.n	0x14\n"
+        "   6:	2f0b      	cmp	r7, #11\n"
+        "   8:	d004      	beq.n	0x14\n"
+        "   a:	4e01      	ldr	r6, [pc, #4]	; (0x10)\n"
+        "   c:	447e      	add	r6, pc\n"
+        "   e:	4730      	bx	r6\n"
+        "  10:	0ff0      	lsrs	r0, r6, #31\n"
+        "  12:	0000      	movs	r0, r0"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_unaligned_test() ->
+    % Create a new state with a 2-byte instruction already in the stream
+    % to simulate starting at an odd offset (offset 2 instead of 0)
+    PaddingInstruction = jit_armv6m_asm:bx(lr),
+    TempState = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    TempStream = jit_stream_binary:append(?BACKEND:stream(TempState), PaddingInstruction),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
+
+    Label = 1,
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
+    ?BACKEND:assert_all_native_free(State3),
+    State4 = ?BACKEND:add_label(State3, Label, 16#1000),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
+    Dump = <<
+        "   0:	4770      	bx	lr\n"
+        "   2:	6987      	ldr	r7, [r0, #24]\n"
+        "   4:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   6:	d007      	beq.n	0x18\n"
+        "   8:	2f0b      	cmp	r7, #11\n"
+        "   a:	d005      	beq.n	0x18\n"
+        "   c:	4e01      	ldr	r6, [pc, #4]	; (0x14)\n"
+        "   e:	447e      	add	r6, pc\n"
+        "  10:	4730      	bx	r6\n"
+        "  12:	46c0      	nop			; (mov r8, r8)\n"
+        "  14:	0fee      	lsrs	r6, r5, #31\n"
+        "  16:	0000      	movs	r0, r0"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Label = 1,
+    State1 = ?BACKEND:add_label(State0, Label, 16#1000),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
+    Dump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   4:	d006      	beq.n	0x14\n"
+        "   6:	2f0b      	cmp	r7, #11\n"
+        "   8:	d004      	beq.n	0x14\n"
+        "   a:	4e01      	ldr	r6, [pc, #4]	; (0x10)\n"
+        "   c:	447e      	add	r6, pc\n"
+        "   e:	4730      	bx	r6\n"
+        "  10:	0ff0      	lsrs	r0, r6, #31\n"
+        "  12:	0000      	movs	r0, r0"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_known_unaligned_test() ->
+    % Create a new state with a 2-byte instruction already in the stream
+    % to simulate starting at an odd offset (offset 2 instead of 0)
+    PaddingInstruction = jit_armv6m_asm:bx(lr),
+    TempState = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    TempStream = jit_stream_binary:append(?BACKEND:stream(TempState), PaddingInstruction),
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
+
+    Label = 1,
+    State1 = ?BACKEND:add_label(State0, Label, 16#1000),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
+    Dump = <<
+        "   0:	4770      	bx	lr\n"
+        "   2:	6987      	ldr	r7, [r0, #24]\n"
+        "   4:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   6:	d007      	beq.n	0x18\n"
+        "   8:	2f0b      	cmp	r7, #11\n"
+        "   a:	d005      	beq.n	0x18\n"
+        "   c:	4e01      	ldr	r6, [pc, #4]	; (0x14)\n"
+        "   e:	447e      	add	r6, pc\n"
+        "  10:	4730      	bx	r6\n"
+        "  12:	46c0      	nop			; (mov r8, r8)\n"
+        "  14:	0fee      	lsrs	r6, r5, #31\n"
+        "  16:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1566,7 +1737,7 @@ wait_timeout_test() ->
         "  18:	9605      	str	r6, [sp, #20]\n"
         "  1a:	46be      	mov	lr, r7\n"
         "  1c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        "  1e:	0000      	movs	r0, r0\n"
+        "  1e:	46c0      	nop			; (mov r8, r8)\n"
         "  20:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  22:	6d57      	ldr	r7, [r2, #84]	; 0x54\n"
         "  24:	b405      	push	{r0, r2}\n"
