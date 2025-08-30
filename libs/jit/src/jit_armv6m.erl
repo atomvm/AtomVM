@@ -1387,8 +1387,23 @@ call_func_ptr(
         [{free, FuncPtrReg} | Args]
     ),
     UsedRegs1 = UsedRegs0 -- FreeRegs,
-    SavedRegs = [?CTX_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
-    {_SavedRegsOdd, Stream1} = push_registers(SavedRegs, StreamModule, Stream0),
+    SavedRegsBase = [?CTX_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
+
+    % Calculate available registers for potential padding
+    FreeGPRegs = FreeRegs -- (FreeRegs -- ?AVAILABLE_REGS),
+    AvailableRegs1 = FreeGPRegs ++ AvailableRegs0,
+
+    % Add padding register if odd number to maintain 8-byte stack alignment per ARM AAPCS
+    {SavedRegs, AvailableRegsAfterPadding} =
+        case (length(SavedRegsBase) rem 2) =:= 1 of
+            true when AvailableRegs1 /= [] ->
+                [PaddingReg | RestAvailable] = AvailableRegs1,
+                {SavedRegsBase ++ [PaddingReg], RestAvailable};
+            _ ->
+                {SavedRegsBase, AvailableRegs1}
+        end,
+
+    Stream1 = push_registers(SavedRegs, StreamModule, Stream0),
 
     % Set up arguments following AArch64 calling convention
     State1 = set_args(State0#state{stream = Stream1}, Args),
@@ -1399,12 +1414,10 @@ call_func_ptr(
     Stream4 = StreamModule:append(Stream2, Call),
 
     % If r0 is in used regs, save it to another temporary register
-    FreeGPRegs = FreeRegs -- (FreeRegs -- ?AVAILABLE_REGS),
-    AvailableRegs1 = FreeGPRegs ++ AvailableRegs0,
     {Stream5, ResultReg} =
         case lists:member(r0, SavedRegs) of
             true ->
-                [Temp | _] = AvailableRegs1,
+                [Temp | _] = AvailableRegsAfterPadding,
                 {StreamModule:append(Stream4, jit_armv6m_asm:mov(Temp, r0)), Temp};
             false ->
                 {Stream4, r0}
@@ -1425,11 +1438,9 @@ call_func_ptr(
     }.
 
 push_registers(SavedRegs, StreamModule, Stream0) when length(SavedRegs) > 0 ->
-    IsOdd = (length(SavedRegs) rem 2) =:= 1,
-    Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:push(SavedRegs)),
-    {IsOdd, Stream1};
+    StreamModule:append(Stream0, jit_armv6m_asm:push(SavedRegs));
 push_registers([], _StreamModule, Stream0) ->
-    {false, Stream0}.
+    Stream0.
 
 pop_registers(SavedRegs, StreamModule, Stream0) when length(SavedRegs) > 0 ->
     Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:pop(SavedRegs)),
