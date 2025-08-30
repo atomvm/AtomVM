@@ -504,6 +504,27 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '==', -1},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2501      	movs	r5, #1\n"
+                        "   6:	426d      	negs	r5, r5\n"
+                        "   8:	42af      	cmp	r7, r5\n"
+                        "   a:	d100      	bne.n	0xe\n"
+                        "   c:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {'(int)', RegA, '==', 0},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)
