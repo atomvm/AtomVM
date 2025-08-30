@@ -464,11 +464,58 @@ update_branches(
         case Type of
             {adr, Reg} when Rel rem 4 =:= 0 -> jit_armv6m_asm:adr(Reg, Rel);
             {adr, Reg} when Rel rem 4 =:= 2 -> jit_armv6m_asm:adr(Reg, Rel + 2);
-            b ->
-                jit_armv6m_asm:b(Rel);
+            {far_branch, Size, TempReg} ->
+                % Check if branch can now be optimized to near branch
+                if
+                    Rel >= -2044 andalso Rel =< 2050 andalso (Rel rem 2) =:= 0 ->
+                        % Optimize to near branch: b + nops to fill original size
+                        DirectBranch = jit_armv6m_asm:b(Rel),
+                        % Fill remaining bytes with NOPs
+                        NopCount = (Size - 2) div 2,
+                        Nops = <<<<(jit_armv6m_asm:nop())/binary>> || _ <- lists:seq(1, NopCount)>>,
+                        <<DirectBranch/binary, Nops/binary>>;
+                    true ->
+                        % Keep far branch sequence, calculate correct ldr immediate and update literal
+
+                        % Calculate where the literal should be placed (same logic as generation)
+                        LdrOffset = Offset,
+                        % ldr + add + bx = 6 bytes
+                        AfterInstructionsOffset = Offset + 6,
+                        AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
+
+                        % Calculate correct PC-relative offset for ldr instruction
+
+                        % PC aligned down
+                        PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
+                        LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
+
+                        % Calculate the relative offset for the literal value
+                        % This is the offset from the add instruction's PC to the target
+                        % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
+                        AddPCOffset = Offset + 6,
+                        RelativeOffset = LabelOffset - AddPCOffset,
+
+                        if
+                            Size =:= 12 ->
+                                % 12-byte sequence with alignment
+                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                                I2 = jit_armv6m_asm:add(TempReg, pc),
+                                I3 = jit_armv6m_asm:bx(TempReg),
+                                I4 = jit_armv6m_asm:nop(),
+                                I5 = <<RelativeOffset:32/little>>,
+                                <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
+                            % Size =:= 10
+                            true ->
+                                % 10-byte sequence without alignment
+                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                                I2 = jit_armv6m_asm:add(TempReg, pc),
+                                I3 = jit_armv6m_asm:bx(TempReg),
+                                I4 = <<RelativeOffset:32/little>>,
+                                <<I1/binary, I2/binary, I3/binary, I4/binary>>
+                        end
+                end;
             {jump_table_data, AddInstrOffset} ->
                 % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
-
                 % PC when add instruction executes
                 AddPC = AddInstrOffset + 4,
                 RelativeOffset = LabelOffset - AddPC,
@@ -749,25 +796,110 @@ return_if_not_equal_to_ctx(
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, labels = Labels} =
-        State,
-    Label
+    #state{stream_module = StreamModule, stream = Stream0, labels = Labels} = State0, Label
 ) ->
+    LabelLookupResult = lists:keyfind(Label, 1, Labels),
     Offset = StreamModule:offset(Stream0),
-    case lists:keyfind(Label, 1, Labels) of
-        {Label, LabelOffset} ->
-            % Label is already known, emit direct branch without relocation
-            Rel = LabelOffset - Offset,
-            I1 = jit_armv6m_asm:b(Rel),
-            Stream1 = StreamModule:append(Stream0, I1),
-            State#state{stream = Stream1};
-        false ->
-            % Label not yet known, emit placeholder and add relocation
-            I1 = jit_armv6m_asm:b(0),
-            Reloc = {Label, Offset, b},
-            Stream1 = StreamModule:append(Stream0, I1),
-            State#state{stream = Stream1, branches = [Reloc | AccBranches]}
-    end.
+    {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
+    Stream1 = StreamModule:append(Stream0, CodeBlock),
+    State1#state{stream = Stream1}.
+
+branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) when
+    LabelOffset - Offset =< 2050, LabelOffset - Offset >= -2044
+->
+    % Near branch: use direct B instruction
+    Rel = LabelOffset - Offset,
+    CodeBlock = jit_armv6m_asm:b(Rel),
+    {State, CodeBlock};
+branch_to_label_code(
+    #state{available_regs = [TempReg | _]} = State0, Offset, Label, {Label, LabelOffset}
+) ->
+    % Far branch: use register-based sequence, need temporary register
+    % Calculate alignment for literal pool
+    LdrOffset = Offset,
+    % ldr + add + bx = 6 bytes
+    AfterInstructionsOffset = Offset + 6,
+    % Round up to 4-byte boundary
+    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
+    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
+
+    % Calculate PC-relative offset for ldr instruction
+    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
+
+    % PC aligned down
+    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
+    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
+
+    % Calculate the literal value: target - PC_at_add_instruction
+    % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
+    AddPCValue = Offset + 6,
+    LiteralValue = LabelOffset - AddPCValue,
+
+    if
+        PaddingSize > 0 ->
+            % Need alignment padding
+            I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+            I2 = jit_armv6m_asm:add(TempReg, pc),
+            I3 = jit_armv6m_asm:bx(TempReg),
+            % Padding
+            I4 = jit_armv6m_asm:nop(),
+            I5 = <<LiteralValue:32/little>>,
+            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
+        true ->
+            % No alignment padding needed
+            I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+            I2 = jit_armv6m_asm:add(TempReg, pc),
+            I3 = jit_armv6m_asm:bx(TempReg),
+            I4 = <<LiteralValue:32/little>>,
+            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>
+    end,
+    {State0, CodeBlock};
+branch_to_label_code(
+    #state{available_regs = [TempReg | _], branches = Branches} = State0, Offset, Label, false
+) ->
+    % Calculate alignment for literal pool
+    LdrOffset = Offset,
+    % ldr + add + bx = 6 bytes
+    AfterInstructionsOffset = Offset + 6,
+    % Round up to 4-byte boundary
+    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
+    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
+
+    % Calculate PC-relative offset for ldr instruction
+    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
+
+    % PC aligned down
+    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
+    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
+
+    {CodeBlock, SequenceSize} =
+        if
+            PaddingSize > 0 ->
+                % Need alignment padding
+                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                I2 = jit_armv6m_asm:add(TempReg, pc),
+                I3 = jit_armv6m_asm:bx(TempReg),
+                I4 = jit_armv6m_asm:nop(),
+                % Placeholder offset
+                I5 = <<0:32/little>>,
+                Seq = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
+                {Seq, byte_size(Seq)};
+            true ->
+                % No alignment padding needed
+                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                I2 = jit_armv6m_asm:add(TempReg, pc),
+                I3 = jit_armv6m_asm:bx(TempReg),
+                % Placeholder offset
+                I4 = <<0:32/little>>,
+                Seq = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+                {Seq, byte_size(Seq)}
+        end,
+    % Add relocation entry
+    Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
+    State1 = State0#state{branches = [Reloc | Branches]},
+    {State1, CodeBlock};
+branch_to_label_code(#state{available_regs = []}, _Offset, _Label, _LabelLookup) ->
+    error(no_available_registers).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
@@ -2369,7 +2501,6 @@ call_only_or_schedule_next(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = Branches,
         available_regs = [Temp, TempJitState | _]
     } = State0,
     Label
@@ -2387,16 +2518,53 @@ call_only_or_schedule_next(
     % If not zero, we want to continue execution at Label
     % If zero, we want to fall through to scheduling code
 
-    % Skip over the unconditional branch (2 bytes)
-    I4 = jit_armv6m_asm:bcc(eq, 4),
-    % Unconditional branch to label (will be patched later)
-    I5 = jit_armv6m_asm:b(0),
-    LongBranchOffset = StreamModule:offset(Stream1) + byte_size(I4),
-    LongBranchReloc = {Label, LongBranchOffset, b},
-    Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary>>),
-    State1 = State0#state{stream = Stream2, branches = [LongBranchReloc | Branches]},
-    State2 = set_continuation_to_label(State1, Label),
-    call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
+    % Look up label once to avoid duplicate lookup in helper
+    LabelLookupResult = lists:keyfind(Label, 1, State0#state.labels),
+
+    State4 =
+        case LabelLookupResult of
+            {Label, LabelOffset} ->
+                % Label is known, check if we can optimize the conditional branch
+                BccOffset = StreamModule:offset(Stream1),
+                % After bcc instruction
+                BranchOffset = BccOffset + 2,
+                Rel = LabelOffset - BranchOffset,
+
+                if
+                    Rel >= -252 andalso Rel =< 258 andalso (Rel rem 2) =:= 0 ->
+                        % Near branch: use direct conditional branch
+
+                        % Branch if NOT zero (ne)
+                        I4 = jit_armv6m_asm:bcc(ne, Rel),
+                        Stream2 = StreamModule:append(Stream1, I4),
+                        State0#state{stream = Stream2};
+                    true ->
+                        % Far branch: use trampoline with helper
+                        % Get the code block size for the far branch sequence that will follow
+                        FarSeqOffset = BccOffset + 2,
+                        {State1, FarCodeBlock} = branch_to_label_code(
+                            State0, FarSeqOffset, Label, LabelLookupResult
+                        ),
+                        FarSeqSize = byte_size(FarCodeBlock),
+                        % Skip over the far branch sequence if zero (eq)
+                        I4 = jit_armv6m_asm:bcc(eq, FarSeqSize + 2),
+                        Stream2 = StreamModule:append(Stream1, I4),
+                        Stream3 = StreamModule:append(Stream2, FarCodeBlock),
+                        State1#state{stream = Stream3}
+                end;
+            false ->
+                % Label not known, get the far branch size for the skip
+                BccOffset = StreamModule:offset(Stream1),
+                FarSeqOffset = BccOffset + 2,
+                {State1, FarCodeBlock} = branch_to_label_code(State0, FarSeqOffset, Label, false),
+                FarSeqSize = byte_size(FarCodeBlock),
+                I4 = jit_armv6m_asm:bcc(eq, FarSeqSize + 2),
+                Stream2 = StreamModule:append(Stream1, I4),
+                Stream3 = StreamModule:append(Stream2, FarCodeBlock),
+                State1#state{stream = Stream3}
+        end,
+    State5 = set_continuation_to_label(State4, Label),
+    call_primitive_last(State5, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
 call_primitive_with_cp(State0, Primitive, Args) ->
     {State1, RewriteOffset, TempReg} = set_cp(State0),
@@ -2560,16 +2728,24 @@ args_regs(Args) ->
     ).
 
 %%-----------------------------------------------------------------------------
-%% @doc Add a label at the current offset
+%% @doc Add a label at the current offset. Eventually align it with a nop.
 %% @end
 %% @param State current backend state
 %% @param Label the label number or reference
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec add_label(state(), integer() | reference()) -> state().
-add_label(#state{stream_module = StreamModule, stream = Stream} = State, Label) ->
-    Offset = StreamModule:offset(Stream),
-    add_label(State, Label, Offset).
+add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label) ->
+    Offset0 = StreamModule:offset(Stream0),
+    {State1, Offset1} =
+        if
+            Offset0 rem 4 =:= 0 ->
+                {State0, Offset0};
+            true ->
+                Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:nop()),
+                {State0#state{stream = Stream1}, Offset0 + 2}
+        end,
+    add_label(State1, Label, Offset1).
 
 %%-----------------------------------------------------------------------------
 %% @doc Add a label at a specific offset
