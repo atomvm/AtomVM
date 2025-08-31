@@ -173,7 +173,7 @@ enum TrapAndLoadResult
 
 #ifdef __arm__
 #define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
-#define JIT_JUMPTABLE_ENTRY_SIZE 8
+#define JIT_JUMPTABLE_ENTRY_SIZE 12
 #endif
 
 #ifndef JIT_ARCH_TARGET
