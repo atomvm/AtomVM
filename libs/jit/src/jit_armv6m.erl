@@ -1020,7 +1020,7 @@ if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val) ->
+) when is_atom(Reg), is_integer(Val), Val >= 0, Val =< 255 ->
     I1 = jit_armv6m_asm:cmp(Reg, Val),
     % ge = greater than or equal
     I2 = jit_armv6m_asm:bcc(ge, 0),
@@ -1031,6 +1031,22 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = State0#state{stream = Stream1},
     {State1, ge, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, available_regs = [Temp | _]} = State0,
+    {Reg, '<', Val}
+) when is_atom(Reg), is_integer(Val) ->
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream0 = State1#state.stream,
+    I1 = jit_armv6m_asm:cmp(Reg, Temp),
+    % ge = greater than or equal
+    I2 = jit_armv6m_asm:bcc(ge, 0),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State2 = State1#state{stream = Stream1},
+    {State2, ge, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -1074,7 +1090,7 @@ if_block_cond(State, {'(int)', RegOrTuple, '==', Val}) when is_integer(Val) ->
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '!=', Val}
-) when is_integer(Val) orelse ?IS_GPR(Val) ->
+) when (is_integer(Val) andalso Val >= 0 andalso Val =< 255) orelse ?IS_GPR(Val) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
@@ -1134,6 +1150,29 @@ if_block_cond(
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
     {State3, ne, Offset1 - Offset0 + byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {RegOrTuple, '!=', Val}
+) when is_integer(Val) ->
+    Offset0 = StreamModule:offset(Stream0),
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    Offset1 = StreamModule:offset(Stream1),
+    I1 = jit_armv6m_asm:cmp(Reg, Temp),
+    I2 = jit_armv6m_asm:bcc(eq, 0),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, eq, Offset1 - Offset0 + byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
