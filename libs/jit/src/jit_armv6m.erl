@@ -178,6 +178,8 @@
 -define(PRIMITIVE(N), {?NATIVE_INTERFACE_REG, N * 4}).
 -define(MODULE_INDEX(ModuleReg), {ModuleReg, 0}).
 
+-define(JUMP_TABLE_ENTRY_SIZE, 12).
+
 % aarch64 ABI specific
 %% ARMv6-M register mappings
 
@@ -345,21 +347,14 @@ assert_all_native_free(#state{
 %% 0 (special entry for lines and labels information) to LabelsCount included
 %% (special entry for OP_INT_CALL_END).
 %%
-%% On this platform, the jump table is composed of
+%% On this platform, each jump table entry is 12 bytes.
 %% ```
-%% ldr r3, offset_to_label_0
-%% b common
-%% ldr r3, offset_to_label_1
-%% b common
-%% ...
-%% offset_to_label_0: dword (32 bits with offset)
-%% offset_to_label_1: dword (32 bits with offset)
-%% ...
-%% common:
-%%   push {r1, r4, r5, r6, r7, lr}
-%%   add pc, pc, r3
+%% ldr r3, pc+8
+%% push {r1, r4, r5, r6, r7, lr}
+%% add pc, pc, r3
+%% nop()
+%% offset_to_label0
 %% ```
-%% so each entry can be anywhere (we're not limited by b's range)
 %%
 %% @end
 %% @param State current backend state
@@ -371,75 +366,29 @@ jump_table(State, LabelsCount) ->
     jump_table0(State, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
-    % After all jump table entries, emit the common handler and offset data
-    emit_jump_table_common_and_data(State, LabelsCount);
+    State;
 jump_table0(
     #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
     N,
     LabelsCount
 ) ->
-    Offset = StreamModule:offset(Stream0),
-    % Calculate offsets at emit time:
-    % Layout: [entries] [common_handler] [data]
+    % Create jump table entry with calculated offsets - all at emit time
+    % LDR r3, {pc, 8} - load data from 8 bytes after PC (constant offset)
+    I1 = jit_armv6m_asm:ldr(r3, {pc, 8}),
+    I2 = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
+    I3 = jit_armv6m_asm:add(pc, r3),
+    I4 = jit_armv6m_asm:nop(),
 
-    % 4 bytes per entry
-    EntriesSize = (LabelsCount + 1) * 4,
-    % push (2 bytes) + add pc, pc, r3 (2 bytes)
-    CommonHandlerSize = 4,
-
-    % Offset to common handler from current branch instruction (branch is at entry+2)
-    CommonHandlerOffset = EntriesSize - (N * 4) - 2,
-
-    % Offset to data from current ldr instruction
-
-    % PC when ldr executes
-    CurrentPC = Offset + 4,
-    DataOffset = Offset + EntriesSize + CommonHandlerSize + (N * 4) - CurrentPC,
-
-    % Create jump table entry with calculated offsets
-    LdrInstr = jit_armv6m_asm:ldr(r3, {pc, DataOffset}),
-    % branch offset in bytes
-    BranchInstr = jit_armv6m_asm:b(CommonHandlerOffset),
-    JumpEntry = <<LdrInstr/binary, BranchInstr/binary>>,
+    JumpEntry = <<I1/binary, I2/binary, I3/binary, I4/binary, 0:32>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
 
-    % No relocations needed since we calculated everything at emit time
-    jump_table0(State#state{stream = Stream1, branches = Branches}, N + 1, LabelsCount).
+    % Add relocation for the data entry so update_branches/2 can patch the jump target
+    DataOffset = StreamModule:offset(Stream1) - 4,
+    % No add instruction offset needed
+    DataReloc = {N, DataOffset, {jump_table_data, 0}},
+    UpdatedState = State#state{stream = Stream1, branches = [DataReloc | Branches]},
 
-%%-----------------------------------------------------------------------------
-%% @doc Emit the common handler and offset data for the jump table.
-%% @end
-%%-----------------------------------------------------------------------------
-emit_jump_table_common_and_data(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
-    LabelsCount
-) ->
-    % Emit common handler: push {r1, r4, r5, r6, r7, lr} + add pc, pc, r3
-    CommonHandlerOffset = StreamModule:offset(Stream0),
-    PushInstr = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
-    AddInstrOffset = CommonHandlerOffset + byte_size(PushInstr),
-    % indirect jump using loaded offset
-    AddInstr = jit_armv6m_asm:add(pc, r3),
-    CommonHandler = <<PushInstr/binary, AddInstr/binary>>,
-    Stream1 = StreamModule:append(Stream0, CommonHandler),
-
-    % Emit offset data (32-bit offsets for each label, will be updated by update_branches/2)
-    {Stream2, NewBranches} = lists:foldl(
-        fun(N, {StreamAcc, BranchesAcc}) ->
-            Offset = StreamModule:offset(StreamAcc),
-            % Each data entry is a 32-bit offset that will be patched by update_branches/2
-
-            % placeholder, will be updated
-            DataEntry = <<0:32/little>>,
-            StreamNext = StreamModule:append(StreamAcc, DataEntry),
-            % Add relocation for this data entry, including the add instruction offset
-            DataReloc = {N, Offset, {jump_table_data, AddInstrOffset}},
-            {StreamNext, [DataReloc | BranchesAcc]}
-        end,
-        {Stream1, Branches},
-        lists:seq(0, LabelsCount)
-    ),
-    State#state{stream = Stream2, branches = NewBranches}.
+    jump_table0(UpdatedState, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -2272,7 +2221,7 @@ set_continuation_to_label(
 ) ->
     Offset = StreamModule:offset(Stream0),
     % Calculate jump table entry offset
-    JumpTableEntryOffset = Label * 4,
+    JumpTableEntryOffset = Label * ?JUMP_TABLE_ENTRY_SIZE,
 
     % Assume mov_immediate will be at most 10 bytes
     MaxMovImmediateSize = 10,
