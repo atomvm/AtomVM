@@ -466,6 +466,48 @@ if_block_test_() ->
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
                         State0,
+                        {RegA, '<', 42},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
+                        "   6:	da00      	bge.n	0xa\n"
+                        "   8:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {RegA, '<', 1024},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	4d00      	ldr	r5, [pc, #0]	; (0x8)\n"
+                        "   6:	da04      	bge.n	0x12\n"
+                        "   8:	0400      	lsls	r0, r0, #16\n"
+                        "   a:	0000      	movs	r0, r0\n"
+                        "   c:	42af      	cmp	r7, r5\n"
+                        "   e:	dafe      	bge.n	0xe\n"
+                        "  10:	3602      	adds	r6, #2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
                         {RegA, '==', 0},
                         fun(BSt0) ->
                             ?BACKEND:add(BSt0, RegB, 2)
@@ -616,6 +658,29 @@ if_block_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    % Test large immediate (1995) that requires temporary register
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {RegA, '!=', 1995},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 1)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   4:	4d00      	ldr	r5, [pc, #0]	; (0x8)\n"
+                        "   6:	e001      	b.n	0xc\n"
+                        "   8:	07cb      	lsls	r3, r1, #31\n"
+                        "   a:	0000      	movs	r0, r0\n"
+                        "   c:	42af      	cmp	r7, r5\n"
+                        "   e:	d000      	beq.n	0x12\n"
+                        "  10:	3601      	adds	r6, #1"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
