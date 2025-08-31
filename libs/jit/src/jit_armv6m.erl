@@ -181,8 +181,8 @@
 % aarch64 ABI specific
 %% ARMv6-M register mappings
 
-%% Link register
--define(LR_REG, r14).
+%% IP can be used as an additional scratch register
+-define(IP_REG, r12).
 
 %% Stack offset for function prolog: push {r1,r4,r5,r6,r7,lr}
 %% r1 (JITSTATE_REG) is at SP+0 after push
@@ -2354,7 +2354,47 @@ and_(
     Stream1 = State1#state.stream,
     I = jit_armv6m_asm:ands(Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
-    State1#state{available_regs = [Temp | AT], stream = Stream2}.
+    State1#state{available_regs = [Temp | AT], stream = Stream2};
+and_(
+    #state{stream_module = StreamModule, available_regs = []} = State0,
+    Reg,
+    Val
+) when Val < 0 andalso Val >= -256 ->
+    % No available registers, use r0 as temp and save it to r12
+    Stream0 = State0#state.stream,
+    % Save r0 to r12
+    Save = jit_armv6m_asm:mov(?IP_REG, r0),
+    Stream1 = StreamModule:append(Stream0, Save),
+    % Load immediate value into r0
+    State1 = mov_immediate(State0#state{stream = Stream1}, r0, bnot (Val)),
+    Stream2 = State1#state.stream,
+    % Perform BICS operation
+    I = jit_armv6m_asm:bics(Reg, r0),
+    Stream3 = StreamModule:append(Stream2, I),
+    % Restore r0 from r12
+    Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
+    Stream4 = StreamModule:append(Stream3, Restore),
+    State0#state{stream = Stream4};
+and_(
+    #state{stream_module = StreamModule, available_regs = []} = State0,
+    Reg,
+    Val
+) ->
+    % No available registers, use r0 as temp and save it to r12
+    Stream0 = State0#state.stream,
+    % Save r0 to r12
+    Save = jit_armv6m_asm:mov(?IP_REG, r0),
+    Stream1 = StreamModule:append(Stream0, Save),
+    % Load immediate value into r0
+    State1 = mov_immediate(State0#state{stream = Stream1}, r0, Val),
+    Stream2 = State1#state.stream,
+    % Perform ANDS operation
+    I = jit_armv6m_asm:ands(Reg, r0),
+    Stream3 = StreamModule:append(Stream2, I),
+    % Restore r0 from r12
+    Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
+    Stream4 = StreamModule:append(Stream3, Restore),
+    State0#state{stream = Stream4}.
 
 or_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,

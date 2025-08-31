@@ -2838,6 +2838,58 @@ debugger_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+and_register_exhaustion_negative_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    % Allocate all available registers to simulate register exhaustion
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, r4} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+    {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+    {StateNoRegs, r1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
+    % Test negative immediate (-4) which should use BICS with r0 as temp
+    StateResult = ?BACKEND:and_(StateNoRegs, r7, -4),
+    Stream = ?BACKEND:stream(StateResult),
+    ExpectedDump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   4:	6a05      	ldr	r5, [r0, #32]\n"
+        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+        "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+        "   c:	4684      	mov	ip, r0\n"
+        "   e:	2003      	movs	r0, #3\n"
+        "  10:	4387      	bics	r7, r0\n"
+        "  12:	4660      	mov	r0, ip"
+    >>,
+    ?assertEqual(dump_to_bin(ExpectedDump), Stream).
+
+and_register_exhaustion_positive_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    % Allocate all available registers to simulate register exhaustion
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, r4} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+    {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+    {StateNoRegs, r1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
+    % Test positive immediate (0x3F) which should use ANDS with r0 as temp
+    StateResult = ?BACKEND:and_(StateNoRegs, r7, 16#3F),
+    Stream = ?BACKEND:stream(StateResult),
+    ExpectedDump = <<
+        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+        "   4:	6a05      	ldr	r5, [r0, #32]\n"
+        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+        "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+        "   c:	4684      	mov	ip, r0\n"
+        "   e:	203f      	movs	r0, #63	; 0x3f\n"
+        "  10:	4007      	ands	r7, r0\n"
+        "  12:	4660      	mov	r0, ip"
+    >>,
+    ?assertEqual(dump_to_bin(ExpectedDump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
