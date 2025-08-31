@@ -266,5 +266,4 @@ start() ->
         [],
         code:all_available()
     ),
-    test(TestModules, [exact_execution]),
-    ok.
+    test(TestModules, [exact_execution]).
