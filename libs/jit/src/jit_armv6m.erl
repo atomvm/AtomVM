@@ -1476,13 +1476,13 @@ set_args(State, [Arg1, Arg2, Arg3, Arg4, Arg5], StackOffset) ->
     % Handle 5th argument on stack first (with alignment) - this may free registers
     State1 = set_args_push_stack(State, Arg5, undefined),
     % Then set up first 4 arguments in registers using existing logic
-    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset);
+    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset + 8);
 % Handle 6 parameters: handle 5th and 6th on stack first, then first 4 in registers r0-r3
 set_args(State, [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6], StackOffset) ->
     % Handle 5th and 6th arguments on stack first (no alignment needed) - this may free registers
     State1 = set_args_push_stack(State, Arg5, Arg6),
     % Then set up first 4 arguments in registers using existing logic
-    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset);
+    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset + 8);
 % Handle up to 4 parameters: all in registers r0-r3
 set_args(State, Args, StackOffset) when length(Args) =< 4 ->
     set_args_registers_only(State, Args, StackOffset).
@@ -2576,9 +2576,10 @@ decrement_reductions_and_maybe_schedule_next(
     % Set continuation to the next instruction
     ADROffset = BNEOffset + byte_size(I4),
     I5 = jit_armv6m_asm:adr(Temp, 4),
-    I6 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
+    I6 = jit_armv6m_asm:adds(Temp, Temp, 1),
+    I7 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
     % Append the instructions to the stream
-    Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary, I6/binary>>),
+    Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary, I6/binary, I7/binary>>),
     State1 = State0#state{stream = Stream2},
     State2 = call_primitive_last(State1, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]),
     % Add the prolog at the continuation point (where scheduled execution resumes)
@@ -2726,37 +2727,46 @@ rewrite_cp_offset(
     RewriteOffset,
     TempReg
 ) ->
-    NewOffset = StreamModule:offset(Stream0) - CodeOffset,
-    OffsetImm = NewOffset bsl 2,
+    CurrentOffset = StreamModule:offset(Stream0),
+    AlignedOffset = (CurrentOffset + 3) band (bnot 3),
+    PaddingSize = AlignedOffset - CurrentOffset,
+    % Execution should resume at an aligned offset
+
+    Delta0 = AlignedOffset - CodeOffset,
+    OffsetImm0 = Delta0 bsl 2,
 
     % Check if offset fits in movs immediate (0-255)
     {NewMoveInstr, Stream1} =
         if
-            OffsetImm =< 255 ->
-                {jit_armv6m_asm:movs(TempReg, OffsetImm), Stream0};
+            OffsetImm0 =< 255 ->
+                PaddedStream =
+                    if
+                        PaddingSize > 0 ->
+                            StreamModule:append(Stream0, <<0:16>>);
+                        true ->
+                            Stream0
+                    end,
+                {jit_armv6m_asm:movs(TempReg, OffsetImm0), PaddedStream};
             true ->
                 % Need to emit literal pool with proper alignment
-                CurrentOffset = StreamModule:offset(Stream0),
-                % Ensure 4-byte alignment for literal pool
-                AlignedOffset = (CurrentOffset + 3) band (bnot 3),
-                PaddingSize = AlignedOffset - CurrentOffset,
-                Padding = <<0:(PaddingSize * 8)>>,
-
-                % Emit the 32-bit literal
-                Literal = <<OffsetImm:32/little>>,
+                Delta1 = Delta0 + 4,
+                OffsetImm1 = Delta1 bsl 2,
+                % Emit the 32-bit literal to point to position after
+                % the pool
                 StreamWithLiteral = StreamModule:append(
-                    StreamModule:append(Stream0, Padding), Literal
+                    Stream0, <<0:(PaddingSize * 8), OffsetImm1:32/little>>
                 ),
 
                 % Compute PC-relative offset for ldr instruction
-                % PC is (RewriteOffset + 4) aligned to 4-byte boundary, literal is at AlignedOffset
-                PCValue = (RewriteOffset + 4 + 3) band (bnot 3),
+                PCValue = (RewriteOffset + 4) band (bnot 3),
                 PCRelOffset = AlignedOffset - PCValue,
                 LdrInstr = jit_armv6m_asm:ldr(TempReg, {pc, PCRelOffset}),
                 {LdrInstr, StreamWithLiteral}
         end,
     Stream2 = StreamModule:replace(Stream1, RewriteOffset, NewMoveInstr),
-    State0#state{stream = Stream2}.
+    Prolog = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
+    Stream3 = StreamModule:append(Stream2, Prolog),
+    State0#state{stream = Stream3}.
 
 set_bs(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
