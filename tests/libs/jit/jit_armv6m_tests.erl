@@ -135,7 +135,8 @@ call_primitive_6_args_test() ->
             "  1a:	2340      	movs	r3, #64	; 0x40\n"
             "  1c:	47a8      	blx	r5\n"
             "  1e:	4605      	mov	r5, r0\n"
-            "  20:	bc05      	pop	{r0, r2}"
+            "  20:	b002      	add	sp, #8\n"
+            "  22:	bc05      	pop	{r0, r2}"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1176,23 +1177,23 @@ call_only_or_schedule_next_and_label_relocation_test() ->
     Stream = ?BACKEND:stream(State8),
     Dump =
         <<
-            "   0:	4b02      	ldr	r3, [pc, #8]	; (0xc)\n"
+            "   0:	4b01      	ldr	r3, [pc, #4]	; (0x8)\n"
             "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   4:	449f      	add	pc, r3\n"
             "   6:	46c0      	nop			; (mov r8, r8)\n"
-            "   8:	0058      	lsls	r0, r3, #1\n"
+            "   8:	0054      	lsls	r4, r2, #1\n"
             "   a:	0000      	movs	r0, r0\n"
-            "   c:	4b02      	ldr	r3, [pc, #8]	; (0x18)\n"
+            "   c:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
             "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  10:	449f      	add	pc, r3\n"
             "  12:	46c0      	nop			; (mov r8, r8)\n"
-            "  14:	0020      	movs	r0, r4\n"
+            "  14:	0010      	movs	r0, r2\n"
             "  16:	0000      	movs	r0, r0\n"
-            "  18:	4b02      	ldr	r3, [pc, #8]	; (0x24)\n"
+            "  18:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
             "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  1c:	449f      	add	pc, r3\n"
             "  1e:	46c0      	nop			; (mov r8, r8)\n"
-            "  20:	004c      	lsls	r4, r1, #1\n"
+            "  20:	0030      	movs	r0, r6\n"
             "  22:	0000      	movs	r0, r0\n"
             "  24:	9e00      	ldr	r6, [sp, #0]\n"
             "  26:	68b7      	ldr	r7, [r6, #8]\n"
@@ -1248,23 +1249,23 @@ call_only_or_schedule_next_and_label_relocation_unaligned_test() ->
     Dump =
         <<
             "   0:	6019      	str	r1, [r3, #0]\n"
-            "   2:	4b02      	ldr	r3, [pc, #8]	; (0xc)\n"
+            "   2:	4b01      	ldr	r3, [pc, #4]	; (0xa)\n"
             "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   6:	449f      	add	pc, r3\n"
             "   8:	46c0      	nop			; (mov r8, r8)\n"
-            "   a:	005c      	lsls	r4, r3, #1\n"
+            "   a:	0056      	lsls	r6, r2, #1\n"
             "   c:	0000      	movs	r0, r0\n"
-            "   e:	4b02      	ldr	r3, [pc, #8]	; (0x18)\n"
+            "   e:	4b01      	ldr	r3, [pc, #4]	; (0x16)\n"
             "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  12:	449f      	add	pc, r3\n"
             "  14:	46c0      	nop			; (mov r8, r8)\n"
-            "  16:	0024      	movs	r4, r4\n"
+            "  16:	0012      	movs	r2, r2\n"
             "  18:	0000      	movs	r0, r0\n"
-            "  1a:	4b02      	ldr	r3, [pc, #8]	; (0x24)\n"
+            "  1a:	4b01      	ldr	r3, [pc, #4]	; (0x22)\n"
             "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  1e:	449f      	add	pc, r3\n"
             "  20:	46c0      	nop			; (mov r8, r8)\n"
-            "  22:	0050      	lsls	r0, r2, #1\n"
+            "  22:	0032      	movs	r2, r6\n"
             "  24:	0000      	movs	r0, r0\n"
             "  26:	46c0      	nop			; (mov r8, r8)\n"
             "  28:	9e00      	ldr	r6, [sp, #0]\n"
@@ -1470,16 +1471,17 @@ call_bif_with_large_literal_integer_test() ->
             "  2c:	6983      	ldr	r3, [r0, #24]\n"
             "  2e:	47b8      	blx	r7\n"
             "  30:	4607      	mov	r7, r0\n"
-            "  32:	bc05      	pop	{r0, r2}\n"
-            "  34:	2f00      	cmp	r7, #0\n"
-            "  36:	d105      	bne.n	0x44\n"
-            "  38:	6997      	ldr	r7, [r2, #24]\n"
-            "  3a:	223a      	movs	r2, #58	; 0x3a\n"
-            "  3c:	9e05      	ldr	r6, [sp, #20]\n"
-            "  3e:	9705      	str	r7, [sp, #20]\n"
-            "  40:	46b6      	mov	lr, r6\n"
-            "  42:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  44:	6187      	str	r7, [r0, #24]"
+            "  32:	b002      	add	sp, #8\n"
+            "  34:	bc05      	pop	{r0, r2}\n"
+            "  36:	2f00      	cmp	r7, #0\n"
+            "  38:	d105      	bne.n	0x46\n"
+            "  3a:	6997      	ldr	r7, [r2, #24]\n"
+            "  3c:	223c      	movs	r2, #60	; 0x3c\n"
+            "  3e:	9e05      	ldr	r6, [sp, #20]\n"
+            "  40:	9705      	str	r7, [sp, #20]\n"
+            "  42:	46b6      	mov	lr, r6\n"
+            "  44:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+            "  46:	6187      	str	r7, [r0, #24]"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1970,7 +1972,8 @@ gc_bif2_test() ->
         "  1c:	681b      	ldr	r3, [r3, #0]\n"
         "  1e:	47b8      	blx	r7\n"
         "  20:	4607      	mov	r7, r0\n"
-        "  22:	bc05      	pop	{r0, r2}"
+        "  22:	b002      	add	sp, #8\n"
+        "  24:	bc05      	pop	{r0, r2}"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -3042,7 +3045,8 @@ call_func_ptr_register_exhaustion_test_() ->
                             "  18:	2303      	movs	r3, #3\n"
                             "  1a:	47b0      	blx	r6\n"
                             "  1c:	4606      	mov	r6, r0\n"
-                            "  1e:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                            "  1e:	b002      	add	sp, #8\n"
+                            "  20:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
@@ -3069,7 +3073,8 @@ call_func_ptr_register_exhaustion_test_() ->
                             "  16:	2301      	movs	r3, #1\n"
                             "  18:	47b0      	blx	r6\n"
                             "  1a:	4606      	mov	r6, r0\n"
-                            "  1c:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                            "  1c:	b002      	add	sp, #8\n"
+                            "  1e:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
@@ -3097,7 +3102,8 @@ call_func_ptr_register_exhaustion_test_() ->
                             "  18:	460b      	mov	r3, r1\n"
                             "  1a:	47b0      	blx	r6\n"
                             "  1c:	4606      	mov	r6, r0\n"
-                            "  1e:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                            "  1e:	b002      	add	sp, #8\n"
+                            "  20:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual(r6, ResultReg)
