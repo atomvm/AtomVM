@@ -2241,8 +2241,8 @@ set_continuation_to_label(
     EstimatedAdrPC = (EstimatedAdrOffset band (bnot 3)) + 4 + 4,
     RelativeOffset = JumpTableEntryOffset - EstimatedAdrPC,
 
-    % Generate mov_immediate with the relative offset
-    State1 = mov_immediate(State, Temp2, RelativeOffset),
+    % Generate mov_immediate with the relative offset + 1 (to set thumb bit)
+    State1 = mov_immediate(State, Temp2, RelativeOffset + 1),
     Stream1 = State1#state.stream,
     ActualMovImmediateSize = StreamModule:offset(Stream1) - Offset,
 
@@ -2259,7 +2259,7 @@ set_continuation_to_label(
     % Get PC address using adr
     I1 = jit_armv6m_asm:adr(Temp1, AdrOffset),
 
-    % Add PC + offset, load jit_state, and store continuation
+    % Add PC + offset (with thumb bit set), load jit_state, and store continuation
     I2 = jit_armv6m_asm:adds(Temp2, Temp2, Temp1),
     I3 = jit_armv6m_asm:ldr(Temp1, {sp, ?STACK_OFFSET_JITSTATE}),
     I4 = jit_armv6m_asm:str(Temp2, ?JITSTATE_CONTINUATION(Temp1)),
@@ -2284,10 +2284,12 @@ set_continuation_to_offset(
     Offset = StreamModule:offset(Stream0),
     I1 = jit_armv6m_asm:adr(Temp, 4),
     Reloc = {OffsetRef, Offset, {adr, Temp}},
+    % Set thumb bit (LSB = 1) by adding 1 to the 4-byte aligned address
+    I2 = jit_armv6m_asm:adds(Temp, Temp, 1),
     % Load jit_state pointer from stack, then store continuation
-    I2a = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
-    I2b = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
-    Code = <<I1/binary, I2a/binary, I2b/binary>>,
+    I3 = jit_armv6m_asm:ldr(TempJitState, {sp, ?STACK_OFFSET_JITSTATE}),
+    I4 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
+    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, branches = [Reloc | Branches]}, OffsetRef}.
 
