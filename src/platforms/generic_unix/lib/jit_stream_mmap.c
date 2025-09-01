@@ -244,7 +244,13 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
 #elif defined(__GNUC__)
     __builtin___clear_cache(js_obj->stream_base, js_obj->stream_base + js_obj->stream_size);
 #endif
+#if JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+    // Set thumb bit for armv6m
+    ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base + 1;
+#else
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
+#endif
+
     js_obj->stream_base = NULL;
     return result;
 }
