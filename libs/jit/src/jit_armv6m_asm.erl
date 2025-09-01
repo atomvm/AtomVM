@@ -20,6 +20,7 @@
 
 -export([
     add/2,
+    add/3,
     adds/2,
     adds/3,
     sub/2,
@@ -154,7 +155,10 @@ cond_to_num(nv) -> 15.
 %% Emit an ADD instruction (Thumb encoding, high register form)
 %% ADD Rd, Rm - adds register value to register (supports high registers including PC)
 %% Encoding: 01000100 DN RmNum[3:0] RdLow3[2:0]
--spec add(arm_gpr_register(), arm_gpr_register()) -> binary().
+%% ADD SP, #imm - adds immediate value to stack pointer
+-spec add
+    (arm_gpr_register(), arm_gpr_register()) -> binary();
+    (sp, integer()) -> binary().
 add(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
     RdNum = reg_to_num(Rd),
     RmNum = reg_to_num(Rm),
@@ -163,7 +167,18 @@ add(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
     RdLow3 = RdNum band 7,
     % Build 16-bit instruction: 01000100 DN RmNum[3:0] RdLow3[2:0]
     Instr = (2#01000100 bsl 8) bor (DN bsl 7) bor (RmNum bsl 3) bor RdLow3,
-    <<Instr:16/little>>.
+    <<Instr:16/little>>;
+add(sp, Imm) when is_integer(Imm), Imm >= 0, Imm =< 508, (Imm rem 4) =:= 0 ->
+    %% Thumb ADD SP, SP, #imm7*4 encoding: 10110000 0iiiiiii
+    Imm7 = Imm div 4,
+    <<(16#B000 bor (Imm7 band 127)):16/little>>;
+add(sp, Imm) when is_integer(Imm) ->
+    error({unencodable_immediate, Imm}).
+
+%% ADD SP, SP, #imm - adds immediate value to stack pointer (3-operand form)
+-spec add(sp, sp, integer()) -> binary().
+add(sp, sp, Imm) ->
+    add(sp, Imm).
 
 %% Emit an ADDS instruction (Thumb encoding)
 %% ADDS Rd, #imm - adds immediate value to register and sets flags (2-operand form)
