@@ -349,7 +349,7 @@ assert_all_native_free(#state{
 %%
 %% On this platform, each jump table entry is 12 bytes.
 %% ```
-%% ldr r3, pc+8
+%% ldr r3, pc+4
 %% push {r1, r4, r5, r6, r7, lr}
 %% add pc, pc, r3
 %% nop()
@@ -373,8 +373,7 @@ jump_table0(
     LabelsCount
 ) ->
     % Create jump table entry with calculated offsets - all at emit time
-    % LDR r3, {pc, 8} - load data from 8 bytes after PC (constant offset)
-    I1 = jit_armv6m_asm:ldr(r3, {pc, 8}),
+    I1 = jit_armv6m_asm:ldr(r3, {pc, 4}),
     I2 = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
     I3 = jit_armv6m_asm:add(pc, r3),
     I4 = jit_armv6m_asm:nop(),
@@ -384,8 +383,10 @@ jump_table0(
 
     % Add relocation for the data entry so update_branches/2 can patch the jump target
     DataOffset = StreamModule:offset(Stream1) - 4,
-    % No add instruction offset needed
-    DataReloc = {N, DataOffset, {jump_table_data, 0}},
+    % Calculate the offset of the add instruction (3rd instruction, at offset 4 from entry start)
+    EntryStartOffset = StreamModule:offset(Stream1) - 12,
+    AddInstrOffset = EntryStartOffset + 4,
+    DataReloc = {N, DataOffset, {jump_table_data, AddInstrOffset}},
     UpdatedState = State#state{stream = Stream1, branches = [DataReloc | Branches]},
 
     jump_table0(UpdatedState, N + 1, LabelsCount).
@@ -1439,14 +1440,24 @@ call_func_ptr(
                 StreamModule:append(Stream4, MoveResult)
         end,
 
-    Stream6 = pop_registers(lists:reverse(SavedRegs), StreamModule, Stream5),
+    % Deallocate stack space if we allocated it for 5+ arguments
+    Stream6 =
+        case length(Args) >= 5 of
+            true ->
+                DeallocateArgs = jit_armv6m_asm:add(sp, 8),
+                StreamModule:append(Stream5, DeallocateArgs);
+            false ->
+                Stream5
+        end,
+
+    Stream7 = pop_registers(lists:reverse(SavedRegs), StreamModule, Stream6),
 
     AvailableRegs2 = lists:delete(ResultReg, AvailableRegs1),
     AvailableRegs3 = ?AVAILABLE_REGS -- (?AVAILABLE_REGS -- AvailableRegs2),
     UsedRegs2 = [ResultReg | UsedRegs1],
     {
         State1#state{
-            stream = Stream6,
+            stream = Stream7,
             available_regs = AvailableRegs3,
             used_regs = UsedRegs2
         },
