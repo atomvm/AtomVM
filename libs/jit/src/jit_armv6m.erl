@@ -2746,7 +2746,7 @@ return_labels_and_lines(
                 % Unaligned - use offset 8 with 2-byte padding
                 {jit_armv6m_asm:adr(r0, 8), <<0:16>>}
         end,
-    I2 = jit_armv6m_asm:bx(lr),
+    I2 = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
     LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
     LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
     Stream1 = StreamModule:append(
