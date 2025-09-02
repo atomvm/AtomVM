@@ -3129,11 +3129,38 @@ call_func_ptr_register_exhaustion_test_() ->
                             "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
                             "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
                             "   c:	b4ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7}\n"
-                            "   e:	4630      	mov	r0, r6\n"
-                            "  10:	4619      	mov	r1, r3\n"
-                            "  12:	4788      	blx	r1\n"
-                            "  14:	9001      	str	r0, [sp, #4]\n"
-                            "  16:	bcff      	pop	{r0, r1, r2, r3, r4, r5, r6, r7}"
+                            "   e:	460c      	mov	r4, r1\n"
+                            "  10:	4630      	mov	r0, r6\n"
+                            "  12:	4619      	mov	r1, r3\n"
+                            "  14:	47a0      	blx	r4\n"
+                            "  16:	9004      	str	r0, [sp, #16]\n"
+                            "  18:	bcff      	pop	{r0, r1, r2, r3, r4, r5, r6, r7}"
+                        >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
+                end),
+                ?_test(begin
+                    {State7, ResultReg} = ?BACKEND:call_func_ptr(
+                        State6,
+                        {primitive, 2},
+                        [{free, r6}, r3]
+                    ),
+                    ?assertEqual(ResultReg, r6),
+                    Stream = ?BACKEND:stream(State7),
+                    Dump =
+                        <<
+                            "   0:	6987      	ldr	r7, [r0, #24]\n"
+                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   c:	b4ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7}\n"
+                            "   e:	6894      	ldr	r4, [r2, #8]\n"
+                            "  10:	4630      	mov	r0, r6\n"
+                            "  12:	4619      	mov	r1, r3\n"
+                            "  14:	47a0      	blx	r4\n"
+                            "  16:	9006      	str	r0, [sp, #24]\n"
+                            "  18:	bcff      	pop	{r0, r1, r2, r3, r4, r5, r6, r7}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
