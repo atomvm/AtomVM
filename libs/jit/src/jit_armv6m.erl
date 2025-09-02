@@ -524,7 +524,13 @@ call_primitive(
         available_regs = RestRegs,
         used_regs = [TempReg | UsedRegs]
     },
-    call_func_ptr(StateCall, {free, TempReg}, Args).
+    call_func_ptr(StateCall, {free, TempReg}, Args);
+call_primitive(
+    #state{available_regs = []} = State,
+    Primitive,
+    Args
+) ->
+    call_func_ptr(State, {primitive, Primitive}, Args).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a jump (call without return) to a primitive with arguments. This
@@ -1286,7 +1292,7 @@ shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, 
 %% @param Args arguments to pass to the function
 %% @return Updated backend state and return register
 %%-----------------------------------------------------------------------------
--spec call_func_ptr(state(), {free, armv6m_register()}, [arg()]) ->
+-spec call_func_ptr(state(), {free, armv6m_register()} | {primitive, non_neg_integer()}, [arg()]) ->
     {state(), armv6m_register()}.
 call_func_ptr(
     #state{
@@ -1295,7 +1301,7 @@ call_func_ptr(
         available_regs = AvailableRegs0,
         used_regs = UsedRegs0
     } = State0,
-    {free, FuncPtrReg},
+    FuncPtrTuple,
     Args
 ) ->
     FreeRegs = lists:flatmap(
@@ -1304,7 +1310,7 @@ call_func_ptr(
             ({free, Reg}) when is_atom(Reg) -> [Reg];
             (_) -> []
         end,
-        [{free, FuncPtrReg} | Args]
+        [FuncPtrTuple | Args]
     ),
     UsedRegs1 = UsedRegs0 -- FreeRegs,
     SavedRegsBase = [?CTX_REG, ?NATIVE_INTERFACE_REG | UsedRegs1],
@@ -1320,6 +1326,7 @@ call_func_ptr(
                 [PaddingReg | _] = AvailableRegs1,
                 SavedRegsBase ++ [PaddingReg];
             _ ->
+                PaddingReg = undefined,
                 SavedRegsBase
         end,
 
@@ -1337,36 +1344,76 @@ call_func_ptr(
         end,
         Args
     ),
-    SavedRegsForTemps = SavedRegs -- [?CTX_REG, ?NATIVE_INTERFACE_REG, FuncPtrReg] -- ArgsRegs,
-    State1 = set_args(
-        State0#state{stream = Stream1, available_regs = SavedRegsForTemps ++ AvailableRegs0},
-        Args,
-        length(SavedRegs) * 4
-    ),
-    #state{stream = Stream2} = State1,
+    SavedRegsForTemps0 = SavedRegs -- [?CTX_REG, ?NATIVE_INTERFACE_REG] -- ArgsRegs,
+    ParameterRegs = lists:sublist(?PARAMETER_REGS, length(Args)),
+    {State1, FuncPtrReg} =
+        case FuncPtrTuple of
+            {free, FuncPtrReg0} ->
+                % If FuncPtrReg is in parameter regs, we must swap it with a free reg.
+                case lists:member(FuncPtrReg0, ParameterRegs) of
+                    true ->
+                        [FuncPtrReg1 | _] = SavedRegsForTemps0 -- ArgsRegs,
+                        MovInstr = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
+                        SavedRegsForTemps1 = SavedRegsForTemps0 -- [FuncPtrReg1],
+                        {
+                            State0#state{
+                                stream = StreamModule:append(Stream1, MovInstr),
+                                available_regs =
+                                    SavedRegsForTemps1 ++ [FuncPtrReg0] ++ AvailableRegs0
+                            },
+                            FuncPtrReg1
+                        };
+                    false ->
+                        SavedRegsForTemps1 = SavedRegsForTemps0 -- [FuncPtrReg0],
+                        {
+                            State0#state{
+                                stream = Stream1,
+                                available_regs = SavedRegsForTemps1 ++ AvailableRegs0
+                            },
+                            FuncPtrReg0
+                        }
+                end;
+            {primitive, Primitive} ->
+                [FuncPtrReg0 | _] =
+                    ((SavedRegsForTemps0 ++ AvailableRegs0) -- ArgsRegs) -- ParameterRegs,
+                SetArgsAvailableRegs = SavedRegsForTemps0 ++ AvailableRegs0 -- [FuncPtrReg0],
+                PrepCall = load_primitive_ptr(Primitive, FuncPtrReg0),
+                Stream2 = StreamModule:append(Stream1, PrepCall),
+                {State0#state{stream = Stream2, available_regs = SetArgsAvailableRegs}, FuncPtrReg0}
+        end,
+
+    State2 = set_args(State1, Args, length(SavedRegs) * 4),
+    #state{stream = Stream3} = State2,
 
     % Call the function pointer (using BLX for call with return)
     Call = jit_armv6m_asm:blx(FuncPtrReg),
-    Stream4 = StreamModule:append(Stream2, Call),
+    Stream4 = StreamModule:append(Stream3, Call),
 
     % For result, we need a free register (including FuncPtrReg) but ideally
     % not the one used for padding. If none are available (all 8 registers
     % were pushed to the stack), we write the result to the stack position
     % of FuncPtrReg
-    Stream5 =
+    {Stream5, UsedRegs2} =
         case length(SavedRegs) of
-            8 ->
+            8 when element(1, FuncPtrTuple) =:= free ->
                 % We use FuncPtrReg then as we know it's available.
                 % Calculate stack offset: register number * 4 bytes
                 ResultReg = FuncPtrReg,
                 StackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
                 StoreResult = jit_armv6m_asm:str(r0, {sp, StackOffset}),
-                StreamModule:append(Stream4, StoreResult);
+                {StreamModule:append(Stream4, StoreResult), [ResultReg | UsedRegs1]};
+            8 when PaddingReg =/= undefined ->
+                % We use PaddingReg then as we know it's available.
+                % Calculate stack offset: register number * 4 bytes
+                ResultReg = PaddingReg,
+                StackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
+                StoreResult = jit_armv6m_asm:str(r0, {sp, StackOffset}),
+                {StreamModule:append(Stream4, StoreResult), [PaddingReg | UsedRegs1]};
             _ ->
                 % Use any free that is not in SavedRegs
                 [ResultReg | _] = AvailableRegs1 -- SavedRegs,
                 MoveResult = jit_armv6m_asm:mov(ResultReg, r0),
-                StreamModule:append(Stream4, MoveResult)
+                {StreamModule:append(Stream4, MoveResult), [ResultReg | UsedRegs1]}
         end,
 
     % Deallocate stack space if we allocated it for 5+ arguments
@@ -1383,9 +1430,8 @@ call_func_ptr(
 
     AvailableRegs2 = lists:delete(ResultReg, AvailableRegs1),
     AvailableRegs3 = ?AVAILABLE_REGS -- (?AVAILABLE_REGS -- AvailableRegs2),
-    UsedRegs2 = [ResultReg | UsedRegs1],
     {
-        State1#state{
+        State2#state{
             stream = Stream7,
             available_regs = AvailableRegs3,
             used_regs = UsedRegs2
