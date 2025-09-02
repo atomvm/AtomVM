@@ -1884,16 +1884,16 @@ return_labels_and_lines_test() ->
     State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
     Stream = ?BACKEND:stream(State3),
 
-    % Should have generated adr + bx lr + labels table + lines table
-    % adr = 4 bytes, bx = 2 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
+    % Should have generated adr + pop {r1,r4,r5,r6,r7,pc} + labels table + lines table
+    % adr = 4 bytes, pop = 2 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
     % Total minimum: 30 bytes
     ?assert(byte_size(Stream) >= 30),
 
-    % Expected: adr r0, <offset> + bx lr + labels table + lines table
+    % Expected: adr r0, <offset> + pop {r1,r4,r5,r6,r7,pc} + labels table + lines table
     % The data tables start at offset 4, so adr should be adr r0, 4 not adr r0, 8
     Dump = <<
         "   0:	a000      	add	r0, pc, #0	; (adr r0, 0x4)\n"
-        "   2:	4770      	bx	lr\n"
+        "   2:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
         "   4:	0200      	lsls	r0, r0, #8\n"
         "   6:	0100      	lsls	r0, r0, #4\n"
         "   8:	0000      	movs	r0, r0\n"
@@ -1933,7 +1933,7 @@ return_labels_and_lines_unaligned_test() ->
     Dump = <<
         "   0:	4770      	bx	lr\n"
         "2:	a001      	add	r0, pc, #4	; (adr r0, 0x8)\n"
-        "4:	4770      	bx	lr\n"
+        "4:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
         "6:	0000      	movs	r0, r0\n"
         "8:	0200      	lsls	r0, r0, #8\n"
         "a:	0100      	lsls	r0, r0, #4\n"
