@@ -554,55 +554,33 @@ call_primitive_last(
     UsedRegs = ?AVAILABLE_REGS -- AvailableRegs1,
     PrepCall = load_primitive_ptr(Primitive, Temp),
     Stream1 = StreamModule:append(Stream0, PrepCall),
-    % Assert that jit_state is the second argument for tail_call_with_jit_state
-    [FirstArg, jit_state | ArgsT] = Args,
-    ArgsForTailCall = [FirstArg, jit_state_tail_call | ArgsT],
 
-    % Handle arguments differently for tail calls with 5+ arguments
+    % Handle arguments differently for 5+ arguments - use direct call without register preservation
     case length(Args) of
         NumArgs when NumArgs >= 5 ->
-            % For tail calls with 5+ args, set first 4 args in registers without stack allocation
-            State1 = set_args_registers_only(
+            % For 5+ args, call directly without preserving registers since we return immediately
+            State1 = set_args(
                 State0#state{
                     stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
                 },
-                lists:sublist(ArgsForTailCall, 4),
+                Args,
                 0
             ),
-            % 5th argument needs to be moved to r5
-            FifthArg = lists:nth(5, ArgsForTailCall),
-            State2 =
-                case FifthArg of
-                    % Already in r5
-                    {free, r5} ->
-                        State1;
-                    % Already in r5
-                    r5 ->
-                        State1;
-                    % Handle {free, Reg} - extract the register and move to r5
-                    {free, Reg} ->
-                        move_to_native_register(State1, Reg, r5);
-                    _ ->
-                        % Move 5th argument to r5
-                        move_to_native_register(State1, FifthArg, r5)
-                end,
-            % Move function pointer to r1 if it's not already in r1
-            #state{stream = Stream2} = State2,
-            {FinalFuncPtrReg, Stream3} =
-                case Temp of
-                    % Already in r1, no move needed
-                    r1 ->
-                        {r1, Stream2};
-                    _ ->
-                        % Move from Temp register to r1
-                        MoveToR1 = jit_armv6m_asm:mov(r1, Temp),
-                        {r1, StreamModule:append(Stream2, MoveToR1)}
-                end,
-            State3 = tail_call_with_jit_state_stack(
-                State2#state{stream = Stream3}, FinalFuncPtrReg, NumArgs
-            );
+            #state{stream = Stream2} = State1,
+            % Call the function pointer directly
+            Call = jit_armv6m_asm:blx(Temp),
+            Stream3 = StreamModule:append(Stream2, Call),
+            % Deallocate stack space that was allocated for 5+ arguments
+            DeallocateArgs = jit_armv6m_asm:add(sp, sp, 8),
+            Stream4 = StreamModule:append(Stream3, DeallocateArgs),
+            % Return: pop prolog registers and return
+            PopCode = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
+            Stream5 = StreamModule:append(Stream4, PopCode),
+            State3 = State1#state{stream = Stream5};
         _ ->
-            % For 4 or fewer args, use standard argument setup
+            % For 4 or fewer args, use tail call
+            [FirstArg, jit_state | ArgsT] = Args,
+            ArgsForTailCall = [FirstArg, jit_state_tail_call | ArgsT],
             State1 = set_args(
                 State0#state{
                     stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
@@ -649,50 +627,6 @@ tail_call_with_jit_state_registers_only(
     PopCode = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
 
     Code = <<RestoreLRToTemp/binary, OverwriteLR/binary, RestoreLR/binary, PopCode/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1}.
-
-tail_call_with_jit_state_stack(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0
-    } = State,
-    FuncPtrReg,
-    NumArgs
-) when NumArgs >= 5 ->
-    % Tail call with 5 or 6 arguments - need to handle 5th (and 6th) stack parameters
-    % 5th argument is in r5, 6th argument (if present) is in r6, function pointer in FuncPtrReg
-    % Restore lr first (using r7 as temp since r6 might contain 6th arg), then r7, then r6
-
-    % Load lr value to r7 (temp)
-    LoadLRtoR7 = jit_armv6m_asm:ldr(r7, {sp, 20}),
-    % Move to lr
-    MoveLR = jit_armv6m_asm:mov(lr, r7),
-    % Restore r7 from stack
-    RestoreR7 = jit_armv6m_asm:ldr(r7, {sp, 16}),
-    % Store 5th arg where r7 was
-    Store5thArg = jit_armv6m_asm:str(r5, {sp, 16}),
-    % Store function ptr where lr was
-    StoreFuncPtr = jit_armv6m_asm:str(FuncPtrReg, {sp, 20}),
-
-    % Handle 6th argument if present (NumArgs == 6)
-    {Store6thArg, RestoreR6, PopAndJump} =
-        case NumArgs of
-            5 ->
-                % For 5 args: restore r6 from stack, pop r1,r4,r5,pc
-                RestoreR6_5 = jit_armv6m_asm:ldr(r6, {sp, 12}),
-                PopAndJump_5 = jit_armv6m_asm:pop([r1, r4, r5, pc]),
-                {<<>>, RestoreR6_5, PopAndJump_5};
-            6 ->
-                % For 6 args: store r6 (6th arg) where r6 was saved, pop r1,r4,r5,r6,pc
-                Store6thArg_6 = jit_armv6m_asm:str(r6, {sp, 12}),
-                PopAndJump_6 = jit_armv6m_asm:pop([r1, r4, r5, r6, pc]),
-                {Store6thArg_6, <<>>, PopAndJump_6}
-        end,
-
-    Code =
-        <<LoadLRtoR7/binary, MoveLR/binary, RestoreR7/binary, Store5thArg/binary,
-            StoreFuncPtr/binary, Store6thArg/binary, RestoreR6/binary, PopAndJump/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
