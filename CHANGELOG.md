@@ -164,6 +164,9 @@ integer (this never happens with integers < 28 bits)
 - Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
 used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
 network. (See issue #1094)
+- Fixed possible memory corruption when doing binary matching.
+- Fixed an issue related to binary matching and more precisely endianness of bit skipping with OTP 25 and lower
+- Fixed an issue with `bs_private_append` that shouldn't gc, affecting code compiled with OTP<25
 
 ### Changed
 

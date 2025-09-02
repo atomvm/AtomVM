@@ -1163,36 +1163,36 @@ storage, as the flash storage may degrade more rapidly with repeated writes to t
 
 NVS entries are stored under a namespace and key, both of which are expressed as atoms.  AtomVM uses the namespace `atomvm` for entries under its control.  Applications may read from and write to the `atomvm` namespace, but they are strongly discouraged from doing so, except when explicitly stated otherwise.
 
-To set a value in non-volatile storage, use the [`esp:nvs_set_binary/3`](./apidocs/erlang/eavmlib/esp.md#nvs_set_binary3) function, and specify a namespace, key, and value:
+To set a value in non-volatile storage, use the [`esp:nvs_put_binary/3`](./apidocs/erlang/eavmlib/esp.md#nvs_put_binary3) function, and specify a namespace, key, and value:
 
 ```erlang
-Namespace = <<"my-namespace">>,
-Key = <<"my-key">>,
-esp:set_binary(Namespace, Key, <<"some-value">>).
+Namespace = my_namespace_atom,
+Key = my_key_atom,
+esp:nvs_put_binary(Namespace, Key, <<"some-value">>).
 ```
 
 To retrieve a value in non-volatile storage, use the [`esp:nvs_get_binary/2`](./apidocs/erlang/eavmlib/esp.md#nvs_get_binary2) function, and specify a namespace and key.  You can optionally specify a default value (of any desired type), if an entry does not exist in non-volatile storage:
 
 ```erlang
-Value = esp:get_binary(Namespace, Key, <<"default-value">>).
+Value = esp:nvs_get_binary(Namespace, Key, <<"default-value">>).
 ```
 
 To delete an entry, use the [`esp:nvs_erase_key/2`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_key2) function, and specify a namespace and key:
 
 ```erlang
-ok = esp:erase_key(Namespace, Key).
+ok = esp:nvs_erase_key(Namespace, Key).
 ```
 
 You can delete all entries in a namespace via the [`esp:nvs_erase_all/1`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_all1) function:
 
 ```erlang
-ok = esp:erase_all(Namespace).
+ok = esp:nvs_erase_all(Namespace).
 ```
 
 Finally, you can delete all entries in all namespaces on the NVS partition via the [`esp:nvs_reformat/0`](./apidocs/erlang/eavmlib/esp.md#nvs_reformat0) function:
 
 ```erlang
-ok = esp:reformat().
+ok = esp:nvs_reformat().
 ```
 
 Applications should use the `esp:nvs_reformat/0` function with caution, in case other applications are making using the non-volatile storage.
