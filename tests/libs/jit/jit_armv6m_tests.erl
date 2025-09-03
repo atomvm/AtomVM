@@ -1693,7 +1693,7 @@ is_boolean_far_test() ->
         "   a:	4e01      	ldr	r6, [pc, #4]	; (0x10)\n"
         "   c:	447e      	add	r6, pc\n"
         "   e:	4730      	bx	r6\n"
-        "  10:	0ff0      	lsrs	r0, r6, #31\n"
+        "  10:	0ff1      	lsrs	r0, r6, #31\n"
         "  12:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -1729,7 +1729,7 @@ is_boolean_far_unaligned_test() ->
         "   e:	447e      	add	r6, pc\n"
         "  10:	4730      	bx	r6\n"
         "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0fee      	lsrs	r6, r5, #31\n"
+        "  14:	0fef      	lsrs	r6, r5, #31\n"
         "  16:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -3146,7 +3146,6 @@ call_func_ptr_register_exhaustion_test_() ->
                     ),
                     ?assertEqual(ResultReg, r6),
                     Stream = ?BACKEND:stream(State7),
-                    armv6m_helper:disassemble(Stream),
                     Dump =
                         <<
                             "   0:	6987      	ldr	r7, [r0, #24]\n"
