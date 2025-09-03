@@ -36,9 +36,6 @@ option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' 
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
 
-# JIT is not available yet on esp32
-set(AVM_DISABLE_JIT ON FORCE)
-
 set(AVM_DISABLE_SMP ON FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 
@@ -84,6 +81,11 @@ if (NOT CMAKE_TOOLCHAIN_FILE)
     your own toolchain file")
 endif ()
 mark_as_advanced(CMAKE_TOOLCHAIN_FILE)
+
+option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+if (NOT AVM_DISABLE_JIT)
+    set(AVM_JIT_TARGET_ARCH "armv6m")
+endif()
 
 if ((NOT ${CMAKE_C_COMPILER_ID} STREQUAL "GNU") OR
     (NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU") OR

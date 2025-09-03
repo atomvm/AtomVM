@@ -296,3 +296,12 @@ void sys_init_icache()
     __dsb;
     __isb;
 }
+
+#ifndef AVM_NO_JIT
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+{
+    UNUSED(size);
+    // We need to set the Thumb bit
+    return (ModuleNativeEntryPoint) ((uintptr_t) (native_code + offset) | 1);
+}
+#endif
