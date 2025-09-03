@@ -437,7 +437,9 @@ update_branches(
                         % Calculate the relative offset for the literal value
                         % This is the offset from the add instruction's PC to the target
                         % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
-                        AddPCOffset = Offset + 6,
+                        % We also need to set thumb bit to 1, so eventually we only substract 5.
+                        AddPCOffset = Offset + 5,
+                        % Set thumb bit for bx instruction - target address must be odd for Thumb mode
                         RelativeOffset = LabelOffset - AddPCOffset,
 
                         if
