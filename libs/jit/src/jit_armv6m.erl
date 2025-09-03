@@ -1694,10 +1694,13 @@ set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, {ptr, 
     I = jit_armv6m_asm:ldr(Reg, {Source, 0}),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
-set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, {y_reg, X}, Reg) ->
-    I1 = jit_armv6m_asm:ldr(Reg, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Reg, {Reg, X * 8}),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+set_args1(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = AvailRegs} = State,
+    {y_reg, X},
+    Reg
+) ->
+    Code = ldr_y_reg(Reg, X, AvailRegs),
+    Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, ArgReg, Reg) when
     ?IS_GPR(ArgReg)
@@ -1732,23 +1735,19 @@ move_to_vm_register(State0, Src, {ptr, Reg}) when is_atom(Src) ->
     I1 = jit_armv6m_asm:str(Src, {Reg, 0}),
     Stream1 = (State0#state.stream_module):append(State0#state.stream, I1),
     State0#state{stream = Stream1};
-move_to_vm_register(#state{available_regs = [Temp | _]} = State0, Src, {y_reg, Y}) when
+move_to_vm_register(#state{available_regs = [Temp1 | AT]} = State0, Src, {y_reg, Y}) when
     is_atom(Src)
 ->
-    I1 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_armv6m_asm:str(Src, {Temp, Y * 4}),
-    Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
+    Code = str_y_reg(Src, Y, Temp1, AT),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, Code),
     State0#state{stream = Stream1};
 % Source is an integer to y_reg (optimized: ldr first, then movs)
-move_to_vm_register(#state{available_regs = [Temp1, Temp2 | _]} = State0, N, {y_reg, Y}) when
+move_to_vm_register(#state{available_regs = [Temp1, Temp2 | AT]} = State0, N, {y_reg, Y}) when
     is_integer(N), N >= 0, N =< 255
 ->
-    I1 = jit_armv6m_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_armv6m_asm:movs(Temp2, N),
-    I3 = jit_armv6m_asm:str(Temp2, {Temp1, Y * 4}),
-    Stream1 = (State0#state.stream_module):append(
-        State0#state.stream, <<I1/binary, I2/binary, I3/binary>>
-    ),
+    I1 = jit_armv6m_asm:movs(Temp2, N),
+    YCode = str_y_reg(Temp2, Y, Temp1, AT),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, YCode/binary>>),
     State0#state{stream = Stream1};
 % Source is an integer (0-255 for movs, negative values need different handling)
 move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, N, Dest) when
@@ -1782,9 +1781,8 @@ move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {ptr, R
     State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
     State1#state{available_regs = AR0};
 move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {y_reg, Y}, Dest) ->
-    I1 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Temp, {Temp, Y * 4}),
-    Stream1 = (State0#state.stream_module):append(State0#state.stream, <<I1/binary, I2/binary>>),
+    Code = ldr_y_reg(Temp, Y, AT),
+    Stream1 = (State0#state.stream_module):append(State0#state.stream, Code),
     State1 = move_to_vm_register(State0#state{stream = Stream1, available_regs = AT}, Temp, Dest),
     State1#state{available_regs = AR0};
 % term_to_float
@@ -1840,29 +1838,27 @@ move_array_element(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | _]} =
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | AT]} =
         State,
     Reg,
     Index,
     {y_reg, Y}
 ) when is_atom(Reg) andalso is_integer(Index) ->
-    I1 = jit_armv6m_asm:ldr(Temp1, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Temp2, {Reg, Index * 4}),
-    I3 = jit_armv6m_asm:str(Temp2, {Temp1, Y * 4}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
+    I1 = jit_armv6m_asm:ldr(Temp2, {Reg, Index * 4}),
+    YCode = str_y_reg(Temp2, Y, Temp1, AT),
+    Code = <<I1/binary, YCode/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_array_element(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} =
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | AT]} =
         State,
     {free, Reg},
     Index,
     {y_reg, Y}
 ) when is_integer(Index) ->
-    I1 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Reg, {Reg, Index * 4}),
-    I3 = jit_armv6m_asm:str(Reg, {Temp, Y * 4}),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
+    I1 = jit_armv6m_asm:ldr(Reg, {Reg, Index * 4}),
+    YCode = str_y_reg(Reg, Y, Temp, AT),
+    Code = <<I1/binary, YCode/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_array_element(
@@ -1919,7 +1915,7 @@ move_array_element(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        available_regs = [Temp | _] = AvailableRegs0,
+        available_regs = [Temp | AT] = AvailableRegs0,
         used_regs = UsedRegs0
     } = State,
     Reg,
@@ -1927,14 +1923,14 @@ move_array_element(
     {y_reg, Y}
 ) when is_atom(IndexReg) ->
     I1 = jit_armv6m_asm:lsls(IndexReg, IndexReg, 2),
-    I2 = jit_armv6m_asm:ldr(Temp, ?Y_REGS),
-    I3 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg}),
-    I4 = jit_armv6m_asm:str(IndexReg, {Temp, Y * 4}),
+    I2 = jit_armv6m_asm:ldr(IndexReg, {Reg, IndexReg}),
+    Code = str_y_reg(IndexReg, Y, Temp, AT),
+    I3 = Code,
     {AvailableRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, UsedRegs0, IndexReg
     ),
     Stream1 = StreamModule:append(
-        Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>
+        Stream0, <<I1/binary, I2/binary, I3/binary>>
     ),
     State#state{
         available_regs = AvailableRegs1,
@@ -2079,9 +2075,7 @@ move_to_native_register(
     } = State,
     {y_reg, Y}
 ) ->
-    I1 = jit_armv6m_asm:ldr(Reg, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Reg, {Reg, Y * 4}),
-    Code = <<I1/binary, I2/binary>>,
+    Code = ldr_y_reg(Reg, Y, AvailT),
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [Reg | Used]}, Reg};
 move_to_native_register(
@@ -2127,11 +2121,11 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_native_register(
-    #state{stream_module = StreamModule, stream = Stream0} = State, {y_reg, Y}, RegDst
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = AT} = State,
+    {y_reg, Y},
+    RegDst
 ) ->
-    I1 = jit_armv6m_asm:ldr(RegDst, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(RegDst, {RegDst, Y * 4}),
-    Code = <<I1/binary, I2/binary>>,
+    Code = ldr_y_reg(RegDst, Y, AT),
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
 move_to_native_register(
@@ -2178,13 +2172,12 @@ copy_to_native_register(State, Reg) ->
     move_to_native_register(State, Reg).
 
 move_to_cp(
-    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | _]} = State,
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | AvailT]} = State,
     {y_reg, Y}
 ) ->
-    I1 = jit_armv6m_asm:ldr(Reg, ?Y_REGS),
-    I2 = jit_armv6m_asm:ldr(Reg, {Reg, Y * 4}),
-    I3 = jit_armv6m_asm:str(Reg, ?CP),
-    Code = <<I1/binary, I2/binary, I3/binary>>,
+    I1 = ldr_y_reg(Reg, Y, AvailT),
+    I2 = jit_armv6m_asm:str(Reg, ?CP),
+    Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
@@ -2803,6 +2796,60 @@ return_labels_and_lines(
             (length(SortedLines)):16, LinesTable/binary>>
     ),
     State#state{stream = Stream1}.
+
+%% Helper function to generate str instruction with y_reg offset, handling large offsets
+str_y_reg(SrcReg, Y, TempReg, _AvailableRegs) when Y * 4 =< 124 ->
+    % Small offset - use immediate addressing
+    I1 = jit_armv6m_asm:ldr(TempReg, ?Y_REGS),
+    I2 = jit_armv6m_asm:str(SrcReg, {TempReg, Y * 4}),
+    <<I1/binary, I2/binary>>;
+str_y_reg(SrcReg, Y, TempReg1, [TempReg2 | _]) ->
+    % Large offset - use register arithmetic with second available register
+    Offset = Y * 4,
+    I1 = jit_armv6m_asm:ldr(TempReg1, ?Y_REGS),
+    I2 = jit_armv6m_asm:movs(TempReg2, Offset),
+    I3 = jit_armv6m_asm:add(TempReg2, TempReg1),
+    I4 = jit_armv6m_asm:str(SrcReg, {TempReg2, 0}),
+    <<I1/binary, I2/binary, I3/binary, I4/binary>>;
+str_y_reg(SrcReg, Y, TempReg1, []) ->
+    % Large offset - no additional registers available, use IP_REG as second temp
+    Offset = Y * 4,
+    I1 = jit_armv6m_asm:ldr(TempReg1, ?Y_REGS),
+    I2 = jit_armv6m_asm:mov(?IP_REG, TempReg1),
+    I3 = jit_armv6m_asm:movs(TempReg1, Offset),
+    I4 = jit_armv6m_asm:add(TempReg1, ?IP_REG),
+    I5 = jit_armv6m_asm:str(SrcReg, {TempReg1, 0}),
+    <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>.
+
+%% Helper function to generate ldr instruction with y_reg offset, handling large offsets
+ldr_y_reg(DstReg, Y, [TempReg | _]) when Y * 4 =< 124 ->
+    % Small offset - use immediate addressing
+    I1 = jit_armv6m_asm:ldr(TempReg, ?Y_REGS),
+    I2 = jit_armv6m_asm:ldr(DstReg, {TempReg, Y * 4}),
+    <<I1/binary, I2/binary>>;
+ldr_y_reg(DstReg, Y, [TempReg | _]) ->
+    % Large offset - use DstReg as second temp register for arithmetic
+    Offset = Y * 4,
+    I1 = jit_armv6m_asm:ldr(TempReg, ?Y_REGS),
+    I2 = jit_armv6m_asm:movs(DstReg, Offset),
+    I3 = jit_armv6m_asm:add(DstReg, TempReg),
+    I4 = jit_armv6m_asm:ldr(DstReg, {DstReg, 0}),
+    <<I1/binary, I2/binary, I3/binary, I4/binary>>;
+ldr_y_reg(DstReg, Y, []) when Y * 4 =< 124 ->
+    % Small offset, no registers available - use DstReg as temp
+    I1 = jit_armv6m_asm:ldr(DstReg, ?Y_REGS),
+    I2 = jit_armv6m_asm:ldr(DstReg, {DstReg, Y * 4}),
+    <<I1/binary, I2/binary>>;
+ldr_y_reg(DstReg, Y, []) ->
+    % Large offset, no registers available - use IP_REG as temp register
+    % Note: IP_REG (r12) can only be used with mov, not ldr directly
+    Offset = Y * 4,
+    I1 = jit_armv6m_asm:ldr(DstReg, ?Y_REGS),
+    I2 = jit_armv6m_asm:mov(?IP_REG, DstReg),
+    I3 = jit_armv6m_asm:movs(DstReg, Offset),
+    I4 = jit_armv6m_asm:add(DstReg, ?IP_REG),
+    I5 = jit_armv6m_asm:ldr(DstReg, {DstReg, 0}),
+    <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>.
 
 free_reg(AvailableRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
     AvailableRegs1 = free_reg0(?AVAILABLE_REGS, AvailableRegs0, Reg, []),
