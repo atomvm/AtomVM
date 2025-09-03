@@ -52,21 +52,13 @@ In addition, several features are supported specifically for integration with mi
 
 ### Limitations
 
-While the list of supported features is long and growing, the currently unsupported Erlang/OTP and BEAM features include (but are not limited to):
+Numerous modules and functions from Erlang/OTP standard libraries (`kernel`, `stdlib`, `sasl`, etc) are not implemented.
 
-* Atoms. Atoms larger than 255 bytes (255 ascii characters) are not supported.
-* Bignums.  Integer values are restricted to 64-bit values.
-* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-bit) bit values is supported, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
-* The `epmd` and the `disterl` protocols are not supported.
-* There is no support for code hot swapping.
-* There is no support for a Read-Eval-Print-Loop. (REPL)
-* Numerous modules and functions from Erlang/OTP standard libraries (`kernel`, `stdlib`, `sasl`, etc) are not implemented.
-
-AtomVM bit syntax is restricted to alignment on 8-bit boundaries.  Little-endian and signed insertion and extraction of integer values is restricted to 8, 16, and 32-bit values.  Only unsigned big and little endian 64-bit values can be inserted into or extracted from binaries.
-
-It is highly unlikely that an existing Erlang program targeted for Erlang/OTP will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likely than not that Erlang applications will need to targeted specifically for the AtomVM platform.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems in both scale and APIs that special care and attention is needed to target applications for such embedded environments.
+For this reason, it is highly unlikely that an existing Erlang program targeted for Erlang/OTP will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likely than not that Erlang applications will need to targeted specifically for the AtomVM platform.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems in both scale and APIs that special care and attention is needed to target applications for such embedded environments.
 
 That being said, many of the features of the BEAM are supported and provide a rich and compelling development environment for embedded devices, which Erlang and Elixir developers will find natural and productive.
+
+Other differences between AtomVM and BEAM are detailed in a [dedicated page](./differences-with-beam.md).
 
 ## AtomVM Development
 
