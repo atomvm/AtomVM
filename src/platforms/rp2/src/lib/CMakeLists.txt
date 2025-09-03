@@ -31,6 +31,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpiodriver.c
+    jit_stream_flash.c
     networkdriver.c
     otp_crypto_platform.c
     platform_defaultatoms.c
