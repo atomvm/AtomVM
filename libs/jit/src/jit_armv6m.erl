@@ -721,7 +721,8 @@ branch_to_label_code(
 
     % Calculate the literal value: target - PC_at_add_instruction
     % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
-    AddPCValue = Offset + 6,
+    % We also need to set thumb bit to 1, so eventually we only subtract 5.
+    AddPCValue = Offset + 5,
     LiteralValue = LabelOffset - AddPCValue,
 
     if
