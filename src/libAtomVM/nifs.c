@@ -69,6 +69,7 @@
 #define RAISE(a, b)  \
     ctx->x[0] = (a); \
     ctx->x[1] = (b); \
+    ctx->x[2] = term_nil(); \
     return term_invalid_term();
 
 #ifndef MAX
@@ -2983,9 +2984,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         int new_value = term_to_int(value);
         int nb_processors = smp_get_online_processors();
         if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
-            argv[0] = ERROR_ATOM;
-            argv[1] = BADARG_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(BADARG_ATOM);
         }
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {};
         return term_from_int32(old_value);
@@ -3531,6 +3530,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 
     ctx->x[0] = THROW_ATOM;
     ctx->x[1] = t;
+    ctx->x[2] = term_nil();
     return term_invalid_term();
 }
 
@@ -3544,7 +3544,7 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     }
     ctx->x[0] = ex_class;
     ctx->x[1] = argv[1];
-    ctx->x[2] = term_nil();
+    ctx->x[2] = argv[2];
     return term_invalid_term();
 }
 
