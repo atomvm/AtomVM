@@ -29,7 +29,8 @@
     terminate_child/2,
     restart_child/2,
     delete_child/2,
-    which_children/1
+    which_children/1,
+    count_children/1
 ]).
 
 -export([
@@ -111,6 +112,9 @@ delete_child(Supervisor, ChildId) ->
 
 which_children(Supervisor) ->
     gen_server:call(Supervisor, which_children).
+
+count_children(Supervisor) ->
+    gen_server:call(Supervisor, count_children).
 
 init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
@@ -280,7 +284,12 @@ handle_call({delete_child, ID}, _From, #state{children = Children} = State) ->
     end;
 handle_call(which_children, _From, #state{children = Children} = State) ->
     ChildrenInfo = lists:map(fun child_to_info/1, Children),
-    {reply, ChildrenInfo, State}.
+    {reply, ChildrenInfo, State};
+handle_call(count_children, _From, #state{children = Children} = State) ->
+    {Specs, Active, Supers, Workers} =
+        lists:foldl(fun count_child/2, {0, 0, 0, 0}, Children),
+    Reply = [{specs, Specs}, {active, Active}, {supervisors, Supers}, {workers, Workers}],
+    {reply, Reply, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -363,6 +372,17 @@ child_to_info(#child{id = Id, pid = Pid, type = Type, modules = Modules}) ->
             _ when is_pid(Pid) -> Pid
         end,
     {Id, Child, Type, Modules}.
+
+count_child(#child{pid = Pid, type = worker}, {Specs, Active, Supers, Workers}) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> {Specs + 1, Active + 1, Supers, Workers + 1};
+        false -> {Specs + 1, Active, Supers, Workers + 1}
+    end;
+count_child(#child{pid = Pid, type = supervisor}, {Specs, Active, Supers, Workers}) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> {Specs + 1, Active + 1, Supers + 1, Workers};
+        false -> {Specs + 1, Active, Supers + 1, Workers}
+    end.
 
 do_terminate(#child{pid = Pid, shutdown = brutal_kill}) ->
     exit(Pid, kill);
