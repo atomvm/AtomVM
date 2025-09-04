@@ -2201,42 +2201,31 @@ set_continuation_to_label(
     } = State,
     Label
 ) ->
-    Offset = StreamModule:offset(Stream0),
     % Calculate jump table entry offset
     JumpTableEntryOffset = Label * ?JUMP_TABLE_ENTRY_SIZE,
 
-    % Assume mov_immediate will be at most 10 bytes
-    MaxMovImmediateSize = 10,
-    EstimatedAdrOffset = Offset + MaxMovImmediateSize,
-    % +4 for adr base, +4 for minimum adr offset
-    EstimatedAdrPC = (EstimatedAdrOffset band (bnot 3)) + 4 + 4,
-    RelativeOffset = JumpTableEntryOffset - EstimatedAdrPC,
+    % First emit the adr instruction with a known offset (we'll use 4 for now)
+    I1 = jit_armv6m_asm:adr(Temp1, 4),
+    Stream1 = StreamModule:append(Stream0, I1),
 
-    % Generate mov_immediate with the relative offset + 1 (to set thumb bit)
-    State1 = mov_immediate(State, Temp2, RelativeOffset + 1),
-    Stream1 = State1#state.stream,
-    ActualMovImmediateSize = StreamModule:offset(Stream1) - Offset,
+    % Calculate the actual ADR PC: ADR reads from (PC+4) aligned to 4-byte boundary
+    AdrOffset = StreamModule:offset(Stream1),
+    AdrPC = (AdrOffset + 4) band (bnot 3),
 
-    % Calculate where adr instruction will actually be
-    ActualAdrOffset = Offset + ActualMovImmediateSize,
-    ActualAdrPC = (ActualAdrOffset band (bnot 3)) + 4,
+    % Calculate what we need to load: JumpTableEntryOffset - (AdrPC + 4) + 1 (for thumb bit)
+    % Since ADR will add AdrPC + 4, we need to subtract 4 from our immediate
+    ImmediateValue = JumpTableEntryOffset - AdrPC - 3,
 
-    % Calculate the correct adr offset: ActualAdrPC + (AdrOffset - 4) + RelativeOffset = JumpTableEntryOffset
-    % So: AdrOffset = JumpTableEntryOffset - ActualAdrPC - RelativeOffset + 4
-    AdrOffset = JumpTableEntryOffset - ActualAdrPC - RelativeOffset + 4,
-    % Ensure adr offset is multiple of 4 and within range
-    AdrOffset = ((AdrOffset + 3) div 4) * 4,
-
-    % Get PC address using adr
-    I1 = jit_armv6m_asm:adr(Temp1, AdrOffset),
+    % Generate mov_immediate to load the calculated offset
+    State1 = mov_immediate(State#state{stream = Stream1}, Temp2, ImmediateValue),
 
     % Add PC + offset (with thumb bit set), load jit_state, and store continuation
     I2 = jit_armv6m_asm:adds(Temp2, Temp2, Temp1),
     I3 = jit_armv6m_asm:ldr(Temp1, {sp, ?STACK_OFFSET_JITSTATE}),
     I4 = jit_armv6m_asm:str(Temp2, ?JITSTATE_CONTINUATION(Temp1)),
 
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-    Stream2 = StreamModule:append(Stream1, Code),
+    Code = <<I2/binary, I3/binary, I4/binary>>,
+    Stream2 = StreamModule:append(State1#state.stream, Code),
     State1#state{stream = Stream2}.
 
 %% @doc Set the contination to a given offset
