@@ -874,7 +874,7 @@ if_block_test_() ->
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	69c6      	ldr	r6, [r0, #28]\n"
                         "   4:	077d      	lsls	r5, r7, #29\n"
-                        "   6:	d100      	bne.n	0xa\n"
+                        "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
@@ -913,7 +913,7 @@ if_block_test_() ->
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	69c6      	ldr	r6, [r0, #28]\n"
                         "   4:	077d      	lsls	r5, r7, #29\n"
-                        "   6:	d100      	bne.n	0xa\n"
+                        "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
@@ -1050,7 +1050,7 @@ bitwise_and_optimization_test_() ->
                 "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
                 "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
                 "   4:	07bd      	lsls	r5, r7, #30\n"
-                "   6:	d100      	bne.n	0xa\n"
+                "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
             >>,
             ?assertEqual(dump_to_bin(Dump), Stream),
@@ -1070,7 +1070,7 @@ bitwise_and_optimization_test_() ->
                 "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
                 "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
                 "   4:	073d      	lsls	r5, r7, #28\n"
-                "   6:	d100      	bne.n	0xa\n"
+                "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
             >>,
             ?assertEqual(dump_to_bin(Dump), Stream),
@@ -1090,7 +1090,7 @@ bitwise_and_optimization_test_() ->
                 "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
                 "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
                 "   4:	06bd      	lsls	r5, r7, #26\n"
-                "   6:	d100      	bne.n	0xa\n"
+                "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
             >>,
             ?assertEqual(dump_to_bin(Dump), Stream),
