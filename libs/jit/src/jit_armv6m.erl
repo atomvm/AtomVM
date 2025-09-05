@@ -1125,8 +1125,8 @@ if_block_cond(
                 % Low bits mask: use lsls to shift high bits away
                 ShiftAmount = 32 - BitCount,
                 TestCode0 = jit_armv6m_asm:lsls(Temp, Reg, ShiftAmount),
-                % branch if not zero (any low bit was set)
-                {TestCode0, ne};
+                % branch if zero (no low bit was set)
+                {TestCode0, eq};
             no_optimization ->
                 % General case: use mov+tst
                 TestCode0 = jit_armv6m_asm:movs(Temp, Val),
@@ -2609,11 +2609,12 @@ call_only_or_schedule_next(
     % Look up label once to avoid duplicate lookup in helper
     LabelLookupResult = lists:keyfind(Label, 1, State0#state.labels),
 
+    BccOffset = StreamModule:offset(Stream1),
+
     State4 =
         case LabelLookupResult of
             {Label, LabelOffset} ->
                 % Label is known, check if we can optimize the conditional branch
-                BccOffset = StreamModule:offset(Stream1),
                 % After bcc instruction
                 BranchOffset = BccOffset + 2,
                 Rel = LabelOffset - BranchOffset,
@@ -2642,7 +2643,6 @@ call_only_or_schedule_next(
                 end;
             false ->
                 % Label not known, get the far branch size for the skip
-                BccOffset = StreamModule:offset(Stream1),
                 FarSeqOffset = BccOffset + 2,
                 {State1, FarCodeBlock} = branch_to_label_code(State0, FarSeqOffset, Label, false),
                 FarSeqSize = byte_size(FarCodeBlock),
