@@ -150,6 +150,7 @@ static void jit_trim_live_regs(Context *ctx, uint32_t live)
 static Context *jit_return(Context *ctx, JITState *jit_state)
 {
     int module_index = ctx->cp >> 24;
+    TRACE("jit_return: ctx->cp = %d, module_index = %d, offset = %d\n", ctx->cp, module_index, (ctx->cp & 0xFFFFFF) >> 2);
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
 
     // Native case
@@ -315,6 +316,7 @@ enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t lab
 
 static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words)
 {
+    TRACE("jit_call_ext: arity=%d index=%d n_words=%d\n", arity, index, n_words);
     const struct ExportedFunction *func = module_resolve_function(jit_state->module, index, ctx->global);
     if (IS_NULL_PTR(func)) {
         return jit_raise_error(ctx, jit_state, 0, UNDEF_ATOM);
@@ -469,6 +471,7 @@ static term jit_module_get_atom_term_by_id(JITState *jit_state, int atom_index)
 
 static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live)
 {
+    TRACE("jit_allocate: stack_need=%u heap_need=%u live=%u\n", stack_need, heap_need, live);
     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + 1)))) {
         TRIM_LIVE_REGS(live);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -483,6 +486,7 @@ static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need,
 
 static void *jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 {
+    TRACE("jit_get_imported_bif: bif=%u\n", bif);
     const struct ExportedFunction *exported_bif = jit_state->module->imported_funcs[bif];
     void *result = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
     return result;
@@ -490,6 +494,7 @@ static void *jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 
 static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 {
+    TRACE("jit_deallocate: n_words=%u\n", n_words);
     ctx->cp = ctx->e[n_words];
     ctx->e += n_words + 1;
     // Hopefully, we only need x[0]
@@ -504,6 +509,7 @@ static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 
 static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, term t, term other, TermCompareOpts opts)
 {
+    TRACE("jit_term_compare: t=%p other=%p opts=%d\n", (void *) t, (void *) other, opts);
     TermCompareResult result = term_compare(t, other, opts, ctx->global);
     if (UNLIKELY(result == 0)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
@@ -513,6 +519,7 @@ static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, ter
 
 static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need, uint32_t live_registers)
 {
+    TRACE("jit_test_heap: heap_need=%u live_registers=%u\n", heap_need, live_registers);
     size_t heap_free = context_avail_free_memory(ctx);
     // if we need more heap space than is currently free, then try to GC the needed space
     if (heap_free < heap_need) {
@@ -536,6 +543,7 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
 
 static term jit_put_list(Context *ctx, term head, term tail)
 {
+    TRACE("jit_put_list: head=%p tail=%p\n", (void *) head, (void *) tail);
     term *list_elem = term_list_alloc(&ctx->heap);
     term t = term_list_init_prepend(list_elem, head, tail);
     return t;
@@ -543,11 +551,13 @@ static term jit_put_list(Context *ctx, term head, term tail)
 
 static term jit_module_load_literal(Context *ctx, JITState *jit_state, int index)
 {
+    TRACE("jit_module_load_literal: index=%d\n", index);
     return module_load_literal(jit_state->module, index, ctx);
 }
 
 static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
+    TRACE("jit_alloc_boxed_integer_fragment: value=%lld\n", (long long) value);
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
@@ -604,11 +614,13 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
+    TRACE("jit_term_alloc_tuple: size=%u\n", size);
     return term_alloc_tuple(size, &ctx->heap);
 }
 
 static term jit_term_alloc_fun(Context *ctx, JITState *jit_state, uint32_t fun_index, uint32_t numfree)
 {
+    TRACE("jit_term_alloc_fun: fun_index=%u numfree=%u\n", fun_index, numfree);
     size_t size = numfree + BOXED_FUN_SIZE;
     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
@@ -620,6 +632,7 @@ static term jit_term_alloc_fun(Context *ctx, JITState *jit_state, uint32_t fun_i
 
 static bool jit_send(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_send: recipient=%p message=%p\n", (void *) ctx->x[0], (void *) ctx->x[1]);
     term recipient_term = ctx->x[0];
     if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
         term return_value = dist_send_message(recipient_term, ctx->x[1], ctx);
@@ -651,6 +664,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
 
 static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 {
+    TRACE("jit_extended_register_ptr: index=%u\n", index);
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->extended_x_regs) {
         struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
@@ -668,6 +682,7 @@ static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 
 static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_process_signal_messages\n");
     MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
     bool handle_error = false;
     bool reprocess_outer = false;
@@ -846,6 +861,7 @@ static void jit_clear_timeout_flag(Context *ctx)
 
 static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout, int label)
 {
+    TRACE("jit_wait_timeout: timeout=%p label=%d\n", (void *) timeout, label);
     avm_int64_t t = 0;
     if (term_is_any_integer(timeout)) {
         t = term_maybe_unbox_int64(timeout);
@@ -885,6 +901,7 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 
 static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state, int label)
 {
+    TRACE("jit_wait_timeout_trap_handler: label=%d\n", label);
     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
         // No message is here.
         // We were signaled for another reason.
@@ -952,6 +969,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term fun, unsigned int args_count)
 {
+    TRACE("jit_call_fun: fun=%p args_count=%u\n", (void *) fun, args_count);
     Module *fun_module;
     unsigned int fun_arity;
     uint32_t n_freeze = 0;
@@ -1025,16 +1043,19 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
 
 static term jit_term_from_float(Context *ctx, int freg)
 {
+    TRACE("jit_term_from_float: freg=%d\n", freg);
     return term_from_float(ctx->fr[freg], &ctx->heap);
 }
 
 static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 {
+    TRACE("jit_term_conv_to_float: t=%p freg=%d\n", (void *) t, freg);
     ctx->fr[freg] = term_conv_to_float(t);
 }
 
 static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fadd: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1054,6 +1075,7 @@ static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fsub: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1073,6 +1095,7 @@ static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fmul: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1092,6 +1115,7 @@ static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fdiv: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
@@ -1111,11 +1135,13 @@ static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 
 static void jit_fnegate(Context *ctx, int freg1, int freg2)
 {
+    TRACE("jit_fnegate: freg1=%d freg2=%d\n", freg1, freg2);
     ctx->fr[freg2] = -ctx->fr[freg1];
 }
 
 static bool jit_catch_end(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_catch_end\n");
     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
     switch (term_to_atom_index(ctx->x[0])) {
         case THROW_ATOM_INDEX:
@@ -1158,6 +1184,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
 
 static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
 {
+    TRACE("jit_memory_ensure_free_with_roots: sz=%d live=%d flags=%d\n", sz, live, flags);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, sz, live, ctx->x, flags) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         return false;
@@ -1167,11 +1194,13 @@ static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state,
 
 static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 {
+    TRACE("jit_term_alloc_bin_match_state: src=%p slots=%d\n", (void *) src, slots);
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
 
 static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
+    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%zu n=%d bs_flags=%d\n", (void *) bin_ptr, offset, n, bs_flags);
     union maybe_unsigned_int64 value;
     bool status = bitstring_extract_integer(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
     if (UNLIKELY(!status)) {
@@ -1186,6 +1215,7 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
 
 static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
+    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%zu n=%d bs_flags=%d\n", (void *) bin_ptr, offset, n, bs_flags);
     avm_float_t value;
     bool status;
     switch (n) {
@@ -1212,6 +1242,7 @@ static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
 
 static term jit_term_maybe_create_sub_binary(Context *ctx, term binary, size_t offset, size_t len)
 {
+    TRACE("jit_term_maybe_create_sub_binary: binary=%p offset=%zu len=%zu\n", (void *) binary, offset, len);
     return term_maybe_create_sub_binary(binary, offset, len, &ctx->heap, ctx->global);
 }
 
@@ -1240,6 +1271,7 @@ static int jit_bitstring_utf16_size(int c)
 
 static term jit_term_create_empty_binary(Context *ctx, size_t len)
 {
+    TRACE("jit_term_create_empty_binary: len=%zu\n", len);
     return term_create_empty_binary(len, &ctx->heap, ctx->global);
 }
 
@@ -1292,6 +1324,7 @@ static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum Bitst
 
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
 {
+    TRACE("jit_bitstring_copy_module_str: bin=%p offset=%zu str_id=%d len=%zu\n", (void *) bin, offset, str_id, len);
     UNUSED(ctx);
     uint8_t *dst = (uint8_t *) term_binary_data(bin);
     size_t remaining = 0;
@@ -1301,6 +1334,7 @@ static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, ter
 
 static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size)
 {
+    TRACE("jit_bitstring_copy_binary: t=%p offset=%zu src=%p size=%p\n", (void *) t, offset, (void *) src, (void *) size);
     if (offset % 8) {
         set_error(ctx, jit_state, 0, UNSUPPORTED_ATOM);
         return -1;
@@ -1317,6 +1351,7 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
 
 static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity)
 {
+    TRACE("jit_apply: module=%p function=%p arity=%u\n", (void *) module, (void *) function, arity);
     atom_index_t module_name = term_to_atom_index(module);
     atom_index_t function_name = term_to_atom_index(function);
 
@@ -1363,6 +1398,7 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
 
 static void *jit_malloc(Context *ctx, JITState *jit_state, size_t sz)
 {
+    TRACE("jit_malloc: sz=%zu\n", sz);
     void *ptr = malloc(sz);
     if (IS_NULL_PTR(ptr)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
@@ -1403,6 +1439,7 @@ static bool sort_kv_pairs(term *kv, int size, GlobalContext *global)
 
 static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv)
 {
+    TRACE("jit_put_map_assoc: src=%p new_entries=%zu num_elements=%zu\n", (void *) src, new_entries, num_elements);
     size_t src_size = term_get_map_size(src);
     size_t new_map_size = src_size + new_entries;
     bool is_shared = new_entries == 0;
