@@ -38,7 +38,8 @@ start() ->
                 ok = test_bs_create_bin_utf16(),
                 ok = test_bs_create_bin_utf32(),
                 ok = test_bs_create_bin_integer(),
-                ok = test_bs_create_bin_binary();
+                ok = test_bs_create_bin_binary(),
+                ok = test_bs_create_bin_alloc_list();
             true ->
                 ok
         end,
@@ -266,3 +267,15 @@ test_bs_create_bin_binary() ->
             error:badarg -> unexpected
         end,
     ok.
+
+test_bs_create_bin_alloc_list() ->
+    %% Test that bs_create_bin with allocator list works correctly
+    %% Expected result: <<0,0,0,42>> (42 as 32-bit big-endian integer)
+    Expected = <<0, 0, 0, 42>>,
+    Result = test_op_bs_create_bin_asm:bs_create_bin_alloc_list(42),
+    case Result of
+        Expected ->
+            ok;
+        _ ->
+            error({unexpected_result, Result, expected, Expected})
+    end.
