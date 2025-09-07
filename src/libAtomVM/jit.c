@@ -170,6 +170,7 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
 
 static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_terminate_context: ctx->process_id = %d\n", ctx->process_id);
     TRACE("-- Code execution finished for %i--\n", ctx->process_id);
     GlobalContext *global = ctx->global;
     if (ctx->leader) {
@@ -182,6 +183,7 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
+    TRACE("jit_terminate_context: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     if (offset || term_is_invalid_term(ctx->x[2])) {
         ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
     }
@@ -248,12 +250,14 @@ static void set_error(Context *ctx, JITState *jit_state, int offset, term error_
 
 static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, term error_type_atom)
 {
+    TRACE("jit_raise_error: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     set_error(ctx, jit_state, offset, error_type_atom);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
 static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1)
 {
+    TRACE("jit_raise_error_tuple: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     // We can gc as we are raising
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, offset, OUT_OF_MEMORY_ATOM);
@@ -270,6 +274,7 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
 
 static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
+    TRACE("jit_raise: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     ctx->x[0] = stacktrace_exception_class(stacktrace);
     ctx->x[1] = exc_value;
     ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, stacktrace);
@@ -278,6 +283,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
 
 static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_schedule_next_cp: ctx->process_id = %d\n", ctx->process_id);
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -286,6 +292,7 @@ static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 
 static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_schedule_wait_cp: ctx->process_id = %d\n", ctx->process_id);
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -466,6 +473,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
 
 static term jit_module_get_atom_term_by_id(JITState *jit_state, int atom_index)
 {
+    TRACE("jit_module_get_atom_term_by_id: atom_index=%d\n", atom_index);
     return module_get_atom_term_by_id(jit_state->module, atom_index);
 }
 
@@ -509,11 +517,11 @@ static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 
 static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, term t, term other, TermCompareOpts opts)
 {
-    TRACE("jit_term_compare: t=%p other=%p opts=%d\n", (void *) t, (void *) other, opts);
     TermCompareResult result = term_compare(t, other, opts, ctx->global);
     if (UNLIKELY(result == 0)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
+    TRACE("jit_term_compare: t=%p other=%p opts=%d, result=%d\n", (void *) t, (void *) other, opts, result);
     return result;
 }
 
@@ -826,6 +834,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 
 static term jit_mailbox_peek(Context *ctx)
 {
+    TRACE("jit_mailbox_peek: ctx->process_id=%d\n", ctx->process_id);
     term out = term_invalid_term();
     mailbox_peek(ctx, &out);
     return out;
@@ -833,22 +842,26 @@ static term jit_mailbox_peek(Context *ctx)
 
 static void jit_mailbox_remove_message(Context *ctx)
 {
+    TRACE("jit_mailbox_remove_message: ctx->process_id=%d\n", ctx->process_id);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 }
 
 static void jit_timeout(Context *ctx)
 {
+    TRACE("jit_timeout: ctx->process_id=%d\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
     mailbox_reset(&ctx->mailbox);
 }
 
 static void jit_mailbox_next(Context *ctx)
 {
+    TRACE("jit_mailbox_next: ctx->process_id=%d\n", ctx->process_id);
     mailbox_next(&ctx->mailbox);
 }
 
 static void jit_cancel_timeout(Context *ctx)
 {
+    TRACE("jit_cancel_timeout: ctx->process_id=%d\n", ctx->process_id);
     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
         scheduler_cancel_timeout(ctx);
     }
@@ -856,6 +869,7 @@ static void jit_cancel_timeout(Context *ctx)
 
 static void jit_clear_timeout_flag(Context *ctx)
 {
+    TRACE("jit_clear_timeout_flag: ctx->process_id=%d\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
 }
 
