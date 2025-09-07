@@ -1076,6 +1076,7 @@ first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt, State0) ->
     {Label, Rest2} = decode_label(Rest1),
     ?TRACE("OP_TRY ~p, ~p\n", [Dest, Label]),
     MSt2 = term_from_catch_label(Dest, Label, MMod, MSt1),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 105
 first_pass(<<?OP_TRY_END, Rest0/binary>>, MMod, MSt, State0) ->
@@ -1384,6 +1385,7 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt, State0) ->
     MSt13 = cond_jump_to_label({{free, BSBinarySize}, '<', BSOffsetReg}, Fail, MMod, MSt12),
     MSt14 = MMod:move_to_array_element(MSt13, BSOffsetReg, MatchStateRegPtr, 2),
     MSt15 = MMod:free_native_registers(MSt14, [BSOffsetReg, MatchStateRegPtr]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt15),
     first_pass(Rest5, MMod, MSt15, State0);
 % 121
 first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt, State0) ->
@@ -2089,7 +2091,8 @@ first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt, State0) ->
     MSt6 = MMod:shift_left(MSt5, Reg, 4),
     MSt7 = MMod:or_(MSt6, Reg, ?TERM_INTEGER_TAG),
     MSt8 = MMod:move_to_vm_register(MSt7, Reg, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Reg]),
+    MSt9 = MMod:free_native_registers(MSt8, [Reg, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest3, MMod, MSt9, State0);
 % 168
 first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt, State0) ->
