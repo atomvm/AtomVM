@@ -1408,8 +1408,21 @@ move_array_element(
     }.
 
 %% @doc move reg[x] to a vm or native register
--spec get_array_element(state(), aarch64_register(), non_neg_integer()) ->
+-spec get_array_element(
+    state(), aarch64_register() | {free, aarch64_register()}, non_neg_integer()
+) ->
     {state(), aarch64_register()}.
+get_array_element(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State,
+    {free, Reg},
+    Index
+) ->
+    I1 = jit_aarch64_asm:ldr(Reg, {Reg, Index * 8}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary>>),
+    {State#state{stream = Stream1}, Reg};
 get_array_element(
     #state{
         stream_module = StreamModule,
