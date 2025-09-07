@@ -2197,24 +2197,24 @@ set_continuation_to_label(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
+        offset = JumpTableOffset,
         available_regs = [Temp1, Temp2 | _]
     } = State,
     Label
 ) ->
     % Calculate jump table entry offset
-    JumpTableEntryOffset = Label * ?JUMP_TABLE_ENTRY_SIZE,
+    JumpTableEntryOffset = (Label * ?JUMP_TABLE_ENTRY_SIZE) + JumpTableOffset,
 
-    % First emit the adr instruction with a known offset (we'll use 4 for now)
+    AdrOffset = StreamModule:offset(Stream0),
+    % ADR Temp, +.4 means we're storing PC value in Temp1.
+    % For example, if AdrOffset is 0x0808034c, Temp1 will contain 0x08080350
     I1 = jit_armv6m_asm:adr(Temp1, 4),
     Stream1 = StreamModule:append(Stream0, I1),
 
-    % Calculate the actual ADR PC: ADR reads from (PC+4) aligned to 4-byte boundary
-    AdrOffset = StreamModule:offset(Stream1),
     AdrPC = (AdrOffset + 4) band (bnot 3),
 
-    % Calculate what we need to load: JumpTableEntryOffset - (AdrPC + 4) + 1 (for thumb bit)
-    % Since ADR will add AdrPC + 4, we need to subtract 4 from our immediate
-    ImmediateValue = JumpTableEntryOffset - AdrPC - 3,
+    % Calculate what we need to load: JumpTableEntryOffset - AdrPC + 1 (for thumb bit)
+    ImmediateValue = JumpTableEntryOffset + 1 - AdrPC,
 
     % Generate mov_immediate to load the calculated offset
     State1 = mov_immediate(State#state{stream = Stream1}, Temp2, ImmediateValue),
