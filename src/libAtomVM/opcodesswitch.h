@@ -6727,7 +6727,7 @@ wait_timeout_trap_handler:
                 uint32_t fail;
                 DECODE_LABEL(fail, pc);
                 uint32_t alloc;
-                DECODE_LITERAL(alloc, pc);
+                DECODE_ALLOCATOR_LIST(alloc, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t unit;
