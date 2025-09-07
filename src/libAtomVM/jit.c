@@ -38,6 +38,134 @@
 
 #include <math.h>
 #include <stddef.h>
+#ifndef AVM_NO_JIT_DWARF
+#include <stdlib.h>
+#include <string.h>
+
+#if TERM_BYTES == 4
+// ELF32 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint32_t e_entry;
+    uint32_t e_phoff;
+    uint32_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
+} Elf_Shdr;
+
+typedef struct
+{
+    uint32_t st_name;
+    uint32_t st_value;
+    uint32_t st_size;
+    unsigned char st_info;
+    unsigned char st_other;
+    uint16_t st_shndx;
+} Elf_Sym;
+
+typedef struct
+{
+    uint32_t p_type;
+    uint32_t p_offset;
+    uint32_t p_vaddr;
+    uint32_t p_paddr;
+    uint32_t p_filesz;
+    uint32_t p_memsz;
+    uint32_t p_flags;
+    uint32_t p_align;
+} Elf_Phdr;
+#elif TERM_BYTES == 8
+// ELF64 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint64_t e_entry;
+    uint64_t e_phoff;
+    uint64_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+} Elf_Shdr;
+
+typedef struct
+{
+    uint32_t st_name;
+    unsigned char st_info;
+    unsigned char st_other;
+    uint16_t st_shndx;
+    uint64_t st_value;
+    uint64_t st_size;
+} Elf_Sym;
+
+typedef struct
+{
+    uint32_t p_type;
+    uint32_t p_flags;
+    uint64_t p_offset;
+    uint64_t p_vaddr;
+    uint64_t p_paddr;
+    uint64_t p_filesz;
+    uint64_t p_memsz;
+    uint64_t p_align;
+} Elf_Phdr;
+#else
+#error TERM_BYTES should be 4 or 8
+#endif
+
+// ELF constants
+#define SHT_SYMTAB 2
+#define SHT_STRTAB 3
+#define STT_FUNC 2
+#define STB_GLOBAL 1
+#define PT_LOAD 1
+#define PF_X 1 // Execute
+#define PF_R 4 // Read
+
+#endif
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -1763,3 +1891,290 @@ const ModuleNativeInterface module_native_interface = {
 };
 
 #endif
+
+#ifndef AVM_NO_JIT_DWARF
+
+// GDB JIT interface structures and constants
+typedef enum
+{
+    JIT_NOACTION = 0,
+    JIT_REGISTER_FN,
+    JIT_UNREGISTER_FN
+} jit_actions_t;
+
+struct jit_code_entry
+{
+    struct jit_code_entry *next_entry;
+    struct jit_code_entry *prev_entry;
+    const char *symfile_addr;
+    uint64_t symfile_size;
+};
+
+struct jit_descriptor
+{
+    uint32_t version;
+    uint32_t action_flag;
+    struct jit_code_entry *relevant_entry;
+    struct jit_code_entry *first_entry;
+};
+
+// Global GDB JIT interface descriptor
+// This must have C linkage and specific symbol names for GDB to find it
+struct jit_descriptor __jit_debug_descriptor = { 1, 0, NULL, NULL };
+
+// GDB sets breakpoint on this function to be notified of new JIT code
+void __attribute__((noinline)) __jit_debug_register_code(void)
+{
+    // GDB will set a breakpoint here
+}
+
+// Create a minimal ELF file for debugging with proper PIE support
+static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_data, size_t original_elf_size,
+    uintptr_t load_address, size_t *new_elf_size)
+{
+    TRACE("create_minimal_elf_for_debugging: original_elf_size=%zu, load_address=0x%lx\n",
+        original_elf_size, load_address);
+
+    // Extract symbol table and string table from original ELF
+    const char *symtab_data = NULL;
+    size_t symtab_size = 0;
+    const char *strtab_data = NULL;
+    size_t strtab_size = 0;
+
+    // Parse original ELF to extract symbol and string tables
+    if (original_elf_size < sizeof(Elf_Ehdr)) {
+        fprintf(stderr, "ERROR: Original ELF too small for header\n");
+        return NULL;
+    }
+
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *) original_elf_data;
+    const Elf_Shdr *shdrs = (const Elf_Shdr *) (original_elf_data + ehdr->e_shoff);
+
+    // Find .symtab and .strtab sections
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_SYMTAB) {
+            symtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            symtab_size = shdrs[i].sh_size;
+        } else if (shdrs[i].sh_type == SHT_STRTAB && i != ehdr->e_shstrndx) {
+            strtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            strtab_size = shdrs[i].sh_size;
+        }
+    }
+
+    if (!symtab_data || !strtab_data) {
+        fprintf(stderr, "ERROR: Could not find symbol or string table in original ELF\n");
+        return NULL;
+    }
+
+    // Section name strings: "\0.text\0.symtab\0.strtab\0.shstrtab\0"
+    const char *section_names = "\0.text\0.symtab\0.strtab\0.shstrtab\0";
+    size_t shstrtab_size = 32; // strlen of section_names
+
+    // Calculate size of new minimal ELF (ELF header + 1 program header + 5 section headers + data)
+    size_t elf_size = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr)) + symtab_size + strtab_size + shstrtab_size;
+
+    uint8_t *new_elf = (uint8_t *) malloc(elf_size);
+    if (!new_elf) {
+        fprintf(stderr, "ERROR: Failed to allocate memory for new ELF\n");
+        return NULL;
+    }
+    memset(new_elf, 0, elf_size);
+
+    // Create ELF header
+    const Elf_Ehdr *orig_ehdr = (const Elf_Ehdr *) original_elf_data;
+    Elf_Ehdr *new_ehdr = (Elf_Ehdr *) new_elf;
+    memcpy(new_ehdr->e_ident, orig_ehdr->e_ident, 16);
+    new_ehdr->e_type = orig_ehdr->e_type;
+    new_ehdr->e_machine = orig_ehdr->e_machine;
+    new_ehdr->e_version = orig_ehdr->e_version;
+    new_ehdr->e_entry = 0;
+    new_ehdr->e_phoff = sizeof(Elf_Ehdr);
+    new_ehdr->e_shoff = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr);
+    new_ehdr->e_flags = orig_ehdr->e_flags;
+    new_ehdr->e_ehsize = sizeof(Elf_Ehdr);
+    new_ehdr->e_phentsize = sizeof(Elf_Phdr);
+    new_ehdr->e_phnum = 1;
+    new_ehdr->e_shentsize = sizeof(Elf_Shdr);
+    new_ehdr->e_shnum = 5; // null, .text, .symtab, .strtab, .shstrtab
+    new_ehdr->e_shstrndx = 4; // .shstrtab is the section name string table
+
+    // Create program header (PT_LOAD segment)
+    Elf_Phdr *new_phdr = (Elf_Phdr *) (new_elf + sizeof(Elf_Ehdr));
+    new_phdr->p_type = PT_LOAD;
+    new_phdr->p_flags = PF_R | PF_X;
+
+    new_phdr->p_offset = 0;
+    new_phdr->p_vaddr = load_address;
+    new_phdr->p_paddr = load_address;
+
+    // Find the actual .text section size from the original ELF
+    const Elf_Shdr *orig_shdrs = (const Elf_Shdr *) (original_elf_data + orig_ehdr->e_shoff);
+
+    size_t code_size = 0;
+
+    // Look for .text section in original ELF
+    for (int i = 0; i < orig_ehdr->e_shnum; i++) {
+        const Elf_Shdr *shdr = &orig_shdrs[i];
+        if (shdr->sh_type == 1 && (shdr->sh_flags & 6) == 6) { // SHT_PROGBITS + SHF_ALLOC + SHF_EXECINSTR
+            code_size = shdr->sh_size;
+            break;
+        }
+    }
+
+    if (code_size == 0) {
+        fprintf(stderr, "ERROR: Could not find .text section in original ELF\n");
+        free(new_elf);
+        return NULL;
+    }
+
+    new_phdr->p_filesz = code_size; // Size in file
+    new_phdr->p_memsz = code_size;  // Size in memory
+    new_phdr->p_align = 1;
+
+    // Create section headers
+    Elf_Shdr *new_shdrs = (Elf_Shdr *) (new_elf + sizeof(Elf_Ehdr) + sizeof(Elf_Phdr));
+    size_t current_offset = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr));
+
+    // Section 0: null section (required)
+    new_shdrs[0] = (Elf_Shdr){ 0 };
+
+    // Section 1: .text section
+    new_shdrs[1].sh_name = 1; // ".text\0" at offset 1 in section names
+    new_shdrs[1].sh_type = 1; // SHT_PROGBITS
+    new_shdrs[1].sh_flags = 6; // SHF_ALLOC | SHF_EXECINSTR
+    new_shdrs[1].sh_addr = load_address;
+    new_shdrs[1].sh_offset = 0; // No actual .text data in this ELF, but debugger uses load_address
+    new_shdrs[1].sh_size = code_size; // Set proper size so debugger knows the extent
+    new_shdrs[1].sh_addralign = 1;
+
+    // Section 2: .symtab
+    new_shdrs[2].sh_name = 7; // ".symtab\0" at offset 7 in section names
+    new_shdrs[2].sh_type = SHT_SYMTAB;
+    new_shdrs[2].sh_offset = current_offset;
+    new_shdrs[2].sh_size = symtab_size;
+    new_shdrs[2].sh_link = 3; // Points to .strtab
+
+#if TERM_BYTES == 8
+    new_shdrs[2].sh_addralign = 8;
+#else
+    new_shdrs[2].sh_addralign = 4;
+#endif
+
+    new_shdrs[2].sh_entsize = sizeof(Elf_Sym);
+    current_offset += symtab_size;
+
+    // Section 3: .strtab
+    new_shdrs[3].sh_name = 15; // ".strtab\0" at offset 15 in section names
+    new_shdrs[3].sh_type = SHT_STRTAB;
+    new_shdrs[3].sh_offset = current_offset;
+    new_shdrs[3].sh_size = strtab_size;
+    new_shdrs[3].sh_addralign = 1;
+    current_offset += strtab_size;
+
+    // Section 4: .shstrtab (section name string table)
+    new_shdrs[4].sh_name = 23; // ".shstrtab\0" at offset 23 in section names
+    new_shdrs[4].sh_type = SHT_STRTAB;
+    new_shdrs[4].sh_offset = current_offset;
+    new_shdrs[4].sh_size = shstrtab_size;
+    new_shdrs[4].sh_addralign = 1;
+
+    // Copy symbol table data and patch symbol addresses
+    uint8_t *new_symtab = new_elf + new_shdrs[2].sh_offset;
+    memcpy(new_symtab, symtab_data, symtab_size);
+
+    // With PT_LOAD program header, the debugger should automatically apply the base address
+    // Copy string table data
+    uint8_t *new_strtab = new_elf + new_shdrs[3].sh_offset;
+    memcpy(new_strtab, strtab_data, strtab_size);
+
+    // Copy section name string table data
+    uint8_t *new_shstrtab = new_elf + new_shdrs[4].sh_offset;
+    memcpy(new_shstrtab, section_names, shstrtab_size);
+
+    *new_elf_size = elf_size;
+    return new_elf;
+}
+
+void jit_debug_register_code(Module *mod, const void *native_code, size_t native_size, ModuleNativeEntryPoint entry_point)
+{
+    UNUSED(mod);
+
+    if (!native_code || native_size < 8) {
+        fprintf(stderr, "jit_debug_register_code: no native code or too small\n");
+        return;
+    }
+
+    // Parse the NativeCodeChunk header to find where the ELF starts
+    const uint8_t *data = (const uint8_t *) native_code;
+    uint32_t info_size = READ_32_UNALIGNED(data);
+
+    if (info_size + 4 > native_size) {
+        fprintf(stderr, "jit_debug_register_code: invalid info_size\n");
+        return;
+    }
+
+    // Check if there's an ELF header after the NativeCodeChunk header
+    const uint8_t *elf_start = data + 4 + info_size;
+    size_t elf_size = native_size - (4 + info_size);
+
+    if (elf_size < 16) {
+        fprintf(stderr, "jit_debug_register_code: no space for ELF header\n");
+        return;
+    }
+
+    // Check for ELF magic: 0x7f, 'E', 'L', 'F'
+    if (elf_start[0] != 0x7f || elf_start[1] != 'E' || elf_start[2] != 'L' || elf_start[3] != 'F') {
+        fprintf(stderr, "jit_debug_register_code: no ELF header found, not registering debug info\n");
+        return;
+    }
+
+    // Allocate memory for the JIT code entry (but not for the ELF data itself)
+    struct jit_code_entry *entry = malloc(sizeof(struct jit_code_entry));
+    if (!entry) {
+        return;
+    }
+
+    // Use the actual mapped entry point address as the load address
+    uintptr_t load_address = (uintptr_t) entry_point;
+
+    // Create a minimal ELF file with proper symbols for debugging
+    size_t new_elf_size;
+    const uint8_t *new_elf = create_minimal_elf_for_debugging(elf_start, elf_size, load_address, &new_elf_size);
+
+    if (!new_elf) {
+        fprintf(stderr, "ERROR: Failed to create minimal ELF for debugging\n");
+        return;
+    }
+
+    // Initialize the entry with the new ELF
+    entry->next_entry = NULL;
+    entry->prev_entry = NULL;
+    entry->symfile_addr = (const char *) new_elf;
+    entry->symfile_size = new_elf_size;
+
+    // Add to GDB's linked list
+    if (__jit_debug_descriptor.first_entry) {
+        __jit_debug_descriptor.first_entry->prev_entry = entry;
+        entry->next_entry = __jit_debug_descriptor.first_entry;
+    }
+    __jit_debug_descriptor.first_entry = entry;
+
+    // TODO: Store entry pointer in module for later unregistration
+
+    // Notify GDB that new code has been registered
+    __jit_debug_descriptor.action_flag = JIT_REGISTER_FN;
+    __jit_debug_descriptor.relevant_entry = entry;
+    __jit_debug_register_code();
+}
+
+void jit_debug_unregister_code(Context *ctx, Module *mod)
+{
+    UNUSED(ctx);
+    UNUSED(mod);
+
+    // TODO: Implement unregistration
+    // Need to store the jit_code_entry pointer in the module structure
+    // and retrieve it here to properly unregister
+}
+
+#endif // AVM_NO_JIT_DWARF

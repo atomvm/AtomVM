@@ -22,7 +22,6 @@ macro(pack_archive avm_name)
 
     set(multiValueArgs ERLC_FLAGS MODULES)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
-    list(JOIN PACK_ARCHIVE_ERLC_FLAGS " " PACK_ARCHIVE_ERLC_FLAGS)
     foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
@@ -83,6 +82,7 @@ macro(pack_precompiled_archive avm_name)
             string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
             set(jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam

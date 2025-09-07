@@ -72,6 +72,17 @@
     add_label/3
 ]).
 
+-ifdef(JIT_DWARF).
+-export([
+    dwarf_opcode/2,
+    dwarf_label/2,
+    dwarf_function/3,
+    dwarf_line/2
+]).
+-endif.
+
+-compile([warnings_as_errors]).
+
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
@@ -198,6 +209,8 @@
 -define(AVAILABLE_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6]).
 -define(PARAMETER_REGS, [r0, r1, r2, r3, r4, r5]).
 -define(SCRATCH_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6, r17]).
+
+-include("jit_backend_dwarf_impl.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
