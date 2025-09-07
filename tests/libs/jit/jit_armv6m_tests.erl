@@ -998,7 +998,7 @@ if_block_test_() ->
                         "   8:	3602      	adds	r6, #2"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
-                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
