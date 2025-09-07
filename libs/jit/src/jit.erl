@@ -2078,7 +2078,7 @@ first_pass(
 ) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
-    {Alloc, Rest2} = decode_literal(Rest1),
+    {Alloc, Rest2} = decode_allocator_list(MMod, Rest1),
     {Live, Rest3} = decode_literal(Rest2),
     {_Unit, Rest4} = decode_literal(Rest3),
     % TODO: add skip_dest and redecode when we need it
