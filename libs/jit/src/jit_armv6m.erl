@@ -2318,7 +2318,11 @@ get_module_index(
     Code = <<I1a/binary, I1b/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {
-        State#state{stream = Stream1, available_regs = AvailableT, used_regs = [Reg | UsedRegs0]},
+        State#state{
+            stream = Stream1,
+            available_regs = [TempJitState | AvailableT],
+            used_regs = [Reg | UsedRegs0]
+        },
         Reg
     }.
 
