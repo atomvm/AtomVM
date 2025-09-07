@@ -1538,6 +1538,18 @@ move_to_native_register(
         available_regs = [Reg | AvailT],
         used_regs = Used
     } = State,
+    {x_reg, extra}
+) ->
+    I1 = jit_aarch64_asm:ldr(Reg, ?X_REG(?MAX_REG)),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
     {x_reg, X}
 ) when
     X < ?MAX_REG
@@ -1586,6 +1598,12 @@ move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Reg}, RegDst
 ) when ?IS_GPR(Reg) ->
     I1 = jit_aarch64_asm:ldr(RegDst, {Reg, 0}),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1};
+move_to_native_register(
+    #state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, extra}, RegDst
+) ->
+    I1 = jit_aarch64_asm:ldr(RegDst, ?X_REG(?MAX_REG)),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1};
 move_to_native_register(
