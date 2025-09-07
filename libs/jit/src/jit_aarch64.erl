@@ -680,8 +680,9 @@ if_block_cond(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    {State1, ge, byte_size(I1)};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, ge, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
 ) ->
