@@ -349,6 +349,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
                     ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
                     module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
+
+#ifndef AVM_NO_JIT_DWARF
+                    // Register debug info with debugger (will check for embedded ELF)
+                    const void *chunk_start = (const uint8_t *) &native_code->info_size;
+                    size_t chunk_size = ENDIAN_SWAP_32(native_code->size);
+                    jit_debug_register_code(mod, chunk_start, chunk_size, module_entry_point);
+#endif
                     break;
                 }
             }
@@ -466,6 +473,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
 COLD_FUNC void module_destroy(Module *module)
 {
+#ifndef AVM_NO_JIT_DWARF
+    // Unregister DWARF debug info from debugger if it was registered
+    jit_debug_unregister_code(NULL, module);
+#endif
+
     free(module->labels);
     free(module->imported_funcs);
     free(module->literals_table);

@@ -100,13 +100,35 @@
         16#00, 16#00, 16#06, 16#00, 16#00, 16#00, 16#00, 16#41, 16#51, 16#61, 16#81, 16#91, 16#B1>>
 ).
 
-compile_minimal_x86_64_test() ->
+-ifdef(JIT_DWARF).
+compile_stream_setup(CodeChunk) ->
+    Stream0 = jit_dwarf:new(jit_x86_64, test_module, jit_stream_binary, 0),
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
+    Stream1 = jit_dwarf:append(
+        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+    ),
+    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_dwarf, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    DwarfStream = jit_x86_64:stream(Stream3),
+    jit_dwarf:stream(DwarfStream).
+-else.
+compile_stream_setup(CodeChunk) ->
     Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_0,
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
     Stream1 = jit_stream_binary:append(
         Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
     ),
     Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    jit_x86_64:stream(Stream3).
+-endif.
+
+compile_minimal_x86_64_test() ->
+    {LabelsCount, Stream2} = compile_stream_setup(?CODE_CHUNK_0),
     {_LabelsCount, Stream3} = jit:compile(
         ?CODE_CHUNK_0,
         fun(_) -> undefined end,
@@ -115,7 +137,7 @@ compile_minimal_x86_64_test() ->
         jit_x86_64,
         Stream2
     ),
-    Stream4 = jit_x86_64:stream(Stream3),
+    Stream4 = compile_stream_finalize(Stream3),
     <<16:32, LabelsCount:32, ?JIT_FORMAT_VERSION:16, 1:16, ?JIT_ARCH_X86_64:16, ?JIT_VARIANT_PIC:16,
         0:32, Code/binary>> = Stream4,
     {JumpTable, _} = split_binary(Code, (LabelsCount + 1) * 5),
@@ -148,13 +170,7 @@ backend_to_arch(jit_aarch64) -> ?JIT_ARCH_AARCH64;
 backend_to_arch(jit_armv6m) -> ?JIT_ARCH_ARMV6M.
 
 compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
-    Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
-    Arch = backend_to_arch(Backend),
-    Stream1 = jit_stream_binary:append(
-        Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
-    ),
-    Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    {LabelsCount, Stream2} = compile_stream_setup(CodeChunk),
 
     AtomResolver = jit_precompile:atom_resolver(AtomChunk),
     LiteralResolver = fun(_) -> test_literal end,
@@ -164,7 +180,7 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     {LabelsCount, Stream3} = jit:compile(
         CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
     ),
-    Backend:stream(Stream3).
+    compile_stream_finalize(Stream3).
 
 term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     CompiledCode = compile_stream_for_backend(

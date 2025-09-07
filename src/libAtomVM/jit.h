@@ -225,6 +225,34 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream);
  */
 enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t label);
 
+#ifndef AVM_NO_JIT_DWARF
+/**
+ * @brief Register JIT-compiled code with debug info with GDB/LLDB
+ *
+ * @details This function registers native code and associated DWARF debug
+ * information with the debugger using the GDB JIT interface. This allows
+ * debuggers to show function names and source line information for JIT code.
+ *
+ * @param mod The module containing the JIT code
+ * @param native_code Pointer to the native machine code
+ * @param native_size Size of the native code in bytes
+ * @param entry_point The actual mapped entry point address
+ */
+void jit_debug_register_code(Module *mod, const void *native_code, size_t native_size, ModuleNativeEntryPoint entry_point);
+
+/**
+ * @brief Unregister JIT-compiled code from debugger
+ *
+ * @details This function unregisters previously registered JIT code from
+ * the debugger. Should be called when a module is unloaded.
+ *
+ * @param ctx The context
+ * @param mod The module being unloaded
+ */
+void jit_debug_unregister_code(Context *ctx, Module *mod);
+
+#endif
+
 #ifdef __cplusplus
 }
 #endif

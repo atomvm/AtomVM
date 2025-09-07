@@ -24,7 +24,8 @@
     stream/1,
     backend/1,
     beam_chunk_header/3,
-    compile/6
+    compile/6,
+    decode_value64/1
 ]).
 
 % NIFs
@@ -46,38 +47,7 @@
 -include("opcodes.hrl").
 -include("primitives.hrl").
 -include("term.hrl").
-
--define(COMPACT_LITERAL, 0).
--define(COMPACT_INTEGER, 1).
--define(COMPACT_ATOM, 2).
--define(COMPACT_XREG, 3).
--define(COMPACT_YREG, 4).
--define(COMPACT_LABEL, 5).
--define(COMPACT_EXTENDED, 7).
--define(COMPACT_LARGE_LITERAL, 8).
--define(COMPACT_LARGE_INTEGER, 9).
--define(COMPACT_LARGE_ATOM, 10).
--define(COMPACT_LARGE_XREG, 11).
--define(COMPACT_LARGE_YREG, 12).
-
-% OTP-20+ format
--define(COMPACT_EXTENDED_LIST, 16#17).
--define(COMPACT_EXTENDED_FP_REGISTER, 16#27).
--define(COMPACT_EXTENDED_ALLOCATION_LIST, 16#37).
--define(COMPACT_EXTENDED_LITERAL, 16#47).
-% https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
--define(COMPACT_EXTENDED_TYPED_REGISTER, 16#57).
-
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS, 0).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS, 1).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS, 2).
-
--define(COMPACT_LARGE_IMM_MASK, 16#18).
--define(COMPACT_11BITS_VALUE, 16#8).
--define(COMPACT_NBITS_VALUE, 16#18).
-
--define(COMPACT_LARGE_INTEGER_11BITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_11BITS_VALUE)).
--define(COMPACT_LARGE_INTEGER_NBITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_NBITS_VALUE)).
+-include("compact_term.hrl").
 
 -define(BOXED_FUN_SIZE, 3).
 -define(FLOAT_SIZE_64, 2).
@@ -113,6 +83,20 @@
 %%-define(ASSERT(Expr), true = Expr).
 -define(ASSERT_ALL_NATIVE_FREE(St), ok).
 -define(ASSERT(Expr), ok).
+
+-ifdef(JIT_DWARF).
+-define(DWARF_OPCODE(MMod, MSt, Opcode), MMod:dwarf_opcode(MSt, Opcode)).
+-define(DWARF_LABEL(MMod, MSt, Label), MMod:dwarf_label(MSt, Label)).
+-define(DWARF_FUNCTION(MMod, MSt, FunctionName, Arity),
+    MMod:dwarf_function(MSt, (State0#state.atom_resolver)(FunctionName), Arity)
+).
+-define(DWARF_LINE(MMod, MSt, Line), MMod:dwarf_line(MSt, Line)).
+-else.
+-define(DWARF_OPCODE(_MMod, MSt, _Opcode), MSt).
+-define(DWARF_LABEL(MMod, MSt, _Label), MSt).
+-define(DWARF_FUNCTION(_MMod, MSt, _FunctionName, _Arity), MSt).
+-define(DWARF_LINE(_MMod, MSt, _Line), MSt).
+-endif.
 
 %%-----------------------------------------------------------------------------
 %% @param   LabelsCount number of labels
@@ -162,17 +146,17 @@ compile(CodeChunk, _AtomResolver, _LiteralResolver, _TypeResolver, _MMod, _MSt) 
     error(badarg, [CodeChunk]).
 
 % 1
-first_pass(
-    <<?OP_LABEL, Rest0/binary>>, MMod, MSt0, State0
-) ->
+first_pass(<<?OP_LABEL, Rest0/binary>>, MMod, MSt, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LABEL ~p\n", [Label]),
+    MSt0 = ?DWARF_LABEL(MMod, MSt, Label),
     MSt1 = MMod:add_label(MSt0, Label),
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest1, MMod, MSt1, State0);
 % 2
-first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt, #state{tail_cache = TC} = State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"func_info/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_ModuleAtom, Rest1} = decode_atom(Rest0),
     {_FunctionName, Rest2} = decode_atom(Rest1),
@@ -194,12 +178,14 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
                 MSt3 = MMod:free_native_registers(MSt2, [OffsetReg]),
                 State0
         end,
-    ?ASSERT_ALL_NATIVE_FREE(MSt3),
-    first_pass(Rest3, MMod, MSt3, State1);
+    MSt4 = ?DWARF_FUNCTION(MMod, MSt3, _FunctionName, _Arity),
+    ?ASSERT_ALL_NATIVE_FREE(MSt4),
+    first_pass(Rest3, MMod, MSt4, State1);
 % 3
 first_pass(
-    <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
+    <<?OP_INT_CALL_END>>, MMod, MSt, #state{labels_count = LabelsCount} = State
 ) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"int_call_end/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_INT_CALL_END\n", []),
     MSt1 = MMod:add_label(MSt0, LabelsCount),
@@ -208,7 +194,8 @@ first_pass(
     ]),
     {State, MSt2};
 % 4
-first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Arity, Rest1} = decode_literal(Rest0),
     {Label, Rest2} = decode_label(Rest1),
@@ -217,7 +204,8 @@ first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest2, MMod, MSt1, State0);
 % 5
-first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt, #state{tail_cache = TC} = State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_last/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Arity, Rest1} = decode_literal(Rest0),
     {Label, Rest2} = decode_label(Rest1),
@@ -250,7 +238,8 @@ first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest3, MMod, MSt3, State1);
 % 6
-first_pass(<<?OP_CALL_ONLY, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_CALL_ONLY, Rest0/binary>>, MMod, MSt, #state{tail_cache = TC} = State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_only/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Arity, Rest1} = decode_literal(Rest0),
     {Label, Rest2} = decode_label(Rest1),
@@ -268,7 +257,8 @@ first_pass(<<?OP_CALL_ONLY, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest2, MMod, MSt1, State1);
 % 7
-first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_ext/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {Index, Rest2} = decode_literal(Rest1),
@@ -280,7 +270,8 @@ first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 8
-first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_ext_last/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {Index, Rest2} = decode_literal(Rest1),
@@ -293,7 +284,8 @@ first_pass(<<?OP_CALL_EXT_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest3, MMod, MSt2, State0);
 % 9
-first_pass(<<?OP_BIF0, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BIF0, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bif0/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Bif, Rest1} = decode_literal(Rest0),
     {MSt1, FuncPtr} = MMod:call_primitive(MSt0, ?PRIM_GET_IMPORTED_BIF, [
@@ -309,7 +301,8 @@ first_pass(<<?OP_BIF0, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest2, MMod, MSt5, State0);
 % 10
-first_pass(<<?OP_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BIF1, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bif1/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Bif, Rest2} = decode_literal(Rest1),
@@ -326,7 +319,8 @@ first_pass(<<?OP_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest4, MMod, MSt5, State0);
 % 11
-first_pass(<<?OP_BIF2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BIF2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bif2/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Bif, Rest2} = decode_literal(Rest1),
@@ -344,7 +338,8 @@ first_pass(<<?OP_BIF2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest5, MMod, MSt6, State0);
 % 12
-first_pass(<<?OP_ALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_ALLOCATE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"allocate/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {StackNeed, Rest1} = decode_literal(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -356,7 +351,8 @@ first_pass(<<?OP_ALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 13
-first_pass(<<?OP_ALLOCATE_HEAP, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_ALLOCATE_HEAP, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"allocate_heap/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {StackNeed, Rest1} = decode_literal(Rest0),
     {HeapNeed, Rest2} = decode_allocator_list(MMod, Rest1),
@@ -369,7 +365,8 @@ first_pass(<<?OP_ALLOCATE_HEAP, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest3, MMod, MSt2, State0);
 % 16
-first_pass(<<?OP_TEST_HEAP, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TEST_HEAP, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"test_heap/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {HeapNeed, Rest1} = decode_allocator_list(MMod, Rest0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -381,7 +378,8 @@ first_pass(<<?OP_TEST_HEAP, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 18
-first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"deallocate/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {NWords, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_DEALLOCATE ~p\n", [NWords]),
@@ -392,7 +390,8 @@ first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 19
-first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt, #state{tail_cache = TC} = State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"return/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_RETURN\n", []),
     % Optimized return: check if returning within same module
@@ -428,7 +427,8 @@ first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, #state{tail_cache = TC} = St
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest, MMod, MSt6, State1);
 % 20
-first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"send/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_SEND\n", []),
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_SEND, [
@@ -438,7 +438,8 @@ first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest, MMod, MSt2, State0);
 % 21
-first_pass(<<?OP_REMOVE_MESSAGE, Rest/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_REMOVE_MESSAGE, Rest/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"remove_message/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_REMOVE_MESSAGE\n", []),
     {MSt1, Reg1} = MMod:call_primitive(MSt0, ?PRIM_CANCEL_TIMEOUT, [
@@ -456,7 +457,8 @@ first_pass(<<?OP_REMOVE_MESSAGE, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest, MMod, MSt6, State0);
 % 22
-first_pass(<<?OP_TIMEOUT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TIMEOUT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"timeout/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_TIMEOUT\n", []),
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_TIMEOUT, [
@@ -466,7 +468,8 @@ first_pass(<<?OP_TIMEOUT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest0, MMod, MSt2, State0);
 % 23
-first_pass(<<?OP_LOOP_REC, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_LOOP_REC, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"loop_rec/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
@@ -482,7 +485,8 @@ first_pass(<<?OP_LOOP_REC, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest2, MMod, MSt7, State0);
 % 24
-first_pass(<<?OP_LOOP_REC_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_LOOP_REC_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"loop_rec_end/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     ?TRACE("OP_LOOP_REC_END ~p\n", [Label]),
@@ -498,7 +502,8 @@ first_pass(<<?OP_LOOP_REC_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest1, MMod, MSt5, State0);
 % 25
-first_pass(<<?OP_WAIT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_WAIT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"wait/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     ?TRACE("OP_WAIT ~p\n", [Label]),
@@ -507,7 +512,8 @@ first_pass(<<?OP_WAIT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 26
-first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"wait_timeout/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, OffsetRef0} = MMod:set_continuation_to_offset(MSt0),
@@ -533,7 +539,8 @@ first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest2, MMod, MSt9, State0);
 % 39
-first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_lt/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -549,7 +556,8 @@ first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 40
-first_pass(<<?OP_IS_GE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_GE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_ge/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -565,7 +573,8 @@ first_pass(<<?OP_IS_GE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 41
-first_pass(<<?OP_IS_EQUAL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_EQUAL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_eq/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -584,7 +593,8 @@ first_pass(<<?OP_IS_EQUAL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 42
-first_pass(<<?OP_IS_NOT_EQUAL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_NOT_EQUAL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_ne/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -598,7 +608,8 @@ first_pass(<<?OP_IS_NOT_EQUAL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 43
-first_pass(<<?OP_IS_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_EQ_EXACT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_eq_exact/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -627,7 +638,8 @@ first_pass(<<?OP_IS_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 44
-first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_ne_exact/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -652,7 +664,8 @@ first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest3, MMod, MSt5, State0);
 % 45
-first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_integer/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -663,7 +676,8 @@ first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 46
-first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_float/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -672,7 +686,8 @@ first_pass(<<?OP_IS_FLOAT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 47
-first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_number/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -705,7 +720,8 @@ first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest2, MMod, MSt4, State0);
 % 48
-first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_atom/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -717,7 +733,8 @@ first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 49
-first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_pid/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -728,7 +745,8 @@ first_pass(<<?OP_IS_PID, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 50
-first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_reference/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -750,7 +768,8 @@ first_pass(<<?OP_IS_REFERENCE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest2, MMod, MSt8, State0);
 % 51
-first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_port/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -761,7 +780,8 @@ first_pass(<<?OP_IS_PORT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 52
-first_pass(<<?OP_IS_NIL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_NIL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_nil/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -772,7 +792,8 @@ first_pass(<<?OP_IS_NIL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest2, MMod, MSt4, State0);
 % 53
-first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_binary/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -782,7 +803,8 @@ first_pass(<<?OP_IS_BINARY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 55
-first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_list/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -800,7 +822,8 @@ first_pass(<<?OP_IS_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 56
-first_pass(<<?OP_IS_NONEMPTY_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_NONEMPTY_LIST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_nonempty_list/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -812,7 +835,8 @@ first_pass(<<?OP_IS_NONEMPTY_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 57
-first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_tuple/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -821,7 +845,8 @@ first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 58
-first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"test_arity/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -835,7 +860,8 @@ first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 59
-first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"select_val/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {DefaultLabel, Rest2} = decode_label(Rest1),
@@ -865,7 +891,8 @@ first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest4, MMod, MSt3, State0);
 % 60
-first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"select_tuple_arity/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {DefaultLabel, Rest2} = decode_label(Rest1),
@@ -889,7 +916,8 @@ first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest4, MMod, MSt5, State0);
 % 61
-first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt, #state{tail_cache = TC} = State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"jump/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     ?TRACE("OP_JUMP ~p\n", [Label]),
@@ -907,7 +935,8 @@ first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = Sta
     end;
 % 62
 % Same implementation as OP_TRY, to confirm.
-first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"catch/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {Label, Rest2} = decode_label(Rest1),
@@ -916,7 +945,8 @@ first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 63
-first_pass(<<?OP_CATCH_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CATCH_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"catch_end/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_CATCH_END ~p\n", [Dest]),
@@ -927,7 +957,8 @@ first_pass(<<?OP_CATCH_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest1, MMod, MSt5, State0);
 % 64
-first_pass(<<?OP_MOVE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_MOVE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"move/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Source, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Dest, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -937,7 +968,8 @@ first_pass(<<?OP_MOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest2, MMod, MSt4, State0);
 % 65
-first_pass(<<?OP_GET_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GET_LIST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"get_list/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, List, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, HeadDest, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -953,7 +985,8 @@ first_pass(<<?OP_GET_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt10),
     first_pass(Rest3, MMod, MSt10, State0);
 % 66
-first_pass(<<?OP_GET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"get_tuple_element/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Source, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {Element, Rest2} = decode_literal(Rest1),
@@ -966,7 +999,8 @@ first_pass(<<?OP_GET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 67
-first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"set_tuple_element/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, NewElement, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Tuple, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
@@ -979,7 +1013,8 @@ first_pass(<<?OP_SET_TUPLE_ELEMENT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 69
-first_pass(<<?OP_PUT_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_PUT_LIST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"put_list/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Head, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Tail, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
@@ -994,7 +1029,8 @@ first_pass(<<?OP_PUT_LIST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest3, MMod, MSt7, State0);
 % 72
-first_pass(<<?OP_BADMATCH, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BADMATCH, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"badmatch/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_BADMATCH ~p\n", [Arg1]),
@@ -1004,7 +1040,8 @@ first_pass(<<?OP_BADMATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 73
-first_pass(<<?OP_IF_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IF_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"if_end/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_IF_END\n", []),
     MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
@@ -1013,7 +1050,8 @@ first_pass(<<?OP_IF_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest0, MMod, MSt1, State0);
 % 74
-first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"case_end/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_CASE_END ~p\n", [Arg1]),
@@ -1023,7 +1061,8 @@ first_pass(<<?OP_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 75
-first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_fun/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {ArgsCount, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_CALL_FUN ~p\n", [ArgsCount]),
@@ -1036,7 +1075,8 @@ first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest1, MMod, MSt4, State0);
 % 77
-first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_function/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1045,7 +1085,8 @@ first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 78
-first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_ext_only/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {Index, Rest2} = decode_literal(Rest1),
@@ -1055,7 +1096,8 @@ first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 96
-first_pass(<<?OP_FMOVE, ?COMPACT_EXTENDED_FP_REGISTER, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FMOVE, ?COMPACT_EXTENDED_FP_REGISTER, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fmove/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FPRegIndex, Rest1} = decode_literal(Rest0),
     {MSt1, Dest, Rest2} = decode_dest(Rest1, MMod, MSt0),
@@ -1065,7 +1107,8 @@ first_pass(<<?OP_FMOVE, ?COMPACT_EXTENDED_FP_REGISTER, Rest0/binary>>, MMod, MSt
     MSt4 = MMod:free_native_registers(MSt3, [ResultReg, Dest]),
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest2, MMod, MSt4, State0);
-first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fmove/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {FPReg, Rest2} = decode_fp_register(Rest1),
@@ -1078,7 +1121,8 @@ first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest2, MMod, MSt6, State0);
 % 97
-first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fconv/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, SrcValue),
@@ -1099,23 +1143,28 @@ first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest2, MMod, MSt8, State0);
 % 98
-first_pass(<<?OP_FADD, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FADD, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fadd/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     first_pass_float3(?PRIM_FADD, Rest0, MMod, MSt0, State0);
 % 99
-first_pass(<<?OP_FSUB, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FSUB, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fsub/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     first_pass_float3(?PRIM_FSUB, Rest0, MMod, MSt0, State0);
 % 100
-first_pass(<<?OP_FMUL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FMUL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fmul/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     first_pass_float3(?PRIM_FMUL, Rest0, MMod, MSt0, State0);
 % 101
-first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FDIV, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fdiv/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     first_pass_float3(?PRIM_FDIV, Rest0, MMod, MSt0, State0);
 % 102
-first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"fnegate/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Label, Rest1} = decode_label(Rest0),
     {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
@@ -1128,7 +1177,8 @@ first_pass(<<?OP_FNEGATE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest3, MMod, MSt2, State0);
 % 104
-first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"try/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {Label, Rest2} = decode_label(Rest1),
@@ -1137,7 +1187,8 @@ first_pass(<<?OP_TRY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 105
-first_pass(<<?OP_TRY_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TRY_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"try_end/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_TRY_END ~p\n", [Dest]),
@@ -1146,7 +1197,8 @@ first_pass(<<?OP_TRY_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest1, MMod, MSt3, State0);
 % 106
-first_pass(<<?OP_TRY_CASE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TRY_CASE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"try_case/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_TRY_CASE ~p\n", [Dest]),
@@ -1155,7 +1207,8 @@ first_pass(<<?OP_TRY_CASE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest1, MMod, MSt3, State0);
 % 107
-first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"try_case_end/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_TRY_CASE_END ~p\n", [Arg1]),
@@ -1165,7 +1218,8 @@ first_pass(<<?OP_TRY_CASE_END, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 108
-first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"raise/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Stacktrace, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, ExcValue, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
@@ -1176,7 +1230,8 @@ first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 112
-first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"apply/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
@@ -1191,7 +1246,8 @@ first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest1, MMod, MSt6, State0);
 % 113
-first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"apply_last/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {NWords, Rest2} = decode_literal(Rest1),
@@ -1209,7 +1265,8 @@ first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest2, MMod, MSt8, State0);
 % 114
-first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_boolean/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1222,7 +1279,8 @@ first_pass(<<?OP_IS_BOOLEAN, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt4),
     first_pass(Rest2, MMod, MSt4, State0);
 % 115
-first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_function2/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1253,7 +1311,8 @@ first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest3, MMod, MSt8, State0);
 % 117
-first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_integer2/7">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1291,7 +1350,8 @@ first_pass(<<?OP_BS_GET_INTEGER2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt18),
     first_pass(Rest7, MMod, MSt18, State0);
 % 118
-first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_float2/7">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1328,7 +1388,8 @@ first_pass(<<?OP_BS_GET_FLOAT2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt17),
     first_pass(Rest7, MMod, MSt17, State0);
 % 119
-first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_binary2/7">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1416,7 +1477,8 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt28),
     first_pass(Rest7, MMod, MSt28, State0);
 % 120
-first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_skip_bits2/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1446,7 +1508,8 @@ first_pass(<<?OP_BS_SKIP_BITS2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt15),
     first_pass(Rest5, MMod, MSt15, State0);
 % 121
-first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_test_tail2/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1464,7 +1527,8 @@ first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt10),
     first_pass(Rest3, MMod, MSt10, State0);
 % 124
-first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"gc_bif1/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -1489,7 +1553,8 @@ first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest5, MMod, MSt7, State0);
 % 125
-first_pass(<<?OP_GC_BIF2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GC_BIF2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"gc_bif2/6">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -1515,7 +1580,8 @@ first_pass(<<?OP_GC_BIF2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest6, MMod, MSt8, State0);
 % 129
-first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_bitstr/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1541,7 +1607,8 @@ first_pass(<<?OP_IS_BITSTR, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest2, MMod, MSt8, State0);
 % 132
-first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_match_string/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt0, State0),
@@ -1561,7 +1628,8 @@ first_pass(<<?OP_BS_MATCH_STRING, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest4, MMod, MSt9, State0);
 % 133
-first_pass(<<?OP_BS_INIT_WRITABLE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_INIT_WRITABLE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_init_writable/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_BS_INIT_WRITABLE\n", []),
     HeapSize = term_binary_heap_size(0, MMod),
@@ -1578,7 +1646,8 @@ first_pass(<<?OP_BS_INIT_WRITABLE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest0, MMod, MSt6, State0);
 % 136
-first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"trim/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {NWords, Rest1} = decode_literal(Rest0),
     {_NRemaining, Rest2} = decode_literal(Rest1),
@@ -1587,7 +1656,8 @@ first_pass(<<?OP_TRIM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest2, MMod, MSt1, State0);
 % 138
-first_pass(<<?OP_BS_GET_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_UTF8, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_utf8/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1602,7 +1672,8 @@ first_pass(<<?OP_BS_GET_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest5, MMod, MSt6, State0);
 % 139
-first_pass(<<?OP_BS_SKIP_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_SKIP_UTF8, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_skip_utf8/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1614,7 +1685,8 @@ first_pass(<<?OP_BS_SKIP_UTF8, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest4, MMod, MSt3, State0);
 % 140
-first_pass(<<?OP_BS_GET_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_UTF16, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_utf16/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1631,7 +1703,8 @@ first_pass(<<?OP_BS_GET_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest5, MMod, MSt6, State0);
 % 141
-first_pass(<<?OP_BS_SKIP_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_SKIP_UTF16, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_skip_utf16/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1645,7 +1718,8 @@ first_pass(<<?OP_BS_SKIP_UTF16, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest4, MMod, MSt3, State0);
 % 142
-first_pass(<<?OP_BS_GET_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_UTF32, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_utf32/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1662,7 +1736,8 @@ first_pass(<<?OP_BS_GET_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest5, MMod, MSt6, State0);
 % 143
-first_pass(<<?OP_BS_SKIP_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_SKIP_UTF32, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_skip_utf32/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1676,7 +1751,8 @@ first_pass(<<?OP_BS_SKIP_UTF32, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest4, MMod, MSt3, State0);
 % 152
-first_pass(<<?OP_GC_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GC_BIF3, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"gc_bif3/7">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -1711,12 +1787,14 @@ first_pass(
 ) ->
     {Line, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LINE ~p\n", [Line]),
-    Offset = MMod:offset(MSt),
-    first_pass(Rest1, MMod, MSt, State0#state{
+    MSt0 = ?DWARF_LINE(MMod, MSt, Line),
+    Offset = MMod:offset(MSt0),
+    first_pass(Rest1, MMod, MSt0, State0#state{
         line_offsets = [{Line, Offset} | AccLines]
     });
 % 154
-first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"put_map_assoc/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1797,7 +1875,8 @@ first_pass(<<?OP_PUT_MAP_ASSOC, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt18),
     first_pass(Rest6, MMod, MSt18, State0);
 % 155
-first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"put_map_exact/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1871,7 +1950,8 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt14),
     first_pass(Rest6, MMod, MSt14, State0);
 % 156
-first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_map/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1880,7 +1960,8 @@ first_pass(<<?OP_IS_MAP, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 157
-first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"has_map_fields/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1926,7 +2007,8 @@ first_pass(<<?OP_HAS_MAP_FIELDS, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest5, MMod, MSt7, State0);
 % 158
-first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"get_map_elements/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -1983,8 +2065,9 @@ first_pass(<<?OP_GET_MAP_ELEMENTS, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass(Rest6, MMod, MSt14, State0);
 % 159
 first_pass(
-    <<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt0, #state{atom_resolver = AtomResolver} = State0
+    <<?OP_IS_TAGGED_TUPLE, Rest0/binary>>, MMod, MSt, #state{atom_resolver = AtomResolver} = State0
 ) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"is_tagged_tuple/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -2019,7 +2102,8 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt14),
     first_pass(Rest4, MMod, MSt14, State0);
 % 160
-first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"build_stacktrace/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, ResultReg} = MMod:call_primitive(MSt0, ?PRIM_STACKTRACE_BUILD, [ctx]),
     MSt2 = MMod:move_to_vm_register(MSt1, ResultReg, {x_reg, 0}),
@@ -2027,7 +2111,8 @@ first_pass(<<?OP_BUILD_STACKTRACE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest0, MMod, MSt3, State0);
 % 161
-first_pass(<<?OP_RAW_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RAW_RAISE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"raw_raise/0">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, ExClassReg} = MMod:move_to_native_register(MSt0, {x_reg, 0}),
     MSt2 = MMod:if_block(MSt1, {ExClassReg, '==', ?ERROR_ATOM}, fun(BSt0) ->
@@ -2043,7 +2128,8 @@ first_pass(<<?OP_RAW_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest0, MMod, MSt5, State0);
 % 162
-first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"get_hd/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Dest, Rest3} = decode_dest(Rest1, MMod, MSt1),
@@ -2055,7 +2141,8 @@ first_pass(<<?OP_GET_HD, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 163
-first_pass(<<?OP_GET_TL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_GET_TL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"get_tl/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, SrcValue, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Dest, Rest3} = decode_dest(Rest1, MMod, MSt1),
@@ -2067,7 +2154,8 @@ first_pass(<<?OP_GET_TL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 164
-first_pass(<<?OP_PUT_TUPLE2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_PUT_TUPLE2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"put_tuple2/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {ListSize, Rest2} = decode_extended_list_header(Rest1),
@@ -2092,7 +2180,8 @@ first_pass(<<?OP_PUT_TUPLE2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest3, MMod, MSt7, State0);
 % 165
-first_pass(<<?OP_BS_GET_TAIL, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_TAIL, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_tail/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Src, Rest1} = decode_typed_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Dest, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -2115,7 +2204,8 @@ first_pass(<<?OP_BS_GET_TAIL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt14),
     first_pass(Rest3, MMod, MSt14, State0);
 % 166
-first_pass(<<?OP_BS_START_MATCH3, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_START_MATCH3, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_start_match3/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, Src, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
@@ -2128,7 +2218,8 @@ first_pass(<<?OP_BS_START_MATCH3, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest4, MMod, MSt5, State0);
 % 167
-first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_get_position/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Src, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Dest, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -2144,7 +2235,8 @@ first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest3, MMod, MSt9, State0);
 % 168
-first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_set_position/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Src, Rest1} = decode_typed_compact_term(Rest0, MMod, MSt0, State0),
     {MSt2, Pos, Rest2} = decode_typed_compact_term(Rest1, MMod, MSt1, State0),
@@ -2156,7 +2248,8 @@ first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest2, MMod, MSt6, State0);
 % 169
-first_pass(<<?OP_SWAP, Rest0/binary>>, MMod, MSt0, State) ->
+first_pass(<<?OP_SWAP, Rest0/binary>>, MMod, MSt, State) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"swap/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, ArgA, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {MSt2, ArgB, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -2168,7 +2261,8 @@ first_pass(<<?OP_SWAP, Rest0/binary>>, MMod, MSt0, State) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest2, MMod, MSt6, State);
 % 170
-first_pass(<<?OP_BS_START_MATCH4, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_START_MATCH4, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_start_match4/4">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_atom_or_label(Rest0, State0),
     {Live, Rest2} = decode_literal(Rest1),
@@ -2189,7 +2283,8 @@ first_pass(<<?OP_BS_START_MATCH4, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest4, MMod, MSt5, State0);
 % 171
-first_pass(<<?OP_MAKE_FUN3, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_MAKE_FUN3, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"make_fun3/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FunIndex, Rest1} = decode_literal(Rest0),
     {MSt1, Dest, Rest2} = decode_dest(Rest1, MMod, MSt0),
@@ -2217,7 +2312,8 @@ first_pass(<<?OP_MAKE_FUN3, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt7),
     first_pass(Rest4, MMod, MSt7, State0);
 % 172
-first_pass(<<?OP_INIT_YREGS, Rest0/binary>>, MMod, MSt0, State) ->
+first_pass(<<?OP_INIT_YREGS, Rest0/binary>>, MMod, MSt, State) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"init_yregs/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {ListSize, Rest1} = decode_extended_list_header(Rest0),
     ?TRACE("OP_INIT_YREGS ~p\n", [ListSize]),
@@ -2234,7 +2330,8 @@ first_pass(<<?OP_INIT_YREGS, Rest0/binary>>, MMod, MSt0, State) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest2, MMod, MSt1, State);
 % 173
-first_pass(<<?OP_RECV_MARKER_BIND, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RECV_MARKER_BIND, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"recv_marker_bind/2">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, RegA, Rest1} = decode_dest(Rest0, MMod, MSt0),
     {MSt2, RegB, Rest2} = decode_dest(Rest1, MMod, MSt1),
@@ -2243,7 +2340,8 @@ first_pass(<<?OP_RECV_MARKER_BIND, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);
 % 174
-first_pass(<<?OP_RECV_MARKER_CLEAR, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RECV_MARKER_CLEAR, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"recv_marker_clear/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, RegA, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_RECV_MARKER_CLEAR ~p\n", [RegA]),
@@ -2251,7 +2349,8 @@ first_pass(<<?OP_RECV_MARKER_CLEAR, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 175
-first_pass(<<?OP_RECV_MARKER_RESERVE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RECV_MARKER_RESERVE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"recv_marker_reserve/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_RECV_MARKER_RESERVE ~p\n", [Dest]),
@@ -2261,7 +2360,8 @@ first_pass(<<?OP_RECV_MARKER_RESERVE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest1, MMod, MSt3, State0);
 % 176
-first_pass(<<?OP_RECV_MARKER_USE, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RECV_MARKER_USE, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"recv_marker_use/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, RegA, Rest1} = decode_dest(Rest0, MMod, MSt0),
     ?TRACE("OP_RECV_MARKER_USE ~p\n", [RegA]),
@@ -2270,8 +2370,9 @@ first_pass(<<?OP_RECV_MARKER_USE, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass(Rest1, MMod, MSt2, State0);
 % 177
 first_pass(
-    <<?OP_BS_CREATE_BIN, Rest0/binary>>, MMod, MSt0, #state{atom_resolver = AtomResolver} = State0
+    <<?OP_BS_CREATE_BIN, Rest0/binary>>, MMod, MSt, #state{atom_resolver = AtomResolver} = State0
 ) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_create_bin/6">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {Alloc, Rest2} = decode_allocator_list(MMod, Rest1),
@@ -2403,7 +2504,8 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt19),
     first_pass(Rest7, MMod, MSt19, State1);
 % 178
-first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"call_fun2/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Tag, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {ArgsCount, Rest2} = decode_literal(Rest1),
@@ -2419,7 +2521,8 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
 % 180
-first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"badrecord/1">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Arg1, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     ?TRACE("OP_BADRECORD ~p\n", [Arg1]),
@@ -2430,8 +2533,9 @@ first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass(Rest1, MMod, MSt2, State0);
 % 181
 first_pass(
-    <<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt0, #state{atom_resolver = AtomResolver} = State0
+    <<?OP_UPDATE_RECORD, Rest0/binary>>, MMod, MSt, #state{atom_resolver = AtomResolver} = State0
 ) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"update_record/5">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {HintAtomIndex, Rest1} = decode_atom(Rest0),
     Hint = AtomResolver(HintAtomIndex),
@@ -2507,7 +2611,8 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt11),
     first_pass(Rest6, MMod, MSt11, State0);
 % 182
-first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt, State0) ->
+    MSt0 = ?DWARF_OPCODE(MMod, MSt, <<"bs_match/3">>),
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Fail, Rest1} = decode_label(Rest0),
     {MSt1, MatchState, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),

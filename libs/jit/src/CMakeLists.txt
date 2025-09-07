@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     jit
+    jit_dwarf
     jit_precompile
     jit_stream_binary
     jit_stream_mmap
@@ -37,7 +38,13 @@ set(ERLANG_MODULES
     jit_x86_64_asm
 )
 
-pack_precompiled_archive(jit ${ERLANG_MODULES})
+if (NOT AVM_DISABLE_JIT_DWARF)
+    set(erlc_flags -DJIT_DWARF)
+else()
+    set(erlc_flags)
+endif()
+
+pack_precompiled_archive(jit ERLC_FLAGS ${erlc_flags} MODULES ${ERLANG_MODULES})
 
 include(../../../version.cmake)
 
