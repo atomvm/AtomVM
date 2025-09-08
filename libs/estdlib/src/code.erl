@@ -140,7 +140,7 @@ which(Module) ->
 %% @doc     Return module binary of a given module.
 %% @end
 %%-----------------------------------------------------------------------------
--spec get_object_code(Module) -> {Module, Binary, Filename} when
+-spec get_object_code(Module) -> {Module, Binary, Filename} | error when
   Module :: atom(), Binary :: binary(), Filename :: string().
 get_object_code(_Module) ->
   erlang:nif_error(undefined).
