@@ -397,7 +397,7 @@ call_primitive(
                 {free, Temp},
                 Args
             );
-        [] when length(Args) >= 3 ->
+        [] ->
             % No register left, we'll use the stack to save NATIVE_INTERFACE_REG
             % and rax when calling function.
             call_func_ptr(State, {primitive, Primitive}, Args)
