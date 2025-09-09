@@ -2650,8 +2650,7 @@ call_only_or_schedule_next(
             {Label, LabelOffset} ->
                 % Label is known, check if we can optimize the conditional branch
                 % After bcc instruction
-                BranchOffset = BccOffset + 2,
-                Rel = LabelOffset - BranchOffset,
+                Rel = LabelOffset - BccOffset,
 
                 if
                     Rel >= -252 andalso Rel =< 258 andalso (Rel rem 2) =:= 0 ->
