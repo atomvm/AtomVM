@@ -31,9 +31,10 @@ start() ->
 compile(Target, Dir, Path) ->
     try
         {ok, InitialBinary} = file:read_file(Path),
-        {ok, _Module, InitialChunks} = beam_lib:all_chunks(InitialBinary),
+        {ok, Module, InitialChunks} = beam_lib:all_chunks(InitialBinary),
         FilteredChunks0 = lists:keydelete("avmN", 1, InitialChunks),
-        FilteredChunks = lists:keydelete("Code", 1, FilteredChunks0),
+        FilteredChunks1 = lists:keydelete("avmD", 1, FilteredChunks0),
+        FilteredChunks = lists:keydelete("Code", 1, FilteredChunks1),
         {"Code", CodeChunk} = lists:keyfind("Code", 1, InitialChunks),
         {"AtU8", AtomChunk} = lists:keyfind("AtU8", 1, InitialChunks),
         AtomResolver = atom_resolver(AtomChunk),
@@ -62,7 +63,9 @@ compile(Target, Dir, Path) ->
             end,
         TypeResolver = type_resolver(TypesChunk),
 
-        Stream0 = jit_stream_binary:new(0),
+        Backend = list_to_atom("jit_" ++ Target),
+
+        Stream0 = jit_dwarf:new(Backend, Module, jit_stream_binary, 0),
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
             CodeChunk,
 
@@ -73,18 +76,34 @@ compile(Target, Dir, Path) ->
                 "armv6m" -> ?JIT_ARCH_ARMV6M
             end,
 
-        Stream1 = jit_stream_binary:append(
+        Stream1 = jit_dwarf:append(
             Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
         ),
-        Backend = list_to_atom("jit_" ++ Target),
-        Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+        Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_dwarf, Stream1),
         {LabelsCount, Stream3} = jit:compile(
             CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
         ),
-        NativeCode = Backend:stream(Stream3),
-        UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
-        {ok, Binary} = beam_lib:build_module(UpdatedChunks),
+        DwarfStream = Backend:stream(Stream3),
+        NativeCode = jit_dwarf:stream(DwarfStream),
+
+        % Create chunks and optional combined ELF file
         Basename = filename:basename(Path),
+        NewChunks =
+            case jit_dwarf:elf(DwarfStream, NativeCode) of
+                false ->
+                    % No debug info - just store native code
+                    [{"avmN", NativeCode}];
+                {ok, DebugELF, CombinedELF} ->
+                    % Create combined ELF file with .text and debug sections
+                    ElfBasename = filename:rootname(Basename) ++ ".elf",
+                    ElfFile = filename:join(Dir, ElfBasename),
+                    ok = file:write_file(ElfFile, CombinedELF),
+
+                    % Store both native code and debug info in chunks
+                    [{"avmN", NativeCode}, {"avmD", DebugELF}]
+            end,
+        UpdatedChunks = FilteredChunks ++ NewChunks,
+        {ok, Binary} = beam_lib:build_module(UpdatedChunks),
         UpdatedFile = filename:join(Dir, Basename),
         ok = file:write_file(UpdatedFile, Binary)
     catch
