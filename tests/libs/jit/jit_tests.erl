@@ -62,13 +62,35 @@
     <<0, 0, 0, 3, 0, 0, 0, 2, 15, 255, 0, 16>>
 ).
 
-compile_minimal_x86_64_test() ->
+-ifdef(JIT_DWARF).
+compile_stream_setup(CodeChunk) ->
+    Stream0 = jit_dwarf:new(jit_x86_64, test_module, jit_stream_binary, 0),
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
+    Stream1 = jit_dwarf:append(
+        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+    ),
+    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_dwarf, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    DwarfStream = jit_x86_64:stream(Stream3),
+    jit_dwarf:stream(DwarfStream).
+-else.
+compile_stream_setup(CodeChunk) ->
     Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_0,
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
     Stream1 = jit_stream_binary:append(
         Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
     ),
     Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    jit_x86_64:stream(Stream3).
+-endif.
+
+compile_minimal_x86_64_test() ->
+    {LabelsCount, Stream2} = compile_stream_setup(?CODE_CHUNK_0),
     {_LabelsCount, Stream3} = jit:compile(
         ?CODE_CHUNK_0,
         fun(_) -> undefined end,
@@ -77,7 +99,7 @@ compile_minimal_x86_64_test() ->
         jit_x86_64,
         Stream2
     ),
-    Stream4 = jit_x86_64:stream(Stream3),
+    Stream4 = compile_stream_finalize(Stream3),
     <<16:32, LabelsCount:32, ?JIT_FORMAT_VERSION:16, 1:16, ?JIT_ARCH_X86_64:16, ?JIT_VARIANT_PIC:16,
         0:32, Code/binary>> = Stream4,
     {JumpTable, _} = split_binary(Code, (LabelsCount + 1) * 5),
@@ -107,13 +129,7 @@ check_lines_table(<<LinesCount:16, _Lines:(LinesCount * 6)/binary>>) -> ok.
 
 term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     % Compile CODE_CHUNK_1 which contains a typed register for term_to_int optimization
-    Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_1,
-    Stream1 = jit_stream_binary:append(
-        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
-    ),
-    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
-
+    {LabelsCount, Stream2} = compile_stream_setup(?CODE_CHUNK_1),
     AtomResolver = jit_precompile:atom_resolver(?ATU8_CHUNK_1),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(?TYPE_CHUNK_1),
@@ -184,13 +200,7 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
 
 verify_is_function_typed_optimization_x86_64_test() ->
     % Compile CODE_CHUNK_1 which contains a typed register for term_to_int optimization
-    Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_2,
-    Stream1 = jit_stream_binary:append(
-        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
-    ),
-    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
-
+    {LabelsCount, Stream2} = compile_stream_setup(?CODE_CHUNK_2),
     AtomResolver = jit_precompile:atom_resolver(?ATU8_CHUNK_2),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(?TYPE_CHUNK_2),
