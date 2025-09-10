@@ -32,6 +32,7 @@
 #include "bif.h"
 #include "context.h"
 #include "iff.h"
+#include "jit.h"
 #include "mapped_file.h"
 #include "module.h"
 #include "term.h"
@@ -687,6 +688,23 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
         perror("Error: ");
         return EXIT_FAILURE;
     }
+#ifndef AVM_NO_JIT
+    if (!beam) {
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+        if (chdir("x86_64") != 0) {
+            perror("Error: cannot find x86_64 directory");
+            return EXIT_FAILURE;
+        }
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+        if (chdir("aarch64") != 0) {
+            perror("Error: cannot find aarch64 directory");
+            return EXIT_FAILURE;
+        }
+#else
+#error Unknown JIT target
+#endif
+    }
+#endif
 
     int failed_tests = 0;
 
