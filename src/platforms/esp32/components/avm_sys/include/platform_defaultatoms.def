@@ -49,7 +49,6 @@ X(BACKLOG_ATOM, "\x7", "backlog")
 X(ACCEPT_ATOM, "\x6", "accept")
 X(FD_ATOM, "\x2", "fd")
 
-X(INIT_ATOM, "\x4", "init")
 X(GET_PORT_ATOM, "\x8", "get_port")
 X(SOCKNAME_ATOM, "\x8", "sockname")
 X(PEERNAME_ATOM, "\x8", "peername")

@@ -30,7 +30,6 @@ test() ->
     case has_compatible_erl(Platform) andalso has_epmd(Platform) of
         true ->
             ok = ensure_epmd(Platform),
-            ok = setup(Platform),
             ok = test_ping_from_beam(Platform),
             ok = test_fail_with_wrong_cookie(Platform),
             ok = test_rpc_from_beam(Platform),
@@ -171,11 +170,14 @@ test_autoconnect_to_beam(Platform) ->
                 "F = fun(G) ->"
                 " receive"
                 "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
-                "   {Caller, quit} -> Caller ! {self(), quit}"
-                "   after 5000 -> exit(timeout)"
-                " end "
-                "end, "
-                "F(F).\" -s init stop -noshell"
+                "   {Caller, net_adm_ping} -> Caller ! {self(), net_adm:ping('" ++
+                    atom_to_list(Node) ++
+                    "')}, G(G);"
+                    "   {Caller, quit} -> Caller ! {self(), quit}"
+                    "   after 5000 -> exit(timeout)"
+                    " end "
+                    "end, "
+                    "F(F).\" -s init stop -noshell"
             )
         end,
         [link, monitor]
@@ -203,6 +205,14 @@ test_autoconnect_to_beam(Platform) ->
             {OTPPid, pong} -> ok
         after 5000 -> timeout
         end,
+    OTPPid ! {self(), net_adm_ping},
+    ok =
+        receive
+            {OTPPid, pong} -> ok
+        after 5000 -> timeout
+        end,
+    % Ensure there is no leak
+    {monitored_by, []} = process_info(whereis(net_kernel), monitored_by),
     erlang:send(OTPPid, {self(), quit}),
     ok =
         receive
@@ -457,13 +467,6 @@ test_is_alive(Platform) ->
     true = is_alive(),
     net_kernel:stop(),
     false = is_alive(),
-    ok.
-
-% On AtomVM, we need to start kernel.
-setup("BEAM") ->
-    ok;
-setup("ATOM") ->
-    {ok, _KernelPid} = kernel:start(normal, []),
     ok.
 
 execute_command("BEAM", Command) ->

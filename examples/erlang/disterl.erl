@@ -23,7 +23,6 @@
 -export([start/0]).
 
 start() ->
-    {ok, _KernelPid} = kernel:start(normal, []),
     {ok, _NetKernelPid} = net_kernel:start('atomvm@127.0.0.1', #{name_domain => longnames}),
     io:format("Distribution was started\n"),
     io:format("Node is ~p\n", [node()]),

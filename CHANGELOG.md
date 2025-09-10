@@ -52,7 +52,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:module_loaded/1`
 - Added `binary:replace/3`, `binary:replace/4`
 - Added `binary:match/2` and `binary:match/3`
-- Added `supervisor:which_children/1`
+- Added `supervisor:which_children/1` and `supervisor:count_children/1`
+- Added `monitored_by` in `process_info/2`
+- Added mock implementation for `current_stacktrace` in `process_info`
 
 ### Changed
 
@@ -60,6 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release images for ESP32 chips are built with ESP-IDF v5.4
 - ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
 - Added `zlib:compress/1`
+- Entry point now is `init:boot/1` if it exists. It starts the kernel application and calls `start/0` from the
+  identified startup module. Users who started kernel application (typically for distribution) must no longer
+  do it. Startint `net_kernel` is still required.
 
 ### Changed
 - `binary_to_integer/1` no longer accepts binaries such as `<<"0xFF">>` or `<<"  123">>`
@@ -71,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
 - packbeam: fix memory leak preventing building with address sanitizer
+- Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
+- Fix a memory leak in distribution when a BEAM node would monitor a process by name.
 
 ## [0.6.7] - Unreleased
 
@@ -160,6 +167,9 @@ integer (this never happens with integers < 28 bits)
 - Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
 used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
 network. (See issue #1094)
+- Fixed possible memory corruption when doing binary matching.
+- Fixed an issue related to binary matching and more precisely endianness of bit skipping with OTP 25 and lower
+- Fixed an issue with `bs_private_append` that shouldn't gc, affecting code compiled with OTP<25
 
 ### Changed
 

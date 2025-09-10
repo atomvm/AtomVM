@@ -146,24 +146,15 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    Context *ctx = context_new(glb);
-    ctx->leader = 1;
-
-    context_execute_loop(ctx, startup_module, "start", 0);
-
-    term ret_value = ctx->x[0];
-    fprintf(stderr, "Return value: ");
-    term_display(stderr, ret_value, ctx);
-    fprintf(stderr, "\n");
+    run_result_t result = globalcontext_run(glb, startup_module, stderr);
 
     int status;
-    if (ret_value == OK_ATOM) {
+    if (result == RUN_SUCCESS) {
         status = EXIT_SUCCESS;
     } else {
         status = EXIT_FAILURE;
     }
 
-    context_destroy(ctx);
     globalcontext_destroy(glb);
 
     return status;

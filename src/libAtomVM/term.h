@@ -53,7 +53,7 @@ extern "C" {
 #define TERM_PRIMARY_CP 0x0
 #define TERM_PRIMARY_LIST 0x1
 #define TERM_PRIMARY_BOXED 0x2
-// #define TERM_PRIMARY_IMMED 0x3
+#define TERM_PRIMARY_IMMED 0x3
 
 #define TERM_BOXED_VALUE_TAG _Pragma ("TERM_BOXED_VALUE_TAG is deprecated, use TERM_PRIMARY_BOXED instead") TERM_PRIMARY_BOXED
 
@@ -61,6 +61,7 @@ extern "C" {
 #define TERM_PID_TAG 0x3
 #define TERM_PORT_TAG 0x7
 #define TERM_INTEGER_TAG 0xF
+#define TERM_IMMED2_TAG 0xB
 
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0

@@ -188,3 +188,9 @@ X(BREAK_IGNORED_ATOM, "\xD", "break_ignored")
 
 X(SCOPE_ATOM, "\x5", "scope")
 X(NOMATCH_ATOM, "\x7", "nomatch")
+
+X(INIT_ATOM, "\x4", "init")
+
+X(MONITORED_BY_ATOM, "\xC", "monitored_by")
+
+X(CURRENT_STACKTRACE_ATOM, "\x12", "current_stacktrace")

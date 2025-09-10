@@ -470,101 +470,101 @@ unsigned long memory_estimate_usage(term t)
     }
 
     while (!temp_stack_is_empty(&temp_stack)) {
-        if (term_is_atom(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_integer(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nil(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_local_pid(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_local_port(t)) {
-            t = temp_stack_pop(&temp_stack);
-
-        } else if (term_is_nonempty_list(t)) {
-            acc += 2;
-            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
-                // TODO: handle failed malloc
-                AVM_ABORT();
-            }
-            t = term_get_list_head(t);
-
-        } else if (term_is_tuple(t)) {
-            int tuple_size = term_get_tuple_arity(t);
-            acc += tuple_size + 1;
-
-            if (tuple_size > 0) {
-                for (int i = 1; i < tuple_size; i++) {
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                }
-                t = term_get_tuple_element(t, 0);
-
-            } else {
-                t = term_nil();
-            }
-
-        } else if (term_is_map(t)) {
-            int map_size = term_get_map_size(t);
-            acc += term_map_size_in_terms(map_size);
-            if (map_size > 0) {
-                for (int i = 1; i < map_size; i++) {
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                    if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
-                        // TODO: handle failed malloc
-                        AVM_ABORT();
-                    }
-                }
-                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+        switch (t & TERM_PRIMARY_MASK) {
+            case TERM_PRIMARY_IMMED:
+                t = temp_stack_pop(&temp_stack);
+                break;
+            case TERM_PRIMARY_LIST:
+                acc += 2;
+                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_list_tail(t)) != TempStackOk)) {
                     // TODO: handle failed malloc
                     AVM_ABORT();
                 }
-                t = term_get_map_key(t, 0);
+                t = term_get_list_head(t);
+                break;
+            case TERM_PRIMARY_BOXED: {
+                const term *boxed_value = term_to_const_term_ptr(t);
+                term boxed_value_0 = boxed_value[0];
+                switch (boxed_value_0 & TERM_BOXED_TAG_MASK) {
+                    case TERM_BOXED_TUPLE: {
+                        int tuple_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += tuple_size + 1;
 
-            } else {
-                t = term_nil();
-            }
+                        if (tuple_size > 0) {
+                            for (int i = 1; i < tuple_size; i++) {
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_tuple_element(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                            }
+                            t = term_get_tuple_element(t, 0);
 
-        } else if (term_is_function(t)) {
-            int boxed_size = term_boxed_size(t);
-            acc += boxed_size + 1;
-            const term *boxed_value = term_to_const_term_ptr(t);
+                        } else {
+                            t = term_nil();
+                        }
+                    } break;
 
-            // We skip the first two elements:
-            // First is either a module atom or a pointer to a Module
-            // Second is either a function atom or a function index
-            // Third would be arity as a term int (external function) or
-            // the first argument (if built with make_fun3) which we should
-            // estimate.
-            for (int i = 2; i < boxed_size; i++) {
-                if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
-                    // TODO: handle failed malloc
-                    AVM_ABORT();
+                    case TERM_BOXED_MAP: {
+                        int map_size = term_get_map_size(t);
+                        acc += term_map_size_in_terms(map_size);
+                        if (map_size > 0) {
+                            for (int i = 1; i < map_size; i++) {
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_key(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                                if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, i)) != TempStackOk)) {
+                                    // TODO: handle failed malloc
+                                    AVM_ABORT();
+                                }
+                            }
+                            if (UNLIKELY(temp_stack_push(&temp_stack, term_get_map_value(t, 0)) != TempStackOk)) {
+                                // TODO: handle failed malloc
+                                AVM_ABORT();
+                            }
+                            t = term_get_map_key(t, 0);
+
+                        } else {
+                            t = term_nil();
+                        }
+                    } break;
+
+                    case TERM_BOXED_FUN: {
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+
+                        // We skip the first two elements:
+                        // First is either a module atom or a pointer to a Module
+                        // Second is either a function atom or a function index
+                        // Third would be arity as a term int (external function) or
+                        // the first argument (if built with make_fun3) which we should
+                        // estimate.
+                        for (int i = 2; i < boxed_size; i++) {
+                            if (UNLIKELY(temp_stack_push(&temp_stack, boxed_value[i + 1]) != TempStackOk)) {
+                                // TODO: handle failed malloc
+                                AVM_ABORT();
+                            }
+                        }
+                        t = boxed_value[2];
+                    } break;
+
+                    case TERM_BOXED_SUB_BINARY: {
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+                        t = term_get_sub_binary_ref(t);
+                    } break;
+
+                    default: {
+                        // Default type of boxed terms
+                        int boxed_size = term_get_size_from_boxed_header(boxed_value_0);
+                        acc += boxed_size + 1;
+                        t = temp_stack_pop(&temp_stack);
+                    }
                 }
-            }
-            t = boxed_value[2];
+            } break;
 
-        } else if (term_is_sub_binary(t)) {
-            acc += term_boxed_size(t) + 1;
-            t = term_get_sub_binary_ref(t);
-
-        } else if (term_is_boxed(t)) {
-            // Default type of boxed terms
-            acc += term_boxed_size(t) + 1;
-            t = temp_stack_pop(&temp_stack);
-
-        } else {
-            fprintf(stderr, "bug: found unknown term type: 0x%" TERM_X_FMT "\n", t);
-            AVM_ABORT();
+            default:
+                UNREACHABLE();
         }
     }
 
@@ -580,141 +580,125 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
     while (ptr < mem_end) {
         term t = *ptr;
+        switch (t & TERM_PRIMARY_MASK) {
+            case TERM_PRIMARY_IMMED:
+                TRACE("Found immediate (%" TERM_X_FMT ")\n", t);
+                ptr++;
+                break;
+            case TERM_PRIMARY_CP: {
+                TRACE("Found boxed header (%" TERM_X_FMT ")\n", t);
 
-        if (term_is_atom(t)) {
-            TRACE("Found atom (%" TERM_X_FMT ")\n", t);
-            ptr++;
+                size_t arity = term_get_size_from_boxed_header(t);
+                switch (t & TERM_BOXED_TAG_MASK) {
+                    case TERM_BOXED_TUPLE: {
+                        TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, (int) arity);
 
-        } else if (term_is_integer(t)) {
-            TRACE("Found integer (%" TERM_X_FMT ")\n", t);
-            ptr++;
-
-        } else if (term_is_nil(t)) {
-            TRACE("Found NIL (%" TERM_X_FMT ")\n", t);
-            ptr++;
-
-        } else if (term_is_local_pid(t)) {
-            TRACE("Found PID (%" TERM_X_FMT ")\n", t);
-            ptr++;
-
-        } else if (term_is_local_port(t)) {
-            TRACE("Found port (%" TERM_X_FMT ")\n", t);
-            ptr++;
-
-        } else if ((t & 0x3) == 0x0) {
-            TRACE("Found boxed header (%" TERM_X_FMT ")\n", t);
-
-            size_t arity = term_get_size_from_boxed_header(t);
-            switch (t & TERM_BOXED_TAG_MASK) {
-                case TERM_BOXED_TUPLE: {
-                    TRACE("- Boxed is tuple (%" TERM_X_FMT "), arity: %i\n", t, (int) arity);
-
-                    for (size_t i = 1; i <= arity; i++) {
-                        TRACE("-- Elem: %" TERM_X_FMT "\n", ptr[i]);
-                        ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                        for (size_t i = 1; i <= arity; i++) {
+                            TRACE("-- Elem: %" TERM_X_FMT "\n", ptr[i]);
+                            ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                        }
+                        break;
                     }
-                    break;
-                }
 
-                case TERM_BOXED_BIN_MATCH_STATE: {
-                    TRACE("- Found bin match state.\n");
-                    ptr[1] = memory_shallow_copy_term(old_fragment, ptr[1], &new_heap, move);
-                    break;
-                }
-
-                case TERM_BOXED_POSITIVE_INTEGER:
-                    TRACE("- Found boxed pos int.\n");
-                    break;
-
-                case TERM_BOXED_NEGATIVE_INTEGER:
-                    TRACE("- Found boxed neg int.\n");
-                    break;
-
-                case TERM_BOXED_REF:
-                    TRACE("- Found ref.\n");
-                    break;
-
-                case TERM_BOXED_EXTERNAL_PID:
-                    TRACE("- Found external pid.\n");
-                    break;
-
-                case TERM_BOXED_EXTERNAL_PORT:
-                    TRACE("- Found external port.\n");
-                    break;
-
-                case TERM_BOXED_EXTERNAL_REF:
-                    TRACE("- Found external ref.\n");
-                    break;
-
-                case TERM_BOXED_FUN: {
-                    TRACE("- Found fun, size: %i.\n", (int) arity);
-
-                    // first term is the boxed header, followed by module and fun index.
-
-                    for (size_t i = 3; i <= arity; i++) {
-                        TRACE("-- Frozen: %" TERM_X_FMT "\n", ptr[i]);
-                        ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                    case TERM_BOXED_BIN_MATCH_STATE: {
+                        TRACE("- Found bin match state.\n");
+                        ptr[1] = memory_shallow_copy_term(old_fragment, ptr[1], &new_heap, move);
+                        break;
                     }
-                    break;
-                }
 
-                case TERM_BOXED_FLOAT:
-                    TRACE("- Found float.\n");
-                    break;
+                    case TERM_BOXED_POSITIVE_INTEGER:
+                        TRACE("- Found boxed pos int.\n");
+                        break;
 
-                case TERM_BOXED_REFC_BINARY: {
-                    TRACE("- Found refc binary.\n");
-                    term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
-                    if (!term_refc_binary_is_const(ref)) {
-                        *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *mso_list);
-                        refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(ref));
+                    case TERM_BOXED_NEGATIVE_INTEGER:
+                        TRACE("- Found boxed neg int.\n");
+                        break;
+
+                    case TERM_BOXED_REF:
+                        TRACE("- Found ref.\n");
+                        break;
+
+                    case TERM_BOXED_EXTERNAL_PID:
+                        TRACE("- Found external pid.\n");
+                        break;
+
+                    case TERM_BOXED_EXTERNAL_PORT:
+                        TRACE("- Found external port.\n");
+                        break;
+
+                    case TERM_BOXED_EXTERNAL_REF:
+                        TRACE("- Found external ref.\n");
+                        break;
+
+                    case TERM_BOXED_FUN: {
+                        TRACE("- Found fun, size: %i.\n", (int) arity);
+
+                        // first term is the boxed header, followed by module and fun index.
+
+                        for (size_t i = 3; i <= arity; i++) {
+                            TRACE("-- Frozen: %" TERM_X_FMT "\n", ptr[i]);
+                            ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                        }
+                        break;
                     }
-                    break;
-                }
 
-                case TERM_BOXED_SUB_BINARY: {
-                    TRACE("- Found sub binary.\n");
-                    ptr[3] = memory_shallow_copy_term(old_fragment, ptr[3], &new_heap, move);
-                    break;
-                }
+                    case TERM_BOXED_FLOAT:
+                        TRACE("- Found float.\n");
+                        break;
 
-                case TERM_BOXED_HEAP_BINARY:
-                    TRACE("- Found binary.\n");
-                    break;
-
-                case TERM_BOXED_MAP: {
-                    TRACE("- Found map.\n");
-                    size_t map_size = arity - 1;
-                    size_t keys_offset = term_get_map_keys_offset();
-                    size_t value_offset = term_get_map_value_offset();
-                    TRACE("-- Map keys: %" TERM_X_FMT "\n", ptr[keys_offset]);
-                    ptr[keys_offset] = memory_shallow_copy_term(old_fragment, ptr[keys_offset], &new_heap, move);
-                    for (size_t i = value_offset; i < value_offset + map_size; ++i) {
-                        TRACE("-- Map Value: %" TERM_X_FMT "\n", ptr[i]);
-                        ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                    case TERM_BOXED_REFC_BINARY: {
+                        TRACE("- Found refc binary.\n");
+                        term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
+                        if (!term_refc_binary_is_const(ref)) {
+                            *mso_list = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *mso_list);
+                            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(ref));
+                        }
+                        break;
                     }
-                } break;
 
-                default:
-                    fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", (t >> 2) & 0xF);
-                    AVM_ABORT();
+                    case TERM_BOXED_SUB_BINARY: {
+                        TRACE("- Found sub binary.\n");
+                        ptr[3] = memory_shallow_copy_term(old_fragment, ptr[3], &new_heap, move);
+                        break;
+                    }
+
+                    case TERM_BOXED_HEAP_BINARY:
+                        TRACE("- Found binary.\n");
+                        break;
+
+                    case TERM_BOXED_MAP: {
+                        TRACE("- Found map.\n");
+                        size_t map_size = arity - 1;
+                        size_t keys_offset = term_get_map_keys_offset();
+                        size_t value_offset = term_get_map_value_offset();
+                        TRACE("-- Map keys: %" TERM_X_FMT "\n", ptr[keys_offset]);
+                        ptr[keys_offset] = memory_shallow_copy_term(old_fragment, ptr[keys_offset], &new_heap, move);
+                        for (size_t i = value_offset; i < value_offset + map_size; ++i) {
+                            TRACE("-- Map Value: %" TERM_X_FMT "\n", ptr[i]);
+                            ptr[i] = memory_shallow_copy_term(old_fragment, ptr[i], &new_heap, move);
+                        }
+                    } break;
+
+                    default:
+                        fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", (t >> 2) & 0xF);
+                        AVM_ABORT();
+                }
+
+                ptr += arity + 1;
+                break;
             }
-
-            ptr += arity + 1;
-
-        } else if (term_is_nonempty_list(t)) {
-            TRACE("Found nonempty list (%p)\n", (void *) t);
-            *ptr = memory_shallow_copy_term(old_fragment, t, &new_heap, move);
-            ptr++;
-
-        } else if (term_is_boxed(t)) {
-            TRACE("Found boxed (%p)\n", (void *) t);
-            *ptr = memory_shallow_copy_term(old_fragment, t, &new_heap, move);
-            ptr++;
-
-        } else {
-            fprintf(stderr, "bug: found unknown term type: 0x%" TERM_X_FMT "\n", t);
-            AVM_ABORT();
+            case TERM_PRIMARY_LIST:
+                TRACE("Found nonempty list (%p)\n", (void *) t);
+                *ptr = memory_shallow_copy_term(old_fragment, t, &new_heap, move);
+                ptr++;
+                break;
+            case TERM_PRIMARY_BOXED:
+                TRACE("Found boxed (%p)\n", (void *) t);
+                *ptr = memory_shallow_copy_term(old_fragment, t, &new_heap, move);
+                ptr++;
+                break;
+            default:
+                UNREACHABLE();
         }
     }
 
@@ -843,90 +827,75 @@ HOT_FUNC static inline bool memory_heap_fragment_contains_pointer(HeapFragment *
 
 HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t, term **new_heap, bool move)
 {
-    if (term_is_atom(t)) {
-        return t;
-
-    } else if (term_is_integer(t)) {
-        return t;
-
-    } else if (term_is_nil(t)) {
-        return t;
-
-    } else if (term_is_local_pid(t)) {
-        return t;
-
-    } else if (term_is_local_port(t)) {
-        return t;
-
-    } else if (term_is_cp(t)) {
-        // CP is valid only on stack
-        return t;
-
-    } else if (term_is_catch_label(t)) {
-        // catch label is valid only on stack
-        return t;
-
-    } else if (term_is_boxed(t)) {
-        term *boxed_value = term_to_term_ptr(t);
-        // Do not GC terms from messages until the message is destroyed
-        if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, boxed_value)) {
+    switch (t & TERM_PRIMARY_MASK) {
+        case TERM_PRIMARY_IMMED:
             return t;
-        }
 
-        if (memory_is_moved_marker(boxed_value)) {
-            return memory_dereference_moved_marker(boxed_value);
-        }
-
-        int boxed_size = term_boxed_size(t) + 1;
-
-        // It must be an empty tuple, so we are not going to use moved markers.
-        // Empty tuples memory is too small to store moved markers.
-        // However it is also required to avoid boxed terms duplication.
-        // So instead all empty tuples will reference the same boxed term.
-        if (boxed_size == 1) {
-            return ((term) &empty_tuple) | TERM_PRIMARY_BOXED;
-        }
-
-        term *dest = *new_heap;
-        for (int i = 0; i < boxed_size; i++) {
-            dest[i] = boxed_value[i];
-        }
-        *new_heap += boxed_size;
-
-        term new_term = ((term) dest) | TERM_PRIMARY_BOXED;
-
-        if (move) {
-            memory_replace_with_moved_marker(boxed_value, new_term);
-        }
-
-        return new_term;
-
-    } else if (term_is_nonempty_list(t)) {
-        term *list_ptr = term_get_list_ptr(t);
-        if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, list_ptr)) {
+        case TERM_PRIMARY_CP:
+            // CP is valid only on stack
+            // catch label is valid only on stack
             return t;
+
+        case TERM_PRIMARY_BOXED: {
+            term *boxed_value = term_to_term_ptr(t);
+            // Do not GC terms from messages until the message is destroyed
+            if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, boxed_value)) {
+                return t;
+            }
+
+            if (memory_is_moved_marker(boxed_value)) {
+                return memory_dereference_moved_marker(boxed_value);
+            }
+
+            int boxed_size = term_boxed_size(t) + 1;
+
+            // It must be an empty tuple, so we are not going to use moved markers.
+            // Empty tuples memory is too small to store moved markers.
+            // However it is also required to avoid boxed terms duplication.
+            // So instead all empty tuples will reference the same boxed term.
+            if (boxed_size == 1) {
+                return ((term) &empty_tuple) | TERM_PRIMARY_BOXED;
+            }
+
+            term *dest = *new_heap;
+            for (int i = 0; i < boxed_size; i++) {
+                dest[i] = boxed_value[i];
+            }
+            *new_heap += boxed_size;
+
+            term new_term = ((term) dest) | TERM_PRIMARY_BOXED;
+
+            if (move) {
+                memory_replace_with_moved_marker(boxed_value, new_term);
+            }
+
+            return new_term;
         }
+        case TERM_PRIMARY_LIST: {
+            term *list_ptr = term_get_list_ptr(t);
+            if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, list_ptr)) {
+                return t;
+            }
 
-        if (memory_is_moved_marker(list_ptr)) {
-            return memory_dereference_moved_marker(list_ptr);
+            if (memory_is_moved_marker(list_ptr)) {
+                return memory_dereference_moved_marker(list_ptr);
+            }
+
+            term *dest = *new_heap;
+            dest[0] = list_ptr[0];
+            dest[1] = list_ptr[1];
+            *new_heap += 2;
+
+            term new_term = ((term) dest) | 0x1;
+
+            if (move) {
+                memory_replace_with_moved_marker(list_ptr, new_term);
+            }
+
+            return new_term;
         }
-
-        term *dest = *new_heap;
-        dest[0] = list_ptr[0];
-        dest[1] = list_ptr[1];
-        *new_heap += 2;
-
-        term new_term = ((term) dest) | 0x1;
-
-        if (move) {
-            memory_replace_with_moved_marker(list_ptr, new_term);
-        }
-
-        return new_term;
-
-    } else {
-        fprintf(stderr, "Unexpected term. Term is: %" TERM_X_FMT "\n", t);
-        AVM_ABORT();
+        default:
+            UNREACHABLE();
     }
 }
 

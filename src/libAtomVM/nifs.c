@@ -4181,28 +4181,47 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term object_type = argv[0];
-    term target_pid = argv[1];
+    term target_proc = argv[1];
+    term target_pid;
+    size_t target_proc_size = 0;
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
-
-    int local_process_id = term_to_local_process_id(target_pid);
-    // Monitoring self is possible but no monitor is actually created
-    if (UNLIKELY(local_process_id == ctx->process_id)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
-        return ref;
+    if (term_is_atom(target_proc)) {
+        target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
+        target_proc_size = TUPLE_SIZE(2);
+    } else {
+        VALIDATE_VALUE(target_proc, term_is_local_pid_or_port);
+        target_pid = target_proc;
     }
 
-    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+    Context *target;
+    int32_t local_process_id;
+    // gcc < 14 is not smart enough to find out local_process_id is not used initialized below
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
+    local_process_id = 0;
+#endif
+    if (UNLIKELY(target_pid == UNDEFINED_ATOM)) {
+        target = NULL;
+    } else {
+        local_process_id = term_to_local_process_id(target_pid);
+        // Monitoring self is possible but no monitor is actually created
+        if (UNLIKELY(local_process_id == ctx->process_id)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+            term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+            return ref;
+        }
+
+        target = globalcontext_get_process_lock(ctx->global, local_process_id);
+    }
+
     if (IS_NULL_PTR(target)) {
-        int res_size = REF_SIZE + TUPLE_SIZE(5);
+        int res_size = REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -4212,7 +4231,14 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
         term_put_tuple_element(down_message_tuple, 2, object_type);
-        term_put_tuple_element(down_message_tuple, 3, target_pid);
+        if (term_is_atom(target_proc)) {
+            term target_proc_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(target_proc_tuple, 0, target_proc);
+            term_put_tuple_element(target_proc_tuple, 1, ctx->global->node_name);
+            term_put_tuple_element(down_message_tuple, 3, target_proc_tuple);
+        } else {
+            term_put_tuple_element(down_message_tuple, 3, target_proc);
+        }
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
@@ -4223,7 +4249,12 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
     term monitoring_pid = term_from_local_process_id(ctx->process_id);
-    struct Monitor *self_monitor = monitor_new(target_pid, ref_ticks, true);
+    struct Monitor *self_monitor;
+    if (term_is_atom(target_proc)) {
+        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_ticks);
+    } else {
+        self_monitor = monitor_new(target_pid, ref_ticks, true);
+    }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

@@ -119,18 +119,11 @@ void app_main()
         AVM_ABORT();
     }
     globalcontext_insert_module(glb, mod);
-    Context *ctx = context_new(glb);
-    ctx->leader = 1;
 
     ESP_LOGI(TAG, "Starting %s...", startup_module_name);
     fprintf(stdout, "---\n");
 
-    context_execute_loop(ctx, mod, "start", 0);
-    term ret_value = ctx->x[0];
-
-    fprintf(stdout, "AtomVM finished with return value: ");
-    term_display(stdout, ret_value, ctx);
-    fprintf(stdout, "\n");
+    run_result_t result = globalcontext_run(glb, mod, stdout);
 
     bool reboot_on_not_ok =
 #if defined(CONFIG_REBOOT_ON_NOT_OK)
@@ -138,7 +131,7 @@ void app_main()
 #else
         false;
 #endif
-    if (reboot_on_not_ok && ret_value != OK_ATOM) {
+    if (reboot_on_not_ok && result != RUN_SUCCESS) {
         ESP_LOGE(TAG, "AtomVM application terminated with non-ok return value.  Rebooting ...");
         esp_restart();
     } else {

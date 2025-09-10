@@ -387,20 +387,13 @@ stop(ServerRef) ->
 %%-----------------------------------------------------------------------------
 -spec stop(ServerRef :: server_ref(), Reason :: term(), Timeout :: non_neg_integer() | infinity) ->
     ok | {error, Reason :: term()}.
-stop(Name, Reason, Timeout) when is_atom(Name) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            {error, undefined};
-        Pid when is_pid(Pid) ->
-            stop(Pid, Reason, Timeout)
-    end;
-stop(Pid, Reason, Timeout) when is_pid(Pid) ->
-    MonitorRef = monitor(process, Pid),
-    Pid ! {'$stop', Reason},
+stop(ServerRef, Reason, Timeout) ->
+    MonitorRef = monitor(process, ServerRef),
+    ServerRef ! {'$stop', Reason},
     receive
-        {'DOWN', MonitorRef, process, Pid, Reason} ->
+        {'DOWN', MonitorRef, process, _, Reason} ->
             ok;
-        {'DOWN', MonitorRef, process, Pid, AnotherReason} ->
+        {'DOWN', MonitorRef, process, _, AnotherReason} ->
             erlang:exit(AnotherReason)
     after Timeout ->
         demonitor(MonitorRef, [flush]),
@@ -431,29 +424,32 @@ call(ServerRef, Request) ->
 %%-----------------------------------------------------------------------------
 -spec call(ServerRef :: server_ref(), Request :: term(), TimeoutMs :: timeout()) ->
     Reply :: term() | {error, Reason :: term()}.
-call(Name, Request, TimeoutMs) when is_atom(Name) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            erlang:exit({noproc, {?MODULE, ?FUNCTION_NAME, [Name, Request]}});
-        Pid when is_pid(Pid) ->
-            call(Pid, Request, TimeoutMs)
-    end;
-call(Pid, Request, TimeoutMs) when is_pid(Pid) ->
-    MonitorRef = monitor(process, Pid),
-    Pid ! {'$gen_call', {self(), MonitorRef}, Request},
+call(ServerRef, Request, TimeoutMs) ->
+    MonitorRef = monitor(process, ServerRef),
+    ok =
+        try
+            ServerRef ! {'$gen_call', {self(), MonitorRef}, Request},
+            ok
+        catch
+            error:badarg ->
+                % Process no longer exists, monitor will send a message
+                ok
+        end,
     receive
-        {'DOWN', MonitorRef, process, Pid, {E, []} = _Reason} ->
-            erlang:exit({E, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}});
-        {'DOWN', MonitorRef, process, Pid, {_E, _L} = Reason} ->
+        {'DOWN', MonitorRef, process, _, {E, []} = _Reason} ->
+            erlang:exit({E, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}});
+        {'DOWN', MonitorRef, process, _, {_E, _L} = Reason} ->
             erlang:exit(Reason);
-        {'DOWN', MonitorRef, process, Pid, Atom} when is_atom(Atom) ->
-            erlang:exit({Atom, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}});
+        {'DOWN', MonitorRef, process, _, Atom} when is_atom(Atom) ->
+            erlang:exit({Atom, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}});
         {MonitorRef, Reply} ->
             demonitor(MonitorRef, [flush]),
             Reply
     after TimeoutMs ->
+        % If TimeoutMS is small enough (0), the error message might be timeout
+        % instead of noproc as there could be a race condition with the monitor.
         demonitor(MonitorRef, [flush]),
-        erlang:exit({timeout, {?MODULE, ?FUNCTION_NAME, [Pid, Request]}})
+        erlang:exit({timeout, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}})
     end.
 
 %%-----------------------------------------------------------------------------
@@ -467,15 +463,14 @@ call(Pid, Request, TimeoutMs) when is_pid(Pid) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec cast(ServerRef :: server_ref(), Request :: term()) -> ok | {error, Reason :: term()}.
-cast(Name, Request) when is_atom(Name) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            {error, undefined};
-        Pid when is_pid(Pid) ->
-            cast(Pid, Request)
-    end;
-cast(Pid, Request) when is_pid(Pid) ->
-    Pid ! {'$gen_cast', Request},
+cast(ServerRef, Request) ->
+    try
+        ServerRef ! {'$gen_cast', Request}
+    catch
+        error:badarg ->
+            % Process does not exist, ignore error
+            ok
+    end,
     ok.
 
 %%-----------------------------------------------------------------------------
