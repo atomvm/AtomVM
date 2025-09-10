@@ -33,12 +33,10 @@
 
 #include "atom.h"
 #include "atom_table.h"
-#include "atomshashtable.h"
 #include "context.h"
 #include "exportedfunction.h"
 #include "globalcontext.h"
 #include "term.h"
-#include "valueshashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -88,13 +86,6 @@ struct ModuleFilename
     size_t len;
 };
 
-struct LineRefOffset
-{
-    struct ListHead head;
-    unsigned int offset;
-    uint16_t line_ref;
-};
-
 struct Module
 {
 #ifdef ENABLE_ADVANCED_TRACE
@@ -113,7 +104,8 @@ struct Module
     size_t locations_count;
     const uint8_t *locations_table;
 
-    struct ListHead line_ref_offsets;
+    unsigned int *line_refs_offsets;
+    size_t line_refs_offsets_count;
 
     const struct ExportedFunction **imported_funcs;
 
@@ -123,7 +115,7 @@ struct Module
 
     struct LiteralEntry *literals_table;
 
-    int *local_atoms_to_global_table;
+    atom_index_t *local_atoms_to_global_table;
 
     void *module_platform_data;
 
@@ -182,9 +174,8 @@ size_t module_get_exported_functions_count(Module *this_module);
  * @param this_module the module on which the function will be searched.
  * @param func_name function name atom string.
  * @param func_arity function arity.
- * @param glb the global context
  */
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb);
+uint32_t module_search_exported_function(Module *this_module, atom_index_t func_name, int func_arity);
 
 /**
  * @brief Determine heap size of exported functions list.
@@ -205,10 +196,9 @@ static inline size_t module_get_exported_functions_list_size(Module *this_module
  *
  * @param this_module the module to count exported functions of
  * @param heap heap to allocate tuples
- * @param global global context to fetch atoms
  * @return a list of exported functions
  */
-term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *global);
+term module_get_exported_functions(Module *this_module, Heap *heap);
 
 /***
  * @brief Destroys an existing Module
@@ -237,21 +227,6 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
  * @param ctx the target context.
  */
 term module_load_literal(Module *mod, int index, Context *ctx);
-
-/**
- * @brief Gets the AtomString for the given local atom id
- *
- * @details Gets an AtomString for the given local atom id from the global table.
- * @param mod the module that owns the atom.
- * @param local_atom_id module atom table index.
- * @param glb the global context.
- * @return the AtomString for the given module atom index.
- */
-static inline AtomString module_get_atom_string_by_id(const Module *mod, int local_atom_id, GlobalContext *glb)
-{
-    int global_id = mod->local_atoms_to_global_table[local_atom_id];
-    return atom_table_get_atom_string(glb->atom_table, global_id);
-}
 
 /**
  * @brief Gets a term for the given local atom id
@@ -324,7 +299,7 @@ static inline term module_address(unsigned int module_index, unsigned int instru
 static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_index)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
@@ -334,7 +309,7 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
     // arity
     // label
     // index
-    uint32_t n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    uint32_t n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 
     return n_freeze;
@@ -343,17 +318,17 @@ static inline uint32_t module_get_fun_freeze(const Module *this_module, int fun_
 static inline void module_get_fun(const Module *this_module, int fun_index, uint32_t *label, uint32_t *arity, uint32_t *n_freeze)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->fun_table;
-    int funs_count = READ_32_ALIGNED(table_data + 8);
+    int funs_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(fun_index >= funs_count)) {
         AVM_ABORT();
     }
 
     // fun atom index
-    *arity = READ_32_ALIGNED(table_data + fun_index * 24 + 4 + 12);
-    *label = READ_32_ALIGNED(table_data + fun_index * 24 + 8 + 12);
+    *arity = READ_32_UNALIGNED(table_data + fun_index * 24 + 4 + 12);
+    *label = READ_32_UNALIGNED(table_data + fun_index * 24 + 8 + 12);
     // index
-    *n_freeze = READ_32_ALIGNED(table_data + fun_index * 24 + 16 + 12);
+    *n_freeze = READ_32_UNALIGNED(table_data + fun_index * 24 + 16 + 12);
     // ouniq
 }
 
@@ -376,9 +351,8 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  * @param label the current label used to look up the function/arity
  * @param function_name (output) the function name, as an AtomString.
  * @param arity (output) the function arity
- * @param glb the global context
  */
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb);
+bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity);
 
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.
@@ -391,10 +365,11 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
  * is a no-op.
  *
  * @param mod the module
+ * @param line_refs the list of line references to append to
  * @param line_ref the line reference (index)
  * @param offset the instruction offset at which the line instruction occurred.
  */
-void module_insert_line_ref_offset(Module *mod, int line_ref, int offset);
+void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint32_t line_ref, int offset);
 
 /*
  * @brief Find the latest line reference (index) before or at which the instruction offset
@@ -420,6 +395,18 @@ static inline bool module_has_line_chunk(Module *mod)
 {
     return mod->line_refs_table != NULL;
 }
+
+/*
+ * @brief Get the module, offset, label and label offset from module start from a continuation pointer.
+ *
+ * @param cp continuation pointer to parse
+ * @param cp_mod if not null, set to found module
+ * @param label if not null, set to found label
+ * @param l_off if not null, set to offset of label from module start
+ * @param mod_offset if not null, set to offset of cp from module start
+ * @param global the global context
+ */
+void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *mod_offset, GlobalContext *global);
 
 #ifdef __cplusplus
 }

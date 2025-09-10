@@ -21,6 +21,7 @@
 #include "module.h"
 
 #include "atom.h"
+#include "atom_table.h"
 #include "bif.h"
 #include "context.h"
 #include "externalterm.h"
@@ -58,6 +59,12 @@ static void module_add_label(Module *mod, int index, const uint8_t *ptr);
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
 static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len);
 
+struct LineRefOffset
+{
+    struct ListHead head;
+    unsigned int offset;
+};
+
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
 #undef TRACE
@@ -65,7 +72,7 @@ static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len
 
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
-    int atoms_count = READ_32_ALIGNED(table_data + 8);
+    int atoms_count = READ_32_UNALIGNED(table_data + 8);
 
     enum EnsureAtomsOpt ensure_opts = EnsureAtomsNoOpts;
     if (atoms_count < 0) {
@@ -81,21 +88,28 @@ static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, ui
         return MODULE_ERROR_FAILED_ALLOCATION;
     }
 
-    long ensure_result = atom_table_ensure_atoms(
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atoms(
         glb->atom_table, current_atom, atoms_count, this_module->local_atoms_to_global_table + 1, ensure_opts);
-    if (UNLIKELY(ensure_result == ATOM_TABLE_ALLOC_FAIL)) {
-        fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
-        return MODULE_ERROR_FAILED_ALLOCATION;
-    } else if (UNLIKELY(ensure_result == ATOM_TABLE_INVALID_LEN)) {
-        return MODULE_ERROR_INVALID;
+    switch (ensure_result) {
+        case AtomTableEnsureAtomAllocFail: {
+            fprintf(stderr, "Cannot allocate memory while loading module (line: %i).\n", __LINE__);
+            return MODULE_ERROR_FAILED_ALLOCATION;
+        }
+        case AtomTableEnsureAtomInvalidLen:
+        case AtomTableEnsureAtomNotFound: {
+            return MODULE_ERROR_INVALID;
+        }
+        case AtomTableEnsureAtomOk: {
+            return MODULE_LOAD_OK;
+        }
+        default:
+            UNREACHABLE();
     }
-
-    return MODULE_LOAD_OK;
 }
 
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
-    int functions_count = READ_32_ALIGNED(table_data + 8);
+    int functions_count = READ_32_UNALIGNED(table_data + 8);
 
     this_module->imported_funcs = calloc(functions_count, sizeof(struct ExportedFunction *));
     if (IS_NULL_PTR(this_module->imported_funcs)) {
@@ -104,18 +118,20 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
     }
 
     for (int i = 0; i < functions_count; i++) {
-        int local_module_atom_index = READ_32_ALIGNED(table_data + i * 12 + 12);
-        int local_function_atom_index = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
-        AtomString module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
-        AtomString function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
-        uint32_t arity = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
+        int local_module_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 12);
+        int local_function_atom_index = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
+        atom_index_t module_atom = this_module->local_atoms_to_global_table[local_module_atom_index];
+        atom_index_t function_atom = this_module->local_atoms_to_global_table[local_function_atom_index];
+        uint32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
+        char mfa[MAX_MFA_NAME_LEN];
+        atom_table_write_mfa(glb->atom_table, mfa, sizeof(mfa), module_atom, function_atom, arity);
 
-        const struct ExportedFunction *bif = bif_registry_get_handler(module_atom, function_atom, arity);
+        const struct ExportedFunction *bif = bif_registry_get_handler(mfa);
 
         if (bif) {
             this_module->imported_funcs[i] = bif;
         } else {
-            this_module->imported_funcs[i] = &nifs_get(module_atom, function_atom, arity)->base;
+            this_module->imported_funcs[i] = &nifs_get(mfa)->base;
         }
 
         if (!this_module->imported_funcs[i]) {
@@ -140,44 +156,44 @@ static enum ModuleLoadResult module_build_imported_functions_table(Module *this_
 void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->import_table;
-    int functions_count = READ_32_ALIGNED(table_data + 8);
+    int functions_count = READ_32_UNALIGNED(table_data + 8);
 
     if (UNLIKELY(index > functions_count)) {
         AVM_ABORT();
     }
-    int local_module_atom_index = READ_32_ALIGNED(table_data + index * 12 + 12);
-    int local_function_atom_index = READ_32_ALIGNED(table_data + index * 12 + 4 + 12);
+    int local_module_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 12);
+    int local_function_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 4 + 12);
     *module_atom = module_get_atom_string_by_id(this_module, local_module_atom_index, glb);
     *function_atom = module_get_atom_string_by_id(this_module, local_function_atom_index, glb);
 }
 #endif
 
-bool module_get_function_from_label(Module *this_module, int label, AtomString *function_name, int *arity, GlobalContext *glb)
+bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity)
 {
     int best_label = -1;
     const uint8_t *export_table_data = (const uint8_t *) this_module->export_table;
-    int exports_count = READ_32_ALIGNED(export_table_data + 8);
+    int exports_count = READ_32_UNALIGNED(export_table_data + 8);
     for (int export_index = exports_count - 1; export_index >= 0; export_index--) {
-        int fun_atom_index = READ_32_ALIGNED(export_table_data + (export_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(export_table_data + (export_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(export_table_data + (export_index * 12) + 8 + 12);
+        int fun_atom_index = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 12);
+        int fun_arity = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 4 + 12);
+        int fun_label = READ_32_UNALIGNED(export_table_data + (export_index * 12) + 8 + 12);
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
+            *function_name = this_module->local_atoms_to_global_table[fun_atom_index];
         }
     }
 
     const uint8_t *local_table_data = (const uint8_t *) this_module->local_table;
-    int locals_count = READ_32_ALIGNED(local_table_data + 8);
+    int locals_count = READ_32_UNALIGNED(local_table_data + 8);
     for (int local_index = locals_count - 1; local_index >= 0; local_index--) {
-        int fun_atom_index = READ_32_ALIGNED(local_table_data + (local_index * 12) + 12);
-        int fun_arity = READ_32_ALIGNED(local_table_data + (local_index * 12) + 4 + 12);
-        int fun_label = READ_32_ALIGNED(local_table_data + (local_index * 12) + 8 + 12);
+        int fun_atom_index = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 12);
+        int fun_arity = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 4 + 12);
+        int fun_label = READ_32_UNALIGNED(local_table_data + (local_index * 12) + 8 + 12);
         if (fun_label <= label && best_label < fun_label) {
             best_label = fun_label;
             *arity = fun_arity;
-            *function_name = module_get_atom_string_by_id(this_module, fun_atom_index, glb);
+            *function_name = this_module->local_atoms_to_global_table[fun_atom_index];
         }
     }
     if (UNLIKELY(best_label == -1)) {
@@ -190,38 +206,42 @@ bool module_get_function_from_label(Module *this_module, int label, AtomString *
 size_t module_get_exported_functions_count(Module *this_module)
 {
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
-    size_t functions_count = READ_32_ALIGNED(table_data + 8);
+    size_t functions_count = READ_32_UNALIGNED(table_data + 8);
     return functions_count;
 }
 
-uint32_t module_search_exported_function(Module *this_module, AtomString func_name, int func_arity, GlobalContext *glb)
+uint32_t module_search_exported_function(Module *this_module, atom_index_t func_name, int func_arity)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
-        int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
-        if ((func_arity == arity) && atom_are_equals(func_name, function_atom)) {
-            uint32_t label = READ_32_ALIGNED(table_data + i * 12 + 8 + 12);
-            return label;
+        int local_atom_id = READ_32_UNALIGNED(table_data + i * 12 + 12);
+        int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
+        if (func_arity == arity) {
+            atom_index_t function_atom_ix = this_module->local_atoms_to_global_table[local_atom_id];
+            if (func_name == function_atom_ix) {
+                uint32_t label = READ_32_UNALIGNED(table_data + i * 12 + 8 + 12);
+                return label;
+            }
         }
     }
 
     return 0;
 }
 
-term module_get_exported_functions(Module *this_module, Heap *heap, GlobalContext *glb)
+term module_get_exported_functions(Module *this_module, Heap *heap)
 {
     size_t functions_count = module_get_exported_functions_count(this_module);
     term result_list = term_nil();
 
     const uint8_t *table_data = (const uint8_t *) this_module->export_table;
     for (unsigned int i = 0; i < functions_count; i++) {
-        AtomString function_atom = module_get_atom_string_by_id(this_module, READ_32_ALIGNED(table_data + i * 12 + 12), glb);
-        int32_t arity = READ_32_ALIGNED(table_data + i * 12 + 4 + 12);
+        int local_atom_id = READ_32_UNALIGNED(table_data + i * 12 + 12);
+        atom_index_t function_atom_ix = this_module->local_atoms_to_global_table[local_atom_id];
+        int32_t arity = READ_32_UNALIGNED(table_data + i * 12 + 4 + 12);
         term function_tuple = term_alloc_tuple(2, heap);
-        term_put_tuple_element(function_tuple, 0, globalcontext_existing_term_from_atom_string(glb, function_atom));
+        term_put_tuple_element(function_tuple, 0, term_from_atom_index(function_atom_ix));
         term_put_tuple_element(function_tuple, 1, term_from_int(arity));
         result_list = term_list_prepend(function_tuple, result_list, heap);
     }
@@ -285,7 +305,6 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     }
 
     module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
-    list_init(&mod->line_ref_offsets);
 
     if (offsets[LITT]) {
         if (!module_are_literals_compressed(beam_file + offsets[LITT])) {
@@ -320,7 +339,42 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    mod->end_instruction_ii = read_core_chunk(mod);
+    struct ListHead line_refs;
+    list_init(&line_refs);
+    mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
+
+    // Create the list of offsets if the module has line informations.
+    if (mod->line_refs_table != NULL) {
+        // Compute the size of the list
+        size_t num_offsets = 0;
+        struct ListHead *item = line_refs.next;
+        while (item != &line_refs) {
+            num_offsets++;
+            item = item->next;
+        }
+        if (num_offsets > 0) {
+            mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
+            if (IS_NULL_PTR(mod->line_refs_offsets)) {
+                fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
+            } else {
+                size_t index = 0;
+                item = line_refs.next;
+                while (item != &line_refs) {
+                    struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
+                    mod->line_refs_offsets[index] = offset->offset;
+                    index++;
+                    item = item->next;
+                }
+                mod->line_refs_offsets_count = num_offsets;
+            }
+        }
+    }
+    // Empty the list
+    while (!list_is_empty(&line_refs)) {
+        struct ListHead *item = line_refs.next;
+        list_remove(item);
+        free(item);
+    }
 
     return mod;
 }
@@ -331,6 +385,7 @@ COLD_FUNC void module_destroy(Module *module)
     free(module->imported_funcs);
     free(module->literals_table);
     free(module->local_atoms_to_global_table);
+    free(module->line_refs_offsets);
     if (module->free_literals_data) {
         free(module->literals_data);
     }
@@ -342,14 +397,14 @@ COLD_FUNC void module_destroy(Module *module)
 
 static bool module_are_literals_compressed(const uint8_t *litT)
 {
-    uint32_t required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    uint32_t required_buf_size = READ_32_UNALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
     return (required_buf_size != 0);
 }
 
 #ifdef WITH_ZLIB
 static void *module_uncompress_literals(const uint8_t *litT, int size)
 {
-    unsigned int required_buf_size = READ_32_ALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
+    unsigned int required_buf_size = READ_32_UNALIGNED(litT + LITT_UNCOMPRESSED_SIZE_OFFSET);
 
     uint8_t *outBuf = malloc(required_buf_size);
     if (IS_NULL_PTR(outBuf)) {
@@ -384,7 +439,7 @@ static void *module_uncompress_literals(const uint8_t *litT, int size)
 
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 {
-    uint32_t terms_count = READ_32_ALIGNED(literalsBuf);
+    uint32_t terms_count = READ_32_UNALIGNED(literalsBuf);
 
     const uint8_t *pos = (const uint8_t *) literalsBuf + sizeof(uint32_t);
 
@@ -406,29 +461,22 @@ static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    term t = externalterm_to_term(mod->literals_table[index].data, mod->literals_table[index].size,
-        ctx, ExternalTermToHeapFragment);
-    if (term_is_invalid_term(t)) {
-        fprintf(stderr, "Invalid term reading literals_table[%i] from module\n", index);
-        AVM_ABORT();
+    term t = externalterm_from_const_literal(mod->literals_table[index].data, mod->literals_table[index].size, ctx);
+    if (UNLIKELY(term_is_invalid_term(t))) {
+        fprintf(stderr, "Either OOM or invalid term while reading literals_table[%i] from module\n", index);
     }
     return t;
 }
 
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
-
-    AtomString module_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index);
-    AtomString function_name_atom = atom_table_get_atom_string(glb->atom_table, unresolved->function_atom_index);
-    int arity = unresolved->arity;
-
-    Module *found_module = globalcontext_get_module(glb, module_name_atom);
+    Module *found_module = globalcontext_get_module(glb, unresolved->module_atom_index);
 
     if (LIKELY(found_module != NULL)) {
-        int exported_label = module_search_exported_function(found_module, function_name_atom, arity, glb);
+        int exported_label = module_search_exported_function(found_module, unresolved->function_atom_index, unresolved->arity);
         if (exported_label == 0) {
-            char buf[256];
-            atom_write_mfa(buf, 256, module_name_atom, function_name_atom, arity);
+            char buf[MAX_MFA_NAME_LEN];
+            atom_table_write_mfa(glb->atom_table, buf, MAX_MFA_NAME_LEN, unresolved->module_atom_index, unresolved->function_atom_index, unresolved->arity);
             fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
             return NULL;
         }
@@ -445,9 +493,9 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
         mod->imported_funcs[import_table_index] = &mfunc->base;
         return &mfunc->base;
     } else {
-        char buf[256];
-        atom_string_to_c(module_name_atom, buf, 256);
-        fprintf(stderr, "Warning: module %s cannot be resolved.\n", buf);
+        size_t atom_string_len;
+        const uint8_t *atom_string_data = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index, &atom_string_len);
+        fprintf(stderr, "Warning: module %.*s cannot be resolved.\n", (int) atom_string_len, atom_string_data);
         return NULL;
     }
 }
@@ -718,19 +766,28 @@ static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len
     }
 }
 
-void module_insert_line_ref_offset(Module *mod, int line_ref, int offset)
+void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint32_t line_ref, int offset)
 {
     if (IS_NULL_PTR(mod->line_refs_table) || line_ref == 0) {
         return;
     }
     struct LineRefOffset *ref_offset = malloc(sizeof(struct LineRefOffset));
     if (IS_NULL_PTR(ref_offset)) {
-        fprintf(stderr, "Warning: Unable to allocate space for line ref offset.  Line information in stacktraces may be missing\n");
+        size_t num_refs = 0;
+        // Empty the list
+        while (!list_is_empty(line_refs)) {
+            struct ListHead *item = line_refs->next;
+            list_remove(item);
+            free(item);
+            num_refs++;
+        }
+        fprintf(stderr, "Warning: Unable to allocate space for an additional line ref offset (we had %zu).  Line information in stacktraces may be missing\n", num_refs);
+        // Give up having line numbers for this module.
+        mod->line_refs_table = NULL;
         return;
     }
-    ref_offset->line_ref = line_ref;
     ref_offset->offset = offset;
-    list_append(&mod->line_ref_offsets, &ref_offset->head);
+    list_append(line_refs, &ref_offset->head);
 }
 
 static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line, size_t *filename_len, const uint8_t **filename)
@@ -744,30 +801,70 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
 
 bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
-    int i = 0;
-    struct LineRefOffset *head = GET_LIST_ENTRY(&mod->line_ref_offsets, struct LineRefOffset, head);
-    struct ListHead *item;
-    LIST_FOR_EACH (item, &mod->line_ref_offsets) {
-        struct LineRefOffset *ref_offset = GET_LIST_ENTRY(item, struct LineRefOffset, head);
-
-        if (offset == ref_offset->offset) {
-            return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
-        } else if (i == 0 && offset < ref_offset->offset) {
-            return false;
-        } else {
-
-            struct LineRefOffset *prev_ref_offset = GET_LIST_ENTRY(ref_offset->head.prev, struct LineRefOffset, head);
-            if (prev_ref_offset->offset <= offset && offset < ref_offset->offset) {
-                return module_find_line_ref(mod, prev_ref_offset->line_ref, line, filename_len, filename);
-            }
-
-            struct LineRefOffset *next_ref_offset = GET_LIST_ENTRY(ref_offset->head.next, struct LineRefOffset, head);
-            if (next_ref_offset == head && ref_offset->offset <= offset) {
-                return module_find_line_ref(mod, ref_offset->line_ref, line, filename_len, filename);
-            }
-        }
-
-        ++i;
+    size_t i;
+    unsigned int ref_offset;
+    uint32_t line_ref;
+    const uint8_t *ref_pc;
+    if (IS_NULL_PTR(mod->line_refs_offsets)) {
+        return false;
     }
-    return false;
+    for (i = 0; i < mod->line_refs_offsets_count; i++) {
+        ref_offset = mod->line_refs_offsets[i];
+        if (offset == ref_offset) {
+            ref_pc = &mod->code->code[ref_offset];
+            DECODE_LITERAL(line_ref, ref_pc);
+            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+        } else if (i == 0 && offset < ref_offset) {
+            return false;
+        } else if (offset < ref_offset) {
+            ref_offset = mod->line_refs_offsets[i - 1];
+            ref_pc = &mod->code->code[ref_offset];
+            DECODE_LITERAL(line_ref, ref_pc);
+            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+        }
+    }
+    ref_offset = mod->line_refs_offsets[i - 1];
+    ref_pc = &mod->code->code[ref_offset];
+    DECODE_LITERAL(line_ref, ref_pc);
+    return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+}
+
+COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *out_mod_offset, GlobalContext *global)
+{
+    Module *mod = globalcontext_get_module_by_index(global, ((uintptr_t) cp) >> 24);
+    long mod_offset = (cp & 0xFFFFFF) >> 2;
+    if (out_mod_offset) {
+        *out_mod_offset = mod_offset;
+    }
+
+    if (cp_mod) {
+        *cp_mod = mod;
+    }
+
+    uint8_t *code = &mod->code->code[0];
+    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
+
+    int i = 1;
+    const uint8_t *l = mod->labels[1];
+    while (mod_offset > l - code) {
+        i++;
+        if (i >= labels_count) {
+            // last label + 1 is reserved for end of module.
+            if (label) {
+                *label = i;
+            }
+            if (l_off) {
+                *l_off = 0;
+            }
+            return;
+        }
+        l = mod->labels[i];
+    }
+
+    if (label) {
+        *label = i - 1;
+    }
+    if (l_off) {
+        *l_off = mod_offset - (mod->labels[*label] - code);
+    }
 }

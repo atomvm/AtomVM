@@ -26,6 +26,8 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 # mkfifo is defined in newlib header but not implemented
 set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
+# Likewise with EXECVE
+set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
 # Force HAVE_SOCKET
 # Automatically detecting it requires to put too many components include dirs
 # in CMAKE_REQUIRED_INCLUDES as lwip includes freetos and many esp system components

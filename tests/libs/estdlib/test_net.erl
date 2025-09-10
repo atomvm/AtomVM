@@ -29,7 +29,7 @@ test() ->
     ok.
 
 test_getaddrinfo() ->
-    ok = test_getaddrinfo("www.atomvm.net"),
+    ok = test_getaddrinfo("test.atomvm.org"),
     ok.
 
 test_getaddrinfo(Host) ->
@@ -70,8 +70,8 @@ test_getaddrinfo(Host) ->
     ok.
 
 test_getaddrinfo2() ->
-    ok = test_getaddrinfo2("www.atomvm.net", "https"),
-    ok = test_getaddrinfo2("www.atomvm.net", "443"),
+    ok = test_getaddrinfo2("test.atomvm.org", "https"),
+    ok = test_getaddrinfo2("test.atomvm.org", "443"),
     ok = test_getaddrinfo2(undefined, "443"),
     ok.
 

@@ -28,7 +28,9 @@
     start_child/2,
     terminate_child/2,
     restart_child/2,
-    delete_child/2
+    delete_child/2,
+    which_children/1,
+    count_children/1
 ]).
 
 -export([
@@ -86,7 +88,8 @@
     start :: {module(), atom(), [any()] | undefined},
     restart :: restart(),
     shutdown :: shutdown(),
-    type :: child_type
+    type :: child_type,
+    modules = [] :: [module()] | dynamic
 }).
 -record(state, {restart_strategy :: strategy(), children = [] :: [#child{}]}).
 
@@ -107,6 +110,12 @@ restart_child(Supervisor, ChildId) ->
 delete_child(Supervisor, ChildId) ->
     gen_server:call(Supervisor, {delete_child, ChildId}).
 
+which_children(Supervisor) ->
+    gen_server:call(Supervisor, which_children).
+
+count_children(Supervisor) ->
+    gen_server:call(Supervisor, count_children).
+
 init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
     case Mod:init(Args) of
@@ -123,13 +132,14 @@ init({Mod, Args}) ->
     end.
 
 -spec child_spec_to_record(child_spec()) -> #child{}.
-child_spec_to_record({ChildId, MFA, Restart, Shutdown, Type, _Modules}) ->
+child_spec_to_record({ChildId, MFA, Restart, Shutdown, Type, Modules}) ->
     #child{
         id = ChildId,
         start = MFA,
         restart = Restart,
         shutdown = Shutdown,
-        type = Type
+        type = Type,
+        modules = Modules
     };
 child_spec_to_record(#{id := ChildId, start := MFA} = ChildMap) ->
     Restart = maps:get(restart, ChildMap, permanent),
@@ -142,12 +152,21 @@ child_spec_to_record(#{id := ChildId, start := MFA} = ChildMap) ->
             supervisor -> infinity
         end
     ),
+    Modules = maps:get(
+        modules,
+        ChildMap,
+        case MFA of
+            {M, _, _} -> [M];
+            _ -> []
+        end
+    ),
     #child{
         id = ChildId,
         start = MFA,
         restart = Restart,
         shutdown = Shutdown,
-        type = Type
+        type = Type,
+        modules = Modules
     }.
 
 init_state([ChildSpec | T], State) ->
@@ -262,7 +281,15 @@ handle_call({delete_child, ID}, _From, #state{children = Children} = State) ->
             {reply, {error, running}, State};
         false ->
             {reply, {error, not_found}, State}
-    end.
+    end;
+handle_call(which_children, _From, #state{children = Children} = State) ->
+    ChildrenInfo = lists:map(fun child_to_info/1, Children),
+    {reply, ChildrenInfo, State};
+handle_call(count_children, _From, #state{children = Children} = State) ->
+    {Specs, Active, Supers, Workers} =
+        lists:foldl(fun count_child/2, {0, 0, 0, 0}, Children),
+    Reply = [{specs, Specs}, {active, Active}, {supervisors, Supers}, {workers, Workers}],
+    {reply, Reply, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -335,6 +362,26 @@ try_start(#child{start = {M, F, Args}} = Record) ->
     catch
         error:Error ->
             {error, {{'EXIT', Error}, Record}}
+    end.
+
+child_to_info(#child{id = Id, pid = Pid, type = Type, modules = Modules}) ->
+    Child =
+        case Pid of
+            undefined -> undefined;
+            {restarting, _} -> restarting;
+            _ when is_pid(Pid) -> Pid
+        end,
+    {Id, Child, Type, Modules}.
+
+count_child(#child{pid = Pid, type = worker}, {Specs, Active, Supers, Workers}) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> {Specs + 1, Active + 1, Supers, Workers + 1};
+        false -> {Specs + 1, Active, Supers, Workers + 1}
+    end;
+count_child(#child{pid = Pid, type = supervisor}, {Specs, Active, Supers, Workers}) ->
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> {Specs + 1, Active + 1, Supers + 1, Workers};
+        false -> {Specs + 1, Active, Supers + 1, Workers}
     end.
 
 do_terminate(#child{pid = Pid, shutdown = brutal_kill}) ->

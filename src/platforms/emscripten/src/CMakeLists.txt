@@ -28,7 +28,7 @@ add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
 target_compile_options(libAtomVM PUBLIC -O3 -fno-exceptions -fno-rtti -pthread -sINLINING_LIMIT -sUSE_ZLIB=1)
 target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)
-target_link_options(AtomVM PRIVATE -sEXPORTED_RUNTIME_METHODS=ccall -sUSE_ZLIB=1 -O3 -pthread -sFETCH --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js)
+target_link_options(AtomVM PRIVATE -sEXPORTED_RUNTIME_METHODS=ccall -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_options(AtomVM PRIVATE -sASSERTIONS=2 -sSAFE_HEAP -sSTACK_OVERFLOW_CHECK)

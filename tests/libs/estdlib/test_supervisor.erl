@@ -33,6 +33,8 @@ test() ->
     ok = test_supervisor_order(),
     ok = test_terminate_delete_child(),
     ok = test_terminate_timeout(),
+    ok = test_which_children(),
+    ok = test_count_children(),
     ok.
 
 test_basic_supervisor() ->
@@ -83,6 +85,55 @@ test_start_child() ->
     {ok, _InfoPid, info} = supervisor:start_child(SupPid, #{
         id => child_info, start => {?MODULE, child_start, [info]}
     }),
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_count_children() ->
+    % Test with no children - all counts should be zero
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    [{specs, 0}, {active, 0}, {supervisors, 0}, {workers, 0}] = supervisor:count_children(SupPid),
+
+    % Add a worker child and verify counts
+    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+        id => test_worker,
+        start => {ping_pong_server, start_link, [self()]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker
+    }),
+
+    % Check count_children with one active worker
+    [{specs, 1}, {active, 1}, {supervisors, 0}, {workers, 1}] = supervisor:count_children(SupPid),
+
+    % Add a supervisor child and verify counts
+    {ok, _SupervisorPid} = supervisor:start_child(SupPid, #{
+        id => test_supervisor,
+        start => {?MODULE, start_link, [self()]},
+        restart => permanent,
+        shutdown => infinity,
+        type => supervisor
+    }),
+
+    % Check count_children with one worker and one supervisor
+    [{specs, 2}, {active, 2}, {supervisors, 1}, {workers, 1}] = supervisor:count_children(SupPid),
+
+    % Terminate the worker child - spec remains but child becomes inactive
+    ok = supervisor:terminate_child(SupPid, test_worker),
+    [{specs, 2}, {active, 1}, {supervisors, 1}, {workers, 1}] = supervisor:count_children(SupPid),
+
+    % Delete the worker child - removes the spec completely
+    ok = supervisor:delete_child(SupPid, test_worker),
+    [{specs, 1}, {active, 1}, {supervisors, 1}, {workers, 0}] = supervisor:count_children(SupPid),
+
+    % Terminate the supervisor child - spec remains but child becomes inactive
+    ok = supervisor:terminate_child(SupPid, test_supervisor),
+    [{specs, 1}, {active, 0}, {supervisors, 1}, {workers, 0}] = supervisor:count_children(SupPid),
+
+    % Delete the supervisor child - removes the spec completely
+    ok = supervisor:delete_child(SupPid, test_supervisor),
+    [{specs, 0}, {active, 0}, {supervisors, 0}, {workers, 0}] = supervisor:count_children(SupPid),
+
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.
@@ -256,6 +307,36 @@ test_supervisor_order() ->
         after 1000 ->
             {error, {timeout, ready_2}}
         end,
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_which_children() ->
+    % Test with no children
+    {ok, SupPid} = supervisor:start_link(?MODULE, {test_no_child, self()}),
+    [] = supervisor:which_children(SupPid),
+
+    % Add a child and test
+    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+        id => test_child,
+        start => {ping_pong_server, start_link, [self()]},
+        restart => permanent,
+        shutdown => 5000,
+        type => worker
+    }),
+
+    % Check which_children returns the child info
+    [{test_child, ChildPid, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
+    true = is_pid(ChildPid),
+
+    % Terminate the child and check it shows as undefined
+    ok = supervisor:terminate_child(SupPid, test_child),
+    [{test_child, undefined, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
+
+    % Delete the child and check empty list
+    ok = supervisor:delete_child(SupPid, test_child),
+    [] = supervisor:which_children(SupPid),
+
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.

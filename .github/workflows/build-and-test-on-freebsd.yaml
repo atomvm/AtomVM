@@ -60,93 +60,139 @@ jobs:
         sync: rsync
         copyback: false
 
-        prepare: |
-          pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3
+    - name: "Install deps"
+      shell: freebsd {0}
+      run: |
+        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3
 
-        run: |
-          set -e
-          echo "%%"
-          echo "%% System Info"
-          echo "%%"
-          echo "**freebsd-version:**"
-          freebsd-version
-          echo "**uname:**"
-          uname -a
-          echo "**C Compiler version:**"
-          clang --version
-          clang++ --version
-          echo "**CMake version:**"
-          cmake --version
-          echo "**hw.ncpu:**"
-          sysctl -n hw.ncpu
+    - name: "System info"
+      shell: freebsd {0}
+      run: |
+        set -e
+        echo "%%"
+        echo "%% System Info"
+        echo "%%"
+        echo "**freebsd-version:**"
+        freebsd-version
+        echo "**uname:**"
+        uname -a
+        echo "**C Compiler version:**"
+        clang --version
+        clang++ --version
+        echo "**CMake version:**"
+        cmake --version
+        echo "**hw.ncpu:**"
+        sysctl -n hw.ncpu
 
-          sed -i '' 's/test_http_server/%test_http_server/g' tests/libs/eavmlib/tests.erl
+    - name: Disable eavmlib's test_http_server
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        sed -i '' 's/test_http_server/%test_http_server/g' tests/libs/eavmlib/tests.erl
 
-          echo "%%"
-          echo "%% Running CMake ..."
-          echo "%%"
-          mkdir build
-          cd build
-          cmake .. -DMBEDTLS_ROOT_DIR=/usr/local -DAVM_WARNINGS_ARE_ERRORS=ON
+    - name: "Build: create build dir"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        mkdir build
 
-          echo "%%"
-          echo "%% Building AtomVM ..."
-          echo "%%"
-          make -j `sysctl -n hw.ncpu`
+    - name: "Build: run cmake"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        cmake .. -DMBEDTLS_ROOT_DIR=/usr/local -DAVM_WARNINGS_ARE_ERRORS=ON
 
-          echo "%%"
-          echo "%% Running test-erlang ..."
-          echo "%%"
-          ./tests/test-erlang
+    - name: "Build: run make"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        make -j `sysctl -n hw.ncpu`
 
-          echo "%%"
-          echo "%% Running test-enif ..."
-          echo "%%"
-          ./tests/test-enif
+    - name: "Build: run dialyzer"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        make -j `sysctl -n hw.ncpu`
 
-          echo "%%"
-          echo "%% Running test-heap ..."
-          echo "%%"
-          ./tests/test-heap
+    - name: "Test: test-erlang"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-erlang
 
-          echo "%%"
-          echo "%% Running test-mailbox ..."
-          echo "%%"
-          ./tests/test-mailbox
+    - name: "Test: test-enif"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-enif
 
-          echo "%%"
-          echo "%% Running test-structs ..."
-          echo "%%"
-          ./tests/test-structs
+    - name: "Test: test-heap"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-heap
 
-          echo "%%"
-          echo "%% Running etest tests ..."
-          echo "%%"
-          ./src/AtomVM tests/libs/etest/test_etest.avm
+    - name: "Test: test-mailbox"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-mailbox
 
-          echo "%%"
-          echo "%% Running estdlib tests ..."
-          echo "%%"
-          ./src/AtomVM tests/libs/estdlib/test_estdlib.avm
+    - name: "Test: test-structs"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./tests/test-structs
 
-          echo "%%"
-          echo "%% Running eavmlib tests ..."
-          echo "%%"
-          ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm
+    - name: "Test: test_etest.avm"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./src/AtomVM tests/libs/etest/test_etest.avm
 
-          echo "%%"
-          echo "%% Running alisp tests ..."
-          echo "%%"
-          ./src/AtomVM tests/libs/alisp/test_alisp.avm
+    - name: "Test: test_estdlib.avm"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./src/AtomVM tests/libs/estdlib/test_estdlib.avm
 
-          echo "%%"
-          echo "%% Running install ..."
-          echo "%%"
-          make install
-          atomvm examples/erlang/hello_world.avm
-          atomvm -v
-          atomvm -h
+    - name: "Test: test_eavmlib.avm"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./src/AtomVM tests/libs/eavmlib/test_eavmlib.avm
 
-          echo "%%"
-          echo "%% Done!"
-          echo "%%"
+    - name: "Test: test_alisp.avm"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./src/AtomVM tests/libs/alisp/test_alisp.avm
+
+    - name: "Test: Tests.avm (Elixir)"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+
+    - name: "Install and smoke test"
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        make install
+        atomvm examples/erlang/hello_world.avm
+        atomvm -v
+        atomvm -h

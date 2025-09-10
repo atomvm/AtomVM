@@ -27,10 +27,11 @@
 # This can be dropped into an external project to help locate this SDK
 # It should be include()ed prior to project()
 
-if (DEFINED ENV{PICO_SDK_PATH} AND (NOT PICO_SDK_PATH))
-    set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
-    message("Using PICO_SDK_PATH from environment ('${PICO_SDK_PATH}')")
-endif ()
+# Commented to ensure fork is picked up as we need some changes that are not available upstream yet
+# if (DEFINED ENV{PICO_SDK_PATH} AND (NOT PICO_SDK_PATH))
+#     set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
+#     message("Using PICO_SDK_PATH from environment ('${PICO_SDK_PATH}')")
+# endif ()
 
 if (DEFINED ENV{PICO_SDK_FETCH_FROM_GIT} AND (NOT PICO_SDK_FETCH_FROM_GIT))
     set(PICO_SDK_FETCH_FROM_GIT $ENV{PICO_SDK_FETCH_FROM_GIT})
@@ -58,14 +59,14 @@ if (NOT PICO_SDK_PATH)
             FetchContent_Declare(
                     pico_sdk
                     GIT_REPOSITORY https://github.com/pguyot/pico-sdk   # revert to raspberrypi once PR 1101 is merged
-                    GIT_TAG v2.0.0+conditional-variables+cyw43-assoc-callback # revert to master once pico-sdk PR 1101 is merged + cyw43-driver PR 91
+                    GIT_TAG v2.1.1+conditional-variables+cyw43-assoc-callback # revert to master once pico-sdk PR 1101 is merged + cyw43-driver PR 91
                     GIT_SUBMODULES_RECURSE FALSE
             )
         else ()
             FetchContent_Declare(
                     pico_sdk
                     GIT_REPOSITORY https://github.com/pguyot/pico-sdk   # revert to raspberrypi once PR 1101 is merged
-                    GIT_TAG v2.0.0+conditional-variables+cyw43-assoc-callback # revert to master once pico-sdk PR 1101 is merged + cyw43-driver PR 91
+                    GIT_TAG v2.1.1+conditional-variables+cyw43-assoc-callback # revert to master once pico-sdk PR 1101 is merged + cyw43-driver PR 91
             )
         endif ()
 

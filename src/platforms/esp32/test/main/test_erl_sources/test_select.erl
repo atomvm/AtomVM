@@ -24,6 +24,8 @@
 
 % This test relies on a special vfs registered under /pipe.
 
+% Timeout has been changed from 200 to 2000 after a number of failures on EPS32-P4 devices
+
 start() ->
     {ok, WrFd} = atomvm:posix_open("/pipe/0", [o_wronly]),
     {ok, RdFd} = atomvm:posix_open("/pipe/0", [o_rdonly]),
@@ -40,7 +42,7 @@ start() ->
         receive
             {select, WrFd, SelectWriteRef, ready_output} -> ok;
             M -> {unexpected, M}
-        after 1000 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     ok = atomvm:posix_select_stop(WrFd),
 
@@ -51,27 +53,27 @@ start() ->
     ok =
         receive
             {select, RdFd, SelectReadRef, ready_input} -> ok
-        after 1000 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     {ok, <<42>>} = atomvm:posix_read(RdFd, 1),
     ok = atomvm:posix_select_read(RdFd, self(), SelectReadRef),
     ok =
         receive
-            {select, RdFd, SelectReadRef, _} -> fail
-        after 1000 -> ok
+            {select, RdFd, SelectReadRef, _} -> {unexpected, ?MODULE, ?LINE}
+        after 2000 -> ok
         end,
     {ok, 1} = atomvm:posix_write(WrFd, <<43>>),
     ok =
         receive
             {select, RdFd, SelectReadRef, ready_input} -> ok;
             M2 -> {unexpected, M2}
-        after 1000 -> fail
+        after 2000 -> {timeout, ?MODULE, ?LINE}
         end,
     ok = atomvm:posix_select_stop(RdFd),
     ok =
         receive
-            Message -> {unexpected, Message}
-        after 1000 -> ok
+            Message -> {unexpected, Message, ?MODULE, ?LINE}
+        after 2000 -> ok
         end,
 
     ok = atomvm:posix_close(WrFd),

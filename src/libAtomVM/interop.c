@@ -26,6 +26,7 @@
 #include "tempstack.h"
 #include "term.h"
 #include "term_typedef.h"
+#include "utils.h"
 #include "valueshashtable.h"
 #include <stdint.h>
 
@@ -197,19 +198,19 @@ char *interop_list_to_utf8_string(term list, int *ok)
 char *interop_atom_to_string(Context *ctx, term atom)
 {
     GlobalContext *glb = ctx->global;
-
-    int atom_index = term_to_atom_index(atom);
-
-    size_t len;
-    atom_ref_t atom_ref = atom_table_get_atom_ptr_and_len(glb->atom_table, atom_index, &len);
-
-    char *str = malloc(len + 1);
-    if (IS_NULL_PTR(str)) {
+    size_t atom_len;
+    const uint8_t *atom_data = atom_table_get_atom_string(glb->atom_table, term_to_atom_index(atom), &atom_len);
+    if (IS_NULL_PTR(atom_data)) {
         return NULL;
     }
-    atom_table_write_cstring(glb->atom_table, atom_ref, len + 1, str);
+    char *result = malloc(atom_len + 1);
+    if (IS_NULL_PTR(result)) {
+        return NULL;
+    }
 
-    return str;
+    memcpy(result, atom_data, atom_len);
+    result[atom_len] = 0;
+    return result;
 }
 
 term interop_proplist_get_value(term list, term key)
@@ -307,10 +308,19 @@ inline InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold
     return InteropOk;
 }
 
+static inline bool is_u8(avm_int_t value)
+{
+    return 0 <= value && value <= UCHAR_MAX;
+}
+
 static inline InteropFunctionResult size_fold_fun(term t, void *accum)
 {
     size_t *size = (size_t *) accum;
     if (term_is_integer(t)) {
+        avm_int_t value = term_to_int(t);
+        if (UNLIKELY(!is_u8(value))) {
+            return InteropBadArg;
+        }
         *size += 1;
     } else /* term_is_binary(t) */ {
         *size += term_binary_size(t);
@@ -328,9 +338,15 @@ static inline InteropFunctionResult write_string_fold_fun(term t, void *accum)
 {
     char **p = (char **) accum;
     if (term_is_integer(t)) {
-        **p = term_to_int(t);
+        avm_int_t value = term_to_int(t);
+        if (UNLIKELY(!is_u8(value))) {
+            return InteropBadArg;
+        }
+        **p = value;
         (*p)++;
-    } else /* term_is_binary(t) */ {
+    } else {
+        assert(term_is_binary(t));
+
         int len = term_binary_size(t);
         memcpy(*p, term_binary_data(t), len);
         *p += len;
@@ -676,8 +692,7 @@ term interop_atom_term_select_atom(const AtomStringIntPair *table, int value, Gl
 {
     for (int i = 0; table[i].as_val != NULL; i++) {
         if (value == table[i].i_val) {
-            int global_atom_index = globalcontext_insert_atom(global, table[i].as_val);
-            return term_from_atom_index(global_atom_index);
+            return globalcontext_make_atom(global, table[i].as_val);
         }
     }
     return term_invalid_term();

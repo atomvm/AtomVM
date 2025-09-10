@@ -39,9 +39,10 @@ extern "C" {
 
 #define MAX_BIF_NAME_LEN 260
 
-const struct ExportedFunction *bif_registry_get_handler(AtomString module, AtomString function, int arity);
+const struct ExportedFunction *bif_registry_get_handler(const char *mfa);
 
 term bif_erlang_self_0(Context *ctx);
+term bif_erlang_node_0(Context *ctx);
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3);
@@ -57,6 +58,7 @@ term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_port_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_reference_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_tuple_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_record_2(Context *ctx, uint32_t fail_label, term arg1, term record_tag);
@@ -79,6 +81,7 @@ term bif_erlang_add_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 term bif_erlang_plus_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_mul_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
+term bif_erlang_fdiv_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_div_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_rem_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
 term bif_erlang_neg_1(Context *ctx, uint32_t fail_label, int live, term arg1);

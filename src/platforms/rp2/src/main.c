@@ -132,26 +132,13 @@ static int app_main()
 
     globalcontext_insert_module(glb, mod);
     mod->module_platform_data = NULL;
-    Context *ctx = context_new(glb);
-    ctx->leader = 1;
 
-    fprintf(stderr, "Starting %s...", startup_module_name);
-    fprintf(stdout, "---\n");
-
-    context_execute_loop(ctx, mod, "start", 0);
-    term ret_value = ctx->x[0];
-
-    fprintf(stdout, "AtomVM finished with return value: ");
-    term_display(stdout, ret_value, ctx);
-    fprintf(stdout, "\n");
-    int result = ret_value != OK_ATOM;
-
-    context_destroy(ctx);
+    run_result_t result = globalcontext_run(glb, mod, stdout);
 
     nif_collection_destroy_all(glb);
     globalcontext_destroy(glb);
 
-    return result;
+    return (int) result;
 }
 
 static void exit_handler(bool reboot)

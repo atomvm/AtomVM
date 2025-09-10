@@ -33,6 +33,7 @@ test() ->
     ok = test_keyfind(),
     ok = test_keydelete(),
     ok = test_keyreplace(),
+    ok = test_keysort(),
     ok = test_keystore(),
     ok = test_keytake(),
     ok = test_foldl(),
@@ -41,6 +42,7 @@ test() ->
     ok = test_any(),
     ok = test_list_match(),
     ok = test_flatten(),
+    ok = test_flatmap(),
     ok = test_filter(),
     ok = test_join(),
     ok = test_seq(),
@@ -119,6 +121,46 @@ test_keyreplace() ->
         lists:keyreplace(a, 3, [b, {a, x}, {a, x}, {a, x}, []], {1, 2}),
         [b, {a, x}, {a, x}, {a, x}, []]
     ),
+    ok.
+
+test_keysort() ->
+    ?ASSERT_MATCH(lists:keysort(1, [{2, foo}, {1, bar}]), [{1, bar}, {2, foo}]),
+    ?ASSERT_MATCH(lists:keysort(1, [{2, foobar}, {1, foo}, {1, bar}]), [
+        {1, foo}, {1, bar}, {2, foobar}
+    ]),
+    ?ASSERT_MATCH(lists:keysort(1, [{2, foo, zot}, {1, bar}]), [{1, bar}, {2, foo, zot}]),
+    ?ASSERT_MATCH(lists:keysort(1, []), []),
+    ?ASSERT_MATCH(lists:keysort(2, [{foo, 2}, {bar, 1}]), [{bar, 1}, {foo, 2}]),
+    ?ASSERT_ERROR(lists:keysort(1, [1, 2])),
+    ?ASSERT_ERROR(lists:keysort(3, [{1, bar}, {2, foo}])),
+
+    % Our sort is always stable, but older versions of OTP only have
+    % keysort/2 documented as stable
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {1, z}, {2, b}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {1, z}, {2, c}, {2, b}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {2, b}, {1, z}, {2, a}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+    ?ASSERT_MATCH(
+        lists:keysort(1, [
+            {3, a}, {2, c}, {2, b}, {2, a}, {1, z}
+        ]),
+        [{1, z}, {2, c}, {2, b}, {2, a}, {3, a}]
+    ),
+
     ok.
 
 test_keystore() ->
@@ -207,6 +249,49 @@ test_flatten() ->
     ),
     ok.
 
+test_flatmap() ->
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> X + 1 end, []), []),
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> [X + 1] end, [1]), [2]),
+    ?ASSERT_MATCH(lists:flatmap(fun(X) -> [X * X] end, [1, 2, 3, 4, 5]), [1, 4, 9, 16, 25]),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [X + 1];
+                    1 -> [X + 2]
+                end
+            end,
+            [1, 2]
+        ),
+        [3, 3]
+    ),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [[X + 1]];
+                    1 -> [X + 2]
+                end
+            end,
+            [1, 2]
+        ),
+        [3, [3]]
+    ),
+    ?ASSERT_MATCH(
+        lists:flatmap(
+            fun(X) ->
+                case X rem 2 of
+                    0 -> [X + 1];
+                    1 -> [X + 1, X + 2]
+                end
+            end,
+            [1, 4]
+        ),
+        [2, 3, 5]
+    ),
+    ?ASSERT_ERROR(lists:flatmap(fun(X) -> X + 1 end, [1]), badarg),
+    ok.
+
 test_filter() ->
     ?ASSERT_MATCH(lists:filter(fun(I) -> I rem 2 =:= 0 end, []), []),
     ?ASSERT_MATCH(lists:filter(fun(I) -> I rem 2 =:= 0 end, [1, 2, 3, 4, 5]), [2, 4]),
@@ -230,6 +315,8 @@ test_seq() ->
     ?ASSERT_MATCH(lists:seq(5, 1, -1), [5, 4, 3, 2, 1]),
     ?ASSERT_MATCH(lists:seq(1, 1, 0), [1]),
     ?ASSERT_MATCH(lists:seq(1, 1), [1]),
+    ?ASSERT_MATCH(lists:seq(1, 0), []),
+    ?ASSERT_MATCH(lists:seq(1, 0, 1), []),
 
     ?ASSERT_ERROR(lists:seq(foo, 1)),
     ?ASSERT_ERROR(lists:seq(1, bar)),

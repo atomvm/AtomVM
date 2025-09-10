@@ -131,7 +131,7 @@ int main(int argc, char **argv)
             }
             globalcontext_insert_module(glb, mod);
             mod->module_platform_data = NULL;
-            if (IS_NULL_PTR(startup_module) && module_search_exported_function(mod, ATOM_STR("\5", "start"), 0, glb) != 0) {
+            if (IS_NULL_PTR(startup_module) && module_search_exported_function(mod, START_ATOM_INDEX, 0) != 0) {
                 startup_module = mod;
             }
 
@@ -146,24 +146,15 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    Context *ctx = context_new(glb);
-    ctx->leader = 1;
-
-    context_execute_loop(ctx, startup_module, "start", 0);
-
-    term ret_value = ctx->x[0];
-    fprintf(stderr, "Return value: ");
-    term_display(stderr, ret_value, ctx);
-    fprintf(stderr, "\n");
+    run_result_t result = globalcontext_run(glb, startup_module, stderr);
 
     int status;
-    if (ret_value == OK_ATOM) {
+    if (result == RUN_SUCCESS) {
         status = EXIT_SUCCESS;
     } else {
         status = EXIT_FAILURE;
     }
 
-    context_destroy(ctx);
     globalcontext_destroy(glb);
 
     return status;

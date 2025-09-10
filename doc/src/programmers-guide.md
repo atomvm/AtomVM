@@ -52,21 +52,13 @@ In addition, several features are supported specifically for integration with mi
 
 ### Limitations
 
-While the list of supported features is long and growing, the currently unsupported Erlang/OTP and BEAM features include (but are not limited to):
+Numerous modules and functions from Erlang/OTP standard libraries (`kernel`, `stdlib`, `sasl`, etc) are not implemented.
 
-* Atoms. Atoms larger than 255 bytes (255 ascii characters) are not supported.
-* Bignums.  Integer values are restricted to 64-bit values.
-* Bit Syntax.  While packing and unpacking of arbitrary (but less than 64-bit) bit values is supported, packing and unpacking of integer values at the start or end of a binary, or bordering binary packing or extraction must align on 8-bit boundaries.  Arbitrary bit length binaries are not currently supported.
-* The `epmd` and the `disterl` protocols are not supported.
-* There is no support for code hot swapping.
-* There is no support for a Read-Eval-Print-Loop. (REPL)
-* Numerous modules and functions from Erlang/OTP standard libraries (`kernel`, `stdlib`, `sasl`, etc) are not implemented.
-
-AtomVM bit syntax is restricted to alignment on 8-bit boundaries.  Little-endian and signed insertion and extraction of integer values is restricted to 8, 16, and 32-bit values.  Only unsigned big and little endian 64-bit values can be inserted into or extracted from binaries.
-
-It is highly unlikely that an existing Erlang program targeted for Erlang/OTP will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likely than not that Erlang applications will need to targeted specifically for the AtomVM platform.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems in both scale and APIs that special care and attention is needed to target applications for such embedded environments.
+For this reason, it is highly unlikely that an existing Erlang program targeted for Erlang/OTP will run unmodified on AtomVM.  And indeed, even as AtomVM matures and additional features are added, it is more likely than not that Erlang applications will need to targeted specifically for the AtomVM platform.  The intended target environment (small, cheap micro-controllers) differs enough from desktop or server-class systems in both scale and APIs that special care and attention is needed to target applications for such embedded environments.
 
 That being said, many of the features of the BEAM are supported and provide a rich and compelling development environment for embedded devices, which Erlang and Elixir developers will find natural and productive.
+
+Other differences between AtomVM and BEAM are detailed in a [dedicated page](./differences-with-beam.md).
 
 ## AtomVM Development
 
@@ -176,10 +168,7 @@ For more information about deploying the AtomVM image and AtomVM applications to
 An AtomVM application is a collection of BEAM files, aggregated into an AtomVM "Packbeam" (`.avm`) file, and typically deployed (flashed) to some device.  These BEAM files be be compiled from Erlang, Elixir, or any other language that targets the Erlang VM.
 
 ```{attention}
-The return value from the `start/0` function is ignored on the the `generic_unix` platform, most MCU platforms have
-the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the
-[Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this
-is configured.
+The return value from the `start/0` function is printed, ok means success (0 is also accepted for historical reasons), and any other value means failure. The processing of this results depend on platforms, on generic unix for example it determines the exit code. Most MCU platforms have the option of rebooting the device if the `start/0` function returns a value other than `ok`. Consult the [Build Instructions](./build-instructions.md#platform-specific-build-instructions) for your device to see how this is configured.
 ```
 
 Here, for example is one of the smallest AtomVM applications you can write:
@@ -204,6 +193,8 @@ prevent the AtomVM from terminating prematurely, e.g.,
 wait_forever() ->
     receive X -> X end.
 ```
+
+The start function actually isn't the first function evaluated by the virtual machine. If the `init` module exists, `init:boot/1` is called and this function calls `start/0`. The `init` module is part of atomvmlib.
 
 ### Packbeam files
 
@@ -1164,36 +1155,36 @@ storage, as the flash storage may degrade more rapidly with repeated writes to t
 
 NVS entries are stored under a namespace and key, both of which are expressed as atoms.  AtomVM uses the namespace `atomvm` for entries under its control.  Applications may read from and write to the `atomvm` namespace, but they are strongly discouraged from doing so, except when explicitly stated otherwise.
 
-To set a value in non-volatile storage, use the [`esp:nvs_set_binary/3`](./apidocs/erlang/eavmlib/esp.md#nvs_set_binary3) function, and specify a namespace, key, and value:
+To set a value in non-volatile storage, use the [`esp:nvs_put_binary/3`](./apidocs/erlang/eavmlib/esp.md#nvs_put_binary3) function, and specify a namespace, key, and value:
 
 ```erlang
-Namespace = <<"my-namespace">>,
-Key = <<"my-key">>,
-esp:set_binary(Namespace, Key, <<"some-value">>).
+Namespace = my_namespace_atom,
+Key = my_key_atom,
+esp:nvs_put_binary(Namespace, Key, <<"some-value">>).
 ```
 
 To retrieve a value in non-volatile storage, use the [`esp:nvs_get_binary/2`](./apidocs/erlang/eavmlib/esp.md#nvs_get_binary2) function, and specify a namespace and key.  You can optionally specify a default value (of any desired type), if an entry does not exist in non-volatile storage:
 
 ```erlang
-Value = esp:get_binary(Namespace, Key, <<"default-value">>).
+Value = esp:nvs_get_binary(Namespace, Key, <<"default-value">>).
 ```
 
 To delete an entry, use the [`esp:nvs_erase_key/2`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_key2) function, and specify a namespace and key:
 
 ```erlang
-ok = esp:erase_key(Namespace, Key).
+ok = esp:nvs_erase_key(Namespace, Key).
 ```
 
 You can delete all entries in a namespace via the [`esp:nvs_erase_all/1`](./apidocs/erlang/eavmlib/esp.md#nvs_erase_all1) function:
 
 ```erlang
-ok = esp:erase_all(Namespace).
+ok = esp:nvs_erase_all(Namespace).
 ```
 
 Finally, you can delete all entries in all namespaces on the NVS partition via the [`esp:nvs_reformat/0`](./apidocs/erlang/eavmlib/esp.md#nvs_reformat0) function:
 
 ```erlang
-ok = esp:reformat().
+ok = esp:nvs_reformat().
 ```
 
 Applications should use the `esp:nvs_reformat/0` function with caution, in case other applications are making using the non-volatile storage.
@@ -2408,7 +2399,7 @@ Currently, the `net:getaddrinfo/1,2` functions only supports reporting of IPv4 a
 For example:
 
 ```erlang
-{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net"),
+{ok, AddrInfos} = net:getaddrinfo("atomvm.org"),
 
 lists:foreach(
     fun(AddrInfo) ->
@@ -2447,7 +2438,7 @@ with OTP 22 ff., AtomVM supports both the `address` and `addr` keys in this map 
 If you want to narrow the information you get back to a specific service type, you can specify a service name or port number (as a string value) as the second parameter:
 
 ```erlang
-{ok, AddrInfos} = net:getaddrinfo("www.atomvm.net", "https"),
+{ok, AddrInfos} = net:getaddrinfo("atomvm.org", "https"),
 ...
 ```
 

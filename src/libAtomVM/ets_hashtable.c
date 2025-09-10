@@ -53,17 +53,10 @@ struct EtsHashTable *ets_hashtable_new()
     return htable;
 }
 
-static void ets_hashtable_free_node(struct HNode *node, GlobalContext *global)
+void ets_hashtable_free_node(struct HNode *node, GlobalContext *global)
 {
     memory_destroy_heap(&node->heap, global);
     free(node);
-}
-
-void ets_hashtable_free_node_array(struct HNode **allocated, size_t size, GlobalContext *global)
-{
-    for (size_t i = 0; i < size; ++i) {
-        ets_hashtable_free_node(allocated[i], global);
-    }
 }
 
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global)
@@ -96,19 +89,19 @@ static void print_info(struct EtsHashTable *hash_table)
 
 struct HNode *ets_hashtable_new_node(term entry, int keypos)
 {
-
     struct HNode *new_node = malloc(sizeof(struct HNode));
     if (IS_NULL_PTR(new_node)) {
-        return NULL;
+        goto cleanup;
     }
 
-    size_t size = (size_t) memory_estimate_usage(entry);
-    if (memory_init_heap(&new_node->heap, size) != MEMORY_GC_OK) {
-        free(new_node);
-        return NULL;
+    size_t size = memory_estimate_usage(entry);
+    if (UNLIKELY(memory_init_heap(&new_node->heap, size) != MEMORY_GC_OK)) {
+        goto cleanup;
     }
 
     term new_entry = memory_copy_term_tree(&new_node->heap, entry);
+    assert(term_is_tuple(new_entry));
+    assert(term_get_tuple_arity(new_entry) >= keypos);
     term key = term_get_tuple_element(new_entry, keypos);
 
     new_node->next = NULL;
@@ -116,9 +109,13 @@ struct HNode *ets_hashtable_new_node(term entry, int keypos)
     new_node->entry = new_entry;
 
     return new_node;
+
+cleanup:
+    free(new_node);
+    return NULL;
 }
 
-EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
+EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global)
 {
     term key = new_node->key;
     uint32_t hash = hash_term(key, global);
@@ -133,7 +130,12 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
     struct HNode *node = hash_table->buckets[index];
     struct HNode *last_node = NULL;
     while (node) {
-        if (term_compare(key, node->key, TermCompareExact, global) == TermEquals) {
+        TermCompareResult cmp = term_compare(key, node->key, TermCompareExact, global);
+        if (UNLIKELY(cmp == TermCompareMemoryAllocFail)) {
+            return EtsHashtableOutOfMemory;
+        }
+
+        if (cmp == TermEquals) {
             if (opts & EtsHashtableAllowOverwrite) {
                 if (IS_NULL_PTR(last_node)) {
                     new_node->next = node->next;
@@ -145,8 +147,7 @@ EtsHashtableErrorCode ets_hashtable_insert(struct EtsHashTable *hash_table, stru
                 ets_hashtable_free_node(node, global);
                 return EtsHashtableOk;
             } else {
-                ets_hashtable_free_node(new_node, global);
-                return EtsHashtableFailure;
+                return EtsHashtableKeyAlreadyExists;
             }
         }
         last_node = node;
@@ -193,11 +194,8 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keyp
     while (node) {
         term key_to_compare = term_get_tuple_element(node->entry, keypos);
         if (term_compare(key, key_to_compare, TermCompareExact, global) == TermEquals) {
-
-            memory_destroy_heap(&node->heap, global);
             struct HNode *next_node = node->next;
-            free(node);
-
+            ets_hashtable_free_node(node, global);
             if (prev_node != NULL) {
                 prev_node->next = next_node;
             } else {
@@ -238,12 +236,12 @@ bool ets_hashtable_remove(struct EtsHashTable *hash_table, term key, size_t keyp
 #define LARGE_PRIME_TUPLE 16778821
 #define LARGE_PRIME_LIST 16779179
 #define LARGE_PRIME_MAP 16779449
+#define LARGE_PRIME_PORT 16778077
 
 static uint32_t hash_atom(term t, int32_t h, GlobalContext *global)
 {
-    AtomString atom_str = (uint8_t *) globalcontext_atomstring_from_term(global, t);
-    size_t len = atom_string_len(atom_str);
-    const uint8_t *data = (const uint8_t *) atom_string_data(atom_str);
+    size_t len;
+    const uint8_t *data = atom_table_get_atom_string(global->atom_table, term_to_atom_index(t), &len);
     for (size_t i = 0; i < len; ++i) {
         h = h * LARGE_PRIME_ATOM + data[i];
     }
@@ -273,7 +271,7 @@ static uint32_t hash_float(term t, int32_t h, GlobalContext *global)
     return h * LARGE_PRIME_FLOAT;
 }
 
-static uint32_t hash_pid(term t, int32_t h, GlobalContext *global)
+static uint32_t hash_local_pid(term t, int32_t h, GlobalContext *global)
 {
     UNUSED(global);
     uint32_t n = (uint32_t) term_to_local_process_id(t);
@@ -284,13 +282,61 @@ static uint32_t hash_pid(term t, int32_t h, GlobalContext *global)
     return h * LARGE_PRIME_PID;
 }
 
-static uint32_t hash_reference(term t, int32_t h, GlobalContext *global)
+static uint32_t hash_local_port(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t n = (uint32_t) term_to_local_process_id(t);
+    while (n) {
+        h = h * LARGE_PRIME_PORT + (n & 0xFF);
+        n >>= 8;
+    }
+    return h * LARGE_PRIME_PORT;
+}
+
+static uint32_t hash_external_pid(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t n = (uint32_t) term_get_external_pid_process_id(t);
+    while (n) {
+        h = h * LARGE_PRIME_PID + (n & 0xFF);
+        n >>= 8;
+    }
+    return h * LARGE_PRIME_PID;
+}
+
+static uint32_t hash_external_port(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t n = (uint32_t) term_get_external_port_number(t);
+    while (n) {
+        h = h * LARGE_PRIME_PORT + (n & 0xFF);
+        n >>= 8;
+    }
+    return h * LARGE_PRIME_PORT;
+}
+
+static uint32_t hash_local_reference(term t, int32_t h, GlobalContext *global)
 {
     UNUSED(global);
     uint64_t n = term_to_ref_ticks(t);
     while (n) {
         h = h * LARGE_PRIME_REF + (n & 0xFF);
         n >>= 8;
+    }
+    return h * LARGE_PRIME_REF;
+}
+
+static uint32_t hash_external_reference(term t, int32_t h, GlobalContext *global)
+{
+    UNUSED(global);
+    uint32_t l = term_get_external_reference_len(t);
+    const uint32_t *words = term_get_external_reference_words(t);
+    for (uint32_t i = 0; i < l; i++) {
+        uint32_t n = words[i];
+        while (n) {
+            h = h * LARGE_PRIME_REF + (n & 0xFF);
+            n >>= 8;
+        }
     }
     return h * LARGE_PRIME_REF;
 }
@@ -314,10 +360,18 @@ static uint32_t hash_term_incr(term t, int32_t h, GlobalContext *global)
         return hash_integer(t, h, global);
     } else if (term_is_float(t)) {
         return hash_float(t, h, global);
-    } else if (term_is_pid(t)) {
-        return hash_pid(t, h, global);
-    } else if (term_is_reference(t)) {
-        return hash_reference(t, h, global);
+    } else if (term_is_local_pid(t)) {
+        return hash_local_pid(t, h, global);
+    } else if (term_is_external_pid(t)) {
+        return hash_external_pid(t, h, global);
+    } else if (term_is_local_port(t)) {
+        return hash_local_port(t, h, global);
+    } else if (term_is_external_port(t)) {
+        return hash_external_port(t, h, global);
+    } else if (term_is_local_reference(t)) {
+        return hash_local_reference(t, h, global);
+    } else if (term_is_external_reference(t)) {
+        return hash_external_reference(t, h, global);
     } else if (term_is_binary(t)) {
         return hash_binary(t, h, global);
     } else if (term_is_tuple(t)) {

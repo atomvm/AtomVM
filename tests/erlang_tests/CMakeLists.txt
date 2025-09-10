@@ -30,6 +30,15 @@ function(compile_erlang module_name)
     )
 endfunction()
 
+function(compile_assembler module_name)
+    add_custom_command(
+        OUTPUT ${module_name}.beam
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
+        COMMENT "Compiling ${module_name}.S"
+    )
+endfunction()
+
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 function(generate_hrl out_file def_name in_file)
@@ -163,6 +172,7 @@ compile_erlang(test_concat_badarg)
 compile_erlang(register_and_whereis_badarg)
 compile_erlang(test_send)
 compile_erlang(test_open_port_badargs)
+compile_erlang(test_port_to_list)
 compile_erlang(echo)
 compile_erlang(pingpong)
 compile_erlang(prime_ext)
@@ -282,6 +292,11 @@ compile_erlang(test_unicode)
 
 compile_erlang(test_binary_part)
 compile_erlang(test_binary_split)
+compile_erlang(test_split_binary)
+compile_erlang(test_binary_replace)
+compile_erlang(test_binary_match)
+
+compile_erlang(test_zlib_compress)
 
 compile_erlang(plusone)
 compile_erlang(plusone2)
@@ -330,6 +345,7 @@ compile_erlang(literal_test0)
 compile_erlang(literal_test1)
 compile_erlang(literal_test2)
 compile_erlang(test_extended_literal_large)
+compile_erlang(bnot64)
 
 compile_erlang(test_list_eq)
 compile_erlang(test_tuple_eq)
@@ -354,6 +370,7 @@ compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_bs_int)
 compile_erlang(test_bs_int_unaligned)
+compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
 compile_erlang(test_catch)
 compile_erlang(test_gc)
@@ -387,6 +404,7 @@ compile_erlang(floatabs)
 compile_erlang(floatdiv)
 compile_erlang(floatmath)
 compile_erlang(floatext)
+compile_erlang(bif_bin_arith_ops)
 
 compile_erlang(boxed_is_not_float)
 compile_erlang(float_is_float)
@@ -501,8 +519,11 @@ compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
 
 compile_erlang(test_module_info)
+compile_erlang(erlang_module_loaded)
 
 compile_erlang(int64_build_binary)
+
+compile_erlang(test_link_port)
 
 compile_erlang(test_crypto_strong_rand_bytes)
 compile_erlang(test_atomvm_random)
@@ -523,8 +544,30 @@ compile_erlang(maps_nifs)
 compile_erlang(test_raw_raise)
 
 compile_erlang(test_ets)
-
 compile_erlang(bigint)
+
+compile_erlang(test_node)
+
+compile_erlang(test_op_bs_start_match)
+compile_assembler(test_op_bs_start_match_asm)
+compile_erlang(test_op_bs_create_bin)
+compile_assembler(test_op_bs_create_bin_asm)
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
+    set(OTP23_OR_GREATER_TESTS
+        test_op_bs_start_match_asm.beam
+    )
+else()
+    set(OTP23_OR_GREATER_TESTS)
+endif()
+
+if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
+    set(OTP25_OR_GREATER_TESTS
+        test_op_bs_create_bin_asm.beam
+    )
+else()
+    set(OTP25_OR_GREATER_TESTS)
+endif()
 
 add_custom_target(erlang_test_modules DEPENDS
     code_load_files
@@ -648,6 +691,7 @@ add_custom_target(erlang_test_modules DEPENDS
     register_and_whereis_badarg.beam
     test_send.beam
     test_open_port_badargs.beam
+    test_port_to_list.beam
     echo.beam
     pingpong.beam
     prime_ext.beam
@@ -768,6 +812,11 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_binary_part.beam
     test_binary_split.beam
+    test_split_binary.beam
+    test_binary_replace.beam
+    test_binary_match.beam
+
+    test_zlib_compress.beam
 
     plusone.beam
     plusone2.beam
@@ -818,6 +867,8 @@ add_custom_target(erlang_test_modules DEPENDS
     literal_test2.beam
     test_extended_literal_large.beam
 
+    bnot64.beam
+
     test_list_eq.beam
     test_tuple_eq.beam
     test_tuple_list_eq.beam
@@ -841,6 +892,7 @@ add_custom_target(erlang_test_modules DEPENDS
     test_bs.beam
     test_bs_int.beam
     test_bs_int_unaligned.beam
+    test_bs_start_match_live.beam
     test_bs_utf.beam
     test_catch.beam
     test_gc.beam
@@ -874,6 +926,7 @@ add_custom_target(erlang_test_modules DEPENDS
     floatdiv.beam
     floatmath.beam
     floatext.beam
+    bif_bin_arith_ops.beam
 
     boxed_is_not_float.beam
     float_is_float.beam
@@ -991,8 +1044,11 @@ add_custom_target(erlang_test_modules DEPENDS
     test_close_avm_pack.beam
 
     test_module_info.beam
+    erlang_module_loaded.beam
 
     int64_build_binary.beam
+
+    test_link_port.beam
 
     test_crypto_strong_rand_bytes.beam
     test_atomvm_random.beam
@@ -1015,4 +1071,12 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_ets.beam
     bigint.beam
+
+    test_node.beam
+
+    test_op_bs_start_match.beam
+    test_op_bs_create_bin.beam
+
+    ${OTP23_OR_GREATER_TESTS}
+    ${OTP25_OR_GREATER_TESTS}
 )

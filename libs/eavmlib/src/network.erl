@@ -39,10 +39,8 @@
 
 -define(SERVER, ?MODULE).
 
--type octet() :: 0..255.
--type ipv4_address() :: {octet(), octet(), octet(), octet()}.
 -type ipv4_info() :: {
-    IPAddress :: ipv4_address(), NetMask :: ipv4_address(), Gateway :: ipv4_address()
+    IPAddress :: inet:ip4_address(), NetMask :: inet:ip4_address(), Gateway :: inet:ip4_address()
 }.
 -type ip_info() :: ipv4_info().
 
@@ -123,7 +121,7 @@
 -type ap_started_config() :: {ap_started, fun(() -> term())}.
 -type ap_sta_connected_config() :: {sta_connected, fun((mac()) -> term())}.
 -type ap_sta_disconnected_config() :: {sta_disconnected, fun((mac()) -> term())}.
--type ap_sta_ip_assigned_config() :: {sta_ip_assigned, fun((ipv4_address()) -> term())}.
+-type ap_sta_ip_assigned_config() :: {sta_ip_assigned, fun((inet:ip4_address()) -> term())}.
 -type ap_config_property() ::
     ssid_config()
     | psk_config()
@@ -144,7 +142,14 @@
     | sntp_synchronized_config().
 -type sntp_config() :: {sntp, [sntp_config_property()]}.
 
--type network_config() :: [sta_config() | ap_config() | sntp_config()].
+-type mdns_hostname_config() :: {host, string() | binary()}.
+-type mdns_ttl_config() :: {ttl, pos_integer()}.
+-type mdns_config_property() ::
+    mdns_hostname_config()
+    | mdns_ttl_config().
+-type mdns_config() :: {mdns, [mdns_config_property()]}.
+
+-type network_config() :: [sta_config() | ap_config() | sntp_config() | mdns_config()].
 
 -type db() :: integer().
 
@@ -152,7 +157,8 @@
     config :: network_config(),
     port :: port(),
     ref :: reference(),
-    sta_ip_info :: ip_info()
+    sta_ip_info :: ip_info(),
+    mdns :: pid() | undefined
 }).
 
 %%-----------------------------------------------------------------------------
@@ -345,9 +351,11 @@ handle_info({Ref, sta_beacon_timeout} = _Msg, #state{ref = Ref, config = Config}
 handle_info({Ref, sta_disconnected} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sta_disconnected_callback(Config),
     {noreply, State};
-handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State) ->
+handle_info({Ref, {sta_got_ip, IpInfo}} = _Msg, #state{ref = Ref, config = Config} = State0) ->
     maybe_sta_got_ip_callback(Config, IpInfo),
-    {noreply, State#state{sta_ip_info = IpInfo}};
+    State1 = State0#state{sta_ip_info = IpInfo},
+    State2 = maybe_start_mdns(State1),
+    {noreply, State2};
 handle_info({Ref, ap_started} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_ap_started_callback(Config),
     {noreply, State};
@@ -431,6 +439,31 @@ maybe_sntp_sync_callback(Config, TimeVal) ->
     maybe_callback1({synchronized, TimeVal}, proplists:get_value(sntp, Config)).
 
 %% @private
+maybe_start_mdns(#state{mdns = MDNSResponder} = State) when is_pid(MDNSResponder) ->
+    mdns:stop(MDNSResponder),
+    maybe_start_mdns(State#state{mdns = undefined});
+maybe_start_mdns(#state{config = Config, sta_ip_info = {InterfaceAddr, _, _}} = State) ->
+    case proplists:get_value(mdns, Config) of
+        undefined ->
+            State;
+        MDNSConfig ->
+            MDNSMap0 = #{
+                hostname => proplists:get_value(hostname, MDNSConfig), interface => InterfaceAddr
+            },
+            MDNSMap1 =
+                case proplists:get_value(ttl, MDNSConfig) of
+                    undefined -> MDNSMap0;
+                    TTL -> MDNSMap0#{ttl => TTL}
+                end,
+            case mdns:start_link(MDNSMap1) of
+                {ok, Pid} ->
+                    State#state{mdns = Pid};
+                {error, _} ->
+                    State
+            end
+    end.
+
+%% @private
 maybe_callback0(_Key, undefined) ->
     ok;
 maybe_callback0(Key, Config) ->
@@ -457,20 +490,22 @@ maybe_callback1({Key, Arg} = Msg, Config) ->
     end.
 
 %% @private
+-spec get_port() -> port().
 get_port() ->
     case whereis(network_port) of
         undefined ->
             open_port();
-        Pid ->
-            Pid
+        Port ->
+            Port
     end.
 
 %% @private
+-spec open_port() -> port().
 open_port() ->
-    Pid = erlang:open_port({spawn, "network"}, []),
+    Port = erlang:open_port({spawn, "network"}, []),
     %Pid = spawn(?MODULE, simulation_loop, []),
-    erlang:register(network_port, Pid),
-    Pid.
+    erlang:register(network_port, Port),
+    Port.
 
 %% @private
 wait_for_ip(Timeout) ->

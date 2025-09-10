@@ -46,8 +46,10 @@ extern "C" {
     ctx->x[1] = (error_type_atom);   \
     return term_invalid_term();
 
-const struct Nif *nifs_get(AtomString module, AtomString function, int arity);
+const struct Nif *nifs_get(const char *mfa);
 
+// spawn opt is used by distribution nifs
+term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[]);
 #ifdef __cplusplus
 }
 #endif

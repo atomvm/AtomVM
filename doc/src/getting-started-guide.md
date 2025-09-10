@@ -259,7 +259,7 @@ For information about how to flash your application to your STM32, see the [Atom
 
 ## Getting Started on the Raspberry Pi RP2
 
-AtomVM supports deployment of the VM and applications onto boards based on Raspberry Pi RP2 socs, including RP2040 and RP2350. This includes [Raspberry Pi Pico and Pico-W](https://www.raspberrypi.com/products/raspberry-pi-pico/), as well as [Raspberry Pi Pico 2](https://www.raspberrypi.com/products/raspberry-pi-pico-2/) boards.  For information about supported boards, please refer to the AtomVM [Release Notes](./release-notes.md).
+AtomVM supports deployment of the VM and applications onto boards based on Raspberry Pi RP2 socs, including RP2040 and RP2350. This includes [Raspberry Pi Pico and Pico W](https://www.raspberrypi.com/products/raspberry-pi-pico/), as well as [Raspberry Pi Pico 2 and Pico 2 W](https://www.raspberrypi.com/products/raspberry-pi-pico-2/) boards.  For information about supported boards, please refer to the AtomVM [Release Notes](./release-notes.md).
 
 The following instructions show you how to install the AtomVM onto one of the [Raspberry Pi Pico](https://www.raspberrypi.com/products/raspberry-pi-pico/) boards.
 

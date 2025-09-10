@@ -39,6 +39,10 @@ binary:last/1, &binary_last_nif
 binary:part/3, &binary_part_nif
 binary:split/2, &binary_split_nif
 binary:split/3, &binary_split_nif
+binary:replace/3, &binary_replace_nif
+binary:replace/4, &binary_replace_nif
+binary:match/2, &binary_match_nif
+binary:match/3, &binary_match_nif
 calendar:system_time_to_universal_time/2, &system_time_to_universal_time_nif
 erlang:atom_to_binary/1, &atom_to_binary_nif
 erlang:atom_to_binary/2, &atom_to_binary_nif
@@ -112,10 +116,12 @@ erlang:put/2, &put_nif
 erlang:binary_to_term/1, &binary_to_term_nif
 erlang:binary_to_term/2, &binary_to_term_nif
 erlang:term_to_binary/1, &term_to_binary_nif
+erlang:split_binary/2, &split_binary_nif
 erlang:throw/1, &throw_nif
 erlang:raise/3, &raise_nif
 erlang:unlink/1, &unlink_nif
 erlang:pid_to_list/1, &pid_to_list_nif
+erlang:port_to_list/1, &port_to_list_nif
 erlang:ref_to_list/1, &ref_to_list_nif
 erlang:fun_to_list/1, &fun_to_list_nif
 erlang:function_exported/3, &function_exported_nif
@@ -126,6 +132,13 @@ erlang:group_leader/0, &group_leader_nif
 erlang:group_leader/2, &group_leader_nif
 erlang:get_module_info/1, &get_module_info_nif
 erlang:get_module_info/2, &get_module_info_nif
+erlang:setnode/2, &setnode_2_nif
+erlang:setnode/3, &setnode_3_nif
+erlang:dist_ctrl_get_data_notification/1, &dist_ctrl_get_data_notification_nif
+erlang:dist_ctrl_get_data/1, &dist_ctrl_get_data_nif
+erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
+erlang:module_loaded/1,&module_loaded_nif
+erlang:nif_error/1,&nif_error_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif
@@ -148,12 +161,14 @@ atomvm:posix_write/2, IF_HAVE_OPEN_CLOSE(&atomvm_posix_write_nif)
 atomvm:posix_select_read/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_read_nif)
 atomvm:posix_select_write/3, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_write_nif)
 atomvm:posix_select_stop/1, IF_HAVE_OPEN_CLOSE(&atomvm_posix_select_stop_nif)
+atomvm:subprocess/4, IF_HAVE_EXECVE(&atomvm_subprocess_nif)
 atomvm:posix_mkfifo/2, IF_HAVE_MKFIFO(&atomvm_posix_mkfifo_nif)
 atomvm:posix_unlink/1, IF_HAVE_UNLINK(&atomvm_posix_unlink_nif)
 atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posix_clock_settime_nif)
 atomvm:posix_opendir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_opendir_nif)
 atomvm:posix_closedir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_closedir_nif)
 atomvm:posix_readdir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_readdir_nif)
+atomvm:get_creation/0, &atomvm_get_creation_nif
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif
 code:all_available/0, &code_all_available_nif
@@ -195,3 +210,4 @@ math:sinh/1, &math_sinh_nif
 math:sqrt/1, &math_sqrt_nif
 math:tan/1, &math_tan_nif
 math:tanh/1, &math_tanh_nif
+zlib:compress/1, &zlib_compress_nif

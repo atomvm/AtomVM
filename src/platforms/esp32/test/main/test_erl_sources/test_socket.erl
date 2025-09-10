@@ -217,7 +217,7 @@ test_tcp_server(Active, Port) ->
     link(Pid),
     {ok, ConnectedSocket} =
         case call(ServerSocket, {accept, 30000}) of
-            {ok, Socket} when is_pid(Socket) ->
+            {ok, Socket} when is_port(Socket) ->
                 {ok, Socket};
             X ->
                 {unexpected_accept, X}

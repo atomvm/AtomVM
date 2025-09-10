@@ -21,10 +21,10 @@
 #include <limits.h>
 #include <string.h>
 
+#include "dist_nifs.h"
 #include "globalcontext.h"
 
 #include "atom_table.h"
-#include "atomshashtable.h"
 #include "avmpack.h"
 #include "context.h"
 #include "defaultatoms.h"
@@ -38,6 +38,7 @@
 #include "smp.h"
 #include "synclist.h"
 #include "sys.h"
+#include "term.h"
 #include "utils.h"
 #include "valueshashtable.h"
 
@@ -55,7 +56,7 @@ struct RegisteredProcess
     struct ListHead registered_processes_list_head;
 
     int atom_index;
-    int local_process_id;
+    term local_pid_or_port;
 };
 
 GlobalContext *globalcontext_new()
@@ -96,7 +97,7 @@ GlobalContext *globalcontext_new()
 
     glb->modules_by_index = NULL;
     glb->loaded_modules_count = 0;
-    glb->modules_table = atomshashtable_new();
+    glb->modules_table = valueshashtable_new();
     if (IS_NULL_PTR(glb->modules_table)) {
         atom_table_destroy(glb->atom_table);
         free(glb);
@@ -122,9 +123,15 @@ GlobalContext *globalcontext_new()
     smp_spinlock_init(&glb->ref_ticks_spinlock);
 #endif
 
-#if HAVE_OPEN && HAVE_CLOSE
+    glb->node_name = NONODE_AT_NOHOST_ATOM;
+    glb->creation = 0;
+    synclist_init(&glb->dist_connections);
+
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    glb->dist_connection_resource_type = enif_init_resource_type(&env, "dist_connection", &dist_connection_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+
+#if HAVE_OPEN && HAVE_CLOSE
     glb->posix_fd_resource_type = enif_init_resource_type(&env, "posix_fd", &posix_fd_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(glb->posix_fd_resource_type)) {
 #ifndef AVM_NO_SMP
@@ -331,6 +338,18 @@ bool globalcontext_process_exists(GlobalContext *glb, int32_t process_id)
     return p != NULL;
 }
 
+enum SendMessageResult globalcontext_post_message(GlobalContext *glb, int32_t process_id, Message *m)
+{
+    Context *p = globalcontext_get_process_lock(glb, process_id);
+    enum SendMessageResult result = SEND_MESSAGE_PROCESS_NOT_FOUND;
+    if (p) {
+        mailbox_post_message(p, &m->base);
+        globalcontext_get_process_unlock(glb, p);
+        result = SEND_MESSAGE_OK;
+    }
+    return result;
+}
+
 void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t)
 {
     Context *p = globalcontext_get_process_lock(glb, process_id);
@@ -349,15 +368,17 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
 }
 
 #ifdef AVM_TASK_DRIVER_ENABLED
-void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t)
+static inline enum SendMessageResult globalcontext_send_message_from_task_common(GlobalContext *glb, int32_t process_id, MailboxMessage *message, enum MessageType type, term t)
 {
-    MailboxMessage *message = NULL;
+    enum SendMessageResult result = SEND_MESSAGE_PROCESS_NOT_FOUND;
     bool postponed = false;
 #ifndef AVM_NO_SMP
     Context *p = NULL;
     if (globalcontext_get_process_trylock(glb, process_id, &p)) {
         if (p) {
-            message = mailbox_message_create_from_term(type, t);
+            if (message == NULL) {
+                message = mailbox_message_create_from_term(type, t);
+            }
             // Ensure we can acquire the spinlock
             if (smp_spinlock_trylock(&glb->processes_spinlock)) {
                 // We can send the message.
@@ -368,6 +389,7 @@ void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id
                 postponed = true;
             }
             globalcontext_get_process_unlock(glb, p);
+            result = SEND_MESSAGE_OK;
         }
     } else {
         postponed = true;
@@ -394,7 +416,20 @@ void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id
         } while (!ATOMIC_COMPARE_EXCHANGE_WEAK_PTR(&glb->message_queue, &current_first, queued_item));
         // Make sure the scheduler is busy
         sys_signal(glb);
+
+        result = SEND_MESSAGE_OK;
     }
+    return result;
+}
+
+enum SendMessageResult globalcontext_post_message_from_task(GlobalContext *glb, int32_t process_id, Message *message)
+{
+    return globalcontext_send_message_from_task_common(glb, process_id, &message->base, NormalMessage, term_nil());
+}
+
+void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t)
+{
+    globalcontext_send_message_from_task_common(glb, process_id, NULL, type, t);
 }
 
 static inline void globalcontext_process_message_queue(GlobalContext *glb)
@@ -474,7 +509,7 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx)
     SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
 }
 
-bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id)
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port)
 {
     struct ListHead *registered_processes_list = synclist_wrlock(&glb->registered_processes);
     struct ListHead *item;
@@ -492,7 +527,7 @@ bool globalcontext_register_process(GlobalContext *glb, int atom_index, int loca
         AVM_ABORT();
     }
     registered_process->atom_index = atom_index;
-    registered_process->local_process_id = local_process_id;
+    registered_process->local_pid_or_port = local_pid_or_port;
 
     list_append(registered_processes_list, &registered_process->registered_processes_list_head);
     synclist_unlock(&glb->registered_processes);
@@ -526,7 +561,7 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int target_pr
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (item, tmp, registered_processes_list) {
         struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->local_process_id == target_process_id) {
+        if (term_to_local_process_id(registered_process->local_pid_or_port) == target_process_id) {
             list_remove(item);
             free(registered_process);
         }
@@ -534,14 +569,14 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int target_pr
     synclist_unlock(&glb->registered_processes);
 }
 
-int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
+term globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 {
     struct ListHead *registered_processes_list = synclist_rdlock(&glb->registered_processes);
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
         const struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
         if (registered_process->atom_index == atom_index) {
-            int result = registered_process->local_process_id;
+            term result = registered_process->local_pid_or_port;
             synclist_unlock(&glb->registered_processes);
             return result;
         }
@@ -549,7 +584,7 @@ int globalcontext_get_registered_process(GlobalContext *glb, int atom_index)
 
     synclist_unlock(&glb->registered_processes);
 
-    return 0;
+    return UNDEFINED_ATOM;
 }
 
 term globalcontext_get_registered_name_process(GlobalContext *glb, int local_process_id)
@@ -558,7 +593,7 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
     struct ListHead *item;
     LIST_FOR_EACH (item, registered_processes_list) {
         struct RegisteredProcess *registered_process = GET_LIST_ENTRY(item, struct RegisteredProcess, registered_processes_list_head);
-        if (registered_process->local_process_id == local_process_id) {
+        if (term_to_local_process_id(registered_process->local_pid_or_port) == local_process_id) {
             int result = registered_process->atom_index;
             synclist_unlock(&glb->registered_processes);
             return term_from_atom_index(result);
@@ -568,40 +603,27 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
     return term_invalid_term();
 }
 
-bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b)
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, atom_index_t atom_index_a, AtomString atom_string_b)
 {
-    AtomString atom_string_a;
-    atom_string_a = atom_table_get_atom_string(glb->atom_table, atom_index_a);
-    return atom_are_equals(atom_string_a, atom_string_b);
-}
-
-AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t)
-{
-    if (!term_is_atom(t)) {
-        AVM_ABORT();
-    }
-    unsigned long atom_index = term_to_atom_index(t);
-    AtomString str = atom_table_get_atom_string(glb->atom_table, atom_index);
-    if (IS_NULL_PTR(str)) {
-        return NULL;
-    }
-    return str;
+    return atom_table_is_equal_to_atom_string(glb->atom_table, atom_index_a, atom_string_b);
 }
 
 term globalcontext_existing_term_from_atom_string(GlobalContext *glb, AtomString atom_string)
 {
-    long atom_index = atom_table_get_index(glb->atom_table, atom_string);
-    if (UNLIKELY(atom_index == ATOM_TABLE_NOT_FOUND)) {
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
+        glb->atom_table, atom_string_data(atom_string), atom_string_len(atom_string), AtomTableAlreadyExisting, &global_atom_index);
+    if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
         return term_invalid_term();
     }
-    return term_from_atom_index(atom_index);
+    return term_from_atom_index(global_atom_index);
 }
 
 int globalcontext_insert_module(GlobalContext *global, Module *module)
 {
+    term module_name = module_get_name(module);
     SMP_RWLOCK_WRLOCK(global->modules_lock);
-    AtomString module_name_atom = module_get_atom_string_by_id(module, 1, global);
-    if (!atomshashtable_insert(global->modules_table, module_name_atom, TO_ATOMSHASHTABLE_VALUE(module))) {
+    if (!valueshashtable_insert(global->modules_table, term_to_atom_index(module_name), TO_VALUESHASHTABLE_VALUE(module))) {
         SMP_RWLOCK_UNLOCK(global->modules_lock);
         return -1;
     }
@@ -651,39 +673,38 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
         return NULL;
     }
 
-    Module *new_module = module_new_from_iff_binary(global, beam_module, beam_module_size);
-    new_module->module_platform_data = NULL;
-
-    return new_module;
+    return module_new_from_iff_binary(global, beam_module, beam_module_size);
 }
 
-Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom)
+Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name_atom)
 {
-    Module *found_module = (Module *) atomshashtable_get_value(global->modules_table, module_name_atom, (unsigned long) NULL);
+    Module *found_module = (Module *) valueshashtable_get_value(global->modules_table, module_name_atom, TO_VALUESHASHTABLE_VALUE(NULL));
 
     if (!found_module) {
-        char *module_name = malloc(256 + 5);
-        if (IS_NULL_PTR(module_name)) {
+        size_t module_name_len;
+        const uint8_t *module_name = atom_table_get_atom_string(global->atom_table, module_name_atom, &module_name_len);
+
+        char *module_file_name = malloc(module_name_len + 6);
+        if (IS_NULL_PTR(module_file_name)) {
             return NULL;
         }
-
-        atom_string_to_c(module_name_atom, module_name, 256);
-        strcat(module_name, ".beam");
-        Module *loaded_module = globalcontext_load_module_from_avm(global, module_name);
+        memcpy(module_file_name, module_name, module_name_len);
+        memcpy(module_file_name + module_name_len, ".beam", 6);
+        Module *loaded_module = globalcontext_load_module_from_avm(global, module_file_name);
         if (IS_NULL_PTR(loaded_module)) {
             // Platform may implement sys_load_module_from_file
-            loaded_module = sys_load_module_from_file(global, module_name);
+            loaded_module = sys_load_module_from_file(global, module_file_name);
         }
         if (UNLIKELY(!loaded_module || (globalcontext_insert_module(global, loaded_module) < 0))) {
-            fprintf(stderr, "Failed load module: %s\n", module_name);
-            free(module_name);
+            fprintf(stderr, "Failed load module: %s\n", module_file_name);
+            free(module_file_name);
             if (loaded_module) {
                 module_destroy(loaded_module);
             }
             return NULL;
         }
 
-        free(module_name);
+        free(module_file_name);
 
         return loaded_module;
     }
@@ -699,26 +720,41 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index)
     return result;
 }
 
-bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks)
+run_result_t globalcontext_run(GlobalContext *glb, Module *startup_module, FILE *out_f)
 {
-    struct ListHead *pitem;
-
-    struct ListHead *processes_table_list = synclist_wrlock(&global->processes_table);
-    LIST_FOR_EACH (pitem, processes_table_list) {
-        Context *p = GET_LIST_ENTRY(pitem, Context, processes_table_head);
-
-        struct ListHead *item;
-        LIST_FOR_EACH (item, &p->monitors_head) {
-            struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
-            if (monitor->ref_ticks == ref_ticks) {
-                list_remove(&monitor->monitor_list_head);
-                free(monitor);
-                synclist_unlock(&global->processes_table);
-                return true;
-            }
+    Context *ctx = context_new(glb);
+    ctx->leader = 1;
+    Module *init_module = globalcontext_get_module(glb, INIT_ATOM_INDEX);
+    if (IS_NULL_PTR(init_module)) {
+        context_execute_loop(ctx, startup_module, "start", 0);
+    } else {
+        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(2) + LIST_SIZE(2, 0)) != MEMORY_GC_OK)) {
+            fprintf(stderr, "Unable to allocate arguments.\n");
+            return RUN_MEMORY_FAILURE;
         }
+        term s_opt = term_from_literal_binary("-s", strlen("-s"), &ctx->heap, glb);
+        term list = term_list_prepend(module_get_name(startup_module), term_nil(), &ctx->heap);
+        ctx->x[0] = term_list_prepend(s_opt, list, &ctx->heap);
+
+        context_execute_loop(ctx, init_module, "boot", 1);
     }
 
-    synclist_unlock(&global->processes_table);
-    return false;
+    term ret_value = ctx->x[0];
+    if (out_f) {
+        fprintf(out_f, "Return value: ");
+        term_display(out_f, ret_value, ctx);
+        fprintf(out_f, "\n");
+    }
+
+    run_result_t result;
+    // ok or 0. 0 is required for running tests for emscripten
+    if (ret_value == OK_ATOM || ret_value == term_from_int(0)) {
+        result = RUN_SUCCESS;
+    } else {
+        result = RUN_RESULT_NOT_OK;
+    }
+
+    context_destroy(ctx);
+
+    return result;
 }

@@ -43,14 +43,17 @@ jobs:
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:21
+          archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:22
+          archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:23
+          archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
@@ -71,23 +74,28 @@ jobs:
           container: erlang:27
 
         # This is ARM64
-        - os: "macos-14"
-          otp: "25"
-          path_prefix: "/opt/homebrew/opt/erlang@25/bin:"
-
-        - os: "macos-14"
+        - os: "macos-15"
           otp: "26"
           path_prefix: "/opt/homebrew/opt/erlang@26/bin:"
 
-        - os: "macos-14"
+        - os: "macos-15"
           otp: "27"
           path_prefix: "/opt/homebrew/opt/erlang@27/bin:"
+
+        - os: "macos-15"
+          otp: "28"
+          path_prefix: "/opt/homebrew/opt/erlang@28/bin:"
     steps:
     # Setup
     - name: "Checkout repo"
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
+
+    - name: "Switch to archive.debian.org"
+      if: matrix.archive == 'true'
+      run: |
+        sed -i 's|deb\.debian\.org|archive.debian.org/debian-archive|g' /etc/apt/sources.list
 
     - name: "Install deps (container)"
       if: runner.os == 'Linux'
@@ -97,7 +105,7 @@ jobs:
 
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
-      run: brew install gperf erlang@${{ matrix.otp }} ninja mbedtls rebar3
+      run: brew update && brew install gperf erlang@${{ matrix.otp }} mbedtls rebar3
 
     # Build
     - name: "Build: create build dir"
@@ -142,7 +150,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
-        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -s tests -s init stop -noshell
+        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -pa libs/eavmlib/src/beams -s tests -s init stop -noshell
 
     # Test
     - name: "Run tests/libs/etest/test_eunit with OTP eunit"

@@ -57,6 +57,11 @@ struct Context;
 typedef struct Context Context;
 #endif
 
+#ifndef TYPEDEF_GLOBALCONTEXT
+#define TYPEDEF_GLOBALCONTEXT
+typedef struct GlobalContext GlobalContext;
+#endif
+
 struct Heap;
 
 #ifndef TYPEDEF_HEAP
@@ -69,7 +74,10 @@ typedef struct Heap Heap;
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
+#ifndef TYPEDEF_MESSAGE
+#define TYPEDEF_MESSAGE
 typedef struct Message Message;
+#endif
 
 enum MessageType
 {
@@ -81,9 +89,15 @@ enum MessageType
     TrapExceptionSignal,
     FlushMonitorSignal,
     FlushInfoMonitorSignal,
+    SetGroupLeaderSignal,
     MonitorSignal,
-    UnlinkSignal,
+    UnlinkIDSignal,
+    UnlinkIDAckSignal,
+    UnlinkRemoteIDSignal,
+    UnlinkRemoteIDAckSignal,
+    LinkExitSignal,
     DemonitorSignal,
+    MonitorDownSignal,
 };
 
 struct MailboxMessage
@@ -134,6 +148,14 @@ struct RefSignal
 {
     MailboxMessage base;
 
+    uint64_t ref_ticks;
+};
+
+struct ImmediateRefSignal
+{
+    MailboxMessage base;
+
+    term immediate;
     uint64_t ref_ticks;
 };
 
@@ -241,6 +263,16 @@ void mailbox_send_built_in_atom_request_signal(
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks);
 
 /**
+ * @brief Sends an immediate and ref signal to a certain mailbox.
+ *
+ * @param c the process context.
+ * @param type the type of the signal
+ * @param immediate the immediate term to send (atom or pid)
+ * @param ref_ticks the ref
+ */
+void mailbox_send_immediate_ref_signal(Context *c, enum MessageType type, term immediate, uint64_t ref_ticks);
+
+/**
  * @brief Sends a ref immediate signal to a certain mailbox.
  *
  * @param c the process context.
@@ -256,6 +288,17 @@ void mailbox_send_monitor_signal(Context *c, enum MessageType type, struct Monit
  * @param type the type of the signal
  */
 void mailbox_send_empty_body_signal(Context *c, enum MessageType type);
+
+/**
+ * @brief Post a message.
+ *
+ * @details Post a message to a given context. Context gets ownership of the
+ * created message.
+ *
+ * @param c the process context.
+ * @param m the mailbox message to send
+ */
+void mailbox_post_message(Context *c, MailboxMessage *m);
 
 #ifdef AVM_TASK_DRIVER_ENABLED
 /**
@@ -359,6 +402,23 @@ MailboxMessage *mailbox_message_create_from_term(enum MessageType type, term t);
  * @param heap heap to append the message to.
  */
 void mailbox_message_dispose(MailboxMessage *m, Heap *heap);
+
+/**
+ * @brief Allocate and serialize a term to a normal message.
+ *
+ * @details Can be called from a task or even ISR (provided malloc works).
+ * @param t the term that will be sent
+ */
+Message *mailbox_message_create_normal_message_from_term(term t);
+
+/**
+ * @brief Dispose an unsent normal message. The message will be freed.
+ *
+ * @param m the message to dispose.
+ * @param global the global context
+ * @param from_task boolean, true if called from a task, false otherwise
+ */
+void mailbox_message_dispose_unsent(Message *m, GlobalContext *global, bool from_task);
 
 /**
  * @brief Remove next message from mailbox.

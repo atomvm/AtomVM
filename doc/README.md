@@ -16,7 +16,6 @@ AtomVM documentation is built using the following tools:
 Dependencies and make files are generated via the standard CMake tooling used in AtomVM builds.  However, the documentation sets are not built by default.  Instead, issue the following make targets after a CMake
 
 * `make sphinx-html` to build the Sphinx HTML documentation (includes libAtomVM 'C' and Erlang APIs)
-* `make sphinx-pdf` to build the Sphinx PDF documentation, (includes Erlang APIs)
 * `make sphinx-epub` to build the Sphinx ePUB documentation, (includes Erlang APIs)
 * `make doc` to build all of the above
 
@@ -40,10 +39,6 @@ To build documentation using Sphinx, we recommend using a Python virtual environ
     ...
     (sphinx) shell$ python3 -m pip install pygments
 
-
-    ## needed for PDF
-    (sphinx) shell$ python3 -m pip install rinohtype
-    (sphinx) shell$ python3 -m pip install pillow
 
 There is also a reqirements.txt to simplify installing all of the dependencies at once.
 

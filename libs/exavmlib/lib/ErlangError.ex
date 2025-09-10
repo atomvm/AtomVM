@@ -22,6 +22,7 @@
 defmodule ErlangError do
   # This avoids crashing the compiler at build time
   @compile {:autoload, false}
+  @compile {:no_warn_undefined, BadStructError}
 
   defexception [:original]
 
@@ -56,7 +57,9 @@ defmodule ErlangError do
   end
 
   def normalize({:badstruct, struct, term}, _stacktrace) do
-    %BadStructError{struct: struct, term: term}
+    # starting from v1.19.0, BadStructError is not available
+    # still older Elixir versions might need it
+    BadStructError.__struct__(%{struct: struct, term: term})
   end
 
   def normalize({:badmatch, term}, _stacktrace) do

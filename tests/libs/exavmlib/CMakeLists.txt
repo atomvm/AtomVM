@@ -22,4 +22,8 @@ project(test_exavmlib)
 
 include(BuildElixir)
 
-pack_runnable(Tests Tests estdlib eavmlib exavmlib etest)
+set(TEST_MODULES
+    Some.Submodule
+)
+
+pack_test(Tests Tests ${TEST_MODULES})

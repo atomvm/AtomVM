@@ -28,6 +28,8 @@
     get_atom/1,
     get_binary/1,
     test_atom_decoding_checks/0,
+    test_encode_pid/0,
+    test_encode_port/0,
     id/1
 ]).
 
@@ -172,6 +174,10 @@ start() ->
     ok = test_mutate_encodings(),
     ok = test_atom_decoding(),
     ok = test_atom_decoding_checks(),
+    ok = test_encode_pid(),
+    ok = test_encode_reference(),
+    ok = test_encode_port(),
+    ok = test_atom_encoding(),
     0.
 
 test_reverse(T, Interop) ->
@@ -334,6 +340,13 @@ get_binary(Id) ->
         % 'hello'
         latin1_as_utf8_3 ->
             <<131, 119, 5, 104, 101, 108, 108, 111>>;
+        % 'hello'
+        short_with_two_bytes_length ->
+            <<131, 118, 5:16, "hello">>;
+        % 'hello'
+        long_with_two_bytes_length ->
+            <<131, 118, 256:16,
+                "🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘"/utf8>>;
         % valid length, but truncated utf8
         invalid_utf8_1 ->
             <<131, 119, 5, 230, 188, 162, 229, 173>>;
@@ -359,14 +372,29 @@ get_binary(Id) ->
 
 get_atom(Id) ->
     case Id of
-        latin1_1 -> 'buondì';
-        latin1_2 -> 'ðñ÷aþbÿ';
-        latin1_3 -> 'hello';
-        jp_1 -> '漢字';
-        jp_2 -> 'Unicodeで使える8ビット';
-        latin1_as_utf8_1 -> 'buondì';
-        latin1_as_utf8_2 -> 'ðñ÷aþbÿ';
-        latin1_as_utf8_3 -> 'hello'
+        latin1_1 ->
+            'buondì';
+        latin1_2 ->
+            'ðñ÷aþbÿ';
+        latin1_3 ->
+            'hello';
+        jp_1 ->
+            '漢字';
+        jp_2 ->
+            'Unicodeで使える8ビット';
+        latin1_as_utf8_1 ->
+            'buondì';
+        latin1_as_utf8_2 ->
+            'ðñ÷aþbÿ';
+        latin1_as_utf8_3 ->
+            'hello';
+        short_with_two_bytes_length ->
+            'hello';
+        % literal only works with OTP >= 28
+        long_with_two_bytes_length ->
+            list_to_atom(
+                ?MODULE:id("🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘🌑🌒🌓🌔🌕🌖🌗🌘")
+            )
     end.
 
 test_atom_decoding() ->
@@ -378,6 +406,8 @@ test_atom_decoding() ->
     true = compare_pair(latin1_as_utf8_1),
     true = compare_pair(latin1_as_utf8_2),
     true = compare_pair(latin1_as_utf8_3),
+    true = compare_pair(short_with_two_bytes_length),
+    true = compare_pair(long_with_two_bytes_length),
     ok.
 
 test_atom_decoding_checks() ->
@@ -399,6 +429,617 @@ test_atom_decoding_checks() ->
     ok = expect_badarg(make_binterm_fun(invalid_utf8_seq_3)),
     ok.
 
+test_encode_pid() ->
+    Bin = term_to_binary(self()),
+    Pid = binary_to_term(Bin),
+    Pid ! hello,
+    Pid1 = binary_to_term(
+        <<131, 88, 119, 13, "nonode@nohost", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0>>
+    ),
+    true = is_pid(Pid1),
+    true = is_process_alive(Pid1),
+    ok =
+        receive
+            hello -> ok
+        after 500 -> error
+        end,
+    {ExpectedSize, CreationOrder} =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                {29, true};
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease =:= "21" -> {27, true};
+                    OTPRelease =:= "22" -> {27, false};
+                    OTPRelease < "26" -> {30, true};
+                    % small utf8 atom
+                    true -> {29, true}
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+
+    % Creation is not displayed in list representation
+    FalsePid1 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 1:32, 0:32, 0:32>>, "26"
+    ),
+    true = is_pid(FalsePid1),
+    "<0.1.0>" = pid_to_list(FalsePid1),
+    FalsePid1Cr = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 1:32, 0:32, 1:32>>, "26"
+    ),
+    "<0.1.0>" = pid_to_list(FalsePid1Cr),
+    false = FalsePid1 =:= FalsePid1Cr,
+    CreationOrder = FalsePid1 < FalsePid1Cr,
+
+    % Order is done by pid on a given node
+    FalsePid2 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 2:32, 0:32, 0:32>>, "26"
+    ),
+    "<0.2.0>" = pid_to_list(FalsePid2),
+    false = FalsePid1 =:= FalsePid2,
+    true = FalsePid1 < FalsePid2,
+    true = FalsePid1Cr < FalsePid2,
+
+    TruePid1 = binary_to_term_idempotent(
+        <<131, 88, 119, 4, "true", 1:32, 0:32, 0:32>>, "26"
+    ),
+    true = is_pid(TruePid1),
+    "<1.1.0>" = pid_to_list(TruePid1),
+    TruePid1Again = binary_to_term(term_to_binary(TruePid1)),
+    true = TruePid1Again =:= TruePid1,
+
+    % Order is done by node atom, with local pid as nonode@nohost
+    true = Pid1 > binary_to_term_idempotent(<<131, 88, 119, 5, "false", 1:32, 0:32, 0:32>>, "26"),
+    true = Pid1 > binary_to_term_idempotent(<<131, 88, 119, 6, "nonode", 1:32, 0:32, 0:32>>, "26"),
+    true = Pid1 < binary_to_term_idempotent(<<131, 88, 119, 6, "nonodf", 1:32, 0:32, 0:32>>, "26"),
+
+    % Order
+    FalsePid_42_43_44 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 42:32, 43:32, 44:32>>, "26"
+    ),
+    FalsePid_42_44_43 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 42:32, 44:32, 43:32>>, "26"
+    ),
+    TruePid_42_43_44 = binary_to_term_idempotent(
+        <<131, 88, 119, 4, "true", 42:32, 43:32, 44:32>>, "26"
+    ),
+    FalsePid_44_43_42 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 44:32, 43:32, 42:32>>, "26"
+    ),
+    TruePid_44_43_42 = binary_to_term_idempotent(
+        <<131, 88, 119, 4, "true", 44:32, 43:32, 42:32>>, "26"
+    ),
+    FalsePid_43_43_43 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 43:32, 43:32, 43:32>>, "26"
+    ),
+    FalsePid_42_43_45 = binary_to_term_idempotent(
+        <<131, 88, 119, 5, "false", 42:32, 43:32, 45:32>>, "26"
+    ),
+
+    % Pid first, serial second, atom third and creation fourth
+    true = FalsePid_42_43_44 < FalsePid_43_43_43,
+    true = FalsePid_42_43_44 < FalsePid_42_44_43,
+    true = FalsePid_43_43_43 < FalsePid_44_43_42,
+    true = FalsePid_42_43_44 < TruePid_42_43_44,
+    true = FalsePid_42_43_44 < TruePid_44_43_42,
+    true = FalsePid_44_43_42 > TruePid_42_43_44,
+    true = FalsePid_42_43_45 < TruePid_42_43_44,
+    true = FalsePid_42_44_43 > TruePid_42_43_44,
+
+    % Not enough data
+    ok =
+        try
+            binary_to_term(<<131, 88, 119, 4, "true", 1:32, 2:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 88, 119, 4, "true", 1:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 88, 119, 4, "true">>)
+        catch
+            error:badarg -> ok
+        end,
+
+    % Node must be an atom
+    ok =
+        try
+            binary_to_term(<<131, 88, 106, 1:32, 2:32, 3:32>>)
+        catch
+            error:badarg -> ok
+        end,
+
+    case has_setnode_creation() of
+        true ->
+            % Test distributed pid
+            Ref42 = do_setnode(test@test_node, 42),
+            DistributedPid1 = binary_to_term(
+                <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
+            ),
+            true = is_pid(DistributedPid1),
+            true = is_process_alive(DistributedPid1),
+
+            DistributedBin42 = term_to_binary(self()),
+            true = DistributedBin42 =/= Bin,
+            DistributedPid42 = binary_to_term(DistributedBin42),
+            true = DistributedPid42 =:= Pid,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+            Bin = term_to_binary(self()),
+
+            Ref43 = do_setnode(test@test_node, 43),
+            DistributedBin43 = term_to_binary(self()),
+            true = DistributedBin43 =/= DistributedBin42,
+            DistributedPid43 = binary_to_term(DistributedBin43),
+            true = DistributedPid43 =:= Pid,
+
+            ok = do_unsetnode(Ref43),
+            Bin = term_to_binary(self()),
+            ok;
+        false ->
+            ok
+    end,
+    ok.
+
+has_setnode_creation() ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            true;
+        "BEAM" ->
+            OTPRelease = erlang:system_info(otp_release),
+            OTPRelease >= "23"
+    end.
+
+do_setnode(Node, Creation) ->
+    {NetKernelPid, MonitorRef} = spawn_opt(
+        fun() ->
+            receive
+                quit -> ok
+            end
+        end,
+        [monitor]
+    ),
+    register(net_kernel, NetKernelPid),
+    true = erlang:setnode(Node, Creation),
+    Node = node(),
+    {NetKernelPid, MonitorRef}.
+
+do_unsetnode({NetKernelPid, MonitorRef}) ->
+    NetKernelPid ! quit,
+    ok =
+        receive
+            {'DOWN', MonitorRef, process, NetKernelPid, normal} -> ok
+        after 1000 -> timeout
+        end,
+    case node() of
+        nonode@nohost ->
+            ok;
+        _Other ->
+            % On BEAM, node may not be reset immediately
+            "BEAM" = erlang:system_info(machine),
+            sleep(100),
+            nonode@nohost = node()
+    end,
+    ok.
+
+test_encode_port() ->
+    TestPort = open_port({spawn, "echo"}, []),
+    Bin = term_to_binary(TestPort),
+    TestPort = binary_to_term(Bin),
+    true = is_port(TestPort),
+    {ExpectedSize, SupportsV4PortEncoding} =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom
+                {29, true};
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> {23, false};
+                    OTPRelease < "24" -> {26, false};
+                    % v4 is supported but not the default
+                    OTPRelease < "26" -> {26, true};
+                    % small utf8 atom
+                    true -> {29, true}
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+    case SupportsV4PortEncoding of
+        true ->
+            LocalPort1 = binary_to_term(
+                <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
+            ),
+            true = is_port(LocalPort1),
+            "#Port<0.1>" = port_to_list(LocalPort1),
+            Port1 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 0:32>>),
+            Port2 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 1:32>>),
+            false = Port1 =:= Port2,
+            true = Port1 < Port2,
+            "#Port<1.43>" = port_to_list(Port1),
+            "#Port<1.43>" = port_to_list(Port2),
+
+            % Order
+            FalsePort_42_43 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 42:64, 43:32>>, "26"
+            ),
+            FalsePort_43_42 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 43:64, 42:32>>, "26"
+            ),
+            FalsePort_43_43 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "false", 43:64, 43:32>>, "26"
+            ),
+            FalsfPort_42_41 = binary_to_term_idempotent(
+                <<131, 120, 119, 5, "falsf", 42:64, 41:32>>, "26"
+            ),
+
+            % Node first, creation second, number third
+            true = FalsePort_42_43 > FalsePort_43_42,
+            true = FalsfPort_42_41 > FalsePort_42_43,
+            true = FalsfPort_42_41 > FalsePort_43_42,
+            true = FalsePort_43_42 < FalsePort_43_43,
+
+            % Order is done by node atom, with local pid as nonode@nohost
+            true =
+                TestPort >
+                    binary_to_term_idempotent(<<131, 120, 119, 5, "false", 1:64, 0:32>>, "26"),
+            true =
+                TestPort >
+                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonode", 1:64, 0:32>>, "26"),
+            true =
+                TestPort <
+                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonodf", 1:64, 0:32>>, "26"),
+
+            ok;
+        false ->
+            ok
+    end,
+    case has_setnode_creation() of
+        true ->
+            % Test distributed ports
+            % Test doesn't pass on BEAM if we use 42 and 43 like for refs,
+            % as there probably is a side-effect we don't have
+            Ref42 = do_setnode(test@test_node, 1042),
+            DistributedBin42 = term_to_binary(TestPort),
+            true = DistributedBin42 =/= Bin,
+            TestRef42 = binary_to_term(DistributedBin42),
+            true = TestRef42 =:= TestPort,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+
+            Ref43 = do_setnode(test@test_node, 1043),
+            DistributedBin43 = term_to_binary(TestPort),
+            true = DistributedBin43 =/= DistributedBin42,
+            TestRef43 = binary_to_term(DistributedBin43),
+            true = TestRef43 =:= TestPort,
+            ExpectedSize = byte_size(DistributedBin43) - 1,
+
+            % If our creation is 1043, encoded binary with creation 1042 is a different port
+            TestRef42_43 = binary_to_term(DistributedBin42),
+            false = TestRef42_43 =:= TestPort,
+
+            ok = do_unsetnode(Ref43),
+            ok;
+        false ->
+            ok
+    end,
+    ok.
+
+test_encode_reference() ->
+    TestRef = make_ref(),
+    Bin = term_to_binary(TestRef),
+    Ref = binary_to_term(Bin),
+    true = is_reference(Ref),
+    Ref123 = binary_to_term(
+        <<131, 90, 0, 2, 119, 13, "nonode@nohost", 0:32, 1:32, 2:32>>
+    ),
+    true = is_reference(Ref123),
+    {ExpectedSize, HasV4NC} =
+        case erlang:system_info(machine) of
+            "ATOM" ->
+                % small utf8 atom & reference with 2 words
+                {31, true};
+            "BEAM" ->
+                OTPRelease = erlang:system_info(otp_release),
+                if
+                    OTPRelease < "23" -> {33, false};
+                    OTPRelease < "24" -> {36, false};
+                    OTPRelease < "26" -> {36, true};
+                    % small utf8 atom
+                    true -> {35, true}
+                end
+        end,
+    ExpectedSize = byte_size(Bin),
+
+    % Creation is not displayed in list representation
+    Ref1 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>, "26"),
+    Ref2 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 2:32, 43:32>>, "26"),
+    false = Ref1 =:= Ref2,
+    true = Ref1 < Ref2,
+    "#Ref<1.43>" = ref_to_list(Ref1),
+    "#Ref<1.43>" = ref_to_list(Ref2),
+
+    % Test order
+    Ref3 = binary_to_term_idempotent(<<131, 90, 0, 2, 119, 4, "true", 1:32, 43:32, 44:32>>, "26"),
+    Ref4 = binary_to_term_idempotent(<<131, 90, 0, 2, 119, 4, "true", 1:32, 44:32, 43:32>>, "26"),
+    "#Ref<1.44.43>" = ref_to_list(Ref3),
+    "#Ref<1.43.44>" = ref_to_list(Ref4),
+    true = Ref3 > Ref4,
+    true = Ref4 > Ref1,
+
+    Ref5 = binary_to_term_idempotent(
+        <<131, 90, 0, 3, 119, 4, "true", 1:32, 42:32, 43:32, 44:32>>, "26"
+    ),
+    Ref6 = binary_to_term_idempotent(
+        <<131, 90, 0, 3, 119, 4, "true", 1:32, 44:32, 43:32, 42:32>>, "26"
+    ),
+    "#Ref<1.44.43.42>" = ref_to_list(Ref5),
+    "#Ref<1.42.43.44>" = ref_to_list(Ref6),
+    true = Ref5 > Ref6,
+    true = Ref6 > Ref3,
+
+    % Starting from OTP-24 that introduced DFLAG_V4_NC, references can have 4 or 5 words
+    if
+        HasV4NC ->
+            Ref7 = binary_to_term_idempotent(
+                <<131, 90, 0, 4, 119, 4, "true", 1:32, 41:32, 42:32, 43:32, 44:32>>, "26"
+            ),
+            Ref8 = binary_to_term_idempotent(
+                <<131, 90, 0, 4, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32>>, "26"
+            ),
+            "#Ref<1.44.43.42.41>" = ref_to_list(Ref7),
+            "#Ref<1.41.42.43.44>" = ref_to_list(Ref8),
+            true = Ref7 > Ref8,
+            true = Ref8 > Ref5,
+
+            Ref9 = binary_to_term_idempotent(
+                <<131, 90, 0, 5, 119, 4, "true", 1:32, 40:32, 41:32, 42:32, 43:32, 44:32>>, "26"
+            ),
+            RefA = binary_to_term_idempotent(
+                <<131, 90, 0, 5, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32, 40:32>>, "26"
+            ),
+            "#Ref<1.44.43.42.41.40>" = ref_to_list(Ref9),
+            "#Ref<1.40.41.42.43.44>" = ref_to_list(RefA),
+            true = Ref9 > RefA,
+            true = RefA > Ref7;
+        true ->
+            ok
+    end,
+
+    % Zero-length is tolerated
+    RefB = binary_to_term_idempotent(<<131, 90, 0, 0, 119, 4, "true", 1:32>>, "26"),
+    "#Ref<1>" = ref_to_list(RefB),
+    true = RefB < Ref1,
+
+    % Creation comes before first word in comparison
+    % Ref1 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 1:32, 43:32>>, "26"),
+    % Ref2 = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 2:32, 43:32>>, "26"),
+    RefC = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 2:32, 42:32>>, "26"),
+    true = RefC < Ref2,
+    true = RefC > Ref1,
+
+    % Node atom comes first
+    RefD = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 5, "false", 1:32, 44:32>>, "26"),
+    "#Ref<0.44>" = ref_to_list(RefD),
+    true = RefD < Ref1,
+
+    % Local references count like references from node "false" (atom index 0)
+    LocalRef = make_ref(),
+    RefE = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 5, "false", 1:32, 0:32>>, "26"),
+    RefF = binary_to_term_idempotent(<<131, 90, 0, 1, 119, 4, "true", 1:32, 0:32>>, "26"),
+    true = RefE < LocalRef,
+    true = RefF > LocalRef,
+
+    % Local ref is sorted at nonode@nohost
+    case term_to_binary(LocalRef) of
+        <<131, 90, 0, Count, 119, 13, "nonode@nohost", Rest/binary>> ->
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 5, "false", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 4, "true", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "foobar", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonode", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonodf", Rest/binary>>, "26"
+                    );
+        <<131, 90, 0, Count, 100, 0, 13, "nonode@nohost", Rest/binary>> ->
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 5, "false", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 4, "true", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "foobar", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonode", Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonodf", Rest/binary>>, "26"
+                    );
+        <<131, 114, 0, Count, 100, 0, 13, "nonode@nohost", Creation, Rest/binary>> ->
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 5, "false", Creation:32, Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 4, "true", Creation:32, Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "foobar", Creation:32, Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef >
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonode", Creation:32, Rest/binary>>, "26"
+                    ),
+            true =
+                LocalRef <
+                    binary_to_term_idempotent(
+                        <<131, 90, 0, Count, 119, 6, "nonodf", Creation:32, Rest/binary>>, "26"
+                    )
+    end,
+
+    % More than 5 words is not tolerated
+    ok =
+        try
+            binary_to_term(
+                <<131, 90, 0, 6, 119, 4, "true", 1:32, 2:32, 3:32, 4:32, 5:32, 6:32, 7:32>>
+            )
+        catch
+            error:badarg -> ok
+        end,
+    % Not enough data
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 5, 119, 4, "true", 1:32, 2:32, 3:32, 4:32, 5:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 4, 119, 4, "true", 1:32, 2:32, 3:32, 4:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 3, 119, 4, "true", 1:32, 2:32, 3:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 2, 119, 4, "true", 1:32, 2:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 1, 119, 4, "true", 1:32>>)
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 0, 119, 4, "true">>)
+        catch
+            error:badarg -> ok
+        end,
+
+    % Node must be an atom
+    ok =
+        try
+            binary_to_term(<<131, 90, 0, 0, 106, 1:32>>)
+        catch
+            error:badarg -> ok
+        end,
+
+    case has_setnode_creation() of
+        true ->
+            % Test distributed pid
+            Ref42 = do_setnode(test@test_node, 42),
+            DistributedRef123_42 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42),
+            true = DistributedRef123_42 =:= Ref123,
+
+            DistributedBin42 = term_to_binary(TestRef),
+            true = DistributedBin42 =/= Bin,
+            TestRef42 = binary_to_term(DistributedBin42),
+            true = TestRef42 =:= TestRef,
+            ExpectedSize = byte_size(DistributedBin42) - 1,
+
+            ok = do_unsetnode(Ref42),
+
+            Ref43 = do_setnode(test@test_node, 43),
+            DistributedRef123_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_43),
+            true = DistributedRef123_43 =:= Ref123,
+
+            DistributedRef123_42_43 = binary_to_term(
+                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+            ),
+            true = is_reference(DistributedRef123_42_43),
+            false = DistributedRef123_42_43 =:= Ref123,
+
+            DistributedBin43 = term_to_binary(TestRef),
+            true = DistributedBin43 =/= Bin,
+            TestRef43 = binary_to_term(DistributedBin43),
+            true = TestRef43 =:= TestRef,
+
+            ok = do_unsetnode(Ref43),
+            ok;
+        false ->
+            ok
+    end,
+    ok.
+
+% Some binaries are re-encoded differently on earlier BEAM. Verify
+% term_to_binary(binary_to_term(Bin)) is idempotent on AtomVM and recent OTPs.
+binary_to_term_idempotent(Binary, OTPVersion) ->
+    Term = binary_to_term(Binary),
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            Binary = term_to_binary(Term);
+        "BEAM" ->
+            OTPRelease = erlang:system_info(otp_release),
+            if
+                OTPRelease >= OTPVersion -> Binary = term_to_binary(Term);
+                true -> ok
+            end
+    end,
+    Term.
+
+test_atom_encoding() ->
+    true = compare_pair_encoding(latin1_as_utf8_1),
+    true = compare_pair_encoding(latin1_as_utf8_2),
+    true = compare_pair_encoding(latin1_as_utf8_3),
+    true = compare_pair_encoding(long_with_two_bytes_length),
+    ok.
+
 make_binterm_fun(Id) ->
     fun() ->
         Bin = ?MODULE:get_binary(Id),
@@ -409,6 +1050,18 @@ compare_pair(Id) ->
     A = ?MODULE:get_atom(Id),
     B = ?MODULE:get_binary(Id),
     A == erlang:binary_to_term(B).
+
+compare_pair_encoding(Id) ->
+    A = ?MODULE:get_atom(Id),
+    B = ?MODULE:get_binary(Id),
+    A = erlang:binary_to_term(erlang:term_to_binary(A)),
+    OTPVersion = get_otp_version(),
+    if
+        OTPVersion =:= atomvm orelse OTPVersion >= 26 ->
+            B == erlang:term_to_binary(A);
+        true ->
+            true
+    end.
 
 % We don't have access to erlang module in tests.
 apply(F, []) ->
@@ -440,6 +1093,11 @@ get_otp_version() ->
             list_to_integer(erlang:system_info(otp_release));
         _ ->
             atomvm
+    end.
+
+sleep(Ms) ->
+    receive
+    after Ms -> ok
     end.
 
 id(X) ->

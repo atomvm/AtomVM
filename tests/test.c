@@ -209,6 +209,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(register_and_whereis_badarg, 333),
     TEST_CASE(test_send),
     TEST_CASE_EXPECTED(test_open_port_badargs, -21),
+    TEST_CASE(test_port_to_list),
     TEST_CASE_EXPECTED(prime_ext, 1999),
     TEST_CASE_EXPECTED(test_try_case_end, 256),
     TEST_CASE(test_exception_classes),
@@ -323,6 +324,11 @@ struct Test tests[] = {
 
     TEST_CASE(test_binary_part),
     TEST_CASE(test_binary_split),
+    TEST_CASE(test_split_binary),
+    TEST_CASE(test_binary_replace),
+    TEST_CASE(test_binary_match),
+
+    TEST_CASE(test_zlib_compress),
 
     TEST_CASE_COND(plusone, 134217728, LONG_MAX != 9223372036854775807),
 
@@ -373,6 +379,8 @@ struct Test tests[] = {
     TEST_CASE(literal_test2),
     TEST_CASE(test_extended_literal_large),
 
+    TEST_CASE(bnot64),
+
     TEST_CASE_EXPECTED(test_list_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_eq, 1),
     TEST_CASE_EXPECTED(test_tuple_list_eq, 1),
@@ -400,6 +408,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
     TEST_CASE(test_bs_int_unaligned),
+    TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
@@ -456,6 +465,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(list2float, 511),
     TEST_CASE(floatmath),
     TEST_CASE(floatext),
+    TEST_CASE(bif_bin_arith_ops),
 
     TEST_CASE(test_fp_allocate_heap_zero),
 
@@ -488,7 +498,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(fail_apply_last, 17),
 
     TEST_CASE_EXPECTED(pid_to_list_test, 63),
-    TEST_CASE_EXPECTED(ref_to_list_test, 386),
+    TEST_CASE(ref_to_list_test),
     TEST_CASE_EXPECTED(test_binary_to_integer, 99),
     TEST_CASE(test_binary_to_integer_2),
 
@@ -540,6 +550,10 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),
 
     TEST_CASE(test_module_info),
+    TEST_CASE(erlang_module_loaded),
+
+    TEST_CASE(test_op_bs_start_match),
+    TEST_CASE(test_op_bs_create_bin),
 
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
@@ -559,6 +573,7 @@ struct Test tests[] = {
     TEST_CASE(test_crypto),
     TEST_CASE(test_min_max_guard),
     TEST_CASE(int64_build_binary),
+    TEST_CASE(test_link_port),
 
 #if defined ATOMVM_HAS_MBEDTLS
     TEST_CASE(test_crypto_strong_rand_bytes),
@@ -581,6 +596,7 @@ struct Test tests[] = {
     TEST_CASE(test_raw_raise),
 
     TEST_CASE(test_ets),
+    TEST_CASE(test_node),
 
     TEST_CASE(bigint),
 
@@ -629,18 +645,23 @@ static int test_atom(struct Test *test)
 static int test_beam(struct Test *test)
 {
     char command[512];
-    snprintf(command, sizeof(command),
+    size_t written = snprintf(command, sizeof(command),
         "erl -pa . -eval '"
-        "erlang:process_flag(trap_exit, false), " /* init(3) traps exists */
-        "R = %s:start(), "
-        "S = if"
-        " R =:= %i -> 0;"
-        " true -> io:format(\"Expected ~B, got ~p\n\", [%i, R]) "
-        "end, "
+        "erlang:process_flag(trap_exit, false), \n" /* init(3) traps exits */
+        "S = try %s:start() of\n"
+        "    R when R =:= %i -> 0;\n"
+        "    R               -> io:format(\"Expected ~B, got ~p\\n\", [%i, R]), 1\n"
+        "catch\n"
+        "    _C:E:ST -> io:format(\"Raised ~p, stacktrace:\\n~p\\n\", [E, ST]), 1\n"
+        "end,\n"
         "erlang:halt(S).' -noshell",
         test->test_module,
         test->expected_value,
         test->expected_value);
+    if (written >= sizeof(command) - 1) {
+        fprintf(stderr, "Exceeded buffer size for module %s\n", test->test_module);
+        return 1;
+    }
     return system(command);
 }
 

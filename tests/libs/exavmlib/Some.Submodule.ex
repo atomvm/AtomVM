@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2022 Paul Guyot <pguyot@kallisys.net>
+# Copyright 2024 Davide Bettio <davide@uninstall.it>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,15 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(examples_erlang_rp2040)
-
-include(BuildErlang)
-
-pack_uf2(hello_pico hello_pico)
-pack_uf2(pico_blink pico_blink)
-pack_uf2(pico_rtc pico_rtc)
-pack_uf2(picow_blink picow_blink)
-pack_uf2(picow_wifi_sta picow_wifi_sta)
-pack_uf2(picow_wifi_ap picow_wifi_ap)
-pack_uf2(picow_udp_beacon picow_udp_beacon)
-pack_uf2(picow_tcp_server picow_tcp_server)
+defmodule Some.Submodule do
+  def start do
+    :ok
+  end
+end

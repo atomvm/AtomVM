@@ -650,8 +650,8 @@ documentation.
 
 The instructions for adding custom Nifs and ports differ in slight detail, but are otherwise quite similar.  In general, they involve:
 
-1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree;
-1. Adding the component to the corresponding `main/component_nifs.txt` or `main/component_ports.txt` files;
+1. Adding the custom Nif or Port to the `components` directory of the AtomVM source tree.
+1. Run `idf.py reconfigure` to pick up any menuconfig options, many extra drivers have an option to disable them (they are enabled by default). Optionally use `idf.py menuconfig` and confirm the driver is enabled and save when quitting.
 1. Building the AtomVM binary.
 
 ```{attention}
@@ -685,10 +685,12 @@ To add support for a new peripheral or protocol using custom AtomVM Nif, you nee
     Instructions for implementing Nifs is outside of the scope of this document.
     ```
 
-* Add your `<moniker>` to the `main/component_nifs.txt` file in the `src/platforms/esp32` directory.
-```{attention}
-The `main/component_nifs.txt` file will not exist until after the first clean build.
-```
+* Add the `REGISTER_NIF_COLLECTION` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `RESOLVE_NIF_CB` macro to the end of your nif code. Example:
+
+    ```c
+        REGISTER_NIF_COLLECTION(my_nif, NULL, NULL, my_nif_get_nif);
+    ```
+
 
 #### Adding a custom AtomVM Port
 
@@ -711,10 +713,12 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
     Instructions for implementing Ports is outside of the scope of this document.
     ```
 
-* Add your `<moniker>` to the `main/component_ports.txt` file in the `src/platforms/esp32` directory.
-```{attention}
-The `main/component_ports.txt` file will not exist until after the first clean build.
-```
+* Add the `REGISTER_PORT_COLLECTION` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `RESOLVE_NIF_CB` macro to the end of your nif code. Example:
+
+    ```c
+        REGISTER_PORT_COLLECTION(my_port, my_port_init, NULL, my_port_create_port);
+    ```
+
 
 ## Building for STM32
 
@@ -831,11 +835,12 @@ After your application has been tested (_and debugged_) and is ready to put into
 
 ## Building for Raspberry Pi RP2
 
-You can build with all boards supported by Raspberry Pi pico SDK, including Pico, Pico-W and Pico2. AtomVM also works with clones such as RP2040 Zero.
+You can build with all boards supported by Raspberry Pi pico SDK, including Pico, Pico W, Pico2 and Pico 2 W. AtomVM also works with clones such as RP2040 Zero.
 
 ### RP2 Prerequisites
 
 * `cmake`
+* `doxygen`
 * `ninja`
 * `Erlang/OTP`
 * `Elixir` (optional)
@@ -855,7 +860,7 @@ $ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
 ```
 
-### AtomVM build steps (Pico-W)
+### AtomVM build steps (Pico W)
 
 ```shell
 $ cd src/platforms/rp2/
@@ -869,7 +874,7 @@ $ ninja
 You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
 ```
 
-### AtomVM build steps (Pico2 or boards based on RP2350)
+### AtomVM build steps (Pico 2 or boards based on RP2350)
 
 For ARM S platform (recommended) :
 ```shell
@@ -887,6 +892,31 @@ $ cd src/platforms/rp2/
 $ mkdir build
 $ cd build
 $ cmake .. -G Ninja -DPICO_BOARD=pico2 -DPICO_PLATFORM=rp2350-riscv
+$ ninja
+```
+
+```{tip}
+You may want to build with option `AVM_REBOOT_ON_NOT_OK` so AtomVM restarts on error.
+```
+
+### AtomVM build steps (Pico 2 W)
+
+For ARM S platform (recommended) :
+```shell
+$ cd src/platforms/rp2/
+$ mkdir build
+$ cd build
+$ cmake .. -G Ninja -DPICO_BOARD=pico2_w
+$ ninja
+```
+
+For RISC-V platform (supported but slower) :
+
+```shell
+$ cd src/platforms/rp2/
+$ mkdir build
+$ cd build
+$ cmake .. -G Ninja -DPICO_BOARD=pico2_w -DPICO_PLATFORM=rp2350-riscv
 $ ninja
 ```
 

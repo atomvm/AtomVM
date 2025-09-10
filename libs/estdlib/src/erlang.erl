@@ -44,12 +44,14 @@
     min/2,
     max/2,
     memory/1,
+    nif_error/1,
     get/0,
     get/1,
     put/2,
     erase/0,
     erase/1,
     function_exported/3,
+    module_loaded/1,
     display/1,
     list_to_atom/1,
     list_to_existing_atom/1,
@@ -57,6 +59,7 @@
     list_to_integer/1,
     list_to_integer/2,
     list_to_tuple/1,
+    iolist_size/1,
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
@@ -70,6 +73,7 @@
     float_to_binary/2,
     float_to_list/1,
     float_to_list/2,
+    fun_info/1,
     fun_info/2,
     integer_to_binary/1,
     integer_to_binary/2,
@@ -77,6 +81,7 @@
     integer_to_list/2,
     fun_to_list/1,
     pid_to_list/1,
+    port_to_list/1,
     ref_to_list/1,
     register/2,
     unregister/1,
@@ -111,9 +116,20 @@
     garbage_collect/1,
     binary_to_term/1,
     term_to_binary/1,
+    split_binary/2,
     timestamp/0,
     universaltime/0,
     localtime/0,
+    setnode/2,
+    setnode/3,
+    is_alive/0,
+    get_cookie/0,
+    get_cookie/1,
+    set_cookie/1,
+    set_cookie/2,
+    dist_ctrl_get_data_notification/1,
+    dist_ctrl_get_data/1,
+    dist_ctrl_put_data/2,
     unique_integer/0,
     unique_integer/1
 ]).
@@ -156,6 +172,14 @@
     | {atomvm_heap_growth, heap_growth_strategy()}
     | link
     | monitor.
+
+-type send_destination() ::
+    pid()
+    | port()
+    | atom().
+
+% Current type until we make these references
+-type resource() :: binary().
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -234,6 +258,7 @@ send_after(Time, Dest, Msg) ->
 %%      <li><b>message_queue_len</b> the number of messages enqueued for the process (integer)</li>
 %%      <li><b>memory</b> the estimated total number of bytes in use by the process (integer)</li>
 %%      <li><b>links</b> the list of linked processes</li>
+%%      <li><b>monitored_by</b> the list of processes, NIF resources or ports that monitor the process</li>
 %% </ul>
 %% Specifying an unsupported term or atom raises a bad_arg error.
 %%
@@ -246,7 +271,8 @@ send_after(Time, Dest, Msg) ->
     (Pid :: pid(), stack_size) -> {stack_size, non_neg_integer()};
     (Pid :: pid(), message_queue_len) -> {message_queue_len, non_neg_integer()};
     (Pid :: pid(), memory) -> {memory, non_neg_integer()};
-    (Pid :: pid(), links) -> {links, [pid()]}.
+    (Pid :: pid(), links) -> {links, [pid()]};
+    (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]}.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 
@@ -583,6 +609,14 @@ erase(_Key) ->
 function_exported(_Module, _Function, _Arity) ->
     erlang:nif_error(undefined).
 
+%% @param   Module name of module
+%% @returns boolean
+%% @doc     Returns true if module is loaded without attempting to do it.
+%% @end
+-spec module_loaded(Module :: atom()) -> boolean().
+module_loaded(_Module) ->
+    erlang:nif_error(undefined).
+
 %%-----------------------------------------------------------------------------
 %% @param   Term    term to print
 %% @returns `true'
@@ -666,12 +700,23 @@ list_to_tuple(_List) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @equiv   byte_size(iolist_to_binary(IOList))
+%% @param   IOList  IO list to compute the binary size of
+%% @returns the number of bytes of IOList if it was convered to `binary()'
+%% @doc     Compute the length in bytes of the IO list or `binary()'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec iolist_size(IOList :: iodata()) -> non_neg_integer().
+iolist_size(_IOList) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   IOList  IO list to convert to binary
 %% @returns a binary with the bytes of the IO list
 %% @doc     Convert an IO list to binary.
 %% @end
 %%-----------------------------------------------------------------------------
--spec iolist_to_binary(IOList :: iolist()) -> binary().
+-spec iolist_to_binary(IOList :: iodata()) -> binary().
 iolist_to_binary(_IOList) ->
     erlang:nif_error(undefined).
 
@@ -803,6 +848,21 @@ float_to_list(_Float, _Options) ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Fun     Function to get information about
+%% @returns         Requested information about the function as a list of tuples.
+%% @doc             Returns information about the function `Fun' in unspecified order.
+%% @end
+%%-----------------------------------------------------------------------------
+fun_info(Fun) ->
+    Items = [module, name, arity, type, env],
+    lists:map(
+        fun(Item) ->
+            erlang:fun_info(Fun, Item)
+        end,
+        Items
+    ).
+
+%%-----------------------------------------------------------------------------
+%% @param   Fun     Function to get information about
 %% @param   Info    A list of atoms specifying the information to return.
 %%                  Available atoms are: module, name, arity, type
 %% @returns         Requested information about the function as a list of tuples.
@@ -875,6 +935,16 @@ pid_to_list(_Pid) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Port     port to convert to a string
+%% @returns a string representation of the port
+%% @doc     Create a string representing a port.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec port_to_list(Port :: port()) -> string().
+port_to_list(_Port) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Ref     reference to convert to a string
 %% @returns a string representation of the reference
 %% @doc     Create a string representing a reference.
@@ -885,17 +955,16 @@ ref_to_list(_Ref) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Name    name of the process to register
-%% @param   Pid     pid of the process to register
+%% @param   Name        name of the process to register
+%% @param   PidOrPort   pid or port of the process to register
 %% @returns `true'
 %% @doc     Register a name for a given process.
-%% Processes can be registered with several names.
-%% Unlike Erlang/OTP, ports are not distinguished from processes.
-%% Errors with `badarg' if the name is already registered.
+%% Errors with `badarg' if the name is already registered or if the process
+%% is already registered.
 %% @end
 %%-----------------------------------------------------------------------------
--spec register(Name :: atom(), Pid :: pid()) -> true.
-register(_Name, _Pid) ->
+-spec register(Name :: atom(), PidOrPort :: pid() | port()) -> true.
+register(_Name, _PidOrPort) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -916,7 +985,7 @@ unregister(_Name) ->
 %% @doc     Lookup a process by name.
 %% @end
 %%-----------------------------------------------------------------------------
--spec whereis(Name :: atom()) -> pid() | undefined.
+-spec whereis(Name :: atom()) -> pid() | port() | undefined.
 whereis(_Name) ->
     erlang:nif_error(undefined).
 
@@ -1051,13 +1120,13 @@ make_ref() ->
 %% @doc     Send a message to a given process
 %% @end
 %%-----------------------------------------------------------------------------
--spec send(Pid :: pid(), Message :: Message) -> Message.
-send(_Pid, _Message) ->
+-spec send(Target :: send_destination(), Message :: Message) -> Message.
+send(_Target, _Message) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Type    type of monitor to create
-%% @param   Pid     pid of the object to monitor
+%% @param   Type        type of monitor to create
+%% @param   PidOrPort   pid or port of the object to monitor
 %% @returns a monitor reference
 %% @doc     Create a monitor on a process or on a port.
 %% When the process or the port terminates, the following message is sent to
@@ -1068,8 +1137,10 @@ send(_Pid, _Message) ->
 %% Unlike Erlang/OTP, monitors are only supported for processes and ports.
 %% @end
 %%-----------------------------------------------------------------------------
--spec monitor(Type :: process | port, Pid :: pid()) -> reference().
-monitor(_Type, _Pid) ->
+-spec monitor
+    (Type :: process, Pid :: pid() | atom()) -> reference();
+    (Type :: port, Port :: port() | atom()) -> reference().
+monitor(_Type, _PidOrPort) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1151,7 +1222,7 @@ exit(_Process, _Reason) ->
 %% Unlike Erlang/OTP, ports are identified by pids.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> pid().
+-spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> port().
 open_port(_PortName, _Options) ->
     erlang:nif_error(undefined).
 
@@ -1297,6 +1368,18 @@ term_to_binary(_Term) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @returns A tuple with two subbinaries
+%% @param   Bin    binary to split
+%% @param   Pos    position to split the binary, from 0 to `byte_size(Bin)'
+%% @doc Split a binary into two sub-binaries. This operation is not destructive
+%% and will create two new binaries.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec split_binary(Bin :: binary(), Pos :: non_neg_integer()) -> {binary(), binary()}.
+split_binary(_Bin, _Pos) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @returns A tuple representing the current timestamp.
 %% @see monotonic_time/1
 %% @see system_time/1
@@ -1329,6 +1412,98 @@ universaltime() ->
 localtime() ->
     erlang:nif_error(undefined).
 
+%% @hidden
+-spec setnode(atom(), non_neg_integer()) -> true.
+setnode(_NodeName, _Creation) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec setnode(node(), pid(), {non_neg_integer(), non_neg_integer()}) -> reference().
+setnode(_TargetNode, _ConnPid, _TargetFlagsCreation) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns true if current node is part of distribution
+%% @doc     Determine if current node is part of distribution
+%% @end
+-spec is_alive() -> boolean().
+is_alive() ->
+    node() =/= nonode@nohost.
+
+%% @hidden
+-spec dist_ctrl_get_data_notification(binary()) -> ok.
+dist_ctrl_get_data_notification(_DHandle) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec dist_ctrl_get_data(binary()) -> none | binary().
+dist_ctrl_get_data(_DHandle) ->
+    erlang:nif_error(undefined).
+
+%% @hidden
+-spec dist_ctrl_put_data(binary(), binary()) -> ok.
+dist_ctrl_put_data(_DHandle, _Packet) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns The cookie used by this node
+%% @doc Return the cookie used by this node or `nocookie' if
+%% distribution was not started
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_cookie() -> nocookie | atom().
+get_cookie() ->
+    try
+        CookieBin = net_kernel:get_cookie(),
+        ?MODULE:binary_to_atom(CookieBin, latin1)
+    catch
+        exit:{Reason, _} when
+            Reason =:= noproc;
+            Reason =:= shutdown;
+            Reason =:= killed
+        ->
+            nocookie
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @returns The cookie used to connect to another node
+%% @doc Return the cookie used to connect to another node or `nocookie' if
+%% distribution was not started
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_cookie(node()) -> nocookie | atom().
+get_cookie(Node) ->
+    try
+        CookieBin = net_kernel:get_cookie(Node),
+        ?MODULE:binary_to_atom(CookieBin, latin1)
+    catch
+        exit:{Reason, _} when
+            Reason =:= noproc;
+            Reason =:= shutdown;
+            Reason =:= killed
+        ->
+            nocookie
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param Cookie the cookie to use to connect to this node
+%% @doc Set the cookie of this node. Fails if distribution was not started.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_cookie(Cookie :: atom()) -> ok.
+set_cookie(Cookie) ->
+    net_kernel:set_cookie(?MODULE:atom_to_binary(Cookie, latin1)).
+
+%%-----------------------------------------------------------------------------
+%% @param Node the node to set the cookie for
+%% @param Cookie the cookie to use to connect to Node
+%% @doc Set the cookie of a given node. Fails if distribution was not started.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_cookie(Node :: node(), Cookie :: atom()) -> ok.
+set_cookie(Node, Cookie) ->
+    net_kernel:set_cookie(Node, ?MODULE:atom_to_binary(Cookie, latin1)).
+
 %%-----------------------------------------------------------------------------
 %% @returns A unique integer
 %% @doc     Same as erlang:unique_integer([]).
@@ -1348,4 +1523,9 @@ unique_integer() ->
 %%-----------------------------------------------------------------------------
 -spec unique_integer([monotonic | positive]) -> integer().
 unique_integer(_Options) ->
+    erlang:nif_error(undefined).
+
+%% @private
+-spec nif_error(Reason :: any()) -> no_return().
+nif_error(_Reason) ->
     erlang:nif_error(undefined).

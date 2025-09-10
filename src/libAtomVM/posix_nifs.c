@@ -47,12 +47,20 @@
 #include <dirent.h>
 #endif
 
+#if HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT
+#include <spawn.h>
+#endif
+
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "nifs.h"
 #include "posix_nifs.h"
+
+#if HAVE_EXECVE
+extern char **environ;
+#endif
 
 term posix_errno_to_term(int err, GlobalContext *glb)
 {
@@ -130,6 +138,24 @@ term posix_errno_to_term(int err, GlobalContext *glb)
     return term_from_int(err);
 }
 
+static term error_tuple_maybe_gc(int err, Context *ctx)
+{
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, ERROR_ATOM);
+    term_put_tuple_element(result, 1, posix_errno_to_term(err, ctx->global));
+
+    return result;
+}
+
+static term errno_to_error_tuple_maybe_gc(Context *ctx)
+{
+    return error_tuple_maybe_gc(errno, ctx);
+}
+
 #if HAVE_OPEN && HAVE_CLOSE
 #define CLOSED_FD (-1)
 
@@ -200,6 +226,20 @@ const ErlNifResourceTypeInit posix_fd_resource_type_init = {
 #define O_SYNC_ATOM_STR ATOM_STR("\x7", "o_sync")
 #define O_TRUNC_ATOM_STR ATOM_STR("\x8", "o_trunc")
 #define O_TTY_INIT_ATOM_STR ATOM_STR("\xA", "o_tty_init")
+
+static term make_posix_fd_resource(Context *ctx, int fd)
+{
+    // Return a resource object
+    struct PosixFd *fd_obj = enif_alloc_resource(ctx->global->posix_fd_resource_type, sizeof(struct PosixFd));
+    if (IS_NULL_PTR(fd_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    fd_obj->fd = fd;
+    fd_obj->selecting_process_id = INVALID_PROCESS_ID;
+    term obj = enif_make_resource(erl_nif_env_from_context(ctx), fd_obj);
+    enif_release_resource(fd_obj); // decrement refcount after enif_alloc_resource
+    return obj;
+}
 
 static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
 {
@@ -304,18 +344,13 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
         term_put_tuple_element(result, 0, ERROR_ATOM);
         term_put_tuple_element(result, 1, posix_errno_to_term(errno, glb));
     } else {
-        // Return a resource object
-        struct PosixFd *fd_obj = enif_alloc_resource(glb->posix_fd_resource_type, sizeof(struct PosixFd));
-        if (IS_NULL_PTR(fd_obj)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        fd_obj->fd = fd;
-        fd_obj->selecting_process_id = INVALID_PROCESS_ID;
         if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term obj = enif_make_resource(erl_nif_env_from_context(ctx), fd_obj);
-        enif_release_resource(fd_obj); // decrement refcount after enif_alloc_resource
+        term obj = make_posix_fd_resource(ctx, fd);
+        if (term_is_invalid_term(obj)) {
+            return obj;
+        }
         result = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(result, 0, OK_ATOM);
         term_put_tuple_element(result, 1, obj);
@@ -341,12 +376,7 @@ static term nif_atomvm_posix_close(Context *ctx, int argc, term argv[])
         }
         if (UNLIKELY(close(fd_obj->fd) < 0)) {
             fd_obj->fd = CLOSED_FD; // even if bad things happen, do not close twice.
-            if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-            }
-            result = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(result, 0, ERROR_ATOM);
-            term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
+            return errno_to_error_tuple_maybe_gc(ctx);
         }
         fd_obj->fd = CLOSED_FD;
     }
@@ -377,13 +407,7 @@ static term nif_atomvm_posix_read(Context *ctx, int argc, term argv[])
     int res = read(fd_obj->fd, (void *) term_binary_data(bin_term), count);
     if (UNLIKELY(res < 0)) {
         // Return an error.
-        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        term ret = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(ret, 0, ERROR_ATOM);
-        term_put_tuple_element(ret, 1, posix_errno_to_term(errno, glb));
-        return ret;
+        return errno_to_error_tuple_maybe_gc(ctx);
     }
     if (res == 0) {
         return globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
@@ -431,11 +455,11 @@ static term nif_atomvm_posix_write(Context *ctx, int argc, term argv[])
 static term nif_atomvm_posix_select(Context *ctx, term argv[], enum ErlNifSelectFlags mode)
 {
     term process_pid_term = argv[1];
-    VALIDATE_VALUE(process_pid_term, term_is_pid);
+    VALIDATE_VALUE(process_pid_term, term_is_local_pid);
     int32_t process_pid = term_to_local_process_id(process_pid_term);
     term select_ref_term = argv[2];
     if (select_ref_term != UNDEFINED_ATOM) {
-        VALIDATE_VALUE(select_ref_term, term_is_reference);
+        VALIDATE_VALUE(select_ref_term, term_is_local_reference);
     }
     void *fd_obj_ptr;
     if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], ctx->global->posix_fd_resource_type, &fd_obj_ptr))) {
@@ -492,6 +516,173 @@ static term nif_atomvm_posix_select_stop(Context *ctx, int argc, term argv[])
 
     return OK_ATOM;
 }
+
+#if HAVE_EXECVE
+static void free_string_list(char **list)
+{
+    if (IS_NULL_PTR(list)) {
+        return;
+    }
+    char **ptr = list;
+    while (*ptr) {
+        char *str = *ptr;
+        free(str);
+        ptr++;
+    }
+    free(list);
+}
+
+static char **parse_string_list(term list)
+{
+    if (!term_is_list(list)) {
+        return NULL;
+    }
+    int proper;
+    size_t result_len = term_list_length(list, &proper);
+    if (UNLIKELY(!proper)) {
+        return NULL;
+    }
+    // All items are initialized to NULL.
+    char **result_list = calloc(result_len + 1, sizeof(char *));
+    if (IS_NULL_PTR(result_list)) {
+        return NULL;
+    }
+    term list_item = list;
+    int i = 0;
+    while (term_is_nonempty_list(list_item)) {
+        term item = term_get_list_head(list_item);
+        char *str = interop_term_to_string(item, &proper);
+        if (UNLIKELY(!proper)) {
+            free_string_list(result_list);
+            return NULL;
+        }
+        result_list[i++] = str;
+        list_item = term_get_list_tail(list_item);
+    }
+    return result_list;
+}
+
+static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    int ok;
+    char *path = interop_term_to_string(argv[0], &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    char **args = parse_string_list(argv[1]);
+    if (IS_NULL_PTR(args)) {
+        free(path);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    char **envp;
+    char **envp_array = NULL;
+    if (argv[2] == UNDEFINED_ATOM) {
+        envp = environ;
+    } else {
+        envp_array = parse_string_list(argv[2]);
+        if (IS_NULL_PTR(envp_array)) {
+            free(path);
+            free_string_list(args);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        envp = envp_array;
+    }
+
+    int pstdout[2];
+    int r = pipe(pstdout);
+    if (r < 0) {
+        free(path);
+        free_string_list(args);
+        free_string_list(envp_array);
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+    pid_t pid;
+#if HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT
+    do {
+        posix_spawn_file_actions_t file_actions;
+        posix_spawnattr_t spawn_attrs;
+        if (UNLIKELY((r = posix_spawn_file_actions_init(&file_actions)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawn_file_actions_adddup2(&file_actions, pstdout[1], 1)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawnattr_init(&spawn_attrs)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawnattr_setflags(&spawn_attrs, HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawn(&pid, path, &file_actions, &spawn_attrs, args, envp)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawnattr_destroy(&spawn_attrs)) != 0)) {
+            break;
+        }
+        if (UNLIKELY((r = posix_spawn_file_actions_destroy(&file_actions)) != 0)) {
+            break;
+        }
+    } while (false);
+    if (UNLIKELY(r != 0)) {
+        free(path);
+        free_string_list(args);
+        free_string_list(envp_array);
+        close(pstdout[0]);
+        close(pstdout[1]);
+        return error_tuple_maybe_gc(r, ctx);
+    }
+#else
+    r = fork();
+    if (r < 0) {
+        int err = errno;
+        free(path);
+        free_string_list(args);
+        free_string_list(envp_array);
+        close(pstdout[0]);
+        close(pstdout[1]);
+        return error_tuple_maybe_gc(err, ctx);
+    }
+    if (r == 0) {
+        // child.
+        close(0); // close stdin of the child
+        close(pstdout[0]); // close read end of the pipe
+        dup2(pstdout[1], 1); // make stdout the write-end of the pipe
+#if HAVE_CLOSEFROM
+        closefrom(2);
+#else
+        int maxfd = sysconf(_SC_OPEN_MAX);
+        for (int fd = 3; fd < maxfd; fd++)
+            close(fd);
+#endif
+        execve(path, args, envp);
+        exit(1);
+    }
+    pid = r;
+#endif
+    // parent
+    close(pstdout[1]); // close write-end of the pipe
+    free(path);
+    free_string_list(args);
+    free_string_list(envp_array);
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term stdout_term = make_posix_fd_resource(ctx, pstdout[0]);
+    if (term_is_invalid_term(stdout_term)) {
+        return stdout_term;
+    }
+    term result = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, term_from_int(pid));
+    term_put_tuple_element(result, 2, stdout_term);
+
+    return result;
+}
+#endif
 #endif
 
 #if HAVE_MKFIFO
@@ -510,23 +701,15 @@ static term nif_atomvm_posix_mkfifo(Context *ctx, int argc, term argv[])
 
     int mode = term_to_int(mode_term);
 
-    term result;
     int res = mkfifo(path, mode);
     free((void *) path);
 
     if (res < 0) {
         // Return an error.
-        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        result = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(result, 0, ERROR_ATOM);
-        term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
-    } else {
-        result = OK_ATOM;
+        return errno_to_error_tuple_maybe_gc(ctx);
     }
 
-    return result;
+    return OK_ATOM;
 }
 #endif
 
@@ -546,13 +729,7 @@ static term nif_atomvm_posix_unlink(Context *ctx, int argc, term argv[])
     free((void *) path);
     if (res < 0) {
         // Return an error.
-        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        term result = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(result, 0, ERROR_ATOM);
-        term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
-        return result;
+        return errno_to_error_tuple_maybe_gc(ctx);
     }
     return OK_ATOM;
 }
@@ -632,19 +809,6 @@ const ErlNifResourceTypeInit posix_dir_resource_type_init = {
     .members = 1,
     .dtor = posix_dir_dtor
 };
-
-static term errno_to_error_tuple_maybe_gc(Context *ctx)
-{
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
-    term result = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(result, 0, ERROR_ATOM);
-    term_put_tuple_element(result, 1, posix_errno_to_term(errno, ctx->global));
-
-    return result;
-}
 
 static term nif_atomvm_posix_opendir(Context *ctx, int argc, term argv[])
 {
@@ -807,6 +971,12 @@ const struct Nif atomvm_posix_select_stop_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_select_stop
 };
+#if HAVE_EXECVE
+const struct Nif atomvm_subprocess_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_subprocess
+};
+#endif
 #endif
 #if HAVE_MKFIFO
 const struct Nif atomvm_posix_mkfifo_nif = {

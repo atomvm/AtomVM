@@ -20,7 +20,7 @@
 
 -module(inet).
 
--export([port/1, close/1, sockname/1, peername/1]).
+-export([port/1, close/1, sockname/1, peername/1, getaddr/2]).
 
 -include("inet-priv.hrl").
 
@@ -30,7 +30,8 @@
 -type port_number() :: 0..65535.
 -type ip_address() :: ip4_address().
 -type ip4_address() :: {0..255, 0..255, 0..255, 0..255}.
--type hostname() :: iodata().
+-type hostname() :: atom() | string().
+-type address_family() :: inet.
 
 -export_type([socket/0, port_number/0, ip_address/0, ip4_address/0, hostname/0]).
 
@@ -85,3 +86,54 @@ sockname({Moniker, Socket, Module}) when
     {ok, {ip_address(), port_number()}} | {error, Reason :: term()}.
 peername({?GEN_TCP_MONIKER, Socket, Module}) ->
     Module:peername(Socket).
+
+%%-----------------------------------------------------------------------------
+%% @param   Name the name to resolve
+%% @param   Family the family to resolve it to
+%% @returns The address or an error tuple.
+%% @doc     Get the IP address associated with a given name.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec getaddr(Name :: ip_address() | hostname(), Family :: address_family()) ->
+    {ok, ip_address()} | {error, Reason :: term()}.
+getaddr(Name, _Family) when is_tuple(Name) ->
+    {ok, Name};
+getaddr(Name, Family) when is_atom(Name) ->
+    getaddr(atom_to_list(Name), Family);
+getaddr(Name, Family) ->
+    try net:getaddrinfo(Name) of
+        {ok, Results} ->
+            Filtered = [Addr || #{family := F, addr := #{addr := Addr}} <- Results, F =:= Family],
+            case Filtered of
+                [] -> {error, nxdomain};
+                [IPAddr | _] -> {ok, IPAddr}
+            end;
+        {error, eainoname} ->
+            case string:split(Name, ".") of
+                [Name] ->
+                    % BEAM succeeds to resolve short names even if gethostbyname(2) fails.
+                    % Work around for distribution by trying to add .local suffix.
+                    case net:getaddrinfo(Name ++ ".local") of
+                        {ok, ResultsLocal} ->
+                            FilteredLocal = [
+                                Addr
+                             || #{family := F, addr := #{addr := Addr}} <- ResultsLocal,
+                                F =:= Family,
+                                Addr =:= {127, 0, 0, 1} orelse Addr =:= {0, 0, 0, 0, 0, 0, 0, 1}
+                            ],
+                            case FilteredLocal of
+                                [] -> {error, nxdomain};
+                                [LocalIPAddr | _] -> {ok, LocalIPAddr}
+                            end;
+                        _ ->
+                            {error, nxdomain}
+                    end;
+                _ ->
+                    {error, nxdomain}
+            end;
+        {error, _} = Err ->
+            Err
+    catch
+        error:function_clause ->
+            {error, einval}
+    end.

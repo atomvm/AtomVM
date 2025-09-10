@@ -40,6 +40,11 @@ start() ->
     {links, [Self]} = process_info(Pid, links),
     unlink(Pid),
     {links, []} = process_info(Pid, links),
+    Monitor = monitor(process, Pid),
+    % Twice because of spawn_opt above
+    {monitored_by, [Self, Self]} = process_info(Pid, monitored_by),
+    demonitor(Monitor),
+    {monitored_by, [Self]} = process_info(Pid, monitored_by),
     Pid ! {Self, stop},
     _Accum =
         receive

@@ -66,110 +66,13 @@ All source code modules should include copyright headers that are formatted for 
 
 ### C Code
 
-C source code style is enforced with [`clang-format-16`](https://releases.llvm.org/16.0.0/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
+C source code follows the [AtomVM C Coding Style Guide (AVMCCS)](C_CODING_STYLE.md). The style is enforced with [`clang-format-16`](https://releases.llvm.org/16.0.0/tools/clang/docs/ClangFormat.html). To automatically fix a file, run:
 
     clang-format-16 --style=file -i file.c
 
-#### Indentation
-
-* [K&R indentation and braces style](https://en.wikipedia.org/wiki/Indentation_style#K&R_style)
-* [Mandatory braces](https://en.wikipedia.org/wiki/Indentation_style#Variant:_mandatory_braces)
-* 4 space indentation (no tabs)
-
-Good:
-
-    void f(bool reverse)
-    {
-        if (reverse) {
-            puts("!dlroW olleH");
-        } else {
-            puts("Hello world");
-        }
-    }
-
-Bad:
-
-    void f(bool reverse) {
-        if (reverse)
-            puts ("!dlroW olleH");
-        else
-            puts ("Hello world");
-    }
-
-#### Naming Conventions
-
-* Struct names are PascalCase (e.g. `Context`)
-* Scalar types are lower case (e.g. `term`)
-* All other names (e.g. functions and variables) are snake_case (e.g. `term_is_integer`)
-* Always prefix exported function names with the module in which they are defined (e.g. `term_is_nil`, `term_is_integer`, `context_new`, `context_destroy`)
-
-#### Other Coding Conventions
-
-* Pointers (`*`) should be with the variable name rather than with the type (e.g. `char *name`, not
-`char* name`)
-* Avoid long lines, use intermediate variables with meaningful names.
-* Function definitions should be separated by 1 empty line
-
-Function declarations should be structured as follows:
-
-    func(main_input, additional_inputs, main_output, additional_outputs, opts, [context])
-
-where `context` is a context structure (such as `Context` or `GlobalContext`).
-
-Any functions that are not exported should be qualified with the `static` keyword.
-
-Functions that return booleans should be named `is_something` (or possibly `module_is_something`, if the function is exported).
-
-C header modules (`.h`) should be organized as follows:
-
-    +-------------------
-    | Copyright Header
-    |
-    | #ifdef MODULE__H__
-    | #define MODULE__H__
-    |
-    | #ifdef __cplusplus
-    | extern "C" {
-    | #endif
-    |
-    | #includes (alphabetical)
-    |
-    | #defines
-    |
-    | type definitions
-    |
-    | function declarations
-    |
-    | #ifdef __cplusplus
-    | }
-    | #endif
-    |
-    | #endif
-    +-------------------
-     module.h
-
-C source modules (`.c`) should be organized as follows:
-
-    +-------------------
-    | Copyright Header
-    |
-    | #includes (alphabetical)
-    |
-    | #defines
-    |
-    | type definitions
-    |
-    | forward declarations (only if necessary)
-    |
-    | function definitions
-    |   dependent static functions first
-    |   exported functions and entrypoints last
-    +-------------------
-     module.c
-
 #### Documentation
 
-[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://www.atomvm.net/doc/main/c_api_docs.html#libatomvm-source-files) and the [libAtomVM Index](https://www.atomvm.net/doc/main/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Structures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the files that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
+[Doxygen Javadoc style](https://www.doxygen.nl/manual/docblocks.html) code comments will be picked up and added to the documentation. Changes will automatically be added to the [libAtomVM Source Files](https://doc.atomvm.org/main/apidocs/libatomvm/index.html#libatomvm-source-files) and the [libAtomVM Index](https://doc.atomvm.org/main/apidocs/libatomvm/index.html#libatomvm-index). But to have `Data Structures`, `Types`, `MACROS`, and `Functions` appear in the correct C Library APIs section the corresponding entries must be added to the similarly named `*.rst` files in the `AtomVM/doc/src/apidocs/libatomvm/` directory. The exact names of the files that need to be altered are: `data_structures.rst`, `functions.rst`, `macros.rst`, and `types.rst`. The other files in the directory handle auto`generated content and do not need to be altered.
 
 In the rare case that a function declaration and definition are both in different header files (rather than the definition in a `*.c` file) this can cause rendering errors for `Doxygen`. The work around for these cases can be demonstrated with this example for the function `sys_listener_destroy` it is documented and declared in `sys.h` and defined as follows in `listeners.h`:
 

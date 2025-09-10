@@ -26,16 +26,19 @@ set(ERLANG_MODULES
     test_apply
     test_binary
     test_calendar
+    test_epmd
     test_gen_event
     test_gen_server
     test_gen_statem
     test_gen_udp
     test_gen_tcp
+    test_inet
     test_io_lib
     test_lists
     test_logger
     test_maps
     test_net
+    test_net_kernel
     test_sets
     test_spawn
     test_ssl

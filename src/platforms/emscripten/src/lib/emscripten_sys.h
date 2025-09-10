@@ -115,6 +115,7 @@ struct EmscriptenPlatformData
     struct ListHead messages;
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
+    ErlNifResourceType *websocket_resource_type;
 
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;

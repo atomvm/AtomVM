@@ -40,6 +40,7 @@
 #include "synclist.h"
 #include "term.h"
 #include "timer_list.h"
+#include "valueshashtable.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -71,6 +72,11 @@ typedef struct GlobalContext GlobalContext;
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
+#ifndef TYPEDEF_MESSAGE
+#define TYPEDEF_MESSAGE
+typedef struct Message Message;
+#endif
+
 struct MessageQueueItem
 {
     struct MessageQueueItem *next;
@@ -83,6 +89,13 @@ struct RefcBinaryQueueItem
     struct RefcBinaryQueueItem *next;
     struct RefcBinary *refc;
 };
+
+typedef enum run_result_t
+{
+    RUN_SUCCESS = 0,
+    RUN_MEMORY_FAILURE = 1,
+    RUN_RESULT_NOT_OK = 2,
+} run_result_t;
 
 struct GlobalContext
 {
@@ -112,7 +125,7 @@ struct GlobalContext
     int32_t last_process_id;
 
     struct AtomTable *atom_table;
-    struct AtomsHashTable *modules_table;
+    struct ValuesHashTable *modules_table;
 
 #ifndef AVM_NO_SMP
     RWLock *modules_lock;
@@ -151,6 +164,11 @@ struct GlobalContext
     SpinLock env_spinlock;
 #endif
 
+    term ATOMIC node_name;
+    uint32_t ATOMIC creation;
+    ErlNifResourceType *dist_connection_resource_type;
+    struct SyncList dist_connections;
+
 #if HAVE_OPEN && HAVE_CLOSE
     ErlNifResourceType *posix_fd_resource_type;
 #endif
@@ -160,6 +178,12 @@ struct GlobalContext
 #endif
 
     void *platform_data;
+};
+
+enum SendMessageResult
+{
+    SEND_MESSAGE_OK = 0,
+    SEND_MESSAGE_PROCESS_NOT_FOUND = 1
 };
 
 /**
@@ -247,6 +271,18 @@ void globalcontext_send_message(GlobalContext *glb, int32_t process_id, term t);
  */
 void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, term t);
 
+/**
+ * @brief Post a mailbox message to a process identified by its id.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message(GlobalContext *glb, int32_t process_id, Message *m);
+
 #ifdef AVM_TASK_DRIVER_ENABLED
 /**
  * @brief Send a message to a process identified by its id. This variant is to
@@ -263,6 +299,19 @@ void globalcontext_send_message_nolock(GlobalContext *glb, int32_t process_id, t
  * @param t the message to send.
  */
 void globalcontext_send_message_from_task(GlobalContext *glb, int32_t process_id, enum MessageType type, term t);
+
+/**
+ * @brief Post a mailbox message to a process identified by its id. Variant
+ * to be used from task drivers.
+ * @details This function is only used by enif_select_read/enif_select_write to
+ * post a message that is built before.
+ *
+ * @param glb the global context (that owns the process table).
+ * @param process_id the local process id.
+ * @param m the mailbox message to send.
+ * @return SEND_MESSAGE_OK if the message was sent (and ownership transfered).
+ */
+enum SendMessageResult globalcontext_post_message_from_task(GlobalContext *glb, int32_t process_id, Message *m);
 
 /**
  * @brief Enqueue a refc binary from a task driver, to be refc decremented
@@ -299,10 +348,10 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx);
  * @details Register a process with a certain name (atom) so it can be easily retrieved later.
  * @param glb the global context, each registered process will be globally available for that context.
  * @param atom_index the atom table index.
- * @param local_process_id the process local id.
+ * @param local_pid_or_port the local pid or port
  * @returns \c true if the process was registered, \c false if another process with the same name already existed
  */
-bool globalcontext_register_process(GlobalContext *glb, int atom_index, int local_process_id);
+bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port);
 
 /**
  * @brief Get registered name for a process/port
@@ -322,9 +371,9 @@ term globalcontext_get_registered_name_process(GlobalContext *glb, int local_pro
  * @details Returns the local process id of a previously registered process.
  * @param glb the global context.
  * @param atom_index the atom table index.
- * @returns a previously registered process local id.
+ * @returns a previously registered process local id or UNDEFINED_ATOM
  */
-int globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
+term globalcontext_get_registered_process(GlobalContext *glb, int atom_index);
 
 /**
  * @brief Unregister a process by name
@@ -353,26 +402,19 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_i
  * @details Inserts an atom into the global atoms table and returns its id.
  * @param glb the global context.
  * @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
- * @param copy if non-zero, make a copy of the input atom_string if the atom is not already in the table.  The table
+ * @param copy if `true`, make a copy of the input atom_string if the atom is not already in the table.  The table
  * assumes "ownership" of the allocated memory.
- * @returns newly added atom id or -1 in case of failure.
+ * @returns newly added atom id or term_invalid_term() in case of failure.
  */
-static inline int globalcontext_insert_atom_maybe_copy(GlobalContext *glb, AtomString atom_string, int copy)
+static inline term globalcontext_insert_atom_maybe_copy(GlobalContext *glb, const uint8_t *atom_data, size_t atom_len, bool copy)
 {
-    long index = atom_table_ensure_atom(
-        glb->atom_table, atom_string, copy ? AtomTableCopyAtom : AtomTableNoOpts);
-    if (UNLIKELY(index) < 0) {
-        return -1;
+    atom_index_t global_atom_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(
+        glb->atom_table, atom_data, atom_len, copy ? AtomTableCopyAtom : AtomTableNoOpts, &global_atom_index);
+    if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
+        return term_invalid_term();
     }
-    return index;
-}
-
-/**
- * @brief equivalent to globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
- */
-static inline int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_string)
-{
-    return globalcontext_insert_atom_maybe_copy(glb, atom_string, 0);
+    return term_from_atom_index(global_atom_index);
 }
 
 /**
@@ -384,7 +426,7 @@ static inline int globalcontext_insert_atom(GlobalContext *glb, AtomString atom_
  * @param atom_string_b an atom string, which is the atom length followed by atom characters.
  * @returns true if they both refer to the same atom, otherwise false.
  */
-bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, int atom_index_a, AtomString atom_string_b);
+bool globalcontext_is_atom_index_equal_to_atom_string(GlobalContext *glb, atom_index_t atom_index_a, AtomString atom_string_b);
 
 /**
  * @brief Compares a term with an AtomString.
@@ -401,38 +443,24 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
         return false;
     }
 
-    int atom_index_a = term_to_atom_index(atom_a);
+    atom_index_t atom_index_a = term_to_atom_index(atom_a);
     return globalcontext_is_atom_index_equal_to_atom_string(global, atom_index_a, atom_string_b);
 }
 
 /**
- * @brief Returns a term representing an atom, from the suppliend string
+ * @brief Returns a term representing an atom, from the supplied string.
  *
  * @details Converts a string to an atom.  Note that this function may have a side-effect on the
- *          global context.
+ *          global context. It doesn't copy the atom string and is meant to be called with
+ *          constant atom strings in code.
  * @param glb pointer to the global context
- * @param string an AtomString
+ * @param atom_string an AtomString
  * @return an atom term formed from the supplied atom string.
  */
-static inline term globalcontext_make_atom(GlobalContext *glb, AtomString string)
+static inline term globalcontext_make_atom(GlobalContext *glb, AtomString atom_string)
 {
-    int global_atom_index = globalcontext_insert_atom(glb, string);
-    return term_from_atom_index(global_atom_index);
+    return globalcontext_insert_atom_maybe_copy(glb, atom_string_data(atom_string), atom_string_len(atom_string), false);
 }
-
-/**
- * @brief   Returns the AtomString value of a term.
- *
- * @details This function fetches the AtomString value of the atom associated
- *          with the supplied term.  The input term must be an atom type.
- *          If no such atom is registered in the global table, this function
- *          returns NULL.  The caller should NOT free the data associated with
- *          the returned value.
- * @param   glb the global context
- * @param   t the atom term
- * @returns the AtomString associated with the supplied atom term.
- */
-AtomString globalcontext_atomstring_from_term(GlobalContext *glb, term t);
 
 /**
  * @brief Returns the term for an existing atom.
@@ -476,7 +504,7 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index);
  * @param module_name_atom the module name.
  * @returns a pointer to a Module struct.
  */
-Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_atom);
+Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name_atom);
 
 /**
  * @brief Load a given module from registered AVM packs
@@ -492,15 +520,19 @@ Module *globalcontext_get_module(GlobalContext *global, AtomString module_name_a
 Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *module_name);
 
 /**
- * @brief remove a monitor
+ * @brief Run a given start module.
  *
- * @details iterate on the list of all processes and then on each monitor
- * to find a given monitor, and remove it
+ * @details This function will create a new context and call init:boot/1
+ * to execute the passed start module. If init module is not found, it will
+ * fallback to calling start module:start/0 directly. It will also
+ * print the result to out_f, typically stdout. It will return RUN_SUCCESS if
+ * result is ok or 0, an error code otherwise.
  * @param global the global context
- * @param ref_ticks the reference to the monitor
- * @return true if the monitor was found
+ * @param start_module the start module
+ * @param out_f file to print the result to, or NULL
+ * @returns RUN_SUCCESS or an error code
  */
-bool globalcontext_demonitor(GlobalContext *global, uint64_t ref_ticks);
+run_result_t globalcontext_run(GlobalContext *global, Module *start_module, FILE *out_f);
 
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)

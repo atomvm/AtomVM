@@ -87,19 +87,17 @@ static void utoa10(unsigned int int_value, char *integer_string)
     integer_string[integer_string_len] = '\0';
 }
 
-void atom_write_mfa(char *buf, size_t buf_size, AtomString module, AtomString function, unsigned int arity)
+void atom_write_mfa(char *buf, size_t buf_size, size_t module_name_len, const void *module_data, size_t function_name_len, const void *function_data, unsigned int arity)
 {
-    size_t module_name_len = atom_string_len(module);
-    memcpy(buf, atom_string_data(module), module_name_len);
+    memcpy(buf, module_data, module_name_len);
 
     buf[module_name_len] = ':';
 
-    size_t function_name_len = atom_string_len(function);
     if (UNLIKELY((module_name_len + 1 + function_name_len + 1 + 4 + 1 > buf_size))) {
         fprintf(stderr, "Insufficient room to write mfa.\n");
         AVM_ABORT();
     }
-    memcpy(buf + module_name_len + 1, atom_string_data(function), function_name_len);
+    memcpy(buf + module_name_len + 1, function_data, function_name_len);
 
     buf[module_name_len + function_name_len + 1] = '/';
     utoa10(arity, buf + module_name_len + 1 + function_name_len + 1);

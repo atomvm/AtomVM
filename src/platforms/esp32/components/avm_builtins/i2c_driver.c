@@ -104,8 +104,7 @@ struct I2CData
 
 void i2c_driver_init(GlobalContext *global)
 {
-    int index = globalcontext_insert_atom(global, i2c_driver_atom);
-    i2c_driver = term_from_atom_index(index);
+    i2c_driver = globalcontext_make_atom(global, i2c_driver_atom);
 }
 
 Context *i2c_driver_create_port(GlobalContext *global, term opts)
@@ -639,8 +638,8 @@ static NativeHandlerResult i2cdriver_consume_mailbox(Context *ctx)
 
 I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalContext *global)
 {
-    if (UNLIKELY(!term_is_pid(i2c_port))) {
-        ESP_LOGW(TAG, "acquire: given term is not a PID.");
+    if (UNLIKELY(!term_is_local_port(i2c_port))) {
+        ESP_LOGW(TAG, "acquire: given term is not a port.");
         return I2CAcquireInvalidPeripheral;
     }
 
@@ -666,8 +665,8 @@ I2CAcquireResult i2c_driver_acquire(term i2c_port, i2c_port_t *i2c_num, GlobalCo
 
 void i2c_driver_release(term i2c_port, GlobalContext *global)
 {
-    if (UNLIKELY(!term_is_pid(i2c_port))) {
-        ESP_LOGW(TAG, "release: given term is not a PID.");
+    if (UNLIKELY(!term_is_local_port(i2c_port))) {
+        ESP_LOGW(TAG, "release: given term is not a port.");
         return;
     }
 

@@ -23,7 +23,6 @@ project (libAtomVM)
 
 set(HEADER_FILES
     atom.h
-    atomshashtable.h
     atom_table.h
     avmpack.h
     bif.h
@@ -33,6 +32,7 @@ set(HEADER_FILES
     defaultatoms.def
     defaultatoms.h
     dictionary.h
+    dist_nifs.h
     erl_nif.h
     erl_nif_priv.h
     ets.h
@@ -75,7 +75,6 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     atom.c
-    atomshashtable.c
     atom_table.c
     avmpack.c
     bif.c
@@ -84,6 +83,7 @@ set(SOURCE_FILES
     debug.c
     defaultatoms.c
     dictionary.c
+    dist_nifs.c
     ets.c
     ets_hashtable.c
     externalterm.c
@@ -203,6 +203,9 @@ define_if_function_exists(libAtomVM closedir "dirent.h" PUBLIC HAVE_CLOSEDIR)
 define_if_function_exists(libAtomVM mkfifo "sys/stat.h" PRIVATE HAVE_MKFIFO)
 define_if_function_exists(libAtomVM readdir "dirent.h" PUBLIC HAVE_READDIR)
 define_if_function_exists(libAtomVM unlink "unistd.h" PRIVATE HAVE_UNLINK)
+define_if_function_exists(libAtomVM execve "unistd.h" PRIVATE HAVE_EXECVE)
+define_if_function_exists(libAtomVM closefrom "unistd.h" PRIVATE HAVE_CLOSEFROM)
+define_if_symbol_exists(libAtomVM POSIX_SPAWN_CLOEXEC_DEFAULT "spawn.h" PRIVATE HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)
 define_if_symbol_exists(libAtomVM O_CLOEXEC "fcntl.h" PRIVATE HAVE_O_CLOEXEC)
 define_if_symbol_exists(libAtomVM O_DIRECTORY "fcntl.h" PRIVATE HAVE_O_DIRECTORY)
 define_if_symbol_exists(libAtomVM O_DSYNC "fcntl.h" PRIVATE HAVE_O_DSYNC)

@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added a limited implementation of the OTP `ets` interface
 - Added `code:all_loaded/0` and `code:all_available/0`
+- Added `erlang:split_binary/2`
+- Added `inet:getaddr/2`
+- Added support for external pids and encoded pids in external terms
+- Added support for external refs and encoded refs in external terms
+- Introduce ports to represent native processes and added support for external ports and encoded ports in external terms
+- Added `atomvm:get_creation/0`, equivalent to `erts_internal:get_creation/0`
 - Added menuconfig option for enabling USE_USB_SERIAL, eg. serial over USB for certain ESP32-S2 boards etc.
-- Partial support for `erlang:fun_info/2`
+- Partial support for `erlang:fun_info/2` and `erlang:fun_info/1`
 - Added support for `registered_name` in `erlang:process_info/2` and `Process.info/2`
 - Added `net:gethostname/0` on platforms with gethostname(3).
 - Added `socket:getopt/2`
@@ -19,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `esp:partition_read/3`, and documentation for `esp:partition_erase_range/2/3` and `esp:partition_write/3`
 - Added support for list insertion in 'ets:insert/2'.
 - Support to OTP-28
+- Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
+- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
+- Added `erl_epmd` client implementation to epmd using `socket` module
+- Added support for socket asynchronous API for `recv`, `recvfrom` and `accept`.
+- Added support for UDP multicast with socket API.
 - Added support for `ets:update_counter/3` and `ets:update_counter/4`.
 - Added `erlang:+/1`
 - Added `lists:append/1` and `lists:append/2`
@@ -28,16 +39,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:get/0` and `erlang:erase/0`.
 - Added `erlang:unique_integer/0` and `erlang:unique_integer/1`
 - Added support for 'ets:delete/1'.
+- Added `lists:flatmap/2`
+- Added `io:fwrite/1,2,3` and `io:format/3` as well as few io functions required by remote shell
+- Added `code:is_loaded/1` and `code:which/1`
+- Added several `io_lib` functions including `io_lib:fwrite/2` and `io_lib:write_atom/1`
+- Added `init:get_argument/1`, `init:get_plain_arguments/0` and `init:notify_when_started/1`
+- Added `application:get_env/2`
+- Added CodeQL analysis to esp32, stm32, pico, and wasm workflows
+- Added Function.ex and Protocol.ex improving Elixir 1.18 support
+- Added WiFi support for ESP32P4 via esp-wifi-external for build with ESP-IDF v5.4 and later
+- Added Process.link/1 and unlink/1 to Elixir Process.ex
+- Added `erlang:module_loaded/1`
+- Added `binary:replace/3`, `binary:replace/4`
+- Added `binary:match/2` and `binary:match/3`
+- Added `supervisor:which_children/1` and `supervisor:count_children/1`
+- Added `monitored_by` in `process_info/2`
+- Added mock implementation for `current_stacktrace` in `process_info`
+
+### Changed
+
+- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
+- Release images for ESP32 chips are built with ESP-IDF v5.4
+- ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
+- Added `zlib:compress/1`
+- Entry point now is `init:boot/1` if it exists. It starts the kernel application and calls `start/0` from the
+  identified startup module. Users who started kernel application (typically for distribution) must no longer
+  do it. Startint `net_kernel` is still required.
 
 ### Changed
 - `binary_to_integer/1` no longer accepts binaries such as `<<"0xFF">>` or `<<"  123">>`
 
 ### Fixed
+
 - ESP32: improved sntp sync speed from a cold boot.
+- Fixed `gen_server` internal messages to match OTP so it works across erlang distribution
 - Utilize reserved `phy_init` partition on ESP32 to store wifi calibration for faster connections.
 - Support for zero count in `lists:duplicate/2`.
+- packbeam: fix memory leak preventing building with address sanitizer
+- Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
+- Fix a memory leak in distribution when a BEAM node would monitor a process by name.
 
-## [0.6.6] - Unreleased
+## [0.6.7] - Unreleased
+
+### Added
+
+- Added `lists:keysort/2`
+- Added `lists:merge/2,3`
+
+### Fixed
+
+- Fixed a bug where binary matching could fail due to a missing preservation of the matched binary.
+- Fixed a bug where `lists:seq/2` wouldn't return the empty list in valid cases.
+- bnot operator wasn't supporting boxed integers (integers bigger than 28-bit on 32-bit CPUs, and
+bigger than 60-bit on 64-bit CPUs).
+
+### Changed
+
+- lists sort function now use a stable merge sort implementation instead of quick sort
+
+## [0.6.6] - 2025-06-23
 
 ### Added
 
@@ -49,6 +109,7 @@ with nodejs and emscripten)
 - Added `uart:read/2` with a timeout parameter.
 - Missing `erlang:is_function/2` BIF
 - Added `erlang:is_record/2`
+- Added ability to set per-interface `dhcp_hostname` on Pico W if present in config.
 
 ### Fixed
 
@@ -99,10 +160,22 @@ memory error
 - Fixed segfault when calling `lists:reverse/1` (#1600)
 - Fixed nif_atomvm_posix_read GC bug
 - Fixed `erlang:is_number/1` function, now returns true also for floats
+- Fixed unlink protocol and add support for `link/1` on ports
+- Do not abort when an out of memory happens while loading a literal value
+- Fixed potential memory corruption when handling integer immediates that are stored as boxed
+integer (this never happens with integers < 28 bits)
+- Correctly set Pico-W unique dhcp hostname when using the default, previously all rp2040 devices
+used the same "PicoW" dhcp hostname, causing collisions when multiple rp2040 are on the same
+network. (See issue #1094)
+- Fixed possible memory corruption when doing binary matching.
+- Fixed an issue related to binary matching and more precisely endianness of bit skipping with OTP 25 and lower
+- Fixed an issue with `bs_private_append` that shouldn't gc, affecting code compiled with OTP<25
 
 ### Changed
 
 - ESP32 UART driver no longer aborts because of badargs in configuration, instead raising an error
+- ESP32: `v0.6.6` uses esp-idf v5.4.1 for pre-built images and `v5.4.x` is the suggested release
+also for custom builds
 
 ## [0.6.5] - 2024-10-15
 

@@ -11,6 +11,7 @@ on:
     paths:
       - '.github/workflows/esp32-build.yaml'
       - 'CMakeLists.txt'
+      - 'CMakeModules/**'
       - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
@@ -19,9 +20,13 @@ on:
   pull_request:
     paths:
       - '.github/workflows/esp32-build.yaml'
+      - 'CMakeLists.txt'
+      - 'CMakeModules/**'
+      - 'libs/**'
       - 'src/platforms/esp32/**'
       - 'src/platforms/esp32/**/**'
       - 'src/libAtomVM/**'
+      - 'tools/packbeam/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -31,27 +36,49 @@ jobs:
   esp-idf:
     runs-on: ubuntu-24.04
     container: espressif/idf:${{ matrix.idf-version }}
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     strategy:
       fail-fast: false
 
       matrix:
-        esp-idf-target: ["esp32", "esp32c3"]
+        esp-idf-target: ["esp32", "esp32c3", "esp32p4"]
+        language: ['cpp']
         idf-version:
-         - 'v5.0.7'
-         - 'v5.1.5'
-         - 'v5.2.3'
-         - 'v5.3.2'
-         - 'v5.4'
+         - 'v5.0.9'
+         - 'v5.1.6'
+         - 'v5.2.5'
+         - 'v5.3.3'
+         - 'v5.4.1'
 
         exclude:
         - esp-idf-target: "esp32c3"
-          idf-version: 'v5.0.7'
+          idf-version: 'v5.0.9'
         - esp-idf-target: "esp32c3"
-          idf-version: 'v5.1.5'
+          idf-version: 'v5.1.6'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.0.9'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.1.6'
+        - esp-idf-target: "esp32p4"
+          idf-version: 'v5.2.5'
+
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{matrix.language}}
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
 
     - name: Build with idf.py
       shell: bash
@@ -68,6 +95,9 @@ jobs:
       run: |
         . $IDF_PATH/export.sh
         idf.py size-components
+
+    - name: "Perform CodeQL Analysis"
+      uses: github/codeql-action/analyze@v3
 
     - name: Install dependencies to build host AtomVM and run qemu
       run: |
@@ -129,6 +159,11 @@ jobs:
         tar -xf ${QEMU_RISCV32_DIST} -C /opt && rm ${QEMU_RISCV32_DIST}
 
     - name: Install pytest and pytest-embedded plugins
+      # ESP32P4 is not currently supported by espressif/qemu, but an issue has been opened
+      # (https://github.com/espressif/qemu/issues/127) and marked as "todo" status, but no
+      # expected timeline is available yet.
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       run: |
         set -e
         . $IDF_PATH/export.sh
@@ -139,6 +174,8 @@ jobs:
             pytest-embedded-qemu==1.10.3
 
     - name: Build ESP32 tests using idf.py with memory checks
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
@@ -156,6 +193,8 @@ jobs:
         idf.py build
 
     - name: Run ESP32 tests using qemu with memory checks build
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       timeout-minutes: 10
       run: |
@@ -167,6 +206,8 @@ jobs:
         cp sdkconfig.defaults.backup sdkconfig.defaults
 
     - name: Build ESP32 tests using idf.py
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       run: |
         set -e
@@ -177,6 +218,8 @@ jobs:
         idf.py build
 
     - name: Run ESP32 tests using qemu
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: matrix.esp-idf-target != 'esp32p4'
       working-directory: ./src/platforms/esp32/test/
       timeout-minutes: 10
       run: |

@@ -28,11 +28,33 @@ defmodule Tests do
 
   def start() do
     :ok = IO.puts("Running Elixir tests")
+    :ok = Some.Submodule.start()
+    :ok = test_funs()
     :ok = test_enum()
     :ok = test_exception()
     :ok = test_chars_protocol()
     :ok = test_inspect()
     :ok = IO.puts("Finished Elixir tests")
+  end
+
+  defp test_funs() do
+    add = fn a, b -> a + b end
+
+    :ok =
+      case add.(1, 2) do
+        3 -> :ok
+        _ -> :error
+      end
+
+    2 =
+      Function.info(add)
+      |> Keyword.get(:arity)
+
+    {:module, Tests} = Function.info(add, :module)
+
+    42 = Function.identity(42)
+
+    :ok
   end
 
   defp test_enum() do
@@ -136,6 +158,9 @@ defmodule Tests do
     # other enum functions
     test_enum_chunk_while()
 
+    # We are about to call Enum.map on an un-enumerable tuple, on purpose.
+    IO.puts("Any warnings about Elixir.Enumerable.Tuple.beam are expected and to be ignored.")
+
     undef =
       try do
         Enum.map({1, 2}, fn x -> x end)
@@ -157,7 +182,7 @@ defmodule Tests do
 
   defp test_enum_chunk_while() do
     initial_col = 4
-    lines_list = '-1234567890\nciao\n12345\nabcdefghijkl\n12'
+    lines_list = ~c"-1234567890\nciao\n12345\nabcdefghijkl\n12"
     columns = 5
 
     chunk_fun = fn char, {count, rchars} ->
@@ -173,7 +198,7 @@ defmodule Tests do
       {_count, rchars} -> {:cont, Enum.reverse(rchars), []}
     end
 
-    ['-', '12345', '67890', 'ciao', '12345', 'abcde', 'fghij', 'kl', '12'] =
+    [~c"-", ~c"12345", ~c"67890", ~c"ciao", ~c"12345", ~c"abcde", ~c"fghij", ~c"kl", ~c"12"] =
       Enum.chunk_while(lines_list, {initial_col, []}, chunk_fun, after_fun)
   end
 
@@ -186,6 +211,9 @@ defmodule Tests do
       end
 
     %RuntimeError{message: "This is a test"} = ex1
+
+    # We are about to call the undefined :undef module, on purpose.
+    IO.puts("Any warnings about undef.beam are expected and to be ignored.")
 
     ex2 =
       try do
@@ -263,10 +291,10 @@ defmodule Tests do
     "[]" = inspect([])
     "[0]" = inspect([0])
     "[9, 10]" = inspect([9, 10])
-    ~s'["test"]' = inspect(["test"])
-    "'hello'" = inspect('hello')
+    ~s(["test"]) = inspect(["test"])
+    "'hello'" = inspect(~c"hello")
     "[127]" = inspect([127])
-    "[104, 101, 108, 108, 248]" = inspect('hellø')
+    "[104, 101, 108, 108, 248]" = inspect(~c"hellø")
 
     ~s([5 | "hello"]) = inspect([5 | "hello"])
 

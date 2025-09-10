@@ -35,13 +35,14 @@
 #define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
 #define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
 #else
-#define SMP_RDLOCK(htable)
-#define SMP_WRLOCK(htable)
-#define SMP_UNLOCK(htable)
+#define SMP_RDLOCK(htable) UNUSED(htable)
+#define SMP_WRLOCK(htable) UNUSED(htable)
+#define SMP_UNLOCK(htable) UNUSED(htable)
 #endif
 
 #define DEFAULT_SIZE 8
 #define CAPACITY_INCREASE 8
+#define MAX_ATOM_LEN ((1 << 12) - 1)
 
 #define ATOM_TABLE_THRESHOLD(capacity) (capacity + (capacity >> 2))
 #define ATOM_TABLE_NEW_CAPACITY(new_count) (new_count + CAPACITY_INCREASE)
@@ -49,14 +50,15 @@
 struct HNode
 {
     struct HNode *next;
-    AtomString key;
-    long index;
+    const uint8_t *key;
+    uint32_t index : 20;
+    uint32_t bytes_len : 10;
 };
 
 struct HNodeGroup
 {
     struct HNodeGroup *next;
-    long first_index;
+    atom_index_t first_index;
     uint16_t len;
 
     struct HNode nodes[];
@@ -64,8 +66,8 @@ struct HNodeGroup
 
 struct AtomTable
 {
-    int capacity;
-    int count;
+    size_t capacity;
+    size_t count;
     int last_node_group_avail;
 #ifndef AVM_NO_SMP
     RWLock *lock;
@@ -118,10 +120,10 @@ void atom_table_destroy(struct AtomTable *table)
     free(table);
 }
 
-int atom_table_count(struct AtomTable *table)
+size_t atom_table_count(struct AtomTable *table)
 {
     SMP_RDLOCK(table);
-    int count = table->count;
+    size_t count = table->count;
     SMP_UNLOCK(table);
 
     return count;
@@ -148,7 +150,7 @@ static struct HNodeGroup *new_node_group(struct AtomTable *table, int len)
 
 static unsigned long sdbm_hash(const unsigned char *str, int len)
 {
-    unsigned long hash = 0;
+    unsigned long hash = len;
     int c;
 
     for (int i = 0; i < len; i++) {
@@ -160,11 +162,11 @@ static unsigned long sdbm_hash(const unsigned char *str, int len)
 }
 
 static inline struct HNode *get_node_from_bucket(
-    const struct AtomTable *hash_table, unsigned long bucket_index, AtomString string)
+    const struct AtomTable *hash_table, unsigned long bucket_index, const uint8_t *string, size_t string_len)
 {
     struct HNode *node = hash_table->buckets[bucket_index];
     while (node) {
-        if (atom_are_equals(string, node->key)) {
+        if (node->bytes_len == string_len && memcmp(node->key, string, string_len) == 0) {
             return node;
         }
 
@@ -175,42 +177,29 @@ static inline struct HNode *get_node_from_bucket(
 }
 
 static inline struct HNode *get_node_with_hash(
-    const struct AtomTable *hash_table, AtomString string, unsigned long hash)
+    const struct AtomTable *hash_table, const uint8_t *string, size_t string_len, unsigned long hash)
 {
     unsigned long bucket_index = hash % hash_table->capacity;
-    return get_node_from_bucket(hash_table, bucket_index, string);
+    return get_node_from_bucket(hash_table, bucket_index, string, string_len);
 }
 
-static inline struct HNode *get_node(const struct AtomTable *hash_table, AtomString string)
+static inline struct HNode *get_node(const struct AtomTable *hash_table, const uint8_t *string, size_t string_len)
 {
-    unsigned long hash = sdbm_hash(string, atom_string_len(string));
+    unsigned long hash = sdbm_hash(string, string_len);
 
-    return get_node_with_hash(hash_table, string, hash);
-}
-
-long atom_table_get_index(struct AtomTable *table, AtomString string)
-{
-    unsigned long hash = sdbm_hash(string, atom_string_len(string));
-
-    SMP_RDLOCK(table);
-
-    struct HNode *node = get_node_with_hash(table, string, hash);
-    long result = (node != NULL) ? node->index : ATOM_TABLE_NOT_FOUND;
-
-    SMP_UNLOCK(table);
-    return result;
+    return get_node_with_hash(hash_table, string, string_len, hash);
 }
 
 // TODO: this function needs use an efficient structure such as a skip list
-static struct HNode *get_node_using_index(struct AtomTable *table, long index)
+static struct HNode *get_node_using_index(struct AtomTable *table, atom_index_t index)
 {
-    if (UNLIKELY(index >= table->count)) {
+    if (UNLIKELY(((size_t) index) >= table->count)) {
         return NULL;
     }
 
     struct HNodeGroup *node_group = table->first_node_group;
     while (node_group) {
-        long first_index = node_group->first_index;
+        atom_index_t first_index = node_group->first_index;
         if (first_index + node_group->len > index) {
             return &node_group->nodes[index - first_index];
         }
@@ -221,8 +210,9 @@ static struct HNode *get_node_using_index(struct AtomTable *table, long index)
     return NULL;
 }
 
-AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
+const uint8_t *atom_table_get_atom_string(struct AtomTable *table, atom_index_t index, size_t *out_size)
 {
+    const uint8_t *result;
     SMP_RDLOCK(table);
 
     struct HNode *node = get_node_using_index(table, index);
@@ -230,24 +220,37 @@ AtomString atom_table_get_atom_string(struct AtomTable *table, long index)
         SMP_UNLOCK(table);
         return NULL;
     }
-
-    AtomString found_key = node->key;
+    result = node->key;
+    *out_size = node->bytes_len;
 
     SMP_UNLOCK(table);
-    return found_key;
+    return result;
 }
 
-int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, int other_atom_index)
+bool atom_table_is_equal_to_atom_string(struct AtomTable *table, atom_index_t t_atom_index, AtomString string)
 {
-    AtomString t_atom_string = atom_table_get_atom_string(table, t_atom_index);
+    size_t t_atom_len;
+    const uint8_t *t_atom_data = atom_table_get_atom_string(table, t_atom_index, &t_atom_len);
+    if (IS_NULL_PTR(t_atom_data)) {
+        return false;
+    }
 
-    int t_atom_len = atom_string_len(t_atom_string);
-    const char *t_atom_data = (const char *) atom_string_data(t_atom_string);
+    return (t_atom_len == atom_string_len(string)) && (memcmp(t_atom_data, atom_string_data(string), t_atom_len) == 0);
+}
 
-    AtomString other_atom_string = atom_table_get_atom_string(table, other_atom_index);
+int atom_table_cmp_using_atom_index(struct AtomTable *table, atom_index_t t_atom_index, atom_index_t other_atom_index)
+{
+    size_t t_atom_len;
+    const uint8_t *t_atom_data = atom_table_get_atom_string(table, t_atom_index, &t_atom_len);
+    if (IS_NULL_PTR(t_atom_data)) {
+        return -1;
+    }
 
-    int other_atom_len = atom_string_len(other_atom_string);
-    const char *other_atom_data = (const char *) atom_string_data(other_atom_string);
+    size_t other_atom_len;
+    const uint8_t *other_atom_data = atom_table_get_atom_string(table, other_atom_index, &other_atom_len);
+    if (IS_NULL_PTR(other_atom_data)) {
+        return 1;
+    }
 
     int cmp_size = (t_atom_len > other_atom_len) ? other_atom_len : t_atom_len;
 
@@ -264,7 +267,7 @@ int atom_table_cmp_using_atom_index(struct AtomTable *table, int t_atom_index, i
     return memcmp_result;
 }
 
-atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, size_t *out_len)
+atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, atom_index_t index, size_t *out_len)
 {
     SMP_RDLOCK(table);
 
@@ -280,49 +283,10 @@ atom_ref_t atom_table_get_atom_ptr_and_len(struct AtomTable *table, long index, 
     return node;
 }
 
-bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom)
+static inline void init_node(struct HNode *node, const uint8_t *atom_data, size_t atom_len, long index)
 {
-    SMP_RDLOCK(table);
-
-    struct HNode *node = (struct HNode *) atom;
-    const uint8_t *data = atom_string_data(node->key);
-    size_t len = atom_string_len(node->key);
-
-    bool result = unicode_buf_is_ascii(data, len);
-
-    SMP_UNLOCK(table);
-    return result;
-}
-
-void atom_table_write_bytes(struct AtomTable *table, atom_ref_t atom, size_t buf_len, void *outbuf)
-{
-    SMP_RDLOCK(table);
-
-    struct HNode *node = (struct HNode *) atom;
-    size_t len = atom_string_len(node->key);
-    if (len > buf_len) {
-        len = buf_len;
-    }
-
-    memcpy(outbuf, atom_string_data(node->key), len);
-
-    SMP_UNLOCK(table);
-}
-
-void atom_table_write_cstring(
-    struct AtomTable *table, atom_ref_t atom, size_t buf_len, char *outbuf)
-{
-    SMP_RDLOCK(table);
-
-    struct HNode *node = (struct HNode *) atom;
-    atom_string_to_c(node->key, outbuf, buf_len);
-
-    SMP_UNLOCK(table);
-}
-
-static inline void init_node(struct HNode *node, AtomString atom, long index)
-{
-    node->key = atom;
+    node->key = atom_data;
+    node->bytes_len = atom_len;
     node->index = index;
 }
 
@@ -334,15 +298,15 @@ static inline void insert_node_into_bucket(
     node->next = maybe_existing_node;
 }
 
-static inline long insert_node(struct AtomTable *table, struct HNodeGroup *node_group,
-    unsigned long bucket_index, AtomString string)
+static inline atom_index_t insert_node(struct AtomTable *table, struct HNodeGroup *node_group,
+    unsigned long bucket_index, const uint8_t *atom_data, size_t atom_len)
 {
-    long new_index = table->count;
+    atom_index_t new_index = table->count;
     table->count++;
 
     struct HNode *node = &node_group->nodes[new_index - node_group->first_index];
     table->last_node_group_avail--;
-    init_node(node, string, new_index);
+    init_node(node, atom_data, atom_len, new_index);
     insert_node_into_bucket(table, bucket_index, node);
 
     return new_index;
@@ -372,9 +336,7 @@ static bool do_rehash(struct AtomTable *table, int new_capacity)
 
         for (int i = 0; i < group_count; i++) {
             struct HNode *node = &group->nodes[i];
-            AtomString key = node->key;
-
-            unsigned long hash = sdbm_hash(key, atom_string_len(key));
+            unsigned long hash = sdbm_hash(node->key, node->bytes_len);
             unsigned long bucket_index = hash % table->capacity;
 
             insert_node_into_bucket(table, bucket_index, node);
@@ -398,20 +360,21 @@ static inline bool maybe_rehash(struct AtomTable *table, int new_entries)
     return do_rehash(table, new_capacity);
 }
 
-long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum AtomTableCopyOpt opts)
+enum AtomTableEnsureAtomResult atom_table_ensure_atom(struct AtomTable *table, const uint8_t *atom_data, size_t atom_len, enum AtomTableCopyOpt opts, atom_index_t *result)
 {
-    unsigned long hash = sdbm_hash(string, atom_string_len(string));
+    unsigned long hash = sdbm_hash(atom_data, atom_len);
     SMP_WRLOCK(table);
     unsigned long bucket_index = hash % table->capacity;
 
-    struct HNode *node = get_node_from_bucket(table, bucket_index, string);
+    struct HNode *node = get_node_from_bucket(table, bucket_index, atom_data, atom_len);
     if (node) {
         SMP_UNLOCK(table);
-        return node->index;
+        *result = node->index;
+        return AtomTableEnsureAtomOk;
     }
     if (opts & AtomTableAlreadyExisting) {
         SMP_UNLOCK(table);
-        return ATOM_TABLE_NOT_FOUND;
+        return AtomTableEnsureAtomNotFound;
     }
 
     struct HNodeGroup *node_group = table->last_node_group;
@@ -419,30 +382,30 @@ long atom_table_ensure_atom(struct AtomTable *table, AtomString string, enum Ato
         node_group = new_node_group(table, DEFAULT_SIZE);
         if (IS_NULL_PTR(node_group)) {
             SMP_UNLOCK(table);
-            return ATOM_TABLE_ALLOC_FAIL;
+            return AtomTableEnsureAtomAllocFail;
         }
     }
 
-    AtomString maybe_copied = string;
     if (opts & AtomTableCopyAtom) {
-        uint8_t len = *((uint8_t *) string);
-        uint8_t *buf = malloc(1 + len);
-        if (IS_NULL_PTR(buf)) {
-            SMP_UNLOCK(table);
-            return ATOM_TABLE_ALLOC_FAIL;
+        uint8_t *buf = malloc(atom_len);
+        if (atom_len > 0) {
+            if (IS_NULL_PTR(buf)) {
+                SMP_UNLOCK(table);
+                return AtomTableEnsureAtomAllocFail;
+            }
+            memcpy(buf, atom_data, atom_len);
         }
-        memcpy(buf, string, 1 + len);
-        maybe_copied = buf;
+        atom_data = buf;
     }
 
     if (maybe_rehash(table, 1)) {
         bucket_index = hash % table->capacity;
     }
 
-    long new_index = insert_node(table, node_group, bucket_index, maybe_copied);
+    *result = insert_node(table, node_group, bucket_index, atom_data, atom_len);
 
     SMP_UNLOCK(table);
-    return new_index;
+    return AtomTableEnsureAtomOk;
 }
 
 static inline int read_encoded_len(const uint8_t **len_bytes)
@@ -463,8 +426,11 @@ static inline int read_encoded_len(const uint8_t **len_bytes)
     }
 }
 
-int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int count,
-    int *translate_table, enum EnsureAtomsOpt opt)
+// -1 is not a valid atom index as we're limited to 2^20
+#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) -1)
+
+enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, size_t count,
+    atom_index_t *translate_table, enum EnsureAtomsOpt opt)
 {
     bool is_long_format = (opt & EnsureLongEncoding) != 0;
 
@@ -474,41 +440,28 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
 
     const uint8_t *current_atom = atoms;
 
-    for (int i = 0; i < count; i++) {
+    for (size_t i = 0; i < count; i++) {
         struct HNode *node;
+        int atom_len;
         if (is_long_format) {
-            int atom_len = read_encoded_len(&current_atom);
-            if (UNLIKELY(atom_len < 0)) {
+            atom_len = read_encoded_len(&current_atom);
+            if (UNLIKELY(atom_len < 0 || atom_len > MAX_ATOM_LEN)) {
                 fprintf(stderr, "Found invalid atom len.");
                 SMP_UNLOCK(table);
-                return ATOM_TABLE_INVALID_LEN;
-            } else if (UNLIKELY(atom_len > 255)) {
-                fprintf(stderr,
-                    "Unsupported atom length %i bytes.\n"
-                    "Unlike OTP >= 28, AtomVM supports a maximum of 255 bytes"
-                    "regardeless the number of codepoints.\n"
-                    "If you are seeing this error please open an issue on GitHub:\n"
-                    "https://github.com/atomvm/AtomVM/issues\n",
-                    atom_len);
-                SMP_UNLOCK(table);
-                return ATOM_TABLE_INVALID_LEN;
+                return AtomTableEnsureAtomInvalidLen;
             }
-            char tmp_old_fmt[256];
-            tmp_old_fmt[0] = atom_len;
-            memcpy(tmp_old_fmt + 1, current_atom, atom_len);
-            node = get_node(table, tmp_old_fmt);
-            current_atom += atom_len;
         } else {
-            node = get_node(table, current_atom);
-            uint8_t atom_len = current_atom[0];
-            current_atom += 1 + atom_len;
+            atom_len = current_atom[0];
+            current_atom++;
         }
+        node = get_node(table, current_atom, atom_len);
+        current_atom += atom_len;
 
         if (node) {
             translate_table[i] = node->index;
         } else {
             new_atoms_count++;
-            translate_table[i] = ATOM_TABLE_NOT_FOUND;
+            translate_table[i] = ATOM_TABLE_NOT_FOUND_MARKER;
         }
     }
 
@@ -517,54 +470,38 @@ int atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, int coun
     current_atom = atoms;
     int remaining_atoms = new_atoms_count;
     struct HNodeGroup *node_group = table->last_node_group;
-    for (int i = 0; i < count; i++) {
-
-        const uint8_t *to_be_copied = NULL;
-        const uint8_t *next_atom = current_atom;
-        uint8_t atom_len;
+    for (size_t i = 0; i < count; i++) {
+        size_t atom_len;
         if (is_long_format) {
-            atom_len = read_encoded_len(&next_atom);
-            to_be_copied = next_atom;
-            next_atom += atom_len;
+            // Size was checked above
+            atom_len = (size_t) read_encoded_len(&current_atom);
         } else {
             atom_len = current_atom[0];
-            next_atom += 1 + atom_len;
+            current_atom++;
         }
 
-        if (translate_table[i] == ATOM_TABLE_NOT_FOUND) {
+        if (translate_table[i] == ATOM_TABLE_NOT_FOUND_MARKER) {
             if (!table->last_node_group_avail) {
                 node_group = new_node_group(table, remaining_atoms);
                 if (IS_NULL_PTR(node_group)) {
                     SMP_UNLOCK(table);
-                    return ATOM_TABLE_ALLOC_FAIL;
+                    return AtomTableEnsureAtomAllocFail;
                 }
-            }
-
-            if (is_long_format) {
-                uint8_t *atom_copy = malloc(atom_len + 1);
-                if (IS_NULL_PTR(atom_copy)) {
-                    // we are not going to remove atoms that have already been added up to this one
-                    SMP_UNLOCK(table);
-                    return ATOM_TABLE_ALLOC_FAIL;
-                }
-                atom_copy[0] = atom_len;
-                memcpy(atom_copy + 1, to_be_copied, atom_len);
-                current_atom = atom_copy;
             }
 
             unsigned long hash = sdbm_hash(current_atom, atom_len);
             unsigned long bucket_index = hash % table->capacity;
 
-            translate_table[i] = insert_node(table, node_group, bucket_index, current_atom);
+            translate_table[i] = insert_node(table, node_group, bucket_index, current_atom, atom_len);
             remaining_atoms--;
             if (remaining_atoms == 0) {
                 break;
             }
         }
-        current_atom = next_atom;
+        current_atom += atom_len;
     }
 
     SMP_UNLOCK(table);
 
-    return 0;
+    return AtomTableEnsureAtomOk;
 }
