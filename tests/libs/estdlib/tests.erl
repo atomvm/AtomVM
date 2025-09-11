@@ -80,7 +80,8 @@ get_non_networking_tests(_OTPVersion) ->
         test_timer,
         test_spawn,
         test_supervisor,
-        test_lists_subtraction
+        test_lists_subtraction,
+        test_file_native_name_encoding
     ].
 
 get_networking_tests(OTPVersion) when
