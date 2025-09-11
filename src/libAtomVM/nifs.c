@@ -229,657 +229,544 @@ DECLARE_MATH_NIF_FUN(sqrt)
 DECLARE_MATH_NIF_FUN(tan)
 DECLARE_MATH_NIF_FUN(tanh)
 
-static const struct Nif binary_at_nif =
-{
+static const struct Nif binary_at_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_at_2
 };
 
-static const struct Nif binary_copy_nif =
-{
+static const struct Nif binary_copy_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_copy
 };
 
-static const struct Nif binary_first_nif =
-{
+static const struct Nif binary_first_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_first_1
 };
 
-static const struct Nif binary_last_nif =
-{
+static const struct Nif binary_last_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_last_1
 };
 
-static const struct Nif binary_part_nif =
-{
+static const struct Nif binary_part_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_part_3
 };
 
-static const struct Nif binary_split_nif =
-{
+static const struct Nif binary_split_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_split
 };
 
-static const struct Nif binary_replace_nif =
-{
+static const struct Nif binary_replace_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_replace
 };
 
-static const struct Nif binary_match_nif =
-{
+static const struct Nif binary_match_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_match
 };
 
-static const struct Nif make_ref_nif =
-{
+static const struct Nif make_ref_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_ref_0
 };
 
-static const struct Nif atom_to_binary_nif =
-{
+static const struct Nif atom_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_atom_to_binary
 };
 
-static const struct Nif atom_to_list_nif =
-{
+static const struct Nif atom_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_atom_to_list_1
 };
 
-static const struct Nif binary_to_atom_1_nif =
-{
+static const struct Nif binary_to_atom_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_atom_1
 };
 
-static const struct Nif binary_to_float_nif =
-{
+static const struct Nif binary_to_float_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_float_1
 };
 
-static const struct Nif binary_to_integer_nif =
-{
+static const struct Nif binary_to_integer_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_integer
 };
 
-static const struct Nif binary_to_list_nif =
-{
+static const struct Nif binary_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_list_1
 };
 
-static const struct Nif binary_to_existing_atom_1_nif =
-{
+static const struct Nif binary_to_existing_atom_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_existing_atom_1
 };
 
-static const struct Nif delete_element_nif =
-{
+static const struct Nif delete_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_delete_element_2
 };
 
-static const struct Nif display_nif =
-{
+static const struct Nif display_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
 };
 
-static const struct Nif erase_0_nif =
-{
+static const struct Nif erase_0_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_0
 };
 
-static const struct Nif erase_1_nif =
-{
+static const struct Nif erase_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_1
 };
 
-static const struct Nif error_nif =
-{
+static const struct Nif error_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_error
 };
 
-static const struct Nif exit_nif =
-{
+static const struct Nif exit_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_exit
 };
 
-static const struct Nif insert_element_nif =
-{
+static const struct Nif insert_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_insert_element_3
 };
 
-static const struct Nif integer_to_binary_nif =
-{
+static const struct Nif integer_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_binary_2
 };
 
-static const struct Nif integer_to_list_nif =
-{
+static const struct Nif integer_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_list_2
 };
 
-static const struct Nif float_to_binary_nif =
-{
+static const struct Nif float_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_float_to_binary
 };
 
-static const struct Nif float_to_list_nif =
-{
+static const struct Nif float_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_float_to_list
 };
 
-static const struct Nif fun_info_nif =
-{
+static const struct Nif fun_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_info_2
 };
 
-static const struct Nif is_process_alive_nif =
-{
+static const struct Nif is_process_alive_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_is_process_alive_1
 };
 
-static const struct Nif list_to_binary_nif =
-{
+static const struct Nif list_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_binary_1
 };
 
-static const struct Nif list_to_integer_nif =
-{
+static const struct Nif list_to_integer_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_integer
 };
 
-static const struct Nif list_to_float_nif =
-{
+static const struct Nif list_to_float_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_float_1
 };
 
-static const struct Nif list_to_tuple_nif =
-{
+static const struct Nif list_to_tuple_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_tuple_1
 };
 
-static const struct Nif iolist_size_nif =
-{
+static const struct Nif iolist_size_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_iolist_size_1
 };
 
-static const struct Nif iolist_to_binary_nif =
-{
+static const struct Nif iolist_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_iolist_to_binary_1
 };
 
-static const struct Nif open_port_nif =
-{
+static const struct Nif open_port_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_open_port_2
 };
 
-static const struct Nif make_tuple_nif =
-{
+static const struct Nif make_tuple_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_tuple_2
 };
 
-static const struct Nif register_nif =
-{
+static const struct Nif register_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_register_2
 };
 
-static const struct Nif unregister_nif =
-{
+static const struct Nif unregister_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_unregister_1
 };
 
-static const struct Nif spawn_opt_nif =
-{
+static const struct Nif spawn_opt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_spawn_opt
 };
 
-static const struct Nif spawn_fun_opt_nif =
-{
+static const struct Nif spawn_fun_opt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_spawn_fun_opt
 };
 
-static const struct Nif send_nif =
-{
+static const struct Nif send_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_send_2
 };
 
-static const struct Nif setelement_nif =
-{
+static const struct Nif setelement_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_setelement_3
 };
 
-static const struct Nif whereis_nif =
-{
+static const struct Nif whereis_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_whereis_1
 };
 
-static const struct Nif concat_nif =
-{
+static const struct Nif concat_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_concat_2
 };
 
-static const struct Nif monotonic_time_nif =
-{
+static const struct Nif monotonic_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_monotonic_time_1
 };
 
-static const struct Nif system_time_nif =
-{
+static const struct Nif system_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_time_1
 };
 
-static const struct Nif universaltime_nif =
-{
+static const struct Nif universaltime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_universaltime_0
 };
 
-static const struct Nif localtime_nif =
-{
+static const struct Nif localtime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_localtime
 };
 
-static const struct Nif timestamp_nif =
-{
+static const struct Nif timestamp_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_timestamp_0
 };
 
-static const struct Nif system_time_to_universal_time_nif =
-{
+static const struct Nif system_time_to_universal_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_calendar_system_time_to_universal_time_2
 };
 
-static const struct Nif tuple_to_list_nif =
-{
+static const struct Nif tuple_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_tuple_to_list_1
 };
 
-static const struct Nif flat_size_nif =
-{
+static const struct Nif flat_size_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erts_debug_flat_size
 };
 
-static const struct Nif process_flag_nif =
-{
+static const struct Nif process_flag_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_flag
 };
 
-static const struct Nif processes_nif =
-{
+static const struct Nif processes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_processes
 };
 
-static const struct Nif process_info_nif =
-{
+static const struct Nif process_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_info
 };
 
-static const struct Nif get_0_nif =
-{
+static const struct Nif get_0_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_0
 };
 
-static const struct Nif put_nif =
-{
+static const struct Nif put_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_put_2
 };
 
-static const struct Nif system_info_nif =
-{
+static const struct Nif system_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_info
 };
 
-static const struct Nif system_flag_nif =
-{
+static const struct Nif system_flag_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_flag
 };
 
-static const struct Nif binary_to_term_nif =
-{
+static const struct Nif binary_to_term_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_term
 };
 
-static const struct Nif term_to_binary_nif =
-{
+static const struct Nif term_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_term_to_binary
 };
 
-static const struct Nif split_binary_nif =
-{
+static const struct Nif split_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_split_binary
 };
 
-static const struct Nif throw_nif =
-{
+static const struct Nif throw_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_throw
 };
 
-static const struct Nif pid_to_list_nif =
-{
+static const struct Nif pid_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_pid_to_list
 };
 
-static const struct Nif port_to_list_nif =
-{
+static const struct Nif port_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_port_to_list
 };
 
-static const struct Nif ref_to_list_nif =
-{
+static const struct Nif ref_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_ref_to_list
 };
 
-static const struct Nif fun_to_list_nif =
-{
+static const struct Nif fun_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_to_list
 };
 
-static const struct Nif function_exported_nif =
-{
+static const struct Nif function_exported_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_function_exported
 };
 
-static const struct Nif garbage_collect_nif =
-{
+static const struct Nif garbage_collect_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_garbage_collect
 };
 
-static const struct Nif make_fun_nif =
-{
+static const struct Nif make_fun_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_fun_3
 };
 
-static const struct Nif memory_nif =
-{
+static const struct Nif memory_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_memory
 };
 
-static const struct Nif monitor_nif =
-{
+static const struct Nif monitor_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_monitor
 };
 
-static const struct Nif demonitor_nif =
-{
+static const struct Nif demonitor_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_demonitor
 };
 
-static const struct Nif link_nif =
-{
+static const struct Nif link_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_link
 };
 
-static const struct Nif unlink_nif =
-{
+static const struct Nif unlink_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_unlink
 };
 
-static const struct Nif group_leader_nif =
-{
+static const struct Nif group_leader_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_group_leader
 };
 
-static const struct Nif get_module_info_nif =
-{
+static const struct Nif get_module_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_module_info
 };
 
-static const struct Nif setnode_2_nif =
-{
+static const struct Nif setnode_2_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_setnode_2
 };
 
-static const struct Nif raise_nif =
-{
+static const struct Nif raise_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_raise
 };
 
-static const struct Nif ets_new_nif =
-{
+static const struct Nif ets_new_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_new
 };
 
-static const struct Nif ets_insert_nif =
-{
+static const struct Nif ets_insert_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_insert
 };
 
-static const struct Nif ets_lookup_nif =
-{
+static const struct Nif ets_lookup_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_lookup
 };
 
-static const struct Nif ets_lookup_element_nif =
-{
+static const struct Nif ets_lookup_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_lookup_element
 };
 
-static const struct Nif ets_delete_nif =
-{
+static const struct Nif ets_delete_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_delete
 };
 
-static const struct Nif ets_update_counter_nif =
-{
+static const struct Nif ets_update_counter_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_update_counter
 };
 
-static const struct Nif atomvm_add_avm_pack_binary_nif =
-{
+static const struct Nif atomvm_add_avm_pack_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_binary
 };
-static const struct Nif atomvm_add_avm_pack_file_nif =
-{
+static const struct Nif atomvm_add_avm_pack_file_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_file
 };
-static const struct Nif atomvm_close_avm_pack_nif =
-{
+static const struct Nif atomvm_close_avm_pack_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_close_avm_pack
 };
-static const struct Nif atomvm_get_start_beam_nif =
-{
+static const struct Nif atomvm_get_start_beam_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_get_start_beam
 };
-static const struct Nif atomvm_read_priv_nif =
-{
+static const struct Nif atomvm_read_priv_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_read_priv
 };
-static const struct Nif atomvm_get_creation_nif =
-{
+static const struct Nif atomvm_get_creation_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_get_creation
 };
-static const struct Nif console_print_nif =
-{
+static const struct Nif console_print_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_console_print
 };
-static const struct Nif base64_encode_nif =
-{
+static const struct Nif base64_encode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_encode
 };
-static const struct Nif base64_decode_nif =
-{
+static const struct Nif base64_decode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode
 };
-static const struct Nif base64_encode_to_string_nif =
-{
+static const struct Nif base64_encode_to_string_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_encode_to_string
 };
-static const struct Nif base64_decode_to_string_nif =
-{
+static const struct Nif base64_decode_to_string_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
 };
-static const struct Nif code_all_available_nif =
-{
+static const struct Nif code_all_available_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_all_available
 };
-static const struct Nif code_all_loaded_nif =
-{
+static const struct Nif code_all_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_all_loaded
 };
-static const struct Nif code_load_abs_nif =
-{
+static const struct Nif code_load_abs_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_abs
 };
-static const struct Nif code_load_binary_nif =
-{
+static const struct Nif code_load_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_binary
 };
-static const struct Nif code_ensure_loaded_nif =
-{
+static const struct Nif code_ensure_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
 };
 
-static const struct Nif module_loaded_nif =
-{
+static const struct Nif module_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_module_loaded
 };
 
-static const struct Nif nif_error_nif =
-{
+static const struct Nif nif_error_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_nif_error
 };
 
-static const struct Nif lists_reverse_nif =
-{
+static const struct Nif lists_reverse_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_lists_reverse
 };
-static const struct Nif maps_from_keys_nif =
-{
+static const struct Nif maps_from_keys_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_from_keys
 };
-static const struct Nif maps_next_nif =
-{
+static const struct Nif maps_next_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
 };
-static const struct Nif unicode_characters_to_list_nif =
-{
+static const struct Nif unicode_characters_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_list
 };
-static const struct Nif unicode_characters_to_binary_nif =
-{
+static const struct Nif unicode_characters_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_binary
 };
-static const struct Nif erlang_lists_subtract_nif =
-{
+static const struct Nif erlang_lists_subtract_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_lists_subtract
 };
-static const struct Nif zlib_compress_nif =
-{
+static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_zlib_compress_1
 };
 
-
-#define DEFINE_MATH_NIF(moniker)                    \
-    static const struct Nif math_##moniker##_nif =  \
-    {                                               \
-        .base.type = NIFFunctionType,               \
-        .nif_ptr = nif_math_##moniker               \
+#define DEFINE_MATH_NIF(moniker)                     \
+    static const struct Nif math_##moniker##_nif = { \
+        .base.type = NIFFunctionType,                \
+        .nif_ptr = nif_math_##moniker                \
     };
 
 DEFINE_MATH_NIF(cos)
