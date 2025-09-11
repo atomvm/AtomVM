@@ -905,7 +905,7 @@ DEFINE_MATH_NIF(sqrt)
 DEFINE_MATH_NIF(tan)
 DEFINE_MATH_NIF(tanh)
 
-//Handle optional nifs
+// Handle optional nifs
 #if HAVE_OPEN && HAVE_CLOSE
 #define IF_HAVE_OPEN_CLOSE(expr) (expr)
 #if HAVE_EXECVE
@@ -940,7 +940,7 @@ DEFINE_MATH_NIF(tanh)
 #define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
 #endif
 
-//Ignore warning caused by gperf generated code
+// Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -1021,11 +1021,11 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     }
 
     term t = term_get_tuple_element(port_name_tuple, 1);
-    //TODO: validate port name
+    // TODO: validate port name
     int ok;
     char *driver_name = interop_term_to_string(t, &ok);
     if (UNLIKELY(!ok)) {
-        //TODO: handle atoms here
+        // TODO: handle atoms here
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1286,7 +1286,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     }
     size += memory_estimate_usage(group_leader);
     if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        //TODO: new process should be terminated, however a new pid is returned anyway
+        // TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
         AVM_ABORT();
     }
@@ -1463,7 +1463,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     int label = module_search_exported_function(found_module, term_to_atom_index(argv[1]), args_len);
-    //TODO: fail here if no function has been found
+    // TODO: fail here if no function has been found
     if (UNLIKELY(label == 0)) {
         AVM_ABORT();
     }
@@ -1471,7 +1471,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
-    //TODO: check available registers count
+    // TODO: check available registers count
     int reg_index = 0;
 
     size_t min_heap_size = 0;
@@ -2021,8 +2021,8 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     memcpy(null_terminated_buf, bin_data, bin_data_size);
     null_terminated_buf[bin_data_size] = '\0';
 
-    //TODO: handle errors
-    //TODO: do not copy buffer, implement a custom strotoll
+    // TODO: handle errors
+    // TODO: do not copy buffer, implement a custom strotoll
     char *endptr;
     uint64_t value = strtoll(null_terminated_buf, &endptr, base);
     if (*endptr != '\0') {
