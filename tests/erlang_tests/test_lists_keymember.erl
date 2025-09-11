@@ -8,6 +8,7 @@ start() ->
     ok = test_keymember_with_empty_list(),
     ok = test_keymember_with_existing_key_on_different_position(),
     ok = test_keymember_with_existing_key_and_different_length_of_tuples(),
+    ok = test_keymember_with_invalid_input(),
     0.
 
 test_keymember_with_existing_key() ->
@@ -52,3 +53,19 @@ test_keymember_with_existing_key_on_different_position() ->
     List = [Tuple1, Tuple2, Tuple3],
     false = lists:keymember(Key, 2, List),
     ok.
+
+test_keymember_with_invalid_input() ->
+    ok =
+        try
+            lists:keymember(key, 2, not_a_list),
+            error
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            lists:keymember(key, 2, [{a, 1}, {b, 2} | foo]),
+            error
+        catch
+            error:badarg -> ok
+        end.

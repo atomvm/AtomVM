@@ -7,6 +7,7 @@ start() ->
     true = test_member_with_existing_element_on_heterogenous_list(),
     false = test_member_with_non_existing_element(),
     false = test_member_in_empty_list(),
+    ok = test_member_with_invalid_input(),
     0.
 
 test_member_with_existing_element() ->
@@ -28,3 +29,19 @@ test_member_in_empty_list() ->
     Element = element,
     List = [],
     lists:member(Element, List).
+
+test_member_with_invalid_input() ->
+    ok =
+        try
+            lists:member(element, not_a_list),
+            error
+        catch
+            error:badarg -> ok
+        end,
+    ok =
+        try
+            lists:member(element, [a, b | foo]),
+            error
+        catch
+            error:badarg -> ok
+        end.

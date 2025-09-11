@@ -5905,15 +5905,8 @@ static term nif_lists_member(Context *ctx, int argc, term argv[])
     UNUSED(argc)
     term elem = argv[0];
     term list = argv[1];
-    VALIDATE_VALUE(list, term_is_list);
 
-    int proper;
-    term_list_length(list, &proper);
-    if (UNLIKELY(!proper)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    while (!term_is_nil(list)) {
+    while (term_is_nonempty_list(list)) {
         term head = term_get_list_head(list);
 
         TermCompareResult cmp_result = term_compare(head, elem, TermCompareExact, ctx->global);
@@ -5929,12 +5922,17 @@ static term nif_lists_member(Context *ctx, int argc, term argv[])
         list = term_get_list_tail(list);
     }
 
+    VALIDATE_VALUE(list, term_is_nil);
+
     return FALSE_ATOM;
 }
 
 static term nif_lists_keymember(Context *ctx, int argc, term argv[])
 {
     term result = nif_lists_keyfind(ctx, argc, argv);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        return result;
+    }
     return result == FALSE_ATOM ? FALSE_ATOM : TRUE_ATOM;
 }
 
@@ -5945,23 +5943,15 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
     term n = argv[1];
     term tuple_list = argv[2];
 
-    if (!term_is_integer(n) || !term_is_list(tuple_list)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    VALIDATE_VALUE(n, term_is_integer);
 
-    int n_pos = term_to_int(n);
+    avm_int_t n_pos = term_to_int(n);
 
     if (n_pos <= 0) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    int proper;
-    term_list_length(tuple_list, &proper);
-    if (UNLIKELY(!proper)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    while (!term_is_nil(tuple_list)) {
+    while (term_is_nonempty_list(tuple_list)) {
         term tuple = term_get_list_head(tuple_list);
 
         if (!term_is_tuple(tuple)) {
@@ -5990,12 +5980,17 @@ static term nif_lists_keyfind(Context *ctx, int argc, term argv[])
         tuple_list = term_get_list_tail(tuple_list);
     }
 
+    VALIDATE_VALUE(tuple_list, term_is_nil);
+
     return FALSE_ATOM;
 }
 
 static term nif_lists_keysearch(Context *ctx, int argc, term argv[])
 {
     term found_value = nif_lists_keyfind(ctx, argc, argv);
+    if (UNLIKELY(term_is_invalid_term(found_value))) {
+        return found_value;
+    }
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &found_value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
