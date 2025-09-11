@@ -29,13 +29,18 @@ test() ->
     ok.
 
 test_os_getenv() ->
+    Machine = erlang:system_info(machine),
+    Platform =
+        case Machine of
+            "ATOM" -> atomvm:platform();
+            "BEAM" -> os:type()
+        end,
     ok =
-        case atomvm:platform() of
+        case Platform of
             generic_unix -> validate_path(os:getenv("PATH"));
             _ -> ok
         end,
     false = os:getenv("NON_EXISTENT_VAR"),
-    false = os:getenv("ZAŻÓŁĆ_GĘŚLĄ_JAŹŃ"),
     false = os:getenv(""),
     ok =
         try
@@ -44,6 +49,10 @@ test_os_getenv() ->
             error:badarg -> ok;
             Class:Reason:Stacktrace -> erlang:raise(Class, Reason, Stacktrace)
         end,
+    case Machine of
+        "ATOM" -> false = os:getenv("ZAŻÓŁĆ_GĘŚLĄ_JAŹŃ");
+        "BEAM" -> ok
+    end,
     ok.
 
 validate_path("/" ++ _Rest) -> ok;
