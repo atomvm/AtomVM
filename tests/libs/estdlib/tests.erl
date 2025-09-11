@@ -81,7 +81,8 @@ get_non_networking_tests(_OTPVersion) ->
         test_spawn,
         test_supervisor,
         test_lists_subtraction,
-        test_os
+        test_os,
+        test_file
     ].
 
 get_networking_tests(OTPVersion) when

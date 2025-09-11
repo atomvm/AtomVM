@@ -34,6 +34,7 @@ set(ERLANG_MODULES
     erpc
     erts_debug
     ets
+    file
     gen_event
     gen_server
     gen_statem
