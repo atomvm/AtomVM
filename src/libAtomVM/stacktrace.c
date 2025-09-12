@@ -273,14 +273,13 @@ static term find_path_created(const void *key, struct ModulePathPair *module_pat
 
 bool stacktrace_is_built(term stack_info_or_stacktrace)
 {
-    TERM_DEBUG_ASSERT(term_is_tuple(stack_info_or_stacktrace) || term_is_list(stack_info_or_stacktrace));
     if (term_is_tuple(stack_info_or_stacktrace)) {
         return false;
     } else if (term_is_list(stack_info_or_stacktrace)) {
         return true;
     } else {
-        fprintf(stderr, "Error: invalid stack_info or stacktrace passed to stacktrace_is_built");
-        return false;
+        fprintf(stderr, "Error: invalid stack_info or stacktrace passed to stacktrace_is_built\n");
+        AVM_ABORT();
     }
 }
 
