@@ -48,6 +48,7 @@
     if (UNLIKELY(!verify_function((value)))) { \
         argv[0] = ERROR_ATOM;                  \
         argv[1] = BADARG_ATOM;                 \
+        ctx->x[2] = term_nil();                \
         return term_invalid_term();            \
     }
 
