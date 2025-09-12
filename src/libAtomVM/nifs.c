@@ -844,6 +844,7 @@ const struct Nif *nifs_get(const char *mfa)
     return nameAndPtr->nif;
 }
 
+// clang-format off
 static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 {
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -864,6 +865,7 @@ static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
         return term_from_int(value);
     }
 }
+// clang-format on
 
 static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 {
