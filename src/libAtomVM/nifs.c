@@ -1841,7 +1841,7 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
     smp_spinlock_unlock(&ctx->global->env_spinlock);
 #endif
 
-    if (UNLIKELY(IS_NULL_PTR(env_var_value))) {
+    if (IS_NULL_PTR(env_var_value)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
