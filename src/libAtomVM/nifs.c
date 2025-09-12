@@ -4853,9 +4853,8 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             break;
     }
     size_t dst_size_with_pad = dst_size + pad;
-    size_t heap_free = return_binary ?
-        term_binary_heap_size(dst_size_with_pad)
-        : 2*dst_size_with_pad;
+    size_t heap_free = return_binary ? term_binary_heap_size(dst_size_with_pad)
+                                     : 2 * dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -5001,9 +5000,8 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         }
     }
     dst_size -= pad;
-    size_t heap_free = return_binary ?
-        term_binary_heap_size(dst_size)
-        : 2*dst_size;
+    size_t heap_free = return_binary ? term_binary_heap_size(dst_size)
+                                     : 2 * dst_size;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
