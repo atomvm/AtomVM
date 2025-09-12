@@ -5867,7 +5867,7 @@ static void maybe_clear_exceptions()
 static term get_exception(avm_float_t f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
     UNUSED(f)
     if (fetestexcept(FE_DIVBYZERO | FE_INVALID)) {
         return BADARITH_ATOM;
@@ -5882,7 +5882,7 @@ static term get_exception(avm_float_t f)
 static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     maybe_clear_exceptions();
@@ -5901,7 +5901,7 @@ static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     avm_float_t y = term_conv_to_float(y_term);
