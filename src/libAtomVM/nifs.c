@@ -953,9 +953,9 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     int32_t pid = term_to_local_process_id(pid_or_port_term);
 
     // pid must be existing, not already registered, and not the atom undefined.
-    if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid)) ||
-        globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM ||
-        reg_name_term == UNDEFINED_ATOM){
+    if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid))
+        || globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM
+        || reg_name_term == UNDEFINED_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1108,7 +1108,9 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     NativeHandlerResult result = NativeContinue;
     while (result == NativeContinue) {
         Message *message = mailbox_first(&ctx->mailbox);
-        if (message == NULL) break;
+        if (message == NULL) {
+            break;
+        }
         term msg = message->message;
 
         result = process_console_message(ctx, msg);
@@ -2874,7 +2876,8 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
             argv[1] = BADARG_ATOM;
             return term_invalid_term();
         }
-        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
+        };
         return term_from_int32(old_value);
     }
 #else
@@ -3110,7 +3113,9 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     size_t heap_size = 0;
     do {
         const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
-        if (!found) break;
+        if (!found) {
+            break;
+        }
         num_segments++;
         heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
         int next_search_offset = found - temp_bin_data + pattern_size;
@@ -3845,7 +3850,7 @@ static term nif_erlang_exit(Context *ctx, int argc, term argv[])
                 } else if (ctx == target) {
                     mailbox_send_term_signal(target, KillSignal, reason);
                     self_is_signaled = target == ctx;
-                } else if (reason != NORMAL_ATOM){
+                } else if (reason != NORMAL_ATOM) {
                     mailbox_send_term_signal(target, KillSignal, reason);
                     self_is_signaled = target == ctx;
                 } // else there is no effect
@@ -5100,7 +5105,8 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[])
     return result;
 }
 
-struct CodeAllAvailableAcc {
+struct CodeAllAvailableAcc
+{
     Context *ctx;
     struct AVMPackData *avmpack_data;
     term result;
