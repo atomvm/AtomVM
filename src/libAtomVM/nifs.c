@@ -78,11 +78,11 @@
 #define NOT_FOUND (0xFF)
 
 #ifdef ENABLE_ADVANCED_TRACE
-static const char *const trace_calls_atom = "\xB" "trace_calls";
-static const char *const trace_call_args_atom = "\xF" "trace_call_args";
-static const char *const trace_returns_atom = "\xD" "trace_returns";
-static const char *const trace_send_atom = "\xA" "trace_send";
-static const char *const trace_receive_atom = "\xD" "trace_receive";
+static const char *const trace_calls_atom = ATOM_STR("\xB", "trace_calls");
+static const char *const trace_call_args_atom = ATOM_STR("\xF", "trace_call_args");
+static const char *const trace_returns_atom = ATOM_STR("\xD", "trace_returns");
+static const char *const trace_send_atom = ATOM_STR("\xA", "trace_send");
+static const char *const trace_receive_atom = ATOM_STR("\xD", "trace_receive");
 #endif
 
 static NativeHandlerResult process_echo_mailbox(Context *ctx);
@@ -5304,7 +5304,7 @@ static term nif_code_load_binary(Context *ctx, int argc, term argv[])
     return result;
 }
 
-static const char *const embedded_atom = "\x8" "embedded";
+static const char *const embedded_atom = ATOM_STR("\x8", "embedded");
 
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
 {
