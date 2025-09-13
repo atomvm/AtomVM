@@ -58,7 +58,8 @@ start() ->
         test_bxor() +
         test_bor() +
         test_bsl() +
-        test_bsr().
+        test_bsr() +
+        test_bnot().
 
 test_mul() ->
     Expected_INT64_MIN = ?MODULE:pow(-2, 63),
@@ -1217,6 +1218,49 @@ test_bsr() ->
     ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(NLS2)) end),
     ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(NLS2)) end),
     0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(NLS2)),
+
+    0.
+
+test_bnot() ->
+    Pattern1 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432987654321">>), 16),
+    Pattern2 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE1234AABBCCDD98765432987654321">>), 16),
+    <<"-CAFE1234AABBCCDD98765432987654322">> = integer_to_binary(
+        ?MODULE:id(bnot (?MODULE:id(Pattern1))), 16
+    ),
+    <<"CAFE1234AABBCCDD98765432987654320">> = integer_to_binary(
+        ?MODULE:id(bnot (?MODULE:id(Pattern2))), 16
+    ),
+
+    Pattern3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Pattern4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+
+    <<"-8000000000000000000000000000000000000000000000000000000000000000">> = integer_to_binary(
+        ?MODULE:id(bnot (?MODULE:id(Pattern3))), 16
+    ),
+    <<"7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">> = integer_to_binary(
+        ?MODULE:id(bnot (?MODULE:id(Pattern4))), 16
+    ),
+
+    PatternMax = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    PatternMin = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+
+    % Here the behaviour differs from the BEAM
+    % See previous comment on this topic
+    NotPatternMax = choose_result(
+        <<"0">>, <<"-10000000000000000000000000000000000000000000000000000000000000000">>
+    ),
+    NotPatternMax = integer_to_binary(?MODULE:id(bnot (?MODULE:id(PatternMax))), 16),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">> = integer_to_binary(
+        ?MODULE:id(bnot (?MODULE:id(PatternMin))), 16
+    ),
 
     0.
 

@@ -1671,8 +1671,20 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
                 return make_boxed_int64(ctx, fail_label, live, ~val);
             }
             #endif
-            default:
-                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            default: {
+                intn_digit_t tmp_buf1[INTN_INT64_LEN];
+                intn_digit_t *m;
+                size_t m_len;
+                intn_integer_sign_t m_sign;
+                term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+
+                intn_digit_t bigres[INTN_MAX_RES_LEN];
+                intn_integer_sign_t bigres_sign;
+
+                size_t bigres_len = intn_bnot(m, m_len, m_sign, bigres, &bigres_sign);
+
+                return make_bigint(ctx, fail_label, live, bigres, bigres_len, bigres_sign);
+            }
         }
     } else {
         TRACE("error: arg1: 0x%lx\n", arg1);
