@@ -143,8 +143,7 @@ struct ModuleNativeInterface
     int (*bitstring_insert_utf8)(term bin, size_t offset, int c);
     int (*bitstring_insert_utf16)(term bin, size_t offset, int c, enum BitstringFlags flags);
     bool (*bitstring_insert_utf32)(term bin, size_t offset, uint32_t c, enum BitstringFlags flags);
-    bool (*bitstring_insert_integer)(term bin, size_t offset, avm_int64_t value, size_t n, enum BitstringFlags flags);
-    avm_int64_t (*term_maybe_unbox_int64)(term i);
+    bool (*bitstring_insert_integer)(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags);
     void (*bitstring_copy_module_str)(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len);
     int (*bitstring_copy_binary)(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size);
     Context *(*apply)(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity);

@@ -1339,6 +1339,12 @@ static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum Bitst
     return byte_size;
 }
 
+static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
+{
+    avm_uint64_t int_value = term_maybe_unbox_int64(value);
+    return bitstring_insert_integer(bin, offset, int_value, n, flags);
+}
+
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
 {
     TRACE("jit_bitstring_copy_module_str: bin=%p offset=%d str_id=%d len=%d\n", (void *) bin, (int) offset, str_id, (int) len);
@@ -1705,8 +1711,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_insert_utf8,
     jit_bitstring_insert_utf16,
     bitstring_insert_utf32,
-    bitstring_insert_integer,
-    term_maybe_unbox_int64,
+    jit_bitstring_insert_integer,
     jit_bitstring_copy_module_str,
     jit_bitstring_copy_binary,
     jit_apply,
