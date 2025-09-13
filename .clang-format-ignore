@@ -12,7 +12,6 @@ src/libAtomVM/debug.h
 src/libAtomVM/defaultatoms.c
 src/libAtomVM/externalterm.c
 src/libAtomVM/module.c
-src/libAtomVM/nifs.c
 src/libAtomVM/opcodesswitch.h
 src/libAtomVM/overflow_helpers.h
 src/libAtomVM/term.c
