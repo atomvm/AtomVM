@@ -2746,11 +2746,13 @@ first_pass_bs_create_bin_insert_value(
     % term_to_int can raise a badarg and use a temp register for this, start
     % with it.
     {MSt1, SizeValue} = term_to_int(Size, Fail, MMod, MSt0),
-    {MSt2, SrcValue} = term_maybe_unbox_int64(Src, MMod, MSt1),
+    % Because we're calling a function without ctx as an arg, we need to move
+    % the value now to a register
+    {MSt2, SrcReg} = MMod:move_to_native_register(MSt1, Src),
     {MSt3, FlagsValue} = decode_flags_list(Flags, MMod, MSt2),
     MSt4 = MMod:mul(MSt3, SizeValue, SegmentUnit),
     {MSt5, BoolResult} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_INSERT_INTEGER, [
-        CreatedBin, Offset, {free, SrcValue}, SizeValue, {free, FlagsValue}
+        CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
     ]),
     MSt6 = cond_raise_badarg_or_jump_to_fail_label(
         {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt5
@@ -3353,13 +3355,6 @@ term_to_int(Term, FailLabel, MMod, MSt0) ->
     MSt3 = MMod:shift_right(MSt2, Reg, 4),
     {MSt3, Reg}.
 
-term_maybe_unbox_int64(Term, _MMod, MSt0) when is_integer(Term) ->
-    {MSt0, Term bsr 4};
-term_maybe_unbox_int64(Term, MMod, MSt0) ->
-    MMod:call_primitive(MSt0, ?PRIM_TERM_MAYBE_UNBOX_INT64, [
-        Term
-    ]).
-
 first_pass_float3(Primitive, Rest0, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {{fp_reg, FPRegIndex1}, Rest2} = decode_fp_register(Rest1),
@@ -3629,7 +3624,7 @@ decode_compact_term_integer(Value, MMod, MSt0, Rest) when
     case MMod:word_size() of
         4 ->
             {MSt1, Reg} = MMod:call_primitive(
-                MSt0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [ctx, Value]
+                MSt0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [ctx, {avm_int64_t, Value}]
             ),
             ?TRACE("(alloc_boxed_integer_fragment(~p) => ~p)", [Value, Reg]),
             {MSt1, Reg, Rest};
@@ -3638,7 +3633,7 @@ decode_compact_term_integer(Value, MMod, MSt0, Rest) when
     end;
 decode_compact_term_integer(Value, MMod, MSt0, Rest) ->
     {MSt1, Reg} = MMod:call_primitive(
-        MSt0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [ctx, Value]
+        MSt0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [ctx, {avm_int64_t, Value}]
     ),
     ?TRACE("(alloc_boxed_integer_fragment(~p) => ~p)", [Value, Reg]),
     {MSt1, Reg, Rest}.

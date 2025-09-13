@@ -154,7 +154,7 @@
 -type vm_register() ::
     {x_reg, non_neg_integer()} | {y_reg, non_neg_integer()} | {ptr, aarch64_register()}.
 -type value() :: immediate() | vm_register() | aarch64_register() | {ptr, aarch64_register()}.
--type arg() :: ctx | jit_state | offset | value() | {free, value()}.
+-type arg() :: ctx | jit_state | offset | value() | {free, value()} | {avm_int64_t, integer()}.
 
 -type maybe_free_aarch64_register() ::
     {free, aarch64_register()} | aarch64_register().
@@ -1109,6 +1109,8 @@ parameter_regs0([{x_reg, _} | T], [GPReg | GPRegsT], Acc) ->
 parameter_regs0([{y_reg, _} | T], [GPReg | GPRegsT], Acc) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]);
 parameter_regs0([Int | T], [GPReg | GPRegsT], Acc) when is_integer(Int) ->
+    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
+parameter_regs0([{avm_int64_t, _} | T], [GPReg | GPRegsT], Acc) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]).
 
 replace_reg(Args, Reg1, Reg2) ->
@@ -1180,7 +1182,9 @@ set_args1({y_reg, X}, Reg) ->
 set_args1(ArgReg, Reg) when ?IS_GPR(ArgReg) ->
     jit_aarch64_asm:mov(Reg, ArgReg);
 set_args1(Arg, Reg) when is_integer(Arg) ->
-    jit_aarch64_asm:mov(Reg, Arg).
+    jit_aarch64_asm:mov(Reg, Arg);
+set_args1({avm_int64_t, Value}, Reg) when is_integer(Value) ->
+    jit_aarch64_asm:mov(Reg, Value).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a move to a vm register (x_reg, y_reg, fpreg or a pointer on x_reg)
@@ -1973,7 +1977,8 @@ args_regs(Args) ->
             ({fp_reg, _}) -> ?CTX_REG;
             ({free, {x_reg, _}}) -> ?CTX_REG;
             ({free, {y_reg, _}}) -> ?CTX_REG;
-            ({free, {fp_reg, _}}) -> ?CTX_REG
+            ({free, {fp_reg, _}}) -> ?CTX_REG;
+            ({avm_int64_t, _}) -> imm
         end,
         Args
     ).

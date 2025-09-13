@@ -136,7 +136,7 @@
     | {ptr, x86_64_register()}
     | {fp_reg, non_neg_integer()}.
 -type value() :: integer() | vm_register() | x86_64_register() | {ptr, x86_64_register()}.
--type arg() :: ctx | jit_state | offset | value() | {free, value()}.
+-type arg() :: ctx | jit_state | offset | value() | {free, value()} | {avm_int64_t, integer()}.
 
 -type maybe_free_x86_64_register() :: x86_64_register() | {free, x86_64_register()}.
 
@@ -1027,6 +1027,8 @@ parameter_regs0([{x_reg, _} | T], [GPReg | GPRegsT], Acc) ->
 parameter_regs0([{y_reg, _} | T], [GPReg | GPRegsT], Acc) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]);
 parameter_regs0([Int | T], [GPReg | GPRegsT], Acc) when is_integer(Int) ->
+    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
+parameter_regs0([{avm_int64_t, _} | T], [GPReg | GPRegsT], Acc) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]).
 
 replace_reg(Args, Reg1, Reg2) ->
@@ -1100,7 +1102,9 @@ set_args1(ArgReg, Reg) when ?IS_GPR(ArgReg) ->
 set_args1(Arg, Reg) when is_integer(Arg) andalso Arg >= -16#80000000 andalso Arg < 16#80000000 ->
     jit_x86_64_asm:movq(Arg, Reg);
 set_args1(Arg, Reg) when is_integer(Arg) ->
-    jit_x86_64_asm:movabsq(Arg, Reg).
+    jit_x86_64_asm:movabsq(Arg, Reg);
+set_args1({avm_int64_t, Value}, Reg) when is_integer(Value) ->
+    jit_x86_64_asm:movabsq(Value, Reg).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a move to a vm register (x_reg, y_reg, fpreg or a pointer on x_reg)
@@ -1928,7 +1932,8 @@ args_regs(Args) ->
             ({fp_reg, _}) -> ?CTX_REG;
             ({free, {x_reg, _}}) -> ?CTX_REG;
             ({free, {y_reg, _}}) -> ?CTX_REG;
-            ({free, {fp_reg, _}}) -> ?CTX_REG
+            ({free, {fp_reg, _}}) -> ?CTX_REG;
+            ({avm_int64_t, _}) -> imm
         end,
         Args
     ).
