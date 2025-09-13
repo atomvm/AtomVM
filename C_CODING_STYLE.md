@@ -2758,6 +2758,9 @@ BraceWrapping:
   BeforeElse: false
   BeforeWhile: false
 
+# Use braces for single-statement blocks (rule: AVMCCS-F002)
+InsertBraces: true
+
 # Spacing (rules: AVMCCS-F004, AVMCCS-F015, AVMCCS-F016, AVMCCS-F018, AVMCCS-F020)
 PointerAlignment: Right                     # AVMCCS-F004: * with variable
 SpaceAfterCStyleCast: true                  # AVMCCS-F018: Space after cast
