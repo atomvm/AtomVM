@@ -653,8 +653,9 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         closefrom(2);
 #else
         int maxfd = sysconf(_SC_OPEN_MAX);
-        for (int fd = 3; fd < maxfd; fd++)
+        for (int fd = 3; fd < maxfd; fd++) {
             close(fd);
+        }
 #endif
         execve(path, args, envp);
         exit(1);
