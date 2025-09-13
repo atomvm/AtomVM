@@ -144,7 +144,7 @@
 -type vm_register() ::
     {x_reg, non_neg_integer()} | {y_reg, non_neg_integer()} | {ptr, armv6m_register()}.
 -type value() :: immediate() | vm_register() | armv6m_register() | {ptr, armv6m_register()}.
--type arg() :: ctx | jit_state | offset | value() | {free, value()}.
+-type arg() :: ctx | jit_state | offset | value() | {free, value()} | {avm_int64_t, integer()}.
 
 -type maybe_free_armv6m_register() ::
     {free, armv6m_register()} | armv6m_register().
@@ -1354,7 +1354,7 @@ call_func_ptr(
         Args
     ),
     SavedRegsForTemps0 = SavedRegs -- [?CTX_REG, ?NATIVE_INTERFACE_REG] -- ArgsRegs,
-    ParameterRegs = lists:sublist(?PARAMETER_REGS, length(Args)),
+    ParameterRegs = parameter_regs(Args),
     {State1, FuncPtrReg} =
         case FuncPtrTuple of
             {free, FuncPtrReg0} ->
@@ -1575,6 +1575,21 @@ set_args_registers_only(
 parameter_regs(Args) ->
     parameter_regs0(Args, ?PARAMETER_REGS, []).
 
+% AAPCS32 helper: align to even register for 64-bit arguments
+
+% r0 is even, use (r0,r1)
+align_to_even_register([r0, r1 | Rest]) -> [r0, r1 | Rest];
+% r1 is odd, skip to (r2,r3)
+align_to_even_register([r1, r2 | Rest]) -> [r2, r3 | Rest];
+% r2 is even, use (r2,r3)
+align_to_even_register([r2, r3 | Rest]) -> [r2, r3 | Rest];
+% r3 is odd, no pair available
+align_to_even_register([r3]) -> [];
+% No registers available
+align_to_even_register([]) -> [];
+% Other cases
+align_to_even_register(_) -> [].
+
 parameter_regs0([], _, Acc) ->
     lists:reverse(Acc);
 parameter_regs0([Special | T], [GPReg | GPRegsT], Acc) when
@@ -1596,6 +1611,16 @@ parameter_regs0([{fp_reg, _} | T], [GPRegA, GPRegB | GPRegsT], Acc) ->
     parameter_regs0(T, GPRegsT, [GPRegB, GPRegA | Acc]);
 parameter_regs0([Int | T], [GPReg | GPRegsT], Acc) when is_integer(Int) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]);
+% AAPCS32: 64-bit arguments require double-word alignment (even register number)
+parameter_regs0([{avm_int64_t, _} | T], GPRegs, Acc) ->
+    % Find the next even-numbered register position for AAPCS32 alignment
+    case align_to_even_register(GPRegs) of
+        [GPRegA, GPRegB | GPRegsT] ->
+            parameter_regs0(T, GPRegsT, [GPRegB, GPRegA | Acc]);
+        _ ->
+            % Not enough registers available, use stack
+            parameter_regs0(T, [], [stack, stack | Acc])
+    end;
 % Handle stack parameters when we run out of registers
 parameter_regs0([_Arg | T], [], Acc) ->
     parameter_regs0(T, [], [stack | Acc]).
@@ -1666,6 +1691,23 @@ set_args0(State, [Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], Av
     false = lists:member(?CTX_REG, ArgsRegs),
     State1 = set_args1(State, Arg, ?CTX_REG),
     set_args0(State1, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
+% Handle 64-bit arguments that need two registers according to AAPCS32
+set_args0(
+    State,
+    [{avm_int64_t, Value} | ArgsT],
+    [_ArgReg | ArgsRegs],
+    [ParamRegLo, ParamRegHi | ParamRegs],
+    AvailGP,
+    StackOffset
+) when is_integer(Value) ->
+    % Split the 64-bit value into two 32-bit parts
+    LowPart = Value band 16#FFFFFFFF,
+    HighPart = (Value bsr 32) band 16#FFFFFFFF,
+    % Set up the low 32 bits in the first register
+    State1 = set_args1(State, LowPart, ParamRegLo),
+    % Set up the high 32 bits in the second register
+    State2 = set_args1(State1, HighPart, ParamRegHi),
+    set_args0(State2, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
 set_args0(
     #state{stream_module = StreamModule} = State,
     [Arg | ArgsT],
@@ -1716,7 +1758,10 @@ set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, ArgReg
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
 set_args1(State, Arg, Reg) when is_integer(Arg) ->
-    mov_immediate(State, Reg, Arg).
+    mov_immediate(State, Reg, Arg);
+set_args1(State, {avm_int64_t, Value}, Reg) when is_integer(Value) ->
+    % For now, just store the lower 32 bits - this needs proper AAPCS32 register pair support
+    mov_immediate(State, Reg, Value band 16#FFFFFFFF).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a move to a vm register (x_reg, y_reg, fpreg or a pointer on x_reg)
@@ -2911,7 +2956,8 @@ args_regs(Args) ->
             ({fp_reg, _}) -> ?CTX_REG;
             ({free, {x_reg, _}}) -> ?CTX_REG;
             ({free, {y_reg, _}}) -> ?CTX_REG;
-            ({free, {fp_reg, _}}) -> ?CTX_REG
+            ({free, {fp_reg, _}}) -> ?CTX_REG;
+            ({avm_int64_t, _}) -> imm
         end,
         Args
     ).
