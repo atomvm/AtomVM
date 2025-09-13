@@ -3090,6 +3090,50 @@ jump_table_large_labels_test() ->
     Stream = ?BACKEND:stream(State1),
     ?assertEqual((512 + 1) * 12, byte_size(Stream)).
 
+alloc_boxed_integer_fragment_small_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, ResultReg} = ?BACKEND:call_primitive(State0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [
+        ctx, {avm_int64_t, 42}
+    ]),
+    ?assertEqual(r7, ResultReg),
+    Stream = ?BACKEND:stream(State1),
+    Dump =
+        <<
+            "   0:	6bd7      	ldr	r7, [r2, #60]	; 0x3c\n"
+            "   2:	b405      	push	{r0, r2}\n"
+            "   4:	222a      	movs	r2, #42	; 0x2a\n"
+            "   6:	2300      	movs	r3, #0\n"
+            "   8:	47b8      	blx	r7\n"
+            "   a:	4607      	mov	r7, r0\n"
+            "   c:	bc05      	pop	{r0, r2}"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+alloc_boxed_integer_fragment_large_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, ResultReg} = ?BACKEND:call_primitive(State0, ?PRIM_ALLOC_BOXED_INTEGER_FRAGMENT, [
+        ctx, {avm_int64_t, 16#123456789ABCDEF0}
+    ]),
+    ?assertEqual(r7, ResultReg),
+    Stream = ?BACKEND:stream(State1),
+    Dump =
+        <<
+            "   0:	6bd7      	ldr	r7, [r2, #60]	; 0x3c\n"
+            "   2:	b405      	push	{r0, r2}\n"
+            "   4:	4a00      	ldr	r2, [pc, #0]	; (0x8)\n"
+            "   6:	e001      	b.n	0xc\n"
+            "   8:	def0      	udf	#240	; 0xf0\n"
+            "   a:	9abc      	ldr	r2, [sp, #752]	; 0x2f0\n"
+            "   c:	4b00      	ldr	r3, [pc, #0]	; (0x10)\n"
+            "   e:	e001      	b.n	0x14\n"
+            "  10:	5678      	ldrsb	r0, [r7, r1]\n"
+            "  12:	1234      	asrs	r4, r6, #8\n"
+            "  14:	47b8      	blx	r7\n"
+            "  16:	4607      	mov	r7, r0\n"
+            "  18:	bc05      	pop	{r0, r2}"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
