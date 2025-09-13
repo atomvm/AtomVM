@@ -569,6 +569,24 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
     return res_count;
 }
 
+size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    intn_digit_t out[], intn_integer_sign_t *out_sign)
+{
+    cond_neg(m_sign, m, m_len, out);
+    for (size_t i = 0; i < m_len; i++) {
+        out[i] = ~out[i];
+    }
+    intn_integer_sign_t res_sign
+        = (m_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+
+    if (res_sign == IntNNegativeInteger) {
+        neg_in_place(out, m_len);
+    }
+    size_t res_count = count_and_normalize_sign(out, m_len, res_sign, out_sign);
+
+    return res_count;
+}
+
 #define INTN_BSL_MAX_OUT_LEN 8
 
 static inline size_t size_round_to(size_t n, size_t round_to)
