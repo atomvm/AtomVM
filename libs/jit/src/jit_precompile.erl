@@ -255,35 +255,111 @@ update_avmn_chunk_with_elf(Info, ElfBinary, TextSectionOffset) ->
     <<(byte_size(UpdatedInfo)):32, UpdatedInfo/binary, ElfBinary/binary>>.
 
 %% @doc Resolve a line reference to filename and line number
-resolve_line_info(Module, <<Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, Rest/binary>>, LineRef) when Version =:= 0, LineRef > 0, LineRef =< NumRefs ->
+resolve_line_info(
+    Module,
+    <<Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, Rest/binary>>,
+    LineRef
+) when Version =:= 0, LineRef > 0, LineRef =< NumRefs ->
     resolve_line_info0(Module, 1, 0, LineRef, NumRefs, Rest, false);
 resolve_line_info(_Module, <<Version:32, _/binary>>, _) when Version =/= 0 ->
     io:format("resolve_line_info -- unknown Line table version (~p)\n", [Version]),
     false;
-resolve_line_info(_Module, <<_Version:32, _Flags:32, _NumInstr:32, _NumRefs:32, _NumFilenames:32, _Rest/binary>>, 0) ->
+resolve_line_info(
+    _Module,
+    <<_Version:32, _Flags:32, _NumInstr:32, _NumRefs:32, _NumFilenames:32, _Rest/binary>>,
+    0
+) ->
     false;
-resolve_line_info(_Module, <<_Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, _Rest/binary>>, LineRef) ->
+resolve_line_info(
+    _Module,
+    <<_Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, _Rest/binary>>,
+    LineRef
+) ->
     io:format("resolve_line_info -- invalid lineref (~p) (NumRefs = ~p)\n", [LineRef, NumRefs]),
     false.
 
-resolve_line_info0(Module, CurrentLineRef, _CurrentLocationIx, _LineRef, NumRefs, LocationData, {Line, LocationIx}) when CurrentLineRef > NumRefs ->
+resolve_line_info0(
+    Module, CurrentLineRef, _CurrentLocationIx, _LineRef, NumRefs, LocationData, {Line, LocationIx}
+) when CurrentLineRef > NumRefs ->
     resolve_line_info1(Module, LocationIx, LocationData, Line);
-resolve_line_info0(Module, LineRef, CurrentLocationIx, LineRef, NumRefs, <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin, false) ->
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin,
+    false
+) ->
     {Line, Rest} = jit:decode_value64(Bin),
-    resolve_line_info0(Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx});
-resolve_line_info0(Module, CurrentLineRef, CurrentLocationIx, LineRef, NumRefs, <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin, Acc) ->
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin,
+    Acc
+) ->
     {_Line, Rest} = jit:decode_value64(Bin),
     resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
-resolve_line_info0(Module, LineRef, CurrentLocationIx, LineRef, NumRefs, <<Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, NextByte, Rest/binary>>, false) ->
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, NextByte, Rest/binary>>,
+    false
+) ->
     Line = (Val bsl 8) bor NextByte,
-    resolve_line_info0(Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx});
-resolve_line_info0(Module, CurrentLineRef, CurrentLocationIx, LineRef, NumRefs, <<_Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, _NextByte, Rest/binary>>, Acc) ->
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, _NextByte, Rest/binary>>,
+    Acc
+) ->
     resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
-resolve_line_info0(Module, LineRef, CurrentLocationIx, LineRef, NumRefs, <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Line:(8 * (Size0 + 2))/signed, Rest/binary>>, false) ->
-    resolve_line_info0(Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx});
-resolve_line_info0(Module, CurrentLineRef, CurrentLocationIx, LineRef, NumRefs,  <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, _:(8 * (Size0 + 2))/signed, Rest/binary>>, Acc) ->
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Line:(8 * (Size0 + 2))/signed, Rest/binary>>,
+    false
+) ->
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, _:(8 * (Size0 + 2))/signed, Rest/binary>>,
+    Acc
+) ->
     resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
-resolve_line_info0(Module, CurrentLineRef, _CurrentLocationIx, LineRef, NumRefs, <<_:4, AtomTag:4, _/binary>> = Bin, Acc) when AtomTag =:= ?COMPACT_LARGE_ATOM; AtomTag =:= ?COMPACT_ATOM ->
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    _CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, AtomTag:4, _/binary>> = Bin,
+    Acc
+) when AtomTag =:= ?COMPACT_LARGE_ATOM; AtomTag =:= ?COMPACT_ATOM ->
     {NewLocationIx, Rest} = jit:decode_value64(Bin),
     resolve_line_info0(Module, CurrentLineRef, NewLocationIx, LineRef, NumRefs, Rest, Acc).
 
