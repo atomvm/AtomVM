@@ -2907,7 +2907,7 @@ set_args1_y_reg_test() ->
     Stream = ?BACKEND:stream(State1),
     % Expected disassembly for loading from y_reg and calling primitive
     Dump = <<
-        "   0:	2744      	movs	r7, #68	; 0x44\n"
+        "   0:	2743      	movs	r7, #67	; 0x43\n"
         "   2:	00bf      	lsls	r7, r7, #2\n"
         "   4:	59d7      	ldr	r7, [r2, r7]\n"
         "   6:	b405      	push	{r0, r2}\n"
