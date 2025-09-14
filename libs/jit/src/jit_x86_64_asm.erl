@@ -469,7 +469,7 @@ orq(Imm, Reg) when ?IS_UINT32_T(Imm) ->
 leaq_rel32({Offset, rip}, Reg) when is_atom(Reg), ?IS_SINT32_T(Offset) ->
     case x86_64_x_reg(Reg) of
         {0, Index} -> {3, <<16#48, 16#8D, (16#05 + (Index bsl 3)), Offset:32/little>>};
-        {1, Index} -> {3, <<16#49, 16#8D, (16#05 + (Index bsl 3)), Offset:32/little>>}
+        {1, Index} -> {3, <<16#4C, 16#8D, (16#05 + (Index bsl 3)), Offset:32/little>>}
     end.
 
 leaq({Offset, BaseReg}, DestReg) when is_atom(BaseReg), is_atom(DestReg), ?IS_SINT8_T(Offset) ->
