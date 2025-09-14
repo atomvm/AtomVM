@@ -2741,9 +2741,9 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:	6987      	ldr	r7, [r0, #24]\n"
                         "   2:	6e06      	ldr	r6, [r0, #96]	; 0x60\n"
-                        "   4:	68bd      	ldr	r5, [r7, #8]\n"
+                        "   4:	687d      	ldr	r5, [r7, #4]\n"
                         "   6:	61b5      	str	r5, [r6, #24]\n"
-                        "   8:	68fd      	ldr	r5, [r7, #12]\n"
+                        "   8:	68bd      	ldr	r5, [r7, #8]\n"
                         "   a:	61f5      	str	r5, [r6, #28]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
