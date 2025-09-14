@@ -74,9 +74,9 @@ new(Backend, ModuleName, StreamModule, MaxSize, LineResolver) ->
         stream_module = StreamModule,
         stream = Stream,
         line_resolver = LineResolver,
-        opcodes = [{0, jump_table, 0}]  % Add jump table symbol at offset 0, size will be calculated
+        % Add jump table symbol at offset 0, size will be calculated
+        opcodes = [{0, jump_table, 0}]
     }.
-
 
 %%-----------------------------------------------------------------------------
 %% @param Stream    stream to get the offset from
@@ -139,7 +139,8 @@ opcode(#state{stream_module = StreamModule, stream = Stream, opcodes = Opcodes0}
     Offset = StreamModule:offset(Stream),
     % Update size of previous opcode and add new opcode
     Opcodes1 = update_previous_opcode_size(Opcodes0, Offset),
-    Opcodes2 = [{Offset, Opcode, 0} | Opcodes1],  % Size will be calculated later
+    % Size will be calculated later
+    Opcodes2 = [{Offset, Opcode, 0} | Opcodes1],
     State#state{opcodes = Opcodes2}.
 
 %%-----------------------------------------------------------------------------
@@ -150,7 +151,11 @@ opcode(#state{stream_module = StreamModule, stream = Stream, opcodes = Opcodes0}
 %% @end
 %%-----------------------------------------------------------------------------
 -spec label(state(), non_neg_integer()) -> state().
-label(#state{stream_module = StreamModule, stream = Stream, labels = Labels0, opcodes = Opcodes0} = State, Label) ->
+label(
+    #state{stream_module = StreamModule, stream = Stream, labels = Labels0, opcodes = Opcodes0} =
+        State,
+    Label
+) ->
     Offset = StreamModule:offset(Stream),
     % Update size of previous opcode before adding label
     Opcodes1 = update_previous_opcode_size(Opcodes0, Offset),
@@ -185,7 +190,10 @@ function(
 -spec line(state(), pos_integer()) -> state().
 line(
     #state{
-        stream_module = StreamModule, stream = Stream, lines = Lines0, line_resolver = LineResolver,
+        stream_module = StreamModule,
+        stream = Stream,
+        lines = Lines0,
+        line_resolver = LineResolver,
         module_name = ModuleName
     } = State,
     LineRef
@@ -625,59 +633,78 @@ generate_debug_line_section(#state{lines = Lines, opcodes = _Opcodes}, SourceFil
     StdOpcodeLengths = <<0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1>>,
 
     % Build file table with actual filenames from line data
-    UniqueFullPaths = case Lines of
-        [] ->
-            [SourceFile];
-        _ ->
-            % Extract unique filenames from Lines, don't add SourceFile as it may be a duplicate
-            Filenames = [Filename || {_Offset, Filename, _LineNum} <- Lines],
-            lists:usort(Filenames)
-    end,
+    UniqueFullPaths =
+        case Lines of
+            [] ->
+                [SourceFile];
+            _ ->
+                % Extract unique filenames from Lines, don't add SourceFile as it may be a duplicate
+                Filenames = [Filename || {_Offset, Filename, _LineNum} <- Lines],
+                lists:usort(Filenames)
+        end,
 
     % Split paths into directories and filenames, avoiding duplicates
-    {Directories, FileEntries, _} = lists:foldl(fun(FullPath, {DirAcc, FileAcc, FileSet}) ->
-        case filename:split(binary_to_list(FullPath)) of
-            [Basename] ->
-                % Just a filename, no directory
-                FileKey = {Basename, 0},
-                case sets:is_element(FileKey, FileSet) of
-                    true -> {DirAcc, FileAcc, FileSet};  % Skip duplicate
-                    false -> {DirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
-                end;
-            PathParts ->
-                DirParts = lists:droplast(PathParts),
-                Dir = filename:join(DirParts),
-                Basename = lists:last(PathParts),
-                % Find or add directory to get proper index (1-based)
-                {NewDirAcc, DirIndex} = case lists:search(fun(D) -> D =:= Dir end, DirAcc) of
-                    {value, _} ->
-                        % Find index of existing directory (1-based)
-                        ExistingIndex = length(lists:takewhile(fun(D) -> D =/= Dir end, DirAcc)) + 1,
-                        {DirAcc, ExistingIndex};
-                    false ->
-                        % Add new directory and return its 1-based index
-                        NewIndex = length(DirAcc) + 1,
-                        {DirAcc ++ [Dir], NewIndex}
-                end,
-                FileKey = {Basename, DirIndex},
-                case sets:is_element(FileKey, FileSet) of
-                    true -> {NewDirAcc, FileAcc, FileSet};  % Skip duplicate
-                    false -> {NewDirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
-                end
-        end
-    end, {[], [], sets:new()}, UniqueFullPaths),
+    {Directories, FileEntries, _} = lists:foldl(
+        fun(FullPath, {DirAcc, FileAcc, FileSet}) ->
+            case filename:split(binary_to_list(FullPath)) of
+                [Basename] ->
+                    % Just a filename, no directory
+                    FileKey = {Basename, 0},
+                    case sets:is_element(FileKey, FileSet) of
+                        % Skip duplicate
+                        true -> {DirAcc, FileAcc, FileSet};
+                        false -> {DirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
+                    end;
+                PathParts ->
+                    DirParts = lists:droplast(PathParts),
+                    Dir = filename:join(DirParts),
+                    Basename = lists:last(PathParts),
+                    % Find or add directory to get proper index (1-based)
+                    {NewDirAcc, DirIndex} =
+                        case lists:search(fun(D) -> D =:= Dir end, DirAcc) of
+                            {value, _} ->
+                                % Find index of existing directory (1-based)
+                                ExistingIndex =
+                                    length(lists:takewhile(fun(D) -> D =/= Dir end, DirAcc)) + 1,
+                                {DirAcc, ExistingIndex};
+                            false ->
+                                % Add new directory and return its 1-based index
+                                NewIndex = length(DirAcc) + 1,
+                                {DirAcc ++ [Dir], NewIndex}
+                        end,
+                    FileKey = {Basename, DirIndex},
+                    case sets:is_element(FileKey, FileSet) of
+                        % Skip duplicate
+                        true ->
+                            {NewDirAcc, FileAcc, FileSet};
+                        false ->
+                            {NewDirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
+                    end
+            end
+        end,
+        {[], [], sets:new()},
+        UniqueFullPaths
+    ),
 
     % Build directory table
-    DirectoryTable = lists:foldl(fun(Dir, Acc) ->
-        DirBin = list_to_binary(Dir),
-        <<Acc/binary, DirBin/binary, 0>>
-    end, <<>>, Directories),
+    DirectoryTable = lists:foldl(
+        fun(Dir, Acc) ->
+            DirBin = list_to_binary(Dir),
+            <<Acc/binary, DirBin/binary, 0>>
+        end,
+        <<>>,
+        Directories
+    ),
 
     % Build file table entries with proper ULEB128 encoding for directory index
-    FileTableEntries = lists:foldl(fun({Filename, DirIndex}, Acc) ->
-        DirIndexEncoded = encode_uleb128(DirIndex),
-        <<Acc/binary, (list_to_binary(Filename))/binary, 0, DirIndexEncoded/binary, 0, 0>>
-    end, <<>>, lists:reverse(FileEntries)),
+    FileTableEntries = lists:foldl(
+        fun({Filename, DirIndex}, Acc) ->
+            DirIndexEncoded = encode_uleb128(DirIndex),
+            <<Acc/binary, (list_to_binary(Filename))/binary, 0, DirIndexEncoded/binary, 0, 0>>
+        end,
+        <<>>,
+        lists:reverse(FileEntries)
+    ),
 
     FileTable = <<
         % Directory table
@@ -841,10 +868,11 @@ calculate_address_range(#state{opcodes = Opcodes}) ->
             % For max, use offset + size, or fallback to offset + 4 if size is 0
             MaxOffset = lists:max([
                 case Size of
-                    0 -> Offset + 4;  % Fallback for opcodes without calculated size
+                    % Fallback for opcodes without calculated size
+                    0 -> Offset + 4;
                     _ -> Offset + Size
                 end
-                || {Offset, Size} <- OffsetsAndSizes
+             || {Offset, Size} <- OffsetsAndSizes
             ]),
             {MinOffset, MaxOffset}
     end.
@@ -887,36 +915,42 @@ generate_line_program_entries([], _FileMapping, _LastOffset, _LastLine, _LastFil
         % DW_LNE_end_sequence
         1
     >>;
-generate_line_program_entries([{Offset, Filename, LineNumber} | Rest], FileMapping, LastOffset, LastLine, LastFileIndex) ->
+generate_line_program_entries(
+    [{Offset, Filename, LineNumber} | Rest], FileMapping, LastOffset, LastLine, LastFileIndex
+) ->
     % Generate DWARF line program opcodes
     % For simplicity, we'll use DW_LNS_advance_pc and DW_LNS_advance_line
 
     % Find file index from mapping
-    FileIndex = case lists:keyfind(Filename, 1, FileMapping) of
-        {Filename, Index} -> Index;
-        false -> 1  % Default to first file if not found
-    end,
+    FileIndex =
+        case lists:keyfind(Filename, 1, FileMapping) of
+            {Filename, Index} -> Index;
+            % Default to first file if not found
+            false -> 1
+        end,
 
     % Calculate address and line deltas
     AddressDelta = Offset - LastOffset,
     LineDelta = LineNumber - LastLine,
 
     % Build opcodes
-    FileOpcodes = if
-        FileIndex =/= LastFileIndex ->
-            % DW_LNS_set_file (opcode 4) with file index
-            <<4, FileIndex>>;
-        true ->
-            <<>>
-    end,
+    FileOpcodes =
+        if
+            FileIndex =/= LastFileIndex ->
+                % DW_LNS_set_file (opcode 4) with file index
+                <<4, FileIndex>>;
+            true ->
+                <<>>
+        end,
 
-    InitialOpcodes = if
-        LastOffset == 0 ->
-            % Set initial file index
-            <<4, FileIndex>>;
-        true ->
-            FileOpcodes
-    end,
+    InitialOpcodes =
+        if
+            LastOffset == 0 ->
+                % Set initial file index
+                <<4, FileIndex>>;
+            true ->
+                FileOpcodes
+        end,
 
     Opcodes = <<
         InitialOpcodes/binary,
