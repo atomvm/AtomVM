@@ -1840,9 +1840,9 @@ move_to_vm_register(
     {fp_reg, F}
 ) ->
     I1 = jit_armv6m_asm:ldr(Temp1, ?FP_REGS),
-    I2 = jit_armv6m_asm:ldr(Temp2, {Reg, 8}),
+    I2 = jit_armv6m_asm:ldr(Temp2, {Reg, 4}),
     I3 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8}),
-    I4 = jit_armv6m_asm:ldr(Temp2, {Reg, 12}),
+    I4 = jit_armv6m_asm:ldr(Temp2, {Reg, 8}),
     I5 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8 + 4}),
     Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
