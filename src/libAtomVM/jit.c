@@ -263,6 +263,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 static void jit_trim_live_regs(Context *ctx, uint32_t live)
 {
+    TRACE("jit_trim_live_regs: ctx->process_id = %d, live = %d\n", ctx->process_id, live);
     if (UNLIKELY(!list_is_empty(&ctx->extended_x_regs))) {
         destroy_extended_registers(ctx, live);
     }
@@ -278,7 +279,7 @@ static void jit_trim_live_regs(Context *ctx, uint32_t live)
 static Context *jit_return(Context *ctx, JITState *jit_state)
 {
     int module_index = ctx->cp >> 24;
-    TRACE("jit_return: ctx->cp = %d, module_index = %d, offset = %d\n", ctx->cp, module_index, (ctx->cp & 0xFFFFFF) >> 2);
+    TRACE("jit_return: ctx->cp = %d, module_index = %d, offset = %d\n", (int) ctx->cp, module_index, (int) (ctx->cp & 0xFFFFFF) >> 2);
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
 
     // Native case
@@ -1185,7 +1186,7 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
 
 static term jit_term_from_float(Context *ctx, int freg)
 {
-    TRACE("jit_term_from_float: freg=%d\n", freg);
+    TRACE("jit_term_from_float: freg=%d -- float = %f\n", freg, ctx->fr[freg]);
     return term_from_float(ctx->fr[freg], &ctx->heap);
 }
 
@@ -1197,7 +1198,7 @@ static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 
 static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
-    TRACE("jit_fadd: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
+    TRACE("jit_fadd: freg1=%d [%f] freg2=%d [%f] freg3=%d\n", freg1, ctx->fr[freg1], freg2, ctx->fr[freg2], freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1379,6 +1380,7 @@ static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offs
 static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
 {
     term binary = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+    TRACE("jit_term_sub_binary_heap_size: binary=%p size=%zu\n", (void *) binary, size);
     return term_sub_binary_heap_size(binary, size);
 }
 
