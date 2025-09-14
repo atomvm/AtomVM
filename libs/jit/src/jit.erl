@@ -24,7 +24,8 @@
     stream/1,
     backend/1,
     beam_chunk_header/3,
-    compile/6
+    compile/6,
+    decode_value64/1
 ]).
 
 % NIFs
@@ -45,38 +46,7 @@
 -include("opcodes.hrl").
 -include("primitives.hrl").
 -include("term.hrl").
-
--define(COMPACT_LITERAL, 0).
--define(COMPACT_INTEGER, 1).
--define(COMPACT_ATOM, 2).
--define(COMPACT_XREG, 3).
--define(COMPACT_YREG, 4).
--define(COMPACT_LABEL, 5).
--define(COMPACT_EXTENDED, 7).
--define(COMPACT_LARGE_LITERAL, 8).
--define(COMPACT_LARGE_INTEGER, 9).
--define(COMPACT_LARGE_ATOM, 10).
--define(COMPACT_LARGE_XREG, 11).
--define(COMPACT_LARGE_YREG, 12).
-
-% OTP-20+ format
--define(COMPACT_EXTENDED_LIST, 16#17).
--define(COMPACT_EXTENDED_FP_REGISTER, 16#27).
--define(COMPACT_EXTENDED_ALLOCATION_LIST, 16#37).
--define(COMPACT_EXTENDED_LITERAL, 16#47).
-% https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
--define(COMPACT_EXTENDED_TYPED_REGISTER, 16#57).
-
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS, 0).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS, 1).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS, 2).
-
--define(COMPACT_LARGE_IMM_MASK, 16#18).
--define(COMPACT_11BITS_VALUE, 16#8).
--define(COMPACT_NBITS_VALUE, 16#18).
-
--define(COMPACT_LARGE_INTEGER_11BITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_11BITS_VALUE)).
--define(COMPACT_LARGE_INTEGER_NBITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_NBITS_VALUE)).
+-include("compact_term.hrl").
 
 -define(BOXED_FUN_SIZE, 3).
 -define(FLOAT_SIZE_64, 2).
@@ -189,11 +159,11 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt, State0) ->
     {_FunctionName, Rest2} = decode_atom(Rest1),
     {_Arity, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [_ModuleAtom, _FunctionName, _Arity]),
-    MSt1 = ?DWARF_FUNCTION(MMod, MSt0, _FunctionName, _Arity),
     % Implement function clause at the previous label. (TODO: optimize it out to save space)
-    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
+    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
         ctx, jit_state, offset, ?FUNCTION_CLAUSE_ATOM
     ]),
+    MSt2 = ?DWARF_FUNCTION(MMod, MSt1, _FunctionName, _Arity),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest3, MMod, MSt2, State0);
 % 3

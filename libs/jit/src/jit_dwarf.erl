@@ -25,20 +25,23 @@
     backend :: module(),
     % Current module being compiled
     module_name :: module(),
-    opcodes = [] :: [{Offset :: non_neg_integer(), Opcode :: atom()}],
+    opcodes = [] :: [{Offset :: non_neg_integer(), Opcode :: atom(), Size :: non_neg_integer()}],
     labels = [] :: [{Offset :: non_neg_integer(), Label :: non_neg_integer()}],
     functions = [] :: [
         {Offset :: non_neg_integer(), FunctionName :: atom(), Arity :: non_neg_integer()}
     ],
-    lines = [] :: [{Offset :: non_neg_integer(), LineNumber :: pos_integer()}],
+    lines = [] :: [
+        {Offset :: non_neg_integer(), Filename :: binary(), LineNumber :: pos_integer()}
+    ],
     stream_module :: module(),
-    stream :: any()
+    stream :: any(),
+    line_resolver :: fun((non_neg_integer()) -> false | {ok, binary(), pos_integer()})
 }).
 
 -type state() :: #state{}.
 
 -export([
-    new/4,
+    new/5,
     opcode/2,
     label/2,
     function/3,
@@ -60,12 +63,20 @@
 %% @doc     Create a new state with the proxied stream.
 %% @end
 %%-----------------------------------------------------------------------------
--spec new(module(), module(), module(), pos_integer()) -> state().
-new(Backend, ModuleName, StreamModule, MaxSize) ->
+-spec new(module(), module(), module(), pos_integer(), fun(
+    (non_neg_integer()) -> false | {ok, binary(), pos_integer()}
+)) -> state().
+new(Backend, ModuleName, StreamModule, MaxSize, LineResolver) ->
     Stream = StreamModule:new(MaxSize),
     #state{
-        backend = Backend, module_name = ModuleName, stream_module = StreamModule, stream = Stream
+        backend = Backend,
+        module_name = ModuleName,
+        stream_module = StreamModule,
+        stream = Stream,
+        line_resolver = LineResolver,
+        opcodes = [{0, jump_table, 0}]  % Add jump table symbol at offset 0, size will be calculated
     }.
+
 
 %%-----------------------------------------------------------------------------
 %% @param Stream    stream to get the offset from
@@ -126,8 +137,10 @@ map(#state{stream_module = StreamModule, stream = Stream0} = State, Offset, Leng
 -spec opcode(state(), binary()) -> state().
 opcode(#state{stream_module = StreamModule, stream = Stream, opcodes = Opcodes0} = State, Opcode) ->
     Offset = StreamModule:offset(Stream),
-    Opcodes1 = [{Offset, Opcode} | Opcodes0],
-    State#state{opcodes = Opcodes1}.
+    % Update size of previous opcode and add new opcode
+    Opcodes1 = update_previous_opcode_size(Opcodes0, Offset),
+    Opcodes2 = [{Offset, Opcode, 0} | Opcodes1],  % Size will be calculated later
+    State#state{opcodes = Opcodes2}.
 
 %%-----------------------------------------------------------------------------
 %% @param State    current state
@@ -137,10 +150,12 @@ opcode(#state{stream_module = StreamModule, stream = Stream, opcodes = Opcodes0}
 %% @end
 %%-----------------------------------------------------------------------------
 -spec label(state(), non_neg_integer()) -> state().
-label(#state{stream_module = StreamModule, stream = Stream, labels = Labels0} = State, Label) ->
+label(#state{stream_module = StreamModule, stream = Stream, labels = Labels0, opcodes = Opcodes0} = State, Label) ->
     Offset = StreamModule:offset(Stream),
+    % Update size of previous opcode before adding label
+    Opcodes1 = update_previous_opcode_size(Opcodes0, Offset),
     Labels1 = [{Offset, Label} | Labels0],
-    State#state{labels = Labels1}.
+    State#state{labels = Labels1, opcodes = Opcodes1}.
 
 %%-----------------------------------------------------------------------------
 %% @param State         current state
@@ -168,10 +183,58 @@ function(
 %% @end
 %%-----------------------------------------------------------------------------
 -spec line(state(), pos_integer()) -> state().
-line(#state{stream_module = StreamModule, stream = Stream, lines = Lines0} = State, Line) ->
+line(
+    #state{
+        stream_module = StreamModule, stream = Stream, lines = Lines0, line_resolver = LineResolver,
+        module_name = ModuleName
+    } = State,
+    LineRef
+) ->
     Offset = StreamModule:offset(Stream),
-    Lines1 = [{Offset, Line} | Lines0],
-    State#state{lines = Lines1}.
+    case LineResolver(LineRef) of
+        {ok, Filename, LineNumber} ->
+            % Check if this is the first time we see the module file and add line 1 at offset 0
+            Lines1 = maybe_add_initial_line(Lines0, ModuleName, Filename),
+            Lines2 = [{Offset, Filename, LineNumber} | Lines1],
+            State#state{lines = Lines2};
+        false ->
+            % No line information available, skip storing this line
+            State
+    end.
+
+%% Helper function to add line 1 at offset 0 for the module file if not already present
+maybe_add_initial_line(Lines, ModuleName, Filename) ->
+    ExpectedBasename = <<(atom_to_binary(ModuleName, utf8))/binary, ".erl">>,
+    case filename:basename(Filename) =:= ExpectedBasename of
+        true ->
+            % This is the module file, check if we already have an entry at offset 0
+            case lists:any(fun({Offset, _, _}) -> Offset =:= 0 end, Lines) of
+                false ->
+                    % Add line 1 at offset 0 for the jump table
+                    [{0, Filename, 1} | Lines];
+                true ->
+                    % Already have an entry at offset 0, don't duplicate
+                    Lines
+            end;
+        false ->
+            % Not the module file, no change needed
+            Lines
+    end.
+
+%% Helper function to update the size of the most recent opcode
+update_previous_opcode_size([], _NewOffset) ->
+    % No previous opcode to update
+    [];
+update_previous_opcode_size([{Offset, Opcode, 0} | Rest], NewOffset) ->
+    % Update the size of the most recent opcode
+    Size = NewOffset - Offset,
+    [{Offset, Opcode, Size} | Rest];
+update_previous_opcode_size([{Offset, Opcode, Size} | Rest], _NewOffset) when Size > 0 ->
+    % Previous opcode already has a calculated size, don't change it
+    [{Offset, Opcode, Size} | Rest];
+update_previous_opcode_size(Opcodes, _NewOffset) ->
+    % Unexpected format, return unchanged
+    Opcodes.
 
 -spec stream(state()) -> any().
 stream(#state{stream = Stream}) ->
@@ -219,11 +282,11 @@ elf(#state{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
                 BaseSections
         end,
 
-    % Create ELF with debug sections and symbol table
-    ElfBinary = create_elf_header_and_sections(Backend, Sections),
-
-    CombinedELF = add_text_section_to_elf(ElfBinary, NativeCode),
-    {ok, ElfBinary, CombinedELF}.
+    % Create complete ELF with text section and debug sections
+    {CombinedELF, TextSectionOffset} = create_elf_with_text_and_debug_sections(
+        Backend, Sections, NativeCode
+    ),
+    {ok, TextSectionOffset, CombinedELF}.
 -else.
 elf(_State, _NativeCode) ->
     false.
@@ -256,6 +319,7 @@ elf(_State, _NativeCode) ->
 -define(EI_MAG2, $L).
 -define(EI_MAG3, $F).
 -define(ELFCLASS32, 1).
+-define(ELFCLASS64, 2).
 -define(ELFDATA2LSB, 1).
 -define(EV_CURRENT, 1).
 -define(ET_REL, 1).
@@ -301,20 +365,6 @@ find_section_index_helper(SectionName, [_ | Rest], Index) ->
     find_section_index_helper(SectionName, Rest, Index + 1).
 
 %% Find .symtab section index in section headers
-find_symtab_section_index(SectionHeaders) ->
-    find_symtab_section_index_helper(SectionHeaders, 0, 40).
-
-find_symtab_section_index_helper(<<>>, _, _) ->
-    error({symtab_not_found});
-find_symtab_section_index_helper(
-    <<_NameOffset:32/little, SectionType:32/little, _Rest:32/binary, Remaining/binary>>,
-    Index,
-    SectionHeaderSize
-) ->
-    case SectionType of
-        ?SHT_SYMTAB -> Index;
-        _ -> find_symtab_section_index_helper(Remaining, Index + 1, SectionHeaderSize)
-    end.
 
 %% Generate ARM attributes section for ARMv6-M
 generate_arm_attributes_section() ->
@@ -549,7 +599,7 @@ generate_debug_info_section_with_opcodes(
     % Build final section with correct length
     <<UnitLength:32/little, Content/binary>>.
 
-generate_debug_line_section(#state{lines = _Lines, opcodes = _Opcodes}, SourceFile) ->
+generate_debug_line_section(#state{lines = Lines, opcodes = _Opcodes}, SourceFile) ->
     % Build header content first to calculate actual lengths
     HeaderContent = <<
         % DWARF version
@@ -570,29 +620,79 @@ generate_debug_line_section(#state{lines = _Lines, opcodes = _Opcodes}, SourceFi
         13
     >>,
 
-    % Standard opcode lengths (for opcodes 1-12)
-    StdOpcodeLengths = <<0, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1>>,
+    % Standard opcode lengths (for opcodes 1-12, opcode_base-1 entries)
+    % DW_LNS_copy(1)=0, DW_LNS_advance_pc(2)=1, DW_LNS_advance_line(3)=1, etc.
+    StdOpcodeLengths = <<0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1>>,
 
-    % File names table - include directory table and multiple files
+    % Build file table with actual filenames from line data
+    UniqueFullPaths = case Lines of
+        [] ->
+            [SourceFile];
+        _ ->
+            % Extract unique filenames from Lines, don't add SourceFile as it may be a duplicate
+            Filenames = [Filename || {_Offset, Filename, _LineNum} <- Lines],
+            lists:usort(Filenames)
+    end,
+
+    % Split paths into directories and filenames, avoiding duplicates
+    {Directories, FileEntries, _} = lists:foldl(fun(FullPath, {DirAcc, FileAcc, FileSet}) ->
+        case filename:split(binary_to_list(FullPath)) of
+            [Basename] ->
+                % Just a filename, no directory
+                FileKey = {Basename, 0},
+                case sets:is_element(FileKey, FileSet) of
+                    true -> {DirAcc, FileAcc, FileSet};  % Skip duplicate
+                    false -> {DirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
+                end;
+            PathParts ->
+                DirParts = lists:droplast(PathParts),
+                Dir = filename:join(DirParts),
+                Basename = lists:last(PathParts),
+                % Find or add directory to get proper index (1-based)
+                {NewDirAcc, DirIndex} = case lists:search(fun(D) -> D =:= Dir end, DirAcc) of
+                    {value, _} ->
+                        % Find index of existing directory (1-based)
+                        ExistingIndex = length(lists:takewhile(fun(D) -> D =/= Dir end, DirAcc)) + 1,
+                        {DirAcc, ExistingIndex};
+                    false ->
+                        % Add new directory and return its 1-based index
+                        NewIndex = length(DirAcc) + 1,
+                        {DirAcc ++ [Dir], NewIndex}
+                end,
+                FileKey = {Basename, DirIndex},
+                case sets:is_element(FileKey, FileSet) of
+                    true -> {NewDirAcc, FileAcc, FileSet};  % Skip duplicate
+                    false -> {NewDirAcc, [FileKey | FileAcc], sets:add_element(FileKey, FileSet)}
+                end
+        end
+    end, {[], [], sets:new()}, UniqueFullPaths),
+
+    % Build directory table
+    DirectoryTable = lists:foldl(fun(Dir, Acc) ->
+        DirBin = list_to_binary(Dir),
+        <<Acc/binary, DirBin/binary, 0>>
+    end, <<>>, Directories),
+
+    % Build file table entries with proper ULEB128 encoding for directory index
+    FileTableEntries = lists:foldl(fun({Filename, DirIndex}, Acc) ->
+        DirIndexEncoded = encode_uleb128(DirIndex),
+        <<Acc/binary, (list_to_binary(Filename))/binary, 0, DirIndexEncoded/binary, 0, 0>>
+    end, <<>>, lists:reverse(FileEntries)),
+
     FileTable = <<
-        % Directory table (empty)
+        % Directory table
+        DirectoryTable/binary,
+        % End of directory table
         0,
-        % File table
-        % File 1: Original source
-        SourceFile/binary,
-        0,
-        % Directory index
-        0,
-        % Last modified
-        0,
-        % File size
-        0,
+        % File table entries
+        FileTableEntries/binary,
         % End of file table
         0
     >>,
 
-    % Line number program - simplified to avoid malformed opcodes
-    Program = generate_simple_line_program(),
+    % Line number program - using actual line data with file mapping
+    FileMapping = lists:zip(UniqueFullPaths, lists:seq(1, length(FileEntries))),
+    Program = generate_line_program(Lines, FileMapping),
 
     % Calculate actual header length (everything from version to end of file table)
     HeaderPlusTablesContent = <<StdOpcodeLengths/binary, FileTable/binary>>,
@@ -627,16 +727,33 @@ generate_debug_line_section(#state{lines = _Lines, opcodes = _Opcodes}, SourceFi
     <<UnitLength:32/little, ContentAfterLength/binary>>.
 
 create_elf_header_and_sections(Backend, Sections) ->
+    % Determine ELF format based on backend word size
+    WordSize = Backend:word_size(),
+    % 32 or 64 bits
+    WordSizeInBits = WordSize * 8,
+    ElfClass =
+        case WordSize of
+            8 -> ?ELFCLASS64;
+            4 -> ?ELFCLASS32
+        end,
+
+    % ELF format dependent sizes
+    {ElfHeaderSize, SectionHeaderSize} =
+        case WordSize of
+            % ELF64
+            8 -> {64, 64};
+            % ELF32
+            4 -> {52, 40}
+        end,
+
     % Create section name string table (dynamic based on sections)
     SectionNames =
         [<<>>] ++ [SectionName || {SectionName, _Section} <- Sections] ++ [<<".shstrtab">>],
     ShStrTab = create_string_table(SectionNames),
 
     % Calculate offsets
-    ElfHeaderSize = 52,
     % null + debug sections + shstrtab
     SectionCount = length(SectionNames),
-    SectionHeaderSize = 40,
 
     % String table index is the last section
     ShStrTabIndex = SectionCount - 1,
@@ -658,8 +775,8 @@ create_elf_header_and_sections(Backend, Sections) ->
         ?EI_MAG1,
         ?EI_MAG2,
         ?EI_MAG3,
-        % 32-bit
-        ?ELFCLASS32,
+        % ELF class (32-bit or 64-bit)
+        ElfClass,
         % Little endian
         ?ELFDATA2LSB,
         % ELF version
@@ -682,12 +799,12 @@ create_elf_header_and_sections(Backend, Sections) ->
         MachineType:16/little,
         % Version
         1:32/little,
-        % Entry point
-        0:32/little,
-        % Program header offset
-        0:32/little,
-        % Section header offset
-        SectionHeaderOffset:32/little,
+        % Entry point - 32 or 64 bit depending on word size
+        0:WordSizeInBits/little,
+        % Program header offset - 32 or 64 bit depending on word size
+        0:WordSizeInBits/little,
+        % Section header offset - 32 or 64 bit depending on word size
+        SectionHeaderOffset:WordSizeInBits/little,
         % Flags
         ElfFlags:32/little,
         % ELF header size
@@ -706,7 +823,7 @@ create_elf_header_and_sections(Backend, Sections) ->
 
     % Generate section headers
     SectionHeaders = create_section_headers_proper(
-        SectionNames, Sections, SectionOffsets, ShStrTab, Backend
+        SectionNames, Sections, SectionOffsets, ShStrTab, Backend, WordSizeInBits
     ),
 
     <<ElfHeader/binary, SectionData/binary, SectionHeaders/binary>>.
@@ -717,26 +834,133 @@ calculate_address_range(#state{opcodes = Opcodes}) ->
         [] ->
             {0, 0};
         _ ->
-            Offsets = [Offset || {Offset, _} <- Opcodes],
-            % Assume 4-byte instruction
-            {lists:min(Offsets), lists:max(Offsets) + 4}
+            % Use the new 3-tuple format {Offset, Opcode, Size}
+            OffsetsAndSizes = [{Offset, Size} || {Offset, _, Size} <- Opcodes],
+            Offsets = [Offset || {Offset, _} <- OffsetsAndSizes],
+            MinOffset = lists:min(Offsets),
+            % For max, use offset + size, or fallback to offset + 4 if size is 0
+            MaxOffset = lists:max([
+                case Size of
+                    0 -> Offset + 4;  % Fallback for opcodes without calculated size
+                    _ -> Offset + Size
+                end
+                || {Offset, Size} <- OffsetsAndSizes
+            ]),
+            {MinOffset, MaxOffset}
     end.
 
-generate_simple_line_program() ->
-    % Very simple line program that just ends the sequence
-    <<
-        % Set file to 1
-        1,
-        1,
-        % End sequence: extended opcode
+generate_line_program(Lines, FileMapping) ->
+    case Lines of
+        [] ->
+            % No line data - generate simple program
+            <<
+                % Set file to 1 using DW_LNS_set_file (opcode 4) with file index 1
+                4,
+                1,
+                % End sequence: extended opcode
+                % Extended opcode prefix
+                0,
+                % Length of extended opcode
+                1,
+                % DW_LNE_end_sequence
+                1
+            >>;
+        _ ->
+            % Sort lines by offset
+            SortedLines = lists:sort(
+                fun({OffsetA, _, _}, {OffsetB, _, _}) ->
+                    OffsetA =< OffsetB
+                end,
+                Lines
+            ),
+            generate_line_program_entries(SortedLines, FileMapping, 0, 1, 0)
+    end.
 
+generate_line_program_entries([], _FileMapping, _LastOffset, _LastLine, _LastFileIndex) ->
+    % End the sequence
+    <<
+        % End sequence: extended opcode
         % Extended opcode prefix
         0,
         % Length of extended opcode
         1,
         % DW_LNE_end_sequence
         1
-    >>.
+    >>;
+generate_line_program_entries([{Offset, Filename, LineNumber} | Rest], FileMapping, LastOffset, LastLine, LastFileIndex) ->
+    % Generate DWARF line program opcodes
+    % For simplicity, we'll use DW_LNS_advance_pc and DW_LNS_advance_line
+
+    % Find file index from mapping
+    FileIndex = case lists:keyfind(Filename, 1, FileMapping) of
+        {Filename, Index} -> Index;
+        false -> 1  % Default to first file if not found
+    end,
+
+    % Calculate address and line deltas
+    AddressDelta = Offset - LastOffset,
+    LineDelta = LineNumber - LastLine,
+
+    % Build opcodes
+    FileOpcodes = if
+        FileIndex =/= LastFileIndex ->
+            % DW_LNS_set_file (opcode 4) with file index
+            <<4, FileIndex>>;
+        true ->
+            <<>>
+    end,
+
+    InitialOpcodes = if
+        LastOffset == 0 ->
+            % Set initial file index
+            <<4, FileIndex>>;
+        true ->
+            FileOpcodes
+    end,
+
+    Opcodes = <<
+        InitialOpcodes/binary,
+        % DW_LNS_advance_pc (opcode 2) with ULEB128 delta
+        2,
+        (encode_uleb128(AddressDelta))/binary,
+        % DW_LNS_advance_line (opcode 3) with SLEB128 delta
+        3,
+        (encode_sleb128(LineDelta))/binary,
+        % DW_LNS_copy (opcode 1) - emit a new row
+        1
+    >>,
+
+    RestOpcodes = generate_line_program_entries(Rest, FileMapping, Offset, LineNumber, FileIndex),
+    <<Opcodes/binary, RestOpcodes/binary>>.
+
+% Encode unsigned LEB128
+encode_uleb128(Value) when Value < 128 ->
+    <<Value>>;
+encode_uleb128(Value) ->
+    Byte = (Value band 16#7F) bor 16#80,
+    Rest = encode_uleb128(Value bsr 7),
+    <<Byte, Rest/binary>>.
+
+% Encode signed LEB128
+encode_sleb128(Value) when Value >= -64, Value < 64 ->
+    ByteValue = Value band 16#7F,
+    <<ByteValue>>;
+encode_sleb128(Value) when Value >= 0 ->
+    encode_uleb128(Value);
+encode_sleb128(Value) ->
+    encode_sleb128_negative(Value).
+
+encode_sleb128_negative(Value) ->
+    Byte = Value band 16#7F,
+    NewValue = Value bsr 7,
+    if
+        NewValue == -1, (Byte band 16#40) =/= 0 ->
+            <<Byte>>;
+        true ->
+            ByteWithCont = Byte bor 16#80,
+            Rest = encode_sleb128_negative(NewValue),
+            <<ByteWithCont, Rest/binary>>
+    end.
 
 %% Generate DIEs for functions as DW_TAG_subprogram with module:func/arity naming
 generate_function_dies_with_module(Functions, ModuleName) ->
@@ -820,19 +1044,21 @@ generate_symbol_table(
     #state{functions = Functions, opcodes = Opcodes, labels = Labels, module_name = ModuleName},
     Backend
 ) ->
+    % Determine ELF format based on backend word size
+    WordSize = Backend:word_size(),
     % Build string table for symbol names (functions) with module:function/arity format
     FunctionNames = [
         list_to_binary(io_lib:format("~s:~s/~B", [ModuleName, FunctionName, Arity]))
      || {_Offset, FunctionName, Arity} <- Functions
     ],
-    % Build string table for opcode symbols with module#offset:opcode/arity format
+    % Build string table for opcode symbols with module:op_opcode@offset format
     OpcodeNames = [
-        list_to_binary(io_lib:format("~s#~w:~s", [ModuleName, Offset, Opcode]))
-     || {Offset, Opcode} <- Opcodes
+        list_to_binary(io_lib:format("~s:op_~s@~w", [ModuleName, Opcode, Offset]))
+     || {Offset, Opcode, _Size} <- Opcodes
     ],
-    % Build string table for label symbols with module#offset:label_X format
+    % Build string table for label symbols with module:label_X@offset format
     LabelNames = [
-        list_to_binary(io_lib:format("~s#~w:label_~w", [ModuleName, Offset, LabelNum]))
+        list_to_binary(io_lib:format("~s:label_~w@~w", [ModuleName, LabelNum, Offset]))
      || {Offset, LabelNum} <- Labels
     ],
     % Add ARM mapping symbol to indicate Thumb code (for armv6m backend)
@@ -869,9 +1095,15 @@ generate_symbol_table(
 
     % Generate symbol table entries
     % First entry is always the null symbol
-
-    % 16 bytes
-    NullSymbol = <<0:32/little, 0:32/little, 0:32/little, 0, 0, 0:16/little>>,
+    NullSymbol =
+        case WordSize of
+            8 ->
+                % ELF64: 24 bytes - st_name(4) + st_info(1) + st_other(1) + st_shndx(2) + st_value(8) + st_size(8)
+                <<0:32/little, 0, 0, 0:16/little, 0:64/little, 0:64/little>>;
+            4 ->
+                % ELF32: 16 bytes - st_name(4) + st_value(4) + st_size(4) + st_info(1) + st_other(1) + st_shndx(2)
+                <<0:32/little, 0:32/little, 0:32/little, 0, 0, 0:16/little>>
+        end,
 
     % Generate function symbols
     FunctionSymbols = lists:foldl(
@@ -883,21 +1115,35 @@ generate_symbol_table(
             % Use raw offset for symbol address (no Thumb bit)
             FunctionAddress = Offset,
 
-            % Symbol table entry (16 bytes for 32-bit ELF)
-            Symbol = <<
-                % st_name (offset in string table)
-                StringOffset:32/little,
-                % st_value (function address)
-                FunctionAddress:32/little,
-                % st_size (function size)
-                FuncSize:32/little,
-                % st_info (STB_GLOBAL << 4 | STT_FUNC)
-                16#12,
-                % st_other
-                0,
-                % st_shndx (section index - .text will be section 1)
-                1:16/little
-            >>,
+            % Symbol table entry (format depends on word size)
+            Symbol =
+                case WordSize of
+                    8 ->
+                        % ELF64: 24 bytes - st_name(4) + st_info(1) + st_other(1) + st_shndx(2) + st_value(8) + st_size(8)
+                        <<
+                            StringOffset:32/little,
+                            % st_info (STB_GLOBAL << 4 | STT_FUNC)
+                            16#12,
+                            % st_other
+                            0,
+                            % st_shndx (section index - .text will be section 1)
+                            1:16/little,
+                            % st_value (function address)
+                            FunctionAddress:64/little,
+                            % st_size (function size)
+                            FuncSize:64/little
+                        >>;
+                    4 ->
+                        % ELF32: 16 bytes - st_name(4) + st_value(4) + st_size(4) + st_info(1) + st_other(1) + st_shndx(2)
+                        <<
+                            StringOffset:32/little,
+                            FunctionAddress:32/little,
+                            FuncSize:32/little,
+                            16#12,
+                            0,
+                            1:16/little
+                        >>
+                end,
             <<Acc/binary, Symbol/binary>>
         end,
         <<>>,
@@ -907,25 +1153,39 @@ generate_symbol_table(
     % Generate opcode symbols
     OpcodeStringOffsets = lists:sublist(ReversedOffsets, length(Functions) + 1, length(Opcodes)),
     OpcodeSymbols = lists:foldl(
-        fun({{Offset, _Opcode}, StringOffset}, Acc) ->
+        fun({{Offset, _Opcode, Size}, StringOffset}, Acc) ->
             % Use raw offset for symbol address (no Thumb bit)
             OpcodeAddress = Offset,
 
-            % Symbol table entry (16 bytes for 32-bit ELF)
-            Symbol = <<
-                % st_name (offset in string table)
-                StringOffset:32/little,
-                % st_value (opcode address)
-                OpcodeAddress:32/little,
-                % st_size (opcode size - small, typically 2-4 bytes)
-                4:32/little,
-                % st_info (STB_GLOBAL << 4 | STT_NOTYPE)
-                16#10,
-                % st_other
-                0,
-                % st_shndx (section index - .text will be section 1)
-                1:16/little
-            >>,
+            % Symbol table entry (format depends on word size)
+            Symbol =
+                case WordSize of
+                    8 ->
+                        % ELF64: 24 bytes - st_name(4) + st_info(1) + st_other(1) + st_shndx(2) + st_value(8) + st_size(8)
+                        <<
+                            StringOffset:32/little,
+                            % st_info (STB_GLOBAL << 4 | STT_NOTYPE)
+                            16#10,
+                            % st_other
+                            0,
+                            % st_shndx (section index - .text will be section 1)
+                            1:16/little,
+                            % st_value (opcode address)
+                            OpcodeAddress:64/little,
+                            % st_size (actual calculated opcode size)
+                            Size:64/little
+                        >>;
+                    4 ->
+                        % ELF32: 16 bytes - st_name(4) + st_value(4) + st_size(4) + st_info(1) + st_other(1) + st_shndx(2)
+                        <<
+                            StringOffset:32/little,
+                            OpcodeAddress:32/little,
+                            Size:32/little,
+                            16#10,
+                            0,
+                            1:16/little
+                        >>
+                end,
             <<Acc/binary, Symbol/binary>>
         end,
         <<>>,
@@ -941,21 +1201,35 @@ generate_symbol_table(
             % Use raw offset for symbol address
             LabelAddress = Offset,
 
-            % Symbol table entry (16 bytes for 32-bit ELF)
-            Symbol = <<
-                % st_name (offset in string table)
-                StringOffset:32/little,
-                % st_value (label address)
-                LabelAddress:32/little,
-                % st_size (label size - 0 for point labels)
-                0:32/little,
-                % st_info (STB_GLOBAL << 4 | STT_NOTYPE)
-                16#10,
-                % st_other
-                0,
-                % st_shndx (section index - .text will be section 1)
-                1:16/little
-            >>,
+            % Symbol table entry (format depends on word size)
+            Symbol =
+                case WordSize of
+                    8 ->
+                        % ELF64: 24 bytes - st_name(4) + st_info(1) + st_other(1) + st_shndx(2) + st_value(8) + st_size(8)
+                        <<
+                            StringOffset:32/little,
+                            % st_info (STB_GLOBAL << 4 | STT_NOTYPE)
+                            16#10,
+                            % st_other
+                            0,
+                            % st_shndx (section index - .text will be section 1)
+                            1:16/little,
+                            % st_value (label address)
+                            LabelAddress:64/little,
+                            % st_size (label size - 0 for point labels)
+                            0:64/little
+                        >>;
+                    4 ->
+                        % ELF32: 16 bytes - st_name(4) + st_value(4) + st_size(4) + st_info(1) + st_other(1) + st_shndx(2)
+                        <<
+                            StringOffset:32/little,
+                            LabelAddress:32/little,
+                            0:32/little,
+                            16#10,
+                            0,
+                            1:16/little
+                        >>
+                end,
             <<Acc/binary, Symbol/binary>>
         end,
         <<>>,
@@ -1028,11 +1302,19 @@ layout_sections(Sections, ShStrTab, BaseOffset) ->
     {FinalData, FinalOffsets}.
 
 %% Create properly formatted section headers
-create_section_headers_proper(SectionNames, Sections, SectionOffsets, ShStrTab, Backend) ->
+create_section_headers_proper(
+    SectionNames, Sections, SectionOffsets, ShStrTab, Backend, WordSizeInBits
+) ->
     % Create null section header (index 0)
-
-    % 40 bytes of zeros
-    NullHeader = <<0:320/little>>,
+    % Size depends on ELF format: 40 bytes (ELF32) or 64 bytes (ELF64)
+    SectionHeaderSizeBits =
+        case WordSizeInBits of
+            % 64 bytes * 8 bits
+            64 -> 512;
+            % 40 bytes * 8 bits
+            32 -> 320
+        end,
+    NullHeader = <<0:SectionHeaderSizeBits/little>>,
 
     % Create section headers for all sections (indices 1-6)
     % SectionOffsets from layout_sections: [ShStrTabOffset, ...SectionOffsets in order...]
@@ -1044,8 +1326,8 @@ create_section_headers_proper(SectionNames, Sections, SectionOffsets, ShStrTab, 
             SectionNameWithNull = <<SectionName/binary, 0>>,
             {NameOffset, _Length} = binary:match(ShStrTab, SectionNameWithNull),
 
-            % Determine section type and properties
-            {SectionType, Link, Info, EntrySize} =
+            % Determine section type, properties, and flags
+            {SectionType, SectionFlags, Link, Info, EntrySize} =
                 case SectionName of
                     <<".symtab">> ->
                         % Find .strtab index dynamically
@@ -1059,39 +1341,47 @@ create_section_headers_proper(SectionNames, Sections, SectionOffsets, ShStrTab, 
                                 _ -> 1
                             end,
                         % SHT_SYMTAB, link to strtab, info = first non-local symbol, entsize = 16
-                        {?SHT_SYMTAB, StrtabIndex, NumLocalSymbols, 16};
+                        SymTabEntrySize =
+                            case WordSizeInBits of
+                                32 -> 16;
+                                64 -> 24
+                            end,
+                        {?SHT_SYMTAB, 0, StrtabIndex, NumLocalSymbols, SymTabEntrySize};
                     % SHT_STRTAB
                     <<".strtab">> ->
-                        {3, 0, 0, 0};
+                        {3, 0, 0, 0, 0};
                     % ARM attributes
                     <<".ARM.attributes">> ->
-                        {?SHT_ARM_ATTRIBUTES, 0, 0, 0};
-                    % Debug sections
+                        {?SHT_ARM_ATTRIBUTES, 0, 0, 0, 0};
+                    % .text section - executable code
+                    <<".text">> ->
+                        {?SHT_PROGBITS, ?SHF_ALLOC bor ?SHF_EXECINSTR, 0, 0, 0};
+                    % Debug sections and other progbits
                     _ ->
-                        {?SHT_PROGBITS, 0, 0, 0}
+                        {?SHT_PROGBITS, 0, 0, 0, 0}
                 end,
 
             Header = <<
-                % Name offset
+                % Name offset - always 32-bit
                 NameOffset:32/little,
-                % Type
+                % Type - always 32-bit
                 SectionType:32/little,
-                % Flags
-                0:32/little,
-                % Address
-                0:32/little,
-                % File offset
-                FileOffset:32/little,
-                % Size
-                (byte_size(SectionData)):32/little,
-                % Link
+                % Flags - 32/64 bit depending on word size
+                SectionFlags:WordSizeInBits/little,
+                % Address - 32/64 bit depending on word size
+                0:WordSizeInBits/little,
+                % File offset - 32/64 bit depending on word size
+                FileOffset:WordSizeInBits/little,
+                % Size - 32/64 bit depending on word size
+                (byte_size(SectionData)):WordSizeInBits/little,
+                % Link - always 32-bit
                 Link:32/little,
-                % Info
+                % Info - always 32-bit
                 Info:32/little,
-                % Address align
-                1:32/little,
-                % Entry size
-                EntrySize:32/little
+                % Address align - 32/64 bit depending on word size
+                1:WordSizeInBits/little,
+                % Entry size - 32/64 bit depending on word size
+                EntrySize:WordSizeInBits/little
             >>,
             <<Acc/binary, Header/binary>>
         end,
@@ -1107,173 +1397,50 @@ create_section_headers_proper(SectionNames, Sections, SectionOffsets, ShStrTab, 
     % First in offsets (ShStrTabOffset is added at the beginning)
     ShStrTabFileOffset = lists:nth(1, SectionOffsets),
     ShStrTabHeader = <<
-        % Name offset
+        % Name offset - always 32-bit
         ShStrTabNameOffset:32/little,
-        % Type
+        % Type - always 32-bit
         ?SHT_STRTAB:32/little,
-        % Flags
+        % Flags - 32/64 bit depending on word size
+        0:WordSizeInBits/little,
+        % Address - 32/64 bit depending on word size
+        0:WordSizeInBits/little,
+        % File offset - 32/64 bit depending on word size
+        ShStrTabFileOffset:WordSizeInBits/little,
+        % Size - 32/64 bit depending on word size
+        (byte_size(ShStrTab)):WordSizeInBits/little,
+        % Link - always 32-bit
         0:32/little,
-        % Address
+        % Info - always 32-bit
         0:32/little,
-        % File offset
-        ShStrTabFileOffset:32/little,
-        % Size
-        (byte_size(ShStrTab)):32/little,
-        % Link
-        0:32/little,
-        % Info
-        0:32/little,
-        % Address align
-        1:32/little,
-        % Entry size
-        0:32/little
+        % Address align - 32/64 bit depending on word size
+        1:WordSizeInBits/little,
+        % Entry size - 32/64 bit depending on word size
+        0:WordSizeInBits/little
     >>,
 
     <<NullHeader/binary, SectionHeaders/binary, ShStrTabHeader/binary>>.
 
 %% @doc Add .text section containing native code to existing debug-only ELF
-add_text_section_to_elf(DebugELF, NativeCode) ->
-    % Parse full ELF header (52 bytes) to get section info
-    <<_ElfMagic:16/binary, _Type:16/little, _Machine:16/little, _Version:32/little,
-        _Entry:32/little, _PHOff:32/little, SHOff:32/little, _Flags:32/little, _EHSize:16/little,
-        _PHEntSize:16/little, _PHNum:16/little, _SHEntSize:16/little, SHNum:16/little,
-        SHStrNdx:16/little, RestOfFile/binary>> = DebugELF,
+%% @doc Create complete ELF with .text section and debug sections from the start
+create_elf_with_text_and_debug_sections(Backend, DebugSections, NativeCode) ->
+    % Add .text section as the first section
+    TextSection = {<<".text">>, NativeCode},
+    AllSections = [TextSection | DebugSections],
 
-    % Parse section headers to find string table
-    SectionHeadersStart = SHOff - 52,
-    <<SectionData:SectionHeadersStart/binary, SectionHeaders/binary>> = RestOfFile,
+    % Calculate text section offset: it's the first section after the ELF header
+    WordSize = Backend:word_size(),
+    TextSectionOffset =
+        case WordSize of
+            % ELF64 header size
+            8 -> 64;
+            % ELF32 header size
+            4 -> 52
+        end,
 
-    % Extract string table section header (SHStrNdx index)
-    SectionHeaderSize = 40,
-    StringTableHeaderOffset = SHStrNdx * SectionHeaderSize,
-    <<_:StringTableHeaderOffset/binary, _StrName:32/little, _StrType:32/little, _StrFlags:32/little,
-        _StrAddr:32/little, StrOffset:32/little, StrSize:32/little, _StrLink:32/little,
-        _StrInfo:32/little, _StrAlign:32/little, _StrEntSize:32/little, _/binary>> = SectionHeaders,
+    % Create complete ELF with all sections
+    ElfBinary = create_elf_header_and_sections(Backend, AllSections),
 
-    % Extract current string table
-    % Relative to after ELF header
-    StrTableFileOffset = StrOffset - 52,
-    <<_:StrTableFileOffset/binary, CurrentStrTable:StrSize/binary, _/binary>> = SectionData,
-
-    % Add ".text" to string table
-    % Offset where ".text" will be added
-    TextNameOffset = StrSize,
-    NewStrTable = <<CurrentStrTable/binary, ".text", 0>>,
-    NewStrTableSize = byte_size(NewStrTable),
-
-    % Replace old string table in section data
-    <<PreStrTable:StrTableFileOffset/binary, _:StrSize/binary, PostStrTable/binary>> = SectionData,
-    UpdatedSectionData = <<PreStrTable/binary, NewStrTable/binary, PostStrTable/binary>>,
-
-    % Update symbol table to point to .text section (which will be section index SHNum)
-    TextSectionIndex = SHNum,
-    UpdatedSectionDataWithSymbols = update_symbol_table_in_data(
-        UpdatedSectionData, SectionHeaders, TextSectionIndex
-    ),
-
-    % Append .text section data
-    TextSectionOffset = 52 + byte_size(UpdatedSectionDataWithSymbols),
-    TextSectionSize = byte_size(NativeCode),
-    FinalSectionData = <<UpdatedSectionDataWithSymbols/binary, NativeCode/binary>>,
-
-    % Create .text section header
-    TextSectionHeader = <<
-        % Name offset in string table
-        TextNameOffset:32/little,
-        % Type
-        ?SHT_PROGBITS:32/little,
-        % Flags
-        (?SHF_ALLOC bor ?SHF_EXECINSTR):32/little,
-        % Address
-        0:32/little,
-        % File offset
-        TextSectionOffset:32/little,
-        % Size
-        TextSectionSize:32/little,
-        % Link
-        0:32/little,
-        % Info
-        0:32/little,
-        % Address alignment
-        4:32/little,
-        % Entry size
-        0:32/little
-    >>,
-
-    % Update string table section header with new size
-    UpdatedStrTableHeader = <<
-        _StrName:32/little,
-        _StrType:32/little,
-        _StrFlags:32/little,
-        _StrAddr:32/little,
-        StrOffset:32/little,
-        NewStrTableSize:32/little,
-        _StrLink:32/little,
-        _StrInfo:32/little,
-        _StrAlign:32/little,
-        _StrEntSize:32/little
-    >>,
-
-    % Update section headers - append text section header at the end
-    <<PreStrHeader:StringTableHeaderOffset/binary, _:SectionHeaderSize/binary,
-        PostStrHeader/binary>> = SectionHeaders,
-    FinalSectionHeaders =
-        <<PreStrHeader/binary, UpdatedStrTableHeader/binary, PostStrHeader/binary,
-            TextSectionHeader/binary>>,
-
-    % Update ELF header with new section count and header offset
-    NewSHOff = TextSectionOffset + TextSectionSize,
-    NewSHNum = SHNum + 1,
-    UpdatedElfHeader =
-        <<_ElfMagic:16/binary, _Type:16/little, _Machine:16/little, _Version:32/little,
-            _Entry:32/little, _PHOff:32/little, NewSHOff:32/little, _Flags:32/little,
-            _EHSize:16/little, _PHEntSize:16/little, _PHNum:16/little, _SHEntSize:16/little,
-            NewSHNum:16/little, SHStrNdx:16/little>>,
-
-    % Final ELF: header + section data + all section headers together
-    <<UpdatedElfHeader/binary, FinalSectionData/binary, FinalSectionHeaders/binary>>.
-
-%% @doc Update symbol table data to point function symbols to .text section
-update_symbol_table_in_data(SectionData, SectionHeaders, TextSectionIndex) ->
-    % Find .symtab section index dynamically
-    % Need to parse section headers to find .symtab
-    SymtabSectionIndex = find_symtab_section_index(SectionHeaders),
-    SectionHeaderSize = 40,
-    SymtabHeaderOffset = SymtabSectionIndex * SectionHeaderSize,
-
-    <<_:SymtabHeaderOffset/binary, _SymtabName:32/little, _SymtabType:32/little,
-        _SymtabFlags:32/little, _SymtabAddr:32/little, SymtabOffset:32/little, SymtabSize:32/little,
-        _/binary>> = SectionHeaders,
-
-    % Symbol table is at SymtabOffset - 52 (ELF header) in section data
-    SymtabFileOffset = SymtabOffset - 52,
-
-    % Extract symbol table data
-    <<PreSymtab:SymtabFileOffset/binary, SymbolTable:SymtabSize/binary, PostSymtab/binary>> =
-        SectionData,
-
-    % Update symbol table entries - each entry is 16 bytes
-    % Skip the null symbol (first 16 bytes) and update the rest
-    <<NullSymbol:16/binary, FunctionSymbols/binary>> = SymbolTable,
-    UpdatedFunctionSymbols = update_function_symbols(FunctionSymbols, TextSectionIndex, <<>>),
-    UpdatedSymbolTable = <<NullSymbol/binary, UpdatedFunctionSymbols/binary>>,
-
-    % Replace symbol table in section data
-    <<PreSymtab/binary, UpdatedSymbolTable/binary, PostSymtab/binary>>.
-
-%% @doc Update function symbol entries to point to .text section
-update_function_symbols(<<>>, _TextSectionIndex, Acc) ->
-    Acc;
-update_function_symbols(
-    <<NameOffset:32/little, Address:32/little, Size:32/little, Info, Other,
-        _OldSectionIndex:16/little, Rest/binary>>,
-    TextSectionIndex,
-    Acc
-) ->
-    % Update section index to point to .text section
-    UpdatedSymbol =
-        <<NameOffset:32/little, Address:32/little, Size:32/little, Info, Other,
-            TextSectionIndex:16/little>>,
-    update_function_symbols(Rest, TextSectionIndex, <<Acc/binary, UpdatedSymbol/binary>>).
+    {ElfBinary, TextSectionOffset}.
 
 -endif.
