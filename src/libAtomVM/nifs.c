@@ -100,6 +100,7 @@ static term nif_binary_split(Context *ctx, int argc, term argv[]);
 static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_binary_match(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
+static term nif_os_getenv_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
@@ -484,7 +485,13 @@ static const struct Nif system_time_to_universal_time_nif = {
     .nif_ptr = nif_calendar_system_time_to_universal_time_2
 };
 
-static const struct Nif tuple_to_list_nif = {
+const struct Nif os_getenv_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_os_getenv_1
+};
+
+static const struct Nif tuple_to_list_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_tuple_to_list_1
 };
@@ -1690,6 +1697,56 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
 
     struct tm broken_down_time;
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
+}
+
+static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term result;
+    term env_var_list = argv[0];
+    VALIDATE_VALUE(env_var_list, term_is_list);
+
+    int ok;
+    char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifndef AVM_NO_SMP
+    smp_spinlock_lock(&ctx->global->env_spinlock);
+#endif
+
+    const char *env_var_value_tmp = getenv(env_var);
+    free(env_var);
+
+    if (IS_NULL_PTR(env_var_value_tmp)) {
+#ifndef AVM_NO_SMP
+        smp_spinlock_unlock(&ctx->global->env_spinlock);
+#endif
+        return FALSE_ATOM;
+    }
+
+    char *env_var_value = strdup(env_var_value_tmp);
+
+#ifndef AVM_NO_SMP
+    smp_spinlock_unlock(&ctx->global->env_spinlock);
+#endif
+
+    if (IS_NULL_PTR(env_var_value)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    size_t env_value_len = strlen(env_var_value);
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, LIST_SIZE(env_value_len, 1), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(env_var_value);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    result = interop_bytes_to_list(env_var_value, env_value_len, &ctx->heap);
+    free(env_var_value);
+    return result;
 }
 
 static term nif_erlang_make_tuple_2(Context *ctx, int argc, term argv[])
