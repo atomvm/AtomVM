@@ -49,7 +49,7 @@ get_object_from_export_test_module() ->
         export_test_module, "export_test_module.beam", Bin
     ),
     {module, export_test_module} = code:ensure_loaded(export_test_module),
-    {export_test_module, Bin, _Filename} = code:get_object_code(export_test_module),
+    error = code:get_object_code(export_test_module),
     24 = export_test_module:exported_func(4),
     ok.
 
