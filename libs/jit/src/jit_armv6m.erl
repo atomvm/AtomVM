@@ -428,7 +428,11 @@ update_branches(
                         % Keep far branch sequence, calculate correct ldr immediate and update literal
 
                         % Calculate where the literal should be placed (same logic as generation)
-                        LdrOffset = Offset,
+                        LdrOffset =
+                            case TempReg of
+                                ?IP_REG -> Offset + 2;
+                                _ -> Offset
+                            end,
                         % ldr + add + bx = 6 bytes
                         AfterInstructionsOffset = Offset + 6,
                         AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
@@ -443,12 +447,40 @@ update_branches(
                         % This is the offset from the add instruction's PC to the target
                         % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
                         % We also need to set thumb bit to 1, so eventually we only substract 5.
-                        AddPCOffset = Offset + 5,
+                        % If IP_REG, add is at Offset + 8
+                        AddPCOffset =
+                            case TempReg of
+                                ?IP_REG -> Offset + 11;
+                                _ -> Offset + 5
+                            end,
                         % Set thumb bit for bx instruction - target address must be odd for Thumb mode
                         RelativeOffset = LabelOffset - AddPCOffset,
 
-                        if
-                            Size =:= 12 ->
+                        case {TempReg, Size} of
+                            {?IP_REG, 18} ->
+                                % 18-byte sequence with alignment
+                                I1 = jit_armv6m_asm:push([r0]),
+                                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                                I3 = jit_armv6m_asm:mov(?IP_REG, r0),
+                                I4 = jit_armv6m_asm:pop([r0]),
+                                I5 = jit_armv6m_asm:add(?IP_REG, pc),
+                                I6 = jit_armv6m_asm:bx(?IP_REG),
+                                I7 = jit_armv6m_asm:nop(),
+                                I8 = <<RelativeOffset:32/little>>,
+                                <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary,
+                                    I7/binary, I8/binary>>;
+                            {?IP_REG, 16} ->
+                                % 16-byte sequence without alignment
+                                I1 = jit_armv6m_asm:push([r0]),
+                                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                                I3 = jit_armv6m_asm:mov(?IP_REG, r0),
+                                I4 = jit_armv6m_asm:pop([r0]),
+                                I5 = jit_armv6m_asm:add(?IP_REG, pc),
+                                I6 = jit_armv6m_asm:bx(?IP_REG),
+                                I7 = <<RelativeOffset:32/little>>,
+                                <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary,
+                                    I7/binary>>;
+                            {_, 12} ->
                                 % 12-byte sequence with alignment
                                 I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
                                 I2 = jit_armv6m_asm:add(TempReg, pc),
@@ -456,8 +488,7 @@ update_branches(
                                 I4 = jit_armv6m_asm:nop(),
                                 I5 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
-                            % Size =:= 10
-                            true ->
+                            {_, 10} ->
                                 % 10-byte sequence without alignment
                                 I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
                                 I2 = jit_armv6m_asm:add(TempReg, pc),
@@ -793,8 +824,61 @@ branch_to_label_code(
     Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
+branch_to_label_code(
+    #state{available_regs = [], branches = Branches} = State0, Offset, Label, false
+) ->
+    % Calculate alignment for literal pool
+    LdrOffset = Offset + 2,
+    % push + ldr + mov + pop + add + bx = 12 bytes
+    AfterInstructionsOffset = Offset + 12,
+    % Round up to 4-byte boundary
+    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
+    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
+
+    % Calculate PC-relative offset for ldr instruction
+    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
+
+    % PC aligned down
+    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
+    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
+
+    {CodeBlock, SequenceSize} =
+        if
+            PaddingSize > 0 ->
+                % Need alignment padding
+                I1 = jit_armv6m_asm:push([r0]),
+                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                I3 = jit_armv6m_asm:mov(?IP_REG, r0),
+                I4 = jit_armv6m_asm:pop([r0]),
+                I5 = jit_armv6m_asm:add(?IP_REG, pc),
+                I6 = jit_armv6m_asm:bx(?IP_REG),
+                I7 = jit_armv6m_asm:nop(),
+                % Placeholder offset
+                I8 = <<0:32/little>>,
+                Seq =
+                    <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary, I7/binary,
+                        I8/binary>>,
+                {Seq, byte_size(Seq)};
+            true ->
+                % No alignment padding needed
+                I1 = jit_armv6m_asm:push([r0]),
+                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                I3 = jit_armv6m_asm:mov(?IP_REG, r0),
+                I4 = jit_armv6m_asm:pop([r0]),
+                I5 = jit_armv6m_asm:add(?IP_REG, pc),
+                I6 = jit_armv6m_asm:bx(?IP_REG),
+                % Placeholder offset
+                I7 = <<0:32/little>>,
+                Seq =
+                    <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
+                {Seq, byte_size(Seq)}
+        end,
+    % Add relocation entry
+    Reloc = {Label, Offset, {far_branch, SequenceSize, ?IP_REG}},
+    State1 = State0#state{branches = [Reloc | Branches]},
+    {State1, CodeBlock};
 branch_to_label_code(#state{available_regs = []}, _Offset, _Label, _LabelLookup) ->
-    error(no_available_registers).
+    error({no_available_registers, _LabelLookup}).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
@@ -1342,106 +1426,148 @@ call_func_ptr(
     Stream1 = push_registers(SavedRegs, StreamModule, Stream0),
 
     % Set up arguments following ARM AAPCS calling convention
-    % Since we pushed registers to stack, those saved registers can now be used as temporaries
-
-    ArgsRegs = lists:flatmap(
+    % First four args are passed in r0-r4, but 5th and 6th are passed
+    % on the stack.
+    {RegArgs, StackArgs} =
+        case Args of
+            [Arg1, Arg2, Arg3, Arg4 | StackArgs0] -> {[Arg1, Arg2, Arg3, Arg4], StackArgs0};
+            _ -> {Args, []}
+        end,
+    RegArgsRegs = lists:flatmap(
         fun
             ({free, {ptr, Reg}}) -> [Reg];
             ({free, Reg}) when is_atom(Reg) -> [Reg];
             (Reg) when is_atom(Reg) -> [Reg];
             (_) -> []
         end,
-        Args
+        RegArgs
     ),
-    SavedRegsForTemps0 = SavedRegs -- [?CTX_REG, ?NATIVE_INTERFACE_REG] -- ArgsRegs,
+    StackArgsRegs = lists:flatmap(
+        fun
+            ({free, {ptr, Reg}}) -> [Reg];
+            ({free, Reg}) when is_atom(Reg) -> [Reg];
+            (Reg) when is_atom(Reg) -> [Reg];
+            (_) -> []
+        end,
+        StackArgs
+    ),
+
+    % We pushed registers to stack, so we can use these registers we saved
+    % and the currently available registers to push values to the stack.
+    SetArgsPushStackAvailableArgs = (UsedRegs1 -- (RegArgsRegs ++ StackArgsRegs)) ++ AvailableRegs0,
+    State1 = State0#state{
+        available_regs = SetArgsPushStackAvailableArgs,
+        used_regs = ?AVAILABLE_REGS -- SetArgsPushStackAvailableArgs,
+        stream = Stream1
+    },
+    State2 =
+        case StackArgs of
+            [] -> State1;
+            [Arg5] -> set_args_push_stack(State1, Arg5, undefined);
+            [Arg5, Args6] -> set_args_push_stack(State1, Arg5, Args6)
+        end,
+
+    SetArgsRegsOnlyAvailableArgs = State2#state.available_regs,
     ParameterRegs = parameter_regs(Args),
-    {State1, FuncPtrReg} =
+    {Stream3, SetArgsAvailableRegs, FuncPtrReg} =
         case FuncPtrTuple of
             {free, FuncPtrReg0} ->
                 % If FuncPtrReg is in parameter regs, we must swap it with a free reg.
                 case lists:member(FuncPtrReg0, ParameterRegs) of
                     true ->
-                        [FuncPtrReg1 | _] = SavedRegsForTemps0 -- ArgsRegs,
+                        case SetArgsRegsOnlyAvailableArgs of
+                            [] ->
+                                io:format(
+                                    "UsedRegs1 = ~p\nAvailableRegs0 = ~p\nArgs = ~p\nSavedRegs = ~p\nFuncPtrReg0 = ~p\n",
+                                    [UsedRegs1, AvailableRegs0, Args, SavedRegs, FuncPtrReg0]
+                                );
+                            _ ->
+                                ok
+                        end,
+                        [FuncPtrReg1 | _] = SetArgsRegsOnlyAvailableArgs,
                         MovInstr = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
-                        SavedRegsForTemps1 = SavedRegsForTemps0 -- [FuncPtrReg1],
+                        SetArgsAvailableArgs1 =
+                            SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1] ++ [FuncPtrReg0],
                         {
-                            State0#state{
-                                stream = StreamModule:append(Stream1, MovInstr),
-                                available_regs =
-                                    SavedRegsForTemps1 ++ [FuncPtrReg0] ++ AvailableRegs0
-                            },
+                            StreamModule:append(State2#state.stream, MovInstr),
+                            SetArgsAvailableArgs1,
                             FuncPtrReg1
                         };
                     false ->
-                        SavedRegsForTemps1 = SavedRegsForTemps0 -- [FuncPtrReg0],
-                        {
-                            State0#state{
-                                stream = Stream1,
-                                available_regs = SavedRegsForTemps1 ++ AvailableRegs0
-                            },
-                            FuncPtrReg0
-                        }
+                        SetArgsAvailableArgs1 = SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg0],
+                        {State2#state.stream, SetArgsAvailableArgs1, FuncPtrReg0}
                 end;
             {primitive, Primitive} ->
-                [FuncPtrReg0 | _] =
-                    ((SavedRegsForTemps0 ++ AvailableRegs0) -- ArgsRegs) -- ParameterRegs,
-                SetArgsAvailableRegs = SavedRegsForTemps0 ++ AvailableRegs0 -- [FuncPtrReg0],
+                [FuncPtrReg0 | _] = SetArgsRegsOnlyAvailableArgs -- ParameterRegs,
+                SetArgsAvailableRegs1 = SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg0],
                 PrepCall = load_primitive_ptr(Primitive, FuncPtrReg0),
-                Stream2 = StreamModule:append(Stream1, PrepCall),
-                {State0#state{stream = Stream2, available_regs = SetArgsAvailableRegs}, FuncPtrReg0}
+                Stream2 = StreamModule:append(State2#state.stream, PrepCall),
+                {Stream2, SetArgsAvailableRegs1, FuncPtrReg0}
         end,
 
-    State2 = set_args(State1, Args, length(SavedRegs) * 4),
-    #state{stream = Stream3} = State2,
+    State3 = State2#state{
+        available_regs = SetArgsAvailableRegs,
+        used_regs = ?AVAILABLE_REGS -- SetArgsAvailableRegs,
+        stream = Stream3
+    },
+
+    % Exclude argument registers from available_regs to prevent mov_immediate from overwriting them
+    StackOffset =
+        case StackArgs of
+            [] -> length(SavedRegs) * 4;
+            _ -> length(SavedRegs) * 4 + 8
+        end,
+    State4 = set_args_registers_only(State3, RegArgs, StackOffset),
+    Stream4 = State4#state.stream,
 
     % Call the function pointer (using BLX for call with return)
     Call = jit_armv6m_asm:blx(FuncPtrReg),
-    Stream4 = StreamModule:append(Stream3, Call),
+    Stream5 = StreamModule:append(Stream4, Call),
 
     % For result, we need a free register (including FuncPtrReg) but ideally
     % not the one used for padding. If none are available (all 8 registers
     % were pushed to the stack), we write the result to the stack position
     % of FuncPtrReg
-    {Stream5, UsedRegs2} =
+    {Stream6, UsedRegs2} =
         case length(SavedRegs) of
             8 when element(1, FuncPtrTuple) =:= free ->
                 % We use FuncPtrReg then as we know it's available.
                 % Calculate stack offset: register number * 4 bytes
                 ResultReg = FuncPtrReg,
-                StackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
-                StoreResult = jit_armv6m_asm:str(r0, {sp, StackOffset}),
-                {StreamModule:append(Stream4, StoreResult), [ResultReg | UsedRegs1]};
+                StoreResultStackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
+                StoreResult = jit_armv6m_asm:str(r0, {sp, StoreResultStackOffset}),
+                {StreamModule:append(Stream5, StoreResult), [ResultReg | UsedRegs1]};
             8 when PaddingReg =/= undefined ->
                 % We use PaddingReg then as we know it's available.
                 % Calculate stack offset: register number * 4 bytes
                 ResultReg = PaddingReg,
-                StackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
-                StoreResult = jit_armv6m_asm:str(r0, {sp, StackOffset}),
-                {StreamModule:append(Stream4, StoreResult), [PaddingReg | UsedRegs1]};
+                StoreResultStackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
+                StoreResult = jit_armv6m_asm:str(r0, {sp, StoreResultStackOffset}),
+                {StreamModule:append(Stream5, StoreResult), [PaddingReg | UsedRegs1]};
             _ ->
                 % Use any free that is not in SavedRegs
                 [ResultReg | _] = AvailableRegs1 -- SavedRegs,
                 MoveResult = jit_armv6m_asm:mov(ResultReg, r0),
-                {StreamModule:append(Stream4, MoveResult), [ResultReg | UsedRegs1]}
+                {StreamModule:append(Stream5, MoveResult), [ResultReg | UsedRegs1]}
         end,
 
     % Deallocate stack space if we allocated it for 5+ arguments
-    Stream6 =
+    Stream7 =
         case length(Args) >= 5 of
             true ->
                 DeallocateArgs = jit_armv6m_asm:add(sp, 8),
-                StreamModule:append(Stream5, DeallocateArgs);
+                StreamModule:append(Stream6, DeallocateArgs);
             false ->
-                Stream5
+                Stream6
         end,
 
-    Stream7 = pop_registers(lists:reverse(SavedRegs), StreamModule, Stream6),
+    Stream8 = pop_registers(lists:reverse(SavedRegs), StreamModule, Stream7),
 
     AvailableRegs2 = lists:delete(ResultReg, AvailableRegs1),
     AvailableRegs3 = ?AVAILABLE_REGS -- (?AVAILABLE_REGS -- AvailableRegs2),
     {
-        State2#state{
-            stream = Stream7,
+        State4#state{
+            stream = Stream8,
             available_regs = AvailableRegs3,
             used_regs = UsedRegs2
         },
