@@ -41,12 +41,16 @@ set(ELIXIR_MODULES
     Enumerable.Range
     Exception
     Function
+    GenServer
     IO
     List
     Map
     MapSet
     Module
     Keyword
+    Supervisor
+    Supervisor.Default
+    Supervisor.Spec
     Kernel
     Process
     Protocol
