@@ -28,10 +28,10 @@ start() ->
 
 test_get_cwd() ->
     {ok, Path} = file:get_cwd(),
-    <<"/", _/binary>> = Path,
-    ok.
+    CanValidate = erlang:system_info(machine) == "BEAM" orelse atomvm:platform() == generic_unix,
+    if
+        CanValidate -> validate_path(Path);
+        true -> ok
+    end.
 
-% is_valid_path() ->
-%     true;
-% is_valid_path(_) ->
-%     false.
+validate_path("/" ++ _Rest) -> ok.
