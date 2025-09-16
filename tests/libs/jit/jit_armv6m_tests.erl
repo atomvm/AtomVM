@@ -3134,13 +3134,6 @@ alloc_boxed_integer_fragment_large_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-dump_to_bin(Dump) ->
-    dump_to_bin0(Dump, addr, []).
-
--define(IS_HEX_DIGIT(C),
-    ((C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) orelse (C >= $A andalso C =< $F))
-).
-
 %% Test for stack alignment issue in call_func_ptr
 %% When we have an odd number of saved registers, the stack becomes misaligned
 %% before the function call, violating ARM AAPCS which requires 8-byte alignment
@@ -3257,8 +3250,8 @@ call_func_ptr_register_exhaustion_test_() ->
                             "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
                             "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
                             "   e:	b082      	sub	sp, #8\n"
-                            "  10:	2101      	movs	r1, #1\n"
-                            "  12:	9100      	str	r1, [sp, #0]\n"
+                            "  10:	2401      	movs	r4, #1\n"
+                            "  12:	9400      	str	r4, [sp, #0]\n"
                             "  14:	9908      	ldr	r1, [sp, #32]\n"
                             "  16:	461a      	mov	r2, r3\n"
                             "  18:	460b      	mov	r3, r1\n"
@@ -3485,6 +3478,13 @@ add_beam_test() ->
             "  e8:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
+
+dump_to_bin(Dump) ->
+    dump_to_bin0(Dump, addr, []).
+
+-define(IS_HEX_DIGIT(C),
+    ((C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) orelse (C >= $A andalso C =< $F))
+).
 
 dump_to_bin0(<<N, $:, Tail/binary>>, addr, Acc) when ?IS_HEX_DIGIT(N) ->
     dump_to_bin0(Tail, hex, Acc);
