@@ -74,13 +74,17 @@ test_send_receive(SpawnControllingProcess, IsActive, Mode, BackendOption) ->
             gen_udp:controlling_process(Socket, Pid),
             receive
                 ready -> ok
+            after 10000 ->
+                error({timeout, ?MODULE, ?LINE})
             end;
         false ->
             ok
     end,
 
     NumToSend = 10,
-    Sender = erlang:spawn(?MODULE, start_sender, [Socket, Port, make_messages(NumToSend)]),
+    {Sender, SenderMonitor} = erlang:spawn_opt(
+        ?MODULE, start_sender, [Socket, Port, make_messages(NumToSend)], [monitor]
+    ),
 
     NumReceived =
         case SpawnControllingProcess of
@@ -88,11 +92,18 @@ test_send_receive(SpawnControllingProcess, IsActive, Mode, BackendOption) ->
                 receive
                     {done, Received} ->
                         Received
+                after 10000 ->
+                    error({timeout, ?MODULE, ?LINE})
                 end;
             false ->
                 F()
         end,
     Sender ! stop,
+    receive
+        {'DOWN', SenderMonitor, process, Sender, normal} -> ok
+    after 10000 ->
+        error({timeout, ?MODULE, ?LINE})
+    end,
 
     ?ASSERT_TRUE((0 < NumReceived) and (NumReceived =< NumToSend)),
     %% NB. Might be closed if controlling process terminates

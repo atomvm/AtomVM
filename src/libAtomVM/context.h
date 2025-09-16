@@ -161,6 +161,7 @@ enum ContextMonitorType
     CONTEXT_MONITOR_MONITORED_LOCAL,
     CONTEXT_MONITOR_RESOURCE,
     CONTEXT_MONITOR_LINK_REMOTE,
+    CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME,
 };
 
 #define UNLINK_ID_LINK_ACTIVE 0x0
@@ -186,6 +187,14 @@ struct MonitorLocalMonitor
     struct Monitor monitor;
     uint64_t ref_ticks;
     term monitor_obj;
+};
+
+struct MonitorLocalRegisteredNameMonitor
+{
+    struct Monitor monitor;
+    uint64_t ref_ticks;
+    int32_t monitor_process_id;
+    term monitor_name;
 };
 
 // The other half is called ResourceMonitor and is a linked list of resources
@@ -479,12 +488,23 @@ struct Monitor *monitor_link_new(term link_pid);
 /**
  * @brief Create a monitor on a process.
  *
- * @param monitor_pid monitoring process
+ * @param monitor_pid monitored process
  * @param ref_ticks reference of the monitor
  * @param is_monitoring if ctx is the monitoring process
  * @return the allocated monitor or NULL if allocation failed
  */
 struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring);
+
+/**
+ * @brief Create a monitor on a process by registered name.
+ *
+ * @param monitor_process_id monitored process id
+ * @param monitor_name name of the monitor (atom)
+ * @param ref_ticks reference of the monitor
+ * @param is_monitoring if ctx is the monitoring process
+ * @return the allocated monitor or NULL if allocation failed
+ */
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, uint64_t ref_ticks);
 
 /**
  * @brief Create a resource monitor.
@@ -547,8 +567,8 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks);
  * @param ctx the context being executed
  * @param ref_ticks reference of the monitor to remove
  * @param is_monitoring whether ctx is the monitoring process.
- * @return pid of monitoring process, self() if process is monitoring (and not
- * monitored) or term_invalid() if no monitor could be found.
+ * @return pid of monitored or monitoring process or term_invalid()
+ * if no monitor could be found.
  */
 term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitoring);
 

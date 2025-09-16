@@ -1140,8 +1140,8 @@ send(_Target, _Message) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec monitor
-    (Type :: process, Pid :: pid()) -> reference();
-    (Type :: port, Port :: port()) -> reference().
+    (Type :: process, Pid :: pid() | atom()) -> reference();
+    (Type :: port, Port :: port() | atom()) -> reference().
 monitor(_Type, _PidOrPort) ->
     erlang:nif_error(undefined).
 

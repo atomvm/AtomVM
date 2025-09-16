@@ -102,8 +102,14 @@ test_shutdown_of_side(Port, Side, Packet) ->
             case catch (socket:send(Socket, Packet)) of
                 {error, _} ->
                     ok;
-                {ok, Data} ->
-                    error({expected_error_on_send, Side, Data})
+                {ok, Data1} ->
+                    %% Second send will fail
+                    case catch (socket:send(Socket, erlang:atom_to_binary(Side, latin1))) of
+                        {error, _} ->
+                            ok;
+                        {ok, Data2} ->
+                            error({expected_error_on_send, Side, Data1, Data2})
+                    end
             end
     end,
 

@@ -78,11 +78,11 @@
 #define NOT_FOUND (0xFF)
 
 #ifdef ENABLE_ADVANCED_TRACE
-static const char *const trace_calls_atom = "\xB" "trace_calls";
-static const char *const trace_call_args_atom = "\xF" "trace_call_args";
-static const char *const trace_returns_atom = "\xD" "trace_returns";
-static const char *const trace_send_atom = "\xA" "trace_send";
-static const char *const trace_receive_atom = "\xD" "trace_receive";
+static const char *const trace_calls_atom = ATOM_STR("\xB", "trace_calls");
+static const char *const trace_call_args_atom = ATOM_STR("\xF", "trace_call_args");
+static const char *const trace_returns_atom = ATOM_STR("\xD", "trace_returns");
+static const char *const trace_send_atom = ATOM_STR("\xA", "trace_send");
+static const char *const trace_receive_atom = ATOM_STR("\xD", "trace_receive");
 #endif
 
 static NativeHandlerResult process_echo_mailbox(Context *ctx);
@@ -230,662 +230,549 @@ DECLARE_MATH_NIF_FUN(sqrt)
 DECLARE_MATH_NIF_FUN(tan)
 DECLARE_MATH_NIF_FUN(tanh)
 
-static const struct Nif binary_at_nif =
-{
+static const struct Nif binary_at_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_at_2
 };
 
-static const struct Nif binary_copy_nif =
-{
+static const struct Nif binary_copy_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_copy
 };
 
-static const struct Nif binary_first_nif =
-{
+static const struct Nif binary_first_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_first_1
 };
 
-static const struct Nif binary_last_nif =
-{
+static const struct Nif binary_last_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_last_1
 };
 
-static const struct Nif binary_part_nif =
-{
+static const struct Nif binary_part_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_part_3
 };
 
-static const struct Nif binary_split_nif =
-{
+static const struct Nif binary_split_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_split
 };
 
-static const struct Nif binary_replace_nif =
-{
+static const struct Nif binary_replace_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_replace
 };
 
-static const struct Nif binary_match_nif =
-{
+static const struct Nif binary_match_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_match
 };
 
-static const struct Nif make_ref_nif =
-{
+static const struct Nif make_ref_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_ref_0
 };
 
-static const struct Nif atom_to_binary_nif =
-{
+static const struct Nif atom_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_atom_to_binary
 };
 
-static const struct Nif atom_to_list_nif =
-{
+static const struct Nif atom_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_atom_to_list_1
 };
 
-static const struct Nif binary_to_atom_1_nif =
-{
+static const struct Nif binary_to_atom_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_atom_1
 };
 
-static const struct Nif binary_to_float_nif =
-{
+static const struct Nif binary_to_float_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_float_1
 };
 
-static const struct Nif binary_to_integer_nif =
-{
+static const struct Nif binary_to_integer_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_integer
 };
 
-static const struct Nif binary_to_list_nif =
-{
+static const struct Nif binary_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_list_1
 };
 
-static const struct Nif binary_to_existing_atom_1_nif =
-{
+static const struct Nif binary_to_existing_atom_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_existing_atom_1
 };
 
-static const struct Nif delete_element_nif =
-{
+static const struct Nif delete_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_delete_element_2
 };
 
-static const struct Nif display_nif =
-{
+static const struct Nif display_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
 };
 
-static const struct Nif erase_0_nif =
-{
+static const struct Nif erase_0_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_0
 };
 
-static const struct Nif erase_1_nif =
-{
+static const struct Nif erase_1_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_erase_1
 };
 
-static const struct Nif error_nif =
-{
+static const struct Nif error_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_error
 };
 
-static const struct Nif exit_nif =
-{
+static const struct Nif exit_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_exit
 };
 
-static const struct Nif insert_element_nif =
-{
+static const struct Nif insert_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_insert_element_3
 };
 
-static const struct Nif integer_to_binary_nif =
-{
+static const struct Nif integer_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_binary_2
 };
 
-static const struct Nif integer_to_list_nif =
-{
+static const struct Nif integer_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_integer_to_list_2
 };
 
-static const struct Nif float_to_binary_nif =
-{
+static const struct Nif float_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_float_to_binary
 };
 
-static const struct Nif float_to_list_nif =
-{
+static const struct Nif float_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_float_to_list
 };
 
-static const struct Nif fun_info_nif =
-{
+static const struct Nif fun_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_info_2
 };
 
-static const struct Nif is_process_alive_nif =
-{
+static const struct Nif is_process_alive_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_is_process_alive_1
 };
 
-static const struct Nif list_to_binary_nif =
-{
+static const struct Nif list_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_binary_1
 };
 
-static const struct Nif list_to_integer_nif =
-{
+static const struct Nif list_to_integer_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_integer
 };
 
-static const struct Nif list_to_float_nif =
-{
+static const struct Nif list_to_float_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_float_1
 };
 
-static const struct Nif list_to_tuple_nif =
-{
+static const struct Nif list_to_tuple_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_tuple_1
 };
 
-static const struct Nif iolist_size_nif =
-{
+static const struct Nif iolist_size_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_iolist_size_1
 };
 
-static const struct Nif iolist_to_binary_nif =
-{
+static const struct Nif iolist_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_iolist_to_binary_1
 };
 
-static const struct Nif open_port_nif =
-{
+static const struct Nif open_port_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_open_port_2
 };
 
-static const struct Nif make_tuple_nif =
-{
+static const struct Nif make_tuple_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_tuple_2
 };
 
-static const struct Nif register_nif =
-{
+static const struct Nif register_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_register_2
 };
 
-static const struct Nif unregister_nif =
-{
+static const struct Nif unregister_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_unregister_1
 };
 
-static const struct Nif spawn_opt_nif =
-{
+static const struct Nif spawn_opt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_spawn_opt
 };
 
-static const struct Nif spawn_fun_opt_nif =
-{
+static const struct Nif spawn_fun_opt_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_spawn_fun_opt
 };
 
-static const struct Nif send_nif =
-{
+static const struct Nif send_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_send_2
 };
 
-static const struct Nif setelement_nif =
-{
+static const struct Nif setelement_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_setelement_3
 };
 
-static const struct Nif whereis_nif =
-{
+static const struct Nif whereis_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_whereis_1
 };
 
-static const struct Nif concat_nif =
-{
+static const struct Nif concat_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_concat_2
 };
 
-static const struct Nif monotonic_time_nif =
-{
+static const struct Nif monotonic_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_monotonic_time_1
 };
 
-static const struct Nif system_time_nif =
-{
+static const struct Nif system_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_time_1
 };
 
-static const struct Nif universaltime_nif =
-{
+static const struct Nif universaltime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_universaltime_0
 };
 
-static const struct Nif localtime_nif =
-{
+static const struct Nif localtime_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_localtime
 };
 
-static const struct Nif timestamp_nif =
-{
+static const struct Nif timestamp_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_timestamp_0
 };
 
-static const struct Nif system_time_to_universal_time_nif =
-{
+static const struct Nif system_time_to_universal_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_calendar_system_time_to_universal_time_2
 };
 
-static const struct Nif tuple_to_list_nif =
-{
+static const struct Nif tuple_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_tuple_to_list_1
 };
 
-static const struct Nif flat_size_nif =
-{
+static const struct Nif flat_size_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erts_debug_flat_size
 };
 
-static const struct Nif process_flag_nif =
-{
+static const struct Nif process_flag_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_flag
 };
 
-static const struct Nif processes_nif =
-{
+static const struct Nif processes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_processes
 };
 
-static const struct Nif process_info_nif =
-{
+static const struct Nif process_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_process_info
 };
 
-static const struct Nif get_0_nif =
-{
+static const struct Nif get_0_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_0
 };
 
-static const struct Nif put_nif =
-{
+static const struct Nif put_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_put_2
 };
 
-static const struct Nif system_info_nif =
-{
+static const struct Nif system_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_info
 };
 
-static const struct Nif system_flag_nif =
-{
+static const struct Nif system_flag_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_system_flag
 };
 
-static const struct Nif binary_to_term_nif =
-{
+static const struct Nif binary_to_term_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_binary_to_term
 };
 
-static const struct Nif term_to_binary_nif =
-{
+static const struct Nif term_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_term_to_binary
 };
 
-static const struct Nif split_binary_nif =
-{
+static const struct Nif split_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_split_binary
 };
 
-static const struct Nif throw_nif =
-{
+static const struct Nif throw_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_throw
 };
 
-static const struct Nif pid_to_list_nif =
-{
+static const struct Nif pid_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_pid_to_list
 };
 
-static const struct Nif port_to_list_nif =
-{
+static const struct Nif port_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_port_to_list
 };
 
-static const struct Nif ref_to_list_nif =
-{
+static const struct Nif ref_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_ref_to_list
 };
 
-static const struct Nif fun_to_list_nif =
-{
+static const struct Nif fun_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_fun_to_list
 };
 
-static const struct Nif function_exported_nif =
-{
+static const struct Nif function_exported_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_function_exported
 };
 
-static const struct Nif garbage_collect_nif =
-{
+static const struct Nif garbage_collect_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_garbage_collect
 };
 
-static const struct Nif make_fun_nif =
-{
+static const struct Nif make_fun_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_make_fun_3
 };
 
-static const struct Nif memory_nif =
-{
+static const struct Nif memory_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_memory
 };
 
-static const struct Nif monitor_nif =
-{
+static const struct Nif monitor_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_monitor
 };
 
-static const struct Nif demonitor_nif =
-{
+static const struct Nif demonitor_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_demonitor
 };
 
-static const struct Nif link_nif =
-{
+static const struct Nif link_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_link
 };
 
-static const struct Nif unlink_nif =
-{
+static const struct Nif unlink_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_unlink
 };
 
-static const struct Nif group_leader_nif =
-{
+static const struct Nif group_leader_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_group_leader
 };
 
-static const struct Nif get_module_info_nif =
-{
+static const struct Nif get_module_info_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_get_module_info
 };
 
-static const struct Nif setnode_2_nif =
-{
+static const struct Nif setnode_2_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_setnode_2
 };
 
-static const struct Nif raise_nif =
-{
+static const struct Nif raise_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_raise
 };
 
-static const struct Nif ets_new_nif =
-{
+static const struct Nif ets_new_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_new
 };
 
-static const struct Nif ets_insert_nif =
-{
+static const struct Nif ets_insert_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_insert
 };
 
-static const struct Nif ets_lookup_nif =
-{
+static const struct Nif ets_lookup_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_lookup
 };
 
-static const struct Nif ets_lookup_element_nif =
-{
+static const struct Nif ets_lookup_element_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_lookup_element
 };
 
-static const struct Nif ets_delete_nif =
-{
+static const struct Nif ets_delete_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_delete
 };
 
-static const struct Nif ets_update_counter_nif =
-{
+static const struct Nif ets_update_counter_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_update_counter
 };
 
-static const struct Nif atomvm_add_avm_pack_binary_nif =
-{
+static const struct Nif atomvm_add_avm_pack_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_binary
 };
-static const struct Nif atomvm_add_avm_pack_file_nif =
-{
+static const struct Nif atomvm_add_avm_pack_file_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_add_avm_pack_file
 };
-static const struct Nif atomvm_close_avm_pack_nif =
-{
+static const struct Nif atomvm_close_avm_pack_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_close_avm_pack
 };
-static const struct Nif atomvm_get_start_beam_nif =
-{
+static const struct Nif atomvm_get_start_beam_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_get_start_beam
 };
-static const struct Nif atomvm_read_priv_nif =
-{
+static const struct Nif atomvm_read_priv_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_read_priv
 };
-static const struct Nif atomvm_get_creation_nif =
-{
+static const struct Nif atomvm_get_creation_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_get_creation
 };
-static const struct Nif console_print_nif =
-{
+static const struct Nif console_print_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_console_print
 };
-static const struct Nif base64_encode_nif =
-{
+static const struct Nif base64_encode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_encode
 };
-static const struct Nif base64_decode_nif =
-{
+static const struct Nif base64_decode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode
 };
-static const struct Nif base64_encode_to_string_nif =
-{
+static const struct Nif base64_encode_to_string_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_encode_to_string
 };
-static const struct Nif base64_decode_to_string_nif =
-{
+static const struct Nif base64_decode_to_string_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_base64_decode_to_string
 };
-static const struct Nif code_all_available_nif =
-{
+static const struct Nif code_all_available_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_all_available
 };
-static const struct Nif code_all_loaded_nif =
-{
+static const struct Nif code_all_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_all_loaded
 };
-static const struct Nif code_load_abs_nif =
-{
+static const struct Nif code_load_abs_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_abs
 };
-static const struct Nif code_load_binary_nif =
-{
+static const struct Nif code_load_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_load_binary
 };
-static const struct Nif code_ensure_loaded_nif =
-{
+static const struct Nif code_ensure_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
 };
 
-static const struct Nif module_loaded_nif =
-{
+static const struct Nif module_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_module_loaded
 };
 
-static const struct Nif nif_error_nif =
-{
+static const struct Nif nif_error_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_nif_error
 };
 
-static const struct Nif lists_reverse_nif =
-{
+static const struct Nif lists_reverse_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_lists_reverse
 };
-static const struct Nif maps_from_keys_nif =
-{
+static const struct Nif maps_from_keys_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_from_keys
 };
-static const struct Nif maps_next_nif =
-{
+static const struct Nif maps_next_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_maps_next
 };
-static const struct Nif unicode_characters_to_list_nif =
-{
+static const struct Nif unicode_characters_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_list
 };
-static const struct Nif unicode_characters_to_binary_nif =
-{
+static const struct Nif unicode_characters_to_binary_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_unicode_characters_to_binary
 };
-static const struct Nif erlang_lists_subtract_nif =
-{
+static const struct Nif erlang_lists_subtract_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_lists_subtract
 };
-static const struct Nif zlib_compress_nif =
-{
+static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_zlib_compress_1
 };
-
 
 static const struct Nif erlang_bump_reductions_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_bump_reductions_1
 };
 
-#define DEFINE_MATH_NIF(moniker)                    \
-    static const struct Nif math_##moniker##_nif =  \
-    {                                               \
-        .base.type = NIFFunctionType,               \
-        .nif_ptr = nif_math_##moniker               \
+#define DEFINE_MATH_NIF(moniker)                     \
+    static const struct Nif math_##moniker##_nif = { \
+        .base.type = NIFFunctionType,                \
+        .nif_ptr = nif_math_##moniker                \
     };
 
 DEFINE_MATH_NIF(cos)
@@ -911,7 +798,7 @@ DEFINE_MATH_NIF(sqrt)
 DEFINE_MATH_NIF(tan)
 DEFINE_MATH_NIF(tanh)
 
-//Handle optional nifs
+// Handle optional nifs
 #if HAVE_OPEN && HAVE_CLOSE
 #define IF_HAVE_OPEN_CLOSE(expr) (expr)
 #if HAVE_EXECVE
@@ -946,7 +833,7 @@ DEFINE_MATH_NIF(tanh)
 #define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
 #endif
 
-//Ignore warning caused by gperf generated code
+// Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -963,6 +850,7 @@ const struct Nif *nifs_get(const char *mfa)
     return nameAndPtr->nif;
 }
 
+// clang-format off
 static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
 {
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -983,6 +871,7 @@ static inline term make_maybe_boxed_int64(Context *ctx, avm_int64_t value)
         return term_from_int(value);
     }
 }
+// clang-format on
 
 static term nif_erlang_iolist_size_1(Context *ctx, int argc, term argv[])
 {
@@ -1027,11 +916,11 @@ static term nif_erlang_open_port_2(Context *ctx, int argc, term argv[])
     }
 
     term t = term_get_tuple_element(port_name_tuple, 1);
-    //TODO: validate port name
+    // TODO: validate port name
     int ok;
     char *driver_name = interop_term_to_string(t, &ok);
     if (UNLIKELY(!ok)) {
-        //TODO: handle atoms here
+        // TODO: handle atoms here
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1072,9 +961,9 @@ static term nif_erlang_register_2(Context *ctx, int argc, term argv[])
     int32_t pid = term_to_local_process_id(pid_or_port_term);
 
     // pid must be existing, not already registered, and not the atom undefined.
-    if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid)) ||
-        globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM ||
-        reg_name_term == UNDEFINED_ATOM){
+    if (UNLIKELY(!globalcontext_process_exists(ctx->global, pid))
+        || globalcontext_get_registered_process(ctx->global, atom_index) != UNDEFINED_ATOM
+        || reg_name_term == UNDEFINED_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -1227,7 +1116,9 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     NativeHandlerResult result = NativeContinue;
     while (result == NativeContinue) {
         Message *message = mailbox_first(&ctx->mailbox);
-        if (message == NULL) break;
+        if (message == NULL) {
+            break;
+        }
         term msg = message->message;
 
         result = process_console_message(ctx, msg);
@@ -1292,7 +1183,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     }
     size += memory_estimate_usage(group_leader);
     if (UNLIKELY(memory_ensure_free_opt(new_ctx, size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        //TODO: new process should be terminated, however a new pid is returned anyway
+        // TODO: new process should be terminated, however a new pid is returned anyway
         fprintf(stderr, "Unable to allocate sufficient memory to spawn process.\n");
         AVM_ABORT();
     }
@@ -1469,7 +1360,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     int label = module_search_exported_function(found_module, term_to_atom_index(argv[1]), args_len);
-    //TODO: fail here if no function has been found
+    // TODO: fail here if no function has been found
     if (UNLIKELY(label == 0)) {
         AVM_ABORT();
     }
@@ -1477,7 +1368,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_ip = found_module->labels[label];
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
-    //TODO: check available registers count
+    // TODO: check available registers count
     int reg_index = 0;
 
     size_t min_heap_size = 0;
@@ -2027,8 +1918,8 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     memcpy(null_terminated_buf, bin_data, bin_data_size);
     null_terminated_buf[bin_data_size] = '\0';
 
-    //TODO: handle errors
-    //TODO: do not copy buffer, implement a custom strotoll
+    // TODO: handle errors
+    // TODO: do not copy buffer, implement a custom strotoll
     char *endptr;
     uint64_t value = strtoll(null_terminated_buf, &endptr, base);
     if (*endptr != '\0') {
@@ -2993,7 +2884,8 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
             argv[1] = BADARG_ATOM;
             return term_invalid_term();
         }
-        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {};
+        while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
+        };
         return term_from_int32(old_value);
     }
 #else
@@ -3229,7 +3121,9 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
     size_t heap_size = 0;
     do {
         const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
-        if (!found) break;
+        if (!found) {
+            break;
+        }
         num_segments++;
         heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
         int next_search_offset = found - temp_bin_data + pattern_size;
@@ -3964,7 +3858,7 @@ static term nif_erlang_exit(Context *ctx, int argc, term argv[])
                 } else if (ctx == target) {
                     mailbox_send_term_signal(target, KillSignal, reason);
                     self_is_signaled = target == ctx;
-                } else if (reason != NORMAL_ATOM){
+                } else if (reason != NORMAL_ATOM) {
                     mailbox_send_term_signal(target, KillSignal, reason);
                     self_is_signaled = target == ctx;
                 } // else there is no effect
@@ -4139,28 +4033,47 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term object_type = argv[0];
-    term target_pid = argv[1];
+    term target_proc = argv[1];
+    term target_pid;
+    size_t target_proc_size = 0;
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    VALIDATE_VALUE(target_pid, term_is_local_pid_or_port);
-
-    int local_process_id = term_to_local_process_id(target_pid);
-    // Monitoring self is possible but no monitor is actually created
-    if (UNLIKELY(local_process_id == ctx->process_id)) {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-        uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
-        return ref;
+    if (term_is_atom(target_proc)) {
+        target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
+        target_proc_size = TUPLE_SIZE(2);
+    } else {
+        VALIDATE_VALUE(target_proc, term_is_local_pid_or_port);
+        target_pid = target_proc;
     }
 
-    Context *target = globalcontext_get_process_lock(ctx->global, local_process_id);
+    Context *target;
+    int32_t local_process_id;
+    // gcc < 14 is not smart enough to find out local_process_id is not used initialized below
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
+    local_process_id = 0;
+#endif
+    if (UNLIKELY(target_pid == UNDEFINED_ATOM)) {
+        target = NULL;
+    } else {
+        local_process_id = term_to_local_process_id(target_pid);
+        // Monitoring self is possible but no monitor is actually created
+        if (UNLIKELY(local_process_id == ctx->process_id)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+            uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+            term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+            return ref;
+        }
+
+        target = globalcontext_get_process_lock(ctx->global, local_process_id);
+    }
+
     if (IS_NULL_PTR(target)) {
-        int res_size = REF_SIZE + TUPLE_SIZE(5);
+        int res_size = REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -4170,7 +4083,14 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
         term_put_tuple_element(down_message_tuple, 2, object_type);
-        term_put_tuple_element(down_message_tuple, 3, target_pid);
+        if (term_is_atom(target_proc)) {
+            term target_proc_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(target_proc_tuple, 0, target_proc);
+            term_put_tuple_element(target_proc_tuple, 1, ctx->global->node_name);
+            term_put_tuple_element(down_message_tuple, 3, target_proc_tuple);
+        } else {
+            term_put_tuple_element(down_message_tuple, 3, target_proc);
+        }
         term_put_tuple_element(down_message_tuple, 4, NOPROC_ATOM);
         mailbox_send(ctx, down_message_tuple);
         return ref;
@@ -4181,7 +4101,12 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
     term monitoring_pid = term_from_local_process_id(ctx->process_id);
-    struct Monitor *self_monitor = monitor_new(target_pid, ref_ticks, true);
+    struct Monitor *self_monitor;
+    if (term_is_atom(target_proc)) {
+        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_ticks);
+    } else {
+        self_monitor = monitor_new(target_pid, ref_ticks, true);
+    }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -4860,6 +4785,7 @@ static term nif_console_print(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
+// clang-format off
 static char b64_table[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
                              'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
                              'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd',
@@ -4867,6 +4793,7 @@ static char b64_table[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
                              'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
                              'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7',
                              '8', '9', '+', '/'};
+// clang-format on
 
 // per https://tools.ietf.org/rfc/rfc4648.txt
 
@@ -4934,9 +4861,8 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             break;
     }
     size_t dst_size_with_pad = dst_size + pad;
-    size_t heap_free = return_binary ?
-        term_binary_heap_size(dst_size_with_pad)
-        : 2*dst_size_with_pad;
+    size_t heap_free = return_binary ? term_binary_heap_size(dst_size_with_pad)
+                                     : 2 * dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -5082,9 +5008,8 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         }
     }
     dst_size -= pad;
-    size_t heap_free = return_binary ?
-        term_binary_heap_size(dst_size)
-        : 2*dst_size;
+    size_t heap_free = return_binary ? term_binary_heap_size(dst_size)
+                                     : 2 * dst_size;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -5186,7 +5111,8 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[])
     return result;
 }
 
-struct CodeAllAvailableAcc {
+struct CodeAllAvailableAcc
+{
     Context *ctx;
     struct AVMPackData *avmpack_data;
     term result;
@@ -5384,7 +5310,7 @@ static term nif_code_load_binary(Context *ctx, int argc, term argv[])
     return result;
 }
 
-static const char *const embedded_atom = "\x8" "embedded";
+static const char *const embedded_atom = ATOM_STR("\x8", "embedded");
 
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
 {
@@ -5960,7 +5886,7 @@ static void maybe_clear_exceptions()
 static term get_exception(avm_float_t f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
     UNUSED(f)
     if (fetestexcept(FE_DIVBYZERO | FE_INVALID)) {
         return BADARITH_ATOM;
@@ -5975,7 +5901,7 @@ static term get_exception(avm_float_t f)
 static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     maybe_clear_exceptions();
@@ -5994,7 +5920,7 @@ static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-    #pragma STDC FENV_ACCESS ON
+#pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     avm_float_t y = term_conv_to_float(y_term);

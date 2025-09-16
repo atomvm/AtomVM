@@ -3319,7 +3319,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 25
             case OP_SET_TUPLE_ELEMENT: {
                 term new_element;
                 DECODE_COMPACT_TERM(new_element, pc);
@@ -3345,7 +3344,6 @@ wait_timeout_trap_handler:
 #endif
                 break;
             }
-#endif
 
             case OP_PUT_LIST: {
 
@@ -4431,7 +4429,7 @@ wait_timeout_trap_handler:
                     // TODO: further investigate unit.
                     // We currently do not support unaligned binaries, unit seems to be equal to 1 binary comprehensions
                     size_t src_size = term_binary_size(src);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_NO_GC) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, src_pc)
@@ -4590,17 +4588,17 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term slots_term;
                 DECODE_COMPACT_TERM(slots_term, pc);
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
+                GC_SAFE_DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match2/5\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match2/5, fail=%i src=0x%lx live=%u arg3=0x%lx dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG(dreg));
+                    TRACE("bs_start_match2/5, fail=%i src=0x%lx live=%u arg3=0x%lx dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER(dreg, src);
+                        WRITE_REGISTER_GC_SAFE(dreg, src);
                         pc = mod->labels[fail];
                     } else {
                         int slots = term_to_int(slots_term);
@@ -4615,7 +4613,7 @@ wait_timeout_trap_handler:
 
                         term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
 
-                        WRITE_REGISTER(dreg, match_state);
+                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
                 #endif
                 break;
@@ -4915,10 +4913,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
                     VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
-                    if (flags_value != 0) {
-                        TRACE("bs_skip_bits2: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
+                    // Ignore flags value as skipping bits is the same whatever the endianness
                     avm_int_t size_val = term_to_int(size);
 
                     TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) size_val, (unsigned) unit, (int) flags_value);
@@ -6379,15 +6374,15 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(live, pc);
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
+                GC_SAFE_DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_start_match4/4\n");
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG(dreg));
+                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG_GC_SAFE(dreg));
 
                     // no_fail: we know it's a binary or a match_state
                     // resume: we know it's a match_state
@@ -6405,7 +6400,7 @@ wait_timeout_trap_handler:
                         src = x_regs[live];
                         term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
 
-                        WRITE_REGISTER(dreg, match_state);
+                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
                 #endif
                 break;

@@ -29,6 +29,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    programmers-guide
    network-programming-guide
    distributed-erlang
+   differences-with-beam
    build-instructions
    atomvm-internals
    memory-management

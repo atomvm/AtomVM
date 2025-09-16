@@ -31,6 +31,7 @@
 #include "limits.h"
 #include "list.h"
 #include "mailbox.h"
+#include "memory.h"
 #include "smp.h"
 #include "synclist.h"
 #include "sys.h"
@@ -255,6 +256,7 @@ void context_destroy(Context *ctx)
                 case CONTEXT_MONITOR_LINK_LOCAL:
                 case CONTEXT_MONITOR_MONITORED_LOCAL:
                 case CONTEXT_MONITOR_MONITORING_LOCAL:
+                case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME:
                     UNREACHABLE();
             }
         }
@@ -421,13 +423,32 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
     LIST_FOR_EACH (item, &ctx->monitors_head) {
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         if (monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL) {
-            struct MonitorLocalMonitor *monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-            if (monitored_monitor->monitor_obj == monitor_obj && monitored_monitor->ref_ticks == ref_ticks) {
+            struct MonitorLocalMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
+            if (monitoring_monitor->monitor_obj == monitor_obj && monitoring_monitor->ref_ticks == ref_ticks) {
                 // Remove link
                 list_remove(&monitor->monitor_list_head);
                 free(monitor);
                 // Enqueue the term as a message.
                 mailbox_send(ctx, signal->signal_term);
+                break;
+            }
+        } else if (monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME) {
+            int32_t monitor_process_id = term_to_local_process_id(monitor_obj);
+            struct MonitorLocalRegisteredNameMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+            if (monitoring_monitor->monitor_process_id == monitor_process_id && monitoring_monitor->ref_ticks == ref_ticks) {
+                // Remove link
+                list_remove(&monitor->monitor_list_head);
+
+                // We need to modify the monitor_obj item
+                BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), temp_heap)
+                term name_tuple = term_alloc_tuple(2, &temp_heap);
+                term_put_tuple_element(name_tuple, 0, monitoring_monitor->monitor_name);
+                term_put_tuple_element(name_tuple, 1, ctx->global->node_name);
+                term_put_tuple_element(signal->signal_term, 3, name_tuple);
+                mailbox_send(ctx, signal->signal_term);
+                END_WITH_STACK_HEAP(temp_heap, ctx->global);
+
+                free(monitor);
                 break;
             }
         }
@@ -687,6 +708,18 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 free(monitor);
                 break;
             }
+            case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
+                // We are the monitoring process.
+                struct MonitorLocalRegisteredNameMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+                int32_t local_process_id = monitoring_monitor->monitor_process_id;
+                Context *target = globalcontext_get_process_nolock(glb, local_process_id);
+                if (LIKELY(target != NULL)) {
+                    // target can be null if we didn't process a MonitorDownSignal
+                    mailbox_send_ref_signal(target, DemonitorSignal, monitoring_monitor->ref_ticks);
+                }
+                free(monitor);
+                break;
+            }
             case CONTEXT_MONITOR_LINK_LOCAL: {
                 struct LinkLocalMonitor *link_monitor = CONTAINER_OF(monitor, struct LinkLocalMonitor, monitor);
                 // Handle the case of inactive link.
@@ -811,6 +844,20 @@ struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monito
     return &monitor->monitor;
 }
 
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, uint64_t ref_ticks)
+{
+    struct MonitorLocalRegisteredNameMonitor *monitor = malloc(sizeof(struct MonitorLocalRegisteredNameMonitor));
+    if (IS_NULL_PTR(monitor)) {
+        return NULL;
+    }
+    monitor->monitor.monitor_type = CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME;
+    monitor->monitor_process_id = monitor_process_id;
+    monitor->monitor_name = monitor_name;
+    monitor->ref_ticks = ref_ticks;
+
+    return &monitor->monitor;
+}
+
 struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks)
 {
     struct ResourceContextMonitor *monitor = malloc(sizeof(struct ResourceContextMonitor));
@@ -845,6 +892,17 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     struct MonitorLocalMonitor *new_local_monitor = CONTAINER_OF(new_monitor, struct MonitorLocalMonitor, monitor);
                     struct MonitorLocalMonitor *existing_local_monitor = CONTAINER_OF(existing, struct MonitorLocalMonitor, monitor);
                     if (UNLIKELY(existing_local_monitor->monitor_obj == new_local_monitor->monitor_obj && existing_local_monitor->ref_ticks == new_local_monitor->ref_ticks)) {
+                        free(new_monitor);
+                        return false;
+                    }
+                    break;
+                }
+                case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
+                    struct MonitorLocalRegisteredNameMonitor *new_local_registeredname_monitor = CONTAINER_OF(new_monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+                    struct MonitorLocalRegisteredNameMonitor *existing_local_registeredname_monitor = CONTAINER_OF(existing, struct MonitorLocalRegisteredNameMonitor, monitor);
+                    if (UNLIKELY(existing_local_registeredname_monitor->monitor_process_id == new_local_registeredname_monitor->monitor_process_id
+                            && existing_local_registeredname_monitor->monitor_name == new_local_registeredname_monitor->monitor_name
+                            && existing_local_registeredname_monitor->ref_ticks == new_local_registeredname_monitor->ref_ticks)) {
                         free(new_monitor);
                         return false;
                     }
@@ -997,6 +1055,15 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
                 }
                 break;
             }
+            case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
+                struct MonitorLocalRegisteredNameMonitor *local_registeredname_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+                if (local_registeredname_monitor->ref_ticks == ref_ticks) {
+                    list_remove(&monitor->monitor_list_head);
+                    free(monitor);
+                    return;
+                }
+                break;
+            }
             case CONTEXT_MONITOR_RESOURCE: {
                 struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
                 if (resource_monitor->ref_ticks == ref_ticks) {
@@ -1024,6 +1091,14 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
                 if (local_monitor->ref_ticks == ref_ticks) {
                     *is_monitoring = monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL;
                     return local_monitor->monitor_obj;
+                }
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
+                struct MonitorLocalRegisteredNameMonitor *local_registeredname_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+                if (local_registeredname_monitor->ref_ticks == ref_ticks) {
+                    *is_monitoring = true;
+                    return term_from_local_process_id(local_registeredname_monitor->monitor_process_id);
                 }
                 break;
             }
@@ -1164,6 +1239,16 @@ COLD_FUNC void context_dump(Context *ctx)
                 fprintf(stderr, "monitored by ");
                 term_display(stderr, monitored_monitor->monitor_obj, ctx);
                 fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
+                fprintf(stderr, "\n");
+                break;
+            }
+            case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
+                struct MonitorLocalRegisteredNameMonitor *local_registeredname_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
+                fprintf(stderr, "monitor to ");
+                term_display(stderr, local_registeredname_monitor->monitor_name, ctx);
+                fprintf(stderr, " (");
+                term_display(stderr, term_from_local_process_id(local_registeredname_monitor->monitor_process_id), ctx);
+                fprintf(stderr, ") ref=%lu", (long unsigned) local_registeredname_monitor->ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }
