@@ -540,6 +540,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
                     && memcmp(remote_monitor->ref_words, ref_words, ref_len * sizeof(uint32_t)) == 0) {
                     enif_demonitor_process(erl_nif_env_from_context(ctx), conn_obj, &remote_monitor->process_monitor);
                     list_remove(item);
+                    free(remote_monitor);
                     break;
                 }
             }

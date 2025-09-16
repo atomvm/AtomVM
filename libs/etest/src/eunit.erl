@@ -219,8 +219,16 @@ module_tests(Module, [_ | Tail], Acc) ->
     module_tests(Module, Tail, Acc).
 
 report(Progress, Identification) ->
-    {module, Module} = lists:keyfind(module, 1, Identification),
-    {test_case, TestCase} = lists:keyfind(test_case, 1, Identification),
+    ModuleString =
+        case lists:keyfind(module, 1, Identification) of
+            false -> "";
+            {module, Module} -> io_lib:format("~s:", [Module])
+        end,
+    TestCaseString =
+        case lists:keyfind(test_case, 1, Identification) of
+            false -> "";
+            {test_case, TestCase} -> TestCase
+        end,
     LineString =
         case lists:keyfind(line, 1, Identification) of
             false -> "";
@@ -239,7 +247,9 @@ report(Progress, Identification) ->
             {exit, Reason} -> io_lib:format(":FAIL:exited with ~p", [Reason]);
             timeout -> ":FAIL:timeout"
         end,
-    io:format("~s:~s ~s~s~s\n", [Module, LineString, TestCase, TitleString, ProgressString]).
+    io:format("~s:~s ~s~s~s\n", [
+        ModuleString, LineString, TestCaseString, TitleString, ProgressString
+    ]).
 
 run_test(Identification, TestFun, #state{total = Total} = State0) ->
     report(start, Identification),
@@ -266,5 +276,4 @@ start() ->
         [],
         code:all_available()
     ),
-    test(TestModules, [exact_execution]),
-    ok.
+    test(TestModules, [exact_execution]).

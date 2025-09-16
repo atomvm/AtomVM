@@ -195,6 +195,8 @@ test_listen_connect_parameters(
     receive
         {ServerPid, ready} ->
             ok
+    after 10000 ->
+        error({timeout, ?MODULE, ?LINE})
     end,
 
     {ok, Socket} = gen_tcp:connect(

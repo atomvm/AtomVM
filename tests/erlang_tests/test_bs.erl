@@ -97,6 +97,8 @@ start() ->
     ok = test_copy_bits_string(),
     ok = test_bs_match_string_select(),
 
+    ok = test_bs_skip_bits2_little(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -426,6 +428,15 @@ test_bs_match_string_select() ->
             _Other -> ok
         end,
     id(Z).
+
+% With OTP25 and lower, this generates bs_skip_init2 with flags equal to 2 (little)
+% More recent versions of OTP use bs_match
+test_bs_skip_bits2_little() ->
+    ok = check_x86_64_jt(id(<<16#e9, 0:32>>)).
+
+check_x86_64_jt(<<>>) -> ok;
+check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
+check_x86_64_jt(Bin) -> {unexpected, Bin}.
 
 id(X) -> X.
 

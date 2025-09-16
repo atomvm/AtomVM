@@ -840,6 +840,7 @@ You can build with all boards supported by Raspberry Pi pico SDK, including Pico
 ### RP2 Prerequisites
 
 * `cmake`
+* `doxygen`
 * `ninja`
 * `Erlang/OTP`
 * `Elixir` (optional)

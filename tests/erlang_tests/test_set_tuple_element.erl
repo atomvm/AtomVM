@@ -20,7 +20,7 @@
 
 -module(test_set_tuple_element).
 
--export([start/0, test/2]).
+-export([start/0, test/2, id/1]).
 
 -record(big, {
     a = foo,
@@ -39,6 +39,7 @@ start() ->
     ok = test(thing1, {ha, ha}),
     ok = test(undefined, {ha, ha}),
     ok = test(undefined, {lets, try_this}),
+    ok = test_set_tuple_element_op(),
     0.
 
 test(G, J) ->
@@ -53,3 +54,15 @@ test(G, J) ->
 
 make_a_change(Big, Thing1, Thing2) ->
     Big#big{g = Thing1, j = Thing2}.
+
+id(X) -> X.
+
+% This generates a set_tuple_element op with OTP28
+test_set_tuple_element_op() ->
+    State0 = id({state, a, b, c, d, e, f, g}),
+    State1 = setelement(6, State0, id([r1, r2])),
+    State2 = setelement(8, State1, [r8, r9]),
+    State3 = id(State2),
+    [r8, r9] = element(8, State3),
+    [r1, r2] = element(6, State3),
+    ok.

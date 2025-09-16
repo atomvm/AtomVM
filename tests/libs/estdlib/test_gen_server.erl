@@ -46,6 +46,7 @@ test() ->
     ok = test_timeout_info(),
     ok = test_register(),
     ok = test_call_unregistered(),
+    ok = test_cast_unregistered(),
     ok = test_normal_exit_call(),
     ok = test_abnormal_exit_call(),
     ok = test_crash_call(),
@@ -332,12 +333,18 @@ test_call_unregistered() ->
         gen_server:call(?MODULE, foo),
         fail
     catch
-        exit:{noproc, _Location} ->
-            % erlang:display({C, E}),
+        exit:{noproc, Location} ->
+            erlang:display({noproc, Location}),
+            ok;
+        T:V ->
+            erlang:display({T, V}),
             ok
     after
         ok = gen_server:stop(Pid)
     end.
+
+test_cast_unregistered() ->
+    ok = gen_server:cast(?MODULE, foo).
 
 test_normal_exit_call() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
