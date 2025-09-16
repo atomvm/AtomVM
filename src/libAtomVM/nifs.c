@@ -5449,6 +5449,7 @@ static term nif_code_get_object_code(Context *ctx, int argc, term argv[])
     // Note: this assumes constness of module->binary and could be use-after-free if we allowed changing module bitcode at runtime.
     // TODO: update this code when module unloading will be supported.
     term binary = term_from_literal_binary((void *) module->binary, module->binary_size, &ctx->heap, ctx->global);
+    // TODO: this code has to be changed to return the complete path
     term filename_term = term_from_string(module_file_name, filename_len, &ctx->heap);
     term result = term_alloc_tuple(3, &ctx->heap);
 
