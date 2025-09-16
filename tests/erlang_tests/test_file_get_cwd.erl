@@ -28,10 +28,10 @@ start() ->
 
 test_get_cwd() ->
     {ok, Path} = file:get_cwd(),
-    true = is_valid_path(Path),
+    <<"/", _/binary>> = Path,
     ok.
 
-is_valid_path(<<"/", _/binary>>) ->
-    true;
-is_valid_path(_) ->
-    false.
+% is_valid_path() ->
+%     true;
+% is_valid_path(_) ->
+%     false.
