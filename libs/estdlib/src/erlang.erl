@@ -274,7 +274,7 @@ send_after(Time, Dest, Msg) ->
     (Pid :: pid(), memory) -> {memory, non_neg_integer()};
     (Pid :: pid(), links) -> {links, [pid()]};
     (Pid :: pid(), monitored_by) -> {monitored_by, [pid() | resource() | port()]};
-    (Pid :: pid(), reductions) -> {reductions, [pos_integer()]}.
+    (Pid :: pid(), reductions) -> {reductions, [non_neg_integer()]}.
 process_info(_Pid, _Key) ->
     erlang:nif_error(undefined).
 
@@ -1541,5 +1541,5 @@ nif_error(_Reason) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec bump_reductions(pos_integer()) -> true.
-bump_reductions(Reductions) when is_integer(Reductions), Reductions > 1 ->
+bump_reductions(Reductions) when is_integer(Reductions), Reductions >= 1 ->
     erlang:nif_error(undefined).

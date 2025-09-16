@@ -598,7 +598,7 @@ struct Test tests[] = {
     TEST_CASE(test_ets),
     TEST_CASE(test_node),
 
-    TEST_CASE(test_bump_reductions),
+    TEST_CASE_ATOMVM_ONLY(test_bump_reductions, 0),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

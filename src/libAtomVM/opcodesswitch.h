@@ -1767,7 +1767,7 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
     Module *prev_mod;
     term *x_regs;
     const uint8_t *pc;
-    uint64_t max_reductions;
+    int max_reductions;
 
     Context *ctx = scheduler_run(glb);
 
