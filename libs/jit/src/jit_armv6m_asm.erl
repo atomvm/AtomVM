@@ -331,8 +331,8 @@ mvns(Rd, Rm) when
 ->
     RdNum = reg_to_num(Rd),
     RmNum = reg_to_num(Rm),
-    %% Thumb MOVS register: 0000000000mmmdddd
-    <<(16#43D0 bor (RmNum bsl 3) bor RdNum):16/little>>.
+    %% Thumb MVNS register: 0100001111mmmdddd
+    <<(16#43C0 bor (RmNum bsl 3) bor RdNum):16/little>>.
 
 %% ARMv6-M Thumb MOV instruction - handle both immediate and register moves
 -spec mov(arm_gpr_register(), arm_gpr_register() | arm_gpr_register()) -> binary().
