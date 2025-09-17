@@ -150,6 +150,8 @@ struct Module
 
     struct LiteralEntry *literals_table;
 
+    void *types_data;
+
     atom_index_t *local_atoms_to_global_table;
 
     void *module_platform_data;
@@ -260,6 +262,16 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
  * @param ctx the target context.
  */
 term module_load_literal(Module *mod, int index, Context *ctx);
+
+/**
+ * @brief Gets type information for the given type index
+ *
+ * @details Loads and parses type information from the Type chunk and returns the type.
+ * @param mod The module that owns the type information.
+ * @param type_index a valid type index.
+ * @param ctx the target context.
+ */
+term module_get_type_by_index(const Module *mod, int type_index, Context *ctx);
 
 /**
  * @brief Gets a term for the given local atom id

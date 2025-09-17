@@ -58,11 +58,13 @@ extern "C" {
 #define LINT 9
 /** Native code section */
 #define AVMN 10
+/** Type table section */
+#define TYPE 11
 
 /** Required size for offsets array */
-#define MAX_OFFS 11
+#define MAX_OFFS 12
 /** Required size for sizes array */
-#define MAX_SIZES 11
+#define MAX_SIZES 12
 
 /** sizeof IFF section header in bytes */
 #define IFF_SECTION_HEADER_SIZE 8

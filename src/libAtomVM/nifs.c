@@ -202,6 +202,7 @@ static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
 static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[]);
 static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
@@ -767,6 +768,10 @@ static const struct Nif code_server_atom_resolver_nif = {
 static const struct Nif code_server_literal_resolver_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_literal_resolver
+};
+static const struct Nif code_server_type_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_type_resolver
 };
 static const struct Nif code_server_set_native_code_nif = {
     .base.type = NIFFunctionType,
@@ -5598,6 +5603,21 @@ static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]
     }
     int literal_index = term_to_int(argv[1]);
     return module_load_literal(mod, literal_index, ctx);
+}
+
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int type_index = term_to_int(argv[1]);
+    return module_get_type_by_index(mod, type_index, ctx);
 }
 
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
