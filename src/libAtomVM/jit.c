@@ -1345,7 +1345,7 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 
 static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
-    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%zu n=%d bs_flags=%d\n", (void *) bin_ptr, offset, n, bs_flags);
+    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%lu n=%d bs_flags=%d\n", (void *) bin_ptr, (unsigned long) offset, n, bs_flags);
     union maybe_unsigned_int64 value;
     bool status = bitstring_extract_integer(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
     if (UNLIKELY(!status)) {
@@ -1360,7 +1360,7 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
 
 static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
-    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%zu n=%d bs_flags=%d\n", (void *) bin_ptr, offset, n, bs_flags);
+    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%lu n=%d bs_flags=%d\n", (void *) bin_ptr, (unsigned long) offset, n, bs_flags);
     avm_float_t value;
     bool status;
     switch (n) {
