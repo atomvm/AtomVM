@@ -574,6 +574,8 @@ compile_erlang(test_raw_raise)
 compile_erlang(test_ets)
 compile_erlang(test_node)
 
+compile_erlang(test_code_server_nifs)
+
 compile_erlang(test_op_bs_start_match)
 compile_assembler(test_op_bs_start_match_asm)
 compile_erlang(test_op_bs_create_bin)
@@ -1095,6 +1097,8 @@ set(erlang_test_beams
 
     test_ets.beam
     test_node.beam
+
+    test_code_server_nifs.beam
 
     test_op_bs_start_match.beam
     test_op_bs_create_bin.beam

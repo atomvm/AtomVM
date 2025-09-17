@@ -19,7 +19,7 @@
 %
 -module(jit_precompile).
 
--export([start/0, compile/3]).
+-export([start/0, compile/3, atom_resolver/1, type_resolver/1]).
 
 -include_lib("jit.hrl").
 
@@ -36,8 +36,7 @@ compile(Target, Dir, Path) ->
         FilteredChunks = lists:keydelete("Code", 1, FilteredChunks0),
         {"Code", CodeChunk} = lists:keyfind("Code", 1, InitialChunks),
         {"AtU8", AtomChunk} = lists:keyfind("AtU8", 1, InitialChunks),
-        Atoms = parse_atom_chunk(AtomChunk),
-        AtomResolver = fun(Index) -> lists:nth(Index, Atoms) end,
+        AtomResolver = atom_resolver(AtomChunk),
         LiteralsChunk =
             case lists:keyfind("LitU", 1, InitialChunks) of
                 {"LitU", LiteralsChunk0} ->
@@ -52,8 +51,16 @@ compile(Target, Dir, Path) ->
                             <<>>
                     end
             end,
-        Literals = parse_literals_chunk(LiteralsChunk),
-        LiteralResolver = fun(Index) -> lists:nth(Index + 1, Literals) end,
+        LiteralResolver = literal_resolver(LiteralsChunk),
+
+        TypesChunk =
+            case lists:keyfind("Type", 1, InitialChunks) of
+                {"Type", TypesChunk0} ->
+                    TypesChunk0;
+                false ->
+                    <<>>
+            end,
+        TypeResolver = type_resolver(TypesChunk),
 
         Stream0 = jit_stream_binary:new(0),
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
@@ -64,7 +71,7 @@ compile(Target, Dir, Path) ->
         Backend = list_to_atom("jit_" ++ Target),
         Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
         {LabelsCount, Stream3} = jit:compile(
-            CodeChunk, AtomResolver, LiteralResolver, Backend, Stream2
+            CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
         ),
         NativeCode = Backend:stream(Stream3),
         UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
@@ -77,6 +84,10 @@ compile(Target, Dir, Path) ->
             [{jit, first_pass, [<<Opcode, _Rest/binary>> | _], _} | _] = S,
             io:format("Unimplemented opcode ~p (~s)\n", [Opcode, Path])
     end.
+
+atom_resolver(AtomChunk) ->
+    Atoms = parse_atom_chunk(AtomChunk),
+    fun(Index) -> lists:nth(Index, Atoms) end.
 
 parse_atom_chunk(<<AtomCount:32/signed, Rest/binary>>) ->
     if
@@ -100,6 +111,10 @@ parse_atom_chunk_old_format(<<Size, Atom:Size/binary, Tail/binary>>, Acc) ->
 parse_atom_chunk_old_format(<<>>, Acc) ->
     lists:reverse(Acc).
 
+literal_resolver(LiteralsChunk) ->
+    Literals = parse_literals_chunk(LiteralsChunk),
+    fun(Index) -> lists:nth(Index + 1, Literals) end.
+
 parse_literals_chunk(<<TermsCount:32, Rest/binary>>) ->
     parse_literals_chunk0(TermsCount, Rest, []);
 parse_literals_chunk(<<>>) ->
@@ -110,3 +125,82 @@ parse_literals_chunk0(0, <<>>, Acc) ->
 parse_literals_chunk0(N, <<TermSize:32, TermBin:TermSize/binary, Rest/binary>>, Acc) ->
     Term = binary_to_term(TermBin),
     parse_literals_chunk0(N - 1, Rest, [Term | Acc]).
+
+%% Version (from beam_types.hrl)
+-define(BEAM_TYPES_VERSION, 3).
+
+%% Type chunk constants (from beam_types.erl)
+-define(BEAM_TYPE_ATOM, (1 bsl 0)).
+-define(BEAM_TYPE_BITSTRING, (1 bsl 1)).
+-define(BEAM_TYPE_CONS, (1 bsl 2)).
+-define(BEAM_TYPE_FLOAT, (1 bsl 3)).
+-define(BEAM_TYPE_FUN, (1 bsl 4)).
+-define(BEAM_TYPE_INTEGER, (1 bsl 5)).
+-define(BEAM_TYPE_MAP, (1 bsl 6)).
+-define(BEAM_TYPE_NIL, (1 bsl 7)).
+-define(BEAM_TYPE_PID, (1 bsl 8)).
+-define(BEAM_TYPE_PORT, (1 bsl 9)).
+-define(BEAM_TYPE_REFERENCE, (1 bsl 10)).
+-define(BEAM_TYPE_TUPLE, (1 bsl 11)).
+
+-define(BEAM_TYPE_HAS_LOWER_BOUND, (1 bsl 12)).
+-define(BEAM_TYPE_HAS_UPPER_BOUND, (1 bsl 13)).
+-define(BEAM_TYPE_HAS_UNIT, (1 bsl 14)).
+
+type_resolver(<<Version:32, _Count:32, TypeData/binary>>) when Version =:= ?BEAM_TYPES_VERSION ->
+    Types = parse_type_entries(TypeData, []),
+    fun(Index) -> lists:nth(Index + 1, Types) end;
+type_resolver(_) ->
+    fun(_) -> any end.
+
+parse_type_entries(<<>>, Acc) ->
+    lists:reverse(Acc);
+parse_type_entries(
+    <<0:1, HasUnit:1, HasUpperBound:1, HasLowerBound:1, TypeBits:12, Rest0/binary>>, Acc
+) ->
+    {Rest, LowerBound, UpperBound, Unit} = parse_extra(
+        HasLowerBound, HasUpperBound, HasUnit, Rest0, '-inf', '+inf', 1
+    ),
+    Type =
+        case TypeBits of
+            ?BEAM_TYPE_ATOM ->
+                t_atom;
+            ?BEAM_TYPE_BITSTRING ->
+                {t_bs_matchable, Unit};
+            ?BEAM_TYPE_CONS ->
+                t_cons;
+            ?BEAM_TYPE_FLOAT ->
+                t_float;
+            ?BEAM_TYPE_FUN ->
+                t_fun;
+            ?BEAM_TYPE_FLOAT bor ?BEAM_TYPE_INTEGER ->
+                {t_number, {LowerBound, UpperBound}};
+            ?BEAM_TYPE_INTEGER ->
+                {t_integer, {LowerBound, UpperBound}};
+            ?BEAM_TYPE_MAP ->
+                t_map;
+            ?BEAM_TYPE_NIL ->
+                nil;
+            ?BEAM_TYPE_NIL bor ?BEAM_TYPE_CONS ->
+                t_list;
+            ?BEAM_TYPE_PID ->
+                pid;
+            ?BEAM_TYPE_PORT ->
+                port;
+            ?BEAM_TYPE_REFERENCE ->
+                reference;
+            ?BEAM_TYPE_TUPLE ->
+                t_tuple;
+            _ ->
+                any
+        end,
+    parse_type_entries(Rest, [Type | Acc]).
+
+parse_extra(1, HasUpperBound, HasUnit, <<Value:64/signed, Rest/binary>>, '-inf', '+inf', 1) ->
+    parse_extra(0, HasUpperBound, HasUnit, Rest, Value, '+inf', 1);
+parse_extra(0, 1, HasUnit, <<Value:64/signed, Rest/binary>>, LowerBound, '+inf', 1) ->
+    parse_extra(0, 0, HasUnit, Rest, LowerBound, Value, 1);
+parse_extra(0, 0, 1, <<Value:8/unsigned, Rest/binary>>, LowerBound, UpperBound, 1) ->
+    parse_extra(0, 0, 0, Rest, LowerBound, UpperBound, Value + 1);
+parse_extra(0, 0, 0, Rest, LowerBound, UpperBound, Unit) ->
+    {Rest, LowerBound, UpperBound, Unit}.
