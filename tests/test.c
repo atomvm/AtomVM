@@ -411,6 +411,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs_int_unaligned),
     TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
+    TEST_CASE_EXPECTED(bs_append_extra_words, 1),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
     TEST_CASE_EXPECTED(test_raise, 7),
