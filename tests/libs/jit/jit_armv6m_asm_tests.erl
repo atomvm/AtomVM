@@ -597,6 +597,24 @@ bkpt_test_() ->
         )
     ].
 
+mvns_test_() ->
+    [
+        %% ARMv6-M Thumb MVNS instructions (register only, low registers)
+        %% MVNS Rd, Rm - bitwise NOT (performs ~Rm -> Rd, sets flags)
+        ?_assertEqual(
+            asm(<<16#43e3:16/little>>, "mvns r3, r4"),
+            jit_armv6m_asm:mvns(r3, r4)
+        ),
+        ?_assertEqual(
+            asm(<<16#43f3:16/little>>, "mvns r3, r6"),
+            jit_armv6m_asm:mvns(r3, r6)
+        ),
+        ?_assertEqual(
+            asm(<<16#43c8:16/little>>, "mvns r0, r1"),
+            jit_armv6m_asm:mvns(r0, r1)
+        )
+    ].
+
 asm(Bin, Str) ->
     case erlang:system_info(machine) of
         "ATOM" ->
