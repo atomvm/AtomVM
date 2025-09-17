@@ -505,14 +505,26 @@ static inline bool term_is_sub_binary(term t)
 /**
  * @brief Checks if a term is an integer value
  *
+ * @details Returns \c true if a term can be converted to a \c avm_int_t value, otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_int(term t)
+{
+    /* integer: 11 11 */
+    return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
+}
+
+/**
+ * @brief Checks if a term is an integer value
+ *
  * @details Returns \c true if a term is an integer value, otherwise \c false.
  * @param t the term that will be checked.
  * @return \c true if check succeeds, \c false otherwise.
  */
 static inline bool term_is_integer(term t)
 {
-    /* integer: 11 11 */
-    return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
+    return term_is_int(t);
 }
 
 /**
