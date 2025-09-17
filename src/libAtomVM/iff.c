@@ -100,6 +100,9 @@ void scan_iff(const void *iff_binary, int buf_size, unsigned long *offsets, unsi
         } else if (!memcmp(current_record->name, "avmN", 4)) {
             offsets[AVMN] = current_pos;
             sizes[AVMN] = ENDIAN_SWAP_32(current_record->size);
+        } else if (!memcmp(current_record->name, "Type", 4)) {
+            offsets[TYPE] = current_pos;
+            sizes[TYPE] = ENDIAN_SWAP_32(current_record->size);
         }
 
         current_pos += iff_align(ENDIAN_SWAP_32(current_record->size) + 8);
