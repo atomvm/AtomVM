@@ -504,16 +504,53 @@ static inline bool term_is_sub_binary(term t)
 }
 
 /**
- * @brief Checks if a term is an integer value
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
  *
- * @details Returns \c true if a term is an integer value, otherwise \c false.
- * @param t the term that will be checked.
- * @return \c true if check succeeds, \c false otherwise.
+ * Tests whether a term represents an integer stored directly in the term
+ * word without boxing. Returns true only for integers that fit within the
+ * platform's unboxed integer range:
+ * - 32-bit builds: [-2^28, 2^28 - 1] (28-bit signed)
+ * - 64-bit builds: [-2^60, 2^60 - 1] (60-bit signed)
+ *
+ * Integers outside these ranges are stored as boxed integers on the heap
+ * and will return false from this function.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @note Returns false for boxed integers and big integers, even if their
+ *       values would fit in \c avm_int_t full range
+ * @note Values passing this check can be safely converted to \c avm_int_t
+ *       or \c size_t using \c term_to_int()
+ * @note Terms for which this functions returns true are not moved during
+ *       garbage collection
+ * @warning Values passing this check may NOT fit in \c int on platforms
+ *          where \c int is smaller than \c avm_int_t
+ *
+ * @see term_is_boxed_integer() for boxed integer checking
+ * @see term_is_any_integer() for checking all integer representations
+ * @see term_to_int() for extracting the integer value
  */
-static inline bool term_is_integer(term t)
+static inline bool term_is_int(term t)
 {
     /* integer: 11 11 */
     return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
+}
+
+/**
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
+ *
+ * @deprecated Use \c term_is_int() instead. This function will raise a warning
+ *             in the future and will eventually be removed.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @see term_is_int() for the replacement function
+ */
+static inline bool term_is_integer(term t)
+{
+    return term_is_int(t);
 }
 
 /**
