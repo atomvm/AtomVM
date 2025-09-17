@@ -1055,7 +1055,7 @@ first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
-    {MSt2, ArityTerm, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {MSt2, ArityTerm, Rest3} = decode_typed_compact_term(Rest2, MMod, MSt1, State0),
     ?TRACE("OP_IS_FUNCTION2 ~p,~p,~p\n", [Label, Arg1, ArityTerm]),
     {MSt3, FuncPtr} = term_is_boxed_with_tag_and_get_ptr(Label, Arg1, ?TERM_BOXED_FUN, MMod, MSt2),
     {MSt4, Arity} = term_to_int(ArityTerm, Label, MMod, MSt3),
@@ -3041,6 +3041,14 @@ term_to_int(Term, _FailLabel, _MMod, MSt0) when is_integer(Term) ->
     {MSt0, Term bsr 4};
 term_to_int({literal, Val}, _FailLabel, _MMod, MSt0) when is_integer(Val) ->
     {MSt0, Val};
+% Optimized case: when we have type information showing this is an integer, skip the type check
+term_to_int({typed, Term, {t_integer, _Range}}, _FailLabel, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Term),
+    MSt2 = MMod:shift_right(MSt1, Reg, 4),
+    {MSt2, Reg};
+term_to_int({typed, Term, _NonIntegerType}, FailLabel, MMod, MSt0) ->
+    % Type information shows it's not an integer, fall back to generic path
+    term_to_int(Term, FailLabel, MMod, MSt0);
 term_to_int(Term, FailLabel, MMod, MSt0) ->
     {MSt1, Reg} = MMod:move_to_native_register(MSt0, Term),
     MSt2 = cond_raise_badarg_or_jump_to_fail_label(
@@ -3210,6 +3218,14 @@ decode_compact_term(<<_Value:5, ?COMPACT_LITERAL:3, _Rest/binary>> = Binary, _MM
     {MSt0, {literal, Value}, Rest};
 decode_compact_term(Other, MMod, MSt, _State) ->
     decode_dest(Other, MMod, MSt).
+
+% Decode compact term with type information awareness
+decode_typed_compact_term(<<?COMPACT_EXTENDED_TYPED_REGISTER, Rest0/binary>>, MMod, MSt0, _State) ->
+    {MSt1, Dest, Rest1} = decode_dest(Rest0, MMod, MSt0),
+    {Type, Rest2} = decode_literal(Rest1),
+    {MSt1, {typed, Dest, Type}, Rest2};
+decode_typed_compact_term(Other, MMod, MSt, State) ->
+    decode_compact_term(Other, MMod, MSt, State).
 
 skip_compact_term(<<_:4, ?COMPACT_INTEGER:4, _Rest/binary>> = Bin) ->
     {_Value, Rest} = decode_value64(Bin),
