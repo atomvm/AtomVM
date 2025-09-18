@@ -21,11 +21,6 @@
 -define(JIT_FORMAT_VERSION, 1).
 
 -define(JIT_ARCH_X86_64, 1).
--define(JIT_ARCH_AARCH64, 2).
--define(JIT_ARCH_XTENSA, 3).
--define(JIT_ARCH_ARMV6M, 4).
--define(JIT_ARCH_RISCV32I, 5).
--define(JIT_ARCH_WASM32, 6).
 
 -define(JIT_VARIANT_PIC, 1).
 

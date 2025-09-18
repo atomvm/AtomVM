@@ -48,6 +48,8 @@
 extern "C" {
 #endif
 
+// Remember to keep in sync with libs/jit/src/*term.hrl
+
 #define COMPACT_LITERAL 0
 #define COMPACT_INTEGER 1
 #define COMPACT_ATOM 2
