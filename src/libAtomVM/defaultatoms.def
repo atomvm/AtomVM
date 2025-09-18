@@ -18,22 +18,33 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+// False should be 0 and true 1
 X(FALSE_ATOM, "\x05", "false")
 X(TRUE_ATOM, "\x04", "true")
 
+// Atoms used in jit compiler, do not change or reorder without syncing
 X(OK_ATOM, "\x2", "ok")
 X(ERROR_ATOM, "\x5", "error")
-
-X(UNDEFINED_ATOM, "\x9", "undefined")
-
 X(BADARG_ATOM, "\x6", "badarg")
 X(BADARITH_ATOM, "\x08", "badarith")
-X(BADARITY_ATOM, "\x08", "badarity")
 X(BADFUN_ATOM, "\x06", "badfun")
-X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
 X(FUNCTION_CLAUSE_ATOM, "\xF", "function_clause")
 X(TRY_CLAUSE_ATOM, "\xA", "try_clause")
 X(OUT_OF_MEMORY_ATOM, "\xD", "out_of_memory")
+X(BADMATCH_ATOM, "\x8", "badmatch")
+X(CASE_CLAUSE_ATOM, "\xB", "case_clause")
+X(IF_CLAUSE_ATOM, "\x9", "if_clause")
+X(THROW_ATOM, "\x5", "throw")
+X(UNSUPPORTED_ATOM, "\xB", "unsupported")
+X(ALL_ATOM, "\x3", "all")
+X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
+X(BADRECORD_ATOM, "\x9", "badrecord")
+// End of atoms used in jit compiler
+
+X(UNDEFINED_ATOM, "\x9", "undefined")
+
+X(BADARITY_ATOM, "\x08", "badarity")
+X(SYSTEM_LIMIT_ATOM, "\xC", "system_limit")
 X(OVERFLOW_ATOM, "\x8", "overflow")
 
 X(FLUSH_ATOM, "\x5", "flush")
@@ -55,14 +66,8 @@ X(DECIMALS_ATOM, "\x8", "decimals")
 X(SCIENTIFIC_ATOM, "\xA", "scientific")
 X(DEFAULTATOMS_COMPACT_ATOM, "\x7", "compact")
 
-X(BADMATCH_ATOM, "\x8", "badmatch")
-X(CASE_CLAUSE_ATOM, "\xB", "case_clause")
-X(IF_CLAUSE_ATOM, "\x9", "if_clause")
-X(THROW_ATOM, "\x5", "throw")
 X(LOW_ENTROPY_ATOM, "\xB", "low_entropy")
-X(UNSUPPORTED_ATOM, "\xB", "unsupported")
 X(USED_ATOM, "\x4", "used")
-X(ALL_ATOM, "\x3", "all")
 X(START_ATOM, "\x5", "start")
 
 X(UNDEF_ATOM, "\x5", "undef")
@@ -87,7 +92,6 @@ X(IO_REQUEST_ATOM, "\xA", "io_request")
 X(IO_REPLY_ATOM, "\x8", "io_reply")
 X(PUT_CHARS_ATOM, "\x9", "put_chars")
 
-X(LOWERCASE_EXIT_ATOM, "\x4", "exit")
 X(ATOMVM_VERSION_ATOM, "\xE", "atomvm_version")
 
 X(SECOND_ATOM, "\x6", "second")
@@ -110,7 +114,6 @@ X(STRING_ATOM, "\x6", "string")
 X(UTF8_ATOM, "\x4", "utf8")
 X(UTF16_ATOM, "\x5", "utf16")
 X(UTF32_ATOM, "\x5", "utf32")
-X(BADRECORD_ATOM, "\x9", "badrecord")
 
 X(COPY_ATOM, "\x4", "copy")
 X(REUSE_ATOM, "\x5", "reuse")

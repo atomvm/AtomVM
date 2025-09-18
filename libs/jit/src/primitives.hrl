@@ -18,6 +18,8 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+% Remember to keep list in sync with ModuleNativeInterface in src/libAtomVM/jit.h
+
 -define(PRIM_RAISE_ERROR, 0).
 -define(PRIM_RETURN, 1).
 -define(PRIM_SCHEDULE_NEXT_CP, 2).

@@ -18,8 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--define(OPCODE_MAX, 182).
-
 -define(OP_LABEL, 1).
 -define(OP_FUNC_INFO, 2).
 -define(OP_INT_CALL_END, 3).
@@ -169,3 +167,7 @@
 -define(OP_BADRECORD, 180).
 -define(OP_UPDATE_RECORD, 181).
 -define(OP_BS_MATCH, 182).
+
+-define(OPCODE_MAX, 182).
+
+% Remember to keep this list in sync with src/libAtomVM/opcodes.h

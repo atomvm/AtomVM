@@ -42,21 +42,23 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-// Verify matching atom index in defaultatoms.hrl
-_Static_assert(ERROR_ATOM_INDEX == 3, "ERROR_ATOM_INDEX is 3 in jit/src/defaultatoms.hrl");
-_Static_assert(BADARG_ATOM_INDEX == 5, "BADARG_ATOM_INDEX is 5 in jit/src/defaultatoms.hrl");
-_Static_assert(BADARITH_ATOM_INDEX == 6, "BADARITH_ATOM_INDEX is 6 in jit/src/defaultatoms.hrl");
-_Static_assert(BADFUN_ATOM_INDEX == 8, "BADFUN_ATOM_INDEX is 8 in jit/src/defaultatoms.hrl");
-_Static_assert(FUNCTION_CLAUSE_ATOM_INDEX == 10, "FUNCTION_CLAUSE_ATOM_INDEX is 10 in jit/src/defaultatoms.hrl");
-_Static_assert(TRY_CLAUSE_ATOM_INDEX == 11, "TRY_CLAUSE_ATOM_INDEX is 11 in jit/src/defaultatoms.hrl");
-_Static_assert(BADMATCH_ATOM_INDEX == 31, "BADMATCH_ATOM_INDEX is 31 in jit/src/defaultatoms.hrl");
-_Static_assert(CASE_CLAUSE_ATOM_INDEX == 32, "CASE_CLAUSE_ATOM_INDEX is 32 in jit/src/defaultatoms.hrl");
-_Static_assert(IF_CLAUSE_ATOM_INDEX == 33, "IF_CLAUSE_ATOM_INDEX is 33 in jit/src/defaultatoms.hrl");
-_Static_assert(THROW_ATOM_INDEX == 34, "THROW_ATOM_INDEX is 34 in jit/src/defaultatoms.hrl");
-_Static_assert(UNSUPPORTED_ATOM_INDEX == 36, "UNSUPPORTED_ATOM_INDEX is 36 in jit/src/defaultatoms.hrl");
-_Static_assert(ALL_ATOM_INDEX == 38, "ALL_ATOM_INDEX is 38 in jit/src/defaultatoms.hrl");
-_Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 58, "LOWERCASE_EXIT_ATOM_INDEX is 58 in jit/src/defaultatoms.hrl");
-_Static_assert(BADRECORD_ATOM_INDEX == 77, "BADRECORD_ATOM_INDEX is 77 in jit/src/defaultatoms.hrl");
+// Verify matching atom index in default_atoms.hrl
+_Static_assert(OK_ATOM_INDEX == 2, "OK_ATOM_INDEX is 2 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(ERROR_ATOM_INDEX == 3, "ERROR_ATOM_INDEX is 3 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADARG_ATOM_INDEX == 4, "BADARG_ATOM_INDEX is 4 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADARITH_ATOM_INDEX == 5, "BADARITH_ATOM_INDEX is 5 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADFUN_ATOM_INDEX == 6, "BADFUN_ATOM_INDEX is 6 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(FUNCTION_CLAUSE_ATOM_INDEX == 7, "FUNCTION_CLAUSE_ATOM_INDEX is 7 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(TRY_CLAUSE_ATOM_INDEX == 8, "TRY_CLAUSE_ATOM_INDEX is 8 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(OUT_OF_MEMORY_ATOM_INDEX == 9, "OUT_OF_MEMORY_ATOM_INDEX is 9 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADMATCH_ATOM_INDEX == 10, "BADMATCH_ATOM_INDEX is 10 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(CASE_CLAUSE_ATOM_INDEX == 11, "CASE_CLAUSE_ATOM_INDEX is 11 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(IF_CLAUSE_ATOM_INDEX == 12, "IF_CLAUSE_ATOM_INDEX is 12 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(THROW_ATOM_INDEX == 13, "THROW_ATOM_INDEX is 13 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(UNSUPPORTED_ATOM_INDEX == 14, "UNSUPPORTED_ATOM_INDEX is 14 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(ALL_ATOM_INDEX == 15, "ALL_ATOM_INDEX is 15 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16 in libs/jit/src/default_atoms.hrl ");
+_Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 
 // Verify offsets in jit_x86_64.erl
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64
