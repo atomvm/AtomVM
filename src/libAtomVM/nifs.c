@@ -1388,9 +1388,9 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_EMU
         new_ctx->saved_ip = fun_module->labels[label];
 #else
-        if (UNLIKELY(jit_trap_and_load(new_ctx, fun_module, label) != TRAP_AND_LOAD_OK)) {
-            mailbox_send_term_signal(new_ctx, KillSignal, UNDEF_ATOM);
-        }
+    if (UNLIKELY(jit_trap_and_load(new_ctx, fun_module, label) != TRAP_AND_LOAD_OK)) {
+        mailbox_send_term_signal(new_ctx, KillSignal, UNDEF_ATOM);
+    }
 #endif
 #ifndef AVM_NO_JIT
     }
@@ -1439,9 +1439,9 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_EMU
         new_ctx->saved_ip = found_module->labels[label];
 #else
-        if (UNLIKELY(jit_trap_and_load(new_ctx, found_module, label) != TRAP_AND_LOAD_OK)) {
-            return UNDEFINED_ATOM;
-        }
+    if (UNLIKELY(jit_trap_and_load(new_ctx, found_module, label) != TRAP_AND_LOAD_OK)) {
+        return UNDEFINED_ATOM;
+    }
 #endif
 #ifndef AVM_NO_JIT
     }
