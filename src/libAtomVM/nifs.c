@@ -490,8 +490,7 @@ const struct Nif os_getenv_nif = {
     .nif_ptr = nif_os_getenv_1
 };
 
-static const struct Nif tuple_to_list_nif =
-{
+static const struct Nif tuple_to_list_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_tuple_to_list_1
 };
