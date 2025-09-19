@@ -189,6 +189,9 @@
 -define(IS_SINT32_T(X), is_integer(X) andalso X >= -16#80000000 andalso X < 16#80000000).
 -define(IS_UINT8_T(X), is_integer(X) andalso X >= 0 andalso X =< 255).
 -define(IS_UINT32_T(X), is_integer(X) andalso X >= 0 andalso X < 16#100000000).
+-define(IS_SIGNED_OR_UNSIGNED_INT32_T(X),
+    is_integer(X) andalso X >= -16#80000000 andalso X < 16#100000000
+).
 
 %% ARMv6-M register allocation:
 %% - r0: context pointer (reserved)
@@ -594,42 +597,51 @@ call_primitive_last(
     PrepCall = load_primitive_ptr(Primitive, Temp),
     Stream1 = StreamModule:append(Stream0, PrepCall),
 
+    State1 = State0#state{
+        stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
+    },
+
+    % Preprocess offset special arg
+    Args1 = lists:map(
+        fun(Arg) ->
+            case Arg of
+                offset -> StreamModule:offset(Stream1);
+                _ -> Arg
+            end
+        end,
+        Args
+    ),
+
     % Handle arguments differently for 5+ arguments - use direct call without register preservation
-    case length(Args) of
-        NumArgs when NumArgs >= 5 ->
-            % For 5+ args, call directly without preserving registers since we return immediately
-            State1 = set_args(
-                State0#state{
-                    stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
-                },
-                Args,
-                0
-            ),
-            #state{stream = Stream2} = State1,
-            % Call the function pointer directly
-            Call = jit_armv6m_asm:blx(Temp),
-            Stream3 = StreamModule:append(Stream2, Call),
-            % Deallocate stack space that was allocated for 5+ arguments
-            DeallocateArgs = jit_armv6m_asm:add(sp, sp, 8),
-            Stream4 = StreamModule:append(Stream3, DeallocateArgs),
-            % Return: pop prolog registers and return
-            PopCode = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
-            Stream5 = StreamModule:append(Stream4, PopCode),
-            State3 = State1#state{stream = Stream5};
-        _ ->
-            % For 4 or fewer args, use tail call
-            [FirstArg, jit_state | ArgsT] = Args,
-            ArgsForTailCall = [FirstArg, jit_state_tail_call | ArgsT],
-            State1 = set_args(
-                State0#state{
-                    stream = Stream1, available_regs = AvailableRegs1, used_regs = UsedRegs
-                },
-                ArgsForTailCall,
-                0
-            ),
-            State3 = tail_call_with_jit_state_registers_only(State1, Temp)
-    end,
-    State3#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State4 =
+        case Args1 of
+            [Arg1, Arg2, Arg3, Arg4, Arg5 | Arg6L] ->
+                State2 =
+                    case Arg6L of
+                        [Arg6] ->
+                            set_stack_args(State1, Arg5, Arg6);
+                        [] ->
+                            set_stack_args(State1, Arg5, undefined)
+                    end,
+                State3 = set_registers_args(State2, [Arg1, Arg2, Arg3, Arg4], 8),
+                #state{stream = Stream2} = State3,
+                % Call the function pointer directly
+                Call = jit_armv6m_asm:blx(Temp),
+                Stream3 = StreamModule:append(Stream2, Call),
+                % Deallocate stack space that was allocated for 5+ arguments
+                DeallocateArgs = jit_armv6m_asm:add(sp, sp, 8),
+                Stream4 = StreamModule:append(Stream3, DeallocateArgs),
+                % Return: pop prolog registers and return
+                PopCode = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
+                Stream5 = StreamModule:append(Stream4, PopCode),
+                State3#state{stream = Stream5};
+            [FirstArg, jit_state | ArgsT] ->
+                % For 4 or fewer args, use tail call
+                ArgsForTailCall = [FirstArg, jit_state_tail_call | ArgsT],
+                State2 = set_registers_args(State1, ArgsForTailCall, 0),
+                tail_call_with_jit_state_registers_only(State2, Temp)
+        end,
+    State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Tail call to address in register, restoring prolog registers including
@@ -1423,29 +1435,22 @@ call_func_ptr(
     % Set up arguments following ARM AAPCS calling convention
     % First four args are passed in r0-r4, but 5th and 6th are passed
     % on the stack.
+    Args1 = lists:map(
+        fun(Arg) ->
+            case Arg of
+                offset -> StreamModule:offset(Stream1);
+                _ -> Arg
+            end
+        end,
+        Args
+    ),
     {RegArgs, StackArgs} =
-        case Args of
+        case Args1 of
             [Arg1, Arg2, Arg3, Arg4 | StackArgs0] -> {[Arg1, Arg2, Arg3, Arg4], StackArgs0};
             _ -> {Args, []}
         end,
-    RegArgsRegs = lists:flatmap(
-        fun
-            ({free, {ptr, Reg}}) -> [Reg];
-            ({free, Reg}) when is_atom(Reg) -> [Reg];
-            (Reg) when is_atom(Reg) -> [Reg];
-            (_) -> []
-        end,
-        RegArgs
-    ),
-    StackArgsRegs = lists:flatmap(
-        fun
-            ({free, {ptr, Reg}}) -> [Reg];
-            ({free, Reg}) when is_atom(Reg) -> [Reg];
-            (Reg) when is_atom(Reg) -> [Reg];
-            (_) -> []
-        end,
-        StackArgs
-    ),
+    RegArgsRegs = lists:flatmap(fun arg_to_reg_list/1, RegArgs),
+    StackArgsRegs = lists:flatmap(fun arg_to_reg_list/1, StackArgs),
 
     % We pushed registers to stack, so we can use these registers we saved
     % and the currently available registers to push values to the stack.
@@ -1458,31 +1463,22 @@ call_func_ptr(
     State2 =
         case StackArgs of
             [] -> State1;
-            [Arg5] -> set_args_push_stack(State1, Arg5, undefined);
-            [Arg5, Args6] -> set_args_push_stack(State1, Arg5, Args6)
+            [Arg5] -> set_stack_args(State1, Arg5, undefined);
+            [Arg5, Args6] -> set_stack_args(State1, Arg5, Args6)
         end,
 
     SetArgsRegsOnlyAvailableArgs = State2#state.available_regs,
-    ParameterRegs = parameter_regs(Args),
+    ParameterRegs = parameter_regs(RegArgs),
     {Stream3, SetArgsAvailableRegs, FuncPtrReg} =
         case FuncPtrTuple of
             {free, FuncPtrReg0} ->
                 % If FuncPtrReg is in parameter regs, we must swap it with a free reg.
                 case lists:member(FuncPtrReg0, ParameterRegs) of
                     true ->
-                        case SetArgsRegsOnlyAvailableArgs of
-                            [] ->
-                                io:format(
-                                    "UsedRegs1 = ~p\nAvailableRegs0 = ~p\nArgs = ~p\nSavedRegs = ~p\nFuncPtrReg0 = ~p\n",
-                                    [UsedRegs1, AvailableRegs0, Args, SavedRegs, FuncPtrReg0]
-                                );
-                            _ ->
-                                ok
-                        end,
                         [FuncPtrReg1 | _] = SetArgsRegsOnlyAvailableArgs,
                         MovInstr = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
                         SetArgsAvailableArgs1 =
-                            SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1] ++ [FuncPtrReg0],
+                            (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++ [FuncPtrReg0],
                         {
                             StreamModule:append(State2#state.stream, MovInstr),
                             SetArgsAvailableArgs1,
@@ -1506,13 +1502,12 @@ call_func_ptr(
         stream = Stream3
     },
 
-    % Exclude argument registers from available_regs to prevent mov_immediate from overwriting them
     StackOffset =
         case StackArgs of
             [] -> length(SavedRegs) * 4;
             _ -> length(SavedRegs) * 4 + 8
         end,
-    State4 = set_args_registers_only(State3, RegArgs, StackOffset),
+    State4 = set_registers_args(State3, RegArgs, ParameterRegs, StackOffset),
     Stream4 = State4#state.stream,
 
     % Call the function pointer (using BLX for call with return)
@@ -1569,6 +1564,11 @@ call_func_ptr(
         ResultReg
     }.
 
+arg_to_reg_list({free, {ptr, Reg}}) -> [Reg];
+arg_to_reg_list({free, Reg}) when is_atom(Reg) -> [Reg];
+arg_to_reg_list(Reg) when is_atom(Reg) -> [Reg];
+arg_to_reg_list(_) -> [].
+
 push_registers(SavedRegs, StreamModule, Stream0) when length(SavedRegs) > 0 ->
     StreamModule:append(Stream0, jit_armv6m_asm:push(SavedRegs));
 push_registers([], _StreamModule, Stream0) ->
@@ -1580,27 +1580,10 @@ pop_registers(SavedRegs, StreamModule, Stream0) when length(SavedRegs) > 0 ->
 pop_registers([], _StreamModule, Stream0) ->
     Stream0.
 
--spec set_args(state(), [arg()], non_neg_integer()) -> state().
-% Handle 5 parameters: handle 5th on stack first, then first 4 in registers r0-r3
-set_args(State, [Arg1, Arg2, Arg3, Arg4, Arg5], StackOffset) ->
-    % Handle 5th argument on stack first (with alignment) - this may free registers
-    State1 = set_args_push_stack(State, Arg5, undefined),
-    % Then set up first 4 arguments in registers using existing logic
-    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset + 8);
-% Handle 6 parameters: handle 5th and 6th on stack first, then first 4 in registers r0-r3
-set_args(State, [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6], StackOffset) ->
-    % Handle 5th and 6th arguments on stack first (no alignment needed) - this may free registers
-    State1 = set_args_push_stack(State, Arg5, Arg6),
-    % Then set up first 4 arguments in registers using existing logic
-    set_args_registers_only(State1, [Arg1, Arg2, Arg3, Arg4], StackOffset + 8);
-% Handle up to 4 parameters: all in registers r0-r3
-set_args(State, Args, StackOffset) when length(Args) =< 4 ->
-    set_args_registers_only(State, Args, StackOffset).
-
 %% @doc Handle 5th and optionally 6th arguments on stack.
 %% For 5 args: push 5th arg at sp+0 with 4-byte padding at sp+4 for 8-byte alignment
 %% For 6 args: push 5th arg at sp+0, 6th arg at sp+4 (2×4 bytes = 8-byte aligned, no padding)
-set_args_push_stack(
+set_stack_args(
     #state{stream_module = StreamModule, stream = Stream0} = State0, Arg5, Arg6
 ) ->
     % Decrement stack pointer by 8 bytes once
@@ -1659,24 +1642,21 @@ set_args_push_stack(
         end,
     State2.
 
-set_args_registers_only(
-    #state{stream = Stream0, stream_module = StreamModule, used_regs = UsedRegs} = State0,
+set_registers_args(State0, Args, StackOffset) ->
+    ParamRegs = parameter_regs(Args),
+    set_registers_args(State0, Args, ParamRegs, StackOffset).
+
+set_registers_args(
+    #state{used_regs = UsedRegs} = State0,
     Args,
+    ParamRegs,
     StackOffset
 ) ->
-    ParamRegs = parameter_regs(Args),
     ArgsRegs = args_regs(Args),
-    AvailableScratchGP =
-        ?SCRATCH_REGS -- ParamRegs -- ArgsRegs -- UsedRegs,
-    Offset = StreamModule:offset(Stream0),
-    Args1 = [
-        case Arg of
-            offset -> Offset;
-            _ -> Arg
-        end
-     || Arg <- Args
-    ],
-    State1 = set_args0(State0, Args1, ArgsRegs, ParamRegs, AvailableScratchGP, StackOffset),
+    AvailableScratchGP = ((?SCRATCH_REGS -- ParamRegs) -- ArgsRegs) -- UsedRegs,
+    State1 = set_registers_args0(
+        State0, Args, ArgsRegs, ParamRegs, AvailableScratchGP, StackOffset
+    ),
     Stream1 = State1#state.stream,
     NewUsedRegs = lists:foldl(
         fun
@@ -1696,55 +1676,17 @@ set_args_registers_only(
 parameter_regs(Args) ->
     parameter_regs0(Args, ?PARAMETER_REGS, []).
 
-% AAPCS32 helper: align to even register for 64-bit arguments
-
-% r0 is even, use (r0,r1)
-align_to_even_register([r0, r1 | Rest]) -> [r0, r1 | Rest];
-% r1 is odd, skip to (r2,r3)
-align_to_even_register([r1, r2 | Rest]) -> [r2, r3 | Rest];
-% r2 is even, use (r2,r3)
-align_to_even_register([r2, r3 | Rest]) -> [r2, r3 | Rest];
-% r3 is odd, no pair available
-align_to_even_register([r3]) -> [];
-% No registers available
-align_to_even_register([]) -> [];
-% Other cases
-align_to_even_register(_) -> [].
-
+% AAPCS32: 64-bit arguments require double-word alignment (even register number)
 parameter_regs0([], _, Acc) ->
     lists:reverse(Acc);
-parameter_regs0([Special | T], [GPReg | GPRegsT], Acc) when
-    Special =:= ctx orelse Special =:= jit_state orelse Special =:= jit_state_tail_call orelse
-        Special =:= offset
-->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-parameter_regs0([{free, Free} | T], GPRegs, Acc) ->
-    parameter_regs0([Free | T], GPRegs, Acc);
-parameter_regs0([{ptr, Reg} | T], [GPReg | GPRegsT], Acc) when ?IS_GPR(Reg) ->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-parameter_regs0([Reg | T], [GPReg | GPRegsT], Acc) when ?IS_GPR(Reg) ->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-parameter_regs0([{x_reg, _} | T], [GPReg | GPRegsT], Acc) ->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-parameter_regs0([{y_reg, _} | T], [GPReg | GPRegsT], Acc) ->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-parameter_regs0([{fp_reg, _} | T], [GPRegA, GPRegB | GPRegsT], Acc) ->
-    parameter_regs0(T, GPRegsT, [GPRegB, GPRegA | Acc]);
-parameter_regs0([Int | T], [GPReg | GPRegsT], Acc) when is_integer(Int) ->
-    parameter_regs0(T, GPRegsT, [GPReg | Acc]);
-% AAPCS32: 64-bit arguments require double-word alignment (even register number)
-parameter_regs0([{avm_int64_t, _} | T], GPRegs, Acc) ->
-    % Find the next even-numbered register position for AAPCS32 alignment
-    case align_to_even_register(GPRegs) of
-        [GPRegA, GPRegB | GPRegsT] ->
-            parameter_regs0(T, GPRegsT, [GPRegB, GPRegA | Acc]);
-        _ ->
-            % Not enough registers available, use stack
-            parameter_regs0(T, [], [stack, stack | Acc])
-    end;
-% Handle stack parameters when we run out of registers
-parameter_regs0([_Arg | T], [], Acc) ->
-    parameter_regs0(T, [], [stack | Acc]).
+parameter_regs0([{avm_int64_t, _} | T], [r0, r1 | Rest], Acc) ->
+    parameter_regs0(T, Rest, [r1, r0 | Acc]);
+parameter_regs0([{avm_int64_t, _} | T], [r1, r2, r3 | Rest], Acc) ->
+    parameter_regs0(T, Rest, [r3, r2 | Acc]);
+parameter_regs0([{avm_int64_t, _} | T], [r2, r3 | Rest], Acc) ->
+    parameter_regs0(T, Rest, [r3, r2 | Acc]);
+parameter_regs0([_Other | T], [Reg | Rest], Acc) ->
+    parameter_regs0(T, Rest, [Reg | Acc]).
 
 replace_reg(Args, Reg1, Reg2) ->
     replace_reg0(Args, Reg1, Reg2, []).
@@ -1756,133 +1698,113 @@ replace_reg0([{free, Reg} | T], Reg, Replacement, Acc) ->
 replace_reg0([Other | T], Reg, Replacement, Acc) ->
     replace_reg0(T, Reg, Replacement, [Other | Acc]).
 
-set_args0(State, [], [], [], _AvailGP, _StackOffset) ->
+set_registers_args0(State, [], [], [], _AvailGP, _StackOffset) ->
     State;
-set_args0(State, [{free, FreeVal} | ArgsT], ArgsRegs, ParamRegs, AvailGP, StackOffset) ->
-    set_args0(State, [FreeVal | ArgsT], ArgsRegs, ParamRegs, AvailGP, StackOffset);
-set_args0(
+set_registers_args0(State, [{free, FreeVal} | ArgsT], ArgsRegs, ParamRegs, AvailGP, StackOffset) ->
+    set_registers_args0(State, [FreeVal | ArgsT], ArgsRegs, ParamRegs, AvailGP, StackOffset);
+set_registers_args0(
     State, [ctx | ArgsT], [?CTX_REG | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, StackOffset
 ) ->
-    set_args0(State, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
-set_args0(
-    #state{stream_module = StreamModule, stream = Stream0} = State,
-    [jit_state | ArgsT],
-    [jit_state | ArgsRegs],
-    [ParamReg | ParamRegs],
-    AvailGP,
-    StackOffset
-) ->
-    % jit_state is loaded from a fixed stack location, so we don't need to check
-    % for register conflicts like other arguments - it can overwrite any existing
-    % register content since it comes from stack
-    % After stack space allocation for parameters, jit_state is at higher offset
-    JitStateOffset = ?STACK_OFFSET_JITSTATE + StackOffset,
-    I = jit_armv6m_asm:ldr(ParamReg, {sp, JitStateOffset}),
-    Stream1 = StreamModule:append(Stream0, I),
-    set_args0(State#state{stream = Stream1}, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
-set_args0(
-    State,
-    [jit_state_tail_call | ArgsT],
-    [jit_state | ArgsRegs],
-    [ParamReg | ParamRegs],
-    AvailGP,
-    StackOffset
-) ->
-    false = lists:member(ParamReg, ArgsRegs),
-    % For tail calls, jit_state will be restored by pop - skip generating load instruction
-    set_args0(State, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
-% Handle stack parameters - load argument into temp register and push to stack
-set_args0(
-    #state{stream_module = StreamModule} = State,
-    [Arg | ArgsT],
-    [stack | ArgsRegs],
-    [stack | ParamRegs],
-    [TempReg | _] = AvailGP,
-    StackOffset
-) ->
-    % Generate code to set up argument in temp register
-    State1 = set_args1(State, Arg, TempReg),
-    % Decrement stack pointer by 4 bytes and store argument
-    DecSP = jit_armv6m_asm:sub(sp, sp, 4),
-    StoreInstr = jit_armv6m_asm:str(TempReg, {sp, 0}),
-    Stream1 = StreamModule:append(State1#state.stream, <<DecSP/binary, StoreInstr/binary>>),
-    set_args0(State1#state{stream = Stream1}, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
-% ctx is special as we need it to access x_reg/y_reg/fp_reg
-set_args0(State, [Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, StackOffset) ->
-    false = lists:member(?CTX_REG, ArgsRegs),
-    State1 = set_args1(State, Arg, ?CTX_REG),
-    set_args0(State1, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
+    set_registers_args0(State, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
 % Handle 64-bit arguments that need two registers according to AAPCS32
-set_args0(
+set_registers_args0(
     State,
     [{avm_int64_t, Value} | ArgsT],
-    [_ArgReg | ArgsRegs],
-    [ParamRegLo, ParamRegHi | ParamRegs],
+    ArgsRegs,
+    ParamRegs,
     AvailGP,
     StackOffset
 ) when is_integer(Value) ->
-    % Split the 64-bit value into two 32-bit parts
     LowPart = Value band 16#FFFFFFFF,
     HighPart = (Value bsr 32) band 16#FFFFFFFF,
-    % Set up the low 32 bits in the first register
-    State1 = set_args1(State, LowPart, ParamRegLo),
-    % Set up the high 32 bits in the second register
-    State2 = set_args1(State1, HighPart, ParamRegHi),
-    set_args0(State2, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
-set_args0(
-    #state{stream_module = StreamModule} = State,
+    set_registers_args0(
+        State, [LowPart, HighPart | ArgsT], [imm | ArgsRegs], ParamRegs, AvailGP, StackOffset
+    );
+% ctx is special as we need it to access x_reg/y_reg/fp_reg and we don't
+% want to replace it
+set_registers_args0(
+    State, [Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, StackOffset
+) ->
+    false = lists:member(?CTX_REG, ArgsRegs),
+    State1 = set_registers_args1(State, Arg, ?CTX_REG, StackOffset),
+    set_registers_args0(State1, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
+set_registers_args0(
+    #state{stream_module = StreamModule} = State0,
     [Arg | ArgsT],
-    [_ArgReg | ArgsRegs],
-    [ParamReg | ParamRegs],
-    [Avail | AvailGPT] = AvailGP,
+    [_ArgReg | ArgsRegsT],
+    [ParamReg | ParamRegsT],
+    AvailGP,
     StackOffset
 ) ->
-    State1 = set_args1(State, Arg, ParamReg),
-    case lists:member(ParamReg, ArgsRegs) of
+    case lists:member(ParamReg, ArgsRegsT) of
         false ->
-            set_args0(State1, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
+            State1 = set_registers_args1(State0, Arg, ParamReg, StackOffset),
+            set_registers_args0(State1, ArgsT, ArgsRegsT, ParamRegsT, AvailGP, StackOffset);
         true ->
+            [Avail | AvailGPT] = AvailGP,
             I = jit_armv6m_asm:mov(Avail, ParamReg),
-            Stream1 = StreamModule:append(State1#state.stream, I),
+            Stream1 = StreamModule:append(State0#state.stream, I),
+            State1 = set_registers_args1(
+                State0#state{stream = Stream1}, Arg, ParamReg, StackOffset
+            ),
             NewArgsT = replace_reg(ArgsT, ParamReg, Avail),
-            set_args0(
-                State1#state{stream = Stream1}, NewArgsT, ArgsRegs, ParamRegs, AvailGPT, StackOffset
+            set_registers_args0(
+                State1, NewArgsT, ArgsRegsT, ParamRegsT, AvailGPT, StackOffset
             )
     end.
 
-set_args1(State, Reg, Reg) ->
+set_registers_args1(State, Reg, Reg, _Offset) ->
     State;
-set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, extra}, Reg) ->
+set_registers_args1(
+    #state{stream_module = StreamModule, stream = Stream0} = State, jit_state, ParamReg, StackOffset
+) ->
+    JitStateOffset = ?STACK_OFFSET_JITSTATE + StackOffset,
+    I = jit_armv6m_asm:ldr(ParamReg, {sp, JitStateOffset}),
+    Stream1 = StreamModule:append(Stream0, I),
+    State#state{stream = Stream1};
+% For tail calls, jit_state will be restored by pop - skip generating load instruction
+set_registers_args1(State, jit_state_tail_call, r1, _StackOffset) ->
+    State;
+set_registers_args1(
+    #state{stream_module = StreamModule, stream = Stream0} = State,
+    {x_reg, extra},
+    Reg,
+    _StackOffset
+) ->
     I = jit_armv6m_asm:ldr(Reg, ?X_REG(?MAX_REG)),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
-set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, X}, Reg) ->
+set_registers_args1(
+    #state{stream_module = StreamModule, stream = Stream0} = State, {x_reg, X}, Reg, _StackOffset
+) ->
     I = jit_armv6m_asm:ldr(Reg, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
-set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Source}, Reg) ->
+set_registers_args1(
+    #state{stream_module = StreamModule, stream = Stream0} = State, {ptr, Source}, Reg, _StackOffset
+) ->
     I = jit_armv6m_asm:ldr(Reg, {Source, 0}),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
-set_args1(
+set_registers_args1(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = AvailRegs} = State,
     {y_reg, X},
-    Reg
+    Reg,
+    _StackOffset
 ) ->
     Code = ldr_y_reg(Reg, X, AvailRegs),
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
-set_args1(#state{stream_module = StreamModule, stream = Stream0} = State, ArgReg, Reg) when
+set_registers_args1(
+    #state{stream_module = StreamModule, stream = Stream0} = State, ArgReg, Reg, _StackOffset
+) when
     ?IS_GPR(ArgReg)
 ->
     I = jit_armv6m_asm:mov(Reg, ArgReg),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1};
-set_args1(State, Arg, Reg) when is_integer(Arg) ->
-    mov_immediate(State, Reg, Arg);
-set_args1(State, {avm_int64_t, Value}, Reg) when is_integer(Value) ->
-    % For now, just store the lower 32 bits - this needs proper AAPCS32 register pair support
-    mov_immediate(State, Reg, Value band 16#FFFFFFFF).
+set_registers_args1(State, Value, Reg, _StackOffset) when ?IS_SIGNED_OR_UNSIGNED_INT32_T(Value) ->
+    mov_immediate(State, Reg, Value).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a move to a vm register (x_reg, y_reg, fpreg or a pointer on x_reg)

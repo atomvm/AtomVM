@@ -209,7 +209,7 @@ call_ext_only_test() ->
         "  28:	2602      	movs	r6, #2\n"
         "  2a:	9600      	str	r6, [sp, #0]\n"
         "  2c:	9902      	ldr	r1, [sp, #8]\n"
-        "  2e:	222c      	movs	r2, #44	; 0x2c\n"
+        "  2e:	2220      	movs	r2, #32\n"
         "  30:	2302      	movs	r3, #2\n"
         "  32:	47b8      	blx	r7\n"
         "  34:	b002      	add	sp, #8\n"
@@ -251,7 +251,7 @@ call_ext_only_unaligned_test() ->
         "  28:	2602      	movs	r6, #2\n"
         "  2a:	9600      	str	r6, [sp, #0]\n"
         "  2c:	9902      	ldr	r1, [sp, #8]\n"
-        "  2e:	222c      	movs	r2, #44	; 0x2c\n"
+        "  2e:	2220      	movs	r2, #32\n"
         "  30:	2302      	movs	r3, #2\n"
         "  32:	47b8      	blx	r7\n"
         "  34:	b002      	add	sp, #8\n"
@@ -274,7 +274,7 @@ call_primitive_last_5_args_test() ->
         "   4:	b082      	sub	sp, #8\n"
         "   6:	9700      	str	r7, [sp, #0]\n"
         "   8:	9902      	ldr	r1, [sp, #8]\n"
-        "   a:	2208      	movs	r2, #8\n"
+        "   a:	2204      	movs	r2, #4\n"
         "   c:	4b00      	ldr	r3, [pc, #0]	; (0x10)\n"
         "   e:	e001      	b.n	0x14\n"
         "  10:	02cb      	lsrs	r3, r1, #16\n"
@@ -308,14 +308,14 @@ call_ext_last_test() ->
         "  1a:	46c0      	nop			; (mov r8, r8)\n"
         "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         % State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_CALL_EXT, [ctx, jit_state, offset, 2, 2, 10]),
-        "  1e:	6917      	ldr	r7, [r2, #16]\n"
+        "1e:	6917      	ldr	r7, [r2, #16]\n"
         "  20:	b082      	sub	sp, #8\n"
         "  22:	260a      	movs	r6, #10\n"
         "  24:	9601      	str	r6, [sp, #4]\n"
         "  26:	2602      	movs	r6, #2\n"
         "  28:	9600      	str	r6, [sp, #0]\n"
         "  2a:	9902      	ldr	r1, [sp, #8]\n"
-        "  2c:	222a      	movs	r2, #42	; 0x2a\n"
+        "  2c:	2220      	movs	r2, #32\n"
         "  2e:	2302      	movs	r3, #2\n"
         "  30:	47b8      	blx	r7\n"
         "  32:	b002      	add	sp, #8\n"
@@ -1911,7 +1911,7 @@ return_labels_and_lines_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-%% Test return_labels_and_lines/2 with unaligned offset - should fail
+%% Test return_labels_and_lines/2 with unaligned offset
 return_labels_and_lines_unaligned_test() ->
     % Create a new state with a 2-byte instruction already in the stream
     % to simulate starting at an odd offset (offset 2 instead of 0)
@@ -1952,7 +1952,7 @@ return_labels_and_lines_unaligned_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-%% Test call_primitive with {free, {x_reg, X}} that causes the jit_precompile bug
+%% Test call_primitive with {free, {x_reg, X}}
 gc_bif2_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, FuncPtr} = ?BACKEND:call_primitive(State0, ?PRIM_GET_IMPORTED_BIF, [jit_state, 42]),
@@ -1981,6 +1981,32 @@ gc_bif2_test() ->
         "  20:	4607      	mov	r7, r0\n"
         "  22:	b002      	add	sp, #8\n"
         "  24:	bc05      	pop	{r0, r2}"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test case where parameter value is in r1
+memory_ensure_free_with_roots_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, _FuncPtr} = ?BACKEND:call_primitive(State0, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+        ctx, jit_state, {free, r1}, 4, 1
+    ]),
+
+    Stream = ?BACKEND:stream(State1),
+    Dump = <<
+        "   0:	27b0      	movs	r7, #176	; 0xb0\n"
+        "   2:	59d7      	ldr	r7, [r2, r7]\n"
+        "   4:	b405      	push	{r0, r2}\n"
+        "   6:	b082      	sub	sp, #8\n"
+        "   8:	2601      	movs	r6, #1\n"
+        "   a:	9600      	str	r6, [sp, #0]\n"
+        "   c:	460e      	mov	r6, r1\n"
+        "   e:	9904      	ldr	r1, [sp, #16]\n"
+        "  10:	4632      	mov	r2, r6\n"
+        "  12:	2304      	movs	r3, #4\n"
+        "  14:	47b8      	blx	r7\n"
+        "  16:	4607      	mov	r7, r0\n"
+        "  18:	b002      	add	sp, #8\n"
+        "  1a:	bc05      	pop	{r0, r2}"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -2087,7 +2113,7 @@ call_fun_test() ->
         "  2e:	b082      	sub	sp, #8\n"
         "  30:	9600      	str	r6, [sp, #0]\n"
         "  32:	9902      	ldr	r1, [sp, #8]\n"
-        "  34:	2232      	movs	r2, #50	; 0x32\n"
+        "  34:	222e      	movs	r2, #46	; 0x2e\n"
         "  36:	4b01      	ldr	r3, [pc, #4]	; (0x3c)\n"
         "  38:	e002      	b.n	0x40\n"
         "  3a:	0000      	movs	r0, r0\n"
@@ -2108,7 +2134,7 @@ call_fun_test() ->
         "  58:	b082      	sub	sp, #8\n"
         "  5a:	9600      	str	r6, [sp, #0]\n"
         "  5c:	9902      	ldr	r1, [sp, #8]\n"
-        "  5e:	225c      	movs	r2, #92	; 0x5c\n"
+        "  5e:	2258      	movs	r2, #88	; 0x58\n"
         "  60:	4b00      	ldr	r3, [pc, #0]	; (0x64)\n"
         "  62:	e001      	b.n	0x68\n"
         "  64:	018b      	lsls	r3, r1, #6\n"
@@ -3252,13 +3278,14 @@ call_func_ptr_register_exhaustion_test_() ->
                             "   e:	b082      	sub	sp, #8\n"
                             "  10:	2401      	movs	r4, #1\n"
                             "  12:	9400      	str	r4, [sp, #0]\n"
-                            "  14:	9908      	ldr	r1, [sp, #32]\n"
-                            "  16:	461a      	mov	r2, r3\n"
-                            "  18:	460b      	mov	r3, r1\n"
-                            "  1a:	47b0      	blx	r6\n"
-                            "  1c:	4606      	mov	r6, r0\n"
-                            "  1e:	b002      	add	sp, #8\n"
-                            "  20:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
+                            "  14:	460f      	mov	r7, r1\n"
+                            "  16:	9908      	ldr	r1, [sp, #32]\n"
+                            "  18:	461a      	mov	r2, r3\n"
+                            "  1a:	463b      	mov	r3, r7\n"
+                            "  1c:	47b0      	blx	r6\n"
+                            "  1e:	4606      	mov	r6, r0\n"
+                            "  20:	b002      	add	sp, #8\n"
+                            "  22:	bcb7      	pop	{r0, r1, r2, r4, r5, r7}"
                         >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual(r6, ResultReg)
