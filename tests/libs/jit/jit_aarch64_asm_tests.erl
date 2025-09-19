@@ -46,6 +46,46 @@ add_test_() ->
         ),
         ?_assertAsmEqual(
             <<16#8b030041:32/little>>, "add x1, x2, x3", jit_aarch64_asm:add(r1, r2, r3)
+        ),
+        %% Test add with invalid immediate
+        ?_assertError({unencodable_immediate, 16#FFFF}, jit_aarch64_asm:add(r0, r0, 16#FFFF)),
+
+        %% Test cases for additional registers (r11, r12, r14, r22-r30)
+        ?_assertAsmEqual(
+            <<16#8b0b000b:32/little>>, "add x11, x0, x11", jit_aarch64_asm:add(r11, r0, r11)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b0c000c:32/little>>, "add x12, x0, x12", jit_aarch64_asm:add(r12, r0, r12)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b0e000e:32/little>>, "add x14, x0, x14", jit_aarch64_asm:add(r14, r0, r14)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b160016:32/little>>, "add x22, x0, x22", jit_aarch64_asm:add(r22, r0, r22)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b170017:32/little>>, "add x23, x0, x23", jit_aarch64_asm:add(r23, r0, r23)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b180018:32/little>>, "add x24, x0, x24", jit_aarch64_asm:add(r24, r0, r24)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b190019:32/little>>, "add x25, x0, x25", jit_aarch64_asm:add(r25, r0, r25)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b1a001a:32/little>>, "add x26, x0, x26", jit_aarch64_asm:add(r26, r0, r26)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b1b001b:32/little>>, "add x27, x0, x27", jit_aarch64_asm:add(r27, r0, r27)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b1c001c:32/little>>, "add x28, x0, x28", jit_aarch64_asm:add(r28, r0, r28)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b1d001d:32/little>>, "add x29, x0, x29", jit_aarch64_asm:add(r29, r0, r29)
+        ),
+        ?_assertAsmEqual(
+            <<16#8b1e001e:32/little>>, "add x30, x0, x30", jit_aarch64_asm:add(r30, r0, r30)
         )
     ].
 
@@ -208,7 +248,60 @@ mov_test_() ->
 
         % mov register
         ?_assertAsmEqual(<<16#AA0103E0:32/little>>, "mov x0, x1", jit_aarch64_asm:mov(r0, r1)),
-        ?_assertAsmEqual(<<16#AA0703E1:32/little>>, "mov x1, x7", jit_aarch64_asm:mov(r1, r7))
+        ?_assertAsmEqual(<<16#AA0703E1:32/little>>, "mov x1, x7", jit_aarch64_asm:mov(r1, r7)),
+
+        %% Test mov with zero immediate (should use movz with 0)
+        ?_assertAsmEqual(
+            <<16#d2800000:32/little>>, "movz x0, #0", jit_aarch64_asm:mov(r0, 0)
+        ),
+
+        %% Test 4-bit pattern encoding
+        ?_test(begin
+            Result = jit_aarch64_asm:mov(r0, 16#FFFFFFFFFFFF0000),
+            ?assert(is_binary(Result))
+        end),
+        %% Test complex immediate that will use fallback sequence
+        ?_test(begin
+            % This should be a complex immediate that can't be encoded as bitmask
+            % and needs fallback to build_immediate_sequence
+            Result = jit_aarch64_asm:mov(r0, 16#123456789ABCDEF0),
+            ?assert(is_binary(Result))
+        end),
+
+        %% Test negative immediate that uses build_negative_immediate fallback
+        ?_assertAsmEqual(
+            <<
+                16#d2842200:32/little,
+                16#f2aca860:32/little,
+                16#f2d530e0:32/little,
+                16#f2fdb960:32/little
+            >>,
+            "mov	x0, #0x2110\n"
+            "movk	x0, #0x6543, lsl #16\n"
+            "movk	x0, #0xa987, lsl #32\n"
+            "movk	x0, #0xedcb, lsl #48",
+            jit_aarch64_asm:mov(r0, -16#123456789ABCDEF0)
+        ),
+
+        %% Test bitmask patterns with different sizes
+        %% Size 16 pattern: repeats every 16 bits
+        ?_assertAsmEqual(
+            <<16#b20083e0:32/little>>,
+            "mov	x0, #0x0001000100010001",
+            jit_aarch64_asm:mov(r0, 16#0001000100010001)
+        ),
+        %% Size 4 pattern: repeats every 4 bits
+        ?_assertAsmEqual(
+            <<16#b200e7e0:32/little>>,
+            "mov	x0, #0x3333333333333333",
+            jit_aarch64_asm:mov(r0, 16#3333333333333333)
+        ),
+        %% Size 2 pattern: repeats every 2 bits
+        ?_assertAsmEqual(
+            <<16#b200f3e0:32/little>>,
+            "mov	x0, #0x5555555555555555",
+            jit_aarch64_asm:mov(r0, 16#5555555555555555)
+        )
     ].
 
 orr_test_() ->
@@ -223,7 +316,19 @@ orr_test_() ->
         ),
         ?_assertAsmEqual(
             <<16#AA020041:32/little>>, "orr x1, x2, x2", jit_aarch64_asm:orr(r1, r2, r2)
-        )
+        ),
+
+        %% Test orr with valid bitmask immediate
+        ?_assertAsmEqual(
+            <<16#b24007e0:32/little>>, "orr x0, xzr, #0x3", jit_aarch64_asm:orr(r0, xzr, 16#3)
+        ),
+        %% Test orr with another bitmask pattern
+        ?_assertAsmEqual(
+            <<16#b27f1fe0:32/little>>, "orr x0, xzr, #0x1fe", jit_aarch64_asm:orr(r0, xzr, 16#1fe)
+        ),
+
+        %% Test orr with unencodable immediate
+        ?_assertError({unencodable_immediate, 16#123456}, jit_aarch64_asm:orr(r0, r0, 16#123456))
     ].
 
 str_test_() ->
@@ -272,14 +377,29 @@ cmp_test_() ->
         ?_assertAsmEqual(<<16#EB01001F:32/little>>, "cmp x0, x1", jit_aarch64_asm:cmp(r0, r1)),
         % cmp reg, imm
         ?_assertAsmEqual(<<16#F100001F:32/little>>, "cmp x0, #0", jit_aarch64_asm:cmp(r0, 0)),
-        ?_assertAsmEqual(<<16#F103001F:32/little>>, "cmp x0, #192", jit_aarch64_asm:cmp(r0, 192))
+        ?_assertAsmEqual(<<16#F103001F:32/little>>, "cmp x0, #192", jit_aarch64_asm:cmp(r0, 192)),
+
+        %% Test large immediate compare (uses temporary register)
+        ?_test(begin
+            Result = jit_aarch64_asm:cmp(r0, 16#12345678),
+            ?assert(is_binary(Result)),
+            ?assert(byte_size(Result) > 4)
+        end)
     ].
 
 cmp_w_test_() ->
     [
         % cmp_w reg, imm
         ?_assertAsmEqual(<<16#7100001F:32/little>>, "cmp w0, #0", jit_aarch64_asm:cmp_w(r0, 0)),
-        ?_assertAsmEqual(<<16#7103001F:32/little>>, "cmp w0, #192", jit_aarch64_asm:cmp_w(r0, 192))
+        ?_assertAsmEqual(<<16#7103001F:32/little>>, "cmp w0, #192", jit_aarch64_asm:cmp_w(r0, 192)),
+
+        %% Test 32-bit compare with negative immediate
+        ?_assertAsmEqual(
+            <<16#3100041f:32/little>>, "adds wzr, w0, #1", jit_aarch64_asm:cmp_w(r0, -1)
+        ),
+        ?_assertAsmEqual(
+            <<16#31000c1f:32/little>>, "adds wzr, w0, #3", jit_aarch64_asm:cmp_w(r0, -3)
+        )
     ].
 
 and_test_() ->
@@ -311,6 +431,10 @@ and_test_() ->
             <<16#92785c83:32/little>>,
             "and x3, x4, #0xffffff00",
             jit_aarch64_asm:and_(r3, r4, 16#ffffff00)
+        ),
+        %% Test and_ with unencodable immediate
+        ?_assertError(
+            {unencodable_immediate, 16#123456}, jit_aarch64_asm:and_(r0, r0, 16#123456)
         )
     ].
 
@@ -349,7 +473,10 @@ tst_test_() ->
         ?_assertAsmEqual(<<16#f24014bf:32/little>>, "tst x5, #63", jit_aarch64_asm:tst(r5, 63)),
         ?_assertAsmEqual(<<16#f27b00df:32/little>>, "tst x6, #32", jit_aarch64_asm:tst(r6, 32)),
         ?_assertAsmEqual(<<16#f27a00ff:32/little>>, "tst x7, #64", jit_aarch64_asm:tst(r7, 64)),
-        ?_assertAsmEqual(<<16#f27e051f:32/little>>, "tst x8, #0xc", jit_aarch64_asm:tst(r8, 16#c))
+        ?_assertAsmEqual(<<16#f27e051f:32/little>>, "tst x8, #0xc", jit_aarch64_asm:tst(r8, 16#c)),
+
+        %% Test tst with unencodable immediate
+        ?_assertError({unencodable_immediate, 16#123456}, jit_aarch64_asm:tst(r0, 16#123456))
     ].
 
 tst_w_test_() ->
@@ -364,7 +491,12 @@ tst_w_test_() ->
         ?_assertAsmEqual(<<16#720014bf:32/little>>, "tst w5, #63", jit_aarch64_asm:tst_w(r5, 63)),
         ?_assertAsmEqual(<<16#721b00df:32/little>>, "tst w6, #32", jit_aarch64_asm:tst_w(r6, 32)),
         ?_assertAsmEqual(<<16#721a00ff:32/little>>, "tst w7, #64", jit_aarch64_asm:tst_w(r7, 64)),
-        ?_assertAsmEqual(<<16#721e051f:32/little>>, "tst w8, #0xc", jit_aarch64_asm:tst_w(r8, 16#c))
+        ?_assertAsmEqual(
+            <<16#721e051f:32/little>>, "tst w8, #0xc", jit_aarch64_asm:tst_w(r8, 16#c)
+        ),
+
+        %% Test tst_w with unencodable immediate
+        ?_assertError({unencodable_immediate, 16#123456}, jit_aarch64_asm:tst_w(r0, 16#123456))
     ].
 
 bcc_test_() ->
@@ -385,7 +517,8 @@ bcc_test_() ->
         ?_assertAsmEqual(<<16#5400040c:32/little>>, "b.gt 128", jit_aarch64_asm:bcc(gt, 128)),
         ?_assertAsmEqual(<<16#5400040d:32/little>>, "b.le 128", jit_aarch64_asm:bcc(le, 128)),
         ?_assertAsmEqual(<<16#5400040e:32/little>>, "b.al 128", jit_aarch64_asm:bcc(al, 128)),
-        ?_assertAsmEqual(<<16#5400040f:32/little>>, "b.nv 128", jit_aarch64_asm:bcc(nv, 128))
+        ?_assertAsmEqual(<<16#5400040f:32/little>>, "b.nv 128", jit_aarch64_asm:bcc(nv, 128)),
+        ?_assertAsmEqual(<<16#54000007:32/little>>, "b.vc .+0", jit_aarch64_asm:bcc(vc, 0))
     ].
 
 cbnz_test_() ->
@@ -503,4 +636,12 @@ adr_test_() ->
         ),
         %% ADR with offset not a multiple of 4 is valid
         ?_assertAsmEqual(<<16#70000000:32/little>>, "adr x0, .+3", jit_aarch64_asm:adr(r0, 3))
+    ].
+
+%% Test nop instruction
+nop_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#d503201f:32/little>>, "nop", jit_aarch64_asm:nop()
+        )
     ].
