@@ -149,14 +149,19 @@ macro(pack_lib avm_name)
         COMMENT "Packing lib ${avm_name}.avm"
         VERBATIM
     )
+    set(target_deps ${avm_name}.avm)
+
     if(NOT AVM_DISABLE_JIT)
-        add_custom_command(
-            OUTPUT ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm
-            DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
-            COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
-            COMMENT "Packing lib ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm"
-            VERBATIM
-        )
+        foreach(jit_target_arch x86_64 aarch64 armv6m)
+            add_custom_command(
+                OUTPUT ${avm_name}-${jit_target_arch}.avm
+                DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
+                COMMENT "Packing lib ${avm_name}-${jit_target_arch}.avm"
+                VERBATIM
+            )
+            set(target_deps ${target_deps} ${avm_name}-${jit_target_arch}.avm)
+        endforeach()
     endif()
     add_custom_command(
         OUTPUT ${avm_name}-pico.uf2
@@ -165,7 +170,6 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-
     add_custom_command(
         OUTPUT ${avm_name}-pico2.uf2
         DEPENDS ${avm_name}.avm UF2Tool
@@ -173,9 +177,24 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-    set(target_deps ${avm_name}.avm ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
+    set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
+
     if(NOT AVM_DISABLE_JIT)
-        set(target_deps ${target_deps} ${avm_name}-${AVM_JIT_TARGET_ARCH}.avm)
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico.uf2 -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico2.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
     endif()
 
     add_custom_target(
