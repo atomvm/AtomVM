@@ -129,6 +129,7 @@ extern "C" {
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
+#define TERM_STRING_SIZE(length) (2 * (length))
 #define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
 #define TERM_MAP_SHARED_SIZE(num_elements) (2 + (num_elements))
 
