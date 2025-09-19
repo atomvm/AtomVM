@@ -1526,9 +1526,9 @@ call_func_ptr(
     {Stream6, UsedRegs2} =
         case length(SavedRegs) of
             8 when element(1, FuncPtrTuple) =:= free ->
-                % We use FuncPtrReg then as we know it's available.
+                % We use original FuncPtrReg then as we know it's available.
                 % Calculate stack offset: register number * 4 bytes
-                ResultReg = FuncPtrReg,
+                ResultReg = element(2, FuncPtrTuple),
                 StoreResultStackOffset = jit_armv6m_asm:reg_to_num(ResultReg) * 4,
                 StoreResult = jit_armv6m_asm:str(r0, {sp, StoreResultStackOffset}),
                 {StreamModule:append(Stream5, StoreResult), [ResultReg | UsedRegs1]};
