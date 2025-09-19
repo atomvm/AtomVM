@@ -291,22 +291,16 @@ build_negative_immediate(Dst, ImmB) ->
 -spec build_immediate_sequence(aarch64_gpr_register(), [integer()]) -> binary().
 build_immediate_sequence(Dst, [C0, C1, C2, C3]) ->
     %% Find the first non-zero chunk to start with MOVZ
-    case find_first_nonzero_chunk([C0, C1, C2, C3]) of
-        {Index, Value} ->
-            First = movz(Dst, Value, Index * 16),
-            Rest = build_movk_sequence(Dst, [C0, C1, C2, C3], Index),
-            <<First/binary, Rest/binary>>;
-        none ->
-            %% All chunks are zero
-            movz(Dst, 0, 0)
-    end.
+    {Index, Value} = find_first_nonzero_chunk([C0, C1, C2, C3]),
+    First = movz(Dst, Value, Index * 16),
+    Rest = build_movk_sequence(Dst, [C0, C1, C2, C3], Index),
+    <<First/binary, Rest/binary>>.
 
 %% Find the first non-zero chunk
 -spec find_first_nonzero_chunk([integer()]) -> {integer(), integer()} | none.
 find_first_nonzero_chunk(Chunks) ->
     find_first_nonzero_chunk(Chunks, 0).
 
-find_first_nonzero_chunk([], _) -> none;
 find_first_nonzero_chunk([0 | Rest], Index) -> find_first_nonzero_chunk(Rest, Index + 1);
 find_first_nonzero_chunk([Chunk | _], Index) -> {Index, Chunk}.
 
@@ -469,8 +463,6 @@ find_single_run_of_ones(Pattern, Size) ->
 find_ones_run([], _, OnesCount, StartPos, in_ones) when OnesCount > 0 ->
     %% Reached end while in ones run
     {ok, OnesCount, StartPos};
-find_ones_run([], _, _, _, _) ->
-    error;
 find_ones_run([1 | Rest], Pos, 0, _, none) ->
     %% Start of ones run
     find_ones_run(Rest, Pos + 1, 1, Pos, in_ones);
