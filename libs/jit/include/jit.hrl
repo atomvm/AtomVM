@@ -25,5 +25,6 @@
 -define(JIT_ARCH_ARMV6M, 3).
 
 -define(JIT_VARIANT_PIC, 1).
+-define(JIT_VARIANT_FLOAT32, 2).
 
 -define(MAX_REG, 16).

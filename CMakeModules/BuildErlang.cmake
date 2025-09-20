@@ -70,7 +70,9 @@ macro(pack_precompiled_archive avm_name)
         else()
             set(jit_deps "jit")
         endif()
-        foreach(jit_target_arch x86_64 aarch64 armv6m)
+        foreach(jit_target_arch_variant x86_64 aarch64 armv6m "armv6m+float32")
+            # Extract base architecture for module dependencies
+            string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
             set(jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
@@ -82,14 +84,14 @@ macro(pack_precompiled_archive avm_name)
 
             foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
                 add_custom_command(
-                    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch}/${module_name}.beam
-                    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch}/
-                        && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${jit_target_arch} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
+                    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam
+                    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/
+                        && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${jit_target_arch_variant} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
                     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam ${jit_compiler_modules} ${jit_deps}
-                    COMMENT "Compiling ${module_name}.beam to ${jit_target_arch}"
+                    COMMENT "Compiling ${module_name}.beam to ${jit_target_arch_variant}"
                     VERBATIM
                 )
-                set(pack_precompile_archive_${avm_name}_beams ${pack_precompile_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch}/${module_name}.beam)
+                set(pack_precompile_archive_${avm_name}_beams ${pack_precompile_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam)
             endforeach()
 
             if(AVM_RELEASE)
@@ -99,17 +101,17 @@ macro(pack_precompiled_archive avm_name)
             endif()
 
             add_custom_command(
-                OUTPUT ${avm_name}-${jit_target_arch}.avm
+                OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
                 DEPENDS ${pack_precompile_archive_${avm_name}_beams} PackBEAM
-                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch}.avm ${pack_precompile_archive_${avm_name}_beams}
-                COMMENT "Packing archive ${avm_name}-${jit_target_arch}.avm"
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_precompile_archive_${avm_name}_beams}
+                COMMENT "Packing archive ${avm_name}-${jit_target_arch_variant}.avm"
                 VERBATIM
             )
             add_custom_target(
-                ${avm_name}_${jit_target_arch} ALL
-                DEPENDS ${avm_name}-${jit_target_arch}.avm
+                ${avm_name}_${jit_target_arch_variant} ALL
+                DEPENDS ${avm_name}-${jit_target_arch_variant}.avm
             )
-            add_dependencies(${avm_name} ${avm_name}_${jit_target_arch})
+            add_dependencies(${avm_name} ${avm_name}_${jit_target_arch_variant})
         endforeach()
     endif()
 endmacro()
@@ -152,15 +154,15 @@ macro(pack_lib avm_name)
     set(target_deps ${avm_name}.avm)
 
     if(NOT AVM_DISABLE_JIT)
-        foreach(jit_target_arch x86_64 aarch64 armv6m)
+        foreach(jit_target_arch_variant x86_64 aarch64 armv6m "armv6m+float32")
             add_custom_command(
-                OUTPUT ${avm_name}-${jit_target_arch}.avm
+                OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
                 DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
-                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
-                COMMENT "Packing lib ${avm_name}-${jit_target_arch}.avm"
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
+                COMMENT "Packing lib ${avm_name}-${jit_target_arch_variant}.avm"
                 VERBATIM
             )
-            set(target_deps ${target_deps} ${avm_name}-${jit_target_arch}.avm)
+            set(target_deps ${target_deps} ${avm_name}-${jit_target_arch_variant}.avm)
         endforeach()
     endif()
     add_custom_command(

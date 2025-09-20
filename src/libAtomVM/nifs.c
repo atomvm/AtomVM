@@ -208,6 +208,7 @@ static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
 static term nif_jit_backend_module(Context *ctx, int argc, term argv[]);
+static term nif_jit_variant(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_maps_from_keys(Context *ctx, int argc, term argv[]);
@@ -789,6 +790,11 @@ static const struct Nif nif_error_nif = {
 static const struct Nif jit_backend_module_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_jit_backend_module
+};
+
+static const struct Nif jit_variant_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_jit_variant
 };
 #endif
 
@@ -5659,6 +5665,19 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_ARMV6M_ATOM;
 #else
 #error Unknown JIT target
+#endif
+}
+
+static term nif_jit_variant(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+#ifdef AVM_USE_SINGLE_PRECISION
+    return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
+#else
+    return term_from_int(JIT_VARIANT_PIC);
 #endif
 }
 #endif
