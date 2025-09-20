@@ -694,6 +694,21 @@ jmp_rel8_test_() ->
         ?_assertEqual({1, dump_to_bin(<<"0: eb 05   jmp    7 <x>">>)}, jit_x86_64_asm:jmp_rel8(5))
     ].
 
+jmp_test_() ->
+    [
+        % Test short jump (8-bit)
+        ?_assertEqual(dump_to_bin(<<"0: eb 05   jmp    7 <x>">>), jit_x86_64_asm:jmp(5)),
+        ?_assertEqual(dump_to_bin(<<"0: eb 7f   jmp    81 <x>">>), jit_x86_64_asm:jmp(127)),
+        ?_assertEqual(dump_to_bin(<<"0: eb 80   jmp    ffffff82 <x>">>), jit_x86_64_asm:jmp(-128)),
+        % Test near jump (32-bit)
+        ?_assertEqual(
+            dump_to_bin(<<"0: e9 80 00 00 00   jmp    85 <x>">>), jit_x86_64_asm:jmp(128)
+        ),
+        ?_assertEqual(
+            dump_to_bin(<<"0: e9 7f ff ff ff   jmp    ffffff84 <x>">>), jit_x86_64_asm:jmp(-129)
+        )
+    ].
+
 andb_test_() ->
     [
         ?_assertEqual(
