@@ -749,14 +749,25 @@ return_if_not_equal_to_ctx(
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State, Label
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, labels = Labels} =
+        State,
+    Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    % Placeholder offset, will be patched
-    I1 = jit_armv6m_asm:b(0),
-    Reloc = {Label, Offset, b},
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct branch without relocation
+            Rel = LabelOffset - Offset,
+            I1 = jit_armv6m_asm:b(Rel),
+            Stream1 = StreamModule:append(Stream0, I1),
+            State#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            I1 = jit_armv6m_asm:b(0),
+            Reloc = {Label, Offset, b},
+            Stream1 = StreamModule:append(Stream0, I1),
+            State#state{stream = Stream1, branches = [Reloc | AccBranches]}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
