@@ -915,10 +915,8 @@ first_pass(<<?OP_FMOVE, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt3 = MMod:free_native_registers(MSt2, [ResultReg]),
     {MSt4, Reg} = MMod:move_to_native_register(MSt3, SrcValue),
     MSt5 = MMod:and_(MSt4, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt6 = MMod:move_array_element(MSt5, Reg, 1, Reg),
-    MSt7 = MMod:move_to_vm_register(MSt6, Reg, FPReg),
-    MSt8 = MMod:free_native_registers(MSt7, [Reg]),
-    first_pass(Rest2, MMod, MSt8, State0);
+    MSt6 = MMod:move_to_vm_register(MSt5, {free, {ptr, Reg, 1}}, FPReg),
+    first_pass(Rest2, MMod, MSt6, State0);
 % 97
 first_pass(<<?OP_FCONV, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
