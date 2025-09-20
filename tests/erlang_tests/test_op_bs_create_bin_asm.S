@@ -31,12 +31,13 @@
     {bs_create_bin_integer_no_fail, 3},
     {bs_create_bin_integer_fail, 3},
     {bs_create_bin_binary_no_fail, 3},
-    {bs_create_bin_binary_fail, 3}
+    {bs_create_bin_binary_fail, 3},
+    {bs_create_bin_alloc_list, 1}
 ]}.
 
 {attributes, []}.
 
-{labels, 26}.
+{labels, 28}.
 
 {function, bs_create_bin_utf8_no_fail, 3, 2}.
 {label, 1}.
@@ -121,4 +122,13 @@ return.
 return.
 {label, 26}.
 {move, {atom, fail}, {x, 0}}.
+return.
+
+{function, bs_create_bin_alloc_list, 1, 28}.
+{label, 27}.
+{func_info, {atom, test_op_bs_create_bin_asm}, {atom, bs_create_bin_alloc_list}, 1}.
+{label, 28}.
+%% Test bs_create_bin with allocator list instead of simple literal
+{bs_create_bin, {f, 0}, {alloc, [{words, 2}, {floats, 1}, {funs, 1}]}, 1, 1, {x, 0},
+    {list, [{atom, integer}, 1, 1, nil, {x, 0}, {integer, 32}]}}.
 return.
