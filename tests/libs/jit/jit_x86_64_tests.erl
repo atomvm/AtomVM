@@ -1344,6 +1344,21 @@ move_to_vm_register_test_() ->
                         "   0:	48 c7 47 30 ff ff ff 	movq   $0xffffffffffffffff,0x30(%rdi)\n"
                         "   7:	ff "
                     >>)
+                end),
+                %% Test: ptr with offset to fp_reg (term_to_float)
+                ?_test(begin
+                    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+                    State2 = ?BACKEND:move_to_vm_register(
+                        State1, {free, {ptr, RegA, 1}}, {fp_reg, 3}
+                    ),
+                    Stream = ?BACKEND:stream(State2),
+                    Dump = <<
+                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   4:	48 8b 40 08          	mov    0x8(%rax),%rax\n"
+                        "   8:	4c 8b 9f c0 00 00 00 	mov    0xc0(%rdi),%r11\n"
+                        "   f:	49 89 43 18          	mov    %rax,0x18(%r11)"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream)
                 end)
             ]
         end}.

@@ -579,62 +579,6 @@ leaq_test_() ->
         )
     ].
 
-movsd_test_() ->
-    [
-        ?_assertEqual(
-            dump_to_bin(<<"0:	f2 0f 10 00          	movsd  (%rax),%xmm0">>),
-            jit_x86_64_asm:movsd({0, rax}, xmm0)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"4:	f2 0f 10 09          	movsd  (%rcx),%xmm1">>),
-            jit_x86_64_asm:movsd({0, rcx}, xmm1)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"8:	f2 0f 10 12          	movsd  (%rdx),%xmm2">>),
-            jit_x86_64_asm:movsd({0, rdx}, xmm2)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"c:	f2 0f 10 1e          	movsd  (%rsi),%xmm3">>),
-            jit_x86_64_asm:movsd({0, rsi}, xmm3)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"10:	f2 0f 10 27          	movsd  (%rdi),%xmm4">>),
-            jit_x86_64_asm:movsd({0, rdi}, xmm4)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"14:	f2 0f 10 28          	movsd  (%rax),%xmm5">>),
-            jit_x86_64_asm:movsd({0, rax}, xmm5)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"18:	f2 0f 10 31          	movsd  (%rcx),%xmm6">>),
-            jit_x86_64_asm:movsd({0, rcx}, xmm6)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"1c:	f2 0f 10 3a          	movsd  (%rdx),%xmm7">>),
-            jit_x86_64_asm:movsd({0, rdx}, xmm7)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"20:	f2 41 0f 10 00       	movsd  (%r8),%xmm0">>),
-            jit_x86_64_asm:movsd({0, r8}, xmm0)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"4d:	f2 0f 10 40 08       	movsd  0x8(%rax),%xmm0">>),
-            jit_x86_64_asm:movsd({8, rax}, xmm0)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"52:	f2 0f 10 48 10       	movsd  0x10(%rax),%xmm1">>),
-            jit_x86_64_asm:movsd({16, rax}, xmm1)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"57:	f2 41 0f 10 40 20    	movsd  0x20(%r8),%xmm0">>),
-            jit_x86_64_asm:movsd({32, r8}, xmm0)
-        ),
-        ?_assertEqual(
-            dump_to_bin(<<"5d:	f2 41 0f 10 43 40    	movsd  0x40(%r11),%xmm0">>),
-            jit_x86_64_asm:movsd({64, r11}, xmm0)
-        )
-    ].
-
 movq_sib_test_() ->
     [
         % movq %rax, 16#10(%rdx,%rcx,2)
