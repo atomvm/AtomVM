@@ -88,19 +88,19 @@ movq_test_() ->
             jit_x86_64_asm:movq(16#6EF, {16#80, rdi})
         ),
         ?_assertEqual(
-            dump_to_bin(<<"0:   48 89 44 0a 00  mov     %rax,0x0(%rdx,%rcx,1)">>),
+            dump_to_bin(<<"0:   48 89 04 0a  mov     %rax,0x0(%rdx,%rcx,1)">>),
             jit_x86_64_asm:movq(rax, {0, rdx, rcx, 1})
         ),
         ?_assertEqual(
-            dump_to_bin(<<"0:   48 89 44 4a 00  mov     %rax,0x0(%rdx,%rcx,2)">>),
+            dump_to_bin(<<"0:   48 89 04 4a  mov     %rax,0x0(%rdx,%rcx,2)">>),
             jit_x86_64_asm:movq(rax, {0, rdx, rcx, 2})
         ),
         ?_assertEqual(
-            dump_to_bin(<<"0:   48 89 44 8a 00  mov     %rax,0x0(%rdx,%rcx,4)">>),
+            dump_to_bin(<<"0:   48 89 04 8a  mov     %rax,0x0(%rdx,%rcx,4)">>),
             jit_x86_64_asm:movq(rax, {0, rdx, rcx, 4})
         ),
         ?_assertEqual(
-            dump_to_bin(<<"0:   48 89 44 ca 00  mov     %rax,0x0(%rdx,%rcx,8)">>),
+            dump_to_bin(<<"0:   48 89 04 ca  mov     %rax,0x0(%rdx,%rcx,8)">>),
             jit_x86_64_asm:movq(rax, {0, rdx, rcx, 8})
         ),
         ?_assertEqual(

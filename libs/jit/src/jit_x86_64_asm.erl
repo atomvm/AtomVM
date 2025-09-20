@@ -134,12 +134,41 @@ movq(Imm, {Offset, DestReg}) when is_integer(Imm) andalso ?IS_SINT8_T(Offset) ->
 movq(Imm, {Offset, DestReg}) when is_integer(Imm) andalso ?IS_SINT32_T(Offset) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#c7, 2:2, 0:3, MODRM_RM:3, Offset:32/little, Imm:32/little>>;
+% movq reg, {0, base, index, scale} - SIB with no displacement
+movq(RegA, {0, RegB, RegC, Scale}) when
+    is_atom(RegA),
+    is_atom(RegB),
+    is_atom(RegC),
+    (Scale == 1 orelse Scale == 2 orelse Scale == 4 orelse Scale == 8)
+->
+    {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
+    {REX_B, MODRM_BASE} = x86_64_x_reg(RegB),
+    {REX_X, MODRM_INDEX} = x86_64_x_reg(RegC),
+    ScaleBits =
+        case Scale of
+            1 -> 0;
+            2 -> 1;
+            4 -> 2;
+            8 -> 3
+        end,
+    % rm=100 for SIB, mod=00 for no displacement
+    <<
+        ?X86_64_REX(1, REX_R, REX_X, REX_B),
+        16#89,
+        0:2,
+        MODRM_REG:3,
+        4:3,
+        ScaleBits:2,
+        MODRM_INDEX:3,
+        MODRM_BASE:3
+    >>;
 movq(RegA, {Offset, RegB, RegC, Scale}) when
     is_atom(RegA),
     is_atom(RegB),
     is_atom(RegC),
     (Scale == 1 orelse Scale == 2 orelse Scale == 4 orelse Scale == 8),
-    ?IS_SINT8_T(Offset)
+    ?IS_SINT8_T(Offset),
+    Offset =/= 0
 ->
     {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
     {REX_B, MODRM_BASE} = x86_64_x_reg(RegB),
