@@ -1079,15 +1079,15 @@ shift_left_test() ->
 call_only_or_schedule_next_and_label_relocation_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 2),
-    Offset1 = ?BACKEND:offset(State1),
-    State2 = ?BACKEND:call_only_or_schedule_next(State1, 2),
-    Offset2 = ?BACKEND:offset(State2),
-    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
+    State4 = ?BACKEND:add_label(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
-    Offset0 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
-    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
-    Stream = ?BACKEND:stream(State5),
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
     Dump =
         <<
             "   0:	4b03      	ldr	r3, [pc, #12]\n"
@@ -1140,15 +1140,15 @@ call_only_or_schedule_next_and_label_relocation_unaligned_test() ->
     %% First do a 2-byte instruction to create unaligned start
     State1 = ?BACKEND:move_to_vm_register(State0, r1, {ptr, r3}),
     State2 = ?BACKEND:jump_table(State1, 2),
-    Offset1 = ?BACKEND:offset(State2),
-    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
-    Offset2 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:call_primitive_last(State3, 0, [ctx, jit_state]),
+    State3 = ?BACKEND:add_label(State2, 1),
+    State4 = ?BACKEND:call_only_or_schedule_next(State3, 2),
+    State5 = ?BACKEND:add_label(State4, 2),
+    State6 = ?BACKEND:call_primitive_last(State5, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
-    Offset0 = ?BACKEND:offset(State4),
-    State5 = ?BACKEND:call_primitive_last(State4, 1, [ctx, jit_state]),
-    State6 = ?BACKEND:update_branches(State5, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
-    Stream = ?BACKEND:stream(State6),
+    State7 = ?BACKEND:add_label(State6, 0),
+    State8 = ?BACKEND:call_primitive_last(State7, 1, [ctx, jit_state]),
+    State9 = ?BACKEND:update_branches(State8),
+    Stream = ?BACKEND:stream(State9),
     Dump =
         <<
             "   0:	6019      	str	r1, [r3, #0]\n"
@@ -1210,15 +1210,15 @@ call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
         State1,
         lists:seq(1, 128)
     ),
-    Offset1 = ?BACKEND:offset(StatePadded),
-    State2 = ?BACKEND:call_only_or_schedule_next(StatePadded, 2),
-    Offset2 = ?BACKEND:offset(State2),
-    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    State2 = ?BACKEND:add_label(StatePadded, 1),
+    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
+    State4 = ?BACKEND:add_label(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
-    Offset0 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
-    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
-    Stream = ?BACKEND:stream(State5),
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
     % Extract the final section starting at 0x11c to verify the literal pool pattern
     Dump = <<
         " 11c:	9e00      	ldr	r6, [sp, #0]\n"
@@ -1267,15 +1267,15 @@ call_only_or_schedule_next_and_label_relocation_large_gap_unaligned_test() ->
         State1,
         lists:seq(1, 127)
     ),
-    Offset1 = ?BACKEND:offset(StatePadded),
-    State2 = ?BACKEND:call_only_or_schedule_next(StatePadded, 2),
-    Offset2 = ?BACKEND:offset(State2),
-    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    State2 = ?BACKEND:add_label(StatePadded, 1),
+    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
+    State4 = ?BACKEND:add_label(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
-    Offset0 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
-    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
-    Stream = ?BACKEND:stream(State5),
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
     % Extract the final section starting at 0x11a to verify the literal pool pattern with different alignment
     Dump = <<
         " 11a:	9e00      	ldr	r6, [sp, #0]\n"
@@ -1412,9 +1412,9 @@ is_integer_test() ->
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
     Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	43fe      	mvns	r6, r7\n"
@@ -1469,9 +1469,9 @@ is_number_test() ->
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
     Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	43fe      	mvns	r6, r7\n"
@@ -1509,11 +1509,11 @@ is_boolean_test() ->
         end)
     end),
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
     ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    Offset = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
         "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
@@ -1534,22 +1534,22 @@ wait_timeout_test() ->
     State3 = ?BACKEND:call_primitive_last(State2, ?PRIM_WAIT_TIMEOUT, [
         ctx, jit_state, {free, TimeoutReg}, Label
     ]),
-    Offset0 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:continuation_entry_point(State3),
-    {State5, ResultReg0} = ?BACKEND:call_primitive(State4, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+    State4 = ?BACKEND:add_label(State3, OffsetRef0),
+    State5 = ?BACKEND:continuation_entry_point(State4),
+    {State6, ResultReg0} = ?BACKEND:call_primitive(State5, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    State6 = ?BACKEND:return_if_not_equal_to_ctx(State5, {free, ResultReg0}),
+    State7 = ?BACKEND:return_if_not_equal_to_ctx(State6, {free, ResultReg0}),
     % ?WAITING_TIMEOUT_EXPIRED
-    {State7, ResultReg1} = ?BACKEND:call_primitive(State6, ?PRIM_CONTEXT_GET_FLAGS, [ctx, 2]),
-    State8 = ?BACKEND:if_block(State7, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
+    {State8, ResultReg1} = ?BACKEND:call_primitive(State7, ?PRIM_CONTEXT_GET_FLAGS, [ctx, 2]),
+    State9 = ?BACKEND:if_block(State8, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
         ?BACKEND:call_primitive_last(BlockSt, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
             ctx, jit_state, Label
         ])
     end),
-    State9 = ?BACKEND:update_branches(State8, [{OffsetRef0, Offset0}]),
+    State10 = ?BACKEND:update_branches(State9),
 
-    Stream = ?BACKEND:stream(State9),
+    Stream = ?BACKEND:stream(State10),
     Dump = <<
         "   0:	a707      	add	r7, pc, #28	; (adr r7, 0x20)\n"
         "   2:	9e00      	ldr	r6, [sp, #0]\n"
@@ -1596,19 +1596,19 @@ wait_timeout_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-%% Test return_labels_and_lines/3 function
+%% Test return_labels_and_lines/2 function
 return_labels_and_lines_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
 
     % Test return_labels_and_lines with some sample labels and lines
+    State1 = ?BACKEND:add_label(State0, 2, 32),
+    State2 = ?BACKEND:add_label(State1, 1, 16),
 
-    % {Label, Offset} pairs
-    SortedLabels = [{1, 16}, {2, 32}],
     % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State1 = ?BACKEND:return_labels_and_lines(State0, SortedLabels, SortedLines),
-    Stream = ?BACKEND:stream(State1),
+    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
+    Stream = ?BACKEND:stream(State3),
 
     % Should have generated adr + bx lr + labels table + lines table
     % adr = 4 bytes, bx = 2 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
@@ -1637,7 +1637,7 @@ return_labels_and_lines_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-%% Test return_labels_and_lines/3 with unaligned offset - should fail
+%% Test return_labels_and_lines/2 with unaligned offset - should fail
 return_labels_and_lines_unaligned_test() ->
     % Create a new state with a 2-byte instruction already in the stream
     % to simulate starting at an odd offset (offset 2 instead of 0)
@@ -1647,11 +1647,14 @@ return_labels_and_lines_unaligned_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
 
     % Test return_labels_and_lines with some sample labels and lines
-    SortedLabels = [{1, 16}, {2, 32}],
+    State1 = ?BACKEND:add_label(State0, 2, 32),
+    State2 = ?BACKEND:add_label(State1, 1, 16),
+
+    % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State1 = ?BACKEND:return_labels_and_lines(State0, SortedLabels, SortedLines),
-    Stream = ?BACKEND:stream(State1),
+    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
+    Stream = ?BACKEND:stream(State3),
 
     Dump = <<
         "   0:	4770      	bx	lr\n"
