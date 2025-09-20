@@ -1334,6 +1334,13 @@ move_to_vm_register_test_() ->
                         "   0:	92800007 	mov	x7, #0xffffffffffffffff    	// #-1\n"
                         "   4:	f9001807 	str	x7, [x0, #48]"
                     >>)
+                end),
+                %% Test: ptr with offset to fp_reg (term_to_float)
+                ?_test(begin
+                    move_to_vm_register_test0(State0, {free, {ptr, r9, 1}}, {fp_reg, 3}, <<
+                        "   0:	f9400127 	ldr	x7, [x9]\n"
+                        "   4:	f9002407 	str	x7, [x0, #72]"
+                    >>)
                 end)
             ]
         end}.
