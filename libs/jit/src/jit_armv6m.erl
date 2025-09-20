@@ -131,7 +131,8 @@
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [armv6m_register()],
     used_regs :: [armv6m_register()],
-    labels :: [{integer() | reference(), integer()}]
+    labels :: [{integer() | reference(), integer()}],
+    variant :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -234,7 +235,7 @@ word_size() -> 4.
 %% @return New backend state
 %%-----------------------------------------------------------------------------
 -spec new(any(), module(), stream()) -> state().
-new(_Variant, StreamModule, Stream) ->
+new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
@@ -242,7 +243,8 @@ new(_Variant, StreamModule, Stream) ->
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
-        labels = []
+        labels = [],
+        variant = Variant
     }.
 
 %%-----------------------------------------------------------------------------
@@ -1859,17 +1861,30 @@ move_to_vm_register(#state{available_regs = [Temp | AT] = AR0} = State0, {y_reg,
     State1#state{available_regs = AR0};
 % term_to_float
 move_to_vm_register(
-    #state{stream_module = StreamModule, available_regs = [Temp1, Temp2 | _], stream = Stream0} =
+    #state{
+        stream_module = StreamModule,
+        available_regs = [Temp1, Temp2 | _],
+        stream = Stream0,
+        variant = Variant
+    } =
         State0,
     {free, {ptr, Reg, 1}},
     {fp_reg, F}
 ) ->
     I1 = jit_armv6m_asm:ldr(Temp1, ?FP_REGS),
     I2 = jit_armv6m_asm:ldr(Temp2, {Reg, 4}),
-    I3 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8}),
-    I4 = jit_armv6m_asm:ldr(Temp2, {Reg, 8}),
-    I5 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8 + 4}),
-    Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
+    case Variant band ?JIT_VARIANT_FLOAT32 of
+        0 ->
+            % Double precision: write both 32-bit parts
+            I3 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8}),
+            I4 = jit_armv6m_asm:ldr(Temp2, {Reg, 8}),
+            I5 = jit_armv6m_asm:str(Temp2, {Temp1, F * 8 + 4}),
+            Code = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
+        _ ->
+            % Single precision: write only first 32-bit part
+            I3 = jit_armv6m_asm:str(Temp2, {Temp1, F * 4}),
+            Code = <<I1/binary, I2/binary, I3/binary>>
+    end,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = free_native_register(State0, Reg),
     State1#state{stream = Stream1}.
