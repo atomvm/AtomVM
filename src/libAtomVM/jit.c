@@ -224,6 +224,7 @@ _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_armv6m.erl");
 
 _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 in jit/src/jit_armv6m.erl");
+_Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 #else
 #error Unknown jit target
 #endif
