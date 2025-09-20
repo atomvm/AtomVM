@@ -424,20 +424,21 @@ first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, #state{labels = Label
         ctx, jit_state, {free, Timeout}, Label
     ]),
     Offset0 = MMod:offset(MSt3),
+    MSt4 = MMod:continuation_entry_point(MSt3),
     Labels1 = [{OffsetRef0, Offset0} | Labels0],
-    {MSt4, ResultReg0} = MMod:call_primitive(MSt3, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+    {MSt5, ResultReg0} = MMod:call_primitive(MSt4, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    MSt5 = MMod:return_if_not_equal_to_ctx(MSt4, {free, ResultReg0}),
-    {MSt6, ResultReg1} = MMod:call_primitive(MSt5, ?PRIM_CONTEXT_GET_FLAGS, [
+    MSt6 = MMod:return_if_not_equal_to_ctx(MSt5, {free, ResultReg0}),
+    {MSt7, ResultReg1} = MMod:call_primitive(MSt6, ?PRIM_CONTEXT_GET_FLAGS, [
         ctx, ?WAITING_TIMEOUT_EXPIRED
     ]),
-    MSt7 = MMod:if_block(MSt6, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
+    MSt8 = MMod:if_block(MSt7, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
             ctx, jit_state, Label
         ])
     end),
-    first_pass(Rest2, MMod, MSt7, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt8, State0#state{labels = Labels1});
 % 39
 first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
