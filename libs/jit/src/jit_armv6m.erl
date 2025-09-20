@@ -31,7 +31,7 @@
     free_native_registers/2,
     assert_all_native_free/1,
     jump_table/2,
-    update_branches/2,
+    update_branches/1,
     call_primitive/3,
     call_primitive_last/3,
     call_primitive_with_cp/3,
@@ -65,7 +65,9 @@
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
     call_func_ptr/3,
-    return_labels_and_lines/3
+    return_labels_and_lines/2,
+    add_label/2,
+    add_label/3
 ]).
 
 -include_lib("jit.hrl").
@@ -133,7 +135,8 @@
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [armv6m_register()],
-    used_regs :: [armv6m_register()]
+    used_regs :: [armv6m_register()],
+    labels :: [{integer() | reference(), integer()}]
 }).
 
 -type state() :: #state{}.
@@ -238,7 +241,8 @@ new(_Variant, StreamModule, Stream) ->
         branches = [],
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
-        used_regs = []
+        used_regs = [],
+        labels = []
     }.
 
 %%-----------------------------------------------------------------------------
@@ -441,19 +445,18 @@ emit_jump_table_common_and_data(
 %% @doc Rewrite stream to update all branches for labels.
 %% @end
 %% @param State current backend state
-%% @param Labels list of tuples with label, offset and size of the branch in bits
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec update_branches(state(), [{non_neg_integer(), non_neg_integer()}]) -> state().
-update_branches(#state{branches = []} = State, _Labels) ->
+-spec update_branches(state()) -> state().
+update_branches(#state{branches = []} = State) ->
     State;
 update_branches(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = [{Label, Offset, Type} | BranchesT]
-    } = State,
-    Labels
+        branches = [{Label, Offset, Type} | BranchesT],
+        labels = Labels
+    } = State
 ) ->
     {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
     Rel = LabelOffset - Offset,
@@ -472,7 +475,7 @@ update_branches(
                 <<RelativeOffset:32/little>>
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
-    update_branches(State#state{stream = Stream1, branches = BranchesT}, Labels).
+    update_branches(State#state{stream = Stream1, branches = BranchesT}).
 
 %%-----------------------------------------------------------------------------
 %% @doc Generate code to load a primitive function pointer into a register
@@ -2466,7 +2469,6 @@ set_bs(
 
 %%-----------------------------------------------------------------------------
 %% @param State current state
-%% @param SortedLabels labels information, sorted by offset
 %% @param SortedLines line information, sorted by offset
 %% @doc Build labels and line tables and encode a function that returns it.
 %% In this case, the function returns the effective address of what immediately
@@ -2477,11 +2479,16 @@ set_bs(
 return_labels_and_lines(
     #state{
         stream_module = StreamModule,
-        stream = Stream0
+        stream = Stream0,
+        labels = Labels
     } = State,
-    SortedLabels,
     SortedLines
 ) ->
+    SortedLabels = lists:keysort(2, [
+        {Label, LabelOffset}
+     || {Label, LabelOffset} <- Labels, is_integer(Label)
+    ]),
+
     % Check if current offset is 4-byte aligned
     CurrentOffset = StreamModule:offset(Stream0),
 
@@ -2540,3 +2547,27 @@ args_regs(Args) ->
         end,
         Args
     ).
+
+%%-----------------------------------------------------------------------------
+%% @doc Add a label at the current offset
+%% @end
+%% @param State current backend state
+%% @param Label the label number or reference
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec add_label(state(), integer() | reference()) -> state().
+add_label(#state{stream_module = StreamModule, stream = Stream} = State, Label) ->
+    Offset = StreamModule:offset(Stream),
+    add_label(State, Label, Offset).
+
+%%-----------------------------------------------------------------------------
+%% @doc Add a label at a specific offset
+%% @end
+%% @param State current backend state
+%% @param Label the label number or reference
+%% @param Offset the explicit offset for this label
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(#state{labels = Labels} = State, Label, Offset) ->
+    State#state{labels = [{Label, Offset} | Labels]}.
