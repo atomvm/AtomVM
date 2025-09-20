@@ -2210,7 +2210,7 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Fun, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
     ?TRACE("OP_CALL_FUN2 ~p, ~p, ~p\n", [Tag, ArgsCount, Fun]),
     % We ignore Tag (could be literal 0 or atom unsafe)
-    MSt3 = MSt3 = MMod:free_native_registers(MSt2, [Tag]),
+    MSt3 = MMod:free_native_registers(MSt2, [Tag]),
     MSt4 = MMod:decrement_reductions_and_maybe_schedule_next(MSt3),
     {MSt5, Reg} = MMod:move_to_native_register(MSt4, Fun),
     MSt6 = verify_is_function(Reg, MMod, MSt5),
