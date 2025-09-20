@@ -793,15 +793,15 @@ shift_left_test() ->
 call_only_or_schedule_next_and_label_relocation_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:jump_table(State0, 2),
-    Offset1 = ?BACKEND:offset(State1),
-    State2 = ?BACKEND:call_only_or_schedule_next(State1, 2),
-    Offset2 = ?BACKEND:offset(State2),
-    State3 = ?BACKEND:call_primitive_last(State2, 0, [ctx, jit_state]),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
+    State4 = ?BACKEND:add_label(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
-    Offset0 = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:call_primitive_last(State3, 1, [ctx, jit_state]),
-    State5 = ?BACKEND:update_branches(State4, [{0, Offset0}, {1, Offset1}, {2, Offset2}]),
-    Stream = ?BACKEND:stream(State5),
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
     Dump =
         <<
             "   0:	e9 2a 00 00 00       	jmpq   0x2f\n"
@@ -929,9 +929,9 @@ is_integer_test() ->
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
     Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
         "   4:	49 89 c3             	mov    %rax,%r11\n"
@@ -983,9 +983,9 @@ is_number_test() ->
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
     ?BACKEND:assert_all_native_free(State3),
     Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
         "   4:	49 89 c3             	mov    %rax,%r11\n"
@@ -1020,11 +1020,11 @@ is_boolean_test() ->
         end)
     end),
     State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    Offset = ?BACKEND:offset(State3),
-    Labels = [{Label, Offset + 16#100}],
     ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:update_branches(State3, Labels),
-    Stream = ?BACKEND:stream(State4),
+    Offset = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
         "   4:	48 83 f8 4b          	cmp    $0x4b,%rax\n"
