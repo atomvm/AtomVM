@@ -108,6 +108,11 @@ struct EmscriptenMessageUnregisterHTMLEvent
     struct HTMLEventUserDataResource *rsrc;
 };
 
+struct TrackedObjectResource
+{
+    int32_t key;
+};
+
 struct EmscriptenPlatformData
 {
     pthread_mutex_t poll_mutex;
@@ -116,6 +121,7 @@ struct EmscriptenPlatformData
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
     ErlNifResourceType *websocket_resource_type;
+    ErlNifResourceType *tracked_object_resource_type;
 
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;

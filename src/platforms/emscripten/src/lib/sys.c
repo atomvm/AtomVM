@@ -130,6 +130,19 @@ static void htmlevent_user_data_down(ErlNifEnv *caller_env, void *obj, ErlNifPid
     }
 }
 
+static void do_remove_tracked_object(atomic_size_t key)
+{
+    EM_ASM({ Module['onTrackedObjectDelete']($0); }, key);
+}
+
+static void tracked_object_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct TrackedObjectResource *tracked_object_rsrc = (struct TrackedObjectResource *) obj;
+    emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VI, do_remove_tracked_object, NULL, tracked_object_rsrc->key);
+}
+
 static const ErlNifResourceTypeInit promise_resource_type_init = {
     .members = 1,
     .dtor = promise_dtor,
@@ -140,6 +153,11 @@ static const ErlNifResourceTypeInit htmlevent_user_data_resource_type_init = {
     .dtor = htmlevent_user_data_dtor,
     .stop = NULL,
     .down = htmlevent_user_data_down,
+};
+
+static const ErlNifResourceTypeInit tracked_object_resource_type_init = {
+    .members = 1,
+    .dtor = tracked_object_dtor
 };
 
 void sys_init_platform(GlobalContext *glb)
@@ -173,6 +191,12 @@ void sys_init_platform(GlobalContext *glb)
     platform->websocket_resource_type = enif_init_resource_type(&env, "websocket", &websocket_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(platform->websocket_resource_type)) {
         fprintf(stderr, "Cannot initialize websocket_resource_type");
+        AVM_ABORT();
+    }
+
+    platform->tracked_object_resource_type = enif_init_resource_type(&env, "tracked_object", &tracked_object_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(platform->tracked_object_resource_type)) {
+        fprintf(stderr, "Cannot initialize tracked_object resource type");
         AVM_ABORT();
     }
 
