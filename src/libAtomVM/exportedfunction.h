@@ -65,7 +65,9 @@ enum FunctionType
     ModuleFunction = 4,
     BIFFunctionType = 5,
     GCBIFFunctionType = 6,
+#ifndef AVM_NO_JIT
     ModuleNativeFunction = 7
+#endif
 };
 
 struct ExportedFunction
