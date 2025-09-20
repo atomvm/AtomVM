@@ -36,12 +36,12 @@ if (NOT AVM_DISABLE_JIT)
     # JIT requires addFunction to register dynamically compiled WASM functions
     set(JIT_LINK_FLAGS
         -sALLOW_TABLE_GROWTH
-        "-sEXPORTED_RUNTIME_METHODS=['ccall','addFunction','ENV']"
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','addFunction','ENV','cwrap','stringToNewUTF8','FS']"
     )
 else()
-    set(JIT_LINK_FLAGS "-sEXPORTED_RUNTIME_METHODS=['ccall','ENV']")
+    set(JIT_LINK_FLAGS "-sEXPORTED_RUNTIME_METHODS=['ccall','ENV','cwrap','stringToNewUTF8','FS']")
 endif()
-target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sEXPORT_ES6 -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.extern-post.js -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH)
+target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sEXPORTED_FUNCTIONS=_malloc,_cast,_call,_next_tracked_object_key,_main -sEMULATE_FUNCTION_POINTER_CASTS=1 -sEXPORT_ES6 -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.extern-post.js -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_options(AtomVM PRIVATE -sASSERTIONS=2 -sSAFE_HEAP -sSTACK_OVERFLOW_CHECK)

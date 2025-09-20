@@ -139,6 +139,16 @@ em_promise_t call(const char *name, const char *message)
 }
 
 /**
+ * @brief Gets a number representing TrackedObject identity.
+ * @return a TrackedObject id.
+ */
+EMSCRIPTEN_KEEPALIVE
+size_t next_tracked_object_key()
+{
+    return sys_get_next_tracked_object_key(global);
+}
+
+/**
  * @brief Emscripten entry point
  * @details For node builds, this function is run in the main thread. For web
  * builds, this function actually is proxied by Emscripten SDK and runs on a
