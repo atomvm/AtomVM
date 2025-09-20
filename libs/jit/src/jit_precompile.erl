@@ -30,6 +30,28 @@ start() ->
     [Target, Dir | Files] = init:get_plain_arguments(),
     lists:foreach(fun(File) -> compile(Target, Dir, File) end, Files).
 
+%% @doc Parse target string to extract base architecture and requested variants
+%% Examples:
+%%   "armv6m" -> {"armv6m", [?JIT_VARIANT_PIC]}
+%%   "armv6m+float32" -> {"armv6m", [?JIT_VARIANT_PIC, ?JIT_VARIANT_FLOAT32]}
+%%   "x86_64" -> {"x86_64", [?JIT_VARIANT_PIC]}
+parse_target(Target) ->
+    case string:split(Target, "+", all) of
+        [BaseTarget] ->
+            {BaseTarget, [?JIT_VARIANT_PIC]};
+        [BaseTarget | Variants] ->
+            RequestedVariants = lists:foldl(
+                fun(Variant, Acc) ->
+                    case Variant of
+                        "float32" -> [?JIT_VARIANT_FLOAT32 | Acc]
+                    end
+                end,
+                [?JIT_VARIANT_PIC],
+                Variants
+            ),
+            {BaseTarget, lists:reverse(RequestedVariants)}
+    end.
+
 compile(Target, Dir, Path) ->
     try
         {ok, InitialBinary} = file:read_file(Path),
@@ -75,43 +97,53 @@ compile(Target, Dir, Path) ->
                     fun(_LineRef) -> false end
             end,
 
-        Backend = list_to_atom("jit_" ++ Target),
-
-        Stream0 = jit_dwarf:new(Backend, Module, jit_stream_binary, 0, LineResolver),
-        <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
-            CodeChunk,
+        % Parse target to extract arch and variant
+        {BaseTarget, RequestedVariants} = parse_target(Target),
+        Backend = list_to_atom("jit_" ++ BaseTarget),
 
         Arch =
-            case Target of
+            case BaseTarget of
                 "x86_64" -> ?JIT_ARCH_X86_64;
                 "aarch64" -> ?JIT_ARCH_AARCH64;
                 "armv6m" -> ?JIT_ARCH_ARMV6M
             end,
 
-        Stream1 = Backend:new(?JIT_VARIANT_PIC, jit_dwarf, Stream0),
-        {LabelsCount, Stream2} = jit:compile(
-            CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream1
-        ),
-        DwarfStream = Backend:stream(Stream2),
-        NativeCode = jit_dwarf:stream(DwarfStream),
-        <<InfoSize:32, Info:InfoSize/binary>> = jit:beam_chunk_header(
-            LabelsCount, Arch, ?JIT_VARIANT_PIC
+        <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
+            CodeChunk,
+
+        % Generate native code for each requested variant
+        NewChunks = lists:foldl(
+            fun(Variant, Acc) ->
+                Stream0 = jit_dwarf:new(Backend, Module, jit_stream_binary, 0, LineResolver),
+                Stream1 = Backend:new(Variant, jit_dwarf, Stream0),
+                {LabelsCount, Stream2} = jit:compile(
+                    CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream1
+                ),
+                DwarfStream = Backend:stream(Stream2),
+                NativeCode = jit_dwarf:stream(DwarfStream),
+                <<InfoSize:32, Info:InfoSize/binary>> = jit:beam_chunk_header(
+                    LabelsCount, Arch, Variant
+                ),
+
+                % Create chunk with embedded ELF when DWARF is enabled
+                ChunkData =
+                    case jit_dwarf:elf(DwarfStream, NativeCode) of
+                        false ->
+                            % No debug info - just store native code
+                            <<InfoSize:32, Info:InfoSize/binary, NativeCode/binary>>;
+                        {ok, TextSectionOffset, ELF} ->
+                            % Update BEAM chunk header structure and combine with ELF.
+                            update_avmn_chunk_with_elf(Info, ELF, TextSectionOffset)
+                    end,
+                [{"avmN", ChunkData} | Acc]
+            end,
+            [],
+            RequestedVariants
         ),
 
-        % Create chunks with embedded ELF when DWARF is enabled
-        Basename = filename:basename(Path),
-        NewChunks =
-            case jit_dwarf:elf(DwarfStream, NativeCode) of
-                false ->
-                    % No debug info - just store native code
-                    [{"avmN", <<InfoSize:32, Info:InfoSize/binary, NativeCode/binary>>}];
-                {ok, TextSectionOffset, ELF} ->
-                    % Update BEAM chunk header structure and combine with ELF.
-                    EmbeddedElfChunk = update_avmn_chunk_with_elf(Info, ELF, TextSectionOffset),
-                    [{"avmN", EmbeddedElfChunk}]
-            end,
         UpdatedChunks = FilteredChunks ++ NewChunks,
         {ok, Binary} = beam_lib:build_module(UpdatedChunks),
+        Basename = filename:basename(Path),
         UpdatedFile = filename:join(Dir, Basename),
         ok = file:write_file(UpdatedFile, Binary)
     catch
