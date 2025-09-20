@@ -70,7 +70,7 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | ATOMVM_MAP_JIT;
     int fd = -1;
-    int offset = 0;
+    off_t offset = 0;
 
     uint8_t *addr = (uint8_t *) mmap(0, size, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
@@ -80,6 +80,7 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     // Return a resource object
     struct JITStreamMMap *js = enif_alloc_resource(jit_stream_mmap_resource_type, sizeof(struct JITStreamMMap));
     if (IS_NULL_PTR(js)) {
+        munmap(addr, size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     js->stream_base = addr;
