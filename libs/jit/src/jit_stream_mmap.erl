@@ -98,13 +98,14 @@ map(Stream, Offset, Length, MapFunction) ->
     ?MODULE:replace(Stream, Offset, Mapped).
 
 %%-----------------------------------------------------------------------------
-%% @param Stream        stream to update
-%% @param Offset        offset to update from
-%% @param Replacement   binary to write at offset
-%% @returns The updated stream
+%% @param Stream        stream to read from
+%% @param Offset        offset to read from
+%% @param Length        number of bytes to read
+%% @returns The binary data read from the stream
 %% @doc     Read bytes at a given offset
+%%
 %% @end
 %%-----------------------------------------------------------------------------
--spec read(stream(), non_neg_integer(), pos_integer()) -> stream().
+-spec read(stream(), non_neg_integer(), pos_integer()) -> binary().
 read(_Stream, _Offset, _Length) ->
     erlang:nif_error(undefined).
