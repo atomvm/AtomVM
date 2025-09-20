@@ -106,6 +106,8 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
             long mod_offset;
 
             module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
+            // TODO: investigate
+            // mod_offset is currently never equal to cp_mod->end_instruction_ii with native code
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
                 prev_mod = cp_mod;
@@ -127,8 +129,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
             int label = term_to_catch_label_and_module(*ct, &module_index);
 
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
-            uint8_t *code = &cl_mod->code->code[0];
-            int mod_offset = cl_mod->labels[label] - code;
+            int mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
@@ -207,8 +208,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
             int module_index;
             int label = term_to_catch_label_and_module(*ct, &module_index);
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
-            uint8_t *code = &cl_mod->code->code[0];
-            int mod_offset = cl_mod->labels[label] - code;
+            int mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
 
