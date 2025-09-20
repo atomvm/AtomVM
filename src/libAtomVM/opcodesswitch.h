@@ -2178,6 +2178,7 @@ loop:
 
                             break;
                         }
+#ifndef AVM_NO_JIT
                         case ModuleNativeFunction: {
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
@@ -2187,11 +2188,10 @@ loop:
                                 mod = jump->target;
                                 code = mod->code->code;
                             }
-#ifndef AVM_NO_JIT
                             native_pc = jump->entry_point;
-#endif
                             continue;
                         }
+#endif
                         case BIFFunctionType: {
                             // Support compilers < OTP26 that generate CALL_EXT
                             // for min/2 and max/2
@@ -2317,6 +2317,7 @@ loop:
 
                             break;
                         }
+#ifndef AVM_NO_JIT
                         case ModuleNativeFunction: {
                             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
@@ -2328,11 +2329,10 @@ loop:
                                 mod = jump->target;
                                 code = mod->code->code;
                             }
-#ifndef AVM_NO_JIT
                             native_pc = jump->entry_point;
-#endif
                             continue;
                         }
+#endif
                         case BIFFunctionType: {
                             // Support compilers < OTP26 that generate CALL_EXT_LAST
                             // for min/2 and max/2
