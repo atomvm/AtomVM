@@ -56,7 +56,6 @@
     popq/1,
     jmpq/1,
     retq/0,
-    movsd/2,
     cmpb/2
 ]).
 
@@ -66,7 +65,6 @@
 -define(IS_UINT32_T(X), is_integer(X) andalso X >= 0 andalso X < 16#100000000).
 
 -type x86_64_register() :: rax | rcx | rdx | rsi | rdi | r8 | r9 | r10 | r11.
--type x86_64_fpu_register() :: xmm0 | xmm1 | xmm2 | xmm3 | xmm4 | xmm5 | xmm6 | xmm7.
 
 % Encode a register on 4 bits
 % https://wiki.osdev.org/X86-64_Instruction_Encoding#Registers
@@ -80,17 +78,6 @@ x86_64_x_reg(r8) -> {1, 0};
 x86_64_x_reg(r9) -> {1, 1};
 x86_64_x_reg(r10) -> {1, 2};
 x86_64_x_reg(r11) -> {1, 3}.
-
-% We only need xmm0 to xmm7
--spec x86_64_xmm_reg(x86_64_fpu_register()) -> 0..7.
-x86_64_xmm_reg(xmm0) -> 0;
-x86_64_xmm_reg(xmm1) -> 1;
-x86_64_xmm_reg(xmm2) -> 2;
-x86_64_xmm_reg(xmm3) -> 3;
-x86_64_xmm_reg(xmm4) -> 4;
-x86_64_xmm_reg(xmm5) -> 5;
-x86_64_xmm_reg(xmm6) -> 6;
-x86_64_xmm_reg(xmm7) -> 7.
 
 -define(X86_64_REX(W, R, X, B), <<4:4, W:1, R:1, X:1, B:1>> / binary).
 
@@ -530,21 +517,3 @@ jmpq({Reg}) ->
 
 retq() ->
     <<16#C3>>.
-
-movsd({0, BaseReg}, XmmReg) when is_atom(BaseReg), is_atom(XmmReg) ->
-    {REX_B, MODRM_RM} = x86_64_x_reg(BaseReg),
-    XMM_MODRM = x86_64_xmm_reg(XmmReg),
-    % MOVSD xmm, m64: F2 [REX] 0F 10 /r
-    % ModRM: mod=00, reg=XMM, rm=BaseReg
-    case REX_B of
-        0 -> <<16#F2, 16#0F, 16#10, 0:2, XMM_MODRM:3, MODRM_RM:3>>;
-        1 -> <<16#F2, 16#41, 16#0F, 16#10, 0:2, XMM_MODRM:3, MODRM_RM:3>>
-    end;
-movsd({Offset, BaseReg}, XmmReg) when is_atom(BaseReg), is_atom(XmmReg), ?IS_SINT8_T(Offset) ->
-    {REX_B, MODRM_RM} = x86_64_x_reg(BaseReg),
-    XMM_MODRM = x86_64_xmm_reg(XmmReg),
-    % MOVSD xmm, m64: F2 [REX] 0F 10 /r, ModRM: mod=01 (disp8), reg=XMM, rm=BaseReg
-    case REX_B of
-        0 -> <<16#F2, 16#0F, 16#10, 1:2, XMM_MODRM:3, MODRM_RM:3, Offset>>;
-        1 -> <<16#F2, 16#41, 16#0F, 16#10, 1:2, XMM_MODRM:3, MODRM_RM:3, Offset>>
-    end.
