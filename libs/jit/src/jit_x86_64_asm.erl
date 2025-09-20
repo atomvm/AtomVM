@@ -35,6 +35,7 @@
     jnz_rel8/1,
     jge/1,
     jge_rel8/1,
+    jmp/1,
     jmp_rel8/1,
     jmp_rel32/1,
     andq/2,
@@ -334,6 +335,11 @@ jge(Offset) when ?IS_SINT8_T(Offset) ->
 
 jge_rel8(Offset) when ?IS_SINT8_T(Offset) ->
     {1, jge(Offset)}.
+
+jmp(Offset) when ?IS_SINT8_T(Offset) ->
+    <<16#EB, Offset>>;
+jmp(Offset) when ?IS_SINT32_T(Offset) ->
+    <<16#E9, Offset:32/little>>.
 
 jmp_rel8(Offset) when ?IS_SINT8_T(Offset) ->
     {1, <<16#EB, Offset>>}.
