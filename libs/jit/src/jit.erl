@@ -96,7 +96,6 @@
 
 -record(state, {
     line_offsets :: [{integer(), integer()}],
-    labels :: [{integer() | reference(), integer()}],
     labels_count :: pos_integer(),
     atom_resolver :: fun((integer()) -> atom()),
     literal_resolver :: fun((integer()) -> any())
@@ -137,7 +136,6 @@ compile(
     MSt1 = MMod:jump_table(MSt0, LabelsCount),
     State0 = #state{
         line_offsets = [],
-        labels = [],
         labels_count = LabelsCount,
         atom_resolver = AtomResolver,
         literal_resolver = LiteralResolver
@@ -158,15 +156,13 @@ compile(CodeChunk, _AtomResolver, _LiteralResolver, _MMod, _MSt) ->
 
 % 1
 first_pass(
-    <<?OP_LABEL, Rest0/binary>>, MMod, MSt, #state{labels = AccLabels} = State0
+    <<?OP_LABEL, Rest0/binary>>, MMod, MSt0, State0
 ) ->
-    ?ASSERT_ALL_NATIVE_FREE(MSt),
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LABEL ~p\n", [Label]),
-    Offset = MMod:offset(MSt),
-    first_pass(Rest1, MMod, MSt, State0#state{
-        labels = [{Label, Offset} | AccLabels]
-    });
+    MSt1 = MMod:add_label(MSt0, Label),
+    first_pass(Rest1, MMod, MSt1, State0);
 % 2
 first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -181,15 +177,15 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
     first_pass(Rest3, MMod, MSt1, State0);
 % 3
 first_pass(
-    <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels = AccLabels, labels_count = LabelsCount} = State
+    <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
 ) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_INT_CALL_END\n", []),
-    Offset = MMod:offset(MSt0),
-    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_TERMINATE_CONTEXT, [
+    MSt1 = MMod:add_label(MSt0, LabelsCount),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_TERMINATE_CONTEXT, [
         ctx, jit_state
     ]),
-    {State#state{labels = [{LabelsCount, Offset} | AccLabels]}, MSt1};
+    {State, MSt2};
 % 4
 first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -414,7 +410,7 @@ first_pass(<<?OP_WAIT, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
     first_pass(Rest1, MMod, MSt2, State0);
 % 26
-first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, #state{labels = Labels0} = State0) ->
+first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, OffsetRef0} = MMod:set_continuation_to_offset(MSt0),
@@ -423,22 +419,21 @@ first_pass(<<?OP_WAIT_TIMEOUT, Rest0/binary>>, MMod, MSt0, #state{labels = Label
     MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_WAIT_TIMEOUT, [
         ctx, jit_state, {free, Timeout}, Label
     ]),
-    Offset0 = MMod:offset(MSt3),
-    MSt4 = MMod:continuation_entry_point(MSt3),
-    Labels1 = [{OffsetRef0, Offset0} | Labels0],
-    {MSt5, ResultReg0} = MMod:call_primitive(MSt4, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+    MSt4 = MMod:add_label(MSt3, OffsetRef0),
+    MSt5 = MMod:continuation_entry_point(MSt4),
+    {MSt6, ResultReg0} = MMod:call_primitive(MSt5, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
         ctx, jit_state
     ]),
-    MSt6 = MMod:return_if_not_equal_to_ctx(MSt5, {free, ResultReg0}),
-    {MSt7, ResultReg1} = MMod:call_primitive(MSt6, ?PRIM_CONTEXT_GET_FLAGS, [
+    MSt7 = MMod:return_if_not_equal_to_ctx(MSt6, {free, ResultReg0}),
+    {MSt8, ResultReg1} = MMod:call_primitive(MSt7, ?PRIM_CONTEXT_GET_FLAGS, [
         ctx, ?WAITING_TIMEOUT_EXPIRED
     ]),
-    MSt8 = MMod:if_block(MSt7, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
+    MSt9 = MMod:if_block(MSt8, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
             ctx, jit_state, Label
         ])
     end),
-    first_pass(Rest2, MMod, MSt8, State0#state{labels = Labels1});
+    first_pass(Rest2, MMod, MSt9, State0);
 % 39
 first_pass(<<?OP_IS_LT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3131,18 +3126,13 @@ memory_ensure_free_with_extra_root(ExtraRoot, Live, Size, MMod, MSt0) when is_tu
     MSt4 = MMod:move_to_vm_register(MSt3, ExtraRootXReg, ExtraRoot),
     {MSt4, ExtraRoot}.
 
-second_pass(MMod, MSt0, #state{labels = Labels0, line_offsets = Lines}) ->
-    ?TRACE("SECOND PASS -- ~B lines, ~B labels\n", [length(Lines), length(Labels0)]),
+second_pass(MMod, MSt0, #state{line_offsets = Lines}) ->
+    ?TRACE("SECOND PASS -- ~B lines\n", [length(Lines)]),
     % Add extra function that returns labels and line information
-    Offset = MMod:offset(MSt0),
-    Labels1 = [{0, Offset} | Labels0],
-    SortedLabels = lists:keysort(2, [
-        {Label, LabelOffset}
-     || {Label, LabelOffset} <- Labels0, is_integer(Label)
-    ]),
+    MSt1 = MMod:add_label(MSt0, 0),
     SortedLines = lists:keysort(2, Lines),
-    MSt1 = MMod:return_labels_and_lines(MSt0, SortedLabels, SortedLines),
-    MMod:update_branches(MSt1, Labels1).
+    MSt2 = MMod:return_labels_and_lines(MSt1, SortedLines),
+    MMod:update_branches(MSt2).
 
 decode_literal(<<_Value:5, ?COMPACT_LITERAL:3, _Rest/binary>> = Binary) ->
     decode_value64(Binary);
