@@ -214,6 +214,36 @@ movq(Imm, {Offset, Base, Index, Scale}) when
     is_atom(Base),
     is_atom(Index),
     (Scale == 1 orelse Scale == 2 orelse Scale == 4 orelse Scale == 8),
+    ?IS_SINT8_T(Offset),
+    Offset =/= 0
+->
+    {REX_B, MODRM_BASE} = x86_64_x_reg(Base),
+    {REX_X, MODRM_INDEX} = x86_64_x_reg(Index),
+    ScaleBits =
+        case Scale of
+            1 -> 0;
+            2 -> 1;
+            4 -> 2;
+            8 -> 3
+        end,
+    % rm=100 for SIB, mod=01 for disp8
+    <<
+        ?X86_64_REX(1, 0, REX_X, REX_B),
+        16#c7,
+        1:2,
+        0:3,
+        4:3,
+        ScaleBits:2,
+        MODRM_INDEX:3,
+        MODRM_BASE:3,
+        Offset,
+        Imm:32/little
+    >>;
+movq(Imm, {Offset, Base, Index, Scale}) when
+    is_integer(Imm),
+    is_atom(Base),
+    is_atom(Index),
+    (Scale == 1 orelse Scale == 2 orelse Scale == 4 orelse Scale == 8),
     ?IS_SINT32_T(Offset)
 ->
     {REX_B, MODRM_BASE} = x86_64_x_reg(Base),
