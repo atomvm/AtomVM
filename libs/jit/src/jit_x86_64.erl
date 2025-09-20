@@ -345,7 +345,7 @@ jump_table0(
     LabelsCount
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(-4),
+    {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
     Reloc = {N, Offset + RelocOffset, 32},
     Stream1 = StreamModule:append(Stream0, I1),
     jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
@@ -491,7 +491,7 @@ return_if_not_equal_to_ctx(
             _ -> jit_x86_64_asm:movq(Reg, rax)
         end,
     I4 = jit_x86_64_asm:retq(),
-    I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4)),
+    I2 = jit_x86_64_asm:jz(byte_size(I3) + byte_size(I4) + 2),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary, I4/binary>>),
     {AvailableRegs1, AvailableFPRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, AvailableFPRegs0, UsedRegs0, Reg
@@ -521,26 +521,14 @@ jump_to_label(
         {Label, LabelOffset} ->
             % Label is already known, emit direct branch without relocation
 
-            % -2 for short jump instruction size
-            Rel8 = LabelOffset - Offset - 2,
-            if
-                Rel8 >= -128 andalso Rel8 =< 127 ->
-                    % Use short jump
-                    I1 = jit_x86_64_asm:jmp(Rel8),
-                    Stream1 = StreamModule:append(Stream0, I1),
-                    State#state{stream = Stream1};
-                true ->
-                    % Use near jump
-
-                    % -5 for near jump instruction size
-                    Rel32 = LabelOffset - Offset - 5,
-                    I1 = jit_x86_64_asm:jmp(Rel32),
-                    Stream1 = StreamModule:append(Stream0, I1),
-                    State#state{stream = Stream1}
-            end;
+            % Calculate relative offset (assembler will adjust for instruction size)
+            RelOffset = LabelOffset - Offset,
+            I1 = jit_x86_64_asm:jmp(RelOffset),
+            Stream1 = StreamModule:append(Stream0, I1),
+            State#state{stream = Stream1};
         false ->
             % Label not yet known, emit placeholder and add relocation
-            {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(-4),
+            {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
             Reloc = {Label, Offset + RelocOffset, 32},
             Stream1 = StreamModule:append(Stream0, I1),
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
@@ -626,7 +614,7 @@ if_else_block(
     State2 = BlockTrueFn(State1),
     Stream2 = State2#state.stream,
     ElseJumpOffset = StreamModule:offset(Stream2),
-    {RelocJMPOffset, I} = jit_x86_64_asm:jmp_rel8(-1),
+    {RelocJMPOffset, I} = jit_x86_64_asm:jmp_rel8(1),
     Stream3 = StreamModule:append(Stream2, I),
     OffsetAfter = StreamModule:offset(Stream3),
     ?ASSERT(OffsetAfter - OffsetAfterCond < 16#80),
@@ -657,7 +645,7 @@ if_block_cond(#state{stream_module = StreamModule} = State0, Cond) ->
 -spec if_block_cond0(state(), condition()) -> {state(), binary(), non_neg_integer()}.
 if_block_cond0(State0, {Reg, '<', 0}) when is_atom(Reg) ->
     I1 = jit_x86_64_asm:testq(Reg, Reg),
-    {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
+    {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(1),
     {State0, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
 if_block_cond0(State0, {RegOrTuple, '<', Value}) ->
     Reg =
@@ -666,7 +654,7 @@ if_block_cond0(State0, {RegOrTuple, '<', Value}) ->
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpq(Value, Reg),
-    {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(-1),
+    {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
 if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
@@ -676,7 +664,7 @@ if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:testq(Reg, Reg),
-    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
 if_block_cond0(State0, {'(int)', RegOrTuple, '==', 0}) ->
@@ -686,7 +674,7 @@ if_block_cond0(State0, {'(int)', RegOrTuple, '==', 0}) ->
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:testl(Reg, Reg),
-    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
 if_block_cond0(
@@ -699,7 +687,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
@@ -713,7 +701,7 @@ if_block_cond0(
         end,
     I1 = jit_x86_64_asm:movabsq(Val, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
-    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
 if_block_cond0(
@@ -726,7 +714,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpl(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
@@ -739,7 +727,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpq(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
@@ -753,7 +741,7 @@ if_block_cond0(
         end,
     I1 = jit_x86_64_asm:movabsq(Val, Temp),
     I2 = jit_x86_64_asm:cmpq(Temp, Reg),
-    {RelocJZOffset, I3} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
 if_block_cond0(
@@ -766,7 +754,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:cmpl(Val, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(
@@ -779,7 +767,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:testb(Reg, Reg),
-    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(-1),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
 if_block_cond0(
@@ -792,7 +780,7 @@ if_block_cond0(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:testb(Reg, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT8_T(Mask) ->
@@ -802,13 +790,13 @@ if_block_cond0(State0, {RegOrTuple, '&', Mask, '!=', 0}) when ?IS_UINT8_T(Mask) 
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_x86_64_asm:testb(Mask, Reg),
-    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I2} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJZOffset};
 if_block_cond0(State0, {{free, Reg} = RegTuple, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
     I1 = jit_x86_64_asm:andb(Mask, Reg),
     I2 = jit_x86_64_asm:cmpb(Val, Reg),
-    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I3} = jit_x86_64_asm:jz_rel8(1),
     State1 = if_block_free_reg(RegTuple, State0),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
 if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
@@ -816,7 +804,7 @@ if_block_cond0(State0, {Reg, '&', Mask, '!=', Val}) when ?IS_UINT8_T(Mask) ->
     I1 = jit_x86_64_asm:movq(Reg, Temp),
     I2 = jit_x86_64_asm:andb(Mask, Temp),
     I3 = jit_x86_64_asm:cmpb(Val, Temp),
-    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(-1),
+    {RelocJZOffset, I4} = jit_x86_64_asm:jz_rel8(1),
     {State0, <<I1/binary, I2/binary, I3/binary, I4/binary>>,
         byte_size(I1) + byte_size(I2) + byte_size(I3) + RelocJZOffset}.
 
@@ -1851,8 +1839,8 @@ call_only_or_schedule_next(
 ) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:decl(?JITSTATE_REMAINING_REDUCTIONS),
-    {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(-4),
-    I2 = jit_x86_64_asm:jz(byte_size(I3)),
+    {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(1),
+    I2 = jit_x86_64_asm:jz(byte_size(I3) + 2),
     Sz = byte_size(I1) + byte_size(I2),
     Reloc1 = {Label, Offset + Sz + RewriteJMPOffset, 32},
     Code = <<I1/binary, I2/binary, I3/binary>>,
