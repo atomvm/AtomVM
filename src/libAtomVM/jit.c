@@ -127,8 +127,6 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
 {
     int module_index = ctx->cp >> 24;
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
-    // JIT case
-    assert(mod->native_code != NULL);
 
     // Native case
     if (mod->native_code == NULL) {
