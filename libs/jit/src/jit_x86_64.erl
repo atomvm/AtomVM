@@ -512,13 +512,39 @@ return_if_not_equal_to_ctx(
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 jump_to_label(
-    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches} = State, Label
+    #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, labels = Labels} =
+        State,
+    Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(-4),
-    Reloc = {Label, Offset + RelocOffset, 32},
-    Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1, branches = [Reloc | AccBranches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct branch without relocation
+
+            % -2 for short jump instruction size
+            Rel8 = LabelOffset - Offset - 2,
+            if
+                Rel8 >= -128 andalso Rel8 =< 127 ->
+                    % Use short jump
+                    I1 = jit_x86_64_asm:jmp(Rel8),
+                    Stream1 = StreamModule:append(Stream0, I1),
+                    State#state{stream = Stream1};
+                true ->
+                    % Use near jump
+
+                    % -5 for near jump instruction size
+                    Rel32 = LabelOffset - Offset - 5,
+                    I1 = jit_x86_64_asm:jmp(Rel32),
+                    Stream1 = StreamModule:append(Stream0, I1),
+                    State#state{stream = Stream1}
+            end;
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(-4),
+            Reloc = {Label, Offset + RelocOffset, 32},
+            Stream1 = StreamModule:append(Stream0, I1),
+            State#state{stream = Stream1, branches = [Reloc | AccBranches]}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
