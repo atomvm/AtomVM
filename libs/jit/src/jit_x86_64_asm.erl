@@ -318,34 +318,48 @@ testl(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
         end,
     <<Prefix/binary, 16#85, (16#C0 bor (MODRM_REG bsl 3) bor MODRM_RM)>>.
 
-jz(Offset) when ?IS_SINT8_T(Offset) ->
-    <<16#74, Offset>>.
+jz(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#74, AdjustedOffset>>.
 
-jz_rel8(Offset) when ?IS_SINT8_T(Offset) ->
+jz_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
     {1, jz(Offset)}.
 
-jnz(Offset) when ?IS_SINT8_T(Offset) ->
-    <<16#75, Offset>>.
+jnz(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#75, AdjustedOffset>>.
 
 jnz_rel8(Offset) when ?IS_SINT8_T(Offset) ->
     {1, jnz(Offset)}.
 
-jge(Offset) when ?IS_SINT8_T(Offset) ->
-    <<16#7D, Offset>>.
+jge(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#7D, AdjustedOffset>>.
 
 jge_rel8(Offset) when ?IS_SINT8_T(Offset) ->
     {1, jge(Offset)}.
 
-jmp(Offset) when ?IS_SINT8_T(Offset) ->
-    <<16#EB, Offset>>;
+jmp(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#EB, AdjustedOffset>>;
 jmp(Offset) when ?IS_SINT32_T(Offset) ->
-    <<16#E9, Offset:32/little>>.
+    % Adjust for 5-byte near jump instruction size
+    AdjustedOffset = Offset - 5,
+    <<16#E9, AdjustedOffset:32/little>>.
 
-jmp_rel8(Offset) when ?IS_SINT8_T(Offset) ->
-    {1, <<16#EB, Offset>>}.
+jmp_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    {1, <<16#EB, AdjustedOffset>>}.
 
 jmp_rel32(Offset) when ?IS_SINT32_T(Offset) ->
-    {1, <<16#E9, Offset:32/little>>}.
+    % Adjust for 5-byte near jump instruction size
+    AdjustedOffset = Offset - 5,
+    {1, <<16#E9, AdjustedOffset:32/little>>}.
 
 andq(Imm, DestReg) when ?IS_SINT8_T(Imm) andalso is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
