@@ -1096,6 +1096,7 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
         MMod:jump_to_label(BSt0, Label)
     end).
 
+%% Keep the unoptimized version to test the and case.
 is_number_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     Label = 1,
