@@ -502,16 +502,26 @@ first_pass(<<?OP_IS_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     {MSt2, Arg2, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
     ?TRACE("OP_IS_EQ_EXACT ~p, ~p, ~p\n", [Label, Arg1, Arg2]),
-    {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_COMPARE, [
-        ctx, jit_state, {free, Arg1}, {free, Arg2}, ?TERM_COMPARE_EXACT
-    ]),
-    MSt4 = handle_error_if({'(int)', ResultReg, '==', ?TERM_COMPARE_MEMORY_ALLOC_FAIL}, MMod, MSt3),
-    MSt5 = cond_jump_to_label(
-        {{free, ResultReg}, '&', ?TERM_LESS_THAN + ?TERM_GREATER_THAN, '!=', 0},
-        Label,
-        MMod,
-        MSt4
-    ),
+    % If Arg2 is an immediate, we don't need to call term_compare
+    MSt5 =
+        if
+            is_integer(Arg2) ->
+                {MSt3, Arg1Reg} = MMod:move_to_native_register(MSt2, Arg1),
+                cond_jump_to_label({{free, Arg1Reg}, '!=', Arg2}, Label, MMod, MSt3);
+            true ->
+                {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_COMPARE, [
+                    ctx, jit_state, {free, Arg1}, {free, Arg2}, ?TERM_COMPARE_EXACT
+                ]),
+                MSt4 = handle_error_if(
+                    {'(int)', ResultReg, '==', ?TERM_COMPARE_MEMORY_ALLOC_FAIL}, MMod, MSt3
+                ),
+                cond_jump_to_label(
+                    {{free, ResultReg}, '&', ?TERM_LESS_THAN + ?TERM_GREATER_THAN, '!=', 0},
+                    Label,
+                    MMod,
+                    MSt4
+                )
+        end,
     first_pass(Rest3, MMod, MSt5, State0);
 % 44
 first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
@@ -520,11 +530,22 @@ first_pass(<<?OP_IS_NOT_EQ_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     {MSt2, Arg2, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
     ?TRACE("OP_IS_NOT_EQ_EXACT ~p, ~p, ~p\n", [Label, Arg1, Arg2]),
-    {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_COMPARE, [
-        ctx, jit_state, {free, Arg1}, {free, Arg2}, ?TERM_COMPARE_EXACT
-    ]),
-    MSt4 = handle_error_if({'(int)', ResultReg, '==', ?TERM_COMPARE_MEMORY_ALLOC_FAIL}, MMod, MSt3),
-    MSt5 = cond_jump_to_label({'(int)', {free, ResultReg}, '==', ?TERM_EQUALS}, Label, MMod, MSt4),
+    MSt5 =
+        if
+            is_integer(Arg2) ->
+                {MSt3, Arg1Reg} = MMod:move_to_native_register(MSt2, Arg1),
+                cond_jump_to_label({{free, Arg1Reg}, '==', Arg2}, Label, MMod, MSt3);
+            true ->
+                {MSt3, ResultReg} = MMod:call_primitive(MSt2, ?PRIM_TERM_COMPARE, [
+                    ctx, jit_state, {free, Arg1}, {free, Arg2}, ?TERM_COMPARE_EXACT
+                ]),
+                MSt4 = handle_error_if(
+                    {'(int)', ResultReg, '==', ?TERM_COMPARE_MEMORY_ALLOC_FAIL}, MMod, MSt3
+                ),
+                cond_jump_to_label(
+                    {'(int)', {free, ResultReg}, '==', ?TERM_EQUALS}, Label, MMod, MSt4
+                )
+        end,
     first_pass(Rest3, MMod, MSt5, State0);
 % 45
 first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
