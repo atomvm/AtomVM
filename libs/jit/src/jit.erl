@@ -560,11 +560,16 @@ first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, State0) ->
         ),
         BSt2 = MMod:and_(BSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
         BSt3 = MMod:move_array_element(BSt2, Reg, 0, Reg),
+        % Optimization : ((Reg & 0x3F) != 0x8) && ((Reg & 0x3F) != 0x18)
+        % is equivalent to (Reg & 0x2F) != 0x8
         cond_jump_to_label(
-            {'and', [
-                {Reg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
-                {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_FLOAT}
-            ]},
+            {
+                {free, Reg},
+                '&',
+                ?TERM_BOXED_TAG_MASK_POSITIVE_INTEGER_OR_FLOAT,
+                '!=',
+                ?TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT
+            },
             Label,
             MMod,
             BSt3
