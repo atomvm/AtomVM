@@ -54,6 +54,7 @@
     increment_sp/2,
     set_continuation_to_label/2,
     set_continuation_to_offset/1,
+    continuation_entry_point/1,
     get_module_index/1,
     and_/3,
     or_/3,
@@ -1734,6 +1735,12 @@ set_continuation_to_offset(
     Code = <<I1/binary, I2/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, branches = [Reloc | Branches]}, OffsetRef}.
+
+%% @doc Implement a continuation entry point. On AArch64 this is a nop
+%% as we don't need to save any register.
+-spec continuation_entry_point(#state{}) -> #state{}.
+continuation_entry_point(State) ->
+    State.
 
 get_module_index(
     #state{
