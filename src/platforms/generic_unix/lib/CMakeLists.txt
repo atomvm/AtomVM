@@ -44,6 +44,15 @@ set(SOURCE_FILES
     ../../../libAtomVM/otp_socket.c
 )
 
+if(NOT AVM_DISABLE_JIT)
+    set(HEADER_FILES ${HEADER_FILES}
+        jit_stream_mmap.h
+    )
+    set(SOURCE_FILES ${SOURCE_FILES}
+        jit_stream_mmap.c
+    )
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
