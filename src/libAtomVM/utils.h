@@ -113,7 +113,7 @@ extern "C" {
     #ifdef __GNUC__
         #define ENDIAN_SWAP_16(value) __builtin_bswap16(value)
     #else
-        #define ENDIAN_SWAP_16(value) (((value) & 0xFF) << 8) | (((value) & 0xFF00) >> 8))
+        #define ENDIAN_SWAP_16(value) ((((value) & 0xFF) << 8) | (((value) & 0xFF00) >> 8))
     #endif
 
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
