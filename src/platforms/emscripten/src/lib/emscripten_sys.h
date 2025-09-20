@@ -113,6 +113,7 @@ struct EmscriptenPlatformData
     pthread_mutex_t poll_mutex;
     pthread_cond_t poll_cond;
     struct ListHead messages;
+    atomic_size_t next_tracked_object_key;
     ErlNifResourceType *promise_resource_type;
     ErlNifResourceType *htmlevent_user_data_resource_type;
     ErlNifResourceType *websocket_resource_type;
@@ -134,6 +135,7 @@ void sys_enqueue_emscripten_cast_message(GlobalContext *glb, const char *target,
 em_promise_t sys_enqueue_emscripten_call_message(GlobalContext *glb, const char *target, const char *message);
 void sys_enqueue_emscripten_htmlevent_message(GlobalContext *glb, int32_t target_pid, term message, term user_data, HeapFragment *heap);
 void sys_enqueue_emscripten_unregister_htmlevent_message(GlobalContext *glb, struct HTMLEventUserDataResource *rsrc);
+size_t sys_get_next_tracked_object_key(GlobalContext *glb);
 void sys_promise_resolve_int_and_destroy(em_promise_t promise, em_promise_result_t result, int value);
 void sys_promise_resolve_str_and_destroy(em_promise_t promise, em_promise_result_t result, int value);
 
