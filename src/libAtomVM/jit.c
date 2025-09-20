@@ -95,11 +95,16 @@ _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in j
 _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_armv6m.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_armv6m.erl");
 
-_Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 in jit/src/jit_armv6m.erl");
 _Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 
 #else
 #error Unknown jit target
+#endif
+
+#ifdef AVM_USE_SINGLE_PRECISION
+_Static_assert(sizeof(avm_float_t) == 0x4, "sizeof(avm_float_t) is 0x4 for single precision");
+#else
+_Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for double precision");
 #endif
 
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \

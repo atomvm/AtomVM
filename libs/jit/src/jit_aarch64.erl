@@ -133,7 +133,8 @@
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [aarch64_register()],
     used_regs :: [aarch64_register()],
-    labels :: [{integer() | reference(), integer()}]
+    labels :: [{integer() | reference(), integer()}],
+    variant :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -167,6 +168,13 @@
 -define(X_REG(N), {?CTX_REG, 16#30 + (N * ?WORD_SIZE)}).
 -define(CP, {?CTX_REG, 16#B8}).
 -define(FP_REGS, {?CTX_REG, 16#C0}).
+-define(FP_REG_OFFSET(State, F),
+    (F *
+        case (State)#state.variant band ?JIT_VARIANT_FLOAT32 of
+            0 -> 8;
+            _ -> 4
+        end)
+).
 -define(BS, {?CTX_REG, 16#C8}).
 -define(BS_OFFSET, {?CTX_REG, 16#D0}).
 -define(JITSTATE_MODULE, {?JITSTATE_REG, 0}).
@@ -216,7 +224,7 @@ word_size() -> ?WORD_SIZE.
 %% @return New backend state
 %%-----------------------------------------------------------------------------
 -spec new(any(), module(), stream()) -> state().
-new(_Variant, StreamModule, Stream) ->
+new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
@@ -224,7 +232,8 @@ new(_Variant, StreamModule, Stream) ->
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
-        labels = []
+        labels = [],
+        variant = Variant
     }.
 
 %%-----------------------------------------------------------------------------
@@ -1273,7 +1282,7 @@ move_to_vm_register(
 ) ->
     I1 = jit_aarch64_asm:ldr(Reg, {Reg, ?WORD_SIZE}),
     I2 = jit_aarch64_asm:ldr(Temp, ?FP_REGS),
-    I3 = jit_aarch64_asm:str(Reg, {Temp, F * ?WORD_SIZE}),
+    I3 = jit_aarch64_asm:str(Reg, {Temp, ?FP_REG_OFFSET(State0, F)}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = free_native_register(State0, Reg),
