@@ -22,10 +22,20 @@
 
 -export([start/0]).
 
+-ifdef(AVM_DISABLE_JIT).
 -include("code_load/export_test_module_data.hrl").
 
+export_test_module_data() ->
+    ?EXPORT_TEST_MODULE_DATA.
+-else.
+-include("code_load/export_test_module_data_x86_64.hrl").
+
+export_test_module_data() ->
+    ?EXPORT_TEST_MODULE_DATA_x86_64.
+-endif.
+
 start() ->
-    Bin = ?EXPORT_TEST_MODULE_DATA,
+    Bin = export_test_module_data(),
     {error, _} = code:ensure_loaded(export_test_module),
     {module, export_test_module} = code:load_binary(
         export_test_module, "export_test_module.beam", Bin

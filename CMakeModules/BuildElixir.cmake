@@ -107,6 +107,13 @@ endmacro()
 macro(pack_test avm_name main)
     find_package(Elixir REQUIRED)
 
+    if(AVM_DISABLE_JIT)
+        set(precompiled_suffix "")
+    else()
+        set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
+        set(ARCHIVES_TARGETS jit)
+    endif()
+
     # Compile the main module
     add_custom_command(
         OUTPUT Elixir.${main}.beam
@@ -145,10 +152,14 @@ macro(pack_test avm_name main)
     endif()
 
     # Set up standard libraries
-    set(ARCHIVE_TARGETS estdlib eavmlib exavmlib etest)
+    set(ARCHIVE_TARGETS ${ARCHIVES_TARGETS} estdlib eavmlib exavmlib etest)
     foreach(archive_name ${ARCHIVE_TARGETS})
         if(${archive_name} STREQUAL "exavmlib")
             set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        elseif(${archive_name} MATCHES "^estdlib$")
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}${precompiled_suffix}.avm)
+        elseif(${archive_name} MATCHES "^jit$")
+            set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/jit/src/jit${precompiled_suffix}.avm)
         else()
             set(ARCHIVES ${ARCHIVES} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         endif()
