@@ -193,6 +193,7 @@ lists:keyfind/3, &lists_keyfind_nif
 lists:keymember/3, &lists_keymember_nif
 lists:member/2, &lists_member_nif
 jit:backend_module/0, IF_HAVE_JIT(&jit_backend_module_nif)
+jit:variant/0, IF_HAVE_JIT(&jit_variant_nif)
 lists:reverse/1, &lists_reverse_nif
 lists:reverse/2, &lists_reverse_nif
 maps:from_keys/2, &maps_from_keys_nif

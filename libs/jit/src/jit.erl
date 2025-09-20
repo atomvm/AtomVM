@@ -30,7 +30,8 @@
 % NIFs
 -export([
     stream_module/0,
-    backend_module/0
+    backend_module/0,
+    variant/0
 ]).
 
 -export_type([
@@ -3702,9 +3703,16 @@ stream(MaxSize) ->
 backend_module() ->
     erlang:nif_error(undefined).
 
+%% @doc Get the JIT variant suitable for runtime compilation
+%% @return The JIT variant for this platform and float precision
+-spec variant() -> non_neg_integer().
+variant() ->
+    erlang:nif_error(undefined).
+
 %% @doc Instantiate backend for this platform
 %% @return A tuple with the backend module and the backend state for this platform
 backend({StreamModule, Stream}) ->
     BackendModule = ?MODULE:backend_module(),
-    BackendState = BackendModule:new(?JIT_VARIANT_PIC, StreamModule, Stream),
+    Variant = ?MODULE:variant(),
+    BackendState = BackendModule:new(Variant, StreamModule, Stream),
     {BackendModule, BackendState}.
