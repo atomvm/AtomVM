@@ -1699,7 +1699,12 @@ get_module_index(
     }.
 
 and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    I1 = jit_x86_64_asm:andq(Val, Reg),
+    % 32 bits instructions on x86-64 zero the high 32 bits
+    I1 =
+        if
+            Val >= 0, Val =< 16#FFFFFFFF -> jit_x86_64_asm:andl(Val, Reg);
+            true -> jit_x86_64_asm:andq(Val, Reg)
+        end,
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
