@@ -37,6 +37,7 @@
     call_primitive_with_cp/3,
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
+    jump_to_continuation/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -153,7 +154,8 @@
     | {'(int)', maybe_free_armv6m_register(), '!=', armv6m_register() | integer()}
     | {'(bool)', maybe_free_armv6m_register(), '==', false}
     | {'(bool)', maybe_free_armv6m_register(), '!=', false}
-    | {maybe_free_armv6m_register(), '&', non_neg_integer(), '!=', integer()}.
+    | {maybe_free_armv6m_register(), '&', non_neg_integer(), '!=', integer()}
+    | {{free, armv6m_register()}, '==', {free, armv6m_register()}}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -721,6 +723,68 @@ jump_to_label(
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
     State1#state{stream = Stream1}.
+
+%%-----------------------------------------------------------------------------
+%% @doc Jump to address in continuation pointer register
+%% The continuation points to a function prologue, so we need to compute
+%% the target address using PIC and use function epilogue to jump.
+%% @end
+%% @param State current backend state
+%% @param {free, OffsetReg} register containing the offset value
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+jump_to_continuation(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Temp | _],
+        offset = BaseOffset
+    } = State0,
+    {free, OffsetReg}
+) ->
+    % ARM v6-M PIC implementation using one temp register:
+    % 1. Use ADR to get PC into temp register
+    % 2. Add PC to OffsetReg to get intermediate value
+    % 3. Load base offset immediate into temp
+    % 4. Add base offset to get final target address
+    % 5. Use function epilogue pattern to jump
+
+    AdrOffset = StreamModule:offset(Stream0),
+    % ADR Temp, +4 stores PC+4 in Temp
+    I1 = jit_armv6m_asm:adr(Temp, 4),
+
+    % Add PC to OffsetReg: OffsetReg = OffsetReg + PC
+    I2 = jit_armv6m_asm:adds(OffsetReg, OffsetReg, Temp),
+
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+
+    % PC is aligned down to 4-byte boundary
+    AdrPC = (AdrOffset + 4) band (bnot 3),
+
+    % Calculate what we need to add: BaseOffset - AdrPC + 1 for thumb bit
+    ImmediateValue = BaseOffset - AdrPC + 1,
+
+    % Generate mov_immediate to load the calculated base offset into Temp
+    State1 = mov_immediate(State0#state{stream = Stream1}, Temp, ImmediateValue),
+
+    % Add base offset to get final target address: OffsetReg = OffsetReg + BaseOffset
+    I3 = jit_armv6m_asm:adds(OffsetReg, OffsetReg, Temp),
+
+    % Function epilogue pattern:
+    % Load saved LR to temp register (LR is at sp+20)
+    I4 = jit_armv6m_asm:ldr(Temp, {sp, 20}),
+    % Store target address to LR position on stack
+    I5 = jit_armv6m_asm:str(OffsetReg, {sp, 20}),
+    % Move saved LR to LR register
+    I6 = jit_armv6m_asm:mov(lr, Temp),
+    % Pop prolog registers: {r1,r4,r5,r6,r7,lr} where lr is now target address
+    % This restores jit_state in r1 and branches to target via pc
+    I7 = jit_armv6m_asm:pop([r1, r4, r5, r6, r7, pc]),
+
+    Code = <<I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
+    Stream2 = StreamModule:append(State1#state.stream, Code),
+    % Free all registers as this is a terminal instruction
+    State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
 branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) when
     LabelOffset - Offset =< 2050, LabelOffset - Offset >= -2044
@@ -2115,7 +2179,19 @@ move_to_array_element(
     State2 = State1#state{stream = Stream1},
     free_native_register(State2, ValueReg).
 
--spec move_to_native_register(state(), value()) -> {state(), armv6m_register()}.
+-spec move_to_native_register(state(), value() | cp) -> {state(), armv6m_register()}.
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
+    cp
+) ->
+    I1 = jit_armv6m_asm:ldr(Reg, ?CP),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg};
 move_to_native_register(

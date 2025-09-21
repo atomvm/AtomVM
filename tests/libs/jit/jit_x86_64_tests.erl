@@ -1559,6 +1559,21 @@ move_to_array_element_test_() ->
             ]
         end}.
 
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, rax}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: leaq -0x7(%rip), %rax; addq %rax, %rax; jmpq *%rax
+    % With default offset 0, NetOffset = 0 - 0 = 0, but RIP-relative needs adjustment for instruction length
+    Dump =
+        <<
+            "   0:	48 8d 05 f9 ff ff ff 	lea    -0x7(%rip),%rax\n"
+            "   7:	48 01 c0             	add    %rax,%rax\n"
+            "   a:	ff e0                	jmpq   *%rax"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 

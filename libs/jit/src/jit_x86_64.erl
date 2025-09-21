@@ -37,6 +37,7 @@
     call_primitive_with_cp/3,
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
+    jump_to_continuation/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -138,7 +139,8 @@
     | {'(int)', maybe_free_x86_64_register(), '!=', x86_64_register() | integer()}
     | {'(bool)', maybe_free_x86_64_register(), '==', false}
     | {'(bool)', maybe_free_x86_64_register(), '!=', false}
-    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', integer()}.
+    | {maybe_free_x86_64_register(), '&', non_neg_integer(), '!=', integer()}
+    | {{free, x86_64_register()}, '==', {free, x86_64_register()}}.
 
 -define(WORD_SIZE, 8).
 
@@ -514,6 +516,42 @@ jump_to_label(
     end.
 
 %%-----------------------------------------------------------------------------
+%% @doc Jump to a continuation address stored in a register.
+%% This is used for optimized intra-module returns.
+%% @end
+%% @param State current backend state
+%% @param OffsetReg register containing the continuation offset
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+jump_to_continuation(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        offset = BaseOffset,
+        available_regs = [TempReg | _]
+    } = State,
+    {free, OffsetReg}
+) ->
+    % Calculate absolute address: native_code_base + target_offset
+    % where native_code_base = current_pc + (BaseOffset - CurrentStreamOffset)
+    % Similar to aarch64 approach but using leaq for PC-relative addressing
+    CurrentStreamOffset = StreamModule:offset(Stream0),
+    NetOffset = BaseOffset - CurrentStreamOffset - 7,
+
+    % Get native code base address using PC-relative lea: leaq NetOffset(%rip), TempReg
+    I1 = jit_x86_64_asm:leaq({rip, NetOffset}, TempReg),
+    7 = byte_size(I1),
+    % Add target offset to get final absolute address: addq OffsetReg, TempReg
+    I2 = jit_x86_64_asm:addq(OffsetReg, TempReg),
+    % Indirect jump to the calculated absolute address: jmpq *TempReg
+    I3 = jit_x86_64_asm:jmpq({TempReg}),
+
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Free all registers since this is a tail jump
+    State#state{stream = Stream1, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+
+%%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionnally
 %% execute a block.
 %% @end
@@ -722,6 +760,14 @@ if_block_cond0(
     {RelocJZOffset, I3} = jit_x86_64_asm:jnz_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJZOffset};
+if_block_cond0(State0, {{free, Reg1}, '==', {free, Reg2}}) ->
+    % Compare two free registers
+    I1 = jit_x86_64_asm:cmpq(Reg2, Reg1),
+    {RelocJNZOffset, I2} = jit_x86_64_asm:jnz_rel8(1),
+    % Free both registers
+    State1 = if_block_free_reg({free, Reg1}, State0),
+    State2 = if_block_free_reg({free, Reg2}, State1),
+    {State2, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJNZOffset};
 if_block_cond0(
     State0,
     {'(int)', RegOrTuple, '==', Val}
@@ -1562,7 +1608,19 @@ move_to_array_element(
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
--spec move_to_native_register(state(), value()) -> {state(), x86_64_register()}.
+-spec move_to_native_register(state(), value() | cp) -> {state(), x86_64_register()}.
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
+    cp
+) ->
+    I1 = jit_x86_64_asm:movq(?CP, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg};
 move_to_native_register(
