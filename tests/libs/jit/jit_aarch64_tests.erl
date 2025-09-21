@@ -1719,6 +1719,21 @@ mul_test_() ->
             ]
         end}.
 
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, r0}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: adr x7, NetOffset; add x7, x7, x0; br x7
+    % With default offset 0, NetOffset = 0 - 0 = 0, temp register is r7
+    Dump =
+        <<
+            "   0:	10000007 	adr	x7, 0x0\n"
+            "   4:	8b0000e7 	add	x7, x7, x0\n"
+            "   8:	d61f00e0 	br	x7"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
 
