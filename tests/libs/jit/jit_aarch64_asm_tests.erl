@@ -24,8 +24,28 @@
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+-export([
+    list_to_integer/1,
+    list_to_integer/2
+]).
+
+list_to_integer(X) -> erlang:list_to_integer(X).
+list_to_integer(X, B) -> erlang:list_to_integer(X, B).
+
 -define(_assertAsmEqual(Bin, Str, Value),
     ?_assertEqual(jit_tests_common:asm(aarch64, Bin, Str), Value)
+).
+-define(_assertAsmEqualLargeInt(Bin, Str, Value),
+    ?_test(begin
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                ?assertEqual(jit_tests_common:asm(aarch64, Bin, Str), Value);
+            "ATOM" ->
+                % AtomVM doesn't handle large integers yet.
+                % Skip the test
+                ok
+        end
+    end)
 ).
 
 add_test_() ->
@@ -236,14 +256,14 @@ mov_test_() ->
         ),
 
         % mov immediate - very large value requiring multiple instructions
-        ?_assertAsmEqual(
+        ?_assertAsmEqualLargeInt(
             <<16#D29579A1:32/little, 16#F2B7C041:32/little, 16#F2DFD741:32/little,
                 16#F2EFF941:32/little>>,
             "mov x1, #0xabcd\n"
             "movk x1, #0xbe02, lsl #16\n"
             "movk x1, #0xfeba, lsl #32\n"
             "movk x1, #0x7fca, lsl #48",
-            jit_aarch64_asm:mov(r1, 9208452466117618637)
+            jit_aarch64_asm:mov(r1, ?MODULE:list_to_integer("9208452466117618637"))
         ),
 
         % mov register
@@ -256,20 +276,28 @@ mov_test_() ->
         ),
 
         %% Test 4-bit pattern encoding
-        ?_test(begin
-            Result = jit_aarch64_asm:mov(r0, 16#FFFFFFFFFFFF0000),
-            ?assert(is_binary(Result))
-        end),
+        ?_assertAsmEqual(
+            <<16#929fffe0:32/little>>,
+            "mov x0, #-65536",
+            jit_aarch64_asm:mov(r0, -65536)
+        ),
         %% Test complex immediate that will use fallback sequence
-        ?_test(begin
-            % This should be a complex immediate that can't be encoded as bitmask
-            % and needs fallback to build_immediate_sequence
-            Result = jit_aarch64_asm:mov(r0, 16#123456789ABCDEF0),
-            ?assert(is_binary(Result))
-        end),
+        ?_assertAsmEqualLargeInt(
+            <<
+                16#d29bde00:32/little,
+                16#f2b35780:32/little,
+                16#f2cacf00:32/little,
+                16#f2e24680:32/little
+            >>,
+            "mov x0, #0xdef0\n"
+            "movk x0, #0x9abc, lsl #16\n"
+            "movk x0, #0x5678, lsl #32\n"
+            "movk x0, #0x1234, lsl #48",
+            jit_aarch64_asm:mov(r0, ?MODULE:list_to_integer("123456789ABCDEF0", 16))
+        ),
 
         %% Test negative immediate that uses build_negative_immediate fallback
-        ?_assertAsmEqual(
+        ?_assertAsmEqualLargeInt(
             <<
                 16#d2842200:32/little,
                 16#f2aca860:32/little,
@@ -280,27 +308,27 @@ mov_test_() ->
             "movk	x0, #0x6543, lsl #16\n"
             "movk	x0, #0xa987, lsl #32\n"
             "movk	x0, #0xedcb, lsl #48",
-            jit_aarch64_asm:mov(r0, -16#123456789ABCDEF0)
+            jit_aarch64_asm:mov(r0, ?MODULE:list_to_integer("-123456789ABCDEF0", 16))
         ),
 
         %% Test bitmask patterns with different sizes
         %% Size 16 pattern: repeats every 16 bits
-        ?_assertAsmEqual(
+        ?_assertAsmEqualLargeInt(
             <<16#b20083e0:32/little>>,
             "mov	x0, #0x0001000100010001",
-            jit_aarch64_asm:mov(r0, 16#0001000100010001)
+            jit_aarch64_asm:mov(r0, ?MODULE:list_to_integer("0001000100010001", 16))
         ),
         %% Size 4 pattern: repeats every 4 bits
-        ?_assertAsmEqual(
+        ?_assertAsmEqualLargeInt(
             <<16#b200e7e0:32/little>>,
             "mov	x0, #0x3333333333333333",
-            jit_aarch64_asm:mov(r0, 16#3333333333333333)
+            jit_aarch64_asm:mov(r0, ?MODULE:list_to_integer("3333333333333333", 16))
         ),
         %% Size 2 pattern: repeats every 2 bits
-        ?_assertAsmEqual(
+        ?_assertAsmEqualLargeInt(
             <<16#b200f3e0:32/little>>,
             "mov	x0, #0x5555555555555555",
-            jit_aarch64_asm:mov(r0, 16#5555555555555555)
+            jit_aarch64_asm:mov(r0, ?MODULE:list_to_integer("5555555555555555", 16))
         )
     ].
 
@@ -380,11 +408,28 @@ cmp_test_() ->
         ?_assertAsmEqual(<<16#F103001F:32/little>>, "cmp x0, #192", jit_aarch64_asm:cmp(r0, 192)),
 
         %% Test large immediate compare (uses temporary register)
-        ?_test(begin
-            Result = jit_aarch64_asm:cmp(r0, 16#12345678),
-            ?assert(is_binary(Result)),
-            ?assert(byte_size(Result) > 4)
-        end)
+        ?_assertAsmEqual(
+            <<
+                16#d28acf10:32/little,
+                16#f2a24690:32/little,
+                16#eb10001f:32/little
+            >>,
+            "mov x16, #0x5678\n"
+            "movk x16, #0x1234, lsl #16\n"
+            "cmp x0, x16",
+            jit_aarch64_asm:cmp(r0, 16#12345678)
+        ),
+
+        %% Test negative immediate compare (uses MOVN)
+        ?_assertAsmEqual(
+            <<
+                16#92800010:32/little,
+                16#eb1000ff:32/little
+            >>,
+            "movn x16, #0\n"
+            "cmp x7, x16",
+            jit_aarch64_asm:cmp(r7, -1)
+        )
     ].
 
 cmp_w_test_() ->
