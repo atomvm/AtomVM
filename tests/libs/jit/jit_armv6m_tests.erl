@@ -3443,6 +3443,27 @@ call_func_ptr_register_exhaustion_test_() ->
             ]
         end}.
 
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, r0}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: armv6m PIC sequence with function epilogue pattern
+    % Based on actual generated output
+    Dump =
+        <<
+            "   0:	a700      	add	r7, pc, #0	; (adr r7, 0x4)\n"
+            "   2:	19c0      	adds	r0, r0, r7\n"
+            "   4:	2703      	movs	r7, #3\n"
+            "   6:	427f      	negs	r7, r7\n"
+            "   8:	19c0      	adds	r0, r0, r7\n"
+            "   a:	9f05      	ldr	r7, [sp, #20]\n"
+            "   c:	9005      	str	r0, [sp, #20]\n"
+            "   e:	46be      	mov	lr, r7\n"
+            "  10:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 %% Mimic part of add.beam
 add_beam_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
