@@ -157,6 +157,103 @@ static term nif_emscripten_promise_reject(Context *ctx, int argc, term argv[])
     return nif_emscripten_promise_resolve_reject(ctx, argc, argv, EM_PROMISE_REJECT);
 }
 
+static term term_tracked_object_from_key(Context *ctx, atomic_size_t key)
+{
+    struct EmscriptenPlatformData *platform = ctx->global->platform_data;
+    struct TrackedObjectResource *rsrc_obj = enif_alloc_resource(platform->tracked_object_resource_type, sizeof(struct TrackedObjectResource));
+    if (IS_NULL_PTR(rsrc_obj)) {
+        return term_invalid_term();
+    }
+    rsrc_obj->key = key;
+    term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
+    enif_release_resource(rsrc_obj);
+    return obj;
+}
+
+// clang-format off
+EM_JS(uint32_t *, js_tracked_eval, (const char *code, uint32_t *size, bool debug), {
+    const keys = Module['onRunTrackedJs'](UTF8ToString(code), debug);
+    const error = keys === null;
+    if (error) {
+        HEAPU32[size / HEAPU32.BYTES_PER_ELEMENT] = 0;
+        return 0;
+    }
+
+    const ptr = Module['_malloc'](keys.length * HEAPU32.BYTES_PER_ELEMENT);
+    HEAPU32[size / HEAPU32.BYTES_PER_ELEMENT] = keys.length;
+    HEAPU32.set(keys, ptr / HEAPU32.BYTES_PER_ELEMENT);
+    return ptr;
+});
+// clang-format on
+
+static void do_run_script_tracked(const char *script, int32_t sync_caller_pid, GlobalContext *global)
+{
+#ifdef NDEBUG
+    bool debug = false;
+#else
+    bool debug = true;
+#endif
+    uint32_t keys_n;
+    uint32_t *keys = js_tracked_eval(script, &keys_n, debug);
+    Context *target_ctx = globalcontext_get_process_lock(global, sync_caller_pid);
+    if (target_ctx) {
+        term result = term_invalid_term();
+        term refs = term_nil();
+        if (UNLIKELY(memory_ensure_free_opt(target_ctx, TUPLE_SIZE(2) + LIST_SIZE(keys_n, TERM_BOXED_REFC_BINARY_SIZE), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            // TODO: how to raise?
+            result = OUT_OF_MEMORY_ATOM;
+            goto send_result;
+        }
+        result = term_alloc_tuple(2, &target_ctx->heap);
+
+        if (IS_NULL_PTR(keys)) {
+            term_put_tuple_element(result, 0, ERROR_ATOM);
+            term_put_tuple_element(result, 1, BADARG_ATOM);
+            goto send_result;
+        }
+
+        if (keys_n == 0) {
+            term_put_tuple_element(result, 0, OK_ATOM);
+            term_put_tuple_element(result, 1, term_nil());
+            goto send_result;
+        }
+
+        for (long i = keys_n - 1; i >= 0; --i) {
+            term tracked_object = term_tracked_object_from_key(target_ctx, keys[i]);
+            // we can't easily recover from OOM here
+            assert(!term_is_invalid_term(tracked_object));
+            refs = term_list_prepend(tracked_object, refs, &target_ctx->heap);
+        }
+        term_put_tuple_element(result, 0, OK_ATOM);
+        term_put_tuple_element(result, 1, refs);
+
+    send_result:
+        free(keys);
+        mailbox_send_term_signal(target_ctx, TrapAnswerSignal, result);
+        globalcontext_get_process_unlock(global, target_ctx);
+    } else {
+        // sender died
+        free(keys);
+    }
+}
+
+static term nif_emscripten_run_script_tracked(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term script_term = argv[0];
+
+    int ok;
+    char *script = interop_term_to_string(script_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    // Trap caller waiting for completion
+    context_update_flags(ctx, ~NoFlags, Trap);
+    // script will be freed as it's passed as satellite
+    emscripten_dispatch_to_thread(emscripten_main_runtime_thread_id(), EM_FUNC_SIG_VIII, do_run_script_tracked, script, script, ctx->process_id, ctx->global);
+    return term_invalid_term();
+}
+
 static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
@@ -176,6 +273,10 @@ static const struct Nif emscripten_promise_resolve_nif = {
 static const struct Nif emscripten_promise_reject_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_emscripten_promise_reject
+};
+static const struct Nif emscripten_run_script_tracked = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_emscripten_run_script_tracked
 };
 
 static bool get_callback_target(Context *ctx, term t, const char **target, char **str)
@@ -787,6 +888,9 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         }
         if (strcmp("run_script/2", nifname) == 0) {
             return &emscripten_run_script_nif;
+        }
+        if (strcmp("run_script_tracked/1", nifname) == 0) {
+            return &emscripten_run_script_tracked;
         }
         if (strcmp("promise_resolve/1", nifname) == 0) {
             return &emscripten_promise_resolve_nif;
