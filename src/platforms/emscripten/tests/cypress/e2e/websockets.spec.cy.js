@@ -19,7 +19,14 @@
  */
 describe("websockets", () => {
   beforeEach(() => {
-    cy.visit("/tests/src/test_websockets.html");
+    // Use Docker echo server in CI, otherwise use the default online server
+    const ciEnv = Cypress.env('CI');
+    const isCI = ciEnv === true || ciEnv === 'true';
+    const url = isCI
+      ? "/tests/src/test_websockets.html#echo_server=ws://localhost:9090"
+      : "/tests/src/test_websockets.html";
+
+    cy.visit(url);
   });
 
   it("should pass test", () => {
