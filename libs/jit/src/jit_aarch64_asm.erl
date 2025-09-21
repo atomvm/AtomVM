@@ -235,8 +235,9 @@ mov(Rd, Rm) when is_atom(Rd), is_atom(Rm) ->
 mov_immediate(Dst, Imm) when Imm >= 0, Imm =< 16#FFFF ->
     %% Simple 16-bit positive immediate
     movz(Dst, Imm, 0);
-mov_immediate(Dst, Imm) when Imm < 0, Imm >= -16#FFFF ->
+mov_immediate(Dst, Imm) when Imm < 0, (-Imm - 1) =< 16#FFFF ->
     %% Simple 16-bit negative immediate using MOVN
+    %% MOVN encodes ~immediate, so we can use it when ~Imm fits in 16 bits
     DstNum = reg_to_num(Dst),
     <<(16#92800000 bor (((-Imm - 1) band 16#FFFF) bsl 5) bor DstNum):32/little>>;
 mov_immediate(Dst, Imm) when Imm >= 0 ->
@@ -372,7 +373,7 @@ orr_immediate(Dst, N, Immr, Imms) when
     % 64-bit operation
     Sf = 1,
     <<
-        ((Sf bsl 31) bor (16#32000000) bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor
+        ((Sf bsl 31) bor (16#B2000000) bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor
             (31 bsl 5) bor DstNum):32/little
     >>.
 
@@ -796,7 +797,7 @@ cmp(Rn, Imm) when is_atom(Rn), is_integer(Imm) ->
     %% For large immediates, load into a temporary register and compare
     %% Use r16 as temporary register (caller-saved)
     TempReg = r16,
-    LoadInstr = build_positive_immediate(TempReg, <<Imm:64>>),
+    LoadInstr = mov_immediate(TempReg, Imm),
     CmpInstr = cmp(Rn, TempReg),
     <<LoadInstr/binary, CmpInstr/binary>>.
 
