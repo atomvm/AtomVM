@@ -21,12 +21,19 @@
 -module(test_websockets).
 -export([start/0]).
 
--define(ECHO_WEBSOCKET_URL, <<"wss://echo.websocket.org">>).
+-define(DEFAULT_ECHO_WEBSOCKET_URL, <<"wss://echo.websocket.org">>).
+
+get_echo_websocket_url() ->
+    case os:getenv("ECHO_WEBSOCKET_URL") of
+        false -> ?DEFAULT_ECHO_WEBSOCKET_URL;
+        Url -> list_to_binary(Url)
+    end.
 
 start() ->
     try
         true = websocket:is_supported(),
-        Websocket = websocket:new(?ECHO_WEBSOCKET_URL),
+        EchoUrl = get_echo_websocket_url(),
+        Websocket = websocket:new(EchoUrl),
         connecting = websocket:ready_state(Websocket),
         ok =
             receive
