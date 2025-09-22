@@ -137,6 +137,7 @@
 -type condition() ::
     {x86_64_register(), '<', integer()}
     | {maybe_free_x86_64_register(), '<', x86_64_register()}
+    | {integer(), '<', maybe_free_x86_64_register()}
     | {maybe_free_x86_64_register(), '==', integer()}
     | {maybe_free_x86_64_register(), '!=', x86_64_register() | integer()}
     | {'(int)', maybe_free_x86_64_register(), '==', integer()}
@@ -739,11 +740,42 @@ if_block_cond(#state{stream_module = StreamModule} = State0, Cond) ->
     {State2, ReplaceDelta}.
 
 -spec if_block_cond0(state(), condition()) -> {state(), binary(), non_neg_integer()}.
-if_block_cond0(State0, {Reg, '<', 0}) when is_atom(Reg) ->
+if_block_cond0(State0, {RegOrTuple, '<', 0}) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     I1 = jit_x86_64_asm:testq(Reg, Reg),
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(1),
-    {State0, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
-if_block_cond0(State0, {RegOrTuple, '<', Value}) ->
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+% Handle {Value, '<', Reg} - means Value < Reg, jump if false (i.e., if Value >= Reg or Reg <= Value)
+if_block_cond0(State0, {Value, '<', RegOrTuple}) when ?IS_SINT32_T(Value) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpq(Value, Reg),
+    {RelocJLEOffset, I2} = jit_x86_64_asm:jle_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJLEOffset};
+% Catch-all for large values outside SINT32_T range
+if_block_cond0(
+    #state{available_regs = [Temp | _]} = State0, {Value, '<', RegOrTuple}
+) when is_integer(Value) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:movabsq(Value, Temp),
+    I2 = jit_x86_64_asm:cmpq(Temp, Reg),
+    {RelocJLEOffset, I3} = jit_x86_64_asm:jle_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJLEOffset};
+if_block_cond0(State0, {RegOrTuple, '<', Value}) when ?IS_SINT32_T(Value) ->
     Reg =
         case RegOrTuple of
             {free, Reg0} -> Reg0;
@@ -753,6 +785,30 @@ if_block_cond0(State0, {RegOrTuple, '<', Value}) ->
     {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(1),
     State1 = if_block_free_reg(RegOrTuple, State0),
     {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+if_block_cond0(State0, {RegOrTuple, '<', RegB}) when is_atom(RegB) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:cmpq(RegB, Reg),
+    {RelocJGEOffset, I2} = jit_x86_64_asm:jge_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary>>, byte_size(I1) + RelocJGEOffset};
+% Catch-all for large values outside SINT32_T range
+if_block_cond0(
+    #state{available_regs = [Temp | _]} = State0, {RegOrTuple, '<', Value}
+) when is_integer(Value) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_x86_64_asm:movabsq(Value, Temp),
+    I2 = jit_x86_64_asm:cmpq(Temp, Reg),
+    {RelocJGEOffset, I3} = jit_x86_64_asm:jge_rel8(1),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    {State1, <<I1/binary, I2/binary, I3/binary>>, byte_size(I1) + byte_size(I2) + RelocJGEOffset};
 if_block_cond0(State0, {RegOrTuple, '==', 0}) ->
     Reg =
         case RegOrTuple of
@@ -1949,11 +2005,41 @@ or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
+add(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [TempReg | _]
+    } = State,
+    Reg,
+    Val
+) when is_integer(Val), Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+    I1 = jit_x86_64_asm:movabsq(Val, TempReg),
+    I2 = jit_x86_64_asm:addq(TempReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    State#state{stream = Stream2};
 add(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:addq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
+sub(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [TempReg | _]
+    } = State,
+    Reg,
+    Val
+) when is_integer(Val), Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+    % Immediate too large for 32-bit, load into temporary register
+    I1 = jit_x86_64_asm:movabsq(Val, TempReg),
+    I2 = jit_x86_64_asm:subq(TempReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    % Free temporary register immediately
+    State#state{stream = Stream2};
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:subq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
