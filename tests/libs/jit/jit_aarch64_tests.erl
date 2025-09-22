@@ -829,6 +829,82 @@ if_block_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', RegA},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004d 	b.le	0x14\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', {free, RegA}},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004d 	b.le	0x14\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {RegA, '<', 100},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {{free, RegA}, '<', 100},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end)
             ]
         end}.

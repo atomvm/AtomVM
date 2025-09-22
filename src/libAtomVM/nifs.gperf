@@ -183,6 +183,7 @@ code_server:code_chunk/1, IF_HAVE_JIT(&code_server_code_chunk_nif)
 code_server:atom_resolver/2, IF_HAVE_JIT(&code_server_atom_resolver_nif)
 code_server:literal_resolver/2, IF_HAVE_JIT(&code_server_literal_resolver_nif)
 code_server:type_resolver/2, IF_HAVE_JIT(&code_server_type_resolver_nif)
+code_server:import_resolver/2, IF_HAVE_JIT(&code_server_import_resolver_nif)
 code_server:set_native_code/3, IF_HAVE_JIT(&code_server_set_native_code_nif)
 console:print/1, &console_print_nif
 base64:encode/1, &base64_encode_nif

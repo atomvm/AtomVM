@@ -261,6 +261,7 @@ static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[]);
 static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
@@ -832,6 +833,10 @@ static const struct Nif code_server_literal_resolver_nif = {
 static const struct Nif code_server_type_resolver_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_type_resolver
+};
+static const struct Nif code_server_import_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_import_resolver
 };
 static const struct Nif code_server_set_native_code_nif = {
     .base.type = NIFFunctionType,
@@ -5689,8 +5694,59 @@ static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[])
     if (IS_NULL_PTR(mod)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+
     int type_index = term_to_int(argv[1]);
     return module_get_type_by_index(mod, type_index, ctx);
+}
+
+static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int import_index = term_to_int(argv[1]);
+
+    // Get the imported function entry at the given index
+    if (IS_NULL_PTR(mod->imported_funcs) || import_index < 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Parse the import table to get the module, function, and arity
+    // Import table format: each entry is 12 bytes (module_atom_index, function_atom_index, arity)
+    const uint8_t *import_table = mod->import_table;
+    if (IS_NULL_PTR(import_table)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int functions_count = READ_32_UNALIGNED(import_table + 8);
+    if (import_index >= functions_count) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int local_module_atom_index = READ_32_UNALIGNED(import_table + import_index * 12 + 12);
+    int local_function_atom_index = READ_32_UNALIGNED(import_table + import_index * 12 + 4 + 12);
+    uint32_t arity = READ_32_UNALIGNED(import_table + import_index * 12 + 8 + 12);
+
+    term module_atom = module_get_atom_term_by_id(mod, local_module_atom_index);
+    term function_atom = module_get_atom_term_by_id(mod, local_function_atom_index);
+    term arity_term = term_from_int(arity);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(result, 0, module_atom);
+    term_put_tuple_element(result, 1, function_atom);
+    term_put_tuple_element(result, 2, arity_term);
+
+    return result;
 }
 
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])

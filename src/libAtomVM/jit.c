@@ -1380,7 +1380,7 @@ static term jit_bitstring_extract_integer(
         }
         return t;
     } else if ((offset % 8 == 0) && (n % 8 == 0) && (n <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-        term bs_bin = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+        term bs_bin = (term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED);
         unsigned long capacity = term_binary_size(bs_bin);
         if (8 * capacity - offset < (unsigned long) n) {
             return FALSE_ATOM;
@@ -1421,7 +1421,7 @@ static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offs
 
 static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
 {
-    term binary = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+    term binary = (term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED);
     TRACE("jit_term_sub_binary_heap_size: binary=%p size=%d\n", (void *) binary, (int) size);
     return term_sub_binary_heap_size(binary, size);
 }
