@@ -52,7 +52,10 @@ loop(Conn) ->
                     ok;
                 {ok, UpdatedConn, Responses} ->
                     io:format("Got: ~p~n", [Responses]),
-                    loop(UpdatedConn);
+                    case maybe_terminate(Responses, UpdatedConn) of
+                        ok -> loop(UpdatedConn);
+                        closed -> ok
+                    end;
                 unknown ->
                     io:format("Unexpected message: ~p~n", [Message]),
                     error
