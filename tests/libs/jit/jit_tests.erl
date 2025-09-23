@@ -48,6 +48,20 @@
     <<0, 0, 0, 3, 0, 0, 0, 3, 15, 255, 0, 2, 0, 32>>
 ).
 
+% Code chunk with typed register from test_call_simple.erl
+% Contains call_fun2 opcode with typed register that uses verify_is_function optimization
+-define(CODE_CHUNK_2,
+    <<0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 178, 0, 0, 0, 3, 0, 0, 0, 1, 1, 16, 153, 16, 2, 18, 34, 32,
+        1, 32, 77, 21, 19, 12, 0, 32, 153, 32, 178, 50, 16, 87, 19, 16, 18, 0, 19, 3>>
+).
+-define(ATU8_CHUNK_2,
+    <<255, 255, 255, 253, 8, 16, 116, 101, 115, 116, 95, 99, 97, 108, 108, 95, 115, 105, 109, 112,
+        108, 101, 144, 116, 101, 115, 116, 95, 99, 97, 108, 108, 96, 117, 110, 115, 97, 102, 101>>
+).
+-define(TYPE_CHUNK_2,
+    <<0, 0, 0, 3, 0, 0, 0, 2, 15, 255, 0, 16>>
+).
+
 compile_minimal_x86_64_test() ->
     Stream0 = jit_stream_binary:new(0),
     <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_0,
@@ -166,4 +180,73 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
         )
     ),
 
+    ok.
+
+verify_is_function_typed_optimization_x86_64_test() ->
+    % Compile CODE_CHUNK_1 which contains a typed register for term_to_int optimization
+    Stream0 = jit_stream_binary:new(0),
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_2,
+    Stream1 = jit_stream_binary:append(
+        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+    ),
+    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+
+    AtomResolver = jit_precompile:atom_resolver(?ATU8_CHUNK_2),
+    LiteralResolver = fun(_) -> test_literal end,
+    TypeResolver = jit_precompile:type_resolver(?TYPE_CHUNK_2),
+
+    % Compile with typed register support
+    {_LabelsCount, Stream3} = jit:compile(
+        ?CODE_CHUNK_2, AtomResolver, LiteralResolver, TypeResolver, jit_x86_64, Stream2
+    ),
+    CompiledCode = jit_x86_64:stream(Stream3),
+
+    % Check that call to allocate is directly followed by the building the cp
+    % for call
+    % b6:	48 8b 42 10          	mov    0x10(%rdx),%rax
+    % ba:	ff e0                	jmpq   *%rax
+    % bc:	48 8b 47 38          	mov    0x38(%rdi),%rax
+    % c0:	4c 8b 1e             	mov    (%rsi),%r11
+    % c3:	45 8b 1b             	mov    (%r11),%r11d
+    % c6:	49 c1 e3 18          	shl    $0x18,%r11
+    % ...
+
+    % As opposed to:
+    % b6:	48 8b 42 10          	mov    0x10(%rdx),%rax
+    % ba:	ff e0                	jmpq   *%rax
+    % bc:	48 8b 47 38          	mov    0x38(%rdi),%rax
+    % c0:	49 89 c3             	mov    %rax,%r11
+    % c3:	4d 89 da             	mov    %r11,%r10
+    % c6:	41 80 e2 03          	and    $0x3,%r10b
+    % ca:	41 80 fa 02          	cmp    $0x2,%r10b
+    % ce:	74 1a                	je     0xea
+    % d0:	48 8b 82 98 00 00 00 	mov    0x98(%rdx),%rax
+    % d7:	48 c7 c2 d7 00 00 00 	mov    $0xd7,%rdx
+    % de:	48 c7 c1 8b 01 00 00 	mov    $0x18b,%rcx
+    % e5:	4d 89 d8             	mov    %r11,%r8
+    % e8:	ff e0                	jmpq   *%rax
+    % ea:	49 83 e3 fc          	and    $0xfffffffffffffffc,%r11
+    % ee:	4d 8b 1b             	mov    (%r11),%r11
+    % f1:	4d 89 da             	mov    %r11,%r10
+    % f4:	41 80 e2 3f          	and    $0x3f,%r10b
+    % f8:	41 80 fa 14          	cmp    $0x14,%r10b
+    % fc:	74 1a                	je     0x118
+    % fe:	48 8b 82 98 00 00 00 	mov    0x98(%rdx),%rax
+    % 105:	48 c7 c2 05 01 00 00 	mov    $0x105,%rdx
+    % 10c:	48 c7 c1 8b 01 00 00 	mov    $0x18b,%rcx
+    % 113:	4d 89 d8             	mov    %r11,%r8
+    % 116:	ff e0                	jmpq   *%rax
+    % 118:	4c 8b 1e             	mov    (%rsi),%r11
+    % 11b:	45 8b 1b             	mov    (%r11),%r11d
+    % 11e:	49 c1 e3 18          	shl    $0x18,%r11
+    % ...
+
+    ?assertMatch(
+        {_, 20},
+        binary:match(
+            CompiledCode,
+            <<16#48, 16#8b, 16#42, 16#10, 16#ff, 16#e0, 16#48, 16#8b, 16#47, 16#38, 16#4c, 16#8b,
+                16#1e, 16#45, 16#8b, 16#1b, 16#49, 16#c1, 16#e3, 16#18>>
+        )
+    ),
     ok.
