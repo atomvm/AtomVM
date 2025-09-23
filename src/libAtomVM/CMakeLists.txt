@@ -306,10 +306,6 @@ endif()
 target_include_directories(libAtomVM PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_BINARY_DIR}/avm_version.h)
 
-if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL "Generic")
-    target_link_libraries(libAtomVM PUBLIC libAtomVM${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR})
-endif()
-
 add_dependencies(libAtomVM generated generated-nifs-hash)
 
 if (COVERAGE)
