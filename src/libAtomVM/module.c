@@ -616,16 +616,13 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "t_atom"));
 
         case BEAM_TYPE_BITSTRING:
-            if (type_bits & BEAM_TYPE_HAS_UNIT) {
-                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
-                    return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
-                }
-                term type_tuple = term_alloc_tuple(2, &ctx->heap);
-                term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "t_bs_matchable")));
-                term_put_tuple_element(type_tuple, 1, term_from_int32(unit));
-                return type_tuple;
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
             }
-            return globalcontext_make_atom(ctx->global, ATOM_STR("\xD", "t_bs_matchable"));
+            term type_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "t_bs_matchable")));
+            term_put_tuple_element(type_tuple, 1, term_from_int32(unit));
+            return type_tuple;
 
         case BEAM_TYPE_CONS:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "t_cons"));
