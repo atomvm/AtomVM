@@ -37,6 +37,7 @@ option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_BUILD_RUNTIME_ONLY "Only build the AtomVM runtime" OFF)
 option(COVERAGE "Build for code coverage" OFF)
+option(ENABLE_ASAN "Use Address Sanitizer" ON)
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
