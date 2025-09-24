@@ -546,6 +546,8 @@ compile_erlang(test_raw_raise)
 compile_erlang(test_ets)
 compile_erlang(test_node)
 
+compile_erlang(test_bump_reductions)
+
 compile_erlang(test_op_bs_start_match)
 compile_assembler(test_op_bs_start_match_asm)
 compile_erlang(test_op_bs_create_bin)
@@ -1068,6 +1070,9 @@ add_custom_target(erlang_test_modules DEPENDS
     test_raw_raise.beam
 
     test_ets.beam
+
+    test_bump_reductions.beam
+
     test_node.beam
 
     test_op_bs_start_match.beam

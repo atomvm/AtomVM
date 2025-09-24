@@ -203,6 +203,7 @@ static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
 static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_bump_reductions_1(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]);
@@ -767,6 +768,11 @@ static const struct Nif erlang_lists_subtract_nif = {
 static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_zlib_compress_1
+};
+
+static const struct Nif erlang_bump_reductions_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_bump_reductions_1
 };
 
 #define DEFINE_MATH_NIF(moniker)                     \
@@ -5901,6 +5907,19 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
     RAISE_ERROR(UNDEFINED_ATOM);
 }
 #endif
+
+static term nif_erlang_bump_reductions_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    int64_t reductions_to_bump = term_to_int(argv[0]) - 1;
+    if (reductions_to_bump < AVM_INT_MAX) {
+        ctx->reductions += reductions_to_bump;
+        return TRUE_ATOM;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+}
 
 //
 // MAINTENANCE NOTE: Exception handling for fp operations using math

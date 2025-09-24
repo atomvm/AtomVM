@@ -28,6 +28,7 @@
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
+#include "limits.h"
 #include "list.h"
 #include "mailbox.h"
 #include "memory.h"
@@ -89,6 +90,8 @@ Context *context_new(GlobalContext *glb)
     list_init(&ctx->dictionary);
 
     ctx->native_handler = NULL;
+
+    ctx->reductions = 0;
 
     ctx->saved_module = NULL;
     ctx->saved_ip = NULL;
@@ -492,6 +495,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case MESSAGE_QUEUE_LEN_ATOM:
         case REGISTERED_NAME_ATOM:
         case MEMORY_ATOM:
+        case REDUCTIONS_ATOM:
             ret_size = TUPLE_SIZE(2);
             break;
         case LINKS_ATOM: {
@@ -644,6 +648,13 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
             // FIXME: since it's not possible how to build stacktrace here with the current API,
             // this mock implementation returns an empty list
             term_put_tuple_element(ret, 1, term_nil());
+            break;
+        }
+
+        case REDUCTIONS_ATOM: {
+            term_put_tuple_element(ret, 0, REDUCTIONS_ATOM);
+            int reductions = ctx->reductions;
+            term_put_tuple_element(ret, 1, term_from_int(reductions));
             break;
         }
 
