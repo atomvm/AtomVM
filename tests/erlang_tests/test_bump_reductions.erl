@@ -29,11 +29,11 @@ start() ->
     {reductions, InitialReductions1} = erlang:process_info(self(), reductions),
     Pid = erlang:spawn_opt(fun() -> process_test() end, [link]),
     Pid ! {ready, self()},
-    ReceivedReductions = 
-        receive 
-            {r1, {reductions, Reductions}} -> Reductions 
+    ReceivedReductions =
+        receive
+            {r1, {reductions, Reductions}} -> Reductions
         end,
-    
+
     receive
         {r2, {reductions, Reductions2}} ->
             Reductions2 = ReceivedReductions + 1027
