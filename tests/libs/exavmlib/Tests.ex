@@ -34,6 +34,8 @@ defmodule Tests do
     :ok = test_exception()
     :ok = test_chars_protocol()
     :ok = test_inspect()
+    :ok = test_gen_server()
+    :ok = test_supervisor()
     :ok = IO.puts("Finished Elixir tests")
   end
 
@@ -144,7 +146,7 @@ defmodule Tests do
 
     # Enum.flat_map
     [:a, :a, :b, :b, :c, :c] = Enum.flat_map([:a, :b, :c], fn x -> [x, x] end)
-    [1, 2, 3, 4, 5, 6] = Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> x..y end)
+    [1, 2, 3, 4, 5, 6] = Enum.flat_map([{1, 3}, {4, 6}], fn {x, y} -> Range.new(x, y) end)
     [[:a], [:b], [:c]] = Enum.flat_map([:a, :b, :c], fn x -> [[x]] end)
 
     # Enum.join
@@ -316,6 +318,170 @@ defmodule Tests do
     :ok
   end
 
+  def test_supervisor do
+    # https://github.com/elixir-lang/elixir/blob/v1.17/lib/elixir/test/elixir/supervisor_test.exs
+
+    # test "start_link/3 with local"
+    {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one, name: :my_sup)
+
+    true = Supervisor.which_children(:my_sup) == []
+    Supervisor.stop(pid)
+
+    # test "start_link/2"
+    children = [{SupervisorTest.Stack, {[:hello], [name: :dyn_stack]}}]
+    {:ok, pid} = Supervisor.start_link(children, strategy: :one_for_one)
+
+    wait_until_registered(:dyn_stack)
+    true = GenServer.call(:dyn_stack, :pop) == :hello
+    true = GenServer.call(:dyn_stack, :stop) == :ok
+
+    wait_until_registered(:dyn_stack)
+    true = GenServer.call(:dyn_stack, :pop) == :hello
+    Supervisor.stop(pid)
+
+    # test "start_link/2 with old and new specs"
+    children = [
+      {SupervisorTest.Stack, {[:hello], []}},
+      {:old_stack, {SupervisorTest.Stack, :start_link, [{[:hello], []}]}, :permanent, 5000,
+       :worker, [SupervisorTest.Stack]}
+    ]
+
+    {:ok, pid} = Supervisor.start_link(children, strategy: :one_for_one)
+    Supervisor.stop(pid)
+
+    # test "start_link/3"
+    {:ok, pid} = Supervisor.start_link(SupervisorTest.Stack.Sup, {[:hello], [name: :stat_stack]})
+    wait_until_registered(:stat_stack)
+    true = GenServer.call(:stat_stack, :pop) == :hello
+    Supervisor.stop(pid)
+
+    # test "with invalid child spec"
+    # do_check_childspec not available atomvm supervisor.erl
+    # {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+
+    # true = Supervisor.start_child(pid, %{}) == {:error, :missing_id}
+    # true = Supervisor.start_child(pid, {1, 2, 3, 4, 5, 6}) == {:error, {:invalid_mfa, 2}}
+
+    # true =
+    #   Supervisor.start_child(pid, %{id: 1, start: {Task, :foo, :bar}}) ==
+    #     {:error, {:invalid_mfa, {Task, :foo, :bar}}}
+
+    # true =
+    #   Supervisor.start_child(pid, %{id: 1, start: {Task, :foo, [:bar]}, shutdown: -1}) ==
+    #     {:error, {:invalid_shutdown, -1}}
+
+    # test "child life cycle"
+    {:ok, pid} = Supervisor.start_link([], strategy: :one_for_one)
+
+    true = Supervisor.which_children(pid) == []
+    true = Supervisor.count_children(pid) == %{specs: 0, active: 0, supervisors: 0, workers: 0}
+
+    child_spec = Supervisor.child_spec({SupervisorTest.Stack, {[:hello], []}}, [])
+    {:ok, stack} = Supervisor.start_child(pid, child_spec)
+    true = GenServer.call(stack, :pop) == :hello
+
+    true =
+      Supervisor.which_children(pid) ==
+        [{SupervisorTest.Stack, stack, :worker, [SupervisorTest.Stack]}]
+
+    true = Supervisor.count_children(pid) == %{specs: 1, active: 1, supervisors: 0, workers: 1}
+
+    true = Supervisor.delete_child(pid, SupervisorTest.Stack) == {:error, :running}
+    true = Supervisor.terminate_child(pid, SupervisorTest.Stack) == :ok
+
+    {:ok, stack} = Supervisor.restart_child(pid, SupervisorTest.Stack)
+    true = GenServer.call(stack, :pop) == :hello
+
+    true = Supervisor.terminate_child(pid, SupervisorTest.Stack) == :ok
+    true = Supervisor.delete_child(pid, SupervisorTest.Stack) == :ok
+    Supervisor.stop(pid)
+
+    :ok
+  end
+
+  def test_gen_server do
+    # Tests are from:
+    # https://github.com/elixir-lang/elixir/blob/v1.17/lib/elixir/test/elixir/gen_server_test.exs
+
+    # test "generates child_spec/1"
+    true =
+      GenServerTest.Stack.child_spec([:hello]) == %{
+        id: GenServerTest.Stack,
+        start: {GenServerTest.Stack, :start_link, [[:hello]]}
+      }
+
+    true =
+      GenServerTest.CustomStack.child_spec([:hello]) == %{
+        id: :id,
+        restart: :temporary,
+        shutdown: :infinity,
+        start: {:foo, :bar, []}
+      }
+
+    # test "start_link/3 with local"
+    {:ok, pid} = GenServer.start_link(GenServerTest.Stack, [:hello], name: :stack)
+    true = GenServer.call(:stack, :pop) == :hello
+    :ok = GenServer.stop(pid)
+
+    # test "start_link/2, call/2 and cast/2"
+    {:ok, pid} = GenServer.start_link(GenServerTest.Stack, [:hello])
+
+    {:links, links} = Process.info(self(), :links)
+    true = pid in links
+
+    true = GenServer.call(pid, :pop) == :hello
+    true = GenServer.cast(pid, {:push, :world}) == :ok
+    :timer.sleep(500)
+    true = GenServer.call(pid, :pop) == :world
+    :timer.sleep(50)
+    true = GenServer.stop(pid) == :ok
+
+    # true = GenServer.cast({:global, :foo}, {:push, :world}) == :ok
+    # true = GenServer.cast({:via, :foo, :bar}, {:push, :world}) == :ok
+    true = GenServer.cast(:foo, {:push, :world}) == :ok
+
+    {:ok, pid} = GenServer.start_link(GenServerTest.Stack, [:hello], name: nil)
+
+    true = Process.info(pid, :registered_name) == {:registered_name, []}
+    true = GenServer.stop(pid) == :ok
+
+    # test "start/2"
+    {:ok, pid} = GenServer.start(GenServerTest.Stack, [:hello])
+    {:links, links} = Process.info(self(), :links)
+    false = pid in links
+    GenServer.stop(pid)
+
+    # test "whereis/1"
+    name = :whereis_server
+
+    {:ok, pid} = GenServer.start_link(GenServerTest.Stack, [], name: name)
+    true = GenServer.whereis(name) == pid
+
+    true = GenServer.whereis({name, node()}) == pid
+
+    true = GenServer.whereis({name, :another_node}) == {name, :another_node}
+    true = GenServer.whereis(pid) == pid
+    true = GenServer.whereis(:whereis_bad_server) == nil
+
+    true = GenServer.stop(pid, :normal) == :ok
+
+    # {:ok, pid} = GenServer.start_link(GenServerTest.Stack, [], name: {:global, name})
+    # true = GenServer.whereis({:global, name}) == pid
+    # true = GenServer.whereis({:global, :whereis_bad_server}) == nil
+    # true = GenServer.whereis({:via, :global, name}) == pid
+    # true = GenServer.whereis({:via, :global, :whereis_bad_server}) == nil
+
+    # test "stop/3", %{test: name}
+    name = :test
+    {:ok, pid} = GenServer.start(GenServerTest.Stack, [])
+    true = GenServer.stop(pid, :normal) == :ok
+
+    {:ok, _} = GenServer.start(GenServerTest.Stack, [], name: name)
+    true = GenServer.stop(name, :normal) == :ok
+
+    :ok
+  end
+
   defp fact(n) when n < 0, do: :test
   defp fact(0), do: 1
   defp fact(n), do: fact(n - 1) * n
@@ -324,6 +490,12 @@ defmodule Tests do
     case value do
       ^a -> a
       ^b -> b
+    end
+  end
+
+  defp wait_until_registered(name) do
+    unless Process.whereis(name) do
+      wait_until_registered(name)
     end
   end
 end
