@@ -653,14 +653,9 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
 
         case REDUCTIONS_ATOM: {
             term_put_tuple_element(ret, 0, REDUCTIONS_ATOM);
-            int64_t reductions = (int64_t) ctx->reductions;
-            size_t reductions_size = term_boxed_integer_size(reductions);
-            if (UNLIKELY(memory_ensure_free_with_roots(ctx, reductions_size, 1, &ret, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                *out = OUT_OF_MEMORY_ATOM;
-                return false;
-            }
-            term reductions_term = term_make_maybe_boxed_int64(reductions, &ctx->heap);
-            term_put_tuple_element(ret, 1, reductions_term);
+            int reductions = ctx->reductions;
+            term reductions_term = term_make_boxed_int(reductions, &ctx->heap);
+            term_put_tuple_element(ret, 1, term_from_int(reductions));
             break;
         }
 
