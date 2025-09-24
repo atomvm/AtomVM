@@ -654,7 +654,6 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case REDUCTIONS_ATOM: {
             term_put_tuple_element(ret, 0, REDUCTIONS_ATOM);
             int reductions = ctx->reductions;
-            term reductions_term = term_make_boxed_int(reductions, &ctx->heap);
             term_put_tuple_element(ret, 1, term_from_int(reductions));
             break;
         }
