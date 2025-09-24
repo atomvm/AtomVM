@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2022 Fred Dushin <fred@dushin.net>
+# Copyright 2025 Winford (Uncle Grumpy) <winford@object.stream>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,23 +18,11 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-if (!ATOMVM_BASE_VERSION)
-    include(${CMAKE_SOURCE_DIR}/version.cmake)
-endif()
-
-if (ATOMVM_DEV)
-    set(ATOMVM_GIT_REVISION "<unknown>")
-    execute_process(
-        COMMAND git rev-parse --short HEAD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE ATOMVM_GIT_REVISION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-    if (NOT ATOMVM_GIT_REVISION STREQUAL "")
-        set(ATOMVM_VERSION "${ATOMVM_BASE_VERSION}+git.${ATOMVM_GIT_REVISION}")
-    else()
-        set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
-    endif()
+partition_table_get_partition_info(app_offset "--partition-name main.avm" "offset")
+if ("${app_offset}" STREQUAL "0x210000")
+    set(BOOT_LIBS "esp32boot.avm")
+elseif ("${app_offset}" STREQUAL "0x250000")
+    set(BOOT_LIBS "elixir_esp32boot.avm")
 else()
-    set(ATOMVM_VERSION ${ATOMVM_BASE_VERSION})
+    set(BOOT_LIBS "NONE")
 endif()
