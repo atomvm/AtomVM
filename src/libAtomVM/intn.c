@@ -212,7 +212,7 @@ static inline uint32_t uint32_nlz(uint32_t x)
     } else if (sizeof(unsigned long long) == sizeof(uint32_t)) {
         return __builtin_clzll(x);
     }
-#elif __STDC_VERSION == 202311L
+#elif __STDC_VERSION__ >= 202311L
     return stdc_leading_zeros(x);
 #else
     uint32_t n;

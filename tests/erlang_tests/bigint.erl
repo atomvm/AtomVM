@@ -230,7 +230,7 @@ parse_bigint() ->
     Pattern7Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern7Bin), 7)),
     Pattern7BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern7Int), 7)),
 
-    expect_badarg(fun() ->
+    ok = expect_badarg(fun() ->
         binary_to_integer(
             ?MODULE:id(
                 <<"-45342150622142553455515645002565446330401366441046314643126036505535454140120366515240023z6">>
@@ -576,8 +576,8 @@ conv_to_from_float() ->
     true = (MinIntAsFloat > ?MODULE:id(-1.888888888888888e77)),
 
     % test overflows
-    expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
-    expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end),
+    ok = expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
+    ok = expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end),
 
     true = (trunc(?MODULE:id(1.157920892373160e77)) > ?MODULE:pow(2, 255)),
     true = (trunc(?MODULE:id(-1.157920892373160e77)) < ?MODULE:pow(-2, 255)),
@@ -807,7 +807,7 @@ expect_badarg(BadFun) ->
     try BadFun() of
         Result -> {unexpected_result, Result}
     catch
-        error:badgarg -> ok;
+        error:badarg -> ok;
         _:E -> {unexpected_error, E}
     end.
 
