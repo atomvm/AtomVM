@@ -145,7 +145,7 @@ compile(CodeChunk, _AtomResolver, _LiteralResolver, _TypeResolver, _MMod, _MSt) 
 
 % 1
 first_pass(<<?OP_LABEL, Rest0/binary>>, MMod, MSt, State0) ->
-    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    ?ASSERT_ALL_NATIVE_FREE(MSt),
     {Label, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LABEL ~p\n", [Label]),
     MSt0 = ?DWARF_LABEL(MMod, MSt, Label),
@@ -1338,7 +1338,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt, State0) ->
     end),
     MSt8 = MMod:shift_right(MSt7, BSOffsetReg, 3),
     MSt9 = MMod:and_(MSt8, BSBinaryReg0, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt10, SizeReg} = MMod:get_array_element(MSt9, BSBinaryReg0, 1),
+    {MSt10, SizeReg} = MMod:get_array_element(MSt9, {free, BSBinaryReg0}, 1),
     {MSt13, SizeValue} =
         if
             Size =:= ?ALL_ATOM ->
@@ -1377,7 +1377,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt, State0) ->
     MSt18 = MMod:free_native_registers(MSt17, [NewOffsetReg]),
     {MSt19, TrimResultReg} = MMod:call_primitive(MSt18, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
     MSt20 = MMod:free_native_registers(MSt19, [TrimResultReg]),
-    {MSt21, BSBinaryReg1} = MMod:get_array_element(MSt20, MatchStateRegPtr, 1),
+    {MSt21, BSBinaryReg1} = MMod:get_array_element(MSt20, {free, MatchStateRegPtr}, 1),
     MSt22 = MMod:or_(MSt21, BSBinaryReg1, ?TERM_PRIMARY_BOXED),
     {MSt23, HeapSizeReg} = MMod:call_primitive(MSt22, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
         BSBinaryReg1, SizeValue
@@ -1393,7 +1393,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt, State0) ->
         Fail, Src, Live, Size, Unit, FlagsValue, Dest
     ]),
     MSt27 = MMod:move_to_vm_register(MSt26, ResultTerm, Dest),
-    MSt28 = MMod:free_native_registers(MSt27, [ResultTerm]),
+    MSt28 = MMod:free_native_registers(MSt27, [ResultTerm, Dest]),
     ?ASSERT_ALL_NATIVE_FREE(MSt28),
     first_pass(Rest7, MMod, MSt28, State0);
 % 120
