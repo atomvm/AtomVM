@@ -31,7 +31,8 @@
     load_binary/3,
     ensure_loaded/1,
     which/1,
-    is_loaded/1
+    is_loaded/1,
+    get_object_code/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -132,3 +133,14 @@ which(Module) ->
         {error, _} ->
             non_existing
     end.
+
+%%-----------------------------------------------------------------------------
+%% @param   Module      module to get object code from
+%% @returns Tuple `{Module, Binary, Filename}' if successful, otherwise `error'.
+%% @doc     Return module binary of a given module.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec get_object_code(Module) -> {Module, Binary, Filename} | error when
+    Module :: atom(), Binary :: binary(), Filename :: string().
+get_object_code(_Module) ->
+    erlang:nif_error(undefined).
