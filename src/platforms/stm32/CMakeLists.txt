@@ -82,6 +82,11 @@ if (NOT CMAKE_TOOLCHAIN_FILE)
 endif ()
 mark_as_advanced(CMAKE_TOOLCHAIN_FILE)
 
+option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+if (NOT AVM_DISABLE_JIT)
+    set(AVM_JIT_TARGET_ARCH "armv6m")
+endif()
+
 if ((NOT ${CMAKE_C_COMPILER_ID} STREQUAL "GNU") OR
     (NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU") OR
     (${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 7.2.1))
