@@ -47,3 +47,5 @@ X(BACKLOG_ATOM, "\x7", "backlog")
 X(ACCEPT_ATOM, "\x6", "accept")
 X(FD_ATOM, "\x2", "fd")
 X(GENERIC_UNIX_ATOM, "\xC", "generic_unix")
+
+X(JIT_STREAM_MMAP_ATOM, "\xF", "jit_stream_mmap")

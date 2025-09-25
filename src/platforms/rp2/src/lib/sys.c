@@ -474,3 +474,12 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     struct RP2PlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
+
+#ifndef AVM_NO_JIT
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+{
+    UNUSED(size);
+    // We need to set the Thumb bit
+    return (ModuleNativeEntryPoint) ((uintptr_t) (native_code + offset) | 1);
+}
+#endif

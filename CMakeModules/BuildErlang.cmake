@@ -22,7 +22,6 @@ macro(pack_archive avm_name)
 
     set(multiValueArgs ERLC_FLAGS MODULES)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
-    list(JOIN PACK_ARCHIVE_ERLC_FLAGS " " PACK_ARCHIVE_ERLC_FLAGS)
     foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
@@ -59,12 +58,78 @@ macro(pack_archive avm_name)
     )
 endmacro()
 
+macro(pack_precompiled_archive avm_name)
+    pack_archive(${avm_name} ${ARGN})
+
+    set(multiValueArgs ERLC_FLAGS MODULES)
+    cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
+
+    if(NOT AVM_DISABLE_JIT)
+        if(${avm_name} STREQUAL jit)
+            set(jit_deps "")
+        else()
+            set(jit_deps "jit")
+        endif()
+        foreach(jit_target_arch_variant x86_64 aarch64 armv6m "armv6m+float32")
+            # Extract base architecture for module dependencies
+            string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
+            set(jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}_asm.beam
+            )
+
+            foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
+                add_custom_command(
+                    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam
+                    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/
+                        && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${jit_target_arch_variant} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
+                    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam ${jit_compiler_modules} ${jit_deps}
+                    COMMENT "Compiling ${module_name}.beam to ${jit_target_arch_variant}"
+                    VERBATIM
+                )
+                set(pack_precompile_archive_${avm_name}_beams ${pack_precompile_archive_${avm_name}_beams} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam)
+            endforeach()
+
+            if(AVM_RELEASE)
+                set(INCLUDE_LINES "")
+            else()
+                set(INCLUDE_LINES "-i")
+            endif()
+
+            add_custom_command(
+                OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
+                DEPENDS ${pack_precompile_archive_${avm_name}_beams} PackBEAM
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_precompile_archive_${avm_name}_beams}
+                COMMENT "Packing archive ${avm_name}-${jit_target_arch_variant}.avm"
+                VERBATIM
+            )
+            add_custom_target(
+                ${avm_name}_${jit_target_arch_variant} ALL
+                DEPENDS ${avm_name}-${jit_target_arch_variant}.avm
+            )
+            add_dependencies(${avm_name} ${avm_name}_${jit_target_arch_variant})
+        endforeach()
+    endif()
+endmacro()
 
 macro(pack_lib avm_name)
+    if(NOT AVM_DISABLE_JIT)
+        set(pack_lib_${avm_name}_jit_archives ${CMAKE_BINARY_DIR}/libs/jit/src/jit-${AVM_JIT_TARGET_ARCH}.avm)
+        set(pack_lib_${avm_name}_archive_targets jit)
+    endif()
 
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "exavmlib")
             set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
+        elseif(${archive_name} STREQUAL "estdlib")
+            if (NOT AVM_DISABLE_JIT)
+                set(pack_lib_${avm_name}_jit_archives ${pack_lib_${avm_name}_jit_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}-${AVM_JIT_TARGET_ARCH}.avm)
+            endif()
+            set(pack_lib_${avm_name}_emu_archives ${pack_lib_${avm_name}_emu_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
         elseif(${archive_name} STREQUAL "gleam_avm")
             set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/${archive_name}.avm)
         else()
@@ -82,10 +147,24 @@ macro(pack_lib avm_name)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_archives}
-        COMMENT "Packing runnable ${avm_name}.avm"
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_emu_archives} ${pack_lib_${avm_name}_archives}
+        COMMENT "Packing lib ${avm_name}.avm"
         VERBATIM
     )
+    set(target_deps ${avm_name}.avm)
+
+    if(NOT AVM_DISABLE_JIT)
+        foreach(jit_target_arch_variant x86_64 aarch64 armv6m "armv6m+float32")
+            add_custom_command(
+                OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
+                DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
+                COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_lib_${avm_name}_jit_archives} ${pack_lib_${avm_name}_archives}
+                COMMENT "Packing lib ${avm_name}-${jit_target_arch_variant}.avm"
+                VERBATIM
+            )
+            set(target_deps ${target_deps} ${avm_name}-${jit_target_arch_variant}.avm)
+        endforeach()
+    endif()
     add_custom_command(
         OUTPUT ${avm_name}-pico.uf2
         DEPENDS ${avm_name}.avm UF2Tool
@@ -93,7 +172,6 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
-
     add_custom_command(
         OUTPUT ${avm_name}-pico2.uf2
         DEPENDS ${avm_name}.avm UF2Tool
@@ -101,10 +179,29 @@ macro(pack_lib avm_name)
         COMMENT "Creating UF2 file ${avm_name}.uf2"
         VERBATIM
     )
+    set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
+
+    if(NOT AVM_DISABLE_JIT)
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico.uf2 -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico2.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
+    endif()
 
     add_custom_target(
         ${avm_name} ALL
-        DEPENDS ${avm_name}.avm ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2
+        DEPENDS ${target_deps}
     )
     if(TARGET ${avm_name}_main)
         add_dependencies(${avm_name} ${avm_name}_main)
@@ -172,11 +269,22 @@ endmacro()
 
 
 macro(pack_test test_avm_name)
-
     set(pack_test_${test_avm_name}_archives ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}_lib.avm)
     set(pack_test_${test_avm_name}_archive_targets ${test_avm_name}_lib)
+
+    if(AVM_DISABLE_JIT)
+        set(precompiled_suffix "")
+    else()
+        set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
+        set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/jit/src/jit${precompiled_suffix}.avm)
+        set(pack_test_${test_avm_name}_archive_targets ${pack_test_${test_avm_name}_archive_targets} jit)
+    endif()
     foreach(archive_name ${ARGN})
-        set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        if(${archive_name} MATCHES "^estdlib$")
+            set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}${precompiled_suffix}.avm)
+        else()
+            set(pack_test_${test_avm_name}_archives ${pack_test_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        endif()
         set(pack_test_${test_avm_name}_archive_targets ${pack_test_${test_avm_name}_archive_targets} ${archive_name})
     endforeach()
 
@@ -208,11 +316,22 @@ macro(pack_test test_avm_name)
 endmacro()
 
 macro(pack_eunit test_avm_name)
-
     set(pack_eunit_${test_avm_name}_archives ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}_lib.avm)
     set(pack_eunit_${test_avm_name}_archive_targets ${test_avm_name}_lib)
+
+    if(AVM_DISABLE_JIT)
+        set(precompiled_suffix "")
+    else()
+        set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
+        set(pack_eunit_${test_avm_name}_archives ${pack_eunit_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/jit/src/jit${precompiled_suffix}.avm)
+        set(pack_eunit_${test_avm_name}_archive_targets ${pack_eunit_${test_avm_name}_archive_targets} jit)
+    endif()
     foreach(archive_name ${ARGN})
-        set(pack_eunit_${test_avm_name}_archives ${pack_eunit_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        if(${archive_name} MATCHES "^estdlib$")
+            set(pack_eunit_${test_avm_name}_archives ${pack_eunit_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}${precompiled_suffix}.avm)
+        else()
+            set(pack_eunit_${test_avm_name}_archives ${pack_eunit_${test_avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
+        endif()
         set(pack_eunit_${test_avm_name}_archive_targets ${pack_eunit_${test_avm_name}_archive_targets} ${archive_name})
     endforeach()
 
