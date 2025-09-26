@@ -852,6 +852,11 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
 #endif
+#if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
+#define IF_HAVE_GETCWD_PATHMAX(expr) (expr)
+#else
+#define IF_HAVE_GETCWD_PATHMAX(expr) NULL
+#endif
 
 // Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push

@@ -25,6 +25,8 @@
 
 #if HAVE_OPEN && HAVE_CLOSE
 #include <fcntl.h>
+#endif
+#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 #include <unistd.h>
 #endif
 #if HAVE_MKFIFO
@@ -39,7 +41,7 @@
 #endif
 
 #if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY) \
-    || HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
+    || HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 #include <errno.h>
 #endif
 
@@ -940,7 +942,43 @@ static term nif_atomvm_posix_readdir(Context *ctx, int argc, term argv[])
 
     return result;
 }
+#endif
 
+#if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
+static term nif_file_get_cwd_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc)
+    UNUSED(argv)
+
+    char *cwd = malloc(PATH_MAX);
+    if (IS_NULL_PTR(cwd)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    if (IS_NULL_PTR(getcwd(cwd, PATH_MAX))) {
+        free(cwd);
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term result_tuple = term_alloc_tuple(2, &ctx->heap);
+        term reason = posix_errno_to_term(errno, ctx->global);
+        term_put_tuple_element(result_tuple, 0, ERROR_ATOM);
+        term_put_tuple_element(result_tuple, 1, reason);
+        return result_tuple;
+    }
+
+    size_t cwd_length = strlen(cwd);
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TERM_STRING_SIZE(cwd_length)) != MEMORY_GC_OK)) {
+        free(cwd);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term result_tuple = term_alloc_tuple(2, &ctx->heap);
+    term cwd_list = term_from_string((uint8_t *) cwd, cwd_length, &ctx->heap);
+    free(cwd);
+
+    term_put_tuple_element(result_tuple, 0, OK_ATOM);
+    term_put_tuple_element(result_tuple, 1, cwd_list);
+    return result_tuple;
+}
 #endif
 
 #if HAVE_OPEN && HAVE_CLOSE
@@ -1009,5 +1047,11 @@ const struct Nif atomvm_posix_closedir_nif = {
 const struct Nif atomvm_posix_readdir_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_readdir
+};
+#endif
+#if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
+const struct Nif file_get_cwd_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_file_get_cwd_0
 };
 #endif
