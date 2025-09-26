@@ -348,6 +348,29 @@ void print_num(const uint32_t num[], int len)
     fprintf(stderr, "\n");
 }
 
+// This function assumes no leading zeros (lenght is used in comparison)
+// Caller must ensure this precondition
+int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len)
+{
+    if (a_len > b_len) {
+        return 1;
+    }
+    if (a_len < b_len) {
+        return -1;
+    }
+
+    for (size_t i = a_len; i > 0; i--) {
+        if (a[i - 1] > b[i - 1]) {
+            return 1;
+        }
+        if (a[i - 1] < b[i - 1]) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 size_t intn_addmnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
 {
@@ -390,6 +413,92 @@ size_t intn_addmnu(
     }
 
     return i;
+}
+
+// This function assumes a >= b
+// Caller must ensure this precondition
+size_t intn_submnu(
+    const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
+{
+    uint32_t borrow = 0;
+    size_t i;
+
+    for (i = 0; i < b_len; i++) {
+        uint64_t temp = (uint64_t) a[i] - (uint64_t) b[i] - (uint64_t) borrow;
+        out[i] = (uint32_t) temp; // Lower 32 bits
+        borrow = (temp >> 63) & 1; // Check if result was negative (borrow needed)
+    }
+
+    for (; i < a_len; i++) {
+        uint64_t temp = (uint64_t) a[i] - (uint64_t) borrow;
+        out[i] = (uint32_t) temp;
+        borrow = (temp >> 63) & 1;
+    }
+
+    return i;
+}
+
+size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    size_t result_len;
+
+    // Case 1: m positive, n positive (m - n)
+    if (m_sign == IntNPositiveInteger && n_sign == IntNPositiveInteger) {
+        int cmp = intn_cmp(m, m_len, n, n_len);
+        if (cmp >= 0) {
+            // m >= n, result is positive
+            *out_sign = IntNPositiveInteger;
+            result_len = intn_submnu(m, m_len, n, n_len, out);
+        } else {
+            // m < n, result is -(n - m), negative
+            *out_sign = IntNNegativeInteger;
+            result_len = intn_submnu(n, n_len, m, m_len, out);
+        }
+    }
+    // Case 2: m positive, n negative (m - (-n) = m + n)
+    else if (m_sign == IntNPositiveInteger && n_sign == IntNNegativeInteger) {
+        *out_sign = IntNPositiveInteger;
+        result_len = intn_addmnu(m, m_len, n, n_len, out);
+    }
+    // Case 3: m negative, n positive ((-m) - n = -(m + n))
+    else if (m_sign == IntNNegativeInteger && n_sign == IntNPositiveInteger) {
+        *out_sign = IntNNegativeInteger;
+        result_len = intn_addmnu(m, m_len, n, n_len, out);
+    }
+    // Case 4: both negative ((-m) - (-n) = n - m)
+    else {
+        int cmp = intn_cmp(n, n_len, m, m_len);
+        if (cmp >= 0) {
+            // n >= m, result is positive
+            *out_sign = IntNPositiveInteger;
+            result_len = intn_submnu(n, n_len, m, m_len, out);
+        } else {
+            // n < m, result is -(m - n), negative
+            *out_sign = IntNNegativeInteger;
+            result_len = intn_submnu(m, m_len, n, n_len, out);
+        }
+    }
+
+    // Normalize 0 sign
+    if (result_len == 1 && out[0] == 0) {
+        *out_sign = IntNPositiveInteger;
+    }
+
+    return result_len;
+}
+
+size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
+{
+    intn_digit_t u[2];
+    intn_integer_sign_t u_sign;
+    int64_to_intn_2(num1, u, &u_sign);
+    intn_digit_t v[2];
+    intn_integer_sign_t v_sign;
+    int64_to_intn_2(num2, v, &v_sign);
+
+    return intn_submn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
 
 static void neg(const intn_digit_t in[], size_t in_len, intn_digit_t out[])
