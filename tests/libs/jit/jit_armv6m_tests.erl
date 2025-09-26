@@ -1721,15 +1721,15 @@ is_boolean_far_unaligned_test() ->
     Dump = <<
         "   0:	4770      	bx	lr\n"
         "   2:	6987      	ldr	r7, [r0, #24]\n"
-        "   4:	2f4b      	cmp	r7, #75	; 0x4b\n"
+        "   4:	2f4b      	cmp	r7, #75	@ 0x4b\n"
         "   6:	d007      	beq.n	0x18\n"
         "   8:	2f0b      	cmp	r7, #11\n"
         "   a:	d005      	beq.n	0x18\n"
-        "   c:	4e01      	ldr	r6, [pc, #4]	; (0x14)\n"
+        "   c:	4e01      	ldr	r6, [pc, #4]	@ (0x14)\n"
         "   e:	447e      	add	r6, pc\n"
         "  10:	4730      	bx	r6\n"
-        "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0fef      	lsrs	r6, r5, #31\n"
+        "  12:	46c0      	nop			@ (mov r8, r8)\n"
+        "  14:	0fef      	lsrs	r7, r5, #31\n"
         "  16:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
