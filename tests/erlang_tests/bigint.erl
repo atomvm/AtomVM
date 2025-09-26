@@ -48,6 +48,7 @@
 
 start() ->
     test_mul() +
+        test_sub() +
         parse_bigint() +
         test_cmp() +
         conv_to_from_float() +
@@ -139,6 +140,160 @@ fact(N) when N rem 2 == 0 ->
     N * fact(N - 1);
 fact(N) when N rem 2 == 1 ->
     fact(N - 1) * N.
+
+test_sub() ->
+    Int0 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">>), 16
+    ),
+    Int1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int2 = erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16),
+    Int3 = erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
+    Int4 = erlang:binary_to_integer(?MODULE:id(<<"ABCDEF0123456789">>), 16),
+    Int5 = erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16),
+    Int6 = erlang:binary_to_integer(?MODULE:id(<<"ABCDEF123456789FFAABBCCDDEE11223">>), 16),
+
+    <<"1">> = erlang:integer_to_binary(?MODULE:id(Int1) - ?MODULE:id(Int0)),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">> = erlang:integer_to_binary(
+        ?MODULE:id(Int1) - ?MODULE:id(1), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE">> = erlang:integer_to_binary(
+        Int1 - 1, 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000000000000000">> = erlang:integer_to_binary(
+        Int1 - Int2, 16
+    ),
+    <<"-1ABCDEF0123456788">> = erlang:integer_to_binary(?MODULE:id(Int3) - ?MODULE:id(Int4), 16),
+    <<"-1ABCDEF123456789FFAABBCCDDEE11222">> = erlang:integer_to_binary(Int5 - Int6, 16),
+
+    %% Case 1: Both positive (equal, result zero)
+    M3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"12345678901234567890123456789012345678901234567890">>)
+    ),
+    N3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"12345678901234567890123456789012345678901234567890">>)
+    ),
+    <<"0">> = erlang:integer_to_binary(?MODULE:id(M3) - ?MODULE:id(N3)),
+
+    %% Case 2: m positive, n negative (result always positive)
+    M4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"800000000000000000000000000000000000000000000000">>)
+    ),
+    N4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-300000000000000000000000000000000000000000000000">>)
+    ),
+    <<"1100000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(M4) - ?MODULE:id(N4)
+    ),
+
+    %% Case 2: m positive, n negative (large numbers)
+    M5 = erlang:binary_to_integer(
+        ?MODULE:id(<<"98765432109876543210987654321098765432109876543210">>)
+    ),
+    N5 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-11111111111111111111111111111111111111111111111111">>)
+    ),
+    <<"109876543220987654322098765432209876543220987654321">> = erlang:integer_to_binary(
+        ?MODULE:id(M5) - ?MODULE:id(N5)
+    ),
+
+    %% Case 3: m negative, n positive (result always negative)
+    M6 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-600000000000000000000000000000000000000000000000">>)
+    ),
+    N6 = erlang:binary_to_integer(
+        ?MODULE:id(<<"400000000000000000000000000000000000000000000000">>)
+    ),
+    <<"-1000000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(M6) - ?MODULE:id(N6)
+    ),
+
+    %% Case 3: m negative, n positive (large numbers)
+    M7 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-55555555555555555555555555555555555555555555555555">>)
+    ),
+    N7 = erlang:binary_to_integer(
+        ?MODULE:id(<<"44444444444444444444444444444444444444444444444444">>)
+    ),
+    <<"-99999999999999999999999999999999999999999999999999">> = erlang:integer_to_binary(
+        ?MODULE:id(M7) - ?MODULE:id(N7)
+    ),
+
+    %% Case 4: Both negative (|m| > |n|, result negative)
+    M8 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-900000000000000000000000000000000000000000000000">>)
+    ),
+    N8 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-200000000000000000000000000000000000000000000000">>)
+    ),
+    <<"-700000000000000000000000000000000000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(M8) - ?MODULE:id(N8)
+    ),
+
+    %% Case 4: Both negative (|m| < |n|, result positive)
+    M9 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-111111111111111111111111111111111111111111111111">>)
+    ),
+    N9 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-777777777777777777777777777777777777777777777777">>)
+    ),
+    <<"666666666666666666666666666666666666666666666666">> = erlang:integer_to_binary(
+        ?MODULE:id(M9) - ?MODULE:id(N9)
+    ),
+
+    %% Case 4: Both negative (equal magnitudes, result zero)
+    M10 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-123123123123123123123123123123123123123123123123">>)
+    ),
+    N10 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-123123123123123123123123123123123123123123123123">>)
+    ),
+    <<"0">> = erlang:integer_to_binary(?MODULE:id(M10) - ?MODULE:id(N10)),
+
+    %% Edge case: Large 200+ bit numbers
+    M11 = erlang:binary_to_integer(
+        ?MODULE:id(<<"1234567890123456789012345678901234567890123456789012345678901234567890">>)
+    ),
+    N11 = erlang:binary_to_integer(
+        ?MODULE:id(<<"1234567890123456789012345678901234567890123456789012345678901234567889">>)
+    ),
+    <<"1">> = erlang:integer_to_binary(?MODULE:id(M11) - ?MODULE:id(N11)),
+
+    %% Edge case: Mixed signs with very large numbers
+    M12 = erlang:binary_to_integer(
+        ?MODULE:id(<<"9999999999999999999999999999999999999999999999999999999999">>)
+    ),
+    N12 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-9999999999999999999999999999999999999999999999999999999999">>)
+    ),
+    <<"19999999999999999999999999999999999999999999999999999999998">> = erlang:integer_to_binary(
+        ?MODULE:id(M12) - ?MODULE:id(N12)
+    ),
+
+    16#3501FEDCB2152350 =
+        erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16) -
+            erlang:binary_to_integer(?MODULE:id(<<"CAFE01234DEADCAF">>), 16),
+
+    -16#3501FEDCB2152350 =
+        erlang:binary_to_integer(?MODULE:id(<<"CAFE01234DEADCAF">>), 16) -
+            erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16),
+
+    16#3501FEDCB2152350 =
+        erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16) -
+            erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
+
+    16#8000000000000000 = ?MODULE:id(16#7FFFFFFFFFFFFFFF) - ?MODULE:id(-1),
+    -16#8000000000000001 = ?MODULE:id(-16#8000000000000000) - ?MODULE:id(1),
+
+    16#7FFFFFFFFFFFFFFF = ?MODULE:id(16#8000000000000000) - ?MODULE:id(1),
+    -16#8000000000000000 = ?MODULE:id(-16#8000000000000001) - ?MODULE:id(-1),
+
+    ok = ?MODULE:expect_overflow(fun() -> Int0 - ?MODULE:id(-2) end),
+    ok = ?MODULE:expect_overflow(fun() -> Int1 - ?MODULE:id(-1) end),
+    ok = ?MODULE:expect_overflow(fun() -> ?MODULE:id(-1) - Int1 end),
+
+    0.
 
 parse_bigint() ->
     PBI = erlang:binary_to_integer(?MODULE:id(<<"1234567892244667788990000000000000000025">>)),
