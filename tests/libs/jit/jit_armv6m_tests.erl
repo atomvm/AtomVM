@@ -1729,7 +1729,7 @@ is_boolean_far_unaligned_test() ->
         "   e:	447e      	add	r6, pc\n"
         "  10:	4730      	bx	r6\n"
         "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0fef      	lsrs	r6, r5, #31\n"
+        "  14:	0ff1      	lsrs	r1, r6, #31\n"
         "  16:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -1793,7 +1793,7 @@ is_boolean_far_known_unaligned_test() ->
         "   e:	447e      	add	r6, pc\n"
         "  10:	4730      	bx	r6\n"
         "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0fef      	lsrs	r7, r5, #31\n"
+        "  14:	0ff1      	lsrs	r1, r6, #31\n"
         "  16:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
