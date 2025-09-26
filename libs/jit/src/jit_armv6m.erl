@@ -425,72 +425,58 @@ update_branches(
                     true ->
                         % Keep far branch sequence, calculate correct ldr immediate and update literal
 
-                        % Calculate where the literal should be placed (same logic as generation)
-                        LdrOffset =
-                            case TempReg of
-                                ?IP_REG -> Offset + 2;
-                                _ -> Offset
-                            end,
-                        % ldr + add + bx = 6 bytes
-                        AfterInstructionsOffset = Offset + 6,
-                        AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
-
-                        % Calculate correct PC-relative offset for ldr instruction
-
-                        % PC aligned down
-                        PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
-                        LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
-
-                        % Calculate the relative offset for the literal value
-                        % This is the offset from the add instruction's PC to the target
-                        % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
-                        % We also need to set thumb bit to 1, so eventually we only substract 5.
-                        % If IP_REG, add is at Offset + 8
-                        AddPCOffset =
-                            case TempReg of
-                                ?IP_REG -> Offset + 11;
-                                _ -> Offset + 5
-                            end,
                         % Set thumb bit for bx instruction - target address must be odd for Thumb mode
-                        RelativeOffset = LabelOffset - AddPCOffset,
+                        % So we substract 1 less
+                        % ldr requires align PC
+                        % add rx, pc doesn't and reads pc+4 whatever the alignment
 
                         case {TempReg, Size} of
                             {?IP_REG, 18} ->
                                 % 18-byte sequence with alignment
+                                % Unaligned
                                 I1 = jit_armv6m_asm:push([r0]),
-                                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                                % Aligned
+                                I2 = jit_armv6m_asm:ldr(r0, {pc, 8}),
                                 I3 = jit_armv6m_asm:mov(?IP_REG, r0),
                                 I4 = jit_armv6m_asm:pop([r0]),
                                 I5 = jit_armv6m_asm:add(?IP_REG, pc),
                                 I6 = jit_armv6m_asm:bx(?IP_REG),
                                 I7 = jit_armv6m_asm:nop(),
+                                RelativeOffset = LabelOffset - Offset - 11,
                                 I8 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary,
                                     I7/binary, I8/binary>>;
                             {?IP_REG, 16} ->
                                 % 16-byte sequence without alignment
+                                % Aligned
                                 I1 = jit_armv6m_asm:push([r0]),
-                                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                                % Unaligned
+                                I2 = jit_armv6m_asm:ldr(r0, {pc, 8}),
                                 I3 = jit_armv6m_asm:mov(?IP_REG, r0),
                                 I4 = jit_armv6m_asm:pop([r0]),
                                 I5 = jit_armv6m_asm:add(?IP_REG, pc),
                                 I6 = jit_armv6m_asm:bx(?IP_REG),
+                                RelativeOffset = LabelOffset - Offset - 11,
                                 I7 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary,
                                     I7/binary>>;
                             {_, 12} ->
                                 % 12-byte sequence with alignment
-                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                                % Aligned
+                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
                                 I2 = jit_armv6m_asm:add(TempReg, pc),
                                 I3 = jit_armv6m_asm:bx(TempReg),
                                 I4 = jit_armv6m_asm:nop(),
+                                RelativeOffset = LabelOffset - Offset - 5,
                                 I5 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
                             {_, 10} ->
                                 % 10-byte sequence without alignment
-                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                                % Unaligned
+                                I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
                                 I2 = jit_armv6m_asm:add(TempReg, pc),
                                 I3 = jit_armv6m_asm:bx(TempReg),
+                                RelativeOffset = LabelOffset - Offset - 5,
                                 I4 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary>>
                         end
@@ -747,42 +733,23 @@ branch_to_label_code(
     #state{available_regs = [TempReg | _]} = State0, Offset, Label, {Label, LabelOffset}
 ) ->
     % Far branch: use register-based sequence, need temporary register
-    % Calculate alignment for literal pool
-    LdrOffset = Offset,
-    % ldr + add + bx = 6 bytes
-    AfterInstructionsOffset = Offset + 6,
-    % Round up to 4-byte boundary
-    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
-    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
-
-    % Calculate PC-relative offset for ldr instruction
-    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
-
-    % PC aligned down
-    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
-    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
-
-    % Calculate the literal value: target - PC_at_add_instruction
-    % The add instruction is at Offset + 2, so PC = Offset + 2 + 4 = Offset + 6
-    % We also need to set thumb bit to 1, so eventually we only subtract 5.
-    AddPCValue = Offset + 5,
-    LiteralValue = LabelOffset - AddPCValue,
-
     if
-        PaddingSize > 0 ->
-            % Need alignment padding
-            I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+        Offset rem 4 =:= 0 ->
+            % Aligned
+            I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
             I2 = jit_armv6m_asm:add(TempReg, pc),
             I3 = jit_armv6m_asm:bx(TempReg),
-            % Padding
+            % Unaligned : need nop
             I4 = jit_armv6m_asm:nop(),
+            LiteralValue = LabelOffset - Offset - 5,
             I5 = <<LiteralValue:32/little>>,
             CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
         true ->
-            % No alignment padding needed
-            I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+            % Unaligned
+            I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
             I2 = jit_armv6m_asm:add(TempReg, pc),
             I3 = jit_armv6m_asm:bx(TempReg),
+            LiteralValue = LabelOffset - Offset - 5,
             I4 = <<LiteralValue:32/little>>,
             CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>
     end,
@@ -790,36 +757,22 @@ branch_to_label_code(
 branch_to_label_code(
     #state{available_regs = [TempReg | _], branches = Branches} = State0, Offset, Label, false
 ) ->
-    % Calculate alignment for literal pool
-    LdrOffset = Offset,
-    % ldr + add + bx = 6 bytes
-    AfterInstructionsOffset = Offset + 6,
-    % Round up to 4-byte boundary
-    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
-    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
-
-    % Calculate PC-relative offset for ldr instruction
-    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
-
-    % PC aligned down
-    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
-    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
-
     {CodeBlock, SequenceSize} =
         if
-            PaddingSize > 0 ->
-                % Need alignment padding
-                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+            Offset rem 4 =:= 0 ->
+                % Aligned
+                I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
                 I2 = jit_armv6m_asm:add(TempReg, pc),
                 I3 = jit_armv6m_asm:bx(TempReg),
+                % Unaligned : need nop
                 I4 = jit_armv6m_asm:nop(),
                 % Placeholder offset
                 I5 = <<0:32/little>>,
                 Seq = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
                 {Seq, byte_size(Seq)};
             true ->
-                % No alignment padding needed
-                I1 = jit_armv6m_asm:ldr(TempReg, {pc, LdrImmediate}),
+                % Unaligned
+                I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
                 I2 = jit_armv6m_asm:add(TempReg, pc),
                 I3 = jit_armv6m_asm:bx(TempReg),
                 % Placeholder offset
@@ -834,31 +787,18 @@ branch_to_label_code(
 branch_to_label_code(
     #state{available_regs = [], branches = Branches} = State0, Offset, Label, false
 ) ->
-    % Calculate alignment for literal pool
-    LdrOffset = Offset + 2,
-    % push + ldr + mov + pop + add + bx = 12 bytes
-    AfterInstructionsOffset = Offset + 12,
-    % Round up to 4-byte boundary
-    AlignedLiteralOffset = ((AfterInstructionsOffset + 3) band (bnot 3)),
-    PaddingSize = AlignedLiteralOffset - AfterInstructionsOffset,
-
-    % Calculate PC-relative offset for ldr instruction
-    % For ldr rd, [pc, #imm]: effective address = (PC+4 aligned to 4) + imm
-
-    % PC aligned down
-    PCAtLdrExecution = (LdrOffset + 4) band (bnot 3),
-    LdrImmediate = AlignedLiteralOffset - PCAtLdrExecution,
-
     {CodeBlock, SequenceSize} =
         if
-            PaddingSize > 0 ->
-                % Need alignment padding
+            Offset rem 4 =/= 0 ->
+                % Unaligned
                 I1 = jit_armv6m_asm:push([r0]),
-                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                % Aligned
+                I2 = jit_armv6m_asm:ldr(r0, {pc, 8}),
                 I3 = jit_armv6m_asm:mov(?IP_REG, r0),
                 I4 = jit_armv6m_asm:pop([r0]),
                 I5 = jit_armv6m_asm:add(?IP_REG, pc),
                 I6 = jit_armv6m_asm:bx(?IP_REG),
+                % Unaligned : need nop
                 I7 = jit_armv6m_asm:nop(),
                 % Placeholder offset
                 I8 = <<0:32/little>>,
@@ -867,9 +807,10 @@ branch_to_label_code(
                         I8/binary>>,
                 {Seq, byte_size(Seq)};
             true ->
-                % No alignment padding needed
+                % Aligned
                 I1 = jit_armv6m_asm:push([r0]),
-                I2 = jit_armv6m_asm:ldr(r0, {pc, LdrImmediate}),
+                % Unaligned
+                I2 = jit_armv6m_asm:ldr(r0, {pc, 8}),
                 I3 = jit_armv6m_asm:mov(?IP_REG, r0),
                 I4 = jit_armv6m_asm:pop([r0]),
                 I5 = jit_armv6m_asm:add(?IP_REG, pc),
