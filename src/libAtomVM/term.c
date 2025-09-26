@@ -646,7 +646,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                     }
                                 }
 #else
-#error "Unsupported endianess"
+#error "Unsupported endianness"
 #endif
                             }
                             CMP_POP_AND_CONTINUE();

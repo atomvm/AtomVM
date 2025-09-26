@@ -27,7 +27,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define MIN(a, b) (a < b) ? a : b;
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #if INTPTR_MAX == 2147483647 // INT32_MAX
 #define INTPTR_MAX_BASE_10_DIGITS 10
@@ -437,7 +437,7 @@ static int bufn_to_int64(const char buf[], size_t buf_len, size_t first_digit_in
 int int64_parse_ascii_buf(const char buf[], size_t buf_len, unsigned int base,
     buf_to_int64_options_t options, int64_t *out)
 {
-    assert((base >= 2) || (base <= 36) || (buf_len < INT_MAX));
+    assert((base >= 2) && (base <= 36) && (buf_len < INT_MAX));
 
     if (buf_len < 1) {
         return -1;
