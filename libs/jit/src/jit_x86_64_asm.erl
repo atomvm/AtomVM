@@ -348,7 +348,7 @@ jnz(Offset) when Offset >= -126 andalso Offset =< 129 ->
     AdjustedOffset = Offset - 2,
     <<16#75, AdjustedOffset>>.
 
-jnz_rel8(Offset) when ?IS_SINT8_T(Offset) ->
+jnz_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
     {1, jnz(Offset)}.
 
 jge(Offset) when Offset >= -126 andalso Offset =< 129 ->
@@ -356,7 +356,7 @@ jge(Offset) when Offset >= -126 andalso Offset =< 129 ->
     AdjustedOffset = Offset - 2,
     <<16#7D, AdjustedOffset>>.
 
-jge_rel8(Offset) when ?IS_SINT8_T(Offset) ->
+jge_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
     {1, jge(Offset)}.
 
 jmp(Offset) when Offset >= -126 andalso Offset =< 129 ->

@@ -1528,7 +1528,7 @@ move_to_array_element(
         is_integer(Offset)
 ->
     I1 = jit_x86_64_asm:movq(Source, {Offset * ?WORD_SIZE, BaseReg, IndexReg, 8}),
-    Stream1 = StreamModule:append(Stream0, I1 / binary),
+    Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
 -spec move_to_native_register(state(), value()) -> {state(), x86_64_register()}.
