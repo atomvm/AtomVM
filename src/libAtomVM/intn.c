@@ -419,13 +419,33 @@ size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
+    size_t result_len;
 
-    // m + n = m - (-n)
-    // Just flip the sign of n and call subtraction
-    intn_integer_sign_t neg_n_sign
-        = (n_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+    // Case 1: Same sign - add magnitudes, keep sign
+    if (m_sign == n_sign) {
+        *out_sign = m_sign;
+        result_len = intn_addmnu(m, m_len, n, n_len, out);
+    }
+    // Case 2: Different signs - subtract smaller from larger
+    else {
+        int cmp = intn_cmp(m, m_len, n, n_len);
+        if (cmp >= 0) {
+            // |m| >= |n|, result takes sign of m
+            *out_sign = m_sign;
+            result_len = intn_submnu(m, m_len, n, n_len, out);
+        } else {
+            // |m| < |n|, result takes sign of n
+            *out_sign = n_sign;
+            result_len = intn_submnu(n, n_len, m, m_len, out);
+        }
+    }
 
-    return intn_submn(m, m_len, m_sign, n, n_len, neg_n_sign, out, out_sign);
+    // Normalize 0 sign
+    if (result_len == 1 && out[0] == 0) {
+        *out_sign = IntNPositiveInteger;
+    }
+
+    return result_len;
 }
 
 size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
@@ -467,51 +487,13 @@ size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
-    size_t result_len;
 
-    // Case 1: m positive, n positive (m - n)
-    if (m_sign == IntNPositiveInteger && n_sign == IntNPositiveInteger) {
-        int cmp = intn_cmp(m, m_len, n, n_len);
-        if (cmp >= 0) {
-            // m >= n, result is positive
-            *out_sign = IntNPositiveInteger;
-            result_len = intn_submnu(m, m_len, n, n_len, out);
-        } else {
-            // m < n, result is -(n - m), negative
-            *out_sign = IntNNegativeInteger;
-            result_len = intn_submnu(n, n_len, m, m_len, out);
-        }
-    }
-    // Case 2: m positive, n negative (m - (-n) = m + n)
-    else if (m_sign == IntNPositiveInteger && n_sign == IntNNegativeInteger) {
-        *out_sign = IntNPositiveInteger;
-        result_len = intn_addmnu(m, m_len, n, n_len, out);
-    }
-    // Case 3: m negative, n positive ((-m) - n = -(m + n))
-    else if (m_sign == IntNNegativeInteger && n_sign == IntNPositiveInteger) {
-        *out_sign = IntNNegativeInteger;
-        result_len = intn_addmnu(m, m_len, n, n_len, out);
-    }
-    // Case 4: both negative ((-m) - (-n) = n - m)
-    else {
-        int cmp = intn_cmp(n, n_len, m, m_len);
-        if (cmp >= 0) {
-            // n >= m, result is positive
-            *out_sign = IntNPositiveInteger;
-            result_len = intn_submnu(n, n_len, m, m_len, out);
-        } else {
-            // n < m, result is -(m - n), negative
-            *out_sign = IntNNegativeInteger;
-            result_len = intn_submnu(m, m_len, n, n_len, out);
-        }
-    }
+    // m - n = m + (-n)
+    // Just flip the sign of n and call addition
+    intn_integer_sign_t neg_n_sign
+        = (n_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
 
-    // Normalize 0 sign
-    if (result_len == 1 && out[0] == 0) {
-        *out_sign = IntNPositiveInteger;
-    }
-
-    return result_len;
+    return intn_addmn(m, m_len, m_sign, n, n_len, neg_n_sign, out, out_sign);
 }
 
 size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
