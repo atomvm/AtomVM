@@ -80,7 +80,7 @@ struct AtomTable
 
 static struct HNodeGroup *new_node_group(struct AtomTable *table, int len);
 
-struct AtomTable *atom_table_new()
+struct AtomTable *atom_table_new(void)
 {
     struct AtomTable *htable = malloc(sizeof(struct AtomTable));
     if (IS_NULL_PTR(htable)) {

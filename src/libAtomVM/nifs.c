@@ -1407,7 +1407,7 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_module = fun_module;
 #ifndef AVM_NO_JIT
     if (fun_module->native_code) {
-        new_ctx->saved_ip = module_get_native_entry_point(fun_module, label);
+        new_ctx->saved_function_ptr = module_get_native_entry_point(fun_module, label);
     } else {
 #endif
 #ifndef AVM_NO_EMU
@@ -1458,7 +1458,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_module = found_module;
 #ifndef AVM_NO_JIT
     if (found_module->native_code) {
-        new_ctx->saved_ip = module_get_native_entry_point(found_module, label);
+        new_ctx->saved_function_ptr = module_get_native_entry_point(found_module, label);
     } else {
 #endif
 #ifndef AVM_NO_EMU
@@ -6257,7 +6257,7 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
 typedef avm_float_t (*unary_math_f)(avm_float_t x);
 typedef avm_float_t (*binary_math_f)(avm_float_t x, avm_float_t y);
 
-static void maybe_clear_exceptions()
+static void maybe_clear_exceptions(void)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     feclearexcept(FE_DIVBYZERO | FE_INVALID);

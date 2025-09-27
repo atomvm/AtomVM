@@ -49,7 +49,7 @@ typedef enum EtsHashtableStatus
     EtsHashtableOutOfMemory
 } EtsHashtableStatus;
 
-struct EtsHashTable *ets_hashtable_new();
+struct EtsHashTable *ets_hashtable_new(void);
 void ets_hashtable_destroy(struct EtsHashTable *hash_table, GlobalContext *global);
 
 EtsHashtableStatus ets_hashtable_insert(struct EtsHashTable *hash_table, struct HNode *new_node, EtsHashtableOptions opts, GlobalContext *global);

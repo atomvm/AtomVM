@@ -192,7 +192,7 @@ enum SendMessageResult
  * @details Allocates a new GlobalContext struct and initialize it, the newly created global context is a new AtomVM instance.
  * @returns A newly created GlobalContext.
  */
-GlobalContext *globalcontext_new();
+GlobalContext *globalcontext_new(void);
 
 /**
  * @brief Destoys an existing GlobalContext

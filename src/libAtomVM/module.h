@@ -34,6 +34,7 @@
 #include "atom.h"
 #include "atom_table.h"
 #include "context.h"
+#include "jit.h"
 #include "exportedfunction.h"
 #include "globalcontext.h"
 #include "term.h"
@@ -58,18 +59,6 @@ typedef struct Mutex Mutex;
 #define SMP_MODULE_LOCK(mod)
 #define SMP_MODULE_UNLOCK(mod)
 #endif
-
-#ifndef TYPEDEF_JITSTATE
-#define TYPEDEF_JITSTATE
-typedef struct JITState JITState;
-#endif
-
-// Interface to native code:
-// Entry point returns the current (or new) context
-// jit_state->remaining_reductions is updated.
-// If returned context is different from passed context, scheduler resumes in
-// schedule_in.
-typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
 
 typedef struct
 {
