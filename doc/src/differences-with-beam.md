@@ -88,9 +88,7 @@ are partially supported, but `proc_lib` is not.
 
 ## Memory usage and speed
 
-AtomVM is optimized for memory usage and is
-much slower than BEAM. It does not feature a JIT compiler yet (this is a work in progress) and
-even with a JIT compiler it will likely remain slower than BEAM.
+AtomVM is optimized for memory usage and is much slower than BEAM, even with JIT compiler enabled.
 
 However, AtomVM uses much less RAM. Process heap initial size and process heap growth strategy are
 much more agressive on AtomVM, and garbage collector runs much more frequently. If speed matters,
