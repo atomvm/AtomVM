@@ -296,6 +296,8 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
+    mod->binary = beam_file;
+    mod->binary_size = size;
     uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
     mod->labels = calloc(num_labels, sizeof(void *));
     if (IS_NULL_PTR(mod->labels)) {

@@ -103,6 +103,8 @@ struct Module
     const uint8_t *line_refs_table;
     size_t locations_count;
     const uint8_t *locations_table;
+    uint8_t *binary;
+    size_t binary_size;
 
     unsigned int *line_refs_offsets;
     size_t line_refs_offsets_count;

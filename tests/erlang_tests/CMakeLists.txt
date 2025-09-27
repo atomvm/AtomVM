@@ -514,6 +514,7 @@ compile_erlang(test_code_all_available_loaded)
 compile_erlang(test_code_load_binary)
 compile_erlang(test_code_load_abs)
 compile_erlang(test_code_ensure_loaded)
+compile_erlang(test_code_get_object_code)
 compile_erlang(test_add_avm_pack_binary)
 compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack)
@@ -1040,6 +1041,7 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_code_all_available_loaded.beam
     test_code_load_binary.beam
+    test_code_get_object_code.beam
     test_code_load_abs.beam
     test_code_ensure_loaded.beam
     test_add_avm_pack_binary.beam
