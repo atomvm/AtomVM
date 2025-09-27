@@ -415,6 +415,19 @@ size_t intn_addmnu(
     return i;
 }
 
+size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+
+    // m + n = m - (-n)
+    // Just flip the sign of n and call subtraction
+    intn_integer_sign_t neg_n_sign
+        = (n_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+
+    return intn_submn(m, m_len, m_sign, n, n_len, neg_n_sign, out, out_sign);
+}
+
 // This function assumes a >= b
 // Caller must ensure this precondition
 size_t intn_submnu(

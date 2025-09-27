@@ -72,6 +72,10 @@ int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_
 size_t intn_addmnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
 
+size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
 size_t intn_submnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
 
