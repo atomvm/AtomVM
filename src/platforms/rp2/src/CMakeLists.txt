@@ -24,7 +24,7 @@ add_executable(AtomVM main.c)
 
 target_compile_features(AtomVM PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
-    target_compile_options(AtomVM PUBLIC -ggdb)
+    target_compile_options(AtomVM PUBLIC -ggdb -Os)
     target_compile_options(AtomVM PRIVATE -Wall -pedantic -Wextra)
 endif()
 
