@@ -1300,6 +1300,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             }                                                           \
         }                                                               \
     } else {                                                            \
+        if (term_is_atom(boxed_value[1])) {                             \
+            SET_ERROR(UNDEF_ATOM);                                      \
+            HANDLE_ERROR();                                             \
+        }                                                               \
         fun_module = (Module *) boxed_value[1];                         \
         uint32_t fun_index = term_to_int(index_or_function);            \
         uint32_t fun_arity_and_freeze;                                  \
