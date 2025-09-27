@@ -43,7 +43,7 @@ jobs:
         cmake_opts_other: [""]
 
         include:
-        - os: "macos-13"
+        - os: "macos-15-intel"
           otp: "28"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
 
