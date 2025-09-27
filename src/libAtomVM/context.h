@@ -29,6 +29,7 @@
 #define _CONTEXT_H_
 
 #include "globalcontext.h"
+#include "jit.h"
 #include "list.h"
 #include "mailbox.h"
 #include "smp.h"
@@ -114,7 +115,15 @@ struct Context
 
     // saved state when scheduled out
     Module *saved_module;
-    const void *saved_ip;
+    union
+    {
+#ifndef AVM_NO_EMU
+        const void *saved_ip;
+#endif
+#ifndef AVM_NO_JIT
+        ModuleNativeEntryPoint saved_function_ptr;
+#endif
+    };
     // pointer to a trap or wait timeout handler
     void *restore_trap_handler;
 

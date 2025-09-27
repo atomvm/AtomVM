@@ -397,7 +397,7 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-uint64_t sys_monotonic_time_u64()
+uint64_t sys_monotonic_time_u64(void)
 {
     // On generic unix, native format is timespec.
     struct timespec ts;

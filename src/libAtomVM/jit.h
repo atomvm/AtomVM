@@ -22,7 +22,7 @@
 #define _JIT_H_
 
 #include "bitstring.h"
-#include "module.h"
+#include "exportedfunction.h"
 #include "term.h"
 #include "term_typedef.h"
 
@@ -46,17 +46,40 @@ struct Module;
 typedef struct Module Module;
 #endif
 
-struct JITState
-{
-    Module *module;
-    const void *continuation; // emulated pc or pointer to entry point
-    int remaining_reductions;
-};
-
 #ifndef TYPEDEF_JITSTATE
 #define TYPEDEF_JITSTATE
 typedef struct JITState JITState;
 #endif
+
+#ifndef TYPEDEF_MODULENATIVEINTERFACE
+#define TYPEDEF_MODULENATIVEINTERFACE
+typedef struct ModuleNativeInterface ModuleNativeInterface;
+#endif
+
+struct Module;
+
+#ifndef TYPEDEF_MODULE
+#define TYPEDEF_MODULE
+typedef struct Module Module;
+#endif
+
+// Interface to native code:
+// Entry point returns the current (or new) context
+// jit_state->remaining_reductions is updated.
+// If returned context is different from passed context, scheduler resumes in
+// schedule_in.
+typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
+
+struct JITState
+{
+    Module *module;
+    union
+    {
+        ModuleNativeEntryPoint continuation;
+        const void *continuation_pc;
+    };
+    int remaining_reductions;
+};
 
 // Remember to keep this struct in sync with libs/jit/src/primitives.hrl
 
@@ -71,7 +94,7 @@ struct ModuleNativeInterface
     bool (*allocate)(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live);
     Context *(*handle_error)(Context *ctx, JITState *jit_state, int offset);
     void (*jit_trim_live_regs)(Context *ctx, uint32_t live);
-    void *(*get_imported_bif)(JITState *jit_state, uint32_t bif);
+    BifImpl0 (*get_imported_bif)(JITState *jit_state, uint32_t bif);
     bool (*deallocate)(Context *ctx, JITState *jit_state, uint32_t n_words);
     Context *(*terminate_context)(Context *ctx, JITState *jit_state);
     TermCompareResult (*term_compare)(Context *ctx, JITState *jit_state, term t, term other, TermCompareOpts opts);
@@ -137,11 +160,6 @@ struct ModuleNativeInterface
     term (*term_copy_map)(Context *ctx, term src);
     term (*stacktrace_build)(Context *ctx);
 };
-
-#ifndef TYPEDEF_MODULENATIVEINTERFACE
-#define TYPEDEF_MODULENATIVEINTERFACE
-typedef struct ModuleNativeInterface ModuleNativeInterface;
-#endif
 
 extern const ModuleNativeInterface module_native_interface;
 

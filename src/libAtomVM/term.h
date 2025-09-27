@@ -828,7 +828,7 @@ static inline bool term_is_cp(term t)
  * @details Returns always an invalid term.
  * @return invalid term.
  */
-static inline term term_invalid_term()
+static inline term term_invalid_term(void)
 {
     return 0;
 }
@@ -839,7 +839,7 @@ static inline term term_invalid_term()
  * @details Returns always the nil value.
  * @return nil value term.
  */
-static inline term term_nil()
+static inline term term_nil(void)
 {
     return TERM_NIL;
 }
@@ -1392,7 +1392,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
     return pos_len.pos == -1 && pos_len.len == -1;
 }
 
-static inline BinaryPosLen term_nomatch_binary_pos_len()
+static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
     return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
@@ -2144,12 +2144,12 @@ static inline bool term_is_map(term t)
     return false;
 }
 
-static inline size_t term_get_map_keys_offset()
+static inline size_t term_get_map_keys_offset(void)
 {
     return 1;
 }
 
-static inline size_t term_get_map_value_offset()
+static inline size_t term_get_map_value_offset(void)
 {
     return 2;
 }

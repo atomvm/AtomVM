@@ -1034,7 +1034,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #define SCHEDULE_WAIT_ANY(restore_mod) \
     {                                                                                             \
-        ctx->saved_ip = native_pc;                                                                \
+        ctx->saved_function_ptr = native_pc;                                                      \
         ctx->saved_module = restore_mod;                                                          \
         ctx = scheduler_wait(ctx);                                                                \
         goto schedule_in;                                                                         \
@@ -1083,7 +1083,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #elif AVM_NO_EMU
     #define RESUME()                                            \
     {                                                           \
-        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);   \
+        native_pc = ctx->saved_function_ptr;                    \
     }
 #else
     #define RESUME()                                            \
@@ -1091,7 +1091,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         pc = (ctx->saved_ip);                                   \
         native_pc = NULL;                                       \
     } else {                                                    \
-        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);   \
+        native_pc = ctx->saved_ip;                              \
     }
 #endif
 
@@ -1845,10 +1845,10 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         ctx->saved_ip = mod->labels[label];
 #elif AVM_NO_EMU
         assert(mod->native_code);
-        ctx->saved_ip = module_get_native_entry_point(mod, label);
+        ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
 #else
         if (mod->native_code) {
-            ctx->saved_ip = module_get_native_entry_point(mod, label);
+            ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
         } else {
             ctx->saved_ip = mod->labels[label];
         }
@@ -1908,7 +1908,7 @@ schedule_in:
     // set PC
     pc = (ctx->saved_ip);
 #elif AVM_NO_EMU
-    native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);
+    native_pc = ctx->saved_function_ptr;
 #else
     if (mod->native_code == NULL) {
         code = mod->code->code;
@@ -1916,7 +1916,7 @@ schedule_in:
         pc = (ctx->saved_ip);
         native_pc = NULL;
     } else {
-        native_pc = (ModuleNativeEntryPoint) (ctx->saved_ip);
+        native_pc = ctx->saved_function_ptr;
     }
 #endif
 

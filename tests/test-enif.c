@@ -91,7 +91,7 @@ static void resource_down_acquiring_lock(ErlNifEnv *env, void *resource, ErlNifP
     globalcontext_get_process_unlock(env->global, target);
 }
 
-void test_resource()
+void test_resource(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
@@ -140,7 +140,7 @@ void test_resource()
     assert(cb_read_resource == 0);
 }
 
-void test_resource_destroyed_with_global()
+void test_resource_destroyed_with_global(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
@@ -169,7 +169,7 @@ void test_resource_destroyed_with_global()
     assert(cb_read_resource == 42);
 }
 
-void test_resource_keep_release()
+void test_resource_keep_release(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
@@ -214,7 +214,7 @@ void test_resource_keep_release()
     assert(cb_read_resource == 0);
 }
 
-void test_resource_monitor()
+void test_resource_monitor(void)
 {
     GlobalContext *glb = globalcontext_new();
     ErlNifEnv env;
@@ -308,7 +308,7 @@ void test_resource_monitor()
     assert(cb_read_resource == 0);
 }
 
-void test_resource_monitor_handler_can_lock()
+void test_resource_monitor_handler_can_lock(void)
 {
     GlobalContext *glb = globalcontext_new();
     ErlNifEnv env;
@@ -360,7 +360,7 @@ void test_resource_monitor_handler_can_lock()
     globalcontext_destroy(glb);
 }
 
-void test_resource_monitor_two_resources_two_processes()
+void test_resource_monitor_two_resources_two_processes(void)
 {
     GlobalContext *glb = globalcontext_new();
     ErlNifEnv env;
@@ -451,6 +451,7 @@ void test_resource_monitor_two_resources_two_processes()
 
     globalcontext_destroy(glb);
 }
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
