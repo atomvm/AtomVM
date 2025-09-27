@@ -126,6 +126,31 @@ This section is under construction
 ## Exception Handling
 -->
 
+## JIT and native code execution
+
+### Flavors of the emulator
+
+Following BEAM, there are two flavors of the emulator: jit and emu.
+
+JIT is available on some platforms (currently only x86_64) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
+
+Modules can include precompiled code in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1. This native code is executed by the jit-flavor of the emulator as well as the emu flavor if execution of precompiled is enabled.
+
+JIT is an experimental feature and is currently disabled by default. Enabling JIT disables the interpreter.
+JIT can enabled with `-DAVM_DISABLE_JIT=Off`
+
+Execution of precompiled modules can be enabled even if JIT is disabled, with `-DAVM_DISABLE_JIT=On -DAVM_ENABLE_PRECOMPILED=On`
+
+### How JIT works internally
+
+The JIT compiler is written in Erlang and is therefore precompiled. When a process calls a function in a module with no precompiled code, the process is trapped and a message is sent to the `code_server`. The code server then compiles the bytecode to native code and then resumes the trapped process.
+
+JIT compiler is composed of two main interfaces : backend and stream.
+
+A backend implementation is required for each architecture. The backend is called by jit module as it translates bytecodes to machine code. The current single implementation is `jit_x86_64` which is suitable for systems with System V X86 64 ABI.
+
+A stream implementation is responsible for streaming the machine code, especially in the context of low memory. Two implementations currently exist: `jit_stream_binary` that streams assembly code to an Erlang binary, suitable for tests and precompilation on the desktop, and `jit_stream_mmap` that streams assembly code in an `mmap(2)` allocated page, suitable for JIT compilation on Unix.
+
 ## The Scheduler
 
 In SMP builds, AtomVM runs one scheduler thread per core.  Scheduler threads are actually started on demand.  The number of scheduler threads can be queried with [`erlang:system_info/1`](./apidocs/erlang/estdlib/erlang.md#system_info1) and be modified with [`erlang:system_flag/2`](./apidocs/erlang/estdlib/erlang.md#system_flag2).  All scheduler threads are considered equal and there is no notion of main thread except when shutting down (main thread is shut down last).
