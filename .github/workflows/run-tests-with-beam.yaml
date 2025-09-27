@@ -43,24 +43,29 @@ jobs:
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:21
+          otp: "21"
           archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:22
+          otp: "22"
           archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
           container: erlang:23
+          otp: "23"
           archive: "true"
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
+          otp: "24"
           container: erlang:24
 
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
+          otp: "25"
           container: erlang:25
 
         - os: "ubuntu-24.04"
@@ -159,3 +164,12 @@ jobs:
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
         erl -pa tests/libs/etest/beams -s test_eunit test -s init stop -noshell
+
+    # Test
+    - name: "Test: jit/ with BEAM"
+      timeout-minutes: 10
+      working-directory: build
+      if: matrix.otp != '21' && matrix.otp != '22'
+      run: |
+        export PATH="${{ matrix.path_prefix }}$PATH"
+        erl -pa tests/libs/jit/beams/ libs/jit/src/beams/ libs/etest/src/beams -noshell -s tests -s init stop -noshell

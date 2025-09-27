@@ -28,6 +28,7 @@ set(ERLANG_MODULES
     binary
     calendar
     code
+    code_server
     crypto
     dist_util
     erl_epmd
@@ -72,7 +73,7 @@ set(ERLANG_MODULES
     erlang
 )
 
-pack_archive(estdlib ${ERLANG_MODULES})
+pack_precompiled_archive(estdlib ${ERLANG_MODULES})
 
 include(../../../version.cmake)
 
