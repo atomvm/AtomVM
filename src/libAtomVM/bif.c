@@ -1427,24 +1427,47 @@ term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 }
 
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
+typedef size_t (*bitwise_big_op)(
+        const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+        const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign,
+        intn_digit_t out[], intn_integer_sign_t *out_sign);
 
-static inline term bitwise_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op)
+static inline term bitwise_helper(
+    Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op, bitwise_big_op big_op)
 {
-    UNUSED(live);
+    if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+        size_t arg2_size = term_is_integer(arg2) ? 0 : term_boxed_size(arg2);
+        if (MAX(arg1_size, arg2_size) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            int64_t a = term_maybe_unbox_int64(arg1);
+            int64_t b = term_maybe_unbox_int64(arg2);
+            int64_t result = op(a, b);
 
-    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_any_integer(arg2))) {
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, fail_label, live, result);
+#else
+            return make_maybe_boxed_int(ctx, fail_label, live, result);
+#endif
+        } else {
+            intn_digit_t tmp_buf1[INTN_INT64_LEN];
+            intn_digit_t tmp_buf2[INTN_INT64_LEN];
+            intn_digit_t *m;
+            size_t m_len;
+            intn_integer_sign_t m_sign;
+            intn_digit_t *n;
+            size_t n_len;
+            intn_integer_sign_t n_sign;
+            args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
+
+            intn_digit_t bigres[INTN_MAX_RES_LEN];
+            intn_integer_sign_t bigres_sign;
+            size_t bigres_len = big_op(m, m_len, m_sign, n, n_len, n_sign, bigres, &bigres_sign);
+
+            return make_bigint(ctx, fail_label, live, bigres, bigres_len, bigres_sign);
+        }
+    } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
-
-    int64_t a = term_maybe_unbox_int64(arg1);
-    int64_t b = term_maybe_unbox_int64(arg2);
-    int64_t result = op(a, b);
-
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-        return make_maybe_boxed_int64(ctx, fail_label, live, result);
-    #else
-        return make_maybe_boxed_int(ctx, fail_label, live, result);
-    #endif
 }
 
 static inline int64_t bor(int64_t a, int64_t b)
@@ -1457,7 +1480,7 @@ term bif_erlang_bor_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 | arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bormn);
     }
 }
 
@@ -1471,7 +1494,7 @@ term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_bandmn);
     }
 }
 
@@ -1485,51 +1508,148 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxormn);
     }
 }
 
-typedef int64_t (*bitshift_op)(int64_t a, avm_int_t b);
-
-static inline term bitshift_helper(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitshift_op op)
+static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
 {
-    UNUSED(live);
-
-    if (UNLIKELY(!term_is_any_integer(arg1) || !term_is_integer(arg2))) {
-        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
-    }
-
-    int64_t a = term_maybe_unbox_int64(arg1);
-    avm_int_t b = term_to_int(arg2);
-    int64_t result = op(a, b);
-
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-        return make_maybe_boxed_int64(ctx, fail_label, live, result);
-    #else
-        return make_maybe_boxed_int(ctx, fail_label, live, result);
-    #endif
+    return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
 }
 
-static inline int64_t bsl(int64_t a, avm_int_t b)
+static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
 {
-    // TODO check for overflow
-    return a << b;
+    if (lshift >= 64) {
+        *out = 0;
+        return (n != 0);
+    }
+
+    int64_t res = (int64_t) (((uint64_t) n) << lshift);
+    *out = res;
+    int64_t check = int64_bsr(res, lshift);
+    return check != n;
+}
+
+static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
+{
+    if (rshift >= 64) {
+        return n < 0 ? -1 : 0;
+    }
+    return int64_bsr(n, rshift);
 }
 
 term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    return bitshift_helper(ctx, fail_label, live, arg1, arg2, bsl);
-}
+    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+        avm_int_t b = term_to_int(arg2);
+        if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            int64_t a = term_maybe_unbox_int64(arg1);
+            int64_t result;
+            if (!int64_bsl_overflow(a, b, &result)) {
+                #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                    return make_maybe_boxed_int64(ctx, fail_label, live, result);
+                #else
+                    return make_maybe_boxed_int(ctx, fail_label, live, result);
+                #endif
+            }
+        }
 
-static inline int64_t bsr(int64_t a, avm_int_t b)
-{
-    // TODO check for underflow
-    return a >> b;
+        intn_digit_t tmp_buf1[INTN_INT64_LEN];
+        intn_digit_t *m;
+        size_t m_len;
+        intn_integer_sign_t m_sign;
+        term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+
+        intn_digit_t bigres[INTN_MAX_RES_LEN];
+        size_t bigres_len = intn_bsl(m, m_len, b, bigres);
+
+        return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+
+    } else if (term_is_neg_integer(arg2)) {
+        term abs_arg2 = term_from_int(-term_to_int(arg2));
+        return bif_erlang_bsr_2(ctx, fail_label, live, arg1, abs_arg2);
+
+    } else if (UNLIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        if (term_is_any_non_neg_integer(arg2)) {
+            // This basically means we are shifting with a quantity bigger than 2^28
+            // that is always overflow except when arg1 is 0:
+            // 0 bsl HugeNumber is always allowed
+            if (term_is_integer(arg1) && term_to_int(arg1) == 0) {
+                return term_from_int(0);
+            } else {
+                // The BEAM raises system_limit error here, however
+                // in AtomVM we have overflow that is more specific
+                // so we are going for internal consistency over perfect BEAM compliance
+                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            }
+            // negative arg2 means bsr
+        } else {
+            return term_is_any_neg_integer(arg1) ? term_from_int(-1) : term_from_int(0);
+        }
+
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
 }
 
 term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    return bitshift_helper(ctx, fail_label, live, arg1, arg2, bsr);
+    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_integer(arg2))) {
+        size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
+
+        avm_int_t b = term_to_int(arg2);
+
+        if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+            int64_t a = term_maybe_unbox_int64(arg1);
+            int64_t result = int64_bsr_safe(a, b);
+
+            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, fail_label, live, result);
+            #else
+                return make_maybe_boxed_int(ctx, fail_label, live, result);
+            #endif
+        }
+
+        intn_digit_t tmp_buf1[INTN_INT64_LEN];
+        intn_digit_t *m;
+        size_t m_len;
+        intn_integer_sign_t m_sign;
+        term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+
+        intn_digit_t bigres[INTN_MAX_RES_LEN];
+        size_t bigres_len = intn_bsr(m, m_len, m_sign, b, bigres);
+
+        return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
+
+    } else if (term_is_neg_integer(arg2)) {
+        term abs_arg2 = term_from_int(-term_to_int(arg2));
+        return bif_erlang_bsl_2(ctx, fail_label, live, arg1, abs_arg2);
+
+    } else if (UNLIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
+        if (term_is_any_non_neg_integer(arg2)) {
+            // This basically means we are shifting with a quantity bigger than 2^28
+            // that is always 0
+            return term_is_any_neg_integer(arg1) ? term_from_int(-1) : term_from_int(0);
+
+            // negative arg2 means bsl
+        } else {
+            // This basically means we are shifting with a quantity bigger than 2^28
+            // that is always overflow except when arg1 is 0:
+            // 0 bsl HugeNumber is always allowed
+            if (term_is_integer(arg1) && term_to_int(arg1) == 0) {
+                return term_from_int(0);
+            } else {
+                // The BEAM raises system_limit error here, however
+                // in AtomVM we have overflow that is more specific
+                // so we are going for internal consistency over perfect BEAM compliance
+                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            }
+        }
+
+    } else {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
 }
 
 static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
@@ -1551,8 +1671,20 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
                 return make_boxed_int64(ctx, fail_label, live, ~val);
             }
             #endif
-            default:
-                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            default: {
+                intn_digit_t tmp_buf1[INTN_INT64_LEN];
+                intn_digit_t *m;
+                size_t m_len;
+                intn_integer_sign_t m_sign;
+                term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+
+                intn_digit_t bigres[INTN_MAX_RES_LEN];
+                intn_integer_sign_t bigres_sign;
+
+                size_t bigres_len = intn_bnot(m, m_len, m_sign, bigres, &bigres_sign);
+
+                return make_bigint(ctx, fail_label, live, bigres, bigres_len, bigres_sign);
+            }
         }
     } else {
         TRACE("error: arg1: 0x%lx\n", arg1);
