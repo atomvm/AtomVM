@@ -543,12 +543,19 @@ static inline term make_maybe_boxed_int64(Context *ctx, uint32_t fail_label, uin
 static term add_int64_to_bigint(
     Context *ctx, uint32_t fail_label, uint32_t live, int64_t val1, int64_t val2)
 {
-    size_t add_out_len = INTN_ADD_OUT_LEN(INTN_INT64_LEN, INTN_INT64_LEN);
-    intn_digit_t add_out[add_out_len];
+    size_t out_buf_len = INTN_ADD_OUT_LEN(INTN_INT64_LEN, INTN_INT64_LEN);
+    intn_digit_t add_out[out_buf_len];
     intn_integer_sign_t out_sign;
-    intn_add_int64(val1, val2, add_out, &out_sign);
+    size_t out_len = intn_add_int64(val1, val2, add_out, &out_sign);
 
-    return make_bigint(ctx, fail_label, live, add_out, add_out_len, out_sign);
+    fprintf(stderr, "len: %i\n", (int) out_len);
+
+    fprintf(stderr, "foo, result:\n");
+    fprintf(stderr, "num1: %lx\n", val1);
+    fprintf(stderr, "num2: %lx\n", val2);
+    print_num(add_out, out_len);
+
+    return make_bigint(ctx, fail_label, live, add_out, out_len, out_sign);
 }
 
 static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)

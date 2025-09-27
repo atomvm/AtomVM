@@ -306,7 +306,16 @@ test_add() ->
         erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16) +
             erlang:binary_to_integer(?MODULE:id(<<"FFFFFFFFFFFFFFFF">>), 16),
 
+    inspect(16#8000000000000000),
+
+    16#8000000000000000 = inspect(?MODULE:id(16#7FFFFFFFFFFFFFFF) + ?MODULE:id(1)),
+   -16#8000000000000001 = inspect(?MODULE:id(-16#8000000000000000) + ?MODULE:id(-1)),
+
     0.
+
+inspect(X) ->
+    erlang:display({inspect, X}),
+    X.
 
 test_sub() ->
     Int0 = erlang:binary_to_integer(
