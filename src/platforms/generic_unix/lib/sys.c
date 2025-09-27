@@ -525,16 +525,14 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;
         {
-            char port_driver_name[64 + strlen("avm_"
-                                              "_port_driver.so")
-                + 1];
+            char port_driver_name[64 + sizeof("avm_") - 1 + sizeof("_port_driver.so") - 1 + 1];
             snprintf(port_driver_name, sizeof(port_driver_name), "./avm_%s_port_driver.so", driver_name);
             handle = dlopen(port_driver_name, RTLD_NOW);
             if (!handle) {
                 return NULL;
             }
         }
-        char port_driver_func_name[64 + strlen("_create_port") + 1];
+        char port_driver_func_name[64 + sizeof("_create_port") - 1 + 1];
         snprintf(port_driver_func_name, sizeof(port_driver_func_name), "%s_create_port", driver_name);
         create_port_t create_port
             = (create_port_t) CAST_VOID_TO_FUNC_PTR(dlsym(handle, port_driver_func_name));
