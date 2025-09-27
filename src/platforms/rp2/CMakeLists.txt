@@ -64,6 +64,9 @@ option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" O
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 
+# JIT is not available yet on rp2
+set(AVM_DISABLE_JIT ON FORCE)
+
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 
 set(

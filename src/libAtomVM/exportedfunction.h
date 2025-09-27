@@ -30,11 +30,19 @@
 
 #include "term.h"
 
-struct Module;
-
 #ifndef TYPEDEF_MODULE
 #define TYPEDEF_MODULE
 typedef struct Module Module;
+#endif
+
+#ifndef TYPEDEF_MODULENATIVEINTERFACE
+#define TYPEDEF_MODULENATIVEINTERFACE
+typedef struct ModuleNativeInterface ModuleNativeInterface;
+#endif
+
+#ifndef TYPEDEF_JITSTATE
+#define TYPEDEF_JITSTATE
+typedef struct JITState JITState;
 #endif
 
 typedef term (*BifImpl0)(Context *ctx);
@@ -47,6 +55,8 @@ typedef term (*GCBifImpl3)(Context *ctx, uint32_t fail_label, int live, term arg
 
 typedef term (*NifImpl)(Context *ctx, int argc, term argv[]);
 
+typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
+
 enum FunctionType
 {
     InvalidFunctionType = 0,
@@ -54,7 +64,10 @@ enum FunctionType
     UnresolvedFunctionCall = 3,
     ModuleFunction = 4,
     BIFFunctionType = 5,
-    GCBIFFunctionType = 6
+    GCBIFFunctionType = 6,
+#ifndef AVM_NO_JIT
+    ModuleNativeFunction = 7
+#endif
 };
 
 struct ExportedFunction
@@ -102,7 +115,11 @@ struct ModuleFunction
 {
     struct ExportedFunction base;
     Module *target;
-    int label;
+    union
+    {
+        ModuleNativeEntryPoint entry_point;
+        int label;
+    };
 };
 
 #define EXPORTED_FUNCTION_TO_BIF(func) \

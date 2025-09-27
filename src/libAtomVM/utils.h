@@ -110,6 +110,12 @@ extern "C" {
         #define ENDIAN_SWAP_32(value) ((((value) & 0xFF) << 24) | (((value) & 0xFF00) << 8) | (((value) & 0xFF0000) >> 8) | (((value) & 0xFF000000) >> 24))
     #endif
 
+    #ifdef __GNUC__
+        #define ENDIAN_SWAP_16(value) __builtin_bswap16(value)
+    #else
+        #define ENDIAN_SWAP_16(value) ((((value) & 0xFF) << 8) | (((value) & 0xFF00) >> 8))
+    #endif
+
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
     #define READ_64_UNALIGNED(ptr) \
@@ -154,6 +160,7 @@ extern "C" {
         }
 
     #define ENDIAN_SWAP_32(value) (value)
+    #define ENDIAN_SWAP_16(value) (value)
 
 #else
     #error "Unsupported __BYTE_ORDER__ value."
@@ -326,6 +333,9 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 #else
     #define UNREACHABLE(...)
 #endif
+
+#define MAXI(A, B) ((A > B) ? (A) : (B))
+#define MINI(A, B) ((A > B) ? (B) : (A))
 
 #ifdef __cplusplus
 }
