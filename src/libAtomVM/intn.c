@@ -448,7 +448,7 @@ size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     return result_len;
 }
 
-void intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
+size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
 {
     intn_digit_t u[2];
     intn_integer_sign_t u_sign;
@@ -457,7 +457,7 @@ void intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_
     intn_integer_sign_t v_sign;
     int64_to_intn_2(num2, v, &v_sign);
 
-    intn_addmn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
+    return intn_addmn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
 
 // This function assumes a >= b
