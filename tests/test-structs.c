@@ -159,7 +159,7 @@ static const char *const bounded_free_atom = "\xC" "bounded_free";
 static const char *const minimum_atom = "\x7" "minimum";
 static const char *const fibonacci_atom = "\x9" "fibonacci";
 
-void test_valueshashtable()
+void test_valueshashtable(void)
 {
     struct ValuesHashTable *htable = valueshashtable_new();
     assert(valueshashtable_insert(htable, 0xABCDEF01, 0x12345678) == 1);
@@ -432,7 +432,7 @@ atom_index_t insert_atoms_into_atom_table(struct AtomTable *table)
     return decimals_index;
 }
 
-void test_atom_table()
+void test_atom_table(void)
 {
     struct AtomTable *table = atom_table_new();
 

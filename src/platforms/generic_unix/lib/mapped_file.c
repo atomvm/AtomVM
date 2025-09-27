@@ -50,7 +50,7 @@ MappedFile *mapped_file_open_beam(const char *file_name)
     fstat(mf->fd, &file_stats);
     mf->size = file_stats.st_size;
 
-    mf->mapped = mmap(NULL, mf->size, PROT_READ, MAP_SHARED, mf->fd, 0);
+    mf->mapped = mmap(NULL, mf->size, PROT_READ | PROT_EXEC, MAP_SHARED, mf->fd, 0);
     if (IS_NULL_PTR(mf->mapped)) {
         fprintf(stderr, "Cannot mmap %s\n", file_name);
         close(mf->fd);

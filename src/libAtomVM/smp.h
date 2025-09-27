@@ -105,7 +105,7 @@ struct SpinLock
  * @brief Create a new mutex.
  * @return a pointer to a mutex.
  */
-Mutex *smp_mutex_create();
+Mutex *smp_mutex_create(void);
 
 /**
  * @brief Destroy a mutex.
@@ -136,7 +136,7 @@ void smp_mutex_unlock(Mutex *mtx);
  * @brief Create a new condition variable.
  * @return a pointer to a cv.
  */
-CondVar *smp_condvar_create();
+CondVar *smp_condvar_create(void);
 
 /**
  * @brief Destroy a condition variable
@@ -163,7 +163,7 @@ void smp_condvar_signal(CondVar *cv);
  * on the platform.
  * @return a pointer to a lock.
  */
-RWLock *smp_rwlock_create();
+RWLock *smp_rwlock_create(void);
 
 /**
  * @brief Destroy a rwlock.
@@ -247,7 +247,7 @@ static inline void smp_spinlock_unlock(SpinLock *lock)
  * smp_scheduler_start will be called by the scheduler.
  * @return the number of online processors.
  */
-int smp_get_online_processors();
+int smp_get_online_processors(void);
 
 /**
  * @brief Start a new scheduler, calling `scheduler_entry_point` with the given
