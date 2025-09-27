@@ -555,6 +555,8 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_create_bin),
 
+    TEST_CASE(test_code_server_nifs),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
@@ -692,6 +694,18 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
         perror("Error: ");
         return EXIT_FAILURE;
     }
+#ifndef AVM_NO_JIT
+    if (!beam) {
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+        if (chdir("x86_64") != 0) {
+            perror("Error: ");
+            return EXIT_FAILURE;
+        }
+#else
+#error Unknown JIT target
+#endif
+    }
+#endif
 
     int failed_tests = 0;
 

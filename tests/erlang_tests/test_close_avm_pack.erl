@@ -22,10 +22,20 @@
 
 -export([start/0]).
 
+-ifdef(AVM_DISABLE_JIT).
 -include("code_load/code_load_pack_data.hrl").
 
+load_pack_data() ->
+    ?CODE_LOAD_PACK_DATA.
+-else.
+-include("code_load/code_load_pack_data_x86_64.hrl").
+
+load_pack_data() ->
+    ?CODE_LOAD_PACK_DATA_x86_64.
+-endif.
+
 start() ->
-    Bin = ?CODE_LOAD_PACK_DATA,
+    Bin = load_pack_data(),
     _ = atomvm:add_avm_pack_binary(Bin, [{name, mypack}]),
     ok = atomvm:close_avm_pack(mypack, []),
     try export_test_module:exported_func(4) of

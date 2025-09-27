@@ -57,6 +57,9 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
+# JIT is not available yet on esp32
+set(AVM_DISABLE_JIT ON)
+
 project(atomvm-esp32-test)
 
 # esp-idf does not use compile_feature but instead sets version in
