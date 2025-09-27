@@ -28,8 +28,20 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     // Arguments are loaded using fetch API.
     // wasm_webserver serves under /tests/build/ files in src/platform/escripten/build/tests/src subdirectory
     // and under /build/ files in build/ subdirectory.
+
+    // Check for echo_server in URL hash fragment
+    const hash = window.location.hash.substring(1); // Remove the # character
+    const hashParams = new URLSearchParams(hash);
+    const echoServer = hashParams.get('echo_server');
+
     var Module = {
-        arguments: ['/tests/build/test_websockets.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/estdlib/src/estdlib.avm']
+        arguments: ['/tests/build/test_websockets.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/estdlib/src/estdlib.avm'],
+        preRun: [function() {
+            if (echoServer) {
+                // Set environment variable for the Erlang code to read
+                ENV['ECHO_WEBSOCKET_URL'] = echoServer;
+            }
+        }]
     }
     </script>
     <script async src="/AtomVM.js"></script>

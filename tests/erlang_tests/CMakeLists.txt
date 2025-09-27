@@ -553,6 +553,11 @@ compile_assembler(test_op_bs_create_bin_asm)
 
 compile_erlang(bigint)
 
+compile_erlang(test_list_to_bitstring)
+compile_erlang(test_lists_member)
+compile_erlang(test_lists_keymember)
+compile_erlang(test_lists_keyfind)
+
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
         test_op_bs_start_match_asm.beam
@@ -1071,6 +1076,12 @@ add_custom_target(erlang_test_modules DEPENDS
 
     test_ets.beam
     test_node.beam
+
+
+    test_list_to_bitstring.beam
+    test_lists_member.beam
+    test_lists_keymember.beam
+    test_lists_keyfind.beam
 
     test_op_bs_start_match.beam
     test_op_bs_create_bin.beam

@@ -244,6 +244,11 @@ jobs:
         name: emscripten-test-modules
         path: src/platforms/emscripten/build
 
+    - name: Start Docker echo server for CI
+      run: |
+        docker run -d --name echo-server -p 9090:8080 jmalloc/echo-server
+        sleep 5
+
     - name: Test using cypress
       shell: bash
       run: |
@@ -252,7 +257,7 @@ jobs:
         chmod +x ./src/AtomVM
         ./src/AtomVM examples/emscripten/wasm_webserver.avm &
         cd ../src/platforms/emscripten/tests/
-        docker run --network host -v $PWD:/mnt -w /mnt cypress/included:12.17.1 --browser chrome
+        docker run --network host -v $PWD:/mnt -w /mnt -e CYPRESS_CI=true cypress/included:12.17.1 --browser chrome
         killall AtomVM
 
     - name: "Publish screenshots of failures"

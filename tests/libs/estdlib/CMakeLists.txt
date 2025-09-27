@@ -39,6 +39,7 @@ set(ERLANG_MODULES
     test_maps
     test_net
     test_net_kernel
+    test_os
     test_sets
     test_spawn
     test_ssl
@@ -48,6 +49,7 @@ set(ERLANG_MODULES
     test_timer
     test_supervisor
     test_lists_subtraction
+    test_file
     test_tcp_socket
     test_udp_socket
     notify_init_server

@@ -44,6 +44,7 @@ binary:replace/4, &binary_replace_nif
 binary:match/2, &binary_match_nif
 binary:match/3, &binary_match_nif
 calendar:system_time_to_universal_time/2, &system_time_to_universal_time_nif
+os:getenv/1, &os_getenv_nif
 erlang:atom_to_binary/1, &atom_to_binary_nif
 erlang:atom_to_binary/2, &atom_to_binary_nif
 erlang:atom_to_list/1, &atom_to_list_nif
@@ -139,12 +140,14 @@ erlang:dist_ctrl_get_data/1, &dist_ctrl_get_data_nif
 erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
 erlang:module_loaded/1,&module_loaded_nif
 erlang:nif_error/1,&nif_error_nif
+erlang:list_to_bitstring/1, &list_to_bitstring_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif
 ets:lookup/2, &ets_lookup_nif
 ets:lookup_element/3, &ets_lookup_element_nif
 ets:delete/1, &ets_delete_nif
+file:get_cwd/0, IF_HAVE_GETCWD_PATHMAX(&file_get_cwd_nif)
 ets:delete/2, &ets_delete_nif
 ets:update_counter/3, &ets_update_counter_nif
 ets:update_counter/4, &ets_update_counter_nif
@@ -179,6 +182,9 @@ base64:encode/1, &base64_encode_nif
 base64:decode/1, &base64_decode_nif
 base64:encode_to_string/1, &base64_encode_to_string_nif
 base64:decode_to_string/1, &base64_decode_to_string_nif
+lists:keyfind/3, &lists_keyfind_nif
+lists:keymember/3, &lists_keymember_nif
+lists:member/2, &lists_member_nif
 lists:reverse/1, &lists_reverse_nif
 lists:reverse/2, &lists_reverse_nif
 maps:from_keys/2, &maps_from_keys_nif

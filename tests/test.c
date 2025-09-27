@@ -600,6 +600,11 @@ struct Test tests[] = {
 
     TEST_CASE(bigint),
 
+    TEST_CASE(test_list_to_bitstring),
+    TEST_CASE(test_lists_member),
+    TEST_CASE(test_lists_keymember),
+    TEST_CASE(test_lists_keyfind),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }

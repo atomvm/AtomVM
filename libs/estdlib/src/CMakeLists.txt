@@ -34,6 +34,7 @@ set(ERLANG_MODULES
     erpc
     erts_debug
     ets
+    file
     gen_event
     gen_server
     gen_statem
@@ -55,6 +56,7 @@ set(ERLANG_MODULES
     maps
     math
     net
+    file
     logger
     logger_std_h
     proplists
