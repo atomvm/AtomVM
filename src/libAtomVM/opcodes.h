@@ -171,4 +171,6 @@
 #define OP_UPDATE_RECORD 181
 #define OP_BS_MATCH 182
 
+// Remember to keep this list in sync with libs/jit/src/opcodes.hrl
+
 #endif
