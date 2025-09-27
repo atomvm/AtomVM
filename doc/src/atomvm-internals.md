@@ -139,7 +139,7 @@ Modules can include precompiled code in a dedicated beam chunk with name 'avmN'.
 JIT is an experimental feature and is currently disabled by default. Enabling JIT disables the interpreter.
 JIT can enabled with `-DAVM_DISABLE_JIT=Off`
 
-Execution of precompiled modules can be enabled even if JIT is disabled, with `-DAVM_DISABLE_JIT=On _DAVM_ENABLE_PRECOMPILED=On`
+Execution of precompiled modules can be enabled even if JIT is disabled, with `-DAVM_DISABLE_JIT=On -DAVM_ENABLE_PRECOMPILED=On`
 
 ### How JIT works internally
 
