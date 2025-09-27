@@ -76,6 +76,8 @@ size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
+void intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
+
 size_t intn_submnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
 
