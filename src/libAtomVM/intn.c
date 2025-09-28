@@ -39,6 +39,11 @@
 static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[]);
 static size_t neg_in_place(intn_digit_t out[], size_t len);
 
+static inline size_t size_round_to(size_t n, size_t round_to)
+{
+    return (n + (round_to - 1)) & ~(round_to - 1);
+}
+
 /*
  * Multiplication
  */
@@ -338,6 +343,88 @@ static int divmnu16(
         }
     }
     return 0;
+}
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+static void big_endian_digits_to_uint16(const intn_digit_t num[], size_t len, uint16_t dest_buf[])
+{
+    const uint16_t *num16 = (const uint16_t *) num;
+    for (size_t i = 0; i < len * 2; i += 2) {
+        dest_buf[i] = num16[i + 1];
+        dest_buf[i + 1] = num16[i];
+    }
+}
+
+static void big_endian_uint16_to_digit_in_place(uint16_t num16[], size_t len16)
+{
+    for (size_t i = 0; i < len16; i += 2) {
+        uint16_t num16_i = num16[i];
+        num16[i] = num16[i + 1];
+        num16[i + 1] = num16_i;
+    }
+}
+#endif
+
+size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
+    intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len)
+{
+    _Static_assert(sizeof(intn_digit_t) == 4, "assuming 32-bit intn_digit_t");
+    size_t uint16_in_a_digit = 2;
+
+    uint16_t *u;
+    uint16_t *v;
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    u = (uint16_t *) m;
+    v = (uint16_t *) n;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    int tmp_buf_size = ((256 / (sizeof(uint32_t) * 8)) + 1) * uint16_in_a_digit;
+    uint16_t u_buf16[tmp_buf_size];
+    big_endian_digits_to_uint16(m, m_len, u_buf16);
+    u = u_buf16;
+    uint16_t v_buf16[tmp_buf_size];
+    big_endian_digits_to_uint16(n, n_len, v_buf16);
+    v = v_buf16;
+#endif
+
+    size_t u_len16 = count16(u, m_len * uint16_in_a_digit);
+    size_t v_len16 = count16(v, n_len * uint16_in_a_digit);
+
+    uint16_t *q = (uint16_t *) q_out;
+    uint16_t *r = (uint16_t *) r_out;
+    if (UNLIKELY(divmnu16(q, r, u, v, u_len16, v_len16) != 0)) {
+        abort();
+    }
+
+    size_t counted_q16_len = count16(q, u_len16 - v_len16 + 1);
+    // change this the day sizeof(intn_digit_t) != 4
+    if ((counted_q16_len % uint16_in_a_digit) != 0) {
+        q[counted_q16_len] = 0;
+    }
+    size_t padded_q_len = size_round_to(counted_q16_len, uint16_in_a_digit);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    big_endian_uint16_to_digit_in_place(q, padded_q_len);
+#endif
+
+    if (r_out != NULL) {
+        size_t counted_r16_len = count16(r, v_len16);
+        // change this the day sizeof(intn_digit_t) != 4
+        if ((counted_r16_len % uint16_in_a_digit) != 0) {
+            r[counted_r16_len] = 0;
+        }
+        size_t padded_r_len = size_round_to(counted_r16_len, uint16_in_a_digit);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        big_endian_uint16_to_digit_in_place(r, padded_r_len);
+#endif
+
+        if (r_out_len != NULL) {
+            *r_out_len = padded_r_len / uint16_in_a_digit;
+        }
+    }
+
+    return padded_q_len / uint16_in_a_digit;
 }
 
 void print_num(const uint32_t num[], int len)
@@ -704,11 +791,6 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
 }
 
 #define INTN_BSL_MAX_OUT_LEN 8
-
-static inline size_t size_round_to(size_t n, size_t round_to)
-{
-    return (n + (round_to - 1)) & ~(round_to - 1);
-}
 
 size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
 {
