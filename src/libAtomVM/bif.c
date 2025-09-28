@@ -540,6 +540,43 @@ static inline term make_maybe_boxed_int64(Context *ctx, uint32_t fail_label, uin
 }
 #endif
 
+static term add_int64_to_bigint(
+    Context *ctx, uint32_t fail_label, uint32_t live, int64_t val1, int64_t val2)
+{
+    size_t out_buf_len = INTN_ADD_OUT_LEN(INTN_INT64_LEN, INTN_INT64_LEN);
+    intn_digit_t add_out[out_buf_len];
+    intn_integer_sign_t out_sign;
+    size_t out_len = intn_add_int64(val1, val2, add_out, &out_sign);
+
+    return make_bigint(ctx, fail_label, live, add_out, out_len, out_sign);
+}
+
+static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
+{
+    intn_digit_t tmp_buf1[INTN_INT64_LEN];
+    intn_digit_t tmp_buf2[INTN_INT64_LEN];
+
+    intn_digit_t *bn1;
+    size_t bn1_len;
+    intn_integer_sign_t bn1_sign;
+    intn_digit_t *bn2;
+    size_t bn2_len;
+    intn_integer_sign_t bn2_sign;
+    args_to_bigint(
+        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+
+    size_t bigres_len = INTN_ADD_OUT_LEN(bn1_len, bn2_len);
+    if (bigres_len > INTN_MAX_RES_LEN) {
+        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+    }
+
+    intn_digit_t bigres[INTN_MAX_RES_LEN];
+    intn_integer_sign_t res_sign;
+    bigres_len = intn_addmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+
+    return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
+}
+
 static term add_overflow_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     avm_int_t val1 = term_to_int(arg1);
@@ -572,8 +609,7 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                         return make_boxed_int64(ctx, fail_label, live, res64);
 
                     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        TRACE("overflow: arg1: " AVM_INT64_FMT ", arg2: " AVM_INT64_FMT "\n", arg1, arg2);
-                        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                        return add_int64_to_bigint(ctx, fail_label, live, val1, val2);
                     #else
                         #error "Unsupported configuration."
                     #endif
@@ -589,8 +625,7 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 avm_int64_t res;
 
                 if (BUILTIN_ADD_OVERFLOW_INT64(val1, val2, &res)) {
-                    TRACE("overflow: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
-                    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                    return add_int64_to_bigint(ctx, fail_label, live, val1, val2);
                 }
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, res);
@@ -598,7 +633,7 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         #endif
 
             default:
-                UNREACHABLE();
+                return add_maybe_bigint(ctx, fail_label, live, arg1, arg2);
         }
     } else {
         avm_float_t farg1 = term_conv_to_float(arg1);
