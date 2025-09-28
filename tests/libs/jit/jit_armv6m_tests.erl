@@ -180,6 +180,43 @@ call_primitive_extended_regs_test() ->
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_primitive_few_free_regs_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, 2),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, 3),
+    {State4, r4} = ?BACKEND:move_to_native_register(State3, 4),
+    {State5, r3} = ?BACKEND:move_to_native_register(State4, 5),
+    {State6, ResultReg} = ?BACKEND:call_primitive(State5, ?PRIM_BITSTRING_INSERT_INTEGER, [
+        r6, r7, {free, r4}, r5, {free, r3}
+    ]),
+    State7 = ?BACKEND:free_native_registers(State6, [ResultReg, r6, r7, r5]),
+    ?BACKEND:assert_all_native_free(State7),
+    Stream = ?BACKEND:stream(State7),
+    Dump = <<
+        "   0:	2701      	movs	r7, #1\n"
+        "   2:	2602      	movs	r6, #2\n"
+        "   4:	2503      	movs	r5, #3\n"
+        "   6:	2404      	movs	r4, #4\n"
+        "   8:	2305      	movs	r3, #5\n"
+        "   a:	21e4      	movs	r1, #228	@ 0xe4\n"
+        "   c:	5851      	ldr	r1, [r2, r1]\n"
+        "   e:	b4e7      	push	{r0, r1, r2, r5, r6, r7}\n"
+        "  10:	b082      	sub	sp, #8\n"
+        "  12:	9300      	str	r3, [sp, #0]\n"
+        "  14:	4633      	mov	r3, r6\n"
+        "  16:	460e      	mov	r6, r1\n"
+        "  18:	4618      	mov	r0, r3\n"
+        "  1a:	4639      	mov	r1, r7\n"
+        "  1c:	4622      	mov	r2, r4\n"
+        "  1e:	462b      	mov	r3, r5\n"
+        "  20:	47b0      	blx	r6\n"
+        "  22:	4604      	mov	r4, r0\n"
+        "  24:	b002      	add	sp, #8\n"
+        "  26:	bce7      	pop	{r0, r1, r2, r5, r6, r7}"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_ext_only_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
