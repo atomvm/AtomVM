@@ -19,25 +19,48 @@
 %
 -module(jit_precompile).
 
--export([start/0, compile/3]).
+-export([start/0, compile/3, atom_resolver/1, type_resolver/1]).
 
 -include_lib("jit.hrl").
+
+-include("compact_term.hrl").
 
 %% @doc Precompile BEAM files on command line
 start() ->
     [Target, Dir | Files] = init:get_plain_arguments(),
     lists:foreach(fun(File) -> compile(Target, Dir, File) end, Files).
 
+%% @doc Parse target string to extract base architecture and requested variants
+%% Examples:
+%%   "armv6m" -> {"armv6m", [?JIT_VARIANT_PIC]}
+%%   "armv6m+float32" -> {"armv6m", [?JIT_VARIANT_PIC, ?JIT_VARIANT_FLOAT32]}
+%%   "x86_64" -> {"x86_64", [?JIT_VARIANT_PIC]}
+parse_target(Target) ->
+    case string:split(Target, "+", all) of
+        [BaseTarget] ->
+            {BaseTarget, [?JIT_VARIANT_PIC]};
+        [BaseTarget | Variants] ->
+            RequestedVariants = lists:foldl(
+                fun(Variant, Acc) ->
+                    case Variant of
+                        "float32" -> [?JIT_VARIANT_FLOAT32 | Acc]
+                    end
+                end,
+                [?JIT_VARIANT_PIC],
+                Variants
+            ),
+            {BaseTarget, lists:reverse(RequestedVariants)}
+    end.
+
 compile(Target, Dir, Path) ->
     try
         {ok, InitialBinary} = file:read_file(Path),
-        {ok, _Module, InitialChunks} = beam_lib:all_chunks(InitialBinary),
+        {ok, Module, InitialChunks} = beam_lib:all_chunks(InitialBinary),
         FilteredChunks0 = lists:keydelete("avmN", 1, InitialChunks),
         FilteredChunks = lists:keydelete("Code", 1, FilteredChunks0),
         {"Code", CodeChunk} = lists:keyfind("Code", 1, InitialChunks),
         {"AtU8", AtomChunk} = lists:keyfind("AtU8", 1, InitialChunks),
-        Atoms = parse_atom_chunk(AtomChunk),
-        AtomResolver = fun(Index) -> lists:nth(Index, Atoms) end,
+        AtomResolver = atom_resolver(AtomChunk),
         LiteralsChunk =
             case lists:keyfind("LitU", 1, InitialChunks) of
                 {"LitU", LiteralsChunk0} ->
@@ -52,22 +75,73 @@ compile(Target, Dir, Path) ->
                             <<>>
                     end
             end,
-        Literals = parse_literals_chunk(LiteralsChunk),
-        LiteralResolver = fun(Index) -> lists:nth(Index + 1, Literals) end,
+        LiteralResolver = literal_resolver(LiteralsChunk),
 
-        Stream0 = jit_stream_binary:new(0),
+        TypesChunk =
+            case lists:keyfind("Type", 1, InitialChunks) of
+                {"Type", TypesChunk0} ->
+                    TypesChunk0;
+                false ->
+                    <<>>
+            end,
+        TypeResolver = type_resolver(TypesChunk),
+
+        % Parse line table (Line chunk) for DWARF line information
+        LineResolver =
+            case lists:keyfind("Line", 1, InitialChunks) of
+                {"Line", LineTable} ->
+                    fun(LineRef) -> resolve_line_info(Module, LineTable, LineRef) end;
+                false ->
+                    io:format("LineResolver -- Line chunk not found\n"),
+                    % No line table - return false
+                    fun(_LineRef) -> false end
+            end,
+
+        % Parse target to extract arch and variant
+        {BaseTarget, RequestedVariants} = parse_target(Target),
+        Backend = list_to_atom("jit_" ++ BaseTarget),
+
+        Arch =
+            case BaseTarget of
+                "x86_64" -> ?JIT_ARCH_X86_64;
+                "aarch64" -> ?JIT_ARCH_AARCH64;
+                "armv6m" -> ?JIT_ARCH_ARMV6M
+            end,
+
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
             CodeChunk,
-        Stream1 = jit_stream_binary:append(
-            Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+
+        % Generate native code for each requested variant
+        NewChunks = lists:foldl(
+            fun(Variant, Acc) ->
+                Stream0 = jit_dwarf:new(Backend, Module, jit_stream_binary, 0, LineResolver),
+                Stream1 = Backend:new(Variant, jit_dwarf, Stream0),
+                {LabelsCount, Stream2} = jit:compile(
+                    CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream1
+                ),
+                DwarfStream = Backend:stream(Stream2),
+                NativeCode = jit_dwarf:stream(DwarfStream),
+                <<InfoSize:32, Info:InfoSize/binary>> = jit:beam_chunk_header(
+                    LabelsCount, Arch, Variant
+                ),
+
+                % Create chunk with embedded ELF when DWARF is enabled
+                ChunkData =
+                    case jit_dwarf:elf(DwarfStream, NativeCode) of
+                        false ->
+                            % No debug info - just store native code
+                            <<InfoSize:32, Info:InfoSize/binary, NativeCode/binary>>;
+                        {ok, TextSectionOffset, ELF} ->
+                            % Update BEAM chunk header structure and combine with ELF.
+                            update_avmn_chunk_with_elf(Info, ELF, TextSectionOffset)
+                    end,
+                [{"avmN", ChunkData} | Acc]
+            end,
+            [],
+            RequestedVariants
         ),
-        Backend = list_to_atom("jit_" ++ Target),
-        Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
-        {LabelsCount, Stream3} = jit:compile(
-            CodeChunk, AtomResolver, LiteralResolver, Backend, Stream2
-        ),
-        NativeCode = Backend:stream(Stream3),
-        UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
+
+        UpdatedChunks = FilteredChunks ++ NewChunks,
         {ok, Binary} = beam_lib:build_module(UpdatedChunks),
         Basename = filename:basename(Path),
         UpdatedFile = filename:join(Dir, Basename),
@@ -77,6 +151,10 @@ compile(Target, Dir, Path) ->
             [{jit, first_pass, [<<Opcode, _Rest/binary>> | _], _} | _] = S,
             io:format("Unimplemented opcode ~p (~s)\n", [Opcode, Path])
     end.
+
+atom_resolver(AtomChunk) ->
+    Atoms = parse_atom_chunk(AtomChunk),
+    fun(Index) -> lists:nth(Index, Atoms) end.
 
 parse_atom_chunk(<<AtomCount:32/signed, Rest/binary>>) ->
     if
@@ -100,6 +178,10 @@ parse_atom_chunk_old_format(<<Size, Atom:Size/binary, Tail/binary>>, Acc) ->
 parse_atom_chunk_old_format(<<>>, Acc) ->
     lists:reverse(Acc).
 
+literal_resolver(LiteralsChunk) ->
+    Literals = parse_literals_chunk(LiteralsChunk),
+    fun(Index) -> lists:nth(Index + 1, Literals) end.
+
 parse_literals_chunk(<<TermsCount:32, Rest/binary>>) ->
     parse_literals_chunk0(TermsCount, Rest, []);
 parse_literals_chunk(<<>>) ->
@@ -110,3 +192,212 @@ parse_literals_chunk0(0, <<>>, Acc) ->
 parse_literals_chunk0(N, <<TermSize:32, TermBin:TermSize/binary, Rest/binary>>, Acc) ->
     Term = binary_to_term(TermBin),
     parse_literals_chunk0(N - 1, Rest, [Term | Acc]).
+
+%% Version (from beam_types.hrl)
+-define(BEAM_TYPES_VERSION, 3).
+
+%% Type chunk constants (from beam_types.erl)
+-define(BEAM_TYPE_ATOM, (1 bsl 0)).
+-define(BEAM_TYPE_BITSTRING, (1 bsl 1)).
+-define(BEAM_TYPE_CONS, (1 bsl 2)).
+-define(BEAM_TYPE_FLOAT, (1 bsl 3)).
+-define(BEAM_TYPE_FUN, (1 bsl 4)).
+-define(BEAM_TYPE_INTEGER, (1 bsl 5)).
+-define(BEAM_TYPE_MAP, (1 bsl 6)).
+-define(BEAM_TYPE_NIL, (1 bsl 7)).
+-define(BEAM_TYPE_PID, (1 bsl 8)).
+-define(BEAM_TYPE_PORT, (1 bsl 9)).
+-define(BEAM_TYPE_REFERENCE, (1 bsl 10)).
+-define(BEAM_TYPE_TUPLE, (1 bsl 11)).
+
+-define(BEAM_TYPE_HAS_LOWER_BOUND, (1 bsl 12)).
+-define(BEAM_TYPE_HAS_UPPER_BOUND, (1 bsl 13)).
+-define(BEAM_TYPE_HAS_UNIT, (1 bsl 14)).
+
+type_resolver(<<Version:32, _Count:32, TypeData/binary>>) when Version =:= ?BEAM_TYPES_VERSION ->
+    Types = parse_type_entries(TypeData, []),
+    fun(Index) -> lists:nth(Index + 1, Types) end;
+type_resolver(_) ->
+    fun(_) -> any end.
+
+parse_type_entries(<<>>, Acc) ->
+    lists:reverse(Acc);
+parse_type_entries(
+    <<0:1, HasUnit:1, HasUpperBound:1, HasLowerBound:1, TypeBits:12, Rest0/binary>>, Acc
+) ->
+    {Rest, LowerBound, UpperBound, Unit} = parse_extra(
+        HasLowerBound, HasUpperBound, HasUnit, Rest0, '-inf', '+inf', 1
+    ),
+    Type =
+        case TypeBits of
+            ?BEAM_TYPE_ATOM ->
+                t_atom;
+            ?BEAM_TYPE_BITSTRING ->
+                {t_bs_matchable, Unit};
+            ?BEAM_TYPE_CONS ->
+                t_cons;
+            ?BEAM_TYPE_FLOAT ->
+                t_float;
+            ?BEAM_TYPE_FUN ->
+                t_fun;
+            ?BEAM_TYPE_FLOAT bor ?BEAM_TYPE_INTEGER ->
+                {t_number, {LowerBound, UpperBound}};
+            ?BEAM_TYPE_INTEGER ->
+                {t_integer, {LowerBound, UpperBound}};
+            ?BEAM_TYPE_MAP ->
+                t_map;
+            ?BEAM_TYPE_NIL ->
+                nil;
+            ?BEAM_TYPE_NIL bor ?BEAM_TYPE_CONS ->
+                t_list;
+            ?BEAM_TYPE_PID ->
+                pid;
+            ?BEAM_TYPE_PORT ->
+                port;
+            ?BEAM_TYPE_REFERENCE ->
+                reference;
+            ?BEAM_TYPE_TUPLE ->
+                t_tuple;
+            _ ->
+                any
+        end,
+    parse_type_entries(Rest, [Type | Acc]).
+
+parse_extra(1, HasUpperBound, HasUnit, <<Value:64/signed, Rest/binary>>, '-inf', '+inf', 1) ->
+    parse_extra(0, HasUpperBound, HasUnit, Rest, Value, '+inf', 1);
+parse_extra(0, 1, HasUnit, <<Value:64/signed, Rest/binary>>, LowerBound, '+inf', 1) ->
+    parse_extra(0, 0, HasUnit, Rest, LowerBound, Value, 1);
+parse_extra(0, 0, 1, <<Value:8/unsigned, Rest/binary>>, LowerBound, UpperBound, 1) ->
+    parse_extra(0, 0, 0, Rest, LowerBound, UpperBound, Value + 1);
+parse_extra(0, 0, 0, Rest, LowerBound, UpperBound, Unit) ->
+    {Rest, LowerBound, UpperBound, Unit}.
+
+%% @doc Update existing Info by updating offset
+update_avmn_chunk_with_elf(Info, ElfBinary, TextSectionOffset) ->
+    % Parse Info to update the offset: LabelsCount + Version + ArchCount + NativeCodeArch
+    <<LabelsCount:32, Version:16, ArchCount:16, Arch:16, Variant:16, _OldOffset:32>> = Info,
+
+    % Calculate new offset: from start of ELF to .text section
+    NewOffset = TextSectionOffset,
+
+    % Create updated Info with new offset
+    UpdatedInfo = <<LabelsCount:32, Version:16, ArchCount:16, Arch:16, Variant:16, NewOffset:32>>,
+
+    % Build updated chunk: InfoSize + UpdatedInfo + ELF
+    <<(byte_size(UpdatedInfo)):32, UpdatedInfo/binary, ElfBinary/binary>>.
+
+%% @doc Resolve a line reference to filename and line number
+resolve_line_info(
+    Module,
+    <<Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, Rest/binary>>,
+    LineRef
+) when Version =:= 0, LineRef > 0, LineRef =< NumRefs ->
+    resolve_line_info0(Module, 1, 0, LineRef, NumRefs, Rest, false);
+resolve_line_info(_Module, <<Version:32, _/binary>>, _) when Version =/= 0 ->
+    io:format("resolve_line_info -- unknown Line table version (~p)\n", [Version]),
+    false;
+resolve_line_info(
+    _Module,
+    <<_Version:32, _Flags:32, _NumInstr:32, _NumRefs:32, _NumFilenames:32, _Rest/binary>>,
+    0
+) ->
+    false;
+resolve_line_info(
+    _Module,
+    <<_Version:32, _Flags:32, _NumInstr:32, NumRefs:32, _NumFilenames:32, _Rest/binary>>,
+    LineRef
+) ->
+    io:format("resolve_line_info -- invalid lineref (~p) (NumRefs = ~p)\n", [LineRef, NumRefs]),
+    false.
+
+resolve_line_info0(
+    Module, CurrentLineRef, _CurrentLocationIx, _LineRef, NumRefs, LocationData, {Line, LocationIx}
+) when CurrentLineRef > NumRefs ->
+    resolve_line_info1(Module, LocationIx, LocationData, Line);
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin,
+    false
+) ->
+    {Line, Rest} = jit:decode_value64(Bin),
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, ?COMPACT_INTEGER:4, _/binary>> = Bin,
+    Acc
+) ->
+    {_Line, Rest} = jit:decode_value64(Bin),
+    resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, NextByte, Rest/binary>>,
+    false
+) ->
+    Line = (Val bsl 8) bor NextByte,
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, _NextByte, Rest/binary>>,
+    Acc
+) ->
+    resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
+resolve_line_info0(
+    Module,
+    LineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Line:(8 * (Size0 + 2))/signed, Rest/binary>>,
+    false
+) ->
+    resolve_line_info0(
+        Module, LineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, {Line, CurrentLocationIx}
+    );
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, _:(8 * (Size0 + 2))/signed, Rest/binary>>,
+    Acc
+) ->
+    resolve_line_info0(Module, CurrentLineRef + 1, CurrentLocationIx, LineRef, NumRefs, Rest, Acc);
+resolve_line_info0(
+    Module,
+    CurrentLineRef,
+    _CurrentLocationIx,
+    LineRef,
+    NumRefs,
+    <<_:4, AtomTag:4, _/binary>> = Bin,
+    Acc
+) when AtomTag =:= ?COMPACT_LARGE_ATOM; AtomTag =:= ?COMPACT_ATOM ->
+    {NewLocationIx, Rest} = jit:decode_value64(Bin),
+    resolve_line_info0(Module, CurrentLineRef, NewLocationIx, LineRef, NumRefs, Rest, Acc).
+
+resolve_line_info1(Module, 0, _LocationData, Line) ->
+    {ok, <<(atom_to_binary(Module, utf8))/binary, ".erl">>, Line};
+resolve_line_info1(_Module, 1, <<Size:16, Filename:Size/binary, _/binary>>, Line) ->
+    {ok, Filename, Line};
+resolve_line_info1(Module, N, <<Size:16, _:Size/binary, Rest/binary>>, Line) ->
+    resolve_line_info1(Module, N - 1, Rest, Line).

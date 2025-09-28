@@ -202,12 +202,14 @@ static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
 static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[]);
 static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
 static term nif_jit_backend_module(Context *ctx, int argc, term argv[]);
+static term nif_jit_variant(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_lists_keyfind(Context *ctx, int argc, term argv[]);
@@ -768,6 +770,10 @@ static const struct Nif code_server_literal_resolver_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_literal_resolver
 };
+static const struct Nif code_server_type_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_type_resolver
+};
 static const struct Nif code_server_set_native_code_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_set_native_code
@@ -788,6 +794,11 @@ static const struct Nif nif_error_nif = {
 static const struct Nif jit_backend_module_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_jit_backend_module
+};
+
+static const struct Nif jit_variant_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_jit_variant
 };
 #endif
 
@@ -5600,6 +5611,21 @@ static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]
     return module_load_literal(mod, literal_index, ctx);
 }
 
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int type_index = term_to_int(argv[1]);
+    return module_get_type_by_index(mod, type_index, ctx);
+}
+
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -5658,8 +5684,25 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
 
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64
     return JIT_X86_64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+    return JIT_AARCH64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+    return JIT_ARMV6M_ATOM;
 #else
 #error Unknown JIT target
+#endif
+}
+
+static term nif_jit_variant(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+#ifdef AVM_USE_SINGLE_PRECISION
+    return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
+#else
+    return term_from_int(JIT_VARIANT_PIC);
 #endif
 }
 #endif
