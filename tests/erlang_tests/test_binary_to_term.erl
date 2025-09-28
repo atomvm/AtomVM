@@ -167,6 +167,7 @@ start() ->
             97, 251, 97, 252, 97, 253, 97, 254, 97, 255, 98, 0, 0, 1, 0>>
     ),
     ok = test_external_function(),
+    ok = test_function(),
 
     {32768, 6} = erlang:binary_to_term(<<131, 98, 0, 0, 128, 0, 127>>, [used]),
     test_catenate_and_split([foo, bar, 128, {foo, bar}, [a, b, c, {d}]]),
@@ -293,6 +294,50 @@ test_external_function() ->
     42 = Fun2(fun() -> 42 end, []),
     42 = Fun3(?MODULE, apply, [fun() -> 42 end, []]),
     42 = Fun3(?MODULE, apply, [Fun2, [fun() -> 42 end, []]]),
+    ok.
+
+test_function() ->
+    X = id(2),
+    T = [fun(A) -> A * 2 end, fun(A) -> A * X end],
+
+    Bin = erlang:term_to_binary(T),
+
+    <<131, ModuleAtom/binary>> = term_to_binary(?MODULE:id(?MODULE)),
+    ModuleAtomSize = byte_size(ModuleAtom),
+
+    <<131, 108, 2:32, Funs/binary>> = Bin,
+    <<112, Size2:32, Rest1/binary>> = Funs,
+    % need to use split_binary for OTP 21/22
+    {Fun2Bin, <<112, Size3:32, Rest2/binary>>} = split_binary(Rest1, Size2 - 4),
+    {Fun3Bin, <<106>>} = split_binary(Rest2, Size3 - 4),
+    <<1, MD5:16/binary, Index2:32, 0:32, ModuleAtom:ModuleAtomSize/binary, 97, Index2, 98,
+        OldUniq:32, Rest3/binary>> = Fun2Bin,
+    <<1, MD5:16/binary, Index3:32, 1:32, ModuleAtom:ModuleAtomSize/binary, 97, Index3, 98,
+        OldUniq:32, _Rest4/binary>> = Fun3Bin,
+
+    [Fun2, Fun3] = binary_to_term(Bin),
+    true = is_function(Fun2),
+    true = is_function(Fun3),
+    42 = Fun2(21),
+    42 = Fun3(21),
+
+    B1 =
+        <<131, 112, Size2:32, 1, 0:(16 * 8), Index2:32, 0:32, ModuleAtom:ModuleAtomSize/binary, 97,
+            (Index2 bxor 42), 98, (OldUniq bxor 42):32, Rest3/binary>>,
+    Fun4 = binary_to_term(B1),
+    ok =
+        try
+            42 = Fun4(21),
+            unexpected
+        catch
+            error:{badfun, Fun4} ->
+                % BEAM
+                ok;
+            error:undef ->
+                % AtomVM
+                ok
+        end,
+    B1 = term_to_binary(Fun4),
     ok.
 
 get_binary(Id) ->
