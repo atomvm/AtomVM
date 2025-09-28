@@ -33,7 +33,7 @@
     the_out_of_order_list/0,
     the_ordered_list/0,
     get_machine_atom/0,
-    expect_badarg/1,
+    expect_error/2,
     expect_overflow/1,
     id/1
 ]).
@@ -48,6 +48,7 @@
 
 start() ->
     test_mul() +
+        test_div() +
         test_add() +
         test_sub() +
         parse_bigint() +
@@ -141,6 +142,55 @@ fact(N) when N rem 2 == 0 ->
     N * fact(N - 1);
 fact(N) when N rem 2 == 1 ->
     fact(N - 1) * N.
+
+test_div() ->
+    Int0 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int1 = erlang:binary_to_integer(?MODULE:id(<<"ABCDEF123456789FFAABBCCDDEE11223">>), 16),
+    Int2 = erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
+    Int3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+
+    <<"17D74FD225B3F8B4E8DB72B81BE0416D2">> = erlang:integer_to_binary(
+        ?MODULE:id(Int0) div ?MODULE:id(Int1), 16
+    ),
+
+    <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(Int0) div ?MODULE:id(-1), 16
+    ),
+
+    1 = ?MODULE:id(Int0) div ?MODULE:id(Int0),
+    1 = ?MODULE:id(Int1) div ?MODULE:id(Int1),
+    1 = ?MODULE:id(Int2) div ?MODULE:id(Int2),
+    -1 = ?MODULE:id(Int0) div ?MODULE:id(Int3),
+    -1 = ?MODULE:id(Int3) div ?MODULE:id(Int0),
+    0 = ?MODULE:id(Int1) div ?MODULE:id(Int0),
+    0 = ?MODULE:id(0) div ?MODULE:id(Int0),
+    0 = ?MODULE:id(Int1) div ?MODULE:id(Int3),
+
+    32894 =
+        (((((((?MODULE:id(Int0) div ?MODULE:id(2)) div ?MODULE:id(123456)) div
+            ?MODULE:id(123456789)) div ?MODULE:id(9876543210)) div ?MODULE:id(1125899906842601)) div
+            ?MODULE:id(1125899906841712)) div ?MODULE:id(9223372036854773330)),
+
+    -2196990 =
+        (((((((?MODULE:id(Int3) div ?MODULE:id(3)) div ?MODULE:id(123431)) div
+            ?MODULE:id(123256789)) div ?MODULE:id(9876543217)) div ?MODULE:id(1125899916842637)) div
+            ?MODULE:id(1125899906841719)) div ?MODULE:id(92233720368547733)),
+
+    <<"8000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#8000000000000000) div ?MODULE:id(-1), 16
+    ),
+
+    <<"FFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        ?MODULE:id(Int2) div ?MODULE:id(-1), 16
+    ),
+
+    ok = expect_error(badarith, fun() -> Int1 div ?MODULE:id(0) end),
+
+    0.
 
 test_add() ->
     Int0 = erlang:binary_to_integer(
@@ -576,7 +626,7 @@ parse_bigint() ->
     Pattern7Int = ?MODULE:id(binary_to_integer(?MODULE:id(Pattern7Bin), 7)),
     Pattern7BinCanonical = ?MODULE:id(integer_to_binary(?MODULE:id(Pattern7Int), 7)),
 
-    ok = expect_badarg(fun() ->
+    ok = expect_error(badarg, fun() ->
         binary_to_integer(
             ?MODULE:id(
                 <<"-45342150622142553455515645002565446330401366441046314643126036505535454140120366515240023z6">>
@@ -1632,11 +1682,11 @@ expect_overflow_or_limit(OvfFun) ->
         _:E -> {unexpected_error, E}
     end.
 
-expect_badarg(BadFun) ->
+expect_error(Error, BadFun) ->
     try BadFun() of
         Result -> {unexpected_result, Result}
     catch
-        error:badarg -> ok;
+        error:Error -> ok;
         _:E -> {unexpected_error, E}
     end.
 

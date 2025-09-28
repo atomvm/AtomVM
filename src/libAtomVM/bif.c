@@ -1038,6 +1038,47 @@ term bif_erlang_fdiv_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     return term_from_float(fresult, &ctx->heap);
 }
 
+static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
+{
+    if (UNLIKELY(arg2 == term_from_int(0))) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+
+    intn_digit_t tmp_buf1[INTN_INT64_LEN];
+    intn_digit_t tmp_buf2[INTN_INT64_LEN];
+
+    intn_digit_t *bn1;
+    size_t bn1_len;
+    intn_integer_sign_t bn1_sign;
+    intn_digit_t *bn2;
+    size_t bn2_len;
+    intn_integer_sign_t bn2_sign;
+    args_to_bigint(
+        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+
+    int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
+    if (cmp_result < 0) {
+        // a / b when a < b -> always 0
+        return term_from_int(0);
+    } else if (cmp_result == 0) {
+        // a / b when a == b -> always +-1
+        return (bn1_sign == bn2_sign) ? term_from_int(1) : term_from_int(-1);
+    }
+
+    intn_digit_t bigres[INTN_MAX_RES_LEN];
+    size_t bigres_len = intn_divmnu(bn1, bn1_len, bn2, bn2_len, bigres, NULL, NULL);
+    intn_integer_sign_t res_sign = intn_muldiv_sign(bn1_sign, bn2_sign);
+
+    return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
+}
+
+static term int64_max_plus_one(Context *ctx, uint32_t fail_label, uint32_t live)
+{
+    intn_digit_t int_buf[INTN_UINT64_LEN];
+    intn_u64_to_digits(((uint64_t) INT64_MAX) + 1, int_buf);
+    return make_bigint(ctx, fail_label, live, int_buf, INTN_UINT64_LEN, IntNPositiveInteger);
+}
+
 static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     if (LIKELY(term_is_any_integer(arg1) && term_is_any_integer(arg2))) {
@@ -1059,8 +1100,7 @@ static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                         return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) AVM_INT_MIN));
 
                     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        TRACE("overflow: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
-                        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                        return int64_max_plus_one(ctx, fail_label, live);
                     #endif
                 }
 
@@ -1076,9 +1116,7 @@ static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
 
                 } else if (UNLIKELY((val2 == -1) && (val1 == INT64_MIN))) {
-                    TRACE("overflow: arg1: 0x%lx, arg2: 0x%lx\n", arg1, arg2);
-                    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-
+                    return int64_max_plus_one(ctx, fail_label, live);
                 }
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, val1 / val2);
@@ -1086,7 +1124,7 @@ static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         #endif
 
             default:
-                UNREACHABLE();
+                return div_maybe_bigint(ctx, fail_label, live, arg1, arg2);
         }
     } else {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
