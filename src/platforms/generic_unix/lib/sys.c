@@ -45,6 +45,10 @@
 #include "sys_mbedtls.h"
 #endif
 
+#ifndef AVM_NO_JIT
+#include "jit_stream_mmap.h"
+#endif
+
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
@@ -582,6 +586,9 @@ void sys_init_platform(GlobalContext *global)
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
     otp_ssl_init(global);
+#endif
+#ifndef AVM_NO_JIT
+    jit_stream_mmap_init(global);
 #endif
 
     global->platform_data = platform;

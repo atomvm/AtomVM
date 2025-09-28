@@ -49,5 +49,15 @@ stop(_State) ->
 
 %% @hidden
 init([]) ->
+    ChildrenSpec = [
+        #{
+            id => code_server,
+            start => {code_server, start_link, []},
+            restart => permanent,
+            shutdown => 1000,
+            type => worker,
+            modules => [code_server]
+        }
+    ],
     SupFlags = #{strategy => one_for_all},
-    {ok, {SupFlags, []}}.
+    {ok, {SupFlags, ChildrenSpec}}.

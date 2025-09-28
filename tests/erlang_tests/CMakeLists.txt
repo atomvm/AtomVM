@@ -21,13 +21,40 @@
 cmake_minimum_required (VERSION 3.13)
 project (erlang_tests)
 
+macro(jit_precompile module_name)
+    if(NOT AVM_DISABLE_JIT)
+        set(jit_compiler_modules
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
+        )
+        add_custom_command(
+            OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
+            COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
+                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+            DEPENDS ${module_name}.beam ${jit_compiler_modules} jit
+            COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
+            VERBATIM
+        )
+    endif()
+endmacro()
+
 function(compile_erlang module_name)
+    if(AVM_DISABLE_JIT)
+        set(erlc_define -DAVM_DISABLE_JIT)
+    else()
+        set(erlc_define "-DAVM_JIT_TARGET_ARCH='${AVM_JIT_TARGET_ARCH}'")
+    endif()
+
     add_custom_command(
         OUTPUT ${module_name}.beam
-        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        COMMAND erlc ${erlc_define} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         COMMENT "Compiling ${module_name}.erl"
     )
+    jit_precompile(${module_name})
 endfunction()
 
 function(compile_assembler module_name)
@@ -37,6 +64,7 @@ function(compile_assembler module_name)
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.S
         COMMENT "Compiling ${module_name}.S"
     )
+    jit_precompile(${module_name})
 endfunction()
 
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
@@ -572,9 +600,7 @@ else()
     set(OTP25_OR_GREATER_TESTS)
 endif()
 
-add_custom_target(erlang_test_modules DEPENDS
-    code_load_files
-
+set(erlang_test_beams
     add.beam
     fact.beam
     mutrec.beam
@@ -1086,4 +1112,16 @@ add_custom_target(erlang_test_modules DEPENDS
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
+)
+
+if(NOT AVM_DISABLE_JIT)
+    set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
+    list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
+    list(APPEND erlang_test_beams ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+endif()
+
+add_custom_target(erlang_test_modules DEPENDS
+    code_load_files
+
+    ${erlang_test_beams}
 )

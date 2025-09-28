@@ -27,6 +27,7 @@
 #include "externalterm.h"
 #include "globalcontext.h"
 #include "iff.h"
+#include "jit.h"
 #include "list.h"
 #include "nifs.h"
 #include "term.h"
@@ -55,7 +56,9 @@ static bool module_are_literals_compressed(const uint8_t *litT);
     static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
+#ifndef AVM_NO_EMU
 static void module_add_label(Module *mod, int index, const uint8_t *ptr);
+#endif
 static enum ModuleLoadResult module_build_imported_functions_table(Module *this_module, uint8_t *table_data, GlobalContext *glb);
 static void module_parse_line_table(Module *mod, const uint8_t *data, size_t len);
 
@@ -65,10 +68,12 @@ struct LineRefOffset
     unsigned int offset;
 };
 
+#ifndef AVM_NO_EMU
 #define IMPL_CODE_LOADER 1
 #include "opcodesswitch.h"
 #undef TRACE
 #undef IMPL_CODE_LOADER
+#endif
 
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
@@ -248,10 +253,12 @@ term module_get_exported_functions(Module *this_module, Heap *heap)
     return result_list;
 }
 
+#ifndef AVM_NO_EMU
 static void module_add_label(Module *mod, int index, const uint8_t *ptr)
 {
     mod->labels[index] = ptr;
 }
+#endif
 
 Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary, unsigned long size)
 {
@@ -289,20 +296,51 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 #ifdef ENABLE_ADVANCED_TRACE
     mod->import_table = beam_file + offsets[IMPT];
 #endif
-    mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
+    if (offsets[CODE]) {
+        mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
+    }
     mod->export_table = beam_file + offsets[EXPT];
     mod->local_table = beam_file + offsets[LOCT];
     mod->atom_table = beam_file + offsets[AT8U];
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
-    uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
-    mod->labels = calloc(num_labels, sizeof(void *));
-    if (IS_NULL_PTR(mod->labels)) {
-        fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
-        module_destroy(mod);
-        return NULL;
+#ifndef AVM_NO_JIT
+    if (offsets[AVMN]) {
+        NativeCodeChunk *native_code = (NativeCodeChunk *) (beam_file + offsets[AVMN]);
+        // Check compatibility
+        if (ENDIAN_SWAP_16(native_code->version) != JIT_FORMAT_VERSION) {
+            fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
+        } else {
+            for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
+                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
+                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
+                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset));
+                    break;
+                }
+            }
+            if (mod->native_code == NULL) {
+                fprintf(stderr, "Native code chunk found but no compatible architecture or variant found\n");
+            }
+        }
     }
+#endif
+
+#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
+    if (mod->native_code == NULL) {
+#endif
+#ifndef AVM_NO_EMU
+        uint32_t num_labels = ENDIAN_SWAP_32(mod->code->labels);
+        mod->labels = calloc(num_labels, sizeof(void *));
+        if (IS_NULL_PTR(mod->labels)) {
+            fprintf(stderr, "Error: Null module labels: %s:%i.\n", __FILE__, __LINE__);
+            module_destroy(mod);
+            return NULL;
+        }
+#endif
+#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
+    }
+#endif
 
     module_parse_line_table(mod, beam_file + offsets[LINT] + 8, sizes[LINT]);
 
@@ -339,42 +377,50 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
-    struct ListHead line_refs;
-    list_init(&line_refs);
-    mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
+#ifndef AVM_NO_JIT
+    if (mod->native_code == NULL) {
+#endif
+#ifndef AVM_NO_EMU
+        struct ListHead line_refs;
+        list_init(&line_refs);
+        mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
 
-    // Create the list of offsets if the module has line informations.
-    if (mod->line_refs_table != NULL) {
-        // Compute the size of the list
-        size_t num_offsets = 0;
-        struct ListHead *item = line_refs.next;
-        while (item != &line_refs) {
-            num_offsets++;
-            item = item->next;
-        }
-        if (num_offsets > 0) {
-            mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
-            if (IS_NULL_PTR(mod->line_refs_offsets)) {
-                fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
-            } else {
-                size_t index = 0;
-                item = line_refs.next;
-                while (item != &line_refs) {
-                    struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
-                    mod->line_refs_offsets[index] = offset->offset;
-                    index++;
-                    item = item->next;
+        // Create the list of offsets if the module has line informations.
+        if (mod->line_refs_table != NULL) {
+            // Compute the size of the list
+            size_t num_offsets = 0;
+            struct ListHead *item = line_refs.next;
+            while (item != &line_refs) {
+                num_offsets++;
+                item = item->next;
+            }
+            if (num_offsets > 0) {
+                mod->line_refs_offsets = malloc(num_offsets * sizeof(unsigned int));
+                if (IS_NULL_PTR(mod->line_refs_offsets)) {
+                    fprintf(stderr, "Warning: Unable to allocate space for line refs offset, module has %zu offsets.  Line information in stacktraces may be missing\n", num_offsets);
+                } else {
+                    size_t index = 0;
+                    item = line_refs.next;
+                    while (item != &line_refs) {
+                        struct LineRefOffset *offset = CONTAINER_OF(item, struct LineRefOffset, head);
+                        mod->line_refs_offsets[index] = offset->offset;
+                        index++;
+                        item = item->next;
+                    }
+                    mod->line_refs_offsets_count = num_offsets;
                 }
-                mod->line_refs_offsets_count = num_offsets;
             }
         }
+        // Empty the list
+        while (!list_is_empty(&line_refs)) {
+            struct ListHead *item = line_refs.next;
+            list_remove(item);
+            free(item);
+        }
+#endif
+#ifndef AVM_NO_JIT
     }
-    // Empty the list
-    while (!list_is_empty(&line_refs)) {
-        struct ListHead *item = line_refs.next;
-        list_remove(item);
-        free(item);
-    }
+#endif
 
     return mod;
 }
@@ -468,6 +514,45 @@ term module_load_literal(Module *mod, int index, Context *ctx)
     return t;
 }
 
+#ifndef AVM_NO_JIT
+ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label)
+{
+    assert(module->native_code);
+    return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+}
+#endif
+
+static const struct ExportedFunction *module_create_function(Module *found_module, int exported_label)
+{
+#ifndef AVM_NO_JIT
+    if (found_module->native_code) {
+        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
+        if (IS_NULL_PTR(mfunc)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return NULL;
+        }
+        mfunc->base.type = ModuleNativeFunction;
+        mfunc->target = found_module;
+        mfunc->entry_point = module_get_native_entry_point(found_module, exported_label);
+
+        return &mfunc->base;
+    } else {
+#endif
+        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
+        if (IS_NULL_PTR(mfunc)) {
+            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+            return NULL;
+        }
+        mfunc->base.type = ModuleFunction;
+        mfunc->target = found_module;
+        mfunc->label = exported_label;
+
+        return &mfunc->base;
+#ifndef AVM_NO_JIT
+    }
+#endif
+}
+
 const struct ExportedFunction *module_resolve_function0(Module *mod, int import_table_index, struct UnresolvedFunctionCall *unresolved, GlobalContext *glb)
 {
     Module *found_module = globalcontext_get_module(glb, unresolved->module_atom_index);
@@ -480,18 +565,13 @@ const struct ExportedFunction *module_resolve_function0(Module *mod, int import_
             fprintf(stderr, "Warning: function %s cannot be resolved.\n", buf);
             return NULL;
         }
-        struct ModuleFunction *mfunc = malloc(sizeof(struct ModuleFunction));
-        if (IS_NULL_PTR(mfunc)) {
-            fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
+        const struct ExportedFunction *exported_function = module_create_function(found_module, exported_label);
+        if (IS_NULL_PTR(exported_function)) {
             return NULL;
         }
-        mfunc->base.type = ModuleFunction;
-        mfunc->target = found_module;
-        mfunc->label = exported_label;
-
+        mod->imported_funcs[import_table_index] = exported_function;
         free(unresolved);
-        mod->imported_funcs[import_table_index] = &mfunc->base;
-        return &mfunc->base;
+        return exported_function;
     } else {
         size_t atom_string_len;
         const uint8_t *atom_string_data = atom_table_get_atom_string(glb->atom_table, unresolved->module_atom_index, &atom_string_len);
@@ -802,31 +882,67 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
 bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     size_t i;
-    unsigned int ref_offset;
-    uint32_t line_ref;
-    const uint8_t *ref_pc;
-    if (IS_NULL_PTR(mod->line_refs_offsets)) {
-        return false;
-    }
-    for (i = 0; i < mod->line_refs_offsets_count; i++) {
-        ref_offset = mod->line_refs_offsets[i];
-        if (offset == ref_offset) {
-            ref_pc = &mod->code->code[ref_offset];
-            DECODE_LITERAL(line_ref, ref_pc);
-            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
-        } else if (i == 0 && offset < ref_offset) {
+#ifndef AVM_NO_JIT
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2 + labels_count * 6;
+        size_t lines_count = READ_16_UNALIGNED(labels_and_lines);
+        if (lines_count == 0) {
             return false;
-        } else if (offset < ref_offset) {
-            ref_offset = mod->line_refs_offsets[i - 1];
-            ref_pc = &mod->code->code[ref_offset];
-            DECODE_LITERAL(line_ref, ref_pc);
-            return module_find_line_ref(mod, line_ref, line, filename_len, filename);
         }
+        labels_and_lines += 2;
+        uint16_t prev_line_ref = 0;
+        for (i = 0; i < lines_count; i++) {
+            uint16_t line_ref = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            uint32_t ref_offset = READ_32_UNALIGNED(labels_and_lines);
+            labels_and_lines += 4;
+            if (offset == ref_offset) {
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            } else if (i == 0 && offset < ref_offset) {
+                return false;
+            } else if (offset < ref_offset) {
+                return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+            }
+            prev_line_ref = line_ref;
+        }
+        return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+    } else {
+#if defined(AVM_NO_EMU)
+        return false;
+#endif
+#endif
+#ifndef AVM_NO_EMU
+        uint32_t line_ref;
+        unsigned int ref_offset;
+        const uint8_t *ref_pc;
+        if (IS_NULL_PTR(mod->line_refs_offsets) || UNLIKELY(mod->line_refs_offsets_count == 0)) {
+            return false;
+        }
+        for (i = 0; i < mod->line_refs_offsets_count; i++) {
+            ref_offset = mod->line_refs_offsets[i];
+            if (offset == ref_offset) {
+                ref_pc = &mod->code->code[ref_offset];
+                DECODE_LITERAL(line_ref, ref_pc);
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            } else if (i == 0 && offset < ref_offset) {
+                return false;
+            } else if (offset < ref_offset) {
+                ref_offset = mod->line_refs_offsets[i - 1];
+                ref_pc = &mod->code->code[ref_offset];
+                DECODE_LITERAL(line_ref, ref_pc);
+                return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+            }
+        }
+        ref_offset = mod->line_refs_offsets[i - 1];
+        ref_pc = &mod->code->code[ref_offset];
+        DECODE_LITERAL(line_ref, ref_pc);
+        return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+#endif
+#ifndef AVM_NO_JIT
     }
-    ref_offset = mod->line_refs_offsets[i - 1];
-    ref_pc = &mod->code->code[ref_offset];
-    DECODE_LITERAL(line_ref, ref_pc);
-    return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+#endif
 }
 
 COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *out_mod_offset, GlobalContext *global)
@@ -841,30 +957,115 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
         *cp_mod = mod;
     }
 
-    uint8_t *code = &mod->code->code[0];
-    int labels_count = ENDIAN_SWAP_32(mod->code->labels);
-
-    int i = 1;
-    const uint8_t *l = mod->labels[1];
-    while (mod_offset > l - code) {
-        i++;
-        if (i >= labels_count) {
-            // last label + 1 is reserved for end of module.
-            if (label) {
-                *label = i;
+#ifndef AVM_NO_JIT
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2;
+        uint32_t label_offset = 0;
+        uint16_t label_id = 0;
+        while (labels_count > 0) {
+            uint16_t new_label_id = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            uint32_t new_label_offset = READ_32_UNALIGNED(labels_and_lines);
+            labels_and_lines += 4;
+            if (new_label_offset > mod_offset) {
+                if (label) {
+                    *label = label_id;
+                }
+                if (l_off) {
+                    *l_off = mod_offset - label_offset;
+                }
+                return;
             }
-            if (l_off) {
-                *l_off = 0;
+            if (new_label_offset == mod_offset) {
+                if (label) {
+                    *label = new_label_id;
+                }
+                if (l_off) {
+                    *l_off = mod_offset - new_label_offset;
+                }
+                return;
             }
-            return;
+            label_id = new_label_id;
+            label_offset = new_label_offset;
+            labels_count--;
         }
-        l = mod->labels[i];
-    }
+        if (label) {
+            *label = label_id;
+        }
+        if (l_off) {
+            *l_off = 0;
+        }
+#endif
+#if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
+    } else {
+#endif
+#ifndef AVM_NO_EMU
+        uint8_t *code = &mod->code->code[0];
+        int labels_count = ENDIAN_SWAP_32(mod->code->labels);
 
-    if (label) {
-        *label = i - 1;
+        int i = 1;
+        const uint8_t *l = mod->labels[1];
+        while (mod_offset > l - code) {
+            i++;
+            if (i >= labels_count) {
+                // last label + 1 is reserved for end of module.
+                if (label) {
+                    *label = i;
+                }
+                if (l_off) {
+                    *l_off = 0;
+                }
+                return;
+            }
+            l = mod->labels[i];
+        }
+
+        if (label) {
+            *label = i - 1;
+        }
+        if (l_off) {
+            *l_off = mod_offset - (mod->labels[*label] - code);
+        }
+#endif
+#ifndef AVM_NO_JIT
     }
-    if (l_off) {
-        *l_off = mod_offset - (mod->labels[*label] - code);
-    }
+#endif
 }
+
+uint32_t module_label_code_offset(Module *mod, int label)
+{
+#ifndef AVM_NO_JIT
+    if (mod->native_code) {
+        const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+        int labels_count = READ_16_UNALIGNED(labels_and_lines);
+        labels_and_lines += 2;
+        while (labels_count > 0) {
+            uint16_t label_id = READ_16_UNALIGNED(labels_and_lines);
+            labels_and_lines += 2;
+            if (label_id == label) {
+                return READ_32_UNALIGNED(labels_and_lines);
+            } else {
+                labels_and_lines += 4;
+            }
+            labels_count--;
+        }
+        return 0;
+    } else {
+#endif
+        uint8_t *code = &mod->code->code[0];
+        return mod->labels[label] - code;
+#ifndef AVM_NO_JIT
+    }
+#endif
+}
+
+#ifndef AVM_NO_JIT
+void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point)
+{
+    mod->native_code = entry_point;
+    // Extra function is OP_INT_CALL_END
+    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
+}
+#endif

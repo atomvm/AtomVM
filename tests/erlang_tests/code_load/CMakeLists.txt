@@ -24,14 +24,22 @@ project (code_load)
 include(BuildErlang)
 
 compile_erlang(export_test_module)
+jit_precompile(export_test_module)
 generate_hrl(export_test_module_data.hrl EXPORT_TEST_MODULE_DATA export_test_module.beam)
 
-pack_archive(code_load_pack export_test_module)
+pack_precompiled_archive(code_load_pack export_test_module)
 generate_hrl(code_load_pack_data.hrl CODE_LOAD_PACK_DATA code_load_pack.avm)
 
-add_custom_target(code_load_files DEPENDS
+set(code_load_deps
     export_test_module.beam
     export_test_module_data.hrl
     code_load_pack
     code_load_pack_data.hrl
 )
+if(NOT AVM_DISABLE_JIT)
+    generate_hrl(export_test_module_data_${AVM_JIT_TARGET_ARCH}.hrl EXPORT_TEST_MODULE_DATA_${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/export_test_module.beam)
+    generate_hrl(code_load_pack_data_${AVM_JIT_TARGET_ARCH}.hrl CODE_LOAD_PACK_DATA_${AVM_JIT_TARGET_ARCH} code_load_pack-${AVM_JIT_TARGET_ARCH}.avm)
+    set(code_load_deps ${code_load_deps} export_test_module_data_${AVM_JIT_TARGET_ARCH}.hrl code_load_pack_data_${AVM_JIT_TARGET_ARCH}.hrl jit)
+endif()
+
+add_custom_target(code_load_files DEPENDS ${code_load_deps})

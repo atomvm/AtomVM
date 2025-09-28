@@ -59,6 +59,18 @@ typedef struct Mutex Mutex;
 #define SMP_MODULE_UNLOCK(mod)
 #endif
 
+#ifndef TYPEDEF_JITSTATE
+#define TYPEDEF_JITSTATE
+typedef struct JITState JITState;
+#endif
+
+// Interface to native code:
+// Entry point returns the current (or new) context
+// jit_state->remaining_reductions is updated.
+// If returned context is different from passed context, scheduler resumes in
+// schedule_in.
+typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
+
 typedef struct
 {
     char magic[4];
@@ -71,6 +83,24 @@ typedef struct
 
     uint8_t code[1];
 } __attribute__((packed)) CodeChunk;
+
+typedef struct
+{
+    uint16_t architecture;
+    uint16_t variant;
+    uint32_t offset;
+} __attribute__((packed)) NativeCodeArch;
+
+typedef struct
+{
+    char magic[4];
+    uint32_t size;
+    uint32_t info_size;
+    uint32_t labels;
+    uint16_t version;
+    uint16_t architectures_count;
+    NativeCodeArch architectures[1];
+} __attribute__((packed)) NativeCodeChunk;
 
 struct ExportedFunction;
 
@@ -88,6 +118,8 @@ struct ModuleFilename
 
 struct Module
 {
+    int module_index;
+
 #ifdef ENABLE_ADVANCED_TRACE
     void *import_table;
 #endif
@@ -103,6 +135,9 @@ struct Module
     const uint8_t *line_refs_table;
     size_t locations_count;
     const uint8_t *locations_table;
+#ifndef AVM_NO_JIT
+    ModuleNativeEntryPoint native_code;
+#endif
 
     unsigned int *line_refs_offsets;
     size_t line_refs_offsets_count;
@@ -118,8 +153,6 @@ struct Module
     atom_index_t *local_atoms_to_global_table;
 
     void *module_platform_data;
-
-    int module_index;
 
     int end_instruction_ii;
 
@@ -354,6 +387,16 @@ static inline const uint8_t *module_get_str(Module *mod, size_t offset, size_t *
  */
 bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity);
 
+/**
+ * @brief Get the entry point to native code for a given exported label
+ *
+ * @details This function is used to call native code.
+ * @param module the module
+ * @param exported_label label to get the native entry point to
+ * @return the native entry point
+ */
+ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label);
+
 /*
  * @brief Insert the instruction offset for a given module at a line reference instruction.
  *
@@ -407,6 +450,24 @@ static inline bool module_has_line_chunk(Module *mod)
  * @param global the global context
  */
 void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *mod_offset, GlobalContext *global);
+
+/**
+ * @brief Get the offset of a given label from the beginning of the code, emulated or native
+ *
+ * @param mod the module
+ * @param label the label to get the offset of
+ * @return the offset to the label code
+ */
+uint32_t module_label_code_offset(Module *mod, int label);
+
+/**
+ * @brief set native code for given module, typically after it is jit-compiled
+ *
+ * @param mod the module to set native code for
+ * @param labels_count number of labels
+ * @param entry_point the native entry point
+ */
+void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntryPoint entry_point);
 
 #ifdef __cplusplus
 }

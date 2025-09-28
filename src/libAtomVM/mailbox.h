@@ -98,6 +98,7 @@ enum MessageType
     LinkExitSignal,
     DemonitorSignal,
     MonitorDownSignal,
+    CodeServerResumeSignal,
 };
 
 struct MailboxMessage
