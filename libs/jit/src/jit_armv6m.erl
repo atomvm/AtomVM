@@ -1403,12 +1403,12 @@ call_func_ptr(
         end,
         Args
     ),
-    {RegArgs, StackArgs} =
+    {RegArgs0, StackArgs} =
         case Args1 of
             [Arg1, Arg2, Arg3, Arg4 | StackArgs0] -> {[Arg1, Arg2, Arg3, Arg4], StackArgs0};
             _ -> {Args, []}
         end,
-    RegArgsRegs = lists:flatmap(fun arg_to_reg_list/1, RegArgs),
+    RegArgsRegs = lists:flatmap(fun arg_to_reg_list/1, RegArgs0),
     StackArgsRegs = lists:flatmap(fun arg_to_reg_list/1, StackArgs),
 
     % We pushed registers to stack, so we can use these registers we saved
@@ -1427,32 +1427,55 @@ call_func_ptr(
         end,
 
     SetArgsRegsOnlyAvailableArgs = State2#state.available_regs,
-    ParameterRegs = parameter_regs(RegArgs),
-    {Stream3, SetArgsAvailableRegs, FuncPtrReg} =
+    ParameterRegs = parameter_regs(RegArgs0),
+    {Stream3, SetArgsAvailableRegs, FuncPtrReg, RegArgs} =
         case FuncPtrTuple of
             {free, FuncPtrReg0} ->
                 % If FuncPtrReg is in parameter regs, we must swap it with a free reg.
                 case lists:member(FuncPtrReg0, ParameterRegs) of
                     true ->
-                        [FuncPtrReg1 | _] = SetArgsRegsOnlyAvailableArgs,
-                        MovInstr = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
-                        SetArgsAvailableArgs1 =
-                            (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++ [FuncPtrReg0],
-                        {
-                            StreamModule:append(State2#state.stream, MovInstr),
-                            SetArgsAvailableArgs1,
-                            FuncPtrReg1
-                        };
+                        case SetArgsRegsOnlyAvailableArgs -- ParameterRegs of
+                            [] ->
+                                % Swap SetArgsRegsOnlyAvailableArgs with a reg used in RegArgs0
+                                % that is not in ParameterRegs
+                                [NewArgReg | _] = SetArgsRegsOnlyAvailableArgs,
+                                [FuncPtrReg1 | _] = RegArgsRegs -- ParameterRegs,
+                                MovInstr1 = jit_armv6m_asm:mov(NewArgReg, FuncPtrReg1),
+                                MovInstr2 = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
+                                SetArgsAvailableArgs1 =
+                                    (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++
+                                        [FuncPtrReg0],
+                                RegArgs1 = replace_reg(RegArgs0, FuncPtrReg1, NewArgReg),
+                                {
+                                    StreamModule:append(
+                                        State2#state.stream, <<MovInstr1/binary, MovInstr2/binary>>
+                                    ),
+                                    SetArgsAvailableArgs1,
+                                    FuncPtrReg1,
+                                    RegArgs1
+                                };
+                            [FuncPtrReg1 | _] ->
+                                MovInstr = jit_armv6m_asm:mov(FuncPtrReg1, FuncPtrReg0),
+                                SetArgsAvailableArgs1 =
+                                    (SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg1]) ++
+                                        [FuncPtrReg0],
+                                {
+                                    StreamModule:append(State2#state.stream, MovInstr),
+                                    SetArgsAvailableArgs1,
+                                    FuncPtrReg1,
+                                    RegArgs0
+                                }
+                        end;
                     false ->
                         SetArgsAvailableArgs1 = SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg0],
-                        {State2#state.stream, SetArgsAvailableArgs1, FuncPtrReg0}
+                        {State2#state.stream, SetArgsAvailableArgs1, FuncPtrReg0, RegArgs0}
                 end;
             {primitive, Primitive} ->
                 [FuncPtrReg0 | _] = SetArgsRegsOnlyAvailableArgs -- ParameterRegs,
                 SetArgsAvailableRegs1 = SetArgsRegsOnlyAvailableArgs -- [FuncPtrReg0],
                 PrepCall = load_primitive_ptr(Primitive, FuncPtrReg0),
                 Stream2 = StreamModule:append(State2#state.stream, PrepCall),
-                {Stream2, SetArgsAvailableRegs1, FuncPtrReg0}
+                {Stream2, SetArgsAvailableRegs1, FuncPtrReg0, RegArgs0}
         end,
 
     State3 = State2#state{
