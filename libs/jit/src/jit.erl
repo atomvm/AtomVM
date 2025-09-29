@@ -352,29 +352,28 @@ first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_RETURN\n", []),
     % Optimized return: check if returning within same module
-    {MSt1, CpReg} = MMod:move_to_native_register(MSt0, cp),
+    {MSt1, CpReg0} = MMod:move_to_native_register(MSt0, cp),
     {MSt2, ModuleIndexReg} = MMod:get_module_index(MSt1),
     % Extract module index from cp (upper 8 bits: cp >> 24)
-    MSt3 = MMod:shift_right(MSt2, CpReg, 24),
+    {MSt3, CpReg1} = MMod:shift_right(MSt2, CpReg0, 24),
     % Compare extracted module index with current module index
     MSt4 = MMod:if_block(
         MSt3,
-        {{free, CpReg}, '==', {free, ModuleIndexReg}},
+        {{free, CpReg1}, '==', {free, ModuleIndexReg}},
         % Same module: fast intra-module return
         fun(BSt0) ->
-            % Restore original cp value and extract offset (lower 24 bits)
-            {BSt1, CpReg2} = MMod:move_to_native_register(BSt0, cp),
             % Mask to get lower 24 bits and shift right by 2 for offset
-            BSt2 = MMod:and_(BSt1, CpReg2, 16#FFFFFF),
-            BSt3 = MMod:shift_right(BSt2, CpReg2, 2),
+            BSt1 = MMod:and_(BSt0, CpReg0, 16#FFFFFF),
+            {BSt3, CPReg1} = MMod:shift_right(BSt1, {free, CpReg0}, 2),
             % Jump to continuation (this is a tail call)
-            MMod:jump_to_continuation(BSt3, {free, CpReg2})
+            MMod:jump_to_continuation(BSt3, {free, CPReg1})
         end
     ),
+    MSt5 = MMod:free_native_registers(MSt4, [CpReg0]),
     % Different module: use existing slow path
-    MSt5 = MMod:call_primitive_last(MSt4, ?PRIM_RETURN, [ctx, jit_state]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt5),
-    first_pass(Rest, MMod, MSt5, State0);
+    MSt6 = MMod:call_primitive_last(MSt5, ?PRIM_RETURN, [ctx, jit_state]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+    first_pass(Rest, MMod, MSt6, State0);
 % 20
 first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -778,11 +777,10 @@ first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
     MSt3 = MMod:and_(MSt2, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt4 = MMod:move_array_element(MSt3, Reg, 0, Reg),
-    MSt5 = MMod:shift_right(MSt4, Reg, 6),
-    MSt6 = cond_jump_to_label({Reg, '!=', Arity}, Label, MMod, MSt5),
-    MSt7 = MMod:free_native_registers(MSt6, [Reg]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt7),
-    first_pass(Rest3, MMod, MSt7, State0);
+    {MSt5, ArityReg} = MMod:shift_right(MSt4, {free, Reg}, 6),
+    MSt6 = cond_jump_to_label({{free, ArityReg}, '!=', Arity}, Label, MMod, MSt5),
+    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+    first_pass(Rest3, MMod, MSt6, State0);
 % 59
 first_pass(<<?OP_SELECT_VAL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1176,19 +1174,20 @@ first_pass(<<?OP_IS_FUNCTION2, Rest0/binary>>, MMod, MSt0, State0) ->
         MSt6,
         {IndexOrModuleReg, '&', ?TERM_IMMED2_TAG_MASK, '!=', ?TERM_IMMED2_ATOM},
         fun(BSt0) ->
-            BSt1 = MMod:shift_right(BSt0, IndexOrModuleReg, 4),
+            {BSt1, IndexReg} = MMod:shift_right(BSt0, {free, IndexOrModuleReg}, 4),
             {BSt2, FunArity} = MMod:call_primitive(BSt1, ?PRIM_MODULE_GET_FUN_ARITY, [
-                ModuleReg, IndexOrModuleReg
+                ModuleReg, {free, IndexReg}
             ]),
             cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
         end,
         fun(BSt0) ->
-            {BSt1, FunArity} = MMod:get_array_element(BSt0, FuncPtr, 3),
-            BSt2 = MMod:shift_right(BSt1, FunArity, 4),
-            cond_jump_to_label({'(int)', {free, FunArity}, '!=', Arity}, Label, MMod, BSt2)
+            BSt1 = MMod:free_native_registers(BSt0, [IndexOrModuleReg]),
+            {BSt2, FunArity} = MMod:get_array_element(BSt1, FuncPtr, 3),
+            {BSt3, FunArityReg} = MMod:shift_right(BSt2, {free, FunArity}, 4),
+            cond_jump_to_label({'(int)', {free, FunArityReg}, '!=', Arity}, Label, MMod, BSt3)
         end
     ),
-    MSt8 = MMod:free_native_registers(MSt7, [FuncPtr, IndexOrModuleReg, ModuleReg, Arity]),
+    MSt8 = MMod:free_native_registers(MSt7, [FuncPtr, ModuleReg, Arity]),
     ?ASSERT_ALL_NATIVE_FREE(MSt8),
     first_pass(Rest3, MMod, MSt8, State0);
 % 117
@@ -1277,7 +1276,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     {FlagsValue, Rest6} = decode_literal(Rest5),
     {MSt3, MatchStateRegPtr} = verify_is_match_state_and_get_ptr(MMod, MSt2, Src),
     {MSt4, BSBinaryReg0} = MMod:get_array_element(MSt3, MatchStateRegPtr, 1),
-    {MSt5, BSOffsetReg} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
+    {MSt5, BSOffsetReg0} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
     MSt6 =
         if
             Unit =/= 8 ->
@@ -1291,22 +1290,22 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
             true ->
                 MSt5
         end,
-    MSt7 = MMod:if_block(MSt6, {BSOffsetReg, '&', 16#7, '!=', 0}, fun(BlockSt) ->
+    MSt7 = MMod:if_block(MSt6, {BSOffsetReg0, '&', 16#7, '!=', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [ctx, jit_state, offset, ?BADARG_ATOM])
     end),
-    MSt8 = MMod:shift_right(MSt7, BSOffsetReg, 3),
+    {MSt8, BSOffsetReg1} = MMod:shift_right(MSt7, {free, BSOffsetReg0}, 3),
     MSt9 = MMod:and_(MSt8, BSBinaryReg0, ?TERM_PRIMARY_CLEAR_MASK),
     {MSt10, SizeReg} = MMod:get_array_element(MSt9, {free, BSBinaryReg0}, 1),
     {MSt13, SizeValue} =
         if
             Size =:= ?ALL_ATOM ->
-                MSt11 = MMod:sub(MSt10, SizeReg, BSOffsetReg),
+                MSt11 = MMod:sub(MSt10, SizeReg, BSOffsetReg1),
                 {MSt11, SizeReg};
             is_integer(Size) ->
                 % SizeReg is binary size
                 % SizeVal is a constant
                 MSt11 = MMod:sub(MSt10, SizeReg, Size bsl 4),
-                MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg}, Fail, MMod, MSt11),
+                MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg1}, Fail, MMod, MSt11),
                 {MSt12, Size bsl 4};
             true ->
                 {MSt11, SizeValReg} = MMod:move_to_native_register(MSt10, Size),
@@ -1314,20 +1313,20 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                     MSt11,
                     {SizeValReg, '==', ?ALL_ATOM},
                     fun(BSt0) ->
-                        BSt1 = MMod:sub(BSt0, SizeReg, BSOffsetReg),
+                        BSt1 = MMod:sub(BSt0, SizeReg, BSOffsetReg1),
                         MMod:free_native_registers(BSt1, [SizeValReg])
                     end,
                     fun(BSt0) ->
                         {BSt1, SizeValReg} = term_to_int(SizeValReg, 0, MMod, BSt0),
                         BSt2 = MMod:sub(BSt1, SizeReg, SizeValReg),
-                        BSt3 = cond_jump_to_label({SizeReg, '<', BSOffsetReg}, Fail, MMod, BSt2),
+                        BSt3 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt2),
                         BSt4 = MMod:move_to_native_register(BSt3, SizeValReg, SizeReg),
                         MMod:free_native_registers(BSt4, [SizeValReg])
                     end
                 ),
                 {MSt12, SizeReg}
         end,
-    {MSt14, NewOffsetReg} = MMod:copy_to_native_register(MSt13, BSOffsetReg),
+    {MSt14, NewOffsetReg} = MMod:copy_to_native_register(MSt13, BSOffsetReg1),
     MSt15 = MMod:add(MSt14, NewOffsetReg, SizeValue),
     MSt16 = MMod:shift_left(MSt15, NewOffsetReg, 3),
     % Write new offset
@@ -1344,7 +1343,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
         BSBinaryReg1, Live, {free, HeapSizeReg}, MMod, MSt23
     ),
     {MSt25, ResultTerm} = MMod:call_primitive(MSt24, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, {free, BSBinaryReg2}, {free, BSOffsetReg}, {free, SizeValue}
+        ctx, {free, BSBinaryReg2}, {free, BSOffsetReg1}, {free, SizeValue}
     ]),
     {MSt26, Dest, Rest7} = decode_dest(Rest6, MMod, MSt25),
     ?TRACE("OP_BS_GET_BINARY2 ~p,~p,~p,~p,~p,~p,~p\n", [
@@ -1935,13 +1934,13 @@ first_pass(
         {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, MSt2
     ),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt5, TagReg} = MMod:get_array_element(MSt4, Reg, 0),
+    {MSt5, TagReg0} = MMod:get_array_element(MSt4, Reg, 0),
     MSt6 = cond_jump_to_label(
-        {TagReg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_TUPLE}, Label, MMod, MSt5
+        {TagReg0, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_TUPLE}, Label, MMod, MSt5
     ),
-    MSt7 = MMod:shift_right(MSt6, TagReg, 6),
-    MSt8 = cond_jump_to_label({TagReg, '!=', Arity}, Label, MMod, MSt7),
-    MSt9 = MMod:free_native_registers(MSt8, [TagReg]),
+    {MSt7, TagReg1} = MMod:shift_right(MSt6, {free, TagReg0}, 6),
+    MSt8 = cond_jump_to_label({TagReg1, '!=', Arity}, Label, MMod, MSt7),
+    MSt9 = MMod:free_native_registers(MSt8, [TagReg1]),
     MSt10 = MMod:move_array_element(MSt9, Reg, 1, Reg),
     {MSt11, AtomReg} =
         case maps:find(AtomResolver(AtomIndex), ?DEFAULT_ATOMS) of
@@ -2282,15 +2281,19 @@ first_pass(
                 {MSt7, (BinaryTotalSize div 8),
                     term_binary_heap_size((BinaryTotalSize div 8), MMod) + Alloc};
             true ->
-                MSt8 = MMod:shift_right(MSt7, BinaryTotalSize, 3),
-                {MSt9, BinaryTotalSize0} = MMod:copy_to_native_register(MSt8, BinaryTotalSize),
-                {MSt10, AllocSizeReg} = term_binary_heap_size({free, BinaryTotalSize0}, MMod, MSt9),
+                {MSt8, BinaryTotalSizeBytes} = MMod:shift_right(MSt7, {free, BinaryTotalSize}, 3),
+                {MSt9, BinaryTotalSizeBytes0} = MMod:copy_to_native_register(
+                    MSt8, BinaryTotalSizeBytes
+                ),
+                {MSt10, AllocSizeReg} = term_binary_heap_size(
+                    {free, BinaryTotalSizeBytes0}, MMod, MSt9
+                ),
                 case Alloc of
                     0 ->
-                        {MSt10, BinaryTotalSize, AllocSizeReg};
+                        {MSt10, BinaryTotalSizeBytes, AllocSizeReg};
                     _ ->
                         MSt11 = MMod:add(MSt10, AllocSizeReg, Alloc),
-                        {MSt11, BinaryTotalSize, AllocSizeReg}
+                        {MSt11, BinaryTotalSizeBytes, AllocSizeReg}
                 end
         end,
     {MSt13, MemoryEnsureFreeReg} = MMod:call_primitive(
@@ -2899,33 +2902,32 @@ first_pass_bs_match_binary(
                 ])
         end,
     MatchedBytes = MatchedBits div 8,
-    {MSt2, BSOffseBytesReg} = MMod:copy_to_native_register(MSt1, BSOffsetReg),
-    MSt3 = MMod:shift_right(MSt2, BSOffseBytesReg, 3),
-    {MSt4, RemainingBytesReg} = MMod:get_array_element(MSt3, BSBinaryReg, 1),
-    MSt5 = MMod:sub(MSt4, RemainingBytesReg, BSOffseBytesReg),
-    MSt6 = cond_jump_to_label({RemainingBytesReg, '<', MatchedBytes}, Fail, MMod, MSt5),
-    MSt7 = MMod:free_native_registers(MSt6, [RemainingBytesReg]),
-    {MSt8, HeapSizeReg} = MMod:call_primitive(MSt7, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
+    {MSt2, BSOffseBytesReg} = MMod:shift_right(MSt1, BSOffsetReg, 3),
+    {MSt3, RemainingBytesReg} = MMod:get_array_element(MSt2, BSBinaryReg, 1),
+    MSt4 = MMod:sub(MSt3, RemainingBytesReg, BSOffseBytesReg),
+    MSt5 = cond_jump_to_label({RemainingBytesReg, '<', MatchedBytes}, Fail, MMod, MSt4),
+    MSt6 = MMod:free_native_registers(MSt5, [RemainingBytesReg]),
+    {MSt7, HeapSizeReg} = MMod:call_primitive(MSt6, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
         BSBinaryReg, MatchedBytes
     ]),
-    {MSt9, NewMatchState} = memory_ensure_free_with_extra_root(
-        MatchState, Live, {free, HeapSizeReg}, MMod, MSt8
+    {MSt8, NewMatchState} = memory_ensure_free_with_extra_root(
+        MatchState, Live, {free, HeapSizeReg}, MMod, MSt7
     ),
     % Restore BSBinaryReg as it may have been gc'd as well
-    {MSt10, MatchStateReg0} = MMod:copy_to_native_register(MSt9, NewMatchState),
-    MSt11 = MMod:and_(MSt10, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt12 = MMod:move_array_element(MSt11, MatchStateReg0, 1, BSBinaryReg),
-    MSt13 = MMod:free_native_registers(MSt12, [MatchStateReg0]),
-    {MSt14, ResultTerm} = MMod:call_primitive(MSt13, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
+    {MSt9, MatchStateReg0} = MMod:copy_to_native_register(MSt8, NewMatchState),
+    MSt10 = MMod:and_(MSt9, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt11 = MMod:move_array_element(MSt10, MatchStateReg0, 1, BSBinaryReg),
+    MSt12 = MMod:free_native_registers(MSt11, [MatchStateReg0]),
+    {MSt13, ResultTerm} = MMod:call_primitive(MSt12, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
         ctx, BSBinaryReg, {free, BSOffseBytesReg}, MatchedBytes
     ]),
-    MSt15 = MMod:and_(MSt14, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt16, Dest, Rest5} = decode_dest(Rest4, MMod, MSt15),
+    MSt14 = MMod:and_(MSt13, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt15, Dest, Rest5} = decode_dest(Rest4, MMod, MSt14),
     ?TRACE("~p},", [Dest]),
-    MSt17 = MMod:move_to_vm_register(MSt16, ResultTerm, Dest),
-    MSt18 = MMod:free_native_registers(MSt17, [ResultTerm]),
-    MSt19 = MMod:add(MSt18, BSOffsetReg, MatchedBits),
-    {J0 - 5, Rest5, NewMatchState, BSOffsetReg, MSt19}.
+    MSt16 = MMod:move_to_vm_register(MSt15, ResultTerm, Dest),
+    MSt17 = MMod:free_native_registers(MSt16, [ResultTerm]),
+    MSt18 = MMod:add(MSt17, BSOffsetReg, MatchedBits),
+    {J0 - 5, Rest5, NewMatchState, BSOffsetReg, MSt18}.
 
 first_pass_bs_match_get_tail(MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Live, Rest1} = decode_literal(Rest0),
@@ -2945,32 +2947,31 @@ do_get_tail(
     MatchState, Live, BSOffsetReg, BSBinaryReg, MMod, MSt0
 ) ->
     MSt1 = cond_raise_badarg({BSOffsetReg, '&', 2#111, '!=', 0}, MMod, MSt0),
-    {MSt2, BSOffseBytesReg} = MMod:copy_to_native_register(MSt1, BSOffsetReg),
-    MSt3 = MMod:shift_right(MSt2, BSOffseBytesReg, 3),
-    {MSt4, TailBytesReg0} = MMod:get_array_element(MSt3, BSBinaryReg, 1),
-    MSt5 = MMod:sub(MSt4, TailBytesReg0, BSOffseBytesReg),
-    {MSt6, HeapSizeReg} = MMod:call_primitive(MSt5, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
+    {MSt2, BSOffseBytesReg} = MMod:shift_right(MSt1, BSOffsetReg, 3),
+    {MSt3, TailBytesReg0} = MMod:get_array_element(MSt2, BSBinaryReg, 1),
+    MSt4 = MMod:sub(MSt3, TailBytesReg0, BSOffseBytesReg),
+    {MSt5, HeapSizeReg} = MMod:call_primitive(MSt4, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
         BSBinaryReg, {free, TailBytesReg0}
     ]),
-    {MSt7, NewMatchState} = memory_ensure_free_with_extra_root(
-        MatchState, Live, {free, HeapSizeReg}, MMod, MSt6
+    {MSt6, NewMatchState} = memory_ensure_free_with_extra_root(
+        MatchState, Live, {free, HeapSizeReg}, MMod, MSt5
     ),
     % Restore BSBinaryReg as it may have been gc'd as well
-    {MSt8, MatchStateReg0} = MMod:copy_to_native_register(MSt7, NewMatchState),
-    MSt9 = MMod:and_(MSt8, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt10 = MMod:move_array_element(MSt9, MatchStateReg0, 1, BSBinaryReg),
-    MSt11 = MMod:free_native_registers(MSt10, [MatchStateReg0]),
-    MSt12 = MMod:and_(MSt11, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
-    {MSt13, TailBytesReg1} = MMod:get_array_element(MSt12, BSBinaryReg, 1),
-    MSt14 = MMod:sub(MSt13, TailBytesReg0, BSOffseBytesReg),
-    MSt15 = MMod:add(MSt14, BSBinaryReg, ?TERM_PRIMARY_BOXED),
-    {MSt16, ResultTerm} = MMod:call_primitive(MSt15, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
+    {MSt7, MatchStateReg0} = MMod:copy_to_native_register(MSt6, NewMatchState),
+    MSt8 = MMod:and_(MSt7, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
+    MSt9 = MMod:move_array_element(MSt8, MatchStateReg0, 1, BSBinaryReg),
+    MSt10 = MMod:free_native_registers(MSt9, [MatchStateReg0]),
+    MSt11 = MMod:and_(MSt10, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt12, TailBytesReg1} = MMod:get_array_element(MSt11, BSBinaryReg, 1),
+    MSt13 = MMod:sub(MSt12, TailBytesReg0, BSOffseBytesReg),
+    MSt14 = MMod:add(MSt13, BSBinaryReg, ?TERM_PRIMARY_BOXED),
+    {MSt15, ResultTerm} = MMod:call_primitive(MSt14, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
         ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg1
     ]),
-    MSt17 = MMod:shift_left(MSt16, TailBytesReg1, 3),
-    MSt18 = MMod:add(MSt17, BSOffsetReg, TailBytesReg1),
-    MSt19 = MMod:free_native_registers(MSt18, [TailBytesReg1]),
-    {MSt19, ResultTerm, NewMatchState}.
+    MSt16 = MMod:shift_left(MSt15, TailBytesReg1, 3),
+    MSt17 = MMod:add(MSt16, BSOffsetReg, TailBytesReg1),
+    MSt18 = MMod:free_native_registers(MSt17, [TailBytesReg1]),
+    {MSt18, ResultTerm, NewMatchState}.
 
 first_pass_bs_match_equal_colon_equal(
     Fail, MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0
@@ -2998,9 +2999,8 @@ first_pass_bs_match_equal_colon_equal(
                 {MSt5, IntValue} = MMod:get_array_element(MSt4, {free, Result}, 1),
                 cond_jump_to_label({{free, IntValue}, '!=', PatternValue}, Fail, MMod, MSt5);
             _ ->
-                MSt4 = MMod:shift_right(MSt3, Result, 4),
-                MSt5 = cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4),
-                MMod:free_native_registers(MSt5, [Result])
+                {MSt4, ResultInt} = MMod:shift_right(MSt3, {free, Result}, 4),
+                cond_jump_to_label({{free, ResultInt}, '!=', PatternValue}, Fail, MMod, MSt4)
         end,
     MSt7 = MMod:add(MSt6, BSOffsetReg, Size),
     {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt7}.
@@ -3241,8 +3241,8 @@ term_to_int({literal, Val}, _FailLabel, _MMod, MSt0) when is_integer(Val) ->
 % Optimized case: when we have type information showing this is an integer, skip the type check
 term_to_int({typed, Term, {t_integer, _Range}}, _FailLabel, MMod, MSt0) ->
     {MSt1, Reg} = MMod:move_to_native_register(MSt0, Term),
-    MSt2 = MMod:shift_right(MSt1, Reg, 4),
-    {MSt2, Reg};
+    {MSt2, IntReg} = MMod:shift_right(MSt1, {free, Reg}, 4),
+    {MSt2, IntReg};
 term_to_int({typed, Term, _NonIntegerType}, FailLabel, MMod, MSt0) ->
     % Type information shows it's not an integer, fall back to generic path
     term_to_int(Term, FailLabel, MMod, MSt0);
@@ -3251,8 +3251,8 @@ term_to_int(Term, FailLabel, MMod, MSt0) ->
     MSt2 = cond_raise_badarg_or_jump_to_fail_label(
         {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, FailLabel, MMod, MSt1
     ),
-    MSt3 = MMod:shift_right(MSt2, Reg, 4),
-    {MSt3, Reg}.
+    {MSt3, IntReg} = MMod:shift_right(MSt2, {free, Reg}, 4),
+    {MSt3, IntReg}.
 
 first_pass_float3(Primitive, Rest0, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
@@ -3610,8 +3610,8 @@ term_get_tuple_arity(Tuple, MMod, MSt0) ->
         end,
     MSt2 = MMod:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt3 = MMod:move_array_element(MSt2, Reg, 0, Reg),
-    MSt4 = MMod:shift_right(MSt3, Reg, 6),
-    {MSt4, Reg}.
+    {MSt4, ArityReg} = MMod:shift_right(MSt3, {free, Reg}, 6),
+    {MSt4, ArityReg}.
 
 term_get_map_size(Map, MMod, MSt0) ->
     {MSt1, MapKeys} = term_get_map_keys(Map, MMod, MSt0),
@@ -3658,7 +3658,7 @@ term_binary_heap_size({free, Reg}, MMod, MSt0) ->
                     {Reg, '<', ?REFC_BINARY_MIN_32},
                     fun(BSt0) ->
                         BSt1 = MMod:add(BSt0, Reg, 3),
-                        BSt2 = MMod:shift_right(BSt1, Reg, 2),
+                        {BSt2, Reg} = MMod:shift_right(BSt1, {free, Reg}, 2),
                         MMod:add(BSt2, Reg, 1 + ?BINARY_HEADER_SIZE)
                     end,
                     fun(BSt0) ->
@@ -3674,7 +3674,7 @@ term_binary_heap_size({free, Reg}, MMod, MSt0) ->
                     {Reg, '<', ?REFC_BINARY_MIN_64},
                     fun(BSt0) ->
                         BSt1 = MMod:add(BSt0, Reg, 7),
-                        BSt2 = MMod:shift_right(BSt1, Reg, 3),
+                        {BSt2, Reg} = MMod:shift_right(BSt1, {free, Reg}, 3),
                         MMod:add(BSt2, Reg, 1 + ?BINARY_HEADER_SIZE)
                     end,
                     fun(BSt0) ->
