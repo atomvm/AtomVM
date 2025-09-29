@@ -3407,7 +3407,7 @@ decode_compact_term_module_literal(LiteralIndex, MMod, MSt0, Rest) ->
     {MSt1, Reg, Rest}.
 
 decode_compact_term_integer(Value, _MMod, MSt, Rest) when
-    Value >= ?INT32_MIN andalso Value =< ?INT32_MAX
+    Value >= (?INT32_MIN bsr 4) andalso Value =< (?INT32_MAX bsr 4)
 ->
     {MSt, term_from_int(Value), Rest};
 decode_compact_term_integer(Value, MMod, MSt0, Rest) when
