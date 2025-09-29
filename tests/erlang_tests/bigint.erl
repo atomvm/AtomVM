@@ -49,6 +49,7 @@
 start() ->
     test_mul() +
         test_div() +
+        test_rem() +
         test_add() +
         test_sub() +
         parse_bigint() +
@@ -189,6 +190,59 @@ test_div() ->
     ),
 
     ok = expect_error(badarith, fun() -> Int1 div ?MODULE:id(0) end),
+
+    0.
+
+test_rem() ->
+    Int0 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int2 = erlang:binary_to_integer(?MODULE:id(<<"ABCDEF123456789FFAABBCCDDEE11223">>), 16),
+    Int3 = erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
+
+    Int4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"1AD15A70023DBFE3CF869EFD994596BDF42A4BE8A164825CB81420FBA070BDEF">>), 16
+    ),
+    Int5 = erlang:binary_to_integer(
+        ?MODULE:id(<<"77DEF52A78035143AD8561489A0108EDFB1741FE95172248814AE0A8BD2AEBB">>), 16
+    ),
+    Int6 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">>), 16
+    ),
+    Int7 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-E8F8DE9724DC489EE5033E06E5032BB883968334C717C819DA9BD314758B0640">>), 16
+    ),
+    Int8 = erlang:binary_to_integer(?MODULE:id(<<"E3AE0EA63AE33EA79B071316BC9A7F1B">>), 16),
+    Int9 = erlang:binary_to_integer(?MODULE:id(<<"A4EF35909EA6E73C93C66B937541696A9C">>), 16),
+
+    0 = ?MODULE:id(0) rem Int0,
+    0 = Int0 rem Int0,
+    0 = Int0 rem Int1,
+    0 = Int1 rem Int0,
+    <<"45BABAFD7AF162B182C7E25A91441D49">> = erlang:integer_to_binary(Int0 rem Int2, 16),
+    <<"-45BABAFD7AF162B182C7E25A91441D49">> = erlang:integer_to_binary(Int1 rem Int2, 16),
+
+    <<"A679ABE013378AC3">> = erlang:integer_to_binary(Int2 rem Int3, 16),
+    <<"-FFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(Int3 rem Int2, 16),
+    0 = ?MODULE:id(0) rem Int3,
+    <<"ABCDEF123456789FFAABBCCDDEE11223">> = erlang:integer_to_binary(Int2 rem Int4, 16),
+    <<"4F5625F74C45E7ABBD9BA68A6A5E39D3">> = erlang:integer_to_binary(Int4 rem Int2, 16),
+    <<"-FFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(Int3 rem Int4, 16),
+    <<"96966651DD5896ED">> = erlang:integer_to_binary(Int4 rem Int3, 16),
+
+    <<"4578C780BBD20A71EFD9CBFFC6565115515EF88E5702BEF1FD616DBFCF8B1BE">> = erlang:integer_to_binary(
+        Int4 rem Int5, 16
+    ),
+    <<"-4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">> = erlang:integer_to_binary(
+        Int6 rem Int7, 16
+    ),
+    <<"E3AE0EA63AE33EA79B071316BC9A7F1B">> = erlang:integer_to_binary(Int8 rem Int9, 16),
+
+    ok = expect_error(badarith, fun() -> Int0 rem ?MODULE:id(0) end),
+    ok = expect_error(badarith, fun() -> Int1 rem ?MODULE:id(0) end),
 
     0.
 

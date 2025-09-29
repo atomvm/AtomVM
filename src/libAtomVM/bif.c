@@ -1333,6 +1333,41 @@ term bif_erlang_abs_1(Context *ctx, uint32_t fail_label, int live, term arg1)
     }
 }
 
+static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
+{
+    if (UNLIKELY(arg2 == term_from_int(0))) {
+        RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
+    }
+
+    intn_digit_t tmp_buf1[INTN_INT64_LEN];
+    intn_digit_t tmp_buf2[INTN_INT64_LEN];
+
+    intn_digit_t *bn1;
+    size_t bn1_len;
+    intn_integer_sign_t bn1_sign;
+    intn_digit_t *bn2;
+    size_t bn2_len;
+    intn_integer_sign_t bn2_sign;
+    args_to_bigint(
+        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+
+    int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
+    if (cmp_result < 0) {
+        // a rem b when |a| < |b| -> always a
+        return arg1;
+    } else if (cmp_result == 0) {
+        // a rem b when |a| == |b| -> always 0
+        return term_from_int(0);
+    }
+
+    intn_digit_t q[INTN_MAX_RES_LEN];
+    intn_digit_t bigres[INTN_MAX_RES_LEN];
+    size_t bigres_len;
+    intn_divmnu(bn1, bn1_len, bn2, bn2_len, q, bigres, &bigres_len);
+
+    return make_bigint(ctx, fail_label, live, bigres, bigres_len, bn1_sign);
+}
+
 static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
     int size = 0;
@@ -1379,7 +1414,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
         #endif
 
         default:
-            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+            return rem_maybe_bigint(ctx, fail_label, live, arg1, arg2);
     }
 }
 
