@@ -2043,7 +2043,7 @@ first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt6 = MMod:shift_left(MSt5, Reg, 4),
     MSt7 = MMod:or_(MSt6, Reg, ?TERM_INTEGER_TAG),
     MSt8 = MMod:move_to_vm_register(MSt7, Reg, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Reg]),
+    MSt9 = MMod:free_native_registers(MSt8, [Reg, Dest]),
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest3, MMod, MSt9, State0);
 % 168
