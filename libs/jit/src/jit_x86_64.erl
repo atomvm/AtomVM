@@ -877,12 +877,30 @@ merge_used_regs(State, []) ->
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
-shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
+-spec shift_right(#state{}, maybe_free_x86_64_register(), non_neg_integer()) ->
+    {#state{}, x86_64_register()}.
+shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
     I = jit_x86_64_asm:shrq(Shift, Reg),
     Stream1 = StreamModule:append(Stream0, I),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+shift_right(
+    #state{
+        stream_module = StreamModule,
+        available_regs = [ResultReg | T],
+        used_regs = UR,
+        stream = Stream0
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I1 = jit_x86_64_asm:movq(Reg, ResultReg),
+    I2 = jit_x86_64_asm:shrq(Shift, ResultReg),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    {State#state{stream = Stream1, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a shift register left by a fixed number of bits, effectively

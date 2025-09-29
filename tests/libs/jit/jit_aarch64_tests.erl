@@ -760,17 +760,34 @@ if_else_block_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_right_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:shift_right(State1, Reg, 3),
-    Stream = ?BACKEND:stream(State2),
-    Dump =
-        <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	d343fce7 	lsr	x7, x7, #3"
-        >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+shift_right_test_() ->
+    [
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, Reg} = ?BACKEND:shift_right(State1, {free, Reg}, 3),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   4:	d343fce7 	lsr	x7, x7, #3"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end),
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, OtherReg} = ?BACKEND:shift_right(State1, Reg, 3),
+            ?assertNotEqual(OtherReg, Reg),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   4:	d343fce8 	lsr	x8, x7, #3"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end)
+    ].
 
 shift_left_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
