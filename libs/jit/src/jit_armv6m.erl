@@ -139,7 +139,8 @@
     available_regs :: [armv6m_register()],
     used_regs :: [armv6m_register()],
     labels :: [{integer() | reference(), integer()}],
-    variant :: non_neg_integer()
+    variant :: non_neg_integer(),
+    literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}]
 }).
 
 -type state() :: #state{}.
@@ -252,7 +253,8 @@ new(Variant, StreamModule, Stream) ->
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
         labels = [],
-        variant = Variant
+        variant = Variant,
+        literal_pool = []
     }.
 
 %%-----------------------------------------------------------------------------
@@ -637,7 +639,8 @@ call_primitive_last(
                 State2 = set_registers_args(State1, ArgsForTailCall, 0),
                 tail_call_with_jit_state_registers_only(State2, Temp)
         end,
-    State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State5 = State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State5).
 
 %%-----------------------------------------------------------------------------
 %% @doc Tail call to address in register, restoring prolog registers including
@@ -730,13 +733,15 @@ jump_to_label(
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State1#state{stream = Stream1}.
+    State2 = State1#state{stream = Stream1},
+    flush_literal_pool(State2).
 
 jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
     Offset = StreamModule:offset(Stream0),
     CodeBlock = branch_to_offset_code(State, Offset, TargetOffset),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State#state{stream = Stream1}.
+    State2 = State#state{stream = Stream1},
+    flush_literal_pool(State2).
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to address in continuation pointer register
@@ -798,7 +803,8 @@ jump_to_continuation(
     Code = <<I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
     Stream2 = StreamModule:append(State1#state.stream, Code),
     % Free all registers as this is a terminal instruction
-    State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State2 = State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State2).
 
 branch_to_offset_code(_State, Offset, TargetOffset) when
     TargetOffset - Offset =< 2050, TargetOffset - Offset >= -2044
@@ -1741,7 +1747,7 @@ set_registers_args(
         UsedRegs,
         Args
     ),
-    State0#state{
+    State1#state{
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS -- ParamRegs -- NewUsedRegs,
         used_regs = ParamRegs ++ (NewUsedRegs -- ParamRegs)
@@ -2625,41 +2631,42 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     I2 = jit_armv6m_asm:negs(Reg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
-mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    %% Use a literal pool with a branch instruction (branch-over pattern)
-    %% Calculate where literal will be placed (must be word-aligned)
-    %% After LDR (2 bytes) + Branch (2 bytes) = 4 bytes from current position
-    CurrentOffset = StreamModule:offset(Stream0),
-    OffsetAfterInstructions = CurrentOffset + 4,
-    %% Find next word-aligned position for literal
-    LiteralPosition =
-        case OffsetAfterInstructions rem 4 of
-            % Already aligned
-            0 -> OffsetAfterInstructions;
-            % Add 2 bytes padding to align
-            _ -> OffsetAfterInstructions + 2
+mov_immediate(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State, Reg, Val
+) ->
+    LdrInstructionAddr = StreamModule:offset(Stream0),
+    I1 = jit_armv6m_asm:ldr(Reg, {pc, 0}),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary>>),
+    State#state{stream = Stream1, literal_pool = [{LdrInstructionAddr, Reg, Val} | LP]}.
+
+flush_literal_pool(#state{literal_pool = []} = State) ->
+    State;
+flush_literal_pool(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
+) ->
+    % Align
+    Offset = StreamModule:offset(Stream0),
+    Stream1 =
+        if
+            Offset rem 4 =:= 0 -> Stream0;
+            true -> StreamModule:append(Stream0, <<0:16>>)
         end,
-    PaddingNeeded = LiteralPosition - OffsetAfterInstructions,
-
-    %% Calculate LDR PC-relative offset
-    %% PC = (current_instruction_address & ~3) + 4
-    LdrInstructionAddr = CurrentOffset,
-    LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
-    LiteralOffset = LiteralPosition - LdrPC,
-
-    %% Generate: ldr rTemp, [pc, #LiteralOffset]  ; Load from literal
-    I1 = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
-    %% Calculate branch offset
-    %% Branch is at CurrentOffset + 2, need to jump past literal
-    BranchPosition = CurrentOffset + 2,
-    % After the 4-byte literal
-    TargetPosition = LiteralPosition + 4,
-    BranchOffset = TargetPosition - BranchPosition,
-    I2 = jit_armv6m_asm:b(BranchOffset),
-    %% Generate padding if needed (just zeros)
-    Padding = <<0:(PaddingNeeded * 8)>>,
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
-    State#state{stream = Stream1}.
+    % Lay all values and update ldr instructions
+    Stream2 = lists:foldl(
+        fun({LdrInstructionAddr, Reg, Val}, AccStream) ->
+            LiteralPosition = StreamModule:offset(AccStream),
+            LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
+            LiteralOffset = LiteralPosition - LdrPC,
+            LdrInstruction = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
+            AccStream1 = StreamModule:append(AccStream, <<Val:32/little>>),
+            StreamModule:replace(
+                AccStream1, LdrInstructionAddr, LdrInstruction
+            )
+        end,
+        Stream1,
+        lists:reverse(LP)
+    ),
+    State#state{stream = Stream2, literal_pool = []}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     (Val >= 0 andalso Val =< 255) orelse is_atom(Val)

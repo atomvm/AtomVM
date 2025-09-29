@@ -174,11 +174,12 @@ load(Module) ->
                             BackendModule,
                             BackendState0
                         ),
-                        Stream1 = BackendModule:stream(BackendState1),
+                        BackendState2 = BackendModule:flush(BackendState1),
+                        Stream1 = BackendModule:stream(BackendState2),
                         code_server:set_native_code(Module, LabelsCount, Stream1),
                         End = erlang:system_time(millisecond),
                         io:format("~B ms (bytecode: ~B bytes, native code: ~B bytes)\n", [
-                            End - Start, byte_size(Code), BackendModule:offset(BackendState1)
+                            End - Start, byte_size(Code), BackendModule:offset(BackendState2)
                         ])
                     catch
                         T:V:S ->
