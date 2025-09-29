@@ -38,6 +38,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -530,6 +531,13 @@ jump_to_label(
             Stream1 = StreamModule:append(Stream0, I1),
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
+
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    Rel = TargetOffset - Offset,
+    I1 = jit_aarch64_asm:b(Rel),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
