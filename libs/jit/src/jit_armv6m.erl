@@ -2405,6 +2405,11 @@ get_module_index(
 %% JIT currentl calls this with two values: ?TERM_PRIMARY_CLEAR_MASK (-4) to
 %% clear bits and ?TERM_BOXED_TAG_MASK (0x3F). We can avoid any literal pool
 %% by using BICS for -4.
+and_(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, 16#FFFFFF) ->
+    I1 = jit_armv6m_asm:lsls(Reg, Reg, 8),
+    I2 = jit_armv6m_asm:lsrs(Reg, Reg, 8),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State0#state{stream = Stream1};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
     Reg,
