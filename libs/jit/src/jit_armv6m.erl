@@ -38,6 +38,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -731,6 +732,12 @@ jump_to_label(
     Stream1 = StreamModule:append(Stream0, CodeBlock),
     State1#state{stream = Stream1}.
 
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    CodeBlock = branch_to_offset_code(State, Offset, TargetOffset),
+    Stream1 = StreamModule:append(Stream0, CodeBlock),
+    State#state{stream = Stream1}.
+
 %%-----------------------------------------------------------------------------
 %% @doc Jump to address in continuation pointer register
 %% The continuation points to a function prologue, so we need to compute
@@ -793,15 +800,14 @@ jump_to_continuation(
     % Free all registers as this is a terminal instruction
     State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
-branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) when
-    LabelOffset - Offset =< 2050, LabelOffset - Offset >= -2044
+branch_to_offset_code(_State, Offset, TargetOffset) when
+    TargetOffset - Offset =< 2050, TargetOffset - Offset >= -2044
 ->
     % Near branch: use direct B instruction
-    Rel = LabelOffset - Offset,
-    CodeBlock = jit_armv6m_asm:b(Rel),
-    {State, CodeBlock};
-branch_to_label_code(
-    #state{available_regs = [TempReg | _]} = State0, Offset, Label, {Label, LabelOffset}
+    Rel = TargetOffset - Offset,
+    jit_armv6m_asm:b(Rel);
+branch_to_offset_code(
+    #state{available_regs = [TempReg | _]}, Offset, TargetOffset
 ) ->
     % Far branch: use register-based sequence, need temporary register
     if
@@ -812,19 +818,22 @@ branch_to_label_code(
             I3 = jit_armv6m_asm:bx(TempReg),
             % Unaligned : need nop
             I4 = jit_armv6m_asm:nop(),
-            LiteralValue = LabelOffset - Offset - 5,
+            LiteralValue = TargetOffset - Offset - 5,
             I5 = <<LiteralValue:32/little>>,
-            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
+            <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
         true ->
             % Unaligned
             I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
             I2 = jit_armv6m_asm:add(TempReg, pc),
             I3 = jit_armv6m_asm:bx(TempReg),
-            LiteralValue = LabelOffset - Offset - 5,
+            LiteralValue = TargetOffset - Offset - 5,
             I4 = <<LiteralValue:32/little>>,
-            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>
-    end,
-    {State0, CodeBlock};
+            <<I1/binary, I2/binary, I3/binary, I4/binary>>
+    end.
+
+branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) ->
+    CodeBlock = branch_to_offset_code(State, Offset, LabelOffset),
+    {State, CodeBlock};
 branch_to_label_code(
     #state{available_regs = [TempReg | _], branches = Branches} = State0, Offset, Label, false
 ) ->
