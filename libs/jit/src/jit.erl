@@ -2915,10 +2915,10 @@ do_get_tail(
     MSt1 = cond_raise_badarg({BSOffsetReg, '&', 2#111, '!=', 0}, MMod, MSt0),
     {MSt2, BSOffseBytesReg} = MMod:copy_to_native_register(MSt1, BSOffsetReg),
     MSt3 = MMod:shift_right(MSt2, BSOffseBytesReg, 3),
-    {MSt4, TailBytesReg} = MMod:get_array_element(MSt3, BSBinaryReg, 1),
-    MSt5 = MMod:sub(MSt4, TailBytesReg, BSOffseBytesReg),
+    {MSt4, TailBytesReg0} = MMod:get_array_element(MSt3, BSBinaryReg, 1),
+    MSt5 = MMod:sub(MSt4, TailBytesReg0, BSOffseBytesReg),
     {MSt6, HeapSizeReg} = MMod:call_primitive(MSt5, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
-        BSBinaryReg, TailBytesReg
+        BSBinaryReg, {free, TailBytesReg0}
     ]),
     {MSt7, NewMatchState} = memory_ensure_free_with_extra_root(
         MatchState, Live, {free, HeapSizeReg}, MMod, MSt6
@@ -2928,13 +2928,17 @@ do_get_tail(
     MSt9 = MMod:and_(MSt8, MatchStateReg0, ?TERM_PRIMARY_CLEAR_MASK),
     MSt10 = MMod:move_array_element(MSt9, MatchStateReg0, 1, BSBinaryReg),
     MSt11 = MMod:free_native_registers(MSt10, [MatchStateReg0]),
-    {MSt12, ResultTerm} = MMod:call_primitive(MSt11, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg
+    MSt12 = MMod:and_(MSt11, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt13, TailBytesReg1} = MMod:get_array_element(MSt12, BSBinaryReg, 1),
+    MSt14 = MMod:sub(MSt13, TailBytesReg0, BSOffseBytesReg),
+    MSt15 = MMod:add(MSt14, BSBinaryReg, ?TERM_PRIMARY_BOXED),
+    {MSt16, ResultTerm} = MMod:call_primitive(MSt15, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
+        ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg1
     ]),
-    MSt13 = MMod:shift_left(MSt12, TailBytesReg, 3),
-    MSt14 = MMod:add(MSt13, BSOffsetReg, TailBytesReg),
-    MSt15 = MMod:free_native_registers(MSt14, [TailBytesReg]),
-    {MSt15, ResultTerm, NewMatchState}.
+    MSt17 = MMod:shift_left(MSt16, TailBytesReg1, 3),
+    MSt18 = MMod:add(MSt17, BSOffsetReg, TailBytesReg1),
+    MSt19 = MMod:free_native_registers(MSt18, [TailBytesReg1]),
+    {MSt19, ResultTerm, NewMatchState}.
 
 first_pass_bs_match_equal_colon_equal(
     Fail, MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0
