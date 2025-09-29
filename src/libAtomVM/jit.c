@@ -962,6 +962,10 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
             }
         }
     } else {
+        if (term_is_atom(boxed_value[1])) {
+            set_error(ctx, jit_state, 0, UNDEF_ATOM);
+            return jit_handle_error(ctx, jit_state, 0);
+        }
         fun_module = (Module *) boxed_value[1];
         uint32_t fun_index = term_to_int(index_or_function);
         uint32_t fun_arity_and_freeze;
