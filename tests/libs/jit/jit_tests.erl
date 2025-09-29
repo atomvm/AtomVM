@@ -290,40 +290,34 @@ tail_call_cache_armv6m_test() ->
     ),
 
     % Check that we have the following pattern:
-    %   8c:	278c      	movs	r7, #140	@ 0x8c
-    %   8e:	6816      	ldr	r6, [r2, #0]
-    %   90:	463a      	mov	r2, r7
-    %   92:	4b01      	ldr	r3, [pc, #4]	@ (0x98)
-    %   94:	e002      	b.n	0x9c
-    %   96:	0000      	movs	r0, r0
-    %   98:	01cb      	lsls	r3, r1, #7
-    %   9a:	0000      	movs	r0, r0
-    %   9c:	9f05      	ldr	r7, [sp, #20]
-    %   9e:	9605      	str	r6, [sp, #20]
-    %   a0:	46be      	mov	lr, r7
+    %  8c:	278c      	movs	r7, #140	; 0x8c
+    %  8e:	6816      	ldr	r6, [r2, #0]
+    %  90:	463a      	mov	r2, r7
+    %  92:	23ff      	movs	r3, #255	; 0xff
+    %  94:	33cc      	adds	r3, #204	; 0xcc
+    %  96:	9f05      	ldr	r7, [sp, #20]
+    %  98:	9605      	str	r6, [sp, #20]
+    %  9a:	46be      	mov	lr, r7
+    %  9c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}
 
     % Check for the first return implementation (call_primitive_last for PRIM_RETURN)
-    % Pattern: movs r7, #140 / ldr r6, [r2, #0] / mov r2, r7
-    % 278c 6816 463a
-    ?assertMatch(
-        {_, _},
-        binary:match(CompiledCode, <<16#278c:16/little, 16#6816:16/little, 16#463a:16/little>>)
-    ),
-
-    %   3f0:	4f00      	ldr	r7, [pc, #0]	@ (0x3f4)
-    %   3f2:	e001      	b.n	0x3f8
-    %   3f4:	03f0      	lsls	r0, r6, #15
-    %   3f6:	0000      	movs	r0, r0
-    %   3f8:	e648      	b.n	0x8c
-
-    % Check for tail-call cache jump: ldr r7, [pc, #0] followed by b.n (backward branch)
-    % Pattern: 4f00 e6f5 (ldr r7, [pc, #0] / b.n 0x8c)
     ?assertMatch(
         {_, _},
         binary:match(
             CompiledCode,
-            <<16#4f00:16/little, 16#e001:16/little, 16#03f0:16/little, 0:16/little,
-                16#e648:16/little>>
+            <<16#278c:16/little, 16#6816:16/little, 16#463a:16/little, 16#23ff:16/little,
+                16#33cc:16/little, 16#9f05:16/little, 16#9605:16/little, 16#46be:16/little,
+                16#bdf2:16/little>>
         )
+    ),
+
+    % Check for tail-call cache jump: ldr r7, [pc, #0] followed by b.n (backward branch)
+    % 29c:	27a7      	movs	r7, #167	; 0xa7
+    % 29e:	00bf      	lsls	r7, r7, #2
+    % 2a0:	e6f4      	b.n	0x8c
+
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#27a7:16/little, 16#00bf:16/little, 16#e6f4:16/little>>)
     ),
     ok.

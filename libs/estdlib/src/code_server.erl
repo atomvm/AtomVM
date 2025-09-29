@@ -164,8 +164,8 @@ load(Module) ->
                             code_server:literal_resolver(Module, Index)
                         end,
                         TypeResolver = fun(Index) -> code_server:type_resolver(Module, Index) end,
-                        Stream0 = jit:stream(jit_mmap_size(byte_size(Code))),
-                        {BackendModule, BackendState0} = jit:backend(Stream0),
+                        {StreamModule, Stream0} = jit:stream(jit_mmap_size(byte_size(Code))),
+                        {BackendModule, BackendState0} = jit:backend(StreamModule, Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
                             Code,
                             AtomResolver,
@@ -175,7 +175,8 @@ load(Module) ->
                             BackendState0
                         ),
                         Stream1 = BackendModule:stream(BackendState1),
-                        code_server:set_native_code(Module, LabelsCount, Stream1),
+                        Stream2 = StreamModule:flush(Stream1),
+                        code_server:set_native_code(Module, LabelsCount, Stream2),
                         End = erlang:system_time(millisecond),
                         io:format("~B ms (bytecode: ~B bytes, native code: ~B bytes)\n", [
                             End - Start, byte_size(Code), BackendModule:offset(BackendState1)
