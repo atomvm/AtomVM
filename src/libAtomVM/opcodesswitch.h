@@ -7429,10 +7429,12 @@ handle_error:
             }
         }
 
+#ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
         // Do not print crash dump if reason is normal or shutdown.
         if (x_regs[0] != LOWERCASE_EXIT_ATOM || (x_regs[1] != NORMAL_ATOM && x_regs[1] != SHUTDOWN_ATOM)) {
             context_dump(ctx);
         }
+#endif
 
         if (x_regs[0] == LOWERCASE_EXIT_ATOM) {
             ctx->exit_reason = x_regs[1];
