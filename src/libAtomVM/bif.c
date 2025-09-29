@@ -1154,6 +1154,23 @@ term bif_erlang_div_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+// TODO: implement an optimized version
+// that just copies the given term but changes the sign
+static term neg_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
+{
+    // update when updating term_to_bigint
+    intn_digit_t *m = term_intn_data(arg1);
+    size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
+    intn_integer_sign_t m_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
+
+    intn_digit_t tmp_copy[INTN_MAX_RES_LEN];
+    memcpy(tmp_copy, m, m_len * sizeof(intn_digit_t));
+    intn_integer_sign_t not_m_sign
+        = (m_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+
+    return make_bigint(ctx, fail_label, live, tmp_copy, m_len, not_m_sign);
+}
+
 static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
 {
     if (term_is_float(arg1)) {
@@ -1185,8 +1202,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                             return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
 
                         #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                            TRACE("overflow: val: " AVM_INT_FMT "\n", val);
-                            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                            return int64_max_plus_one(ctx, fail_label, live);
 
                         #else
                             #error "Unsupported configuration."
@@ -1202,8 +1218,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 avm_int64_t val = term_unbox_int64(arg1);
 
                 if (val == INT64_MIN) {
-                    TRACE("overflow: arg1: " AVM_INT64_FMT "\n", arg1);
-                    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                    return int64_max_plus_one(ctx, fail_label, live);
 
                 } else {
                     // maybe boxed int64 since we need to handle -(AVM_INT_MAX + 1) that is
@@ -1213,7 +1228,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
             }
             #endif
             default:
-                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                return neg_bigint(ctx, fail_label, live, arg1);
         }
     } else {
         TRACE("error: arg1: 0x%lx\n", arg1);
@@ -1235,6 +1250,20 @@ term bif_erlang_neg_1(Context *ctx, uint32_t fail_label, int live, term arg1)
     } else {
         return neg_boxed_helper(ctx, fail_label, live, arg1);
     }
+}
+
+// TODO: implement an optimized version
+// that just copies the given term but changes the sign
+static term abs_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
+{
+    // update when updating term_to_bigint
+    intn_digit_t *m = term_intn_data(arg1);
+    size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
+
+    intn_digit_t tmp_copy[INTN_MAX_RES_LEN];
+    memcpy(tmp_copy, m, m_len * sizeof(intn_digit_t));
+
+    return make_bigint(ctx, fail_label, live, tmp_copy, m_len, IntNPositiveInteger);
 }
 
 static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
@@ -1274,8 +1303,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                         return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
 
                     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        TRACE("overflow: val: " AVM_INT_FMT "\n", val);
-                        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                        return int64_max_plus_one(ctx, fail_label, live);
 
                     #else
                         #error "Unsupported configuration."
@@ -1294,8 +1322,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 }
 
                 if (val == INT64_MIN) {
-                    TRACE("overflow: val:" AVM_INT64_FMT "\n", val);
-                    RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                    return int64_max_plus_one(ctx, fail_label, live);
 
                 } else {
                     return make_boxed_int64(ctx, fail_label, live, -val);
@@ -1303,7 +1330,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
             }
             #endif
             default:
-                RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+                return abs_bigint(ctx, fail_label, live, arg1);
         }
     } else {
         TRACE("error: arg1: 0x%lx\n", arg1);

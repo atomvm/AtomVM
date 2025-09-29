@@ -52,6 +52,8 @@ start() ->
         test_rem() +
         test_add() +
         test_sub() +
+        test_abs() +
+        test_neg() +
         parse_bigint() +
         test_cmp() +
         conv_to_from_float() +
@@ -581,6 +583,106 @@ test_sub() ->
     ok = ?MODULE:expect_overflow(fun() -> Int0 - ?MODULE:id(-2) end),
     ok = ?MODULE:expect_overflow(fun() -> Int1 - ?MODULE:id(-1) end),
     ok = ?MODULE:expect_overflow(fun() -> ?MODULE:id(-1) - Int1 end),
+
+    0.
+
+test_abs() ->
+    Int0 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int2 = erlang:binary_to_integer(
+        ?MODULE:id(<<"1AD15A70023DBFE3CF869EFD994596BDF42A4BE8A164825CB81420FBA070BDEF">>), 16
+    ),
+    Int3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"77DEF52A78035143AD8561489A0108EDFB1741FE95172248814AE0A8BD2AEBB">>), 16
+    ),
+    Int4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">>), 16
+    ),
+    Int5 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-E8F8DE9724DC489EE5033E06E5032BB883968334C717C819DA9BD314758B0640">>), 16
+    ),
+    Int6 = erlang:binary_to_integer(?MODULE:id(<<"CAFE01234DEADCAF">>), 16),
+    Int7 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16),
+
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        abs(Int0), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        abs(Int1), 16
+    ),
+    <<"1AD15A70023DBFE3CF869EFD994596BDF42A4BE8A164825CB81420FBA070BDEF">> = erlang:integer_to_binary(
+        abs(Int2), 16
+    ),
+    <<"77DEF52A78035143AD8561489A0108EDFB1741FE95172248814AE0A8BD2AEBB">> = erlang:integer_to_binary(
+        abs(Int3), 16
+    ),
+    <<"4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">> = erlang:integer_to_binary(
+        abs(Int4), 16
+    ),
+    <<"E8F8DE9724DC489EE5033E06E5032BB883968334C717C819DA9BD314758B0640">> = erlang:integer_to_binary(
+        abs(Int5), 16
+    ),
+    <<"CAFE01234DEADCAF">> = erlang:integer_to_binary(abs(Int6), 16),
+    <<"CAFE01234DEADCAF">> = erlang:integer_to_binary(abs(Int7), 16),
+
+    <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
+    <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(16#8000000000000000)), 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(-16#8000000000000000)), 16),
+
+    0.
+
+test_neg() ->
+    Int0 = erlang:binary_to_integer(
+        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int1 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    Int2 = erlang:binary_to_integer(
+        ?MODULE:id(<<"1AD15A70023DBFE3CF869EFD994596BDF42A4BE8A164825CB81420FBA070BDEF">>), 16
+    ),
+    Int3 = erlang:binary_to_integer(
+        ?MODULE:id(<<"77DEF52A78035143AD8561489A0108EDFB1741FE95172248814AE0A8BD2AEBB">>), 16
+    ),
+    Int4 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">>), 16
+    ),
+    Int5 = erlang:binary_to_integer(
+        ?MODULE:id(<<"-E8F8DE9724DC489EE5033E06E5032BB883968334C717C819DA9BD314758B0640">>), 16
+    ),
+    Int6 = erlang:binary_to_integer(?MODULE:id(<<"CAFE01234DEADCAF">>), 16),
+    Int7 = erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16),
+
+    <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        -(Int0), 16
+    ),
+    <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">> = erlang:integer_to_binary(
+        -(Int1), 16
+    ),
+    <<"-1AD15A70023DBFE3CF869EFD994596BDF42A4BE8A164825CB81420FBA070BDEF">> = erlang:integer_to_binary(
+        -(Int2), 16
+    ),
+    <<"-77DEF52A78035143AD8561489A0108EDFB1741FE95172248814AE0A8BD2AEBB">> = erlang:integer_to_binary(
+        -(Int3), 16
+    ),
+    <<"4531A41167802967085EBCC1B0AA2843C1A02C4959E911636CE52ED2FD77EBE6">> = erlang:integer_to_binary(
+        -(Int4), 16
+    ),
+    <<"E8F8DE9724DC489EE5033E06E5032BB883968334C717C819DA9BD314758B0640">> = erlang:integer_to_binary(
+        -(Int5), 16
+    ),
+    <<"-CAFE01234DEADCAF">> = erlang:integer_to_binary(-(Int6), 16),
+    <<"CAFE01234DEADCAF">> = erlang:integer_to_binary(-(Int7), 16),
+
+    <<"-7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
+    <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
+    <<"-8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(16#8000000000000000)), 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(-16#8000000000000000)), 16),
 
     0.
 
