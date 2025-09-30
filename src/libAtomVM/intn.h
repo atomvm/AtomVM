@@ -136,6 +136,11 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
 
 size_t intn_required_unsigned_integer_bytes(const intn_digit_t in[], size_t in_len);
 
+static inline intn_integer_sign_t intn_negate_sign(intn_integer_sign_t sign)
+{
+    return (sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+}
+
 static inline void intn_copy(
     const intn_digit_t *num, size_t num_len, intn_digit_t *out, size_t extend_to)
 {
