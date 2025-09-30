@@ -42,6 +42,29 @@
 #include <zlib.h>
 #endif
 
+// BEAM Type constants from OTP source code:
+// /opt/src/otp/lib/compiler/src/beam_types.erl lines 1446-1461
+#define BEAM_TYPE_ATOM          (1 << 0)
+#define BEAM_TYPE_BITSTRING     (1 << 1)
+#define BEAM_TYPE_CONS          (1 << 2)
+#define BEAM_TYPE_FLOAT         (1 << 3)
+#define BEAM_TYPE_FUN           (1 << 4)
+#define BEAM_TYPE_INTEGER       (1 << 5)
+#define BEAM_TYPE_MAP           (1 << 6)
+#define BEAM_TYPE_NIL           (1 << 7)
+#define BEAM_TYPE_PID           (1 << 8)
+#define BEAM_TYPE_PORT          (1 << 9)
+#define BEAM_TYPE_REFERENCE     (1 << 10)
+#define BEAM_TYPE_TUPLE         (1 << 11)
+
+#define BEAM_TYPE_HAS_LOWER_BOUND (1 << 12)
+#define BEAM_TYPE_HAS_UPPER_BOUND (1 << 13)
+#define BEAM_TYPE_HAS_UNIT        (1 << 14)
+
+// BEAM Types version from OTP source code:
+// /opt/src/otp/lib/compiler/src/beam_types.hrl line 22
+#define BEAM_TYPES_VERSION 3
+
 #define LITT_UNCOMPRESSED_SIZE_OFFSET 8
 #define LITT_HEADER_SIZE 12
 
@@ -313,9 +336,23 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
-                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
+                uint16_t runtime_variant;
+#ifdef AVM_USE_SINGLE_PRECISION
+                runtime_variant = JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC;
+#else
+                runtime_variant = JIT_VARIANT_PIC;
+#endif
+                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
-                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), (ModuleNativeEntryPoint) ((const uint8_t *) &native_code->info_size + offset));
+                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
+                    module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
+
+#ifndef AVM_NO_JIT_DWARF
+                    // Register debug info with debugger (will check for embedded ELF)
+                    const void *chunk_start = (const uint8_t *) &native_code->info_size;
+                    size_t chunk_size = ENDIAN_SWAP_32(native_code->size);
+                    jit_debug_register_code(mod, chunk_start, chunk_size);
+#endif
                     break;
                 }
             }
@@ -377,6 +414,12 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         mod->free_literals_data = 0;
     }
 
+    if (offsets[TYPE]) {
+        mod->types_data = beam_file + offsets[TYPE] + IFF_SECTION_HEADER_SIZE;
+    } else {
+        mod->types_data = NULL;
+    }
+
 #ifndef AVM_NO_JIT
     if (mod->native_code == NULL) {
 #endif
@@ -427,6 +470,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
 COLD_FUNC void module_destroy(Module *module)
 {
+#ifndef AVM_NO_JIT_DWARF
+    // Unregister DWARF debug info from debugger if it was registered
+    jit_debug_unregister_code(NULL, module);
+#endif
+
     free(module->labels);
     free(module->imported_funcs);
     free(module->literals_table);
@@ -512,6 +560,176 @@ term module_load_literal(Module *mod, int index, Context *ctx)
         fprintf(stderr, "Either OOM or invalid term while reading literals_table[%i] from module\n", index);
     }
     return t;
+}
+
+term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
+{
+    if (IS_NULL_PTR(mod->types_data)) {
+        // No Type chunk available, return 'any'
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+    }
+
+    const uint8_t *types_data = (const uint8_t *) mod->types_data;
+
+    // Parse Type chunk header: Version:32, Count:32
+    uint32_t version = READ_32_UNALIGNED(types_data);
+    uint32_t count = READ_32_UNALIGNED(types_data + 4);
+
+    // Check if version is supported
+    if (version != BEAM_TYPES_VERSION) {
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+    }
+
+    // Check bounds
+    if (type_index >= (int) count) {
+        return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+    }
+
+    // Skip to type data
+    const uint8_t *type_entries = types_data + 8;
+    const uint8_t *pos = type_entries;
+
+    // Skip to the requested type index
+    for (int i = 0; i < type_index; i++) {
+        uint16_t type_bits = READ_16_UNALIGNED(pos);
+        pos += 2;
+
+        // Skip extra data if present
+        if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) pos += 8;
+        if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) pos += 8;
+        if (type_bits & BEAM_TYPE_HAS_UNIT) pos += 1;
+    }
+
+    // Read the target type
+    uint16_t type_bits = READ_16_UNALIGNED(pos);
+    pos += 2;
+
+    // Parse extra data for bounds and unit
+    int64_t lower_bound = INT64_MIN;
+    int64_t upper_bound = INT64_MAX;
+    uint8_t unit = 1;
+    bool has_lower = false;
+    bool has_upper = false;
+
+    if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) {
+        lower_bound = (int64_t) READ_64_UNALIGNED(pos);
+        pos += 8;
+        has_lower = true;
+    }
+    if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) {
+        upper_bound = (int64_t) READ_64_UNALIGNED(pos);
+        pos += 8;
+        has_upper = true;
+    }
+    if (type_bits & BEAM_TYPE_HAS_UNIT) {
+        unit = *pos + 1; // Stored as unit-1
+        pos += 1;
+    }
+
+    // Decode type based on TypeBits (matching jit_precompile.erl exact pattern matching)
+    // From OTP source code: /opt/src/otp/lib/compiler/src/beam_types.erl decode_type function
+    uint16_t type_pattern = type_bits & 0xFFF; // Mask out flags, keep type bits
+
+    switch (type_pattern) {
+        case BEAM_TYPE_ATOM:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "t_atom"));
+
+        case BEAM_TYPE_BITSTRING:
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+            }
+            term type_tuple = term_alloc_tuple(2, &ctx->heap);
+            term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "t_bs_matchable")));
+            term_put_tuple_element(type_tuple, 1, term_from_int32(unit));
+            return type_tuple;
+
+        case BEAM_TYPE_CONS:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "t_cons"));
+
+        case BEAM_TYPE_FLOAT:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "t_float"));
+
+        case BEAM_TYPE_FUN:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "t_fun"));
+
+        case (BEAM_TYPE_FLOAT | BEAM_TYPE_INTEGER):
+            // {t_number, {LowerBound, UpperBound}}
+            if (has_lower || has_upper) {
+                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                    return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+                }
+                term bounds_tuple = term_alloc_tuple(2, &ctx->heap);
+
+                if (has_lower) {
+                    term_put_tuple_element(bounds_tuple, 0, term_from_int64(lower_bound));
+                } else {
+                    term_put_tuple_element(bounds_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "-inf")));
+                }
+
+                if (has_upper) {
+                    term_put_tuple_element(bounds_tuple, 1, term_from_int64(upper_bound));
+                } else {
+                    term_put_tuple_element(bounds_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "+inf")));
+                }
+
+                term type_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "t_number")));
+                term_put_tuple_element(type_tuple, 1, bounds_tuple);
+                return type_tuple;
+            }
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "t_number"));
+
+        case BEAM_TYPE_INTEGER:
+            if (has_lower || has_upper) {
+                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                    return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+                }
+                term bounds_tuple = term_alloc_tuple(2, &ctx->heap);
+
+                if (has_lower) {
+                    term_put_tuple_element(bounds_tuple, 0, term_from_int64(lower_bound));
+                } else {
+                    term_put_tuple_element(bounds_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "-inf")));
+                }
+
+                if (has_upper) {
+                    term_put_tuple_element(bounds_tuple, 1, term_from_int64(upper_bound));
+                } else {
+                    term_put_tuple_element(bounds_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "+inf")));
+                }
+
+                term type_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "t_integer")));
+                term_put_tuple_element(type_tuple, 1, bounds_tuple);
+                return type_tuple;
+            }
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "t_integer"));
+
+        case BEAM_TYPE_MAP:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "t_map"));
+
+        case BEAM_TYPE_NIL:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "nil"));
+
+        case (BEAM_TYPE_NIL | BEAM_TYPE_CONS):
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x6", "t_list"));
+
+        case BEAM_TYPE_PID:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "pid"));
+
+        case BEAM_TYPE_PORT:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "port"));
+
+        case BEAM_TYPE_REFERENCE:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "reference"));
+
+        case BEAM_TYPE_TUPLE:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "t_tuple"));
+
+        default:
+            // Default fallback for any other combination or union types
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
+    }
 }
 
 #ifndef AVM_NO_JIT

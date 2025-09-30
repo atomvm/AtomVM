@@ -63,9 +63,20 @@ option(AVM_WAIT_FOR_USB_CONNECT "Wait for USB connection before starting" OFF)
 option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" ON)
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
-
-# JIT is not available yet on rp2
-set(AVM_DISABLE_JIT ON FORCE)
+option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
+    # We only have armv6m for now, which all cortex-m should support
+    if (NOT AVM_DISABLE_JIT)
+        set(AVM_JIT_TARGET_ARCH "armv6m")
+    endif()
+else()
+    # Typically riscv is not supported yet
+    if (NOT AVM_DISABLE_JIT)
+        message("JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
+        set(AVM_DISABLE_JIT ON CACHE BOOL "Disable just in time compilation." FORCE)
+        set(AVM_ENABLE_PRECOMPILED OFF CACHE BOOL "Enable execution of precompiled code, even if JIT is disabled." FORCE)
+    endif()
+endif()
 
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 

@@ -38,6 +38,7 @@
     code_chunk/1,
     atom_resolver/2,
     literal_resolver/2,
+    type_resolver/2,
     set_native_code/3
 ]).
 
@@ -126,6 +127,14 @@ atom_resolver(_Module, _Index) ->
 literal_resolver(_Module, _Index) ->
     erlang:nif_error(undefined).
 
+%% @doc Get a type from its index
+%% @return The type information
+%% @param Module module get a type from
+%% @param Index type index in the module
+-spec type_resolver(Module :: module(), Index :: non_neg_integer()) -> any().
+type_resolver(_Module, _Index) ->
+    erlang:nif_error(undefined).
+
 %% @doc Associate a native code stream with a module
 %% @return ok
 %% @param Module module to set the native code of
@@ -154,10 +163,16 @@ load(Module) ->
                         LiteralResolver = fun(Index) ->
                             code_server:literal_resolver(Module, Index)
                         end,
+                        TypeResolver = fun(Index) -> code_server:type_resolver(Module, Index) end,
                         Stream0 = jit:stream(jit_mmap_size(byte_size(Code))),
                         {BackendModule, BackendState0} = jit:backend(Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
-                            Code, AtomResolver, LiteralResolver, BackendModule, BackendState0
+                            Code,
+                            AtomResolver,
+                            LiteralResolver,
+                            TypeResolver,
+                            BackendModule,
+                            BackendState0
                         ),
                         Stream1 = BackendModule:stream(BackendState1),
                         code_server:set_native_code(Module, LabelsCount, Stream1),

@@ -38,6 +38,134 @@
 
 #include <math.h>
 #include <stddef.h>
+#ifndef AVM_NO_JIT_DWARF
+#include <stdlib.h>
+#include <string.h>
+
+#if TERM_BYTES == 4
+// ELF32 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint32_t e_entry;
+    uint32_t e_phoff;
+    uint32_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
+} Elf_Shdr;
+
+typedef struct
+{
+    uint32_t st_name;
+    uint32_t st_value;
+    uint32_t st_size;
+    unsigned char st_info;
+    unsigned char st_other;
+    uint16_t st_shndx;
+} Elf_Sym;
+
+typedef struct
+{
+    uint32_t p_type;
+    uint32_t p_offset;
+    uint32_t p_vaddr;
+    uint32_t p_paddr;
+    uint32_t p_filesz;
+    uint32_t p_memsz;
+    uint32_t p_flags;
+    uint32_t p_align;
+} Elf_Phdr;
+#elif TERM_BYTES == 8
+// ELF64 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint64_t e_entry;
+    uint64_t e_phoff;
+    uint64_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+} Elf_Shdr;
+
+typedef struct
+{
+    uint32_t st_name;
+    unsigned char st_info;
+    unsigned char st_other;
+    uint16_t st_shndx;
+    uint64_t st_value;
+    uint64_t st_size;
+} Elf_Sym;
+
+typedef struct
+{
+    uint32_t p_type;
+    uint32_t p_flags;
+    uint64_t p_offset;
+    uint64_t p_vaddr;
+    uint64_t p_paddr;
+    uint64_t p_filesz;
+    uint64_t p_memsz;
+    uint64_t p_align;
+} Elf_Phdr;
+#else
+#error TERM_BYTES should be 4 or 8
+#endif
+
+// ELF constants
+#define SHT_SYMTAB 2
+#define SHT_STRTAB 3
+#define STT_FUNC 2
+#define STB_GLOBAL 1
+#define PT_LOAD 1
+#define PF_X 1 // Execute
+#define PF_R 4 // Read
+
+#endif
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -72,6 +200,38 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_x86_64.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_x86_64.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_x86_64.erl");
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_aarch64.erl");
+
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_aarch64.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_aarch64.erl");
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in jit/src/jit_armv6m.erl");
+
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_armv6m.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_armv6m.erl");
+
+_Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
+#else
+#error Unknown jit target
+#endif
+
+#ifdef AVM_USE_SINGLE_PRECISION
+_Static_assert(sizeof(avm_float_t) == 0x4, "sizeof(avm_float_t) is 0x4 for single precision");
+#else
+_Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for double precision");
 #endif
 
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \
@@ -111,6 +271,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 static void jit_trim_live_regs(Context *ctx, uint32_t live)
 {
+    TRACE("jit_trim_live_regs: ctx->process_id = %d, live = %d\n", ctx->process_id, live);
     if (UNLIKELY(!list_is_empty(&ctx->extended_x_regs))) {
         destroy_extended_registers(ctx, live);
     }
@@ -126,6 +287,7 @@ static void jit_trim_live_regs(Context *ctx, uint32_t live)
 static Context *jit_return(Context *ctx, JITState *jit_state)
 {
     int module_index = ctx->cp >> 24;
+    TRACE("jit_return: ctx->cp = %d, module_index = %d, offset = %d\n", (int) ctx->cp, module_index, (int) (ctx->cp & 0xFFFFFF) >> 2);
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
 
     // Native case
@@ -145,6 +307,7 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
 
 static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_terminate_context: ctx->process_id = %d\n", ctx->process_id);
     TRACE("-- Code execution finished for %i--\n", ctx->process_id);
     GlobalContext *global = ctx->global;
     if (ctx->leader) {
@@ -157,6 +320,7 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
+    TRACE("jit_terminate_context: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     if (offset || term_is_invalid_term(ctx->x[2])) {
         ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
     }
@@ -223,12 +387,14 @@ static void set_error(Context *ctx, JITState *jit_state, int offset, term error_
 
 static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, term error_type_atom)
 {
+    TRACE("jit_raise_error: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     set_error(ctx, jit_state, offset, error_type_atom);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
 static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1)
 {
+    TRACE("jit_raise_error_tuple: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     // We can gc as we are raising
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, offset, OUT_OF_MEMORY_ATOM);
@@ -245,6 +411,7 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
 
 static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
+    TRACE("jit_raise: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
     ctx->x[0] = stacktrace_exception_class(stacktrace);
     ctx->x[1] = exc_value;
     ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, stacktrace);
@@ -253,6 +420,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
 
 static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_schedule_next_cp: ctx->process_id = %d\n", ctx->process_id);
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -261,6 +429,7 @@ static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 
 static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_schedule_wait_cp: ctx->process_id = %d\n", ctx->process_id);
     ctx->saved_ip = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -291,6 +460,7 @@ enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t lab
 
 static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int arity, int index, int n_words)
 {
+    TRACE("jit_call_ext: arity=%d index=%d n_words=%d\n", arity, index, n_words);
     const struct ExportedFunction *func = module_resolve_function(jit_state->module, index, ctx->global);
     if (IS_NULL_PTR(func)) {
         return jit_raise_error(ctx, jit_state, 0, UNDEF_ATOM);
@@ -440,11 +610,13 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
 
 static term jit_module_get_atom_term_by_id(JITState *jit_state, int atom_index)
 {
+    TRACE("jit_module_get_atom_term_by_id: atom_index=%d\n", atom_index);
     return module_get_atom_term_by_id(jit_state->module, atom_index);
 }
 
 static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live)
 {
+    TRACE("jit_allocate: stack_need=%u heap_need=%u live=%u\n", stack_need, heap_need, live);
     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + 1)))) {
         TRIM_LIVE_REGS(live);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -459,6 +631,7 @@ static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need,
 
 static void *jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 {
+    TRACE("jit_get_imported_bif: bif=%u\n", bif);
     const struct ExportedFunction *exported_bif = jit_state->module->imported_funcs[bif];
     void *result = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
     return result;
@@ -466,6 +639,7 @@ static void *jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 
 static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 {
+    TRACE("jit_deallocate: n_words=%u\n", n_words);
     ctx->cp = ctx->e[n_words];
     ctx->e += n_words + 1;
     // Hopefully, we only need x[0]
@@ -484,11 +658,13 @@ static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, ter
     if (UNLIKELY(result == 0)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
+    TRACE("jit_term_compare: t=%p other=%p opts=%d, result=%d\n", (void *) t, (void *) other, opts, result);
     return result;
 }
 
 static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need, uint32_t live_registers)
 {
+    TRACE("jit_test_heap: heap_need=%u live_registers=%u\n", heap_need, live_registers);
     size_t heap_free = context_avail_free_memory(ctx);
     // if we need more heap space than is currently free, then try to GC the needed space
     if (heap_free < heap_need) {
@@ -512,6 +688,7 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
 
 static term jit_put_list(Context *ctx, term head, term tail)
 {
+    TRACE("jit_put_list: head=%p tail=%p\n", (void *) head, (void *) tail);
     term *list_elem = term_list_alloc(&ctx->heap);
     term t = term_list_init_prepend(list_elem, head, tail);
     return t;
@@ -519,11 +696,13 @@ static term jit_put_list(Context *ctx, term head, term tail)
 
 static term jit_module_load_literal(Context *ctx, JITState *jit_state, int index)
 {
+    TRACE("jit_module_load_literal: index=%d\n", index);
     return module_load_literal(jit_state->module, index, ctx);
 }
 
 static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
+    TRACE("jit_alloc_boxed_integer_fragment: value=%lld\n", (long long) value);
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
@@ -580,11 +759,13 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
+    TRACE("jit_term_alloc_tuple: size=%u\n", size);
     return term_alloc_tuple(size, &ctx->heap);
 }
 
 static term jit_term_alloc_fun(Context *ctx, JITState *jit_state, uint32_t fun_index, uint32_t numfree)
 {
+    TRACE("jit_term_alloc_fun: fun_index=%u numfree=%u\n", fun_index, numfree);
     size_t size = numfree + BOXED_FUN_SIZE;
     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
@@ -596,6 +777,7 @@ static term jit_term_alloc_fun(Context *ctx, JITState *jit_state, uint32_t fun_i
 
 static bool jit_send(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_send: recipient=%p message=%p\n", (void *) ctx->x[0], (void *) ctx->x[1]);
     term recipient_term = ctx->x[0];
     if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
         term return_value = dist_send_message(recipient_term, ctx->x[1], ctx);
@@ -627,6 +809,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
 
 static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 {
+    TRACE("jit_extended_register_ptr: index=%u\n", index);
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->extended_x_regs) {
         struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
@@ -644,6 +827,7 @@ static term *jit_extended_register_ptr(Context *ctx, unsigned int index)
 
 static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_process_signal_messages\n");
     MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);
     bool handle_error = false;
     bool reprocess_outer = false;
@@ -787,6 +971,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 
 static term jit_mailbox_peek(Context *ctx)
 {
+    TRACE("jit_mailbox_peek: ctx->process_id=%d\n", ctx->process_id);
     term out = term_invalid_term();
     mailbox_peek(ctx, &out);
     return out;
@@ -794,22 +979,26 @@ static term jit_mailbox_peek(Context *ctx)
 
 static void jit_mailbox_remove_message(Context *ctx)
 {
+    TRACE("jit_mailbox_remove_message: ctx->process_id=%d\n", ctx->process_id);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 }
 
 static void jit_timeout(Context *ctx)
 {
+    TRACE("jit_timeout: ctx->process_id=%d\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
     mailbox_reset(&ctx->mailbox);
 }
 
 static void jit_mailbox_next(Context *ctx)
 {
+    TRACE("jit_mailbox_next: ctx->process_id=%d\n", ctx->process_id);
     mailbox_next(&ctx->mailbox);
 }
 
 static void jit_cancel_timeout(Context *ctx)
 {
+    TRACE("jit_cancel_timeout: ctx->process_id=%d\n", ctx->process_id);
     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
         scheduler_cancel_timeout(ctx);
     }
@@ -817,11 +1006,13 @@ static void jit_cancel_timeout(Context *ctx)
 
 static void jit_clear_timeout_flag(Context *ctx)
 {
+    TRACE("jit_clear_timeout_flag: ctx->process_id=%d\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
 }
 
 static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout, int label)
 {
+    TRACE("jit_wait_timeout: timeout=%p label=%d\n", (void *) timeout, label);
     avm_int64_t t = 0;
     if (term_is_any_integer(timeout)) {
         t = term_maybe_unbox_int64(timeout);
@@ -861,6 +1052,7 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
 
 static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state, int label)
 {
+    TRACE("jit_wait_timeout_trap_handler: label=%d\n", label);
     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
         // No message is here.
         // We were signaled for another reason.
@@ -928,6 +1120,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term fun, unsigned int args_count)
 {
+    TRACE("jit_call_fun: fun=%p args_count=%u\n", (void *) fun, args_count);
     Module *fun_module;
     unsigned int fun_arity;
     uint32_t n_freeze = 0;
@@ -1005,16 +1198,19 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
 
 static term jit_term_from_float(Context *ctx, int freg)
 {
+    TRACE("jit_term_from_float: freg=%d -- float = %f\n", freg, ctx->fr[freg]);
     return term_from_float(ctx->fr[freg], &ctx->heap);
 }
 
 static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 {
+    TRACE("jit_term_conv_to_float: t=%p freg=%d\n", (void *) t, freg);
     ctx->fr[freg] = term_conv_to_float(t);
 }
 
 static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fadd: freg1=%d [%f] freg2=%d [%f] freg3=%d\n", freg1, ctx->fr[freg1], freg2, ctx->fr[freg2], freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1034,6 +1230,7 @@ static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fsub: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1053,6 +1250,7 @@ static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fmul: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
@@ -1072,6 +1270,7 @@ static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 
 static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 {
+    TRACE("jit_fdiv: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
 #pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
@@ -1091,11 +1290,13 @@ static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 
 static void jit_fnegate(Context *ctx, int freg1, int freg2)
 {
+    TRACE("jit_fnegate: freg1=%d freg2=%d\n", freg1, freg2);
     ctx->fr[freg2] = -ctx->fr[freg1];
 }
 
 static bool jit_catch_end(Context *ctx, JITState *jit_state)
 {
+    TRACE("jit_catch_end\n");
     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
     switch (term_to_atom_index(ctx->x[0])) {
         case THROW_ATOM_INDEX:
@@ -1138,6 +1339,7 @@ static bool jit_catch_end(Context *ctx, JITState *jit_state)
 
 static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state, int sz, int live, int flags)
 {
+    TRACE("jit_memory_ensure_free_with_roots: sz=%d live=%d flags=%d\n", sz, live, flags);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, sz, live, ctx->x, flags) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         return false;
@@ -1147,11 +1349,13 @@ static bool jit_memory_ensure_free_with_roots(Context *ctx, JITState *jit_state,
 
 static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
 {
+    TRACE("jit_term_alloc_bin_match_state: src=%p slots=%d\n", (void *) src, slots);
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
 
 static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
+    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%lu n=%d bs_flags=%d\n", (void *) bin_ptr, (unsigned long) offset, n, bs_flags);
     union maybe_unsigned_int64 value;
     bool status = bitstring_extract_integer(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
     if (UNLIKELY(!status)) {
@@ -1166,6 +1370,7 @@ static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, ter
 
 static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
+    TRACE("jit_bitstring_extract_float: bin_ptr=%p offset=%lu n=%d bs_flags=%d\n", (void *) bin_ptr, (unsigned long) offset, n, bs_flags);
     avm_float_t value;
     bool status;
     switch (n) {
@@ -1187,11 +1392,13 @@ static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offs
 static size_t jit_term_sub_binary_heap_size(term *bin_ptr, size_t size)
 {
     term binary = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+    TRACE("jit_term_sub_binary_heap_size: binary=%p size=%zu\n", (void *) binary, size);
     return term_sub_binary_heap_size(binary, size);
 }
 
 static term jit_term_maybe_create_sub_binary(Context *ctx, term binary, size_t offset, size_t len)
 {
+    TRACE("jit_term_maybe_create_sub_binary: binary=%p offset=%zu len=%zu\n", (void *) binary, offset, len);
     return term_maybe_create_sub_binary(binary, offset, len, &ctx->heap, ctx->global);
 }
 
@@ -1220,6 +1427,7 @@ static int jit_bitstring_utf16_size(int c)
 
 static term jit_term_create_empty_binary(Context *ctx, size_t len)
 {
+    TRACE("jit_term_create_empty_binary: len=%zu\n", len);
     return term_create_empty_binary(len, &ctx->heap, ctx->global);
 }
 
@@ -1270,8 +1478,15 @@ static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum Bitst
     return byte_size;
 }
 
+static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
+{
+    avm_uint64_t int_value = term_maybe_unbox_int64(value);
+    return bitstring_insert_integer(bin, offset, int_value, n, flags);
+}
+
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
 {
+    TRACE("jit_bitstring_copy_module_str: bin=%p offset=%zu str_id=%d len=%zu\n", (void *) bin, offset, str_id, len);
     UNUSED(ctx);
     uint8_t *dst = (uint8_t *) term_binary_data(bin);
     size_t remaining = 0;
@@ -1281,6 +1496,7 @@ static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, ter
 
 static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, size_t offset, term src, term size)
 {
+    TRACE("jit_bitstring_copy_binary: t=%p offset=%zu src=%p size=%p\n", (void *) t, offset, (void *) src, (void *) size);
     if (offset % 8) {
         set_error(ctx, jit_state, 0, UNSUPPORTED_ATOM);
         return -1;
@@ -1297,6 +1513,7 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
 
 static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term module, term function, unsigned int arity)
 {
+    TRACE("jit_apply: module=%p function=%p arity=%u\n", (void *) module, (void *) function, arity);
     atom_index_t module_name = term_to_atom_index(module);
     atom_index_t function_name = term_to_atom_index(function);
 
@@ -1343,6 +1560,7 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
 
 static void *jit_malloc(Context *ctx, JITState *jit_state, size_t sz)
 {
+    TRACE("jit_malloc: sz=%zu\n", sz);
     void *ptr = malloc(sz);
     if (IS_NULL_PTR(ptr)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
@@ -1383,6 +1601,7 @@ static bool sort_kv_pairs(term *kv, int size, GlobalContext *global)
 
 static term jit_put_map_assoc(Context *ctx, JITState *jit_state, term src, size_t new_entries, size_t num_elements, term *kv)
 {
+    TRACE("jit_put_map_assoc: src=%p new_entries=%zu num_elements=%zu\n", (void *) src, new_entries, num_elements);
     size_t src_size = term_get_map_size(src);
     size_t new_map_size = src_size + new_entries;
     bool is_shared = new_entries == 0;
@@ -1631,8 +1850,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_insert_utf8,
     jit_bitstring_insert_utf16,
     bitstring_insert_utf32,
-    bitstring_insert_integer,
-    term_maybe_unbox_int64,
+    jit_bitstring_insert_integer,
     jit_bitstring_copy_module_str,
     jit_bitstring_copy_binary,
     jit_apply,
@@ -1650,3 +1868,295 @@ const ModuleNativeInterface module_native_interface = {
 };
 
 #endif
+
+#ifndef AVM_NO_JIT_DWARF
+
+// GDB JIT interface structures and constants
+typedef enum
+{
+    JIT_NOACTION = 0,
+    JIT_REGISTER_FN,
+    JIT_UNREGISTER_FN
+} jit_actions_t;
+
+struct jit_code_entry
+{
+    struct jit_code_entry *next_entry;
+    struct jit_code_entry *prev_entry;
+    const char *symfile_addr;
+    uint64_t symfile_size;
+};
+
+struct jit_descriptor
+{
+    uint32_t version;
+    uint32_t action_flag;
+    struct jit_code_entry *relevant_entry;
+    struct jit_code_entry *first_entry;
+};
+
+// Global GDB JIT interface descriptor
+// This must have C linkage and specific symbol names for GDB to find it
+struct jit_descriptor __jit_debug_descriptor = { 1, 0, NULL, NULL };
+
+// GDB sets breakpoint on this function to be notified of new JIT code
+void __attribute__((noinline)) __jit_debug_register_code(void)
+{
+    // GDB will set a breakpoint here
+}
+
+// Create a minimal ELF file for debugging with proper PIE support
+static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_data, size_t original_elf_size,
+    uintptr_t load_address, size_t *new_elf_size)
+{
+    TRACE("create_minimal_elf_for_debugging: original_elf_size=%zu, load_address=0x%lx\n",
+        original_elf_size, load_address);
+
+    // Extract symbol table and string table from original ELF
+    const char *symtab_data = NULL;
+    size_t symtab_size = 0;
+    const char *strtab_data = NULL;
+    size_t strtab_size = 0;
+
+    // Parse original ELF to extract symbol and string tables
+    if (original_elf_size < sizeof(Elf_Ehdr)) {
+        fprintf(stderr, "ERROR: Original ELF too small for header\n");
+        return NULL;
+    }
+
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *) original_elf_data;
+    const Elf_Shdr *shdrs = (const Elf_Shdr *) (original_elf_data + ehdr->e_shoff);
+
+    // Find .symtab and .strtab sections
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        if (shdrs[i].sh_type == SHT_SYMTAB) {
+            symtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            symtab_size = shdrs[i].sh_size;
+        } else if (shdrs[i].sh_type == SHT_STRTAB && i != ehdr->e_shstrndx) {
+            strtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            strtab_size = shdrs[i].sh_size;
+        }
+    }
+
+    if (!symtab_data || !strtab_data) {
+        fprintf(stderr, "ERROR: Could not find symbol or string table in original ELF\n");
+        return NULL;
+    }
+
+    // Section name strings: "\0.text\0.symtab\0.strtab\0.shstrtab\0"
+    const char *section_names = "\0.text\0.symtab\0.strtab\0.shstrtab\0";
+    size_t shstrtab_size = 32; // strlen of section_names
+
+    // Calculate size of new minimal ELF (ELF header + 1 program header + 5 section headers + data)
+    size_t elf_size = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr)) + symtab_size + strtab_size + shstrtab_size;
+
+    uint8_t *new_elf = (uint8_t *) malloc(elf_size);
+    if (!new_elf) {
+        fprintf(stderr, "ERROR: Failed to allocate memory for new ELF\n");
+        return NULL;
+    }
+    memset(new_elf, 0, elf_size);
+
+    // Create ELF header
+    const Elf_Ehdr *orig_ehdr = (const Elf_Ehdr *) original_elf_data;
+    Elf_Ehdr *new_ehdr = (Elf_Ehdr *) new_elf;
+    memcpy(new_ehdr->e_ident, orig_ehdr->e_ident, 16);
+    new_ehdr->e_type = orig_ehdr->e_type;
+    new_ehdr->e_machine = orig_ehdr->e_machine;
+    new_ehdr->e_version = orig_ehdr->e_version;
+    new_ehdr->e_entry = 0;
+    new_ehdr->e_phoff = sizeof(Elf_Ehdr);
+    new_ehdr->e_shoff = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr);
+    new_ehdr->e_flags = orig_ehdr->e_flags;
+    new_ehdr->e_ehsize = sizeof(Elf_Ehdr);
+    new_ehdr->e_phentsize = sizeof(Elf_Phdr);
+    new_ehdr->e_phnum = 1;
+    new_ehdr->e_shentsize = sizeof(Elf_Shdr);
+    new_ehdr->e_shnum = 5; // null, .text, .symtab, .strtab, .shstrtab
+    new_ehdr->e_shstrndx = 4; // .shstrtab is the section name string table
+
+    // Create program header (PT_LOAD segment)
+    Elf_Phdr *new_phdr = (Elf_Phdr *) (new_elf + sizeof(Elf_Ehdr));
+    new_phdr->p_type = PT_LOAD;
+    new_phdr->p_flags = PF_R | PF_X;
+
+    new_phdr->p_offset = 0;
+    new_phdr->p_vaddr = load_address;
+    new_phdr->p_paddr = load_address;
+
+    // Find the actual .text section size from the original ELF
+    const Elf_Shdr *orig_shdrs = (const Elf_Shdr *) (original_elf_data + orig_ehdr->e_shoff);
+
+    size_t code_size = 0;
+
+    // Look for .text section in original ELF
+    for (int i = 0; i < orig_ehdr->e_shnum; i++) {
+        const Elf_Shdr *shdr = &orig_shdrs[i];
+        if (shdr->sh_type == 1 && (shdr->sh_flags & 6) == 6) { // SHT_PROGBITS + SHF_ALLOC + SHF_EXECINSTR
+            code_size = shdr->sh_size;
+            break;
+        }
+    }
+
+    if (code_size == 0) {
+        fprintf(stderr, "ERROR: Could not find .text section in original ELF\n");
+        free(new_elf);
+        return NULL;
+    }
+
+    new_phdr->p_filesz = code_size; // Size in file
+    new_phdr->p_memsz = code_size;  // Size in memory
+    new_phdr->p_align = 1;
+
+    // Create section headers
+    Elf_Shdr *new_shdrs = (Elf_Shdr *) (new_elf + sizeof(Elf_Ehdr) + sizeof(Elf_Phdr));
+    size_t current_offset = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr));
+
+    // Section 0: null section (required)
+    new_shdrs[0] = (Elf_Shdr){ 0 };
+
+    // Section 1: .text section
+    new_shdrs[1].sh_name = 1; // ".text\0" at offset 1 in section names
+    new_shdrs[1].sh_type = 1; // SHT_PROGBITS
+    new_shdrs[1].sh_flags = 6; // SHF_ALLOC | SHF_EXECINSTR
+    new_shdrs[1].sh_addr = load_address;
+    new_shdrs[1].sh_offset = 0; // No actual .text data in this ELF, but debugger uses load_address
+    new_shdrs[1].sh_size = code_size; // Set proper size so debugger knows the extent
+    new_shdrs[1].sh_addralign = 1;
+
+    // Section 2: .symtab
+    new_shdrs[2].sh_name = 7; // ".symtab\0" at offset 7 in section names
+    new_shdrs[2].sh_type = SHT_SYMTAB;
+    new_shdrs[2].sh_offset = current_offset;
+    new_shdrs[2].sh_size = symtab_size;
+    new_shdrs[2].sh_link = 3; // Points to .strtab
+
+#if TERM_BYTES == 8
+    new_shdrs[2].sh_addralign = 8;
+#else
+    new_shdrs[2].sh_addralign = 4;
+#endif
+
+    new_shdrs[2].sh_entsize = sizeof(Elf_Sym);
+    current_offset += symtab_size;
+
+    // Section 3: .strtab
+    new_shdrs[3].sh_name = 15; // ".strtab\0" at offset 15 in section names
+    new_shdrs[3].sh_type = SHT_STRTAB;
+    new_shdrs[3].sh_offset = current_offset;
+    new_shdrs[3].sh_size = strtab_size;
+    new_shdrs[3].sh_addralign = 1;
+    current_offset += strtab_size;
+
+    // Section 4: .shstrtab (section name string table)
+    new_shdrs[4].sh_name = 23; // ".shstrtab\0" at offset 23 in section names
+    new_shdrs[4].sh_type = SHT_STRTAB;
+    new_shdrs[4].sh_offset = current_offset;
+    new_shdrs[4].sh_size = shstrtab_size;
+    new_shdrs[4].sh_addralign = 1;
+
+    // Copy symbol table data and patch symbol addresses
+    uint8_t *new_symtab = new_elf + new_shdrs[2].sh_offset;
+    memcpy(new_symtab, symtab_data, symtab_size);
+
+    // With PT_LOAD program header, the debugger should automatically apply the base address
+    // Copy string table data
+    uint8_t *new_strtab = new_elf + new_shdrs[3].sh_offset;
+    memcpy(new_strtab, strtab_data, strtab_size);
+
+    // Copy section name string table data
+    uint8_t *new_shstrtab = new_elf + new_shdrs[4].sh_offset;
+    memcpy(new_shstrtab, section_names, shstrtab_size);
+
+    *new_elf_size = elf_size;
+    return new_elf;
+}
+
+void jit_debug_register_code(Module *mod, const void *native_code, size_t native_size)
+{
+    UNUSED(mod);
+
+    if (!native_code || native_size < 8) {
+        fprintf(stderr, "jit_debug_register_code: no native code or too small\n");
+        return;
+    }
+
+    // Parse the NativeCodeChunk header to find where the ELF starts
+    const uint8_t *data = (const uint8_t *) native_code;
+    uint32_t info_size = READ_32_UNALIGNED(data);
+
+    if (info_size + 4 > native_size) {
+        fprintf(stderr, "jit_debug_register_code: invalid info_size\n");
+        return;
+    }
+
+    // Check if there's an ELF header after the NativeCodeChunk header
+    const uint8_t *elf_start = data + 4 + info_size;
+    size_t elf_size = native_size - (4 + info_size);
+
+    if (elf_size < 16) {
+        fprintf(stderr, "jit_debug_register_code: no space for ELF header\n");
+        return;
+    }
+
+    // Check for ELF magic: 0x7f, 'E', 'L', 'F'
+    if (elf_start[0] != 0x7f || elf_start[1] != 'E' || elf_start[2] != 'L' || elf_start[3] != 'F') {
+        fprintf(stderr, "jit_debug_register_code: no ELF header found, not registering debug info\n");
+        return;
+    }
+
+    // Allocate memory for the JIT code entry (but not for the ELF data itself)
+    struct jit_code_entry *entry = malloc(sizeof(struct jit_code_entry));
+    if (!entry) {
+        return;
+    }
+
+    // Calculate where the .text section actually executes
+    // The .text section offset differs between ELF32 and ELF64
+#if TERM_BYTES == 8
+    uintptr_t load_address = (uintptr_t) elf_start + 0x40; // ELF64: header(64) + section_headers(5*64) = 384 bytes, but .text starts at 0x40
+#else
+    uintptr_t load_address = (uintptr_t) elf_start + 0x34; // ELF32: .text offset
+#endif
+
+    // Create a minimal ELF file with proper symbols for debugging
+    size_t new_elf_size;
+    const uint8_t *new_elf = create_minimal_elf_for_debugging(elf_start, elf_size, load_address, &new_elf_size);
+
+    if (!new_elf) {
+        fprintf(stderr, "ERROR: Failed to create minimal ELF for debugging\n");
+        return;
+    }
+
+    // Initialize the entry with the new ELF
+    entry->next_entry = NULL;
+    entry->prev_entry = NULL;
+    entry->symfile_addr = (const char *) new_elf;
+    entry->symfile_size = new_elf_size;
+
+    // Add to GDB's linked list
+    if (__jit_debug_descriptor.first_entry) {
+        __jit_debug_descriptor.first_entry->prev_entry = entry;
+        entry->next_entry = __jit_debug_descriptor.first_entry;
+    }
+    __jit_debug_descriptor.first_entry = entry;
+
+    // TODO: Store entry pointer in module for later unregistration
+
+    // Notify GDB that new code has been registered
+    __jit_debug_descriptor.action_flag = JIT_REGISTER_FN;
+    __jit_debug_descriptor.relevant_entry = entry;
+    __jit_debug_register_code();
+}
+
+void jit_debug_unregister_code(Context *ctx, Module *mod)
+{
+    UNUSED(ctx);
+    UNUSED(mod);
+
+    // TODO: Implement unregistration
+    // Need to store the jit_code_entry pointer in the module structure
+    // and retrieve it here to properly unregister
+}
+
+#endif // AVM_NO_JIT_DWARF
