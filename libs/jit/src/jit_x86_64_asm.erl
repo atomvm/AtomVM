@@ -396,7 +396,16 @@ andl(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
             0 -> <<>>;
             1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
         end,
-    <<Prefix/binary, 16#83, 3:2, 4:3, MODRM_RM:3, Imm>>.
+    <<Prefix/binary, 16#83, 3:2, 4:3, MODRM_RM:3, Imm>>;
+andl(Imm, Reg) when ?IS_UINT32_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    % AND r/m32, imm32: 0x81 /4 ModRM imm32 (REX prefix for r8-r15)
+    Prefix =
+        case REX_B of
+            0 -> <<>>;
+            1 -> <<?X86_64_REX(0, 0, 0, REX_B)>>
+        end,
+    <<Prefix/binary, 16#81, 3:2, 4:3, MODRM_RM:3, Imm:32/little>>.
 
 andb(Imm, rax) when ?IS_UINT8_T(Imm) orelse ?IS_SINT8_T(Imm) ->
     <<16#24, Imm>>;
@@ -515,6 +524,10 @@ leaq_rel32({Offset, rip}, Reg) when is_atom(Reg), ?IS_SINT32_T(Offset) ->
         {1, Index} -> {3, <<16#4C, 16#8D, (16#05 + (Index bsl 3)), Offset:32/little>>}
     end.
 
+leaq({rip, Offset}, DestReg) when is_atom(DestReg), ?IS_SINT32_T(Offset) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
+    % RIP-relative addressing: ModRM: mod=00, reg=DestReg, rm=101 (RIP-relative)
+    <<?X86_64_REX(1, REX_R, 0, 0), 16#8D, 0:2, MODRM_REG:3, 5:3, Offset:32/little>>;
 leaq({Offset, BaseReg}, DestReg) when is_atom(BaseReg), is_atom(DestReg), ?IS_SINT8_T(Offset) ->
     {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
     {REX_B, MODRM_RM} = x86_64_x_reg(BaseReg),

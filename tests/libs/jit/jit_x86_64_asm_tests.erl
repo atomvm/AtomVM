@@ -439,6 +439,28 @@ andl_test_() ->
         ),
         ?_assertAsmEqual(
             <<16#41, 16#83, 16#E1, 16#7F>>, "andl $0x7f, %r9d", jit_x86_64_asm:andl(127, r9)
+        ),
+        % andl imm32, r32 (no REX)
+        ?_assertAsmEqual(
+            <<16#81, 16#E0, 16#FF, 16#FF, 16#FF, 16#00>>,
+            "andl $0xffffff, %eax",
+            jit_x86_64_asm:andl(16#00FFFFFF, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#81, 16#E1, 16#34, 16#12, 16#00, 16#00>>,
+            "andl $0x1234, %ecx",
+            jit_x86_64_asm:andl(16#1234, rcx)
+        ),
+        % andl imm32, r32 (REX)
+        ?_assertAsmEqual(
+            <<16#41, 16#81, 16#E0, 16#FF, 16#FF, 16#FF, 16#00>>,
+            "andl $0xffffff, %r8d",
+            jit_x86_64_asm:andl(16#00FFFFFF, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#41, 16#81, 16#E1, 16#34, 16#12, 16#00, 16#00>>,
+            "andl $0x1234, %r9d",
+            jit_x86_64_asm:andl(16#1234, r9)
         )
     ].
 
@@ -790,6 +812,29 @@ leaq_test_() ->
             <<16#4C, 16#8D, 16#87, 16#78, 16#56, 16#34, 16#12>>,
             "leaq 0x12345678(%rdi),%r8",
             jit_x86_64_asm:leaq({305419896, rdi}, r8)
+        ),
+        % leaq with RIP-relative addressing (low registers)
+        ?_assertAsmEqual(
+            <<16#48, 16#8D, 16#05, 16#00, 16#00, 16#00, 16#00>>,
+            "leaq 0x0(%rip),%rax",
+            jit_x86_64_asm:leaq({rip, 0}, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#8D, 16#0D, 16#34, 16#12, 16#00, 16#00>>,
+            "leaq 0x1234(%rip),%rcx",
+            jit_x86_64_asm:leaq({rip, 16#1234}, rcx)
+        ),
+        % leaq with RIP-relative addressing (high registers)
+        ?_assertAsmEqual(
+            <<16#4C, 16#8D, 16#05, 16#78, 16#56, 16#34, 16#12>>,
+            "leaq 0x12345678(%rip),%r8",
+            jit_x86_64_asm:leaq({rip, 16#12345678}, r8)
+        ),
+        % leaq with RIP-relative addressing (negative offset)
+        ?_assertAsmEqual(
+            <<16#48, 16#8D, 16#0D, 16#FC, 16#FF, 16#FF, 16#FF>>,
+            "leaq -0x4(%rip),%rcx",
+            jit_x86_64_asm:leaq({rip, -4}, rcx)
         )
     ].
 
