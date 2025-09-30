@@ -27,9 +27,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "utils.h"
+
 #define USE_64BIT_MUL
 
-#include "utils.h"
+#define UINT16_IN_A_DIGIT (sizeof(intn_digit_t) / sizeof(uint16_t))
 
 #define INTN_DIVMNU_MAX_IN_LEN (INTN_MAX_IN_LEN + 1)
 
@@ -38,6 +40,17 @@
 
 static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[]);
 static size_t neg_in_place(intn_digit_t out[], size_t len);
+
+static inline size_t pad_uint16_to_digits(uint16_t n16[], size_t n16_len)
+{
+    _Static_assert(UINT16_IN_A_DIGIT == 2, "assuming 32-bit intn_digit_t");
+    if ((n16_len % UINT16_IN_A_DIGIT) != 0) {
+        // change this the day sizeof(intn_digit_t) != 4
+        n16[n16_len] = 0;
+        return n16_len + 1;
+    }
+    return n16_len;
+}
 
 static inline size_t size_round_to(size_t n, size_t round_to)
 {
@@ -286,13 +299,13 @@ static int divmnu16(
     // digit on the dividend; we do that unconditionally.
 
     s = uint32_nlz(v[n - 1]) - 16; // 0 <= s <= 15.
-    uint16_t vn[INTN_DIVMNU_MAX_IN_LEN * (sizeof(intn_digit_t) / sizeof(uint16_t))];
+    uint16_t vn[INTN_DIVMNU_MAX_IN_LEN * UINT16_IN_A_DIGIT];
     for (i = n - 1; i > 0; i--) {
         vn[i] = (v[i] << s) | (v[i - 1] >> (16 - s));
     }
     vn[0] = v[0] << s;
 
-    uint16_t un[(INTN_DIVMNU_MAX_IN_LEN * (sizeof(intn_digit_t) / sizeof(uint16_t))) + 1];
+    uint16_t un[(INTN_DIVMNU_MAX_IN_LEN * UINT16_IN_A_DIGIT) + 1];
     un[m] = u[m - 1] >> (16 - s);
     for (i = m - 1; i > 0; i--) {
         un[i] = (u[i] << s) | (u[i - 1] >> (16 - s));
@@ -349,7 +362,8 @@ static int divmnu16(
 static void big_endian_digits_to_uint16(const intn_digit_t num[], size_t len, uint16_t dest_buf[])
 {
     const uint16_t *num16 = (const uint16_t *) num;
-    for (size_t i = 0; i < len * 2; i += 2) {
+    for (size_t i = 0; i < len * UINT16_IN_A_DIGIT; i += UINT16_IN_A_DIGIT) {
+        // change this the day sizeof(intn_digit_t) != 4
         dest_buf[i] = num16[i + 1];
         dest_buf[i + 1] = num16[i];
     }
@@ -357,7 +371,8 @@ static void big_endian_digits_to_uint16(const intn_digit_t num[], size_t len, ui
 
 static void big_endian_uint16_to_digit_in_place(uint16_t num16[], size_t len16)
 {
-    for (size_t i = 0; i < len16; i += 2) {
+    for (size_t i = 0; i < len16; i += UINT16_IN_A_DIGIT) {
+        // change this the day sizeof(intn_digit_t) != 4
         uint16_t num16_i = num16[i];
         num16[i] = num16[i + 1];
         num16[i + 1] = num16_i;
@@ -368,9 +383,6 @@ static void big_endian_uint16_to_digit_in_place(uint16_t num16[], size_t len16)
 size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
     intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len)
 {
-    _Static_assert(sizeof(intn_digit_t) == 4, "assuming 32-bit intn_digit_t");
-    size_t uint16_in_a_digit = 2;
-
     uint16_t *u;
     uint16_t *v;
 
@@ -378,17 +390,16 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
     u = (uint16_t *) m;
     v = (uint16_t *) n;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    int tmp_buf_size = ((256 / (sizeof(uint32_t) * 8)) + 1) * uint16_in_a_digit;
-    uint16_t u_buf16[tmp_buf_size];
+    uint16_t u_buf16[INTN_DIVMNU_MAX_IN_LEN * UINT16_IN_A_DIGIT];
     big_endian_digits_to_uint16(m, m_len, u_buf16);
     u = u_buf16;
-    uint16_t v_buf16[tmp_buf_size];
+    uint16_t v_buf16[INTN_DIVMNU_MAX_IN_LEN * UINT16_IN_A_DIGIT];
     big_endian_digits_to_uint16(n, n_len, v_buf16);
     v = v_buf16;
 #endif
 
-    size_t u_len16 = count16(u, m_len * uint16_in_a_digit);
-    size_t v_len16 = count16(v, n_len * uint16_in_a_digit);
+    size_t u_len16 = count16(u, m_len * UINT16_IN_A_DIGIT);
+    size_t v_len16 = count16(v, n_len * UINT16_IN_A_DIGIT);
 
     uint16_t *q = (uint16_t *) q_out;
     uint16_t *r = (uint16_t *) r_out;
@@ -397,11 +408,7 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
     }
 
     size_t counted_q16_len = count16(q, u_len16 - v_len16 + 1);
-    // change this the day sizeof(intn_digit_t) != 4
-    if ((counted_q16_len % uint16_in_a_digit) != 0) {
-        q[counted_q16_len] = 0;
-    }
-    size_t padded_q_len = size_round_to(counted_q16_len, uint16_in_a_digit);
+    size_t padded_q_len = pad_uint16_to_digits(q, counted_q16_len);
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     big_endian_uint16_to_digit_in_place(q, padded_q_len);
@@ -409,22 +416,18 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
 
     if (r_out != NULL) {
         size_t counted_r16_len = count16(r, v_len16);
-        // change this the day sizeof(intn_digit_t) != 4
-        if ((counted_r16_len % uint16_in_a_digit) != 0) {
-            r[counted_r16_len] = 0;
-        }
-        size_t padded_r_len = size_round_to(counted_r16_len, uint16_in_a_digit);
+        size_t padded_r_len = pad_uint16_to_digits(r, counted_r16_len);
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
         big_endian_uint16_to_digit_in_place(r, padded_r_len);
 #endif
 
         if (r_out_len != NULL) {
-            *r_out_len = padded_r_len / uint16_in_a_digit;
+            *r_out_len = padded_r_len / UINT16_IN_A_DIGIT;
         }
     }
 
-    return padded_q_len / uint16_in_a_digit;
+    return padded_q_len / UINT16_IN_A_DIGIT;
 }
 
 void print_num(const uint32_t num[], int len)
@@ -974,11 +977,8 @@ char *intn_to_string(
     static const uint8_t pad[] = { 14, 9, 7, 6, 5, 5, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3,
         3, 3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2 };
 
-    // let's keep space for abs(INT_MIN), that is bigger than INT_MAX
-    // and it must be supported, since we must allow converting to string INT_MIN as well
-    int tmp_buf_size = (256 / (sizeof(uint32_t) * 8)) + 1;
-    uint32_t tmp_buf1[tmp_buf_size];
-    uint32_t tmp_buf2[tmp_buf_size];
+    uint32_t tmp_buf1[INTN_DIVMNU_MAX_IN_LEN];
+    uint32_t tmp_buf2[INTN_DIVMNU_MAX_IN_LEN];
 
     char *outbuf = malloc(258);
     if (IS_NULL_PTR(outbuf)) {
@@ -995,12 +995,7 @@ char *intn_to_string(
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     memcpy(tmp_buf1, num, len * sizeof(uint32_t));
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    uint16_t *dest_buf = (uint16_t *) tmp_buf1;
-    const uint16_t *num16 = (const uint16_t *) num;
-    for (size_t i = 0; i < len * 2; i += 2) {
-        dest_buf[i] = num16[i + 1];
-        dest_buf[i + 1] = num16[i];
-    }
+    big_endian_digits_to_uint16(num, len, (uint16_t *) tmp_buf1);
 #endif
     m = len;
     u = (uint16_t *) tmp_buf1;
