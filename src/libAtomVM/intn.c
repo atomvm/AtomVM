@@ -38,8 +38,7 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[]);
-static size_t neg_in_place(intn_digit_t out[], size_t len);
+static size_t neg_and_count_in_place(intn_digit_t out[], size_t len);
 
 static inline size_t pad_uint16_to_digits(uint16_t n16[], size_t n16_len)
 {
@@ -781,7 +780,7 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
     intn_integer_sign_t res_sign = intn_negate_sign(m_sign);
 
     if (res_sign == IntNNegativeInteger) {
-        neg_in_place(out, m_len);
+        neg_and_count_in_place(out, m_len);
     }
     size_t res_count = count_and_normalize_sign(out, m_len, res_sign, out_sign);
 
@@ -888,7 +887,7 @@ size_t intn_bsr(
         uint32_t tmp_buf[INTN_MAX_RES_LEN];
         neg(num, counted_digits, tmp_buf);
         bsru(tmp_buf, effective_bits_len, n, (uint32_t) -1, out);
-        neg_in_place(out, shifted_len);
+        neg_and_count_in_place(out, shifted_len);
     }
 
     return shifted_len;
@@ -1152,7 +1151,7 @@ int intn_parse(
     return out_len;
 }
 
-static size_t neg_in_place(intn_digit_t out[], size_t len)
+static size_t neg_and_count_in_place(intn_digit_t out[], size_t len)
 {
     uint32_t carry = 1;
     size_t i;
@@ -1165,21 +1164,9 @@ static size_t neg_in_place(intn_digit_t out[], size_t len)
         out[i] = (uint32_t) temp;
         carry = temp >> 32;
     }
-    if (carry) {
-        out[i] = carry;
-        return i;
-    } else {
-        return last_non_zero + 1;
-    }
-}
+    // carry is non zero here only when input is only made of 0s
 
-static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[])
-{
-    if (sign == IntNNegativeInteger) {
-        return neg_in_place(out, INTN_MAX_RES_LEN - 1);
-    } else {
-        return intn_count_digits(out, INTN_MAX_IN_LEN);
-    }
+    return last_non_zero + 1;
 }
 
 int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_integer_options_t opts,
@@ -1226,7 +1213,11 @@ int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_intege
         }
     }
 
-    return cond_neg_in_place(sign, out);
+    if (sign == IntNNegativeInteger) {
+        return neg_and_count_in_place(out, INTN_MAX_RES_LEN - 1);
+    } else {
+        return intn_count_digits(out, INTN_MAX_IN_LEN);
+    }
 }
 
 int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_sign_t in_sign,
