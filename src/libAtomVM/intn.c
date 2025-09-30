@@ -975,11 +975,12 @@ char *intn_to_string(
     uint32_t tmp_buf1[INTN_DIVMNU_MAX_IN_LEN];
     uint32_t tmp_buf2[INTN_DIVMNU_MAX_IN_LEN];
 
-    char *outbuf = malloc(258);
+    size_t outbuf_size = INTN_MAX_UNSIGNED_BITS_SIZE + 1 /* sign */ + 1 /* \0 */;
+    char *outbuf = malloc(outbuf_size);
     if (IS_NULL_PTR(outbuf)) {
         return NULL;
     }
-    char *end = outbuf + 257;
+    char *end = outbuf + INTN_MAX_UNSIGNED_BITS_SIZE + 1 /* sign */;
     *end = '\0';
 
     uint16_t *u;
@@ -1038,7 +1039,7 @@ char *intn_to_string(
         *end = '-';
     }
 
-    size_t str_size = 258 - (end - outbuf);
+    size_t str_size = outbuf_size - (end - outbuf);
     memmove(outbuf, end, str_size);
 
     *string_len = str_size - 1;
