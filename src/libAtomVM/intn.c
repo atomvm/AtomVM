@@ -577,13 +577,9 @@ size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
-
     // m - n = m + (-n)
     // Just flip the sign of n and call addition
-    intn_integer_sign_t neg_n_sign
-        = (n_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
-
-    return intn_addmn(m, m_len, m_sign, n, n_len, neg_n_sign, out, out_sign);
+    return intn_addmn(m, m_len, m_sign, n, n_len, intn_negate_sign(n_sign), out, out_sign);
 }
 
 size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
@@ -782,8 +778,7 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
     for (size_t i = 0; i < m_len; i++) {
         out[i] = ~out[i];
     }
-    intn_integer_sign_t res_sign
-        = (m_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+    intn_integer_sign_t res_sign = intn_negate_sign(m_sign);
 
     if (res_sign == IntNNegativeInteger) {
         neg_in_place(out, m_len);
