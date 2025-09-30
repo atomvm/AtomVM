@@ -2442,11 +2442,11 @@ first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt6 = MMod:free_native_registers(MSt5, [MatchStateReg0]),
     MSt7 = MMod:and_(MSt6, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
     {MSt8, MatchStateReg1} = MMod:move_to_native_register(MSt7, MatchState),
-    {MSt9, Rest4, NewMatchState} = first_pass_bs_match(
+    {MSt9, Rest4, NewMatchState, NewBSOffsetReg} = first_pass_bs_match(
         Fail, MatchStateReg1, BSBinaryReg, BSOffsetReg, ListLen, Rest3, MMod, MSt8, State0
     ),
     ?TRACE("]\n", []),
-    MSt10 = MMod:free_native_registers(MSt9, [BSBinaryReg, BSOffsetReg, NewMatchState]),
+    MSt10 = MMod:free_native_registers(MSt9, [BSBinaryReg, NewBSOffsetReg, NewMatchState]),
     ?ASSERT_ALL_NATIVE_FREE(MSt10),
     first_pass(Rest4, MMod, MSt10, State0).
 
@@ -2708,8 +2708,8 @@ first_pass_bs_create_bin_insert_value_increment_offset(MMod, MSt0, Offset, Size,
     MSt2 = MMod:free_native_registers(MSt1, [Size]),
     {MSt2, Offset}.
 
-first_pass_bs_match(_Fail, MatchState, _BSBinaryReg, _BSOffsetReg, 0, Rest, _MMod, MSt, _State) ->
-    {MSt, Rest, MatchState};
+first_pass_bs_match(_Fail, MatchState, _BSBinaryReg, BSOffsetReg, 0, Rest, _MMod, MSt, _State) ->
+    {MSt, Rest, MatchState, BSOffsetReg};
 first_pass_bs_match(
     Fail,
     MatchState,
@@ -2724,7 +2724,7 @@ first_pass_bs_match(
     {CommandAtomIndex, Rest1} = decode_atom(Rest0),
     Command = AtomResolver(CommandAtomIndex),
     J1 = J0 - 1,
-    {J2, Rest2, NewMatchState, MSt1} =
+    {J2, Rest2, NewMatchState, NewBSOffsetReg, MSt1} =
         case Command of
             ensure_at_least ->
                 first_pass_bs_match_ensure_at_least(
@@ -2756,10 +2756,10 @@ first_pass_bs_match(
     % offset needs to be updated in the loop
     {MSt2, MatchStateReg1} = MMod:copy_to_native_register(MSt1, NewMatchState),
     MSt3 = MMod:and_(MSt2, MatchStateReg1, ?TERM_PRIMARY_CLEAR_MASK),
-    MSt4 = MMod:move_to_array_element(MSt3, BSOffsetReg, MatchStateReg1, 2),
+    MSt4 = MMod:move_to_array_element(MSt3, NewBSOffsetReg, MatchStateReg1, 2),
     MSt5 = MMod:free_native_registers(MSt4, [MatchStateReg1]),
     first_pass_bs_match(
-        Fail, NewMatchState, BSBinaryReg, BSOffsetReg, J2, Rest2, MMod, MSt5, State0
+        Fail, NewMatchState, BSBinaryReg, NewBSOffsetReg, J2, Rest2, MMod, MSt5, State0
     ).
 
 first_pass_bs_match_ensure_at_least(
@@ -2771,7 +2771,7 @@ first_pass_bs_match_ensure_at_least(
             MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
                 ctx, jit_state, offset, ?BADARG_ATOM
             ]),
-            {J0, Rest0, MatchState, MSt1};
+            {J0, Rest0, MatchState, BSOffsetReg, MSt1};
         true ->
             % TODO: check use of unit here (TODO is the same in opcodeswitch.h)
             {_Unit, Rest2} = decode_literal(Rest1),
@@ -2783,7 +2783,7 @@ first_pass_bs_match_ensure_at_least(
             % Reg is (bs_bin_size * 8) - bs_offset
             MSt4 = cond_jump_to_label({Reg, '<', Stride}, Fail, MMod, MSt3),
             MSt5 = MMod:free_native_registers(MSt4, [Reg]),
-            {J0 - 2, Rest2, MatchState, MSt5}
+            {J0 - 2, Rest2, MatchState, BSOffsetReg, MSt5}
     end.
 
 first_pass_bs_match_ensure_exactly(
@@ -2795,7 +2795,7 @@ first_pass_bs_match_ensure_exactly(
             MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
                 ctx, jit_state, offset, ?BADARG_ATOM
             ]),
-            {J0, Rest0, MatchState, MSt1};
+            {J0, Rest0, MatchState, BSOffsetReg, MSt1};
         true ->
             ?TRACE("{ensure_exactly,~p},", [Stride]),
             {MSt1, Reg} = MMod:get_array_element(MSt0, BSBinaryReg, 1),
@@ -2805,7 +2805,7 @@ first_pass_bs_match_ensure_exactly(
             % Reg is (bs_bin_size * 8) - bs_offset
             MSt4 = cond_jump_to_label({Reg, '!=', Stride}, Fail, MMod, MSt3),
             MSt5 = MMod:free_native_registers(MSt4, [Reg]),
-            {J0 - 1, Rest1, MatchState, MSt5}
+            {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt5}
     end.
 
 first_pass_bs_match_integer(
@@ -2831,13 +2831,30 @@ first_pass_bs_match_integer(
     ]),
     MSt8 = handle_error_if({Result, '==', 0}, MMod, MSt7),
     MSt9 = cond_jump_to_label({Result, '==', ?FALSE_ATOM}, Fail, MMod, MSt8),
-    {MSt10, Dest, Rest5} = decode_dest(Rest4, MMod, MSt9),
+    MSt10 =
+        case MMod:available_regs(MSt9) of
+            [] ->
+                MMod:free_native_registers(MSt9, [BSOffsetReg]);
+            _ ->
+                MSt9
+        end,
+    {MSt11, Dest, Rest5} = decode_dest(Rest4, MMod, MSt10),
     ?TRACE("~p},", [Dest]),
-    MSt11 = MMod:move_to_vm_register(MSt10, Result, Dest),
-    MSt12 = MMod:free_native_registers(MSt11, [Result]),
-    MSt13 = MMod:add(MSt12, BSOffsetReg, NumBits),
-    MSt14 = MMod:free_native_registers(MSt13, [NumBits]),
-    {J0 - 5, Rest5, MatchState, MSt14}.
+    MSt12 = MMod:move_to_vm_register(MSt11, Result, Dest),
+    MSt13 = MMod:free_native_registers(MSt12, [Result, Dest]),
+    case MMod:available_regs(MSt9) of
+        [] ->
+            MSt14 = MMod:and_(MSt13, MatchState, ?TERM_PRIMARY_CLEAR_MASK),
+            {MSt15, NewBSOffsetReg} = MMod:get_array_element(MSt14, MatchState, 2),
+            MSt16 = MMod:or_(MSt15, MatchState, ?TERM_PRIMARY_BOXED),
+            MSt17 = MMod:add(MSt16, NewBSOffsetReg, NumBits),
+            MSt18 = MMod:free_native_registers(MSt17, [NumBits]),
+            {J0 - 5, Rest5, MatchState, NewBSOffsetReg, MSt18};
+        _ ->
+            MSt14 = MMod:add(MSt13, BSOffsetReg, NumBits),
+            MSt15 = MMod:free_native_registers(MSt14, [NumBits]),
+            {J0 - 5, Rest5, MatchState, BSOffsetReg, MSt15}
+    end.
 
 first_pass_bs_match_binary(
     Fail,
@@ -2893,7 +2910,7 @@ first_pass_bs_match_binary(
     MSt17 = MMod:move_to_vm_register(MSt16, ResultTerm, Dest),
     MSt18 = MMod:free_native_registers(MSt17, [ResultTerm]),
     MSt19 = MMod:add(MSt18, BSOffsetReg, MatchedBits),
-    {J0 - 5, Rest5, NewMatchState, MSt19}.
+    {J0 - 5, Rest5, NewMatchState, BSOffsetReg, MSt19}.
 
 first_pass_bs_match_get_tail(MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Live, Rest1} = decode_literal(Rest0),
@@ -2907,7 +2924,7 @@ first_pass_bs_match_get_tail(MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MM
     ?TRACE("~p},", [Dest]),
     MSt3 = MMod:move_to_vm_register(MSt2, ResultTerm, Dest),
     MSt4 = MMod:free_native_registers(MSt3, [ResultTerm, Dest]),
-    {J0 - 3, Rest3, NewMatchState, MSt4}.
+    {J0 - 3, Rest3, NewMatchState, BSOffsetReg, MSt4}.
 
 do_get_tail(
     MatchState, Live, BSOffsetReg, BSBinaryReg, MMod, MSt0
@@ -2957,13 +2974,13 @@ first_pass_bs_match_equal_colon_equal(
     MSt5 = cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4),
     MSt6 = MMod:add(MSt5, BSOffsetReg, Size),
     MSt7 = MMod:free_native_registers(MSt6, [Result]),
-    {J0 - 3, Rest3, MatchState, MSt7}.
+    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt7}.
 
 first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Stride, Rest1} = decode_literal(Rest0),
     MSt1 = MMod:add(MSt0, BSOffsetReg, Stride),
     ?TRACE("{skip,~p},", [Stride]),
-    {J0 - 1, Rest1, MatchState, MSt1}.
+    {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt1}.
 
 term_alloc_bin_match_state(Live, Src, Dest, MMod, MSt0) ->
     {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
