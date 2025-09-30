@@ -1760,7 +1760,7 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt8, NewSrc} = memory_ensure_free_with_extra_root(
         Src, Live, {free, SrcSizeReg}, MMod, MSt7
     ),
-    {MSt9, NewMapPtrReg} = MMod:call_primitive(MSt8, ?PRIM_TERM_COPY_MAP, [ctx, {free, NewSrc}]),
+    {MSt9, NewMapPtrReg} = MMod:call_primitive(MSt8, ?PRIM_TERM_COPY_MAP, [ctx, NewSrc]),
     MSt10 = MMod:and_(MSt9, NewMapPtrReg, ?TERM_PRIMARY_CLEAR_MASK),
     {MSt11, Rest6} = lists:foldl(
         fun(_Index, {ASt0, ARest0}) ->
@@ -1768,7 +1768,7 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
             {ASt2, Value, ARest2} = decode_compact_term(ARest1, MMod, ASt1, State0),
             ?TRACE("(~p,~p),", [Key, Value]),
             {ASt3, PosReg} = MMod:call_primitive(ASt2, ?PRIM_TERM_FIND_MAP_POS, [
-                ctx, Src, Key
+                ctx, NewSrc, Key
             ]),
             ASt4 = MMod:if_block(ASt3, {'(int)', PosReg, '==', ?TERM_MAP_MEMORY_ALLOC_FAIL}, fun(
                 BSt0
@@ -1788,7 +1788,7 @@ first_pass(<<?OP_PUT_MAP_EXACT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("]\n", []),
     MSt12 = MMod:or_(MSt11, NewMapPtrReg, ?TERM_PRIMARY_BOXED),
     MSt13 = MMod:move_to_vm_register(MSt12, NewMapPtrReg, Dest),
-    MSt14 = MMod:free_native_registers(MSt13, [NewMapPtrReg, Dest]),
+    MSt14 = MMod:free_native_registers(MSt13, [NewMapPtrReg, Dest, NewSrc]),
     ?ASSERT_ALL_NATIVE_FREE(MSt14),
     first_pass(Rest6, MMod, MSt14, State0);
 % 156
