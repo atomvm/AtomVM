@@ -41,6 +41,7 @@
 #define INTN_UINT64_LEN 2
 #define INTN_MAX_IN_LEN 8 // 256 bit / 32 bit = 8 digits
 #define INTN_MAX_RES_LEN (INTN_MAX_IN_LEN + INTN_INT64_LEN + 1)
+#define INTN_BSL_MAX_RES_LEN 8
 
 #define MAX_LEN(m, n) (((m) > (n)) ? (m) : (n))
 #define INTN_ADD_OUT_LEN(m, n) ((MAX_LEN(m, n)) + 1)

@@ -787,8 +787,6 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
     return res_count;
 }
 
-#define INTN_BSL_MAX_OUT_LEN 8
-
 size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
@@ -803,11 +801,11 @@ size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
 
     size_t new_digits_count = new_bits_len / digit_bit_size;
 
-    if (new_digits_count > INTN_BSL_MAX_OUT_LEN) {
+    if (new_digits_count > INTN_BSL_MAX_RES_LEN) {
         return new_digits_count;
     }
 
-    size_t initial_zeros = MIN(n / digit_bit_size, INTN_BSL_MAX_OUT_LEN);
+    size_t initial_zeros = MIN(n / digit_bit_size, INTN_BSL_MAX_RES_LEN);
     memset(out, 0, initial_zeros * sizeof(uint32_t));
 
     if (right_shift_n == 32) {
