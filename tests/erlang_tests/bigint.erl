@@ -245,6 +245,57 @@ parse_bigint() ->
         )
     end),
 
+    TooBig1 = <<"10000000000000000000000000000000000000000000000000000000000000000">>,
+    ok = expect_atomvm_error(badarg, fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                TooBig1
+            ),
+            16
+        )
+    end),
+
+    TooBig2 = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    ok = expect_atomvm_error(badarg, fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                TooBig2
+            ),
+            16
+        )
+    end),
+
+    TooBig3 = <<"ACRLOAJ1MN6J7S7EH8796SS9GJF9GD34BPDF15DIES8ME9Q9G7HSG">>,
+    ok = expect_atomvm_error(badarg, fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                TooBig3
+            ),
+            29
+        )
+    end),
+
+    TooBig4 = <<"2AVFFIPA2YC3I7N7GI96SUVLXY3W2PM5SW8JCGASD013YIUGHJ3MBVOYDJ9PIXSH0SNR4">>,
+    ok = expect_atomvm_error(badarg, fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                TooBig4
+            ),
+            35
+        )
+    end),
+
+    TooBig5 =
+        <<"2AVFFIPA2YC3I7N7GI96SUVLXY3W2PM5SW8JCGASD013YIUGHJ3MBVOYDJ9PIXSH0SNR40000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005">>,
+    ok = expect_atomvm_error(badarg, fun() ->
+        binary_to_integer(
+            ?MODULE:id(
+                TooBig5
+            ),
+            35
+        )
+    end),
+
     0.
 
 test_cmp() ->
@@ -1273,15 +1324,18 @@ choose_result(AResult, BResult) ->
         beam -> BResult
     end.
 
-expect_overflow(OvfFun) ->
+expect_atomvm_error(Error, ErrFun) ->
     Machine = ?MODULE:get_machine_atom(),
-    try {Machine, OvfFun()} of
+    try {Machine, ErrFun()} of
         {beam, I} when is_integer(I) -> ok;
         {atomvm, Result} -> {unexpected_result, Result}
     catch
-        error:overflow -> ok;
+        error:Error -> ok;
         _:E -> {unexpected_error, E}
     end.
+
+expect_overflow(OvfFun) ->
+    expect_atomvm_error(overflow, OvfFun).
 
 expect_overflow_or_limit(OvfFun) ->
     try OvfFun() of
