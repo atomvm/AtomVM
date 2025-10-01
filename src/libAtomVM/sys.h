@@ -221,7 +221,7 @@ void sys_monotonic_time(struct timespec *t);
  *
  * @return a monotonic time in a system-chosen unit
  */
-uint64_t sys_monotonic_time_u64();
+uint64_t sys_monotonic_time_u64(void);
 
 /**
  * @brief convert a number of milliseconds to system-chosen unit

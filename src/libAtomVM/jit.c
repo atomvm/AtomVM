@@ -131,16 +131,20 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
 
     // Native case
+#ifndef AVM_NO_EMU
     if (mod->native_code == NULL) {
         // return to emulated
         const uint8_t *code = mod->code->code;
         const uint8_t *pc = code + ((ctx->cp & 0xFFFFFF) >> 2);
         jit_state->continuation = pc;
     } else {
-        // return to native
+#endif
+        // return to native using pointer arithmetics on function pointers
         const void *native_pc = ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2);
-        jit_state->continuation = native_pc;
+        jit_state->continuation = (ModuleNativeEntryPoint) native_pc;
+#ifndef AVM_NO_EMU
     }
+#endif
     jit_state->module = mod;
     return ctx;
 }
@@ -261,7 +265,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
 static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_schedule_next_cp: ctx->process_id = %d\n", ctx->process_id);
-    ctx->saved_ip = jit_state->continuation;
+    ctx->saved_function_ptr = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
     return scheduler_next(ctx->global, ctx);
@@ -270,7 +274,7 @@ static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_schedule_wait_cp: ctx->process_id = %d\n", ctx->process_id);
-    ctx->saved_ip = jit_state->continuation;
+    ctx->saved_function_ptr = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
     return scheduler_wait(ctx);
@@ -293,7 +297,11 @@ enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t lab
     globalcontext_send_message(ctx->global, code_server_process_id, code_server_tuple);
     END_WITH_STACK_HEAP(heap, ctx->global);
     ctx->saved_module = mod;
-    ctx->saved_ip = (void *) (uintptr_t) label;
+    // We exceptionally store the label in this field, used by context_process_code_server_resume_signal
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+    ctx->saved_function_ptr = (void *) (uintptr_t) label;
+#pragma GCC diagnostic pop
     context_update_flags(ctx, ~NoFlags, Trap);
     return TRAP_AND_LOAD_OK;
 }
@@ -469,11 +477,11 @@ static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need,
     return true;
 }
 
-static void *jit_get_imported_bif(JITState *jit_state, uint32_t bif)
+static BifImpl0 jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 {
     TRACE("jit_get_imported_bif: bif=%u\n", bif);
     const struct ExportedFunction *exported_bif = jit_state->module->imported_funcs[bif];
-    void *result = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
+    const BifImpl0 result = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
     return result;
 }
 
@@ -782,7 +790,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
             }
             case CodeServerResumeSignal: {
                 context_process_code_server_resume_signal(ctx);
-                jit_state->continuation = ctx->saved_ip;
+                jit_state->continuation = ctx->saved_function_ptr;
                 break;
             }
             case NormalMessage: {
