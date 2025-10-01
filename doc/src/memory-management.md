@@ -370,7 +370,7 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
 
 ### Maps
 
-Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x3C` (`111100b`), followed by:
+Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x2C` (`101100b`), followed by:
 
 * a term pointer to a tuple of arity `n` containing the keys in the map;
 * a sequence of `n`-many words, containing the values of the map corresponding (in order) to the keys in the reference tuple.
@@ -392,7 +392,7 @@ The keys and values are single word terms, i.e., either immediates or pointers t
     |                       ...
     |       |                         |< 6  >|
     |       +=========================+======+
-    |       |    boxed-size (n)       |111100| boxed[0]
+    |       |    boxed-size (n)       |101100| boxed[0]
     |       +-------------------------+------+
     +-----------------<   keys               | boxed[1]
             +--------------------------------+
