@@ -538,7 +538,7 @@ to `nil`.
     some
     binary                            |< 6  >|
     ^       +=========================+======+
-    |       |    boxed-size (5)       |100100| boxed[0]
+    |       |    boxed-size (5)       |000100| boxed[0]
     |       +-------------------------+------+
     |       |      match-or-binary-ref       | boxed[1]
     |       +--------------------------------+
@@ -556,7 +556,7 @@ A reference to a reference-counted binary counts as a reference, in which case t
 
 #### Sub-Binaries
 
-Sub-binaries are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x28` (`001000b`)
+Sub-binaries are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x28` (`101000b`)
 
 A sub-binary is a boxed term that points to a reference-counted binary, recording the offset into the binary and the length (in bytes) of the sub-binary.  An invariant for this term is that the `offset + length` is always less than or equal to the length of the referenced binary.
 
@@ -564,7 +564,7 @@ A sub-binary is a boxed term that points to a reference-counted binary, recordin
         refc
         binary                            |< 6  >|
         ^       +=========================+======+
-        |       |    boxed-size (3)       |001000| boxed[0]
+        |       |    boxed-size (3)       |101000| boxed[0]
         |       +-------------------------+------+
         |       |              len               | boxed[1]
         |       +--------------------------------+
