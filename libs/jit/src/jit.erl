@@ -949,13 +949,12 @@ first_pass(<<?OP_CALL_FUN, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_CALL_FUN ~p\n", [ArgsCount]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
     {MSt2, FuncReg} = read_any_xreg(ArgsCount, MMod, MSt1),
-    {MSt3, Reg} = MMod:move_to_native_register(MSt2, FuncReg),
-    MSt4 = verify_is_function(Reg, MMod, MSt3),
-    MSt5 = MMod:call_primitive_with_cp(MSt4, ?PRIM_CALL_FUN, [
-        ctx, jit_state, offset, Reg, ArgsCount
+    {MSt3, Reg} = verify_is_function(FuncReg, MMod, MSt2),
+    MSt4 = MMod:call_primitive_with_cp(MSt3, ?PRIM_CALL_FUN, [
+        ctx, jit_state, offset, {free, Reg}, ArgsCount
     ]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt5),
-    first_pass(Rest1, MMod, MSt5, State0);
+    ?ASSERT_ALL_NATIVE_FREE(MSt4),
+    first_pass(Rest1, MMod, MSt4, State0);
 % 77
 first_pass(<<?OP_IS_FUNCTION, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2322,18 +2321,17 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Tag, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {ArgsCount, Rest2} = decode_literal(Rest1),
-    {MSt2, Fun, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {MSt2, Fun, Rest3} = decode_typed_compact_term(Rest2, MMod, MSt1, State0),
     ?TRACE("OP_CALL_FUN2 ~p, ~p, ~p\n", [Tag, ArgsCount, Fun]),
     % We ignore Tag (could be literal 0 or atom unsafe)
     MSt3 = MMod:free_native_registers(MSt2, [Tag]),
     MSt4 = MMod:decrement_reductions_and_maybe_schedule_next(MSt3),
-    {MSt5, Reg} = MMod:move_to_native_register(MSt4, Fun),
-    MSt6 = verify_is_function(Reg, MMod, MSt5),
-    MSt7 = MMod:call_primitive_with_cp(MSt6, ?PRIM_CALL_FUN, [
-        ctx, jit_state, offset, Reg, ArgsCount
+    {MSt5, Reg} = verify_is_function(Fun, MMod, MSt4),
+    MSt6 = MMod:call_primitive_with_cp(MSt5, ?PRIM_CALL_FUN, [
+        ctx, jit_state, offset, {free, Reg}, ArgsCount
     ]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt7),
-    first_pass(Rest3, MMod, MSt7, State0);
+    ?ASSERT_ALL_NATIVE_FREE(MSt6),
+    first_pass(Rest3, MMod, MSt6, State0);
 % 180
 first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3016,8 +3014,18 @@ term_is_boxed_with_tag_and_get_ptr(Label, Arg1, BoxedTag, MMod, MSt1) ->
 %% @param MSt0 backend state
 %% @return new backend state
 %%-----------------------------------------------------------------------------
-verify_is_function(Arg, MMod, MSt0) ->
-    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg),
+verify_is_function({typed, Func, t_fun}, MMod, MSt0) ->
+    MMod:move_to_native_register(MSt0, Func);
+verify_is_function({typed, Func, any}, MMod, MSt0) ->
+    verify_is_function(Func, MMod, MSt0);
+verify_is_function({typed, Func, _Other}, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Func),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, offset, ?BADFUN_ATOM, Reg
+    ]),
+    {MSt2, Reg};
+verify_is_function(Func, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Func),
     MSt2 = MMod:if_block(MSt1, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BSt0) ->
         MMod:call_primitive_last(BSt0, ?PRIM_RAISE_ERROR_TUPLE, [
             ctx, jit_state, offset, ?BADFUN_ATOM, Reg
@@ -3030,7 +3038,8 @@ verify_is_function(Arg, MMod, MSt0) ->
             ctx, jit_state, offset, ?BADFUN_ATOM, Reg
         ])
     end),
-    MMod:free_native_registers(MSt5, [Reg]).
+    MSt6 = MMod:free_native_registers(MSt5, [Reg]),
+    MMod:move_to_native_register(MSt6, Func).
 
 verify_is_binary_or_match_state(Label, Src, MMod, MSt0) ->
     {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Src),
