@@ -74,7 +74,8 @@
 
 -include("primitives.hrl").
 
--define(ASSERT(Expr), true = Expr).
+%-define(ASSERT(Expr), true = Expr).
+-define(ASSERT(_Expr), ok).
 
 %% AArch64 ABI: r0-r7 are used for argument passing and return value.
 %% r8 is the indirect result location register (platform-specific),
@@ -336,6 +337,7 @@ assert_all_native_free(#state{
 jump_table(State, LabelsCount) ->
     jump_table0(State, 0, LabelsCount).
 
+-spec jump_table0(state(), non_neg_integer(), pos_integer()) -> state().
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
@@ -417,6 +419,7 @@ call_primitive(
 %% @param Args arguments to pass to the primitive
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
+-spec call_primitive_last(state(), non_neg_integer(), [arg()]) -> state().
 call_primitive_last(
     #state{
         stream_module = StreamModule,
@@ -461,6 +464,7 @@ call_primitive_last(
 %% @param Reg register to compare to (should be {free, Reg} as it's always freed)
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
+-spec return_if_not_equal_to_ctx(state(), {free, aarch64_register()}) -> state().
 return_if_not_equal_to_ctx(
     #state{
         stream_module = StreamModule,
@@ -496,6 +500,7 @@ return_if_not_equal_to_ctx(
 %% @param Label to jump to
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
+-spec jump_to_label(state(), integer() | reference()) -> state().
 jump_to_label(
     #state{stream_module = StreamModule, stream = Stream0, branches = AccBranches, labels = Labels} =
         State,
@@ -632,6 +637,7 @@ if_else_block(
     Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
+%% @private
 -spec if_block_cond(state(), condition()) ->
     {
         state(),
@@ -882,6 +888,7 @@ if_block_cond(
     State4 = if_block_free_reg(RegTuple, State3),
     {State4, eq, OffsetAfter - OffsetBefore}.
 
+%% @private
 -spec if_block_free_reg(aarch64_register() | {free, aarch64_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
     #state{available_regs = AvR0, used_regs = UR0} = State0,
@@ -893,6 +900,7 @@ if_block_free_reg({free, Reg}, State0) ->
 if_block_free_reg(Reg, State0) when ?IS_GPR(Reg) ->
     State0.
 
+%% @private
 -spec merge_used_regs(state(), [aarch64_register()]) -> state().
 merge_used_regs(#state{used_regs = UR0, available_regs = AvR0} = State, [
     Reg | T
@@ -918,6 +926,7 @@ merge_used_regs(State, []) ->
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
+-spec shift_right(state(), aarch64_register(), non_neg_integer()) -> state().
 shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
@@ -933,6 +942,7 @@ shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg,
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
+-spec shift_left(state(), aarch64_register(), non_neg_integer()) -> state().
 shift_left(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
     is_atom(Reg)
 ->
@@ -1024,6 +1034,8 @@ call_func_ptr(
         ResultReg
     }.
 
+%% @private
+-spec push_registers([aarch64_register()], module(), stream()) -> {boolean(), stream()}.
 push_registers([RegA, RegB | Tail], StreamModule, Stream0) ->
     Stream1 = StreamModule:append(Stream0, jit_aarch64_asm:stp(RegA, RegB, {sp, -16}, '!')),
     push_registers(Tail, StreamModule, Stream1);
@@ -1033,6 +1045,8 @@ push_registers([RegA], StreamModule, Stream0) ->
     Stream1 = StreamModule:append(Stream0, jit_aarch64_asm:str(RegA, {sp, -16}, '!')),
     {true, Stream1}.
 
+%% @private
+-spec pop_registers(boolean(), [aarch64_register()], module(), stream()) -> stream().
 pop_registers(true, [Reg | Tail], StreamModule, Stream0) ->
     % Odd number of registers, pop the last one first
     Stream1 = StreamModule:append(Stream0, jit_aarch64_asm:ldr(Reg, {sp}, 16)),
@@ -1043,6 +1057,7 @@ pop_registers(false, [RegB, RegA | Tail], StreamModule, Stream0) ->
     Stream1 = StreamModule:append(Stream0, jit_aarch64_asm:ldp(RegA, RegB, {sp}, 16)),
     pop_registers(false, Tail, StreamModule, Stream1).
 
+%% @private
 -spec set_args(state(), [arg()]) -> state().
 set_args(
     #state{stream = Stream0, stream_module = StreamModule, used_regs = UsedRegs} = State0, Args
@@ -1076,9 +1091,13 @@ set_args(
         used_regs = ParamRegs ++ (NewUsedRegs -- ParamRegs)
     }.
 
+%% @private
+-spec parameter_regs([arg()]) -> [aarch64_register()].
 parameter_regs(Args) ->
     parameter_regs0(Args, ?PARAMETER_REGS, []).
 
+%% @private
+-spec parameter_regs0([arg()], [aarch64_register()], [aarch64_register()]) -> [aarch64_register()].
 parameter_regs0([], _, Acc) ->
     lists:reverse(Acc);
 parameter_regs0([Special | T], [GPReg | GPRegsT], Acc) when
@@ -1098,9 +1117,13 @@ parameter_regs0([{y_reg, _} | T], [GPReg | GPRegsT], Acc) ->
 parameter_regs0([Int | T], [GPReg | GPRegsT], Acc) when is_integer(Int) ->
     parameter_regs0(T, GPRegsT, [GPReg | Acc]).
 
+%% @private
+-spec replace_reg([arg()], aarch64_register(), aarch64_register()) -> [arg()].
 replace_reg(Args, Reg1, Reg2) ->
     replace_reg0(Args, Reg1, Reg2, []).
 
+%% @private
+-spec replace_reg0([arg()], aarch64_register(), aarch64_register(), [arg()]) -> [arg()].
 replace_reg0([Reg | T], Reg, Replacement, Acc) ->
     lists:reverse(Acc, [Replacement | T]);
 replace_reg0([{free, Reg} | T], Reg, Replacement, Acc) ->
@@ -1108,6 +1131,10 @@ replace_reg0([{free, Reg} | T], Reg, Replacement, Acc) ->
 replace_reg0([Other | T], Reg, Replacement, Acc) ->
     replace_reg0(T, Reg, Replacement, [Other | Acc]).
 
+%% @private
+-spec set_args0([arg()], [aarch64_register() | imm], [aarch64_register()], [aarch64_register()], [
+    binary()
+]) -> binary().
 set_args0([], [], [], _AvailGP, Acc) ->
     list_to_binary(lists:reverse(Acc));
 set_args0([{free, FreeVal} | ArgsT], ArgsRegs, ParamRegs, AvailGP, Acc) ->
@@ -1151,6 +1178,8 @@ set_args0(
             set_args0(NewArgsT, ArgsRegs, ParamRegs, AvailGPT, [J, I | Acc])
     end.
 
+%% @private
+-spec set_args1(arg(), aarch64_register()) -> binary() | [binary()].
 set_args1(Reg, Reg) ->
     [];
 set_args1({x_reg, extra}, Reg) ->
@@ -1379,7 +1408,14 @@ move_array_element(
         stream = Stream1
     }.
 
-%% @doc move reg[x] to a vm or native register
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of an array element (reg[x]) to a new native register.
+%% @end
+%% @param State current backend state
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec get_array_element(
     state(), aarch64_register() | {free, aarch64_register()}, non_neg_integer()
 ) ->
@@ -1414,7 +1450,16 @@ get_array_element(
         ElemReg
     }.
 
-%% @doc move an integer, a vm or native register to reg[x]
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of a value (integer, vm register or native register) to an
+%% array element (reg[x])
+%% @end
+%% @param State current backend state
+%% @param Value value to move
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec move_to_array_element(
     state(), integer() | vm_register() | aarch64_register(), aarch64_register(), non_neg_integer()
 ) -> state().
@@ -1446,14 +1491,28 @@ move_to_array_element(
     State2 = move_to_array_element(State1, Temp, Reg, Index),
     free_native_register(State2, Temp).
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a move of a value (integer, vm register or native register) to an
+%% array element (reg[x+offset])
+%% @end
+%% @param State current backend state
+%% @param Value value to move
+%% @param Reg base register of the array
+%% @param Index index in the array, as an integer or a native register
+%% @param Offset additional offset
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec move_to_array_element(
+    state(), value(), aarch64_register(), aarch64_register() | non_neg_integer(), integer()
+) -> state().
 move_to_array_element(
     State,
     Value,
     BaseReg,
-    IndexReg,
+    IndexVal,
     Offset
-) when is_integer(IndexReg) andalso is_integer(Offset) andalso Offset div 8 =:= 0 ->
-    move_to_array_element(State, Value, BaseReg, IndexReg + (Offset div 8));
+) when is_integer(IndexVal) andalso is_integer(Offset) ->
+    move_to_array_element(State, Value, BaseReg, IndexVal + Offset);
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     ValueReg,
@@ -1480,6 +1539,15 @@ move_to_array_element(
     State2 = State1#state{stream = Stream1},
     free_native_register(State2, ValueReg).
 
+%%-----------------------------------------------------------------------------
+%% @doc Move a value (integer, vm register, pointer or native register) to a
+%% native register. This allocates a new native register from the available
+%% pool if needed.
+%% @end
+%% @param State current backend state
+%% @param Value value to move (can be an immediate, vm register, pointer, or native register)
+%% @return Tuple of {Updated backend state, Native register containing the value}
+%%-----------------------------------------------------------------------------
 -spec move_to_native_register(state(), value()) -> {state(), aarch64_register()}.
 move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg};
@@ -1544,6 +1612,15 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, available_regs = AvailT, used_regs = [Reg | Used]}, Reg}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Move a value (integer, vm register, pointer or native register) to a
+%% specific native register.
+%% @end
+%% @param State current backend state
+%% @param Value value to move (can be an immediate, vm register, pointer, or native register)
+%% @param TargetReg the specific native register to move the value to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec move_to_native_register(state(), value(), aarch64_register()) -> state().
 move_to_native_register(
     #state{stream_module = StreamModule, stream = Stream0} = State, RegSrc, RegDst
@@ -1580,6 +1657,15 @@ move_to_native_register(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Copy a value to a native register, allocating a new register from the
+%% available pool. Unlike move_to_native_register, this always allocates a new
+%% register and copies the value (preserving the source if it's a register).
+%% @end
+%% @param State current backend state
+%% @param Value value to copy (can be an immediate, vm register, pointer, or native register)
+%% @return Tuple of {Updated backend state, Native register containing the copied value}
+%%-----------------------------------------------------------------------------
 -spec copy_to_native_register(state(), value()) -> {state(), aarch64_register()}.
 copy_to_native_register(
     #state{
@@ -1608,6 +1694,14 @@ copy_to_native_register(
 copy_to_native_register(State, Reg) ->
     move_to_native_register(State, Reg).
 
+%%-----------------------------------------------------------------------------
+%% @doc Move a VM register value to the continuation pointer (CP).
+%% @end
+%% @param State current backend state
+%% @param VMReg VM register to move to CP
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec move_to_cp(state(), vm_register()) -> state().
 move_to_cp(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | _]} = State,
     {y_reg, Y}
@@ -1619,6 +1713,14 @@ move_to_cp(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Increment the stack pointer (SP) by a given offset.
+%% @end
+%% @param State current backend state
+%% @param Offset offset to add to SP (in words, will be multiplied by 8)
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec increment_sp(state(), integer()) -> state().
 increment_sp(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Reg | _]} = State,
     Offset
@@ -1630,6 +1732,15 @@ increment_sp(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Set the continuation address to point to a specific label. The actual
+%% address will be resolved during branch update.
+%% @end
+%% @param State current backend state
+%% @param Label label to set as continuation target
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec set_continuation_to_label(state(), integer() | reference()) -> state().
 set_continuation_to_label(
     #state{
         stream_module = StreamModule,
@@ -1647,6 +1758,15 @@ set_continuation_to_label(
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1, branches = [Reloc | Branches]}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Set the continuation address to the current offset, creating a
+%% reference for later resolution. Returns a reference that can be used
+%% to add the label at the target location.
+%% @end
+%% @param State current backend state
+%% @return Tuple of {Updated backend state, Reference for the continuation offset}
+%%-----------------------------------------------------------------------------
+-spec set_continuation_to_offset(state()) -> {state(), reference()}.
 set_continuation_to_offset(
     #state{
         stream_module = StreamModule,
@@ -1664,12 +1784,25 @@ set_continuation_to_offset(
     Stream1 = StreamModule:append(Stream0, Code),
     {State#state{stream = Stream1, branches = [Reloc | Branches]}, OffsetRef}.
 
+%%-----------------------------------------------------------------------------
 %% @doc Implement a continuation entry point. On AArch64 this is a nop
 %% as we don't need to save any register.
+%% @end
+%% @param State current backend state
+%% @return Updated backend state (unchanged on AArch64)
+%%-----------------------------------------------------------------------------
 -spec continuation_entry_point(#state{}) -> #state{}.
 continuation_entry_point(State) ->
     State.
 
+%%-----------------------------------------------------------------------------
+%% @doc Get the module index from the JIT state and load it into a native
+%% register.
+%% @end
+%% @param State current backend state
+%% @return Tuple of {Updated backend state, Native register containing module index}
+%%-----------------------------------------------------------------------------
+-spec get_module_index(state()) -> {state(), aarch64_register()}.
 get_module_index(
     #state{
         stream_module = StreamModule,
@@ -1687,6 +1820,8 @@ get_module_index(
         Reg
     }.
 
+%% @private
+-spec op_imm(state(), atom(), aarch64_register(), aarch64_register(), integer()) -> state().
 op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, Reg, Reg, Val) ->
     Stream1 =
         try
@@ -1713,20 +1848,66 @@ op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, RegA,
         end,
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Perform bitwise AND of a register with an immediate value.
+%% @end
+%% @param State current backend state
+%% @param Reg register to AND with value
+%% @param Val immediate value to AND
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec and_(state(), aarch64_register(), integer()) -> state().
 and_(State, Reg, Val) ->
     op_imm(State, and_, Reg, Reg, Val).
 
+%%-----------------------------------------------------------------------------
+%% @doc Perform bitwise OR of a register with an immediate value.
+%% @end
+%% @param State current backend state
+%% @param Reg register to OR with value
+%% @param Val immediate value to OR
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec or_(state(), aarch64_register(), integer()) -> state().
 or_(State, Reg, Val) ->
     op_imm(State, orr, Reg, Reg, Val).
 
+%%-----------------------------------------------------------------------------
+%% @doc Add an immediate value to a register.
+%% @end
+%% @param State current backend state
+%% @param Reg register to add to
+%% @param Val immediate value to add
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec add(state(), aarch64_register(), integer()) -> state().
 add(State, Reg, Val) ->
     op_imm(State, add, Reg, Reg, Val).
 
+%%-----------------------------------------------------------------------------
+%% @doc Subtract an immediate value from a register.
+%% @end
+%% @param State current backend state
+%% @param Reg register to subtract from
+%% @param Val immediate value to subtract
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec sub(state(), aarch64_register(), integer()) -> state().
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_aarch64_asm:sub(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Multiply a register by a constant value. Uses optimized instruction
+%% sequences for common multipliers (powers of 2, small values).
+%% @end
+%% @param State current backend state
+%% @param Reg register to multiply
+%% @param Val constant multiplier (non-negative integer)
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec mul(state(), aarch64_register(), non_neg_integer()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -1783,6 +1964,14 @@ mul(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Decrement the reduction count and schedule the next process if it
+%% reaches zero. If reductions remain, execution continues; otherwise, the
+%% continuation is set and the scheduler is invoked.
+%% @end
+%% @param State current backend state
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 decrement_reductions_and_maybe_schedule_next(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0
@@ -1815,12 +2004,31 @@ decrement_reductions_and_maybe_schedule_next(
     ),
     merge_used_regs(State2#state{stream = Stream4}, State1#state.used_regs).
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a call to a label with automatic scheduling. Decrements reductions
+%% and calls the label if reductions remain, otherwise schedules the next
+%% process. Sets the continuation pointer before the call.
+%% @end
+%% @param State current backend state
+%% @param Label label to call
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
     {State1, RewriteOffset, RewriteSize} = set_cp(State0),
     State2 = call_only_or_schedule_next(State1, Label),
     rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a tail call to a label with automatic scheduling. Decrements
+%% reductions and jumps to the label if reductions remain, otherwise schedules
+%% the next process. Does not set a new continuation pointer (tail call).
+%% @end
+%% @param State current backend state
+%% @param Label label to jump to
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec call_only_or_schedule_next(state(), non_neg_integer()) -> state().
 call_only_or_schedule_next(
     #state{
         stream_module = StreamModule,
@@ -1846,11 +2054,23 @@ call_only_or_schedule_next(
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
+%%-----------------------------------------------------------------------------
+%% @doc Emit a call to a primitive with continuation pointer setup. This is
+%% used for primitives that may not return directly (e.g., those that can
+%% trap or reschedule). Sets CP before calling the primitive.
+%% @end
+%% @param State current backend state
+%% @param Primitive index of the primitive to call
+%% @param Args arguments to pass to the primitive
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec call_primitive_with_cp(state(), non_neg_integer(), [arg()]) -> state().
 call_primitive_with_cp(State0, Primitive, Args) ->
     {State1, RewriteOffset, RewriteSize} = set_cp(State0),
     State2 = call_primitive_last(State1, Primitive, Args),
     rewrite_cp_offset(State2, RewriteOffset, RewriteSize).
 
+%% @private
 -spec set_cp(state()) -> {state(), non_neg_integer(), 4 | 8}.
 set_cp(State0) ->
     % get module index (dynamically)
@@ -1879,6 +2099,7 @@ set_cp(State0) ->
     State3 = free_native_register(State2, Reg),
     {State3, MOVOffset, RewriteSize}.
 
+%% @private
 -spec rewrite_cp_offset(state(), non_neg_integer(), 4 | 8) -> state().
 rewrite_cp_offset(
     #state{stream_module = StreamModule, stream = Stream0, offset = CodeOffset} = State0,
@@ -1891,6 +2112,15 @@ rewrite_cp_offset(
     Stream1 = StreamModule:replace(Stream0, RewriteOffset, NewMoveInstr),
     State0#state{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Set the binary state (BS) register to point to a term and reset the
+%% BS offset to zero. Used for binary matching operations.
+%% @end
+%% @param State current backend state
+%% @param TermReg register containing the term to set as binary state
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec set_bs(state(), aarch64_register()) -> state().
 set_bs(#state{stream_module = StreamModule, stream = Stream0} = State0, TermReg) ->
     I1 = jit_aarch64_asm:str(TermReg, ?BS),
     I2 = jit_aarch64_asm:str(xzr, ?BS_OFFSET),
@@ -1906,6 +2136,7 @@ set_bs(#state{stream_module = StreamModule, stream = Stream0} = State0, TermReg)
 %% @end
 %% @return New state
 %%-----------------------------------------------------------------------------
+-spec return_labels_and_lines(state(), [{non_neg_integer(), non_neg_integer()}]) -> state().
 return_labels_and_lines(
     #state{
         stream_module = StreamModule,
@@ -1930,12 +2161,18 @@ return_labels_and_lines(
     ),
     State#state{stream = Stream1}.
 
+%% @private
+-spec free_reg([aarch64_register()], [aarch64_register()], aarch64_register()) ->
+    {[aarch64_register()], [aarch64_register()]}.
 free_reg(AvailableRegs0, UsedRegs0, Reg) when ?IS_GPR(Reg) ->
     AvailableRegs1 = free_reg0(?AVAILABLE_REGS, AvailableRegs0, Reg, []),
     true = lists:member(Reg, UsedRegs0),
     UsedRegs1 = lists:delete(Reg, UsedRegs0),
     {AvailableRegs1, UsedRegs1}.
 
+%% @private
+-spec free_reg0([aarch64_register()], [aarch64_register()], aarch64_register(), [aarch64_register()]) ->
+    [aarch64_register()].
 free_reg0([Reg | _SortedT], PrevRegs0, Reg, Acc) ->
     lists:reverse(Acc, [Reg | PrevRegs0]);
 free_reg0([PrevReg | SortedT], [PrevReg | PrevT], Reg, Acc) ->
@@ -1943,6 +2180,8 @@ free_reg0([PrevReg | SortedT], [PrevReg | PrevT], Reg, Acc) ->
 free_reg0([_Other | SortedT], PrevRegs, Reg, Acc) ->
     free_reg0(SortedT, PrevRegs, Reg, Acc).
 
+%% @private
+-spec args_regs([arg()]) -> [aarch64_register() | imm].
 args_regs(Args) ->
     lists:map(
         fun

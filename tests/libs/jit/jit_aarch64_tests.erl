@@ -1513,7 +1513,7 @@ move_to_array_element_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
                         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-                        "   4:	f9000907 	str	x7, [x8, #16]"
+                        "   4:	f9000d07 	str	x7, [x8, #24]"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
                 end),
