@@ -81,8 +81,20 @@ compile(Target, Dir, Path) ->
         ok = file:write_file(UpdatedFile, Binary)
     catch
         error:function_clause:S ->
-            [{jit, first_pass, [<<Opcode, _Rest/binary>> | _], _} | _] = S,
-            io:format("Unimplemented opcode ~p (~s)\n", [Opcode, Path])
+            case S of
+                [{jit, first_pass, [<<Opcode, _Rest/binary>> | _], _} | _] ->
+                    io:format("Unimplemented opcode ~p (~s)\n", [Opcode, Path]);
+                _ ->
+                    io:format("Function clause error in ~s:~n", [Path]),
+                    lists:foreach(
+                        fun(Frame) -> io:format("  ~p~n", [Frame]) end, lists:sublist(S, 5)
+                    ),
+                    erlang:raise(error, function_clause, S)
+            end;
+        Class:Reason:Stack ->
+            io:format("Error ~p:~p in ~s:~n", [Class, Reason, Path]),
+            lists:foreach(fun(Frame) -> io:format("  ~p~n", [Frame]) end, lists:sublist(Stack, 5)),
+            erlang:raise(Class, Reason, Stack)
     end.
 
 atom_resolver(AtomChunk) ->
