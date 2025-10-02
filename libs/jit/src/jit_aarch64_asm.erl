@@ -124,7 +124,7 @@ add(Rd, Rn, Rm, {lsl, Amount}) when
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
     RmNum = reg_to_num(Rm),
-    %% AArch64 ADD (immediate) encoding: 1001000100iiiiiiiiiiiinnnnndddddd
+    %% AArch64 ADD (shifted register) encoding: 10001011000mmmmmiiiiiinnnnndddddd
     %% 0x8B000000 | Rm << 16 | Amount << 10 | Rn << 5 | Rd
     <<
         (16#8B000000 bor (RmNum bsl 16) bor ((Amount band 16#3F) bsl 10) bor (RnNum bsl 5) bor

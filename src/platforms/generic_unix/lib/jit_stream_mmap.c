@@ -29,6 +29,7 @@
 #include "platform_defaultatoms.h"
 #include "term.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -74,7 +75,7 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
 
     uint8_t *addr = (uint8_t *) mmap(0, size, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
-        fprintf(stderr, "Could not allocate mmap for JIT");
+        fprintf(stderr, "Could not allocate mmap for JIT: size=%zu, errno=%d\n", size, errno);
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -119,7 +120,9 @@ static term nif_jit_stream_mmap_append(Context *ctx, int argc, term argv[])
 
     size_t binary_size = term_binary_size(argv[1]);
     const uint8_t *binary_data = (const uint8_t *) term_binary_data(argv[1]);
-    assert(js_obj->stream_offset + binary_size < js_obj->stream_size);
+    if (UNLIKELY(js_obj->stream_offset + binary_size > js_obj->stream_size)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
 #if HAVE_PTHREAD_JIT_WRITE_PROTECT_NP
     pthread_jit_write_protect_np(0);

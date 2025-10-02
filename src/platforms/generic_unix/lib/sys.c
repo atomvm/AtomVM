@@ -47,6 +47,8 @@
 
 #ifndef AVM_NO_JIT
 #include "jit_stream_mmap.h"
+
+#include <errno.h>
 #include <pthread.h>
 #include <sys/mman.h>
 
@@ -818,7 +820,7 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
 #if defined(__APPLE__) && defined(__arm64__)
     uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
     if (native_code_mmap == MAP_FAILED) {
-        fprintf(stderr, "Could not allocate mmap for native code");
+        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
         return NULL;
     }
     pthread_jit_write_protect_np(0);
