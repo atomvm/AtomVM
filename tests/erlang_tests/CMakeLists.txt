@@ -70,10 +70,37 @@ endfunction()
 set(TO_HRL_PATH ${CMAKE_CURRENT_LIST_DIR})
 
 function(generate_hrl out_file def_name in_file)
+    if(AVM_DISABLE_JIT)
+        # For non-JIT builds, use the base file
+        set(selected_file ${in_file})
+    else()
+        # For JIT builds, determine the architecture-specific file
+        get_filename_component(base_name ${in_file} NAME_WE)
+        get_filename_component(base_ext ${in_file} EXT)
+        get_filename_component(base_dir ${in_file} DIRECTORY)
+
+        # Check if it's a .avm file (pack) or .beam file
+        if(base_ext STREQUAL ".avm")
+            # For .avm files: name.avm -> name-arch.avm
+            if(base_dir)
+                set(selected_file ${base_dir}/${base_name}-${AVM_JIT_TARGET_ARCH}${base_ext})
+            else()
+                set(selected_file ${base_name}-${AVM_JIT_TARGET_ARCH}${base_ext})
+            endif()
+        else()
+            # For .beam files: name.beam -> arch/name.beam
+            if(base_dir)
+                set(selected_file ${base_dir}/${AVM_JIT_TARGET_ARCH}/${base_name}${base_ext})
+            else()
+                set(selected_file ${AVM_JIT_TARGET_ARCH}/${base_name}${base_ext})
+            endif()
+        endif()
+    endif()
+
     add_custom_command(
         OUTPUT ${out_file}
-        COMMAND escript ${TO_HRL_PATH}/to_hrl.erl ${in_file} ${def_name} ${out_file}
-        DEPENDS ${in_file}
+        COMMAND escript ${TO_HRL_PATH}/to_hrl.erl ${selected_file} ${def_name} ${out_file}
+        DEPENDS ${selected_file}
         COMMENT "Generating ${out_file}"
     )
 endfunction()
