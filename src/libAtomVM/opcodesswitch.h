@@ -1895,7 +1895,7 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
 
 // This is where loop starts after context switching.
 schedule_in:
-    TRACE("scheduling in, ctx = %p\n", ctx);
+    TRACE("scheduling in, ctx = %p\n", (void *) ctx);
     if (ctx == NULL) return 0;
     x_regs = ctx->x;
     mod = ctx->saved_module;
@@ -1962,9 +1962,9 @@ schedule_in:
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
-            TRACE("calling native code at %p, ctx = %p\n", native_pc, ctx);
+            TRACE("calling native code at %p, ctx = %p\n", (void *) native_pc, (void *) ctx);
             Context *new_ctx = native_pc(ctx, &jit_state, &module_native_interface);
-            TRACE("returning from native code at %p, ctx = %p, new_ctx = %p\n", native_pc, ctx, new_ctx);
+            TRACE("returning from native code at %p, ctx = %p, new_ctx = %p, jit_state.continuation = %p\n", (void *) native_pc, (void *) ctx, (void *) new_ctx, (void *) jit_state.continuation);
             remaining_reductions = jit_state.remaining_reductions;
             if (UNLIKELY(new_ctx != ctx)) {
                 ctx = new_ctx;
