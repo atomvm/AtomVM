@@ -39,6 +39,11 @@
 static size_t cond_neg_in_place(intn_integer_sign_t sign, intn_digit_t out[]);
 static size_t neg_in_place(intn_digit_t out[], size_t len);
 
+static inline size_t size_round_to(size_t n, size_t round_to)
+{
+    return (n + (round_to - 1)) & ~(round_to - 1);
+}
+
 /*
  * Multiplication
  */
@@ -340,12 +345,117 @@ static int divmnu16(
     return 0;
 }
 
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+static void big_endian_digits_to_uint16(const intn_digit_t num[], size_t len, uint16_t dest_buf[])
+{
+    const uint16_t *num16 = (const uint16_t *) num;
+    for (size_t i = 0; i < len * 2; i += 2) {
+        dest_buf[i] = num16[i + 1];
+        dest_buf[i + 1] = num16[i];
+    }
+}
+
+static void big_endian_uint16_to_digit_in_place(uint16_t num16[], size_t len16)
+{
+    for (size_t i = 0; i < len16; i += 2) {
+        uint16_t num16_i = num16[i];
+        num16[i] = num16[i + 1];
+        num16[i + 1] = num16_i;
+    }
+}
+#endif
+
+size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
+    intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len)
+{
+    _Static_assert(sizeof(intn_digit_t) == 4, "assuming 32-bit intn_digit_t");
+    size_t uint16_in_a_digit = 2;
+
+    uint16_t *u;
+    uint16_t *v;
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    u = (uint16_t *) m;
+    v = (uint16_t *) n;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    int tmp_buf_size = ((256 / (sizeof(uint32_t) * 8)) + 1) * uint16_in_a_digit;
+    uint16_t u_buf16[tmp_buf_size];
+    big_endian_digits_to_uint16(m, m_len, u_buf16);
+    u = u_buf16;
+    uint16_t v_buf16[tmp_buf_size];
+    big_endian_digits_to_uint16(n, n_len, v_buf16);
+    v = v_buf16;
+#endif
+
+    size_t u_len16 = count16(u, m_len * uint16_in_a_digit);
+    size_t v_len16 = count16(v, n_len * uint16_in_a_digit);
+
+    uint16_t *q = (uint16_t *) q_out;
+    uint16_t *r = (uint16_t *) r_out;
+    if (UNLIKELY(divmnu16(q, r, u, v, u_len16, v_len16) != 0)) {
+        abort();
+    }
+
+    size_t counted_q16_len = count16(q, u_len16 - v_len16 + 1);
+    // change this the day sizeof(intn_digit_t) != 4
+    if ((counted_q16_len % uint16_in_a_digit) != 0) {
+        q[counted_q16_len] = 0;
+    }
+    size_t padded_q_len = size_round_to(counted_q16_len, uint16_in_a_digit);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    big_endian_uint16_to_digit_in_place(q, padded_q_len);
+#endif
+
+    if (r_out != NULL) {
+        size_t counted_r16_len = count16(r, v_len16);
+        // change this the day sizeof(intn_digit_t) != 4
+        if ((counted_r16_len % uint16_in_a_digit) != 0) {
+            r[counted_r16_len] = 0;
+        }
+        size_t padded_r_len = size_round_to(counted_r16_len, uint16_in_a_digit);
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        big_endian_uint16_to_digit_in_place(r, padded_r_len);
+#endif
+
+        if (r_out_len != NULL) {
+            *r_out_len = padded_r_len / uint16_in_a_digit;
+        }
+    }
+
+    return padded_q_len / uint16_in_a_digit;
+}
+
 void print_num(const uint32_t num[], int len)
 {
     for (int i = 0; i < len; i++) {
         fprintf(stderr, "0x%x ", (unsigned int) num[i]);
     }
     fprintf(stderr, "\n");
+}
+
+// This function assumes no leading zeros (lenght is used in comparison)
+// Caller must ensure this precondition
+int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len)
+{
+    if (a_len > b_len) {
+        return 1;
+    }
+    if (a_len < b_len) {
+        return -1;
+    }
+
+    for (size_t i = a_len; i > 0; i--) {
+        if (a[i - 1] > b[i - 1]) {
+            return 1;
+        }
+        if (a[i - 1] < b[i - 1]) {
+            return -1;
+        }
+    }
+
+    return 0;
 }
 
 size_t intn_addmnu(
@@ -390,6 +500,99 @@ size_t intn_addmnu(
     }
 
     return i;
+}
+
+size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    size_t result_len;
+
+    // Case 1: Same sign - add magnitudes, keep sign
+    if (m_sign == n_sign) {
+        *out_sign = m_sign;
+        result_len = intn_addmnu(m, m_len, n, n_len, out);
+    }
+    // Case 2: Different signs - subtract smaller from larger
+    else {
+        int cmp = intn_cmp(m, m_len, n, n_len);
+        if (cmp >= 0) {
+            // |m| >= |n|, result takes sign of m
+            *out_sign = m_sign;
+            result_len = intn_submnu(m, m_len, n, n_len, out);
+        } else {
+            // |m| < |n|, result takes sign of n
+            *out_sign = n_sign;
+            result_len = intn_submnu(n, n_len, m, m_len, out);
+        }
+    }
+
+    // Normalize 0 sign
+    if (result_len == 1 && out[0] == 0) {
+        *out_sign = IntNPositiveInteger;
+    }
+
+    return result_len;
+}
+
+size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
+{
+    intn_digit_t u[2];
+    intn_integer_sign_t u_sign;
+    int64_to_intn_2(num1, u, &u_sign);
+    intn_digit_t v[2];
+    intn_integer_sign_t v_sign;
+    int64_to_intn_2(num2, v, &v_sign);
+
+    return intn_addmn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
+}
+
+// This function assumes a >= b
+// Caller must ensure this precondition
+size_t intn_submnu(
+    const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
+{
+    uint32_t borrow = 0;
+    size_t i;
+
+    for (i = 0; i < b_len; i++) {
+        uint64_t temp = (uint64_t) a[i] - (uint64_t) b[i] - (uint64_t) borrow;
+        out[i] = (uint32_t) temp; // Lower 32 bits
+        borrow = (temp >> 63) & 1; // Check if result was negative (borrow needed)
+    }
+
+    for (; i < a_len; i++) {
+        uint64_t temp = (uint64_t) a[i] - (uint64_t) borrow;
+        out[i] = (uint32_t) temp;
+        borrow = (temp >> 63) & 1;
+    }
+
+    return i;
+}
+
+size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+
+    // m - n = m + (-n)
+    // Just flip the sign of n and call addition
+    intn_integer_sign_t neg_n_sign
+        = (n_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+
+    return intn_addmn(m, m_len, m_sign, n, n_len, neg_n_sign, out, out_sign);
+}
+
+size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
+{
+    intn_digit_t u[2];
+    intn_integer_sign_t u_sign;
+    int64_to_intn_2(num1, u, &u_sign);
+    intn_digit_t v[2];
+    intn_integer_sign_t v_sign;
+    int64_to_intn_2(num2, v, &v_sign);
+
+    return intn_submn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
 
 static void neg(const intn_digit_t in[], size_t in_len, intn_digit_t out[])
@@ -588,11 +791,6 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
 }
 
 #define INTN_BSL_MAX_OUT_LEN 8
-
-static inline size_t size_round_to(size_t n, size_t round_to)
-{
-    return (n + (round_to - 1)) & ~(round_to - 1);
-}
 
 size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
 {

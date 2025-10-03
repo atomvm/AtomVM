@@ -38,11 +38,16 @@
 //
 // Also we need some room for any potential overflow, worst case is still INTN_MUL_OUT_LEN(8, 3).
 #define INTN_INT64_LEN 2
+#define INTN_UINT64_LEN 2
 #define INTN_MAX_IN_LEN 8 // 256 bit / 32 bit = 8 digits
 #define INTN_MAX_RES_LEN (INTN_MAX_IN_LEN + INTN_INT64_LEN + 1)
 
+#define MAX_LEN(m, n) (((m) > (n)) ? (m) : (n))
+#define INTN_ADD_OUT_LEN(m, n) ((MAX_LEN(m, n)) + 1)
+#define INTN_SUB_OUT_LEN(m, n) ((MAX_LEN(m, n)) + 1)
 #define INTN_NEG_OUT_LEN(m) ((m) + 1)
 #define INTN_MUL_OUT_LEN(m, n) ((m) + (n))
+#define INTN_REM_OUT_LEN(m, n) (n)
 #define INTN_DIV_OUT_LEN(m, n) ((m) - (n) + 1 + 1)
 #define INTN_ABS_OUT_LEN(m) ((m) + 1)
 
@@ -64,12 +69,32 @@ typedef enum
 
 typedef uint32_t intn_digit_t;
 
+int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
+
 size_t intn_addmnu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
+
+size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
+size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
+
+size_t intn_submnu(
+    const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
+
+size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign);
+
+size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
 void intn_mulmnu(
     const intn_digit_t u[], size_t m, const intn_digit_t v[], size_t n, intn_digit_t w[]);
 void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
+
+size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
+    intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len);
 
 void print_num(const uint32_t num[], int len);
 
