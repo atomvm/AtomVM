@@ -41,6 +41,7 @@
 #define INTN_UINT64_LEN 2
 #define INTN_MAX_IN_LEN 8 // 256 bit / 32 bit = 8 digits
 #define INTN_MAX_RES_LEN (INTN_MAX_IN_LEN + INTN_INT64_LEN + 1)
+#define INTN_BSL_MAX_RES_LEN 8
 
 #define MAX_LEN(m, n) (((m) > (n)) ? (m) : (n))
 #define INTN_ADD_OUT_LEN(m, n) ((MAX_LEN(m, n)) + 1)
@@ -135,6 +136,11 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
     intn_from_integer_options_t opts, uint8_t out[], size_t out_len);
 
 size_t intn_required_unsigned_integer_bytes(const intn_digit_t in[], size_t in_len);
+
+static inline intn_integer_sign_t intn_negate_sign(intn_integer_sign_t sign)
+{
+    return (sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
+}
 
 static inline void intn_copy(
     const intn_digit_t *num, size_t num_len, intn_digit_t *out, size_t extend_to)

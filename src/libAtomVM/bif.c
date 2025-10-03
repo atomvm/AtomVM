@@ -1165,10 +1165,8 @@ static term neg_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term ar
 
     intn_digit_t tmp_copy[INTN_MAX_RES_LEN];
     memcpy(tmp_copy, m, m_len * sizeof(intn_digit_t));
-    intn_integer_sign_t not_m_sign
-        = (m_sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;
 
-    return make_bigint(ctx, fail_label, live, tmp_copy, m_len, not_m_sign);
+    return make_bigint(ctx, fail_label, live, tmp_copy, m_len, intn_negate_sign(m_sign));
 }
 
 static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
