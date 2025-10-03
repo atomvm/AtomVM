@@ -344,18 +344,23 @@ defmodule LEDC do
     do: throw(:nif_error)
 
   @doc """
-  Convenience function for setting ledc speed mode
+  Convenience function for setting ledc speed mode, note that not all targets support high speed mode.
+  Function returns low speed mode on boards that do not support high speed mode.
   """
   @spec high_speed_mode() :: 0
   def high_speed_mode(),
     do: 0
 
   @doc """
-  Convenience function for setting ledc speed mode
+  Convenience function for setting ledc low speed mode.
   """
-  @spec low_speed_mode() :: 1
-  def low_speed_mode(),
-    do: 1
+  @spec low_speed_mode() :: 0 | 1
+  def low_speed_mode() do
+    case :erlang.system_info(:esp32_chip_info) do
+      %{model: :esp32} -> 1
+      _ -> 0
+    end
+  end
 
   @doc """
   Convenience function for setting ledc fade mode
