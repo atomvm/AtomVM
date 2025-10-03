@@ -887,6 +887,13 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             size_t num_bytes = external_term_buf[1];
             if (UNLIKELY(remaining < (SMALL_BIG_EXT_BASE_SIZE + num_bytes)
                     || num_bytes > INTN_MAX_UNSIGNED_BYTES_SIZE)) {
+                // This branch makes sure than any integer > 256 bits is rejected
+                // a badarg will be raised from the caller.
+                //
+                // We raise badarg (not overflow) for integers > 256 bits because:
+                // - overflow is for arithmetic operations exceeding capacity
+                // - badarg is for invalid/unsupported serialized terms
+                // This keeps error handling consistent across deserialization
                 return INVALID_TERM_SIZE;
             }
             uint8_t sign = external_term_buf[2];

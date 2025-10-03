@@ -1220,6 +1220,48 @@ external_term_decode() ->
             ?MODULE:id(<<131, 110, 8, 1, 255, 255, 255, 255, 255, 255, 255, 255>>)
         )
     ),
+
+    % 16#10000000000000000000000000000000000000000000000000000000000000000 = 2^256
+    TooBig1 =
+        <<131, 110, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 1>>,
+    ok = expect_atomvm_error(
+        badarg,
+        fun() ->
+            erlang:binary_to_term(
+                ?MODULE:id(TooBig1)
+            )
+        end
+    ),
+
+    % {foo, #{16#10000000000000000000000000000000000000000000000000000000000000000 => <<"bar">>}}
+    TooBig2 =
+        <<131, 104, 2, 119, 3, 102, 111, 111, 116, 0, 0, 0, 1, 110, 33, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 109, 0, 0, 0,
+            3, 98, 97, 114>>,
+    ok = expect_atomvm_error(
+        badarg,
+        fun() ->
+            erlang:binary_to_term(
+                ?MODULE:id(TooBig2)
+            )
+        end
+    ),
+
+    % 16#1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 = 2^600
+    TooBig3 =
+        <<131, 110, 76, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>,
+    ok = expect_atomvm_error(
+        badarg,
+        fun() ->
+            erlang:binary_to_term(
+                ?MODULE:id(TooBig3)
+            )
+        end
+    ),
+
     0.
 
 big_literals() ->
@@ -1873,7 +1915,7 @@ choose_result(AResult, BResult) ->
 expect_atomvm_error(Error, ErrFun) ->
     Machine = ?MODULE:get_machine_atom(),
     try {Machine, ErrFun()} of
-        {beam, I} when is_integer(I) -> ok;
+        {beam, _I} -> ok;
         {atomvm, Result} -> {unexpected_result, Result}
     catch
         error:Error -> ok;
