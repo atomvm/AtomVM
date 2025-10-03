@@ -87,8 +87,7 @@
 %% d0-d7 are used for FP argument passing and return value.
 %% d8-d15 are callee-saved FP registers.
 %%
-%% See: Arm® Architecture Procedure Call Standard (AAPCS64)
-%% https://developer.arm.com/documentation/ihi0055/latest/
+%% https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst
 %%
 %% Registers used by the JIT backend:
 %%   - Scratch GPRs: r9-r15
@@ -99,8 +98,6 @@
 %%   - Indirect result: r8
 %%
 %% Note: r18 is reserved for platform use and must not be used.
-%%
-%% For more details, refer to the AArch64 Procedure Call Standard.
 
 -type aarch64_register() ::
     r0
