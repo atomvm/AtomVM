@@ -1080,6 +1080,7 @@ static void ipow(int base, int exp, intn_digit_t *out)
 int intn_parse(
     const char buf[], size_t buf_len, int base, intn_digit_t *out, intn_integer_sign_t *out_sign)
 {
+    // maximum number of digits for every chunk that is parsed using int64_parse_ascii_buf
     static const uint8_t base_max_digits[] = { 63, 40, 31, 27, 24, 22, 21, 20, 19, 18, 17, 17, 16,
         16, 15, 15, 15, 15, 14, 14, 14, 14, 13, 13, 13, 13,
         13, 13, 13, 12, 12, 12, 12, 12, 12 };
@@ -1121,14 +1122,25 @@ int intn_parse(
             // TODO: check overflows
             intn_mulmnu(out, out_len, mult, 2, new_out);
             new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
+            if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
+                assert(out_len <= INTN_MAX_RES_LEN);
+                // we are above the allowed 256 bits, so it is going to be overflow
+                // if still have some room in our buffer, so we are safe
+                return -1;
+            }
         }
 
         intn_integer_sign_t ignored_sign;
         intn_digit_t parsed_as_intn[2];
         int64_to_intn_2(parsed_chunk, parsed_as_intn, &ignored_sign);
 
-        // TODO: check overflows
         out_len = intn_addmnu(new_out, new_out_len, parsed_as_intn, 2, out);
+        if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
+            assert(out_len <= INTN_MAX_RES_LEN);
+            // we are above the allowed 256 bits, so it is going to be overflow
+            // if still have some room in our buffer, so we are safe
+            return -1;
+        }
 
         pos += parsed_digits;
         buf_to_int64_opts = BufToInt64RejectSign;
