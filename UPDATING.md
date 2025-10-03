@@ -13,6 +13,9 @@ port socket driver, are also represented by a port and some matching code may ne
 `is_pid/1` to `is_port/1`.
 - Ports and pids can be registered. Function `globalcontext_get_registered_process` result now is
 a term that can be a `port()` or a `pid()`.
+- `bsl` (Bitshift left) now checks for overflows, this shouldn't be a practical issue for existing
+code, since integers were limited to 64 bits, however make sure to bitmask values before left
+bitshifts: e.g. `(16#FFFF band 0xF) bsl 252`.
 
 ## v0.6.4 -> v0.6.5
 

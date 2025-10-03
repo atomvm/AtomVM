@@ -180,7 +180,15 @@ loaded) a fixed size table.  Management of the global atom table is outside of t
 
 ### Integers
 
-An integer is represented as a single word, with the low-order 4 bits having the value `0xF` (`1111b`).  The high order word-size-6 bits are used to represent the integer value:
+AtomVM supports integers up to 256 bits with an additional sign bit stored outside the numeric
+payload. The representation strategy depends on the integer's size and uses canonicalization to
+ensure each value has exactly one representation.
+
+#### Immediate Integers
+
+Small integers are represented as a single word, with the low-order 4 bits having the value `0xF`
+(`1111b`).  The high order word-size-4 bits are used to represent the integer value using two's
+complement:
 
                                 |< 4>|
     +===========================+====+
@@ -189,11 +197,13 @@ An integer is represented as a single word, with the low-order 4 bits having the
     |                                |
     |<---------- word-size --------->|
 
-The magnitude of an integer is therefore limited to `2^{word-size - 4}` in an AtomVM program (e.g., on a 32-bit platform, `+- 134,217,728`).
+On 32-bit systems, immediate integers can represent signed values in the range `[-2^27, 2^27-1]` (28
+bits + 4-bit tag = 32 bits).
+On 64-bit systems, immediate integers can represent signed values in the range `[-2^59, 2^59-1]` (60
+bits + 4-bit tag = 64 bits).
 
-```{attention}
-Arbitrarily large integers (bignums) are not currently supported in AtomVM.
-```
+For integers outside these ranges, AtomVM uses boxed representations (see Boxed Integers section
+below).
 
 ### nil
 
@@ -242,6 +252,88 @@ A boxed term pointer is a single-word term that contains the address of the refe
 
 Because terms (and hence the heap) are always aligned on boundaries that are divisible by the word size, the low-order 2 bits of a term address are always 0.  Consequently, the high-order word-size - 2 (`1,073,741,824`, on a 32-bit platform) are sufficient to address any term address in the AtomVM address space, for 32-bit and greater machine architectures.
 
+### Boxed Integers
+
+AtomVM uses boxed integers for values that exceed the immediate integer range. There are two types
+of boxed integer representations: native integers (using int32_t or int64_t) and big integers (using
+arrays of uint32_t digits).
+
+#### Native Boxed Integers
+
+For integers that don't fit in immediate representation but can be stored in native C integer
+types, AtomVM uses boxed integers with two's complement encoding and a redundant sign bit in the
+header.
+
+**On 32-bit systems:**
+- Integers in range `[-2^31, -2^27-1] ∪ [2^27, 2^31-1]` are stored as boxed int32_t (single word
+payload)
+- Integers in range `[-2^63, -2^31-1] ∪ [2^31, 2^63-1]` are stored as boxed int64_t (two word
+payload)
+
+**On 64-bit systems:**
+- Integers in range `[-2^63, -2^59-1] ∪ [2^59, 2^63-1]` are stored as boxed int64_t (single word
+payload)
+
+The boxed header uses:
+- `0x8` (`001000b`) for positive integers (TERM_BOXED_POSITIVE_INTEGER)
+- `0xC` (`001100b`) for negative integers (TERM_BOXED_NEGATIVE_INTEGER)
+
+                              |< 6  >|
+    +=========================+======+
+    |    boxed-size (1 or 2)  |001X00| boxed[0] (X=0 for positive, X=1 for negative)
+    +-------------------------+------+
+    |     native integer value       | boxed[1] (int32_t or int64_t low word)
+    +--------------------------------+
+    |     high word (if int64_t on   | boxed[2] (32-bit systems only)
+    |         32-bit system)         |
+    +================================+
+    |                                |
+    |<---------- word-size --------->|
+
+#### Big Integers
+
+For integers beyond the native int64_t range (up to ±(2^256 - 1)), AtomVM uses an array of uint32_t
+digits representing the magnitude, with the sign stored as a flag in the boxed header. These big
+integers do NOT use two's complement encoding.
+
+The digits array:
+- Stores the absolute value of the integer
+- Uses little-endian ordering (digit[0] is least significant)
+- Omits leading zero digits to save space
+- Includes a dummy zero digit when necessary to avoid ambiguity with native boxed integers
+
+                              |< 6  >|
+    +=========================+======+
+    |    boxed-size (n)       |001X00| boxed[0] (X=0 for positive, X=1 for negative)
+    +-------------------------+------+
+    |         digit[0] (lsb)         | boxed[1] (uint32_t)
+    +--------------------------------+
+    |         digit[1]               | boxed[2] (uint32_t)
+    +--------------------------------+
+    |               ...              | ...
+    +--------------------------------+
+    |         digit[k-1] (msb)       | boxed[k] (uint32_t)
+    +--------------------------------+
+    |     0 (dummy digit if needed)  | boxed[n] (uint32_t)
+    +================================+
+    |                                |
+    |<---------- word-size --------->|
+
+**Canonicalization Rules:**
+- AtomVM ensures that integers are always stored in the most compact representation
+- Operations that produce results fitting in a smaller representation automatically convert to that
+representation
+- A dummy digit mechanism ensures that the smallest big integer always has more words than the
+largest native boxed integer. This is required when storing values such as `UINT64_MAX`
+(`0xFFFFFFFFFFFFFFFF`), that would require only 2 digits, but boxed-size field must allow to
+distinguish it from native boxed integers (such as `int64_t`)
+
+**Examples:**
+- The value 3 is always stored as an immediate integer (never as a boxed integer)
+- On a 64-bit system, 2^60 would be stored as a boxed int64_t, not as a big integer
+- The value 2^100 would be stored as a big integer with 4 uint32_t digits (plus potentially a dummy
+digit)
+
 ### References
 
 A reference (e.g., created via [`erlang:make_ref/0`](./apidocs/erlang/estdlib/erlang.md#make_ref0)) stores a 64-bit incrementing counter value (a "ref tick").  On 64 bit machines, a Reference takes up two words -- the boxed header and the 64-bit value, which of course can fit in a single word.  On 32-bit platforms, the high-order 28 bits are stored in `boxed[1]`, and the low-order 32 bits are stored in `boxed[2]`:
@@ -278,7 +370,7 @@ Tuples are represented as boxed terms containing a boxed header (`boxed[0]`), a 
 
 ### Maps
 
-Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x3C` (`111100b`), followed by:
+Maps are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x2C` (`101100b`), followed by:
 
 * a term pointer to a tuple of arity `n` containing the keys in the map;
 * a sequence of `n`-many words, containing the values of the map corresponding (in order) to the keys in the reference tuple.
@@ -300,7 +392,7 @@ The keys and values are single word terms, i.e., either immediates or pointers t
     |                       ...
     |       |                         |< 6  >|
     |       +=========================+======+
-    |       |    boxed-size (n)       |111100| boxed[0]
+    |       |    boxed-size (n)       |101100| boxed[0]
     |       +-------------------------+------+
     +-----------------<   keys               | boxed[1]
             +--------------------------------+
@@ -446,7 +538,7 @@ to `nil`.
     some
     binary                            |< 6  >|
     ^       +=========================+======+
-    |       |    boxed-size (5)       |100100| boxed[0]
+    |       |    boxed-size (5)       |000100| boxed[0]
     |       +-------------------------+------+
     |       |      match-or-binary-ref       | boxed[1]
     |       +--------------------------------+
@@ -464,7 +556,7 @@ A reference to a reference-counted binary counts as a reference, in which case t
 
 #### Sub-Binaries
 
-Sub-binaries are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x28` (`001000b`)
+Sub-binaries are represented as boxed terms containing a boxed header (`boxed[0]`), a type tag of `0x28` (`101000b`)
 
 A sub-binary is a boxed term that points to a reference-counted binary, recording the offset into the binary and the length (in bytes) of the sub-binary.  An invariant for this term is that the `offset + length` is always less than or equal to the length of the referenced binary.
 
@@ -472,7 +564,7 @@ A sub-binary is a boxed term that points to a reference-counted binary, recordin
         refc
         binary                            |< 6  >|
         ^       +=========================+======+
-        |       |    boxed-size (3)       |001000| boxed[0]
+        |       |    boxed-size (3)       |101000| boxed[0]
         |       +-------------------------+------+
         |       |              len               | boxed[1]
         |       +--------------------------------+
@@ -629,6 +721,8 @@ A given process heap and stack occupy a single region of malloc'd memory, and it
     |       ...       |
 
 Terms stored in the stack, registers, and process dictionary are either single-word terms (like atoms or pids) or term references, i.e., single-word terms that point to boxed terms or list cells in the heap.  These terms constitute the "roots" of the memory graph of all "reachable" terms in the process.
+
+Boxed integers, including both native boxed integers and big integers, are simple blob structures that are copied as-is during garbage collection. They do not contain any pointers or addresses that need to be updated during the garbage collection process.
 
 ### When does garbage collection happen?
 
