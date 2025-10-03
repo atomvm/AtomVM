@@ -55,6 +55,7 @@ start() ->
         test_abs() +
         test_neg() +
         parse_bigint() +
+        test_integer_to_list() +
         test_cmp() +
         conv_to_from_float() +
         external_term_decode() +
@@ -841,6 +842,31 @@ parse_bigint() ->
             35
         )
     end),
+
+    0.
+
+test_integer_to_list() ->
+    IntMaxBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    IntMax = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(IntMaxBin), 16)),
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935" = ?MODULE:id(
+        erlang:integer_to_list(IntMax)
+    ),
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" = ?MODULE:id(
+        erlang:integer_to_list(IntMax, 16)
+    ),
+
+    IntMinBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    IntMin = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(IntMinBin), 16)),
+    "-115792089237316195423570985008687907853269984665640564039457584007913129639935" = ?MODULE:id(
+        erlang:integer_to_list(IntMin)
+    ),
+    "-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" = ?MODULE:id(
+        erlang:integer_to_list(IntMin, 16)
+    ),
+
+    RandBin = <<"313584127083402947713449759974837293576">>,
+    RandInt = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(RandBin))),
+    "EBEA1B25A9CBB9DBC60F1D1FF7C19208" = ?MODULE:id(erlang:integer_to_list(RandInt, 16)),
 
     0.
 
