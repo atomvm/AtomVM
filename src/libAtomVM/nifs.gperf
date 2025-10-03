@@ -177,6 +177,7 @@ code:load_binary/3, &code_load_binary_nif
 code:all_available/0, &code_all_available_nif
 code:all_loaded/0, &code_all_loaded_nif
 code:ensure_loaded/1, &code_ensure_loaded_nif
+code:get_object_code/1, &code_get_object_code_nif
 code_server:is_loaded/1, &code_server_is_loaded_nif
 code_server:resume/2, &code_server_resume_nif
 code_server:code_chunk/1, IF_HAVE_JIT(&code_server_code_chunk_nif)
