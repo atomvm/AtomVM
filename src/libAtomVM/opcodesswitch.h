@@ -66,13 +66,13 @@ extern "C" {
 #define SET_ERROR(error_type_atom)                                      \
     x_regs[0] = ERROR_ATOM;                                             \
     x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, native_pc - mod->native_code, ERROR_ATOM);
+    x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
 #else
 #define SET_ERROR(error_type_atom)                                      \
     x_regs[0] = ERROR_ATOM;                                             \
     x_regs[1] = error_type_atom;                                        \
     if (mod->native_code) {                                             \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, native_pc - mod->native_code, ERROR_ATOM); \
+        x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM); \
     } else {                                                            \
         x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
     }
@@ -1100,7 +1100,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #define PROCESS_SIGNAL_MESSAGES() \
     {                                                                                           \
         MailboxMessage *signal_message = mailbox_process_outer_list(&ctx->mailbox);             \
-        void *next_label = NULL;                                                                \
+        bool handle_error = false;                                                              \
         bool reprocess_outer = false;                                                           \
         while (signal_message) {                                                                \
             switch (signal_message->type) {                                                     \
@@ -1113,7 +1113,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                 case GCSignal: {                                                                \
                     if (UNLIKELY(memory_ensure_free_opt(ctx, 0, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) { \
                         SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
-                        next_label = &&handle_error;                                            \
+                        handle_error = true;                                                    \
                     }                                                                           \
                     break;                                                                      \
                 }                                                                               \
@@ -1128,7 +1128,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
                     if (UNLIKELY(!context_process_signal_trap_answer(ctx, trap_answer))) {      \
                         SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
-                        next_label = &&handle_error;                                            \
+                        handle_error = true;                                                    \
                     }                                                                           \
                     break;                                                                      \
                 }                                                                               \
@@ -1136,7 +1136,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                     struct ImmediateSignal *trap_exception                                      \
                         = CONTAINER_OF(signal_message, struct ImmediateSignal, base);           \
                     SET_ERROR(trap_exception->immediate);                                       \
-                    next_label = &&handle_error;                                                \
+                    handle_error = true;                                                        \
                     break;                                                                      \
                 }                                                                               \
                 case FlushMonitorSignal:                                                        \
@@ -1152,7 +1152,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                         = CONTAINER_OF(signal_message, struct TermSignal, base);                \
                     if (UNLIKELY(!context_process_signal_set_group_leader(ctx, group_leader))) { \
                         SET_ERROR(OUT_OF_MEMORY_ATOM);                                          \
-                        next_label = &&handle_error;                                            \
+                        handle_error = true;                                                    \
                     }                                                                           \
                     break;                                                                      \
                 }                                                                               \
@@ -1231,8 +1231,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         if (context_get_flags(ctx, Killed)) {                                                   \
             goto terminate_context;                                                             \
         }                                                                                       \
-        if (next_label) {                                                                       \
-            goto *next_label;                                                                   \
+        if (handle_error) {                                                                     \
+            goto handle_error;                                                                  \
         }                                                                                       \
         if (context_get_flags(ctx, Trap)) {                                                     \
             SCHEDULE_WAIT_ANY(mod);                                                             \
@@ -1920,26 +1920,17 @@ schedule_in:
     }
 #endif
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-    // Handle traps.
-    if (ctx->restore_trap_handler) {
-#if AVM_NO_JIT
-        goto *ctx->restore_trap_handler;
-#elif AVM_NO_EMU
-        native_pc = ctx->restore_trap_handler;
-#else
-        if (mod->native_code == NULL) {
-            goto *ctx->restore_trap_handler;
-        } else {
-            native_pc = ctx->restore_trap_handler;
-        }
-#endif
+    // Handle waiting timeout
+#ifndef AVM_NO_EMU
+    if (ctx->waiting_with_timeout) {
+        goto wait_timeout_trap_handler;
     } else {
+#endif
         // Handle signals
         PROCESS_SIGNAL_MESSAGES();
+#ifndef AVM_NO_EMU
     }
-#pragma GCC diagnostic pop
+#endif
 #endif
 
 #ifdef IMPL_CODE_LOADER
@@ -2728,10 +2719,7 @@ loop:
                     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
                         scheduler_cancel_timeout(ctx);
                     }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
                     PROCESS_SIGNAL_MESSAGES();
-#pragma GCC diagnostic pop
                     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
                     // Cannot GC now as remove_message is GC neutral
                 #endif
@@ -2759,10 +2747,7 @@ loop:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     term ret;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
                     PROCESS_SIGNAL_MESSAGES();
-#pragma GCC diagnostic pop
                     if (mailbox_peek(ctx, &ret)) {
                         TRACE_RECEIVE(ctx, ret);
 
@@ -2782,10 +2767,7 @@ loop:
                 USED_BY_TRACE(label);
 
 #ifdef IMPL_EXECUTE_LOOP
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
                 PROCESS_SIGNAL_MESSAGES();
-#pragma GCC diagnostic pop
                 mailbox_next(&ctx->mailbox);
                 pc = mod->labels[label];
 #endif
@@ -2830,10 +2812,7 @@ loop:
                     }
                     TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
                     PROCESS_SIGNAL_MESSAGES();
-#pragma GCC diagnostic pop
                     int needs_to_wait = 0;
                     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired) == 0) {
                         if (timeout != INFINITY_ATOM) {
@@ -2847,10 +2826,7 @@ loop:
                     }
 
                     if (needs_to_wait) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
-                        ctx->restore_trap_handler = &&wait_timeout_trap_handler;
-#pragma GCC diagnostic pop
+                        ctx->waiting_with_timeout = true;
                         SCHEDULE_WAIT(mod, saved_pc);
                     } else {
                         JUMP_TO_ADDRESS(mod->labels[label]);
@@ -2877,12 +2853,9 @@ wait_timeout_trap_handler:
                 int timeout;
                 DECODE_COMPACT_TERM(timeout, pc)
                 TRACE("wait_timeout_trap_handler, label: %i\n", label);
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
                 PROCESS_SIGNAL_MESSAGES();
-#pragma GCC diagnostic pop
                 if (context_get_flags(ctx, WaitingTimeoutExpired)) {
-                    ctx->restore_trap_handler = NULL;
+                    ctx->waiting_with_timeout = false;
                 } else {
                     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {
                         // No message is here.
@@ -2890,7 +2863,7 @@ wait_timeout_trap_handler:
                         ctx = scheduler_wait(ctx);
                         goto schedule_in;
                     } else {
-                        ctx->restore_trap_handler = NULL;
+                        ctx->waiting_with_timeout = false;
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     }
                 }

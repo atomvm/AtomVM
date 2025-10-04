@@ -139,6 +139,9 @@ struct Context
     unsigned int has_max_heap_size : 1;
 
     bool trap_exit : 1;
+#ifndef AVM_NO_EMU
+    bool waiting_with_timeout : 1;
+#endif
 #ifdef ENABLE_ADVANCED_TRACE
     unsigned int trace_calls : 1;
     unsigned int trace_call_args : 1;
