@@ -77,6 +77,7 @@ asm(Arch, Bin, Str) ->
 find_binutils(Arch) ->
     ArchStr = atom_to_list(Arch),
     BinutilsList = [
+        {ArchStr ++ "-esp-elf-as", ArchStr ++ "-esp-elf-objdump"},
         {ArchStr ++ "-elf-as", ArchStr ++ "-elf-objdump"},
         {ArchStr ++ "-none-eabi-as", ArchStr ++ "-none-eabi-objdump"},
         {ArchStr ++ "-linux-gnu-as", ArchStr ++ "-linux-gnu-objdump"}
@@ -104,6 +105,8 @@ get_asm_header(arm) ->
 get_asm_header(aarch64) ->
     ".text\n";
 get_asm_header(x86_64) ->
+    ".text\n";
+get_asm_header(riscv32) ->
     ".text\n".
 
 %% Get architecture-specific assembler flags
@@ -113,7 +116,9 @@ get_as_flags(arm) ->
 get_as_flags(aarch64) ->
     "";
 get_as_flags(x86_64) ->
-    "--64".
+    "--64";
+get_as_flags(riscv32) ->
+    "-march=rv32ima".
 
 %% Parse objdump output lines and extract binary data
 -spec asm_lines([binary()], binary(), atom()) -> binary().
