@@ -321,6 +321,36 @@ jobs:
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "aarch64"
 
+        # armhf build
+        - os: "ubuntu-24.04"
+          cc: "arm-linux-gnueabihf-gcc"
+          cxx: "arm-linux-gnueabihf-g++"
+          # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
+          # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
+          arch: "armhf"
+          library-arch: arm-linux-gnueabihf
+
+        # s390x build
+        - os: "ubuntu-24.04"
+          cc: "s390x-linux-gnu-gcc"
+          cxx: "s390x-linux-gnu-g++"
+          # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
+          # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/s390x_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-s390x libc6-dbg:s390x zlib1g-dev:s390x libmbedtls-dev:s390x qemu-user qemu-user-binfmt binfmt-support"
+          arch: "s390x"
+          library-arch: s390x-linux-gnu
+
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
@@ -339,6 +369,32 @@ jobs:
     - name: "Add i386 architecture"
       if: matrix.arch == 'i386'
       run: sudo dpkg --add-architecture i386
+
+    - name: "Setup cross compilation architecture"
+      if: matrix.library-arch != ''
+      run: |
+        sudo dpkg --add-architecture ${{ matrix.arch }}
+        cat > ${RUNNER_TEMP}/cross-compile-sources.list <<EOF
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble main restricted
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble-updates main restricted
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble universe
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble-updates universe
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble multiverse
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble-updates multiverse
+        deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble-backports main restricted universe multiverse
+        EOF
+        sudo mv ${RUNNER_TEMP}/cross-compile-sources.list /etc/apt/sources.list.d/
+
+        sudo sed -i '/Types: deb/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+
+        cat > ${RUNNER_TEMP}/${{ matrix.arch }}_toolchain.cmake <<EOF
+        set(CMAKE_SYSTEM_NAME Linux)
+        set(CMAKE_C_LIBRARY_ARCHITECTURE ${{ matrix.library-arch }})
+
+        set(ZLIB_LIBRARY /usr/lib/${{ matrix.library-arch }}/libz.so)
+        set(MBEDTLS_ROOT_DIR /usr)
+        set(MBEDTLS_LIBRARIES_DIR /usr/lib/${{ matrix.library-arch }})
+        EOF
 
     - name: "APT update"
       run: sudo apt update -y
@@ -407,49 +463,89 @@ jobs:
 
     - name: "Build: run make"
       working-directory: build
-      run: make
+      run: make -j3
 
     - name: "Build: run dialyzer"
       working-directory: build
       run: make dialyzer
 
     # Test
-    - name: "Test: test-erlang"
+    - name: "Test: test-erlang with valgrind"
+      if: matrix.library-arch == ''
       timeout-minutes: 30
       working-directory: build
       run: |
         ulimit -c unlimited
         valgrind --error-exitcode=1 ./tests/test-erlang -s prime_smp
+
+    - name: "Test: test-erlang"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ulimit -c unlimited
         ./tests/test-erlang -s prime_smp
+
+    - name: "Test: test-enif with valgrind"
+      if: matrix.library-arch == ''
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-enif
 
     - name: "Test: test-enif"
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./tests/test-enif
         ./tests/test-enif
+
+    - name: "Test: test-heap with valgrind"
+      if: matrix.library-arch == ''
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-heap
 
     - name: "Test: test-heap"
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./tests/test-heap
         ./tests/test-heap
+
+    - name: "Test: test-mailbox with valgrind"
+      if: matrix.library-arch == ''
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-mailbox
 
     - name: "Test: test-mailbox"
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./tests/test-mailbox
         ./tests/test-mailbox
+
+    - name: "Test: test-structs with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-structs
 
     - name: "Test: test-structs"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./tests/test-structs
         ./tests/test-structs
+
+    - name: "Test: test_etest.avm with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_etest.avm"
       timeout-minutes: 5
@@ -457,40 +553,80 @@ jobs:
       run: |
         ulimit -c unlimited
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
-        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
-    - name: "Test: test_estdlib.avm"
+    - name: "Test: test_estdlib.avm with valgrind"
+      if: matrix.library-arch == ''
       timeout-minutes: 30
       working-directory: build
       run: |
         ulimit -c unlimited
         valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+
+    - name: "Test: test_estdlib.avm"
+      timeout-minutes: 20
+      working-directory: build
+      run: |
+        ulimit -c unlimited
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
+
+    - name: "Test: test_eavmlib.avm with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_eavmlib.avm"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
-    - name: "Test: test_jit.avm"
+    - name: "Test: test_jit.avm with valgrind"
+      if: matrix.library-arch == '' && matrix.otp != '21' && matrix.otp != '22'
       timeout-minutes: 30
-      if: matrix.otp != '21' && matrix.otp != '22'
       working-directory: build
       run: |
         ulimit -c unlimited
         valgrind --error-exitcode=1 ./src/AtomVM tests/libs/jit/test_jit.avm
+
+    - name: "Test: test_jit.avm"
+      timeout-minutes: 20
+      if: matrix.otp != '21' && matrix.otp != '22'
+      working-directory: build
+      run: |
+        ulimit -c unlimited
         ./src/AtomVM tests/libs/jit/test_jit.avm
+
+    - name: "Test: test_alisp.avm with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 20
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
 
     - name: "Test: test_alisp.avm"
       timeout-minutes: 10
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
         ./src/AtomVM ./tests/libs/alisp/test_alisp.avm
+
+    - name: "Test: Tests.avm (Elixir) with valgrind"
+      if: matrix.library-arch == ''
+      timeout-minutes: 20
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        if command -v elixirc >/dev/null 2>&1 && command -v elixir >/dev/null 2>&1
+        then
+          valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
+        else
+          echo "Elixir not installed, skipping Elixir tests"
+        fi
 
     - name: "Test: Tests.avm (Elixir)"
       timeout-minutes: 10
@@ -499,7 +635,6 @@ jobs:
         ulimit -c unlimited
         if command -v elixirc >/dev/null 2>&1 && command -v elixir >/dev/null 2>&1
         then
-          valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
           ./src/AtomVM ./tests/libs/exavmlib/Tests.avm
         else
           echo "Elixir not installed, skipping Elixir tests"

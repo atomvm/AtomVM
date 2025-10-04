@@ -53,9 +53,15 @@ macro(pack_archive avm_name)
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
+    # Create emu target for source beams only
+    add_custom_target(
+        ${avm_name}_emu
+        DEPENDS ${avm_name}.avm
+    )
+    # Create main target (will be updated by pack_precompiled_archive if needed)
     add_custom_target(
         ${avm_name} ALL
-        DEPENDS ${avm_name}.avm
+        DEPENDS ${avm_name}_emu
     )
 endmacro()
 
@@ -110,6 +116,9 @@ macro(pack_precompiled_archive avm_name)
                 ${avm_name}_${jit_target_arch} ALL
                 DEPENDS ${avm_name}-${jit_target_arch}.avm
             )
+            # Ensure source beams are built before precompilation
+            add_dependencies(${avm_name}_${jit_target_arch} ${avm_name}_emu)
+            # Make main target depend on precompiled targets
             add_dependencies(${avm_name} ${avm_name}_${jit_target_arch})
         endforeach()
     endif()
