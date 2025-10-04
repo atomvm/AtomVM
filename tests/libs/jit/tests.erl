@@ -27,6 +27,8 @@
 start() ->
     etest:test([
         jit_tests,
+        jit_aarch64_tests,
+        jit_aarch64_asm_tests,
         jit_x86_64_tests,
         jit_x86_64_asm_tests
     ]).

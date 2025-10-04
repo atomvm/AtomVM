@@ -22,17 +22,10 @@
 
 -export([start/0]).
 
--ifdef(AVM_DISABLE_JIT).
 -include("code_load/code_load_pack_data.hrl").
 
 load_pack_data() ->
     ?CODE_LOAD_PACK_DATA.
--else.
--include("code_load/code_load_pack_data_x86_64.hrl").
-
-load_pack_data() ->
-    ?CODE_LOAD_PACK_DATA_x86_64.
--endif.
 
 start() ->
     Bin = load_pack_data(),

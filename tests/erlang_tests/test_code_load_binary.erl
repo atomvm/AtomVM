@@ -22,17 +22,10 @@
 
 -export([start/0]).
 
--ifdef(AVM_DISABLE_JIT).
 -include("code_load/export_test_module_data.hrl").
 
 export_test_module_data() ->
     ?EXPORT_TEST_MODULE_DATA.
--else.
--include("code_load/export_test_module_data_x86_64.hrl").
-
-export_test_module_data() ->
-    ?EXPORT_TEST_MODULE_DATA_x86_64.
--endif.
 
 start() ->
     Bin = export_test_module_data(),

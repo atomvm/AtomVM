@@ -26,6 +26,8 @@ set(ERLANG_MODULES
     tests
     jit_tests
     jit_tests_common
+    jit_aarch64_tests
+    jit_aarch64_asm_tests
     jit_x86_64_tests
     jit_x86_64_asm_tests
 )

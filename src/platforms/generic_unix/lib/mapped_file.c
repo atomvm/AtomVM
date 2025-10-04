@@ -22,6 +22,7 @@
 
 #include "utils.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,9 +51,18 @@ MappedFile *mapped_file_open_beam(const char *file_name)
     fstat(mf->fd, &file_stats);
     mf->size = file_stats.st_size;
 
-    mf->mapped = mmap(NULL, mf->size, PROT_READ | PROT_EXEC, MAP_SHARED, mf->fd, 0);
-    if (IS_NULL_PTR(mf->mapped)) {
-        fprintf(stderr, "Cannot mmap %s\n", file_name);
+    int prot;
+#ifdef AVM_NO_JIT
+    prot = PROT_READ;
+#elif defined(__APPLE__) && defined(__arm64__)
+    prot = PROT_READ;
+#else
+    prot = PROT_READ | PROT_EXEC;
+#endif
+
+    mf->mapped = mmap(NULL, mf->size, prot, MAP_SHARED, mf->fd, 0);
+    if (UNLIKELY(mf->mapped == MAP_FAILED)) {
+        fprintf(stderr, "Cannot mmap %s -- errno=%d\n", file_name, errno);
         close(mf->fd);
         free(mf);
         return NULL;
