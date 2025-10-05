@@ -25,6 +25,7 @@ set(AVM_SYS_COMPONENT_SRCS
     "sys.c"
     "platform_nifs.c"
     "platform_defaultatoms.c"
+    "jit_stream_flash.c"
     "../../../../libAtomVM/inet.c"
     "../../../../libAtomVM/otp_crypto.c"
     "../../../../libAtomVM/otp_net.c"

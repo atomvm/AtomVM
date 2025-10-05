@@ -97,6 +97,20 @@ _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->rema
 
 _Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in jit/src/jit_riscv32.erl");
+
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_riscv32.erl");
+
+_Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
+
 #else
 #error Unknown jit target
 #endif
@@ -144,7 +158,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 static void jit_trim_live_regs(Context *ctx, uint32_t live)
 {
-    TRACE("jit_trim_live_regs: ctx->process_id = %d, live = %d\n", ctx->process_id, live);
+    TRACE("jit_trim_live_regs: ctx->process_id = %" PRId32 ", live = %" PRIu32 "\n", ctx->process_id, live);
     if (UNLIKELY(!list_is_empty(&ctx->extended_x_regs))) {
         destroy_extended_registers(ctx, live);
     }
@@ -184,8 +198,8 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
 
 static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 {
-    TRACE("jit_terminate_context: ctx->process_id = %d\n", ctx->process_id);
-    TRACE("-- Code execution finished for %i--\n", ctx->process_id);
+    TRACE("jit_terminate_context: ctx->process_id = %" PRId32 "\n", ctx->process_id);
+    TRACE("-- Code execution finished for %" PRId32 "--\n", ctx->process_id);
     GlobalContext *global = ctx->global;
     if (ctx->leader) {
         scheduler_stop_all(global);
@@ -197,7 +211,7 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
-    TRACE("jit_terminate_context: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
+    TRACE("jit_terminate_context: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     if (offset || term_is_invalid_term(ctx->x[2])) {
         ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
     }
@@ -264,14 +278,14 @@ static void set_error(Context *ctx, JITState *jit_state, int offset, term error_
 
 static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, term error_type_atom)
 {
-    TRACE("jit_raise_error: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
+    TRACE("jit_raise_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     set_error(ctx, jit_state, offset, error_type_atom);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
 static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1)
 {
-    TRACE("jit_raise_error_tuple: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
+    TRACE("jit_raise_error_tuple: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     // We can gc as we are raising
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         set_error(ctx, jit_state, offset, OUT_OF_MEMORY_ATOM);
@@ -288,7 +302,7 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
 
 static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
-    TRACE("jit_raise: ctx->process_id = %d, offset = %d\n", ctx->process_id, offset);
+    TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     ctx->x[0] = stacktrace_exception_class(stacktrace);
     ctx->x[1] = exc_value;
     ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, stacktrace);
@@ -297,7 +311,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
 
 static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 {
-    TRACE("jit_schedule_next_cp: ctx->process_id = %d\n", ctx->process_id);
+    TRACE("jit_schedule_next_cp: ctx->process_id = %" PRId32 "\n", ctx->process_id);
     ctx->saved_function_ptr = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -306,7 +320,7 @@ static Context *jit_schedule_next_cp(Context *ctx, JITState *jit_state)
 
 static Context *jit_schedule_wait_cp(Context *ctx, JITState *jit_state)
 {
-    TRACE("jit_schedule_wait_cp: ctx->process_id = %d\n", ctx->process_id);
+    TRACE("jit_schedule_wait_cp: ctx->process_id = %" PRId32 "\n", ctx->process_id);
     ctx->saved_function_ptr = jit_state->continuation;
     ctx->saved_module = jit_state->module;
     jit_state->remaining_reductions = 0;
@@ -444,7 +458,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                     return_value = bif->bif2_ptr(ctx, 0, ctx->x[0], ctx->x[1]);
                     break;
                 default:
-                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", (uint32_t) arity);
                     AVM_ABORT();
             }
             PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
@@ -474,7 +488,7 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                     return_value = gcbif->gcbif2_ptr(ctx, 0, 0, ctx->x[0], ctx->x[1]);
                     break;
                 default:
-                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", (uint32_t) arity);
                     AVM_ABORT();
             }
             PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
@@ -497,7 +511,7 @@ static term jit_module_get_atom_term_by_id(JITState *jit_state, int atom_index)
 
 static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need, uint32_t heap_need, uint32_t live)
 {
-    TRACE("jit_allocate: stack_need=%u heap_need=%u live=%u\n", stack_need, heap_need, live);
+    TRACE("jit_allocate: ENTRY ctx=%p jit_state=%p stack_need=%" PRIu32 " heap_need=%" PRIu32 " live=%" PRIu32 "\n", (void*)ctx, (void*)jit_state, stack_need, heap_need, live);
     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need > ctx->e - (stack_need + 1)))) {
         TRIM_LIVE_REGS(live);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -512,7 +526,7 @@ static bool jit_allocate(Context *ctx, JITState *jit_state, uint32_t stack_need,
 
 static BifImpl0 jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 {
-    TRACE("jit_get_imported_bif: bif=%u\n", bif);
+    TRACE("jit_get_imported_bif: bif=%" PRIu32 "\n", bif);
     const struct ExportedFunction *exported_bif = jit_state->module->imported_funcs[bif];
     const BifImpl0 result = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
     return result;
@@ -520,7 +534,7 @@ static BifImpl0 jit_get_imported_bif(JITState *jit_state, uint32_t bif)
 
 static bool jit_deallocate(Context *ctx, JITState *jit_state, uint32_t n_words)
 {
-    TRACE("jit_deallocate: n_words=%u\n", n_words);
+    TRACE("jit_deallocate: n_words=%" PRIu32 "\n", n_words);
     ctx->cp = ctx->e[n_words];
     ctx->e += n_words + 1;
     // Hopefully, we only need x[0]
@@ -545,7 +559,7 @@ static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, ter
 
 static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need, uint32_t live_registers)
 {
-    TRACE("jit_test_heap: heap_need=%u live_registers=%u\n", heap_need, live_registers);
+    TRACE("jit_test_heap: heap_need=%" PRIu32 " live_registers=%" PRIu32 "\n", heap_need, live_registers);
     size_t heap_free = context_avail_free_memory(ctx);
     // if we need more heap space than is currently free, then try to GC the needed space
     if (heap_free < heap_need) {
@@ -559,7 +573,7 @@ static bool jit_test_heap(Context *ctx, JITState *jit_state, uint32_t heap_need,
     } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
         TRIM_LIVE_REGS(live_registers);
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
+            TRACE("Unable to ensure free memory.  heap_need=%" PRIu32 "\n", heap_need);
             set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
             return false;
         }
@@ -640,13 +654,13 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
-    TRACE("jit_term_alloc_tuple: size=%u\n", size);
+    TRACE("jit_term_alloc_tuple: size=%" PRIu32 "\n", size);
     return term_alloc_tuple(size, &ctx->heap);
 }
 
 static term jit_term_alloc_fun(Context *ctx, JITState *jit_state, uint32_t fun_index, uint32_t numfree)
 {
-    TRACE("jit_term_alloc_fun: fun_index=%u numfree=%u\n", fun_index, numfree);
+    TRACE("jit_term_alloc_fun: fun_index=%" PRIu32 " numfree=%" PRIu32 "\n", fun_index, numfree);
     size_t size = numfree + BOXED_FUN_SIZE;
     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
@@ -852,7 +866,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 
 static term jit_mailbox_peek(Context *ctx)
 {
-    TRACE("jit_mailbox_peek: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_mailbox_peek: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     term out = term_invalid_term();
     mailbox_peek(ctx, &out);
     return out;
@@ -860,26 +874,26 @@ static term jit_mailbox_peek(Context *ctx)
 
 static void jit_mailbox_remove_message(Context *ctx)
 {
-    TRACE("jit_mailbox_remove_message: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_mailbox_remove_message: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
 }
 
 static void jit_timeout(Context *ctx)
 {
-    TRACE("jit_timeout: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_timeout: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
     mailbox_reset(&ctx->mailbox);
 }
 
 static void jit_mailbox_next(Context *ctx)
 {
-    TRACE("jit_mailbox_next: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_mailbox_next: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     mailbox_next(&ctx->mailbox);
 }
 
 static void jit_cancel_timeout(Context *ctx)
 {
-    TRACE("jit_cancel_timeout: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_cancel_timeout: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
         scheduler_cancel_timeout(ctx);
     }
@@ -887,7 +901,7 @@ static void jit_cancel_timeout(Context *ctx)
 
 static void jit_clear_timeout_flag(Context *ctx)
 {
-    TRACE("jit_clear_timeout_flag: ctx->process_id=%d\n", ctx->process_id);
+    TRACE("jit_clear_timeout_flag: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
 }
 
