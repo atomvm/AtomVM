@@ -96,7 +96,9 @@ Context *context_new(GlobalContext *glb)
 #else
     ctx->saved_function_ptr = NULL;
 #endif
-    ctx->restore_trap_handler = NULL;
+#ifndef AVM_NO_EMU
+    ctx->waiting_with_timeout = false;
+#endif
 
     ctx->leader = 0;
 
