@@ -70,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: ["arm32v5", "arm32v7", "arm64v8"]
+        arch: ["arm32v5", "arm32v7"]
 
         include:
         - arch: "arm32v5"
@@ -98,12 +98,6 @@ jobs:
           # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
           # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
           cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
-          cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-
-        - arch: "arm64v8"
-          platform: "arm64/v8"
-          tag: "bookworm"
-          cflags: "-O2"
           cmake_opts: "-DAVM_WARNINGS_ARE_ERRORS=ON"
 
         # Required for testing big endian archs
