@@ -20,10 +20,30 @@
 
 add_library(esp32_test_modules)
 
+include(ExternalProject)
+if(NOT AVM_DISABLE_JIT)
+set(host_atomvm_jit_target "--target=jit")
+else()
+set(host_atomvm_jit_target "")
+endif()
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
+    BUILD_COMMAND cmake --build . --target=atomvmlib ${host_atomvm_jit_target} --target=PackBEAM
 )
+
+macro(jit_precompile module_name)
+    if(NOT AVM_DISABLE_JIT)
+        add_custom_command(
+            OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
+            COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
+                && erl -pa HostAtomVM-prefix/src/HostAtomVM-build/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+            DEPENDS ${module_name}.beam HostAtomVM
+            COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
+            VERBATIM
+        )
+    endif()
+endmacro()
 
 function(compile_erlang module_name)
     add_custom_command(
@@ -33,6 +53,7 @@ function(compile_erlang module_name)
         COMMENT "Compiling ${module_name}.erl"
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+    jit_precompile(${module_name})
 
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
@@ -55,46 +76,44 @@ compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
 compile_erlang(test_tz)
 
+set(erlang_test_beams
+    test_esp_partition.beam
+    test_file.beam
+    test_wifi_example.beam
+    test_list_to_atom.beam
+    test_list_to_binary.beam
+    test_md5.beam
+    test_crypto.beam
+    test_monotonic_time.beam
+    test_mount.beam
+    test_net.beam
+    test_rtc_slow.beam
+    test_select.beam
+    test_socket.beam
+    test_ssl.beam
+    test_time_and_processes.beam
+    test_twdt.beam
+    test_tz.beam
+)
+
+if(NOT AVM_DISABLE_JIT)
+    set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
+    list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
+    set(erlang_test_beams_to_package ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+    set(erlang_test_beams_depends ${erlang_test_beams} ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+else()
+    set(erlang_test_beams_to_package ${erlang_test_beams})
+    set(erlang_test_beams_depends ${erlang_test_beams})
+endif()
+
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
-        test_esp_partition.beam
-        test_file.beam
-        test_wifi_example.beam
-        test_list_to_atom.beam
-        test_list_to_binary.beam
-        test_md5.beam
-        test_crypto.beam
-        test_monotonic_time.beam
-        test_mount.beam
-        test_net.beam
-        test_rtc_slow.beam
-        test_select.beam
-        test_socket.beam
-        test_ssl.beam
-        test_time_and_processes.beam
-        test_twdt.beam
-        test_tz.beam
+        ${erlang_test_beams_to_package}
     DEPENDS
         HostAtomVM
-        "${CMAKE_CURRENT_BINARY_DIR}/test_esp_partition.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_wifi_example.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_atom.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_binary.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_md5.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_crypto.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_monotonic_time.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_mount.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_net.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_rtc_slow.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_select.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_socket.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_ssl.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_time_and_processes.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_twdt.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_tz.beam"
+        ${erlang_test_beams_depends}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )
