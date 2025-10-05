@@ -1368,10 +1368,21 @@ move_array_element(
 %%-----------------------------------------------------------------------------
 -spec get_array_element(
     State :: state(),
-    Reg :: x86_64_register(),
+    Reg :: x86_64_register() | {free, x86_64_register()},
     Index :: non_neg_integer()
 ) ->
     {state(), x86_64_register()}.
+get_array_element(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State,
+    {free, Reg},
+    Index
+) ->
+    I1 = jit_x86_64_asm:movq({Index * 8, Reg}, Reg),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary>>),
+    {State#state{stream = Stream1}, Reg};
 get_array_element(
     #state{
         stream_module = StreamModule,
