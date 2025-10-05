@@ -58,15 +58,6 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     endif()
 endif()
 
-include(MbedTLS)
-if (MbedTLS_FOUND)
-    target_link_libraries(test-erlang PRIVATE MbedTLS::mbedtls)
-    target_link_libraries(test-enif PRIVATE MbedTLS::mbedtls)
-    target_link_libraries(test-heap PRIVATE MbedTLS::mbedtls)
-    target_link_libraries(test-mailbox PRIVATE MbedTLS::mbedtls)
-    target_link_libraries(test-structs PRIVATE MbedTLS::mbedtls)
-endif()
-
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
@@ -90,11 +81,11 @@ target_include_directories(test-enif PRIVATE ../src/libAtomVM)
 target_include_directories(test-heap PRIVATE ../src/libAtomVM)
 target_include_directories(test-mailbox PRIVATE ../src/libAtomVM)
 target_include_directories(test-structs PRIVATE ../src/libAtomVM)
-target_link_libraries(test-erlang PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-target_link_libraries(test-enif PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-target_link_libraries(test-heap PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-target_link_libraries(test-mailbox PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
-target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(test-erlang PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
+target_link_libraries(test-enif PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
+target_link_libraries(test-heap PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
+target_link_libraries(test-mailbox PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
+target_link_libraries(test-structs PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 
 # Except for XCode, also compile beams
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")

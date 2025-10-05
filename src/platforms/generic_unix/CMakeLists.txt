@@ -44,13 +44,11 @@ add_subdirectory(lib)
 target_include_directories(AtomVM PUBLIC lib/)
 
 add_subdirectory(../../libAtomVM libAtomVM)
-target_link_libraries(AtomVM PRIVATE libAtomVM)
-
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
-target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
+target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 
 if(AVM_DISABLE_JIT)
 set(precompiled_suffix)

@@ -49,10 +49,8 @@ set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}
 )
-target_link_libraries(PackBEAM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
-
+target_link_libraries(PackBEAM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX} libAtomVM)
 target_include_directories(PackBEAM PUBLIC ../../src/libAtomVM)
-target_link_libraries(PackBEAM PRIVATE libAtomVM)
 
 if (COVERAGE)
     include(CodeCoverage)

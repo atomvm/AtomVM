@@ -69,7 +69,11 @@ define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} signal "signal.h" PRIV
 define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h" PRIVATE HAVE_SERVBYNAME)
 define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} gethostname "unistd.h" PRIVATE HAVE_GETHOSTNAME)
 
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+# Get include directories and compile definitions from libAtomVM without linking
+target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+    $<TARGET_PROPERTY:libAtomVM,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PRIVATE
+    $<TARGET_PROPERTY:libAtomVM,INTERFACE_COMPILE_DEFINITIONS>)
 include_directories(${CMAKE_SOURCE_DIR}/src/platforms/generic_unix/lib)
 
 include(MbedTLS)
