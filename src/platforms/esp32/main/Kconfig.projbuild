@@ -39,5 +39,11 @@ menu "AtomVM configuration"
          depends on USE_USB_SERIAL
          help
              Enable TinyUSB CDC functionality if USE_USB_SERIAL is enabled.
+
+     config JIT_ENABLED
+         bool "Enable just in time compilation"
+         default n
+         help
+             Enable Just in time compilation, or just execution of precompiled native code
              
 endmenu
