@@ -615,6 +615,20 @@ static inline uint64_t int64_safe_unsigned_abs(int64_t i64)
 }
 
 /**
+ * @brief Check if 64-bit integer value fits within int32_t range
+ *
+ * Tests whether a given int64_t value can be safely represented as
+ * an int32_t without overflow or truncation.
+ *
+ * @param value The 64-bit integer value to check
+ * @return true if value is within [INT32_MIN, INT32_MAX], false otherwise
+ */
+static inline bool int64_is_int32(int64_t value)
+{
+    return ((value >= (int64_t) INT32_MIN) && (value <= (int64_t) INT32_MAX));
+}
+
+/**
  * @brief Perform arithmetic right shift on 32-bit signed integer (\c int32_t)
  *
  * Performs a portable arithmetic right shift that preserves sign extension
