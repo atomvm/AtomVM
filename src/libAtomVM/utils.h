@@ -413,6 +413,20 @@ static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_ne
     return int64_safe_unsigned_abs(i64);
 }
 
+/**
+ * @brief Check if 64-bit integer value fits within int32_t range
+ *
+ * Tests whether a given int64_t value can be safely represented as
+ * an int32_t without overflow or truncation.
+ *
+ * @param value The 64-bit integer value to check
+ * @return true if value is within [INT32_MIN, INT32_MAX], false otherwise
+ */
+static inline bool int64_is_int32(int64_t value)
+{
+    return ((value >= (int64_t) INT32_MIN) && (value <= (int64_t) INT32_MAX));
+}
+
 #if INTPTR_MAX <= INT32_MAX
 #define INTPTR_WRITE_TO_ASCII_BUF_LEN (32 + 1)
 #elif INTPTR_MAX <= INT64_MAX
