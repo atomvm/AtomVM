@@ -321,7 +321,7 @@ jobs:
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "aarch64"
 
-        # armhf build
+        # armhf builds
         - os: "ubuntu-24.04"
           cc: "arm-linux-gnueabihf-gcc"
           cxx: "arm-linux-gnueabihf-g++"
@@ -335,6 +335,21 @@ jobs:
           compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
           arch: "armhf"
           library-arch: arm-linux-gnueabihf
+
+        - os: "ubuntu-24.04"
+          cc: "arm-linux-gnueabihf-gcc"
+          cxx: "arm-linux-gnueabihf-g++"
+          # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
+          # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=armv6m -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
+          arch: "armhf"
+          library-arch: arm-linux-gnueabihf
+          jit_target_arch: "armv6m"
 
         # s390x build
         - os: "ubuntu-24.04"

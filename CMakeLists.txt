@@ -60,7 +60,7 @@ if (NOT AVM_DISABLE_JIT AND NOT DEFINED AVM_JIT_TARGET_ARCH)
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
         set(AVM_JIT_TARGET_ARCH "armv6m")
     else()
-        message(FATAL "JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
+        message(FATAL_ERROR "JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 endif()
 
