@@ -264,6 +264,7 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[]);
 static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
@@ -854,6 +855,11 @@ static const struct Nif code_load_binary_nif = {
 static const struct Nif code_ensure_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
+};
+
+static const struct Nif code_get_object_code_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_get_object_code
 };
 
 static const struct Nif code_server_is_loaded_nif = {
@@ -5996,6 +6002,62 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
         term_put_tuple_element(result, 1, module_atom);
     }
 
+    return result;
+}
+
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term module_atom = argv[0];
+    VALIDATE_VALUE(module_atom, term_is_atom);
+
+    size_t module_name_len;
+    const uint8_t *module_name = atom_table_get_atom_string(
+        ctx->global->atom_table, term_to_atom_index(module_atom), &module_name_len);
+
+    size_t filename_size = module_name_len + strlen(".beam") + 1;
+    char *module_file_name = malloc(filename_size);
+    if (IS_NULL_PTR(module_file_name)) {
+        return ERROR_ATOM;
+    }
+    memcpy(module_file_name, module_name, module_name_len);
+    strcpy(module_file_name + module_name_len, ".beam");
+    // TODO: fix this, make this NIF work like on the BEAM.
+    //
+    // Our NIF returns a valid module also for modules loaded from a binary with code:load_binary/3.
+    //
+    // On the BEAM, it opens a file from the filesystem, regardless if it is a valid .beam module.
+    // So on the BEAM it cannot find on the filesystem the modules loaded from binaries,
+    // and it fails.
+    // Basically, on the BEAM this NIF is more about loading a file from the loader search path.
+    Module *module = globalcontext_get_module(ctx->global, term_to_atom_index(module_atom));
+
+    if (UNLIKELY(!module)) {
+        free(module_file_name);
+        return ERROR_ATOM;
+    }
+    size_t result_size = TUPLE_SIZE(3) + term_binary_heap_size(module->binary_size)
+        + LIST_SIZE(filename_size - 1, 1);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, result_size, 1, &module_atom, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        free(module_file_name);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    // Note: this assumes constness of module->binary and could be use-after-free if we allowed
+    // changing module bitcode at runtime.
+    // TODO: update this code when module unloading will be supported.
+    term binary = term_from_literal_binary(
+        (void *) module->binary, module->binary_size, &ctx->heap, ctx->global);
+    // TODO: this code has to be changed to return the complete path
+    term filename_term
+        = term_from_string((const uint8_t *) module_file_name, filename_size - 1, &ctx->heap);
+    term result = term_alloc_tuple(3, &ctx->heap);
+
+    term_put_tuple_element(result, 0, module_atom);
+    term_put_tuple_element(result, 1, binary);
+    term_put_tuple_element(result, 2, filename_term);
+
+    free(module_file_name);
     return result;
 }
 

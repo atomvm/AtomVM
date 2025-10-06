@@ -565,6 +565,7 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_binary, 24),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_file, 24),
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),
+    TEST_CASE(test_code_get_object_code),
 
     TEST_CASE(test_module_info),
     TEST_CASE(erlang_module_loaded),
