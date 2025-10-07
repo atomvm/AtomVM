@@ -1028,18 +1028,18 @@ static inline term term_from_int(avm_int_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 }
 
-static inline bool term_is_non_neg_integer(term t)
+static inline bool term_is_non_neg_int(term t)
 {
-    if (term_is_integer(t)) {
+    if (term_is_int(t)) {
         avm_int_t v = term_to_int(t);
         return v >= 0;
     }
     return false;
 }
 
-static inline bool term_is_pos_integer(term t)
+static inline bool term_is_pos_int(term t)
 {
-    if (term_is_integer(t)) {
+    if (term_is_int(t)) {
         avm_int_t v = term_to_int(t);
         return v > 0;
     }
@@ -1047,9 +1047,9 @@ static inline bool term_is_pos_integer(term t)
     return false;
 }
 
-static inline bool term_is_neg_integer(term t)
+static inline bool term_is_neg_int(term t)
 {
-    if (term_is_integer(t)) {
+    if (term_is_int(t)) {
         avm_int_t v = term_to_int(t);
         return v < 0;
     }
@@ -1085,17 +1085,17 @@ static inline term_integer_sign_t term_boxed_integer_sign(term t)
 
 static inline bool term_is_any_non_neg_integer(term t)
 {
-    return term_is_non_neg_integer(t) || term_is_pos_boxed_integer(t);
+    return term_is_non_neg_int(t) || term_is_pos_boxed_integer(t);
 }
 
 static inline bool term_is_any_pos_integer(term t)
 {
-    return term_is_pos_integer(t) || term_is_pos_boxed_integer(t);
+    return term_is_pos_int(t) || term_is_pos_boxed_integer(t);
 }
 
 static inline bool term_is_any_neg_integer(term t)
 {
-    return term_is_neg_integer(t) || term_is_neg_boxed_integer(t);
+    return term_is_neg_int(t) || term_is_neg_boxed_integer(t);
 }
 
 static inline avm_int_t term_unbox_int(term boxed_int)

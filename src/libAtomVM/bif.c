@@ -1719,7 +1719,7 @@ static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
 
 term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_integer(arg2))) {
+    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_int(arg2))) {
         size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
         avm_int_t b = term_to_int(arg2);
         if (arg1_size <= BOXED_TERMS_REQUIRED_FOR_INT64) {
@@ -1745,7 +1745,7 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
 
-    } else if (term_is_neg_integer(arg2)) {
+    } else if (term_is_neg_int(arg2)) {
         term abs_arg2 = term_from_int(-term_to_int(arg2));
         return bif_erlang_bsr_2(ctx, fail_label, live, arg1, abs_arg2);
 
@@ -1774,7 +1774,7 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 
 term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
-    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_integer(arg2))) {
+    if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_int(arg2))) {
         size_t arg1_size = term_is_integer(arg1) ? 0 : term_boxed_size(arg1);
 
         avm_int_t b = term_to_int(arg2);
@@ -1801,7 +1801,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
 
-    } else if (term_is_neg_integer(arg2)) {
+    } else if (term_is_neg_int(arg2)) {
         term abs_arg2 = term_from_int(-term_to_int(arg2));
         return bif_erlang_bsl_2(ctx, fail_label, live, arg1, abs_arg2);
 
