@@ -915,6 +915,31 @@ static inline int32_t term_to_int32(term t)
     return ((int32_t) t) >> 4;
 }
 
+/**
+ * @brief Extract \c avm_int_t value from unboxed integer term
+ *
+ * Extracts the \c avm_int_t value from a term that contains an unboxed
+ * integer. An unboxed integer is an integer value stored directly within
+ * the term itself, not as a separate allocation on the heap.
+ *
+ * @param t Term containing unboxed integer
+ * @return The extracted \c avm_int_t value
+ *
+ * @pre \c term_is_int(t) must be true
+ * @warning Undefined behavior if called on non-integer or boxed integer terms
+ *
+ * @note This function performs no type checking - validation must be done
+ *       by caller using \c term_is_int()
+ * @note Only extracts from unboxed integers (28-bit on 32-bit builds,
+ *       60-bit on 64-bit builds)
+ * @note Safe conversions: \c size_t s = term_to_int(t) is always valid
+ * @warning Unsafe conversions on 64-bit builds: \c int or \c int32_t may overflow
+ *          since \c avm_int_t can hold 60-bit values
+ *
+ * @see term_is_int() to validate term before extraction
+ * @see term_unbox_int() for extracting boxed integers
+ * @see term_maybe_unbox_int() for extracting from either unboxed or boxed integers
+ */
 static inline avm_int_t term_to_int(term t)
 {
     TERM_DEBUG_ASSERT(term_is_integer(t));
@@ -1028,6 +1053,14 @@ static inline term term_from_int(avm_int_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 }
 
+/**
+ * @brief Check if term is a non-negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer >= 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
 static inline bool term_is_non_neg_int(term t)
 {
     if (term_is_int(t)) {
@@ -1037,6 +1070,14 @@ static inline bool term_is_non_neg_int(term t)
     return false;
 }
 
+/**
+ * @brief Check if term is a positive (non-zero) unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer > 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
 static inline bool term_is_pos_int(term t)
 {
     if (term_is_int(t)) {
@@ -1047,6 +1088,14 @@ static inline bool term_is_pos_int(term t)
     return false;
 }
 
+/**
+ * @brief Check if term is a negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer < 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
 static inline bool term_is_neg_int(term t)
 {
     if (term_is_int(t)) {
