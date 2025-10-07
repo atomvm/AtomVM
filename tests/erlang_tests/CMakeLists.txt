@@ -34,7 +34,7 @@ macro(jit_precompile module_name)
             OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
             COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
                 && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
-            DEPENDS ${module_name}.beam ${jit_compiler_modules} jit
+            DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam ${jit_compiler_modules} jit
             COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
             VERBATIM
         )
