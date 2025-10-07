@@ -1659,6 +1659,143 @@ static inline void term_to_bigint(
     *bigint_sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
 }
 
+/**
+ * @brief Check if term can be safely converted to \c uint32_t
+ *
+ * Tests whether a term represents a non-negative integer value that fits
+ * within the \c uint32_t range [0, UINT32_MAX] without overflow or truncation.
+ *
+ * @param t Term to check
+ * @return true if term is a non-negative integer within \c uint32_t range, false otherwise
+ *
+ * @note Handles immediate integers, boxed integers, and checks range for larger values
+ */
+static inline bool term_is_uint32(term t)
+{
+    if (term_is_pos_boxed_integer(t)) {
+        if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT) {
+#if AVM_INT_MAX == INT32_MAX
+            return true;
+#elif AVM_INT_MAX == INT64_MAX
+            avm_int_t unboxed = term_unbox_int(t);
+            return unboxed <= UINT32_MAX;
+#else
+#error "Unsupported AVM_INT_MAX definition"
+#endif
+
+#if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
+        } else {
+            avm_int64_t unboxed64 = term_unbox_int64(t);
+            return unboxed64 <= UINT32_MAX;
+#endif
+        }
+
+        return false;
+    } else {
+        return term_is_non_neg_int(t);
+    }
+}
+
+/**
+ * @brief Convert term to \c uint32_t value
+ *
+ * Extracts the unsigned integer value from a term that has been validated
+ * to fit within \c uint32_t range.
+ *
+ * @param t Term containing non-negative integer value
+ * @return The \c uint32_t value
+ *
+ * @pre \c term_is_uint32(t) must be true
+ * @warning No overflow checking performed - caller must validate with \c term_is_uint32()
+ */
+static inline uint32_t term_to_uint32(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_uint32(t));
+
+    if (term_is_boxed(t)) {
+#if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
+        if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT) {
+#endif
+            return term_unbox_int(t);
+#if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
+        }
+        return term_unbox_int64(t);
+#endif
+    } else {
+        return term_to_int(t);
+    }
+}
+
+/**
+ * @brief Check if term can be safely converted to \c uint64_t
+ *
+ * Tests whether a term represents a non-negative integer value that fits
+ * within the \c uint64_t range [0, UINT64_MAX] without overflow or truncation.
+ *
+ * @param t Term to check
+ * @return true if term is a non-negative integer within \c uint64_t range, false otherwise
+ *
+ * @note Handles immediate integers, boxed integers, and big integers up to 64 bits
+ */
+static inline bool term_is_uint64(term t)
+{
+    if (term_is_non_neg_int(t)) {
+        return true;
+
+    } else if (term_is_pos_boxed_integer(t)
+        && (term_boxed_size(t) <= BOXED_TERMS_REQUIRED_FOR_INT64)) {
+        // reasonable assumption: we are not supporting 128 bit archs
+        return true;
+
+    } else if (term_is_pos_boxed_integer(t)) {
+        const intn_digit_t *digits;
+        size_t digits_len;
+        intn_integer_sign_t sign;
+        term_to_bigint(t, &digits, &digits_len, &sign);
+
+        return intn_is_uint64(digits, digits_len);
+    }
+
+    return false;
+}
+
+/**
+ * @brief Convert term to \c uint64_t value
+ *
+ * Extracts the unsigned integer value from a term that has been validated
+ * to fit within \c uint64_t range.
+ *
+ * @param t Term containing non-negative integer value
+ * @return The \c uint64_t value
+ *
+ * @pre \c term_is_uint64(t) must be true
+ * @warning No overflow checking performed - caller must validate with \c term_is_uint64()
+ * @note Can extract from big integers that fit within 64 bits
+ */
+static inline uint64_t term_to_uint64(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_uint64(t));
+
+    if (term_is_boxed(t)) {
+        if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT) {
+            return term_unbox_int(t);
+#if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
+        } else if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT64) {
+            return term_unbox_int64(t);
+#endif
+        } else {
+            const intn_digit_t *digits;
+            size_t digits_len;
+            intn_integer_sign_t sign;
+            term_to_bigint(t, &digits, &digits_len, &sign);
+
+            return intn_to_uint64(digits);
+        }
+    } else {
+        return term_to_int(t);
+    }
+}
+
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
 {
     return (term) ((module_index << 24) | (label << 6) | TERM_IMMED2_CATCH);
