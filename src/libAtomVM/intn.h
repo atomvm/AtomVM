@@ -212,6 +212,16 @@ static inline bool intn_fits_int64(const intn_digit_t num[], size_t len, intn_in
     return false;
 }
 
+static inline bool intn_is_uint64(const intn_digit_t num[], size_t len)
+{
+    return intn_count_digits(num, len) == 2;
+}
+
+static inline uint64_t intn_to_uint64(const intn_digit_t num[])
+{
+    return ((uint64_t) num[0]) | ((uint64_t) num[1] << 32);
+}
+
 static inline intn_integer_sign_t intn_muldiv_sign(intn_integer_sign_t s1, intn_integer_sign_t s2)
 {
     return (intn_integer_sign_t) ((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger;

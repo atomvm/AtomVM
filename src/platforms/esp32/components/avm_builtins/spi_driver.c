@@ -468,11 +468,11 @@ static term populate_transaction(Context *ctx, struct spi_transaction_t *transac
     transaction->cmd = (uint16_t) command_value;
 
     term address_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, address_atom), zero_term, ctx->global);
-    if (!term_is_any_integer(address_term)) {
-        ESP_LOGE(TAG, "address transaction entry is not an integer");
+    if (!term_is_uint64(address_term)) {
+        ESP_LOGE(TAG, "address transaction entry is not an uint64");
         return BADARG_ATOM;
     }
-    transaction->addr = (uint64_t) term_maybe_unbox_int(address_term);
+    transaction->addr = term_to_uint64(address_term);
 
     term write_data_term = term_get_map_assoc_default(transaction_term, globalcontext_make_atom(glb, write_data_atom), UNDEFINED_ATOM, ctx->global);
     term binary_bits_term = zero_term;
