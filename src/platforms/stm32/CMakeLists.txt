@@ -36,6 +36,9 @@ option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' 
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
 
+# JIT is not available yet on esp32
+set(AVM_DISABLE_JIT ON FORCE)
+
 set(AVM_DISABLE_SMP ON FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
 

@@ -337,6 +337,14 @@ static void pack_beam_file(FILE *pack, const uint8_t *data, size_t size, const c
         assert_fwrite(data + offsets[STRT], sizes[STRT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);
     }
+    if (offsets[AVMN]) {
+        assert_fwrite(data + offsets[AVMN], sizes[AVMN] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
+    if (offsets[TYPE]) {
+        assert_fwrite(data + offsets[TYPE], sizes[TYPE] + IFF_SECTION_HEADER_SIZE, pack);
+        pad_and_align(pack);
+    }
     if (offsets[LINT] && include_lines) {
         assert_fwrite(data + offsets[LINT], sizes[LINT] + IFF_SECTION_HEADER_SIZE, pack);
         pad_and_align(pack);

@@ -45,6 +45,18 @@
 #include "sys_mbedtls.h"
 #endif
 
+#ifndef AVM_NO_JIT
+#include "jit_stream_mmap.h"
+
+#include <errno.h>
+#include <pthread.h>
+#include <sys/mman.h>
+
+#if defined(__APPLE__)
+#include <libkern/OSCacheControl.h>
+#endif
+#endif
+
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
@@ -393,7 +405,7 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-uint64_t sys_monotonic_time_u64()
+uint64_t sys_monotonic_time_u64(void)
 {
     // On generic unix, native format is timespec.
     struct timespec ts;
@@ -481,16 +493,14 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 #ifdef DYNLOAD_PORT_DRIVERS
         void *handle;
         {
-            char port_driver_name[64 + strlen("avm_"
-                                              "_port_driver.so")
-                + 1];
+            char port_driver_name[64 + sizeof("avm_") - 1 + sizeof("_port_driver.so") - 1 + 1];
             snprintf(port_driver_name, sizeof(port_driver_name), "./avm_%s_port_driver.so", driver_name);
             handle = dlopen(port_driver_name, RTLD_NOW);
             if (!handle) {
                 return NULL;
             }
         }
-        char port_driver_func_name[64 + strlen("_create_port") + 1];
+        char port_driver_func_name[64 + sizeof("_create_port") - 1 + 1];
         snprintf(port_driver_func_name, sizeof(port_driver_func_name), "%s_create_port", driver_name);
         create_port_t create_port
             = (create_port_t) CAST_VOID_TO_FUNC_PTR(dlsym(handle, port_driver_func_name));
@@ -582,6 +592,9 @@ void sys_init_platform(GlobalContext *global)
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
     otp_ssl_init(global);
+#endif
+#ifndef AVM_NO_JIT
+    jit_stream_mmap_init(global);
 #endif
 
     global->platform_data = platform;
@@ -799,4 +812,25 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
 
+#endif
+
+#ifndef AVM_NO_JIT
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+{
+#if defined(__APPLE__) && defined(__arm64__)
+    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+    if (native_code_mmap == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
+        return NULL;
+    }
+    pthread_jit_write_protect_np(0);
+    memcpy(native_code_mmap, native_code, size);
+    pthread_jit_write_protect_np(1);
+    sys_icache_invalidate(native_code_mmap, size);
+    return (ModuleNativeEntryPoint) (native_code_mmap + offset);
+#else
+    UNUSED(size);
+    return (ModuleNativeEntryPoint) (native_code + offset);
+#endif
+}
 #endif

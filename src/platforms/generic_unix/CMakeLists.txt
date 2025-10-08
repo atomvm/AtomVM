@@ -39,6 +39,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     endif()
 endif()
 
+
 add_subdirectory(lib)
 target_include_directories(AtomVM PUBLIC lib/)
 
@@ -51,15 +52,26 @@ set(
 )
 target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
+if(AVM_DISABLE_JIT)
+set(precompiled_suffix)
+else()
+set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
+include(DefineIfExists)
+define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} pthread_jit_write_protect_np "pthread.h" PUBLIC HAVE_PTHREAD_JIT_WRITE_PROTECT_NP)
+define_if_symbol_exists(libAtomVM${PLATFORM_LIB_SUFFIX} MAP_JIT "sys/mman.h" PUBLIC HAVE_MAP_JIT)
+endif()
+
 if (COVERAGE)
     include(CodeCoverage)
     append_coverage_compiler_flags_to_target(AtomVM)
     append_coverage_linker_flags_to_target(AtomVM)
 endif()
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/atomvm ${CMAKE_CURRENT_BINARY_DIR}/atomvm @ONLY)
+
 install(TARGETS AtomVM DESTINATION lib/atomvm)
 install(
-    FILES ${CMAKE_CURRENT_SOURCE_DIR}/atomvm
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/atomvm
     DESTINATION bin
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
 )

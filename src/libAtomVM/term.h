@@ -49,6 +49,37 @@
 extern "C" {
 #endif
 
+// Remember to keep in sync with libs/jit/src/*term.hrl
+
+#define COMPACT_LITERAL 0
+#define COMPACT_INTEGER 1
+#define COMPACT_ATOM 2
+#define COMPACT_XREG 3
+#define COMPACT_YREG 4
+#define COMPACT_LABEL 5
+#define COMPACT_EXTENDED 7
+#define COMPACT_LARGE_LITERAL 8
+#define COMPACT_LARGE_INTEGER 9
+#define COMPACT_LARGE_ATOM 10
+#define COMPACT_LARGE_XREG 11
+#define COMPACT_LARGE_YREG 12
+
+// OTP-20+ format
+#define COMPACT_EXTENDED_LIST 0x17
+#define COMPACT_EXTENDED_FP_REGISTER 0x27
+#define COMPACT_EXTENDED_ALLOCATION_LIST 0x37
+#define COMPACT_EXTENDED_LITERAL 0x47
+// https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
+#define COMPACT_EXTENDED_TYPED_REGISTER 0x57
+
+#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS 0
+#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS 1
+#define COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS 2
+
+#define COMPACT_LARGE_IMM_MASK 0x18
+#define COMPACT_11BITS_VALUE 0x8
+#define COMPACT_NBITS_VALUE 0x18
+
 #define TERM_PRIMARY_MASK 0x3
 #define TERM_PRIMARY_CP 0x0
 #define TERM_PRIMARY_LIST 0x1
@@ -847,7 +878,7 @@ static inline bool term_is_cp(term t)
  * @details Returns always an invalid term.
  * @return invalid term.
  */
-static inline term term_invalid_term()
+static inline term term_invalid_term(void)
 {
     return 0;
 }
@@ -858,7 +889,7 @@ static inline term term_invalid_term()
  * @details Returns always the nil value.
  * @return nil value term.
  */
-static inline term term_nil()
+static inline term term_nil(void)
 {
     return TERM_NIL;
 }
@@ -1577,7 +1608,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
     return pos_len.pos == -1 && pos_len.len == -1;
 }
 
-static inline BinaryPosLen term_nomatch_binary_pos_len()
+static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
     return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
@@ -2322,12 +2353,12 @@ static inline bool term_is_map(term t)
     return false;
 }
 
-static inline size_t term_get_map_keys_offset()
+static inline size_t term_get_map_keys_offset(void)
 {
     return 1;
 }
 
-static inline size_t term_get_map_value_offset()
+static inline size_t term_get_map_value_offset(void)
 {
     return 2;
 }
