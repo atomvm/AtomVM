@@ -55,6 +55,8 @@ start() ->
         test_abs() +
         test_neg() +
         parse_bigint() +
+        test_integer_to_list() +
+        test_integer_from_list() +
         test_cmp() +
         conv_to_from_float() +
         external_term_decode() +
@@ -839,6 +841,97 @@ parse_bigint() ->
                 TooBig5
             ),
             35
+        )
+    end),
+
+    0.
+
+test_integer_to_list() ->
+    IntMaxBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    IntMax = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(IntMaxBin), 16)),
+    "115792089237316195423570985008687907853269984665640564039457584007913129639935" = ?MODULE:id(
+        erlang:integer_to_list(IntMax)
+    ),
+    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" = ?MODULE:id(
+        erlang:integer_to_list(IntMax, 16)
+    ),
+
+    IntMinBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    IntMin = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(IntMinBin), 16)),
+    "-115792089237316195423570985008687907853269984665640564039457584007913129639935" = ?MODULE:id(
+        erlang:integer_to_list(IntMin)
+    ),
+    "-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" = ?MODULE:id(
+        erlang:integer_to_list(IntMin, 16)
+    ),
+
+    RandBin = <<"313584127083402947713449759974837293576">>,
+    RandInt = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(RandBin))),
+    "EBEA1B25A9CBB9DBC60F1D1FF7C19208" = ?MODULE:id(erlang:integer_to_list(RandInt, 16)),
+
+    0.
+
+test_integer_from_list() ->
+    RandListDec = "1731841583231287768806110493630117706",
+    RandIntDec = ?MODULE:id(erlang:list_to_integer(?MODULE:id(RandListDec))),
+    <<"14D8A61E79E0FD73F68ED4EB6E9B74A">> = erlang:integer_to_binary(?MODULE:id(RandIntDec), 16),
+
+    RandListHex = "97DD30E2C7C05611F18579A689C1A023",
+    RandIntHex = ?MODULE:id(erlang:list_to_integer(?MODULE:id(RandListHex), 16)),
+    <<"201861916492304234384630055011635798051">> = erlang:integer_to_binary(
+        ?MODULE:id(RandIntHex), 10
+    ),
+
+    IntMaxList = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    IntMax = ?MODULE:id(erlang:list_to_integer(?MODULE:id(IntMaxList), 16)),
+    <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">> = erlang:integer_to_binary(
+        ?MODULE:id(IntMax), 10
+    ),
+
+    PlusIntMaxList = "+FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    PlusIntMax = ?MODULE:id(erlang:list_to_integer(?MODULE:id(PlusIntMaxList), 16)),
+    <<"115792089237316195423570985008687907853269984665640564039457584007913129639935">> = erlang:integer_to_binary(
+        ?MODULE:id(PlusIntMax), 10
+    ),
+
+    IntMinList = "-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+    IntMin = ?MODULE:id(erlang:list_to_integer(?MODULE:id(IntMinList), 16)),
+    <<"-115792089237316195423570985008687907853269984665640564039457584007913129639935">> = erlang:integer_to_binary(
+        ?MODULE:id(IntMin), 10
+    ),
+
+    Int0List = "8000000000000000",
+    Int0 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int0List), 16)),
+    <<"9223372036854775808">> = erlang:integer_to_binary(?MODULE:id(Int0), 10),
+
+    Int1List = "9223372036854775808",
+    Int1 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int1List), 10)),
+    <<"9223372036854775808">> = erlang:integer_to_binary(?MODULE:id(Int1), 10),
+
+    Int2List = "-8000000000000001",
+    Int2 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int2List), 16)),
+    <<"-9223372036854775809">> = erlang:integer_to_binary(?MODULE:id(Int2), 10),
+
+    Int3List = "-8000000000000001",
+    Int3 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int3List), 16)),
+    <<"-9223372036854775809">> = erlang:integer_to_binary(?MODULE:id(Int3), 10),
+
+    Int4List = "18446744073709551615",
+    Int4 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int4List))),
+    <<"18446744073709551615">> = erlang:integer_to_binary(?MODULE:id(Int4)),
+
+    Int5List = "18446744073709551616",
+    Int5 = ?MODULE:id(erlang:list_to_integer(?MODULE:id(Int5List))),
+    <<"18446744073709551616">> = erlang:integer_to_binary(?MODULE:id(Int5)),
+
+    TooBig =
+        "473G8HGH5SHXPHL0FW40LIZSMNW3BNJ51ABCT02HG4AKRJWXWI96A1W9UG2YQ9XNJ595OFX6ZUZWLNFZ2W1RYW49ZBUWZ16GXQE",
+    ok = expect_atomvm_error(badarg, fun() ->
+        list_to_integer(
+            ?MODULE:id(
+                TooBig
+            ),
+            36
         )
     end),
 

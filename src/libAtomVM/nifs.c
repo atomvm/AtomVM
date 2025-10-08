@@ -1976,11 +1976,33 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term bigres_term = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
+    term bigres_term
+        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
     intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
     intn_copy(bigres, bigres_len, dest_buf, rounded_res_len);
 
     return bigres_term;
+}
+
+static term parse_integer(
+    Context *ctx, const char *bin_data, size_t bin_data_size, unsigned int base)
+{
+    int64_t value;
+    int parse_res
+        = int64_parse_ascii_buf(bin_data, bin_data_size, base, BufToInt64NoOptions, &value);
+    if (parse_res == (int) bin_data_size) {
+        return make_maybe_boxed_int64(ctx, value);
+    } else if (parse_res > 0) {
+        intn_digit_t tmp_parsed[INTN_MAX_RES_LEN];
+        intn_integer_sign_t parsed_sign;
+        int parsed_digits = intn_parse(bin_data, bin_data_size, base, tmp_parsed, &parsed_sign);
+        if (parsed_digits <= 0) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        return make_bigint(ctx, tmp_parsed, parsed_digits, parsed_sign);
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 }
 
 static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
@@ -2001,24 +2023,9 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     }
 
     const char *bin_data = term_binary_data(bin_term);
-    int bin_data_size = term_binary_size(bin_term);
+    size_t bin_data_size = term_binary_size(bin_term);
 
-    int64_t value;
-    int parse_res
-        = int64_parse_ascii_buf(bin_data, bin_data_size, base, BufToInt64NoOptions, &value);
-    if (parse_res == bin_data_size) {
-        return make_maybe_boxed_int64(ctx, value);
-    } else if (parse_res > 0) {
-        intn_digit_t tmp_parsed[INTN_MAX_RES_LEN];
-        intn_integer_sign_t parsed_sign;
-        int parsed_digits = intn_parse(bin_data, bin_data_size, base, tmp_parsed, &parsed_sign);
-        if (parsed_digits <= 0) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-        return make_bigint(ctx, tmp_parsed, parsed_digits, parsed_sign);
-    } else {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    return parse_integer(ctx, bin_data, bin_data_size, base);
 }
 
 static bool is_valid_float_string(const char *str, int len)
@@ -2588,19 +2595,6 @@ static term nif_erlang_list_to_binary_1(Context *ctx, int argc, term argv[])
     return bin_res;
 }
 
-static avm_int_t to_digit_index(avm_int_t character)
-{
-    if (character >= '0' && character <= '9') {
-        return character - '0';
-    } else if (character >= 'a' && character <= 'z') {
-        return character - 'a' + 10;
-    } else if (character >= 'A' && character <= 'Z') {
-        return character - 'A' + 10;
-    } else {
-        return -1;
-    }
-}
-
 static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[])
 {
     avm_int_t base = 10;
@@ -2613,54 +2607,17 @@ static term nif_erlang_list_to_integer(Context *ctx, int argc, term argv[])
         }
     }
 
-    term t = argv[0];
-    int64_t acc = 0;
-    int digits = 0;
+    VALIDATE_VALUE(argv[0], term_is_nonempty_list);
 
-    VALIDATE_VALUE(t, term_is_nonempty_list);
-
-    int negative = 0;
-    term first_digit = term_get_list_head(t);
-    if (first_digit == term_from_int11('-')) {
-        negative = 1;
-        t = term_get_list_tail(t);
-    } else if (first_digit == term_from_int11('+')) {
-        t = term_get_list_tail(t);
-    }
-
-    while (term_is_nonempty_list(t)) {
-        term head = term_get_list_head(t);
-        VALIDATE_VALUE(head, term_is_integer);
-        avm_int_t c = term_to_int(head);
-
-        avm_int_t digit = to_digit_index(c);
-        if (UNLIKELY(digit == -1 || digit >= base)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-
-        // TODO: fix this
-        if (acc > INT64_MAX / base) {
-            // overflow error is not standard, but we need it since we are running on an embedded device
-            RAISE_ERROR(OVERFLOW_ATOM);
-        }
-
-        acc = (acc * base) + digit;
-        digits++;
-        t = term_get_list_tail(t);
-        if (!term_is_list(t)) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-    }
-
-    if (negative) {
-        acc = -acc;
-    }
-
-    if (UNLIKELY(digits == 0)) {
+    int ok;
+    char *int_as_string = interop_list_to_string(argv[0], &ok);
+    if (UNLIKELY(!ok)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-
-    return make_maybe_boxed_int64(ctx, acc);
+    size_t int_as_string_len = strlen(int_as_string);
+    term res = parse_integer(ctx, int_as_string, int_as_string_len, base);
+    free(int_as_string);
+    return res;
 }
 
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[])

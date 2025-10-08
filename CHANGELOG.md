@@ -76,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `binary_to_integer/1` no longer accepts binaries such as `<<"0xFF">>` or `<<"  123">>`
+- `binary_to_integer` and `list_to_integer` do not raise anymore `overflow` error, they raise
+instead `badarg`.
 
 ### Fixed
 
@@ -86,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - packbeam: fix memory leak preventing building with address sanitizer
 - Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
 - Fix a memory leak in distribution when a BEAM node would monitor a process by name.
+- Fix `list_to_integer`, it was likely buggy with integers close to INT64_MAX
 
 ## [0.6.7] - Unreleased
 
