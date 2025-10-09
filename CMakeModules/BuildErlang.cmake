@@ -41,15 +41,15 @@ macro(pack_archive avm_name)
     endforeach()
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${pack_archive_${avm_name}_beams} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_archive_${avm_name}_beams}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${avm_name}.avm ${pack_archive_${avm_name}_beams}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -135,16 +135,16 @@ macro(pack_lib avm_name)
     endforeach()
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_emu_archives} ${pack_lib_${avm_name}_archives}
-        COMMENT "Packing lib ${avm_name}.avm"
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_archives}
+        COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
     if(NOT AVM_DISABLE_JIT)
@@ -225,15 +225,15 @@ macro(pack_runnable avm_name main)
     endif()
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${pack_runnable_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
@@ -266,9 +266,9 @@ macro(pack_test test_avm_name)
     endforeach()
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
@@ -281,7 +281,7 @@ macro(pack_test test_avm_name)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm
         DEPENDS ${pack_test_${test_avm_name}_archive_targets} PackBEAM tests.beam
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
     )
@@ -313,15 +313,15 @@ macro(pack_eunit test_avm_name)
     endforeach()
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
         OUTPUT ${test_avm_name}.avm
         DEPENDS ${pack_eunit_${test_avm_name}_archive_targets} PackBEAM ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam ${pack_eunit_${test_avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam ${pack_eunit_${test_avm_name}_archives}
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
     )
@@ -359,7 +359,7 @@ macro(pack_uf2 avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${pack_uf2_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s ${main} ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
