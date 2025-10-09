@@ -817,16 +817,31 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 #ifndef AVM_NO_JIT
 ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
 {
-#if defined(__APPLE__) && defined(__arm64__)
+#if defined(__arm__) || defined(__aarch64__)
+#if defined(__APPLE__)
     uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+#else
+    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+#endif
     if (native_code_mmap == MAP_FAILED) {
         fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
         return NULL;
     }
+#if defined(__APPLE__)
     pthread_jit_write_protect_np(0);
+#endif
     memcpy(native_code_mmap, native_code, size);
+#if defined(__APPLE__)
     pthread_jit_write_protect_np(1);
     sys_icache_invalidate(native_code_mmap, size);
+#else
+    if (mprotect(native_code_mmap, size, PROT_READ | PROT_EXEC) != 0) {
+        fprintf(stderr, "Could not make native code executable: size=%zu, errno=%d\n", size, errno);
+        munmap(native_code_mmap, size);
+        return NULL;
+    }
+    __builtin___clear_cache((char *) native_code_mmap, (char *) (native_code_mmap + size));
+#endif
     return (ModuleNativeEntryPoint) (native_code_mmap + offset);
 #else
     UNUSED(size);
