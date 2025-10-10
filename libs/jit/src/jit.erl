@@ -2976,14 +2976,14 @@ first_pass_bs_match_equal_colon_equal(
                 ),
                 MSt4 = MMod:and_(MSt3, Result, ?TERM_PRIMARY_CLEAR_MASK),
                 {MSt5, IntValue} = MMod:get_array_element(MSt4, {free, Result}, 1),
-                cond_jump_to_label({IntValue, '!=', PatternValue}, Fail, MMod, MSt5);
+                cond_jump_to_label({{free, IntValue}, '!=', PatternValue}, Fail, MMod, MSt5);
             _ ->
                 MSt4 = MMod:shift_right(MSt3, Result, 4),
-                cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4)
+                MSt5 = cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4),
+                MMod:free_native_registers(MSt5, [Result])
         end,
     MSt7 = MMod:add(MSt6, BSOffsetReg, Size),
-    MSt8 = MMod:free_native_registers(MSt7, [Result]),
-    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt8}.
+    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt7}.
 
 first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Stride, Rest1} = decode_literal(Rest0),
