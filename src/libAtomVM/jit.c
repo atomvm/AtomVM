@@ -618,6 +618,34 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     }
 }
 
+static term jit_alloc_big_integer_fragment(
+    Context *ctx, size_t digits_len, term_integer_sign_t sign)
+{
+    TRACE("jit_alloc_big_integer_fragment: len=%lu sign=%i\n", (unsigned long) digits_len,
+        (int) sign);
+    Heap heap;
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_intn_to_term_size(digits_len, &intn_data_size, &rounded_res_len);
+
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        ctx->x[0] = ERROR_ATOM;
+        ctx->x[1] = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+
+    term bigint_term
+        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
+    void *digits_mem = term_intn_data(bigint_term);
+    // TODO: optimize: just initialize space that will not be used
+    memset(digits_mem, 0, intn_data_size * sizeof(term));
+
+    memory_heap_append_heap(&ctx->heap, &heap);
+
+    return bigint_term;
+}
+
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
     TRACE("jit_term_alloc_tuple: size=%u\n", size);
@@ -1725,7 +1753,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
     term_copy_map,
-    jit_stacktrace_build
+    jit_stacktrace_build,
+    jit_alloc_big_integer_fragment
 };
 
 #endif

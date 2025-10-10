@@ -158,6 +158,7 @@ struct ModuleNativeInterface
     term (*bitstring_get_utf32)(term src, int flags_value);
     term (*term_copy_map)(Context *ctx, term src);
     term (*stacktrace_build)(Context *ctx);
+    term (*alloc_big_integer_fragment)(Context *ctx, size_t digits_len, term_integer_sign_t sign);
 };
 
 extern const ModuleNativeInterface module_native_interface;
