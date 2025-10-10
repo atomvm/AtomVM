@@ -824,7 +824,7 @@ call_only_or_schedule_next_and_label_relocation_test() ->
 call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, FuncPtr} = ?BACKEND:call_primitive(State0, 8, [jit_state, 2]),
-    {State2, ArgReg} = ?BACKEND:call_primitive(State1, 15, [ctx, 9208452466117618637]),
+    {State2, ArgReg} = ?BACKEND:call_primitive(State1, 15, [ctx, {avm_int64_t, 9208452466117618637}]),
     {State3, ResultReg} = ?BACKEND:call_func_ptr(State2, {free, FuncPtr}, [
         ctx, 0, 1, {free, {x_reg, 0}}, {free, ArgReg}
     ]),
