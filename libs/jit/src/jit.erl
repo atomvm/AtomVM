@@ -3361,6 +3361,18 @@ decode_compact_term(
 ) ->
     {MSt, term_from_int((Val bsl 8) bor NextByte), Rest};
 decode_compact_term(
+    <<7:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Rest/binary>>,
+    MMod,
+    MSt,
+    _State
+) ->
+    {DecodedLen, Rest1} = decode_literal(Rest),
+    % 7 actually means 7 + 2, that means an integer that is >= 9 bytes
+    IntegerByteLen = DecodedLen + 9,
+    io:format("Bit len is: ~p~n", [IntegerByteLen * 8]),
+    <<Value:(IntegerByteLen * 8)/signed-big-integer, Rest2/binary>> = Rest1,
+    decode_compact_term_big_integer(Value, MMod, MSt, Rest2);
+decode_compact_term(
     <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Value:(8 * (Size0 + 2))/signed, Rest/binary>>,
     MMod,
     MSt,
@@ -3516,6 +3528,39 @@ decode_compact_term_integer(Value, MMod, MSt0, Rest) ->
     ),
     ?TRACE("(alloc_boxed_integer_fragment(~p) => ~p)", [Value, Reg]),
     {MSt1, Reg, Rest}.
+
+decode_compact_term_big_integer(Value, MMod, MSt0, Rest) ->
+    Sign = case Value of
+               Pos when Pos >= 0 -> ?TERM_POSITIVE_INTEGER;
+               _Neg -> ?TERM_NEGATIVE_INTEGER
+            end,
+    AbsValue = abs(Value),
+    Len = count_big_int_digits(AbsValue, 0),
+    {MSt1, Reg} = MMod:call_primitive(
+        MSt0, ?PRIM_ALLOC_BIG_INTEGER_FRAGMENT, [ctx, Len, Sign]
+    ),
+    MSt2 = MMod:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    WordSize = MMod:word_size(),
+    MSt3 = put_digits(AbsValue, 1, MSt2, Reg, WordSize, MMod),
+    MSt4 = MMod:or_(MSt3, Reg, 2),
+    {MSt4, Reg, Rest}.
+
+count_big_int_digits(0, Acc) ->
+    Acc;
+count_big_int_digits(N, Acc) ->
+    count_big_int_digits(N bsr 32, Acc + 1).
+
+put_digits(0, _Index, Mst0, _Reg, _WordSize, _MMod) ->
+    Mst0;
+put_digits(Value, Index, MSt0, Reg, 4, MMod) ->
+    Digit = Value band 16#FFFFFFFF,
+    MSt1 = MMod:move_to_array_element(MSt0, Digit, Reg, Index),
+    put_digits(Value bsr 32, Index + 1, MSt1, Reg, 4, MMod);
+put_digits(Value, Index, MSt0, Reg, 8, MMod) ->
+    % Assuming little endian
+    Word = Value band 16#FFFFFFFFFFFFFFFF,
+    MSt1 = MMod:move_to_array_element(MSt0, Word, Reg, Index),
+    put_digits(Value bsr 64, Index + 1, MSt1, Reg, 8, MMod).
 
 decode_dest(<<RegIndex:4, ?COMPACT_XREG:4, Rest/binary>>, _MMod, MSt) ->
     {MSt, {x_reg, RegIndex}, Rest};

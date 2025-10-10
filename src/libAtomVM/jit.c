@@ -618,6 +618,36 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     }
 }
 
+// This function is not optimized, it is taking the actual number of digits instead of the number
+// of required words, hence we initialze it in advance, so words that are not yet written are
+// already (safely) 0
+static term jit_alloc_big_integer_fragment(Context *ctx, size_t len, term_integer_sign_t sign)
+{
+    fprintf(stdout, "x[0]: ");
+    term_display(stdout, ctx->x[0], ctx);
+    fprintf(stdout, "jit_alloc_big_integer_fragment: len=%lu sign=%i\n", (unsigned long) len, (int) sign);
+    Heap heap;
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_intn_to_term_size(len, &intn_data_size, &rounded_res_len);
+
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        ctx->x[0] = ERROR_ATOM;
+        ctx->x[1] = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+
+    term bigint_term
+        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
+    void *digits_mem = term_intn_data(bigint_term);
+    memset(digits_mem, 0, intn_data_size * sizeof(term));
+
+    memory_heap_append_heap(&ctx->heap, &heap);
+
+    return bigint_term;
+}
+
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
     TRACE("jit_term_alloc_tuple: size=%u\n", size);
@@ -1725,7 +1755,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
     term_copy_map,
-    jit_stacktrace_build
+    jit_stacktrace_build,
+    jit_alloc_big_integer_fragment
 };
 
 #endif
