@@ -44,7 +44,7 @@ struct HNode
     uintptr_t value;
 };
 
-struct ValuesHashTable *valueshashtable_new()
+struct ValuesHashTable *valueshashtable_new(void)
 {
     struct ValuesHashTable *htable = malloc(sizeof(struct ValuesHashTable));
     if (IS_NULL_PTR(htable)) {

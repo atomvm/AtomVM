@@ -24,7 +24,7 @@
 #include "context.h"
 #include "term.h"
 
-void *socket_driver_create_data();
+void *socket_driver_create_data(void);
 void socket_driver_delete_data(void *data);
 
 term socket_driver_do_init(Context *ctx, term params);

@@ -36,6 +36,6 @@
 #define AVM_LOGE(tag, format, ...) \
     fprintf(stderr, "E %s: " format " (%s:%i)\n", tag, ##__VA_ARGS__, __FILE__, __LINE__);
 
-bool otp_socket_platform_supports_peek();
+bool otp_socket_platform_supports_peek(void);
 
 #endif

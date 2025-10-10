@@ -44,8 +44,7 @@ test() ->
 test_echo_server() ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     test_send_receive(Port, 10),
 
@@ -58,8 +57,7 @@ test_echo_server() ->
 test_shutdown() ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     ok = test_shutdown_of_client_sockets(Port),
 
@@ -122,8 +120,7 @@ test_close_by_another_process() ->
     % the socket.
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     {ok, ClientSocket1} = socket:open(inet, stream, tcp),
     ok = try_connect(ClientSocket1, Port, 10),
@@ -142,8 +139,7 @@ test_close_by_another_process() ->
 test_buf_size() ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = try_connect(Socket, Port, 10),
@@ -178,17 +174,19 @@ test_buf_size() ->
 %% echo_server
 %%
 
-start_echo_server(Port) ->
+start_echo_server(_Port) ->
     {ok, ListenSocket} = socket:open(inet, stream, tcp),
 
     ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
     ok = socket:setopt(ListenSocket, {socket, linger}, #{onoff => true, linger => 0}),
 
     ok = socket:bind(ListenSocket, #{
-        family => inet, addr => loopback, port => Port
+        family => inet, addr => loopback, port => 0
     }),
 
     ok = socket:listen(ListenSocket),
+
+    {ok, #{port := ActualPort}} = socket:sockname(ListenSocket),
 
     Self = self(),
     spawn(fun() ->
@@ -201,7 +199,7 @@ start_echo_server(Port) ->
             ok
     end,
 
-    ListenSocket.
+    {ListenSocket, ActualPort}.
 
 accept(Pid, ListenSocket) ->
     case socket:accept(ListenSocket) of
@@ -364,8 +362,7 @@ receive_loop_nowait_ref(Socket, Packet) when byte_size(Packet) > 0 ->
 test_timeout() ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = try_connect(Socket, Port, 10),
@@ -445,8 +442,7 @@ test_recv_nowait() ->
 test_recv_nowait(ReceiveFun) ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
-    ListenSocket = start_echo_server(Port),
+    {ListenSocket, Port} = start_echo_server(0),
 
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = try_connect(Socket, Port, 10),
@@ -482,16 +478,17 @@ test_accept_nowait(Ref, Version) when
 test_accept_nowait(NoWaitRef, _Version) ->
     etest:flush_msg_queue(),
 
-    Port = 44404,
     {ok, Socket} = socket:open(inet, stream, tcp),
     ok = socket:setopt(Socket, {socket, reuseaddr}, true),
     ok = socket:setopt(Socket, {socket, linger}, #{onoff => true, linger => 0}),
 
     ok = socket:bind(Socket, #{
-        family => inet, addr => loopback, port => Port
+        family => inet, addr => loopback, port => 0
     }),
 
     ok = socket:listen(Socket),
+
+    {ok, #{port := Port}} = socket:sockname(Socket),
 
     Parent = self(),
     {Child, MonitorRef} = spawn_opt(
@@ -544,14 +541,13 @@ test_setopt_getopt() ->
 test_abandon_select() ->
     etest:flush_msg_queue(),
 
-    Port = 44408,
     {ok, ListenSocket} = socket:open(inet, stream, tcp),
 
     ok = socket:setopt(ListenSocket, {socket, reuseaddr}, true),
     ok = socket:setopt(ListenSocket, {socket, linger}, #{onoff => true, linger => 0}),
 
     ok = socket:bind(ListenSocket, #{
-        family => inet, addr => loopback, port => Port
+        family => inet, addr => loopback, port => 0
     }),
 
     ok = socket:listen(ListenSocket),

@@ -29,7 +29,7 @@
 #include "term.h"
 #include "utils.h"
 
-void test_memory_ensure_free()
+void test_memory_ensure_free(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
@@ -60,7 +60,7 @@ void test_memory_ensure_free()
     assert(memory_size == 0);
 }
 
-void test_gc_ref_count()
+void test_gc_ref_count(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);

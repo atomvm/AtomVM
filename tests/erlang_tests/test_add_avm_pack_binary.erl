@@ -24,7 +24,10 @@
 
 -include("code_load/code_load_pack_data.hrl").
 
+load_pack_data() ->
+    ?CODE_LOAD_PACK_DATA.
+
 start() ->
-    Bin = ?CODE_LOAD_PACK_DATA,
+    Bin = load_pack_data(),
     _ = atomvm:add_avm_pack_binary(Bin, []),
     export_test_module:exported_func(4).

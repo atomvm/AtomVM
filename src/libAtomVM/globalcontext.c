@@ -59,7 +59,7 @@ struct RegisteredProcess
     term local_pid_or_port;
 };
 
-GlobalContext *globalcontext_new()
+GlobalContext *globalcontext_new(void)
 {
     GlobalContext *glb = malloc(sizeof(GlobalContext));
     if (IS_NULL_PTR(glb)) {
@@ -238,7 +238,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
         struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
 #ifndef NDEBUG
         if (refc->resource_type) {
-            fprintf(stderr, "Warning, dangling resource of type %s, ref_count = %d, data = %p\n", refc->resource_type->name, (int) refc->ref_count, refc->data);
+            fprintf(stderr, "Warning, dangling resource of type %s, ref_count = %d, data = %p\n", refc->resource_type->name, (int) refc->ref_count, (void *) refc->data);
         } else {
             fprintf(stderr, "Warning, dangling refc binary, ref_count = %d\n", (int) refc->ref_count);
         }

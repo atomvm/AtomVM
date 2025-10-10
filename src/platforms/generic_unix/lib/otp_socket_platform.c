@@ -20,7 +20,7 @@
 
 #include "otp_socket_platform.h"
 
-bool otp_socket_platform_supports_peek()
+bool otp_socket_platform_supports_peek(void)
 {
     return false;
 }

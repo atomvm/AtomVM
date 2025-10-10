@@ -43,6 +43,7 @@ set(HEADER_FILES
     iff.h
     interop.h
     intn.h
+    jit.h
     list.h
     listeners.h
     mailbox.h
@@ -108,6 +109,15 @@ set(SOURCE_FILES
     valueshashtable.c
 )
 
+if(NOT AVM_DISABLE_JIT)
+    set(HEADER_FILES ${HEADER_FILES}
+        jit.h
+    )
+    set(SOURCE_FILES ${SOURCE_FILES}
+        jit.c
+    )
+endif()
+
 option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" ON)
 if (AVM_PEDANTIC_WARNINGS)
     set(MAYBE_PEDANTIC_FLAG "-pedantic")
@@ -124,7 +134,7 @@ target_compile_features(libAtomVM PUBLIC c_std_11)
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} ${MAYBE_WERROR_FLAG} -Wextra -ggdb -Werror=incompatible-pointer-types)
 elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
-    target_compile_options(libAtomVM PUBLIC -Wall --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
+    target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} -Wno-gnu-zero-variadic-macro-arguments --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
 endif()
 
 if (ENABLE_REALLOC_GC)
@@ -162,11 +172,26 @@ if (NOT AVM_DISABLE_TASK_DRIVER)
     target_compile_definitions(libAtomVM PUBLIC AVM_TASK_DRIVER_ENABLED)
 endif()
 
+if (NOT AVM_DISABLE_JIT AND AVM_ENABLE_PRECOMPILED)
+    message(FATAL_ERROR "JIT is not disabled but AVM_ENABLE_PRECOMPILED was selected. Please disable jit or do not select precompiled")
+endif()
+
+if (AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_JIT)
+endif()
+if (NOT AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_EMU)
+endif()
+
 if(HAVE_PLATFORM_SMP_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
 endif()
 if(HAVE_PLATFORM_ATOMIC_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_ATOMIC_H)
+endif()
+
+if (AVM_PRINT_PROCESS_CRASH_DUMPS)
+    target_compile_definitions(libAtomVM PUBLIC AVM_PRINT_PROCESS_CRASH_DUMPS)
 endif()
 
 # Platforms that run select in a task must set this option

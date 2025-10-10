@@ -133,7 +133,7 @@ jobs:
       uses: docker/setup-qemu-action@v3
 
     - name: "Build and Test: AtomVM on foreign arch"
-      timeout-minutes: 15
+      timeout-minutes: 30
       run: |
         docker run --platform linux/${{ matrix.platform }} --rm -v $PWD:/atomvm -w /atomvm \
         -e CFLAGS="${{ matrix.cflags }}" -e CXXFLAGS="${{ matrix.cflags }}" \

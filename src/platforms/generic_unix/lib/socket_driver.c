@@ -171,7 +171,7 @@ term socket_create_packet_term(const char *buf, ssize_t len, int is_binary, Heap
     }
 }
 
-void *socket_driver_create_data()
+void *socket_driver_create_data(void)
 {
     struct SocketDriverData *data = calloc(1, sizeof(struct SocketDriverData));
     data->sockfd = -1;
