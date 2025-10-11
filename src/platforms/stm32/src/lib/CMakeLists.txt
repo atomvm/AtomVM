@@ -33,6 +33,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpio_driver.c
+    jit_stream_flash.c
     platform_nifs.c
     sys.c
     ../../../../libAtomVM/portnifloader.c

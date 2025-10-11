@@ -37,6 +37,7 @@
     call_primitive_with_cp/3,
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
+    jump_to_continuation/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -155,7 +156,8 @@
     | {'(int)', maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
     | {'(bool)', maybe_free_aarch64_register(), '==', false}
     | {'(bool)', maybe_free_aarch64_register(), '!=', false}
-    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}.
+    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}
+    | {{free, aarch64_register()}, '==', {free, aarch64_register()}}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -520,6 +522,40 @@ jump_to_label(
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
 
+%%-----------------------------------------------------------------------------
+%% @doc Jump to a continuation address stored in a register.
+%% This is used for optimized intra-module returns.
+%% @end
+%% @param State current backend state
+%% @param OffsetReg register containing the continuation offset
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+jump_to_continuation(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        offset = BaseOffset,
+        available_regs = [TempReg | _]
+    } = State,
+    {free, OffsetReg}
+) ->
+    % Calculate absolute address: native_code_base + target_offset
+    % where native_code_base = current_pc + (BaseOffset - CurrentStreamOffset)
+    CurrentStreamOffset = StreamModule:offset(Stream0),
+    NetOffset = BaseOffset - CurrentStreamOffset,
+
+    % Get native code base address into temporary register
+    I1 = jit_aarch64_asm:adr(TempReg, NetOffset),
+    % Add target offset to get final absolute address
+    I2 = jit_aarch64_asm:add(TempReg, TempReg, OffsetReg),
+    % Indirect branch to the calculated absolute address
+    I3 = jit_aarch64_asm:br(TempReg),
+
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Free all registers since this is a tail jump
+    State#state{stream = Stream1, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+
 %% @private
 -spec rewrite_branch_instruction(
     jit_aarch64_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()}, integer()
@@ -783,6 +819,20 @@ if_block_cond(
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
     {State2, ne, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {{free, Reg1}, '==', {free, Reg2}}
+) ->
+    % Compare two free registers
+    I1 = jit_aarch64_asm:cmp(Reg1, Reg2),
+    I2 = jit_aarch64_asm:bcc(ne, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Free both registers
+    State1 = if_block_free_reg({free, Reg1}, State0),
+    State2 = if_block_free_reg({free, Reg2}, State1),
+    State3 = State2#state{stream = Stream1},
+    {State3, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(bool)', RegOrTuple, '==', false}
@@ -1550,7 +1600,19 @@ move_to_array_element(
 %% @param Value value to move (can be an immediate, vm register, pointer, or native register)
 %% @return Tuple of {Updated backend state, Native register containing the value}
 %%-----------------------------------------------------------------------------
--spec move_to_native_register(state(), value()) -> {state(), aarch64_register()}.
+-spec move_to_native_register(state(), value() | cp) -> {state(), aarch64_register()}.
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
+    cp
+) ->
+    I1 = jit_aarch64_asm:ldr(Reg, ?CP),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg};
 move_to_native_register(

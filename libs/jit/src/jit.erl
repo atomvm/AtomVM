@@ -350,11 +350,30 @@ first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
 first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_RETURN\n", []),
-    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RETURN, [
-        ctx, jit_state
-    ]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest, MMod, MSt1, State0);
+    % Optimized return: check if returning within same module
+    {MSt1, CpReg} = MMod:move_to_native_register(MSt0, cp),
+    {MSt2, ModuleIndexReg} = MMod:get_module_index(MSt1),
+    % Extract module index from cp (upper 8 bits: cp >> 24)
+    MSt3 = MMod:shift_right(MSt2, CpReg, 24),
+    % Compare extracted module index with current module index
+    MSt4 = MMod:if_block(
+        MSt3,
+        {{free, CpReg}, '==', {free, ModuleIndexReg}},
+        % Same module: fast intra-module return
+        fun(BSt0) ->
+            % Restore original cp value and extract offset (lower 24 bits)
+            {BSt1, CpReg2} = MMod:move_to_native_register(BSt0, cp),
+            % Mask to get lower 24 bits and shift right by 2 for offset
+            BSt2 = MMod:and_(BSt1, CpReg2, 16#FFFFFF),
+            BSt3 = MMod:shift_right(BSt2, CpReg2, 2),
+            % Jump to continuation (this is a tail call)
+            MMod:jump_to_continuation(BSt3, {free, CpReg2})
+        end
+    ),
+    % Different module: use existing slow path
+    MSt5 = MMod:call_primitive_last(MSt4, ?PRIM_RETURN, [ctx, jit_state]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    first_pass(Rest, MMod, MSt5, State0);
 % 20
 first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2976,14 +2995,14 @@ first_pass_bs_match_equal_colon_equal(
                 ),
                 MSt4 = MMod:and_(MSt3, Result, ?TERM_PRIMARY_CLEAR_MASK),
                 {MSt5, IntValue} = MMod:get_array_element(MSt4, {free, Result}, 1),
-                cond_jump_to_label({IntValue, '!=', PatternValue}, Fail, MMod, MSt5);
+                cond_jump_to_label({{free, IntValue}, '!=', PatternValue}, Fail, MMod, MSt5);
             _ ->
                 MSt4 = MMod:shift_right(MSt3, Result, 4),
-                cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4)
+                MSt5 = cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4),
+                MMod:free_native_registers(MSt5, [Result])
         end,
     MSt7 = MMod:add(MSt6, BSOffsetReg, Size),
-    MSt8 = MMod:free_native_registers(MSt7, [Result]),
-    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt8}.
+    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt7}.
 
 first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Stride, Rest1} = decode_literal(Rest0),
