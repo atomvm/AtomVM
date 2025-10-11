@@ -30,7 +30,8 @@
 % NIFs
 -export([
     stream_module/0,
-    backend_module/0
+    backend_module/0,
+    variant/0
 ]).
 
 -export_type([
@@ -2976,14 +2977,14 @@ first_pass_bs_match_equal_colon_equal(
                 ),
                 MSt4 = MMod:and_(MSt3, Result, ?TERM_PRIMARY_CLEAR_MASK),
                 {MSt5, IntValue} = MMod:get_array_element(MSt4, {free, Result}, 1),
-                cond_jump_to_label({IntValue, '!=', PatternValue}, Fail, MMod, MSt5);
+                cond_jump_to_label({{free, IntValue}, '!=', PatternValue}, Fail, MMod, MSt5);
             _ ->
                 MSt4 = MMod:shift_right(MSt3, Result, 4),
-                cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4)
+                MSt5 = cond_jump_to_label({Result, '!=', PatternValue}, Fail, MMod, MSt4),
+                MMod:free_native_registers(MSt5, [Result])
         end,
     MSt7 = MMod:add(MSt6, BSOffsetReg, Size),
-    MSt8 = MMod:free_native_registers(MSt7, [Result]),
-    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt8}.
+    {J0 - 3, Rest3, MatchState, BSOffsetReg, MSt7}.
 
 first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     {Stride, Rest1} = decode_literal(Rest0),
@@ -3702,9 +3703,16 @@ stream(MaxSize) ->
 backend_module() ->
     erlang:nif_error(undefined).
 
+%% @doc Get the JIT variant suitable for runtime compilation
+%% @return The JIT variant for this platform and float precision
+-spec variant() -> non_neg_integer().
+variant() ->
+    erlang:nif_error(undefined).
+
 %% @doc Instantiate backend for this platform
 %% @return A tuple with the backend module and the backend state for this platform
 backend({StreamModule, Stream}) ->
     BackendModule = ?MODULE:backend_module(),
-    BackendState = BackendModule:new(?JIT_VARIANT_PIC, StreamModule, Stream),
+    Variant = ?MODULE:variant(),
+    BackendState = BackendModule:new(Variant, StreamModule, Stream),
     {BackendModule, BackendState}.
