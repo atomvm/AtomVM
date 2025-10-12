@@ -442,7 +442,7 @@ andl_test_() ->
         ),
         % andl imm32, r32 (no REX)
         ?_assertAsmEqual(
-            <<16#81, 16#E0, 16#FF, 16#FF, 16#FF, 16#00>>,
+            <<16#25, 16#FF, 16#FF, 16#FF, 16#00>>,
             "andl $0xffffff, %eax",
             jit_x86_64_asm:andl(16#00FFFFFF, rax)
         ),
