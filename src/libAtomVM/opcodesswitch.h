@@ -1811,6 +1811,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 #endif
 
+#ifndef AVM_NO_EMU
     static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
     {
         const uint8_t *new_encoded = encoded;
@@ -1858,6 +1859,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
     return_size:
         return (new_encoded - encoded) + len;
     }
+#endif
 
 #ifndef __clang__
 #pragma GCC diagnostic push
