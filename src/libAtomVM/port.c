@@ -99,7 +99,7 @@ term port_heap_create_error_tuple(Heap *heap, term reason)
 
 term port_heap_create_sys_error_tuple(Heap *heap, term syscall, int errno)
 {
-    term reason = port_heap_create_tuple2(heap, syscall, term_from_int32(errno));
+    term reason = port_heap_create_tuple2(heap, syscall, term_from_int(errno));
     return port_heap_create_error_tuple(heap, reason);
 }
 
