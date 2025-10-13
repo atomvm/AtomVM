@@ -421,7 +421,9 @@ test_add() ->
     <<"8000000000000000">> = erlang:integer_to_binary(
         ?MODULE:id(16#7FFFFFFFFFFFFFFF) + ?MODULE:id(1), 16
     ),
-    -16#8000000000000001 = ?MODULE:id(-16#8000000000000000) + ?MODULE:id(-1),
+    <<"-8000000000000001">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#8000000000000000) + ?MODULE:id(-1), 16
+    ),
 
     ok = ?MODULE:expect_overflow(fun() -> Int0 + ?MODULE:id(2) end),
     ok = ?MODULE:expect_overflow(fun() -> Int0 + ?MODULE:id(16#7FFFFFFFFFFFFFFF) end),
@@ -576,11 +578,19 @@ test_sub() ->
         erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16) -
             erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
 
-    16#8000000000000000 = ?MODULE:id(16#7FFFFFFFFFFFFFFF) - ?MODULE:id(-1),
-    -16#8000000000000001 = ?MODULE:id(-16#8000000000000000) - ?MODULE:id(1),
+    <<"8000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#7FFFFFFFFFFFFFFF) - ?MODULE:id(-1), 16
+    ),
+    <<"-8000000000000001">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#8000000000000000) - ?MODULE:id(1), 16
+    ),
 
-    16#7FFFFFFFFFFFFFFF = ?MODULE:id(16#8000000000000000) - ?MODULE:id(1),
-    -16#8000000000000000 = ?MODULE:id(-16#8000000000000001) - ?MODULE:id(-1),
+    16#7FFFFFFFFFFFFFFF =
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)) -
+            ?MODULE:id(1),
+    -16#8000000000000000 =
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-8000000000000001">>), 16)) -
+            ?MODULE:id(-1),
 
     ok = ?MODULE:expect_overflow(fun() -> Int0 - ?MODULE:id(-2) end),
     ok = ?MODULE:expect_overflow(fun() -> Int1 - ?MODULE:id(-1) end),
@@ -633,7 +643,9 @@ test_abs() ->
 
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
-    <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(16#8000000000000000)), 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(
+        abs(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)), 16
+    ),
     <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(-16#8000000000000000)), 16),
 
     0.
@@ -683,7 +695,9 @@ test_neg() ->
 
     <<"-7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
-    <<"-8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(16#8000000000000000)), 16),
+    <<"-8000000000000000">> = erlang:integer_to_binary(
+        -(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)), 16
+    ),
     <<"8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(-16#8000000000000000)), 16),
 
     0.
