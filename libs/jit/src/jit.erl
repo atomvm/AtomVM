@@ -585,9 +585,7 @@ first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_INTEGER ~p, ~p\n", [Label, Arg1]),
-    MSt2 = verify_is_immediate_or_boxed(
-        {free, Arg1}, ?TERM_INTEGER_TAG, ?TERM_BOXED_POSITIVE_INTEGER, Label, MMod, MSt1
-    ),
+    MSt2 = verify_is_any_integer({free, Arg1}, Label, MMod, MSt1),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 46
@@ -605,33 +603,17 @@ first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_NUMBER ~p, ~p\n", [Label, Arg1]),
-    % test term_is_integer
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    MSt3 = MMod:if_block(MSt2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
-        % test term_is_boxed
-        BSt1 = cond_jump_to_label(
-            {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, BSt0
-        ),
-        BSt2 = MMod:and_(BSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
-        BSt3 = MMod:move_array_element(BSt2, Reg, 0, Reg),
-        % Optimization : ((Reg & 0x3F) != 0x8) && ((Reg & 0x3F) != 0x18)
-        % is equivalent to (Reg & 0x2F) != 0x8
-        cond_jump_to_label(
-            {
-                {free, Reg},
-                '&',
-                ?TERM_BOXED_TAG_MASK_POSITIVE_INTEGER_OR_FLOAT,
-                '!=',
-                ?TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT
-            },
-            Label,
-            MMod,
-            BSt3
-        )
-    end),
-    MSt4 = MMod:free_native_registers(MSt3, [Reg]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt4),
-    first_pass(Rest2, MMod, MSt4, State0);
+    MSt2 = verify_is_immediate_or_boxed(
+        {free, Arg1},
+        ?TERM_INTEGER_TAG,
+        ?TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT,
+        ?TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT,
+        Label,
+        MMod,
+        MSt1
+    ),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 48
 first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3077,20 +3059,23 @@ verify_is_binary_or_match_state(Label, Src, MMod, MSt0) ->
     ),
     MMod:free_native_registers(MSt6, [Reg]).
 
-verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, MSt0) when is_atom(Reg) ->
+verify_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt0) ->
+    verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TAG_MASK, BoxedTag, MMod, MSt0).
+
+verify_is_boxed_with_tag(Label, {free, Reg}, BoxedMask, BoxedTag, MMod, MSt0) when is_atom(Reg) ->
     MSt1 = verify_is_boxed(MMod, MSt0, Reg, Label),
     MSt2 = MMod:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt3 = MMod:move_array_element(MSt2, Reg, 0, Reg),
     cond_raise_badarg_or_jump_to_fail_label(
-        {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt3
+        {{free, Reg}, '&', BoxedMask, '!=', BoxedTag}, Label, MMod, MSt3
     );
-verify_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
+verify_is_boxed_with_tag(Label, Arg1, BoxedMask, BoxedTag, MMod, MSt1) ->
     {MSt2, Reg} = MMod:copy_to_native_register(MSt1, Arg1),
     MSt3 = verify_is_boxed(MMod, MSt2, Reg, Label),
     MSt4 = MMod:and_(MSt3, Reg, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
     cond_raise_badarg_or_jump_to_fail_label(
-        {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt5
+        {{free, Reg}, '&', BoxedMask, '!=', BoxedTag}, Label, MMod, MSt5
     ).
 
 verify_is_boxed(MMod, MSt0, Reg) ->
@@ -3149,16 +3134,25 @@ verify_is_integer(Arg1, Fail, MMod, MSt0) ->
 verify_is_atom(Arg1, Fail, MMod, MSt0) ->
     verify_is_immediate(Arg1, ?TERM_IMMED2_TAG_MASK, ?TERM_IMMED2_ATOM, Fail, MMod, MSt0).
 
-verify_is_immediate_or_boxed(Arg1, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0) when
-    is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
-->
-    MSt0;
-verify_is_immediate_or_boxed({free, Arg1}, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0) when
+verify_is_immediate_or_boxed(Arg1, ImmediateTag, BoxedTag, FailLabel, MMod, MSt0) ->
+    verify_is_immediate_or_boxed(
+        Arg1, ImmediateTag, ?TERM_BOXED_TAG_MASK, BoxedTag, FailLabel, MMod, MSt0
+    ).
+
+verify_is_immediate_or_boxed(
+    Arg1, ImmediateTag, _BoxedMask, _BoxedTag, _FailLabel, _MMod, MSt0
+) when
     is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
 ->
     MSt0;
 verify_is_immediate_or_boxed(
-    ArgOrTuple, ImmediateTag, BoxedTag, Label, MMod, MSt0
+    {free, Arg1}, ImmediateTag, _BoxedMask, _BoxedTag, _FailLabel, _MMod, MSt0
+) when
+    is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
+->
+    MSt0;
+verify_is_immediate_or_boxed(
+    ArgOrTuple, ImmediateTag, BoxedMask, BoxedTag, Label, MMod, MSt0
 ) ->
     {MSt1, Reg} =
         case ArgOrTuple of
@@ -3166,13 +3160,19 @@ verify_is_immediate_or_boxed(
             _ -> MMod:copy_to_native_register(MSt0, ArgOrTuple)
         end,
     MSt2 = MMod:if_block(MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, fun(BSt0) ->
-        verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, BSt0)
+        verify_is_boxed_with_tag(Label, {free, Reg}, BoxedMask, BoxedTag, MMod, BSt0)
     end),
     MMod:free_native_registers(MSt2, [Reg]).
 
 verify_is_any_integer(Arg1, Fail, MMod, MSt0) ->
     verify_is_immediate_or_boxed(
-        Arg1, ?TERM_INTEGER_TAG, ?TERM_BOXED_POSITIVE_INTEGER, Fail, MMod, MSt0
+        Arg1,
+        ?TERM_INTEGER_TAG,
+        ?TERM_BOXED_TAG_MASK_NO_SIGN,
+        ?TERM_BOXED_POSITIVE_INTEGER,
+        Fail,
+        MMod,
+        MSt0
     ).
 
 %%-----------------------------------------------------------------------------

@@ -909,7 +909,13 @@ is_integer_test() ->
             MSt3 = ?BACKEND:move_array_element(MSt2, Reg, 0, Reg),
             ?BACKEND:if_block(
                 MSt3,
-                {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                {
+                    {free, Reg},
+                    '&',
+                    ?TERM_BOXED_TAG_MASK_NO_SIGN,
+                    '!=',
+                    ?TERM_BOXED_POSITIVE_INTEGER
+                },
                 fun(BSt0) ->
                     ?BACKEND:jump_to_label(BSt0, Label)
                 end
@@ -926,17 +932,18 @@ is_integer_test() ->
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
         "   4:	92400ce8 	and	x8, x7, #0xf\n"
         "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	54000160 	b.eq	0x38  // b.none\n"
+        "   c:	54000180 	b.eq	0x3c  // b.none\n"
         "  10:	924004e8 	and	x8, x7, #0x3\n"
         "  14:	f100091f 	cmp	x8, #0x2\n"
         "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	14000047 	b	0x138\n"
+        "  1c:	14000048 	b	0x13c\n"
         "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
         "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e7 	and	x7, x7, #0x3f\n"
-        "  2c:	f10020ff 	cmp	x7, #0x8\n"
-        "  30:	54000040 	b.eq	0x38  // b.none\n"
-        "  34:	14000041 	b	0x138"
+        "  28:	d2800768 	mov	x8, #0x3b\n"
+        "  2c:	8a0800e7 	and	x7, x7, x8\n"
+        "  30:	f10020ff 	cmp	x7, #0x8\n"
+        "  34:	54000040 	b.eq	0x3c  // b.none\n"
+        "  38:	14000041 	b	0x13c\n"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -959,7 +966,7 @@ is_number_test() ->
             BSt3 = ?BACKEND:move_array_element(BSt2, Reg, 0, Reg),
             cond_jump_to_label(
                 {'and', [
-                    {Reg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                    {Reg, '&', ?TERM_BOXED_TAG_MASK_NO_SIGN, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
                     {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_FLOAT}
                 ]},
                 Label,
@@ -978,20 +985,21 @@ is_number_test() ->
         "   0:	f9401807 	ldr	x7, [x0, #48]\n"
         "   4:	92400ce8 	and	x8, x7, #0xf\n"
         "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	540001c0 	b.eq	0x44  // b.none\n"
+        "   c:	540001e0 	b.eq	0x48  // b.none\n"
         "  10:	924004e8 	and	x8, x7, #0x3\n"
         "  14:	f100091f 	cmp	x8, #0x2\n"
         "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	1400004a 	b	0x144\n"
+        "  1c:	1400004b 	b	0x148\n"
         "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
         "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e8 	and	x8, x7, #0x3f\n"
-        "  2c:	f100211f 	cmp	x8, #0x8\n"
-        "  30:	540000a0 	b.eq	0x44  // b.none\n"
-        "  34:	924014e7 	and	x7, x7, #0x3f\n"
-        "  38:	f10060ff 	cmp	x7, #0x18\n"
-        "  3c:	54000040 	b.eq	0x44  // b.none\n"
-        "  40:	14000041 	b	0x144"
+        "  28:	d2800768 	mov	x8, #0x3b\n"
+        "  2c:	8a0800e8 	and	x8, x7, x8\n"
+        "  30:	f100211f 	cmp	x8, #0x8\n"
+        "  34:	540000a0 	b.eq	0x48  // b.none\n"
+        "  38:	924014e7 	and	x7, x7, #0x3f\n"
+        "  3c:	f10060ff 	cmp	x7, #0x18\n"
+        "  40:	54000040 	b.eq	0x48  // b.none\n"
+        "  44:	14000041 	b	0x148\n"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 

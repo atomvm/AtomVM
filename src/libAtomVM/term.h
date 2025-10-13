@@ -102,6 +102,8 @@ extern "C" {
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
+// Do not assign 0x1C: an optimization in libs/jit/src/term.hrl will misidentify this as boxed
+// number: define(TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT, 16#2B).
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
