@@ -23,7 +23,14 @@
 
 test() ->
     ok = test_passive(),
-    ok = test_active().
+    ok = test_active(),
+    case get_otp_version() of
+        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
+            ok = test_passive_socket(),
+            ok = test_active_socket();
+        _ ->
+            ok
+    end.
 
 test_passive() ->
     ok = ssl:start(),
@@ -48,6 +55,44 @@ test_passive() ->
 
 test_active() ->
     ConnectResult = ahttp_client:connect(http, "test.atomvm.org", 80, [{active, true}]),
+    case ConnectResult of
+        {ok, Conn} ->
+            case ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined) of
+                {ok, Conn2, _Ref} ->
+                    loop_active(Conn2, #{});
+                {error, _} = RequestError ->
+                    io:format("Request failed: ~p~n", [RequestError]),
+                    RequestError
+            end;
+        {error, _} = ConnectError ->
+            io:format("Request failed: ~p~n", [ConnectError]),
+            ConnectError
+    end.
+
+test_passive_socket() ->
+    ConnectResult = ahttp_client:connect(http, "test.atomvm.org", 80, [
+        {inet_backend, socket},
+        {active, false},
+        {parse_headers, [<<"Location">>]}
+    ]),
+    case ConnectResult of
+        {ok, Conn} ->
+            case ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined) of
+                {ok, Conn2, _Ref} ->
+                    loop_passive(Conn2, #{});
+                {error, _} = RequestError ->
+                    io:format("Request failed: ~p~n", [RequestError]),
+                    RequestError
+            end;
+        {error, _} = ConnectError ->
+            io:format("Request failed: ~p~n", [ConnectError]),
+            ConnectError
+    end.
+
+test_active_socket() ->
+    ConnectResult = ahttp_client:connect(http, "test.atomvm.org", 80, [
+        {inet_backend, socket}, {active, true}
+    ]),
     case ConnectResult of
         {ok, Conn} ->
             case ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined) of
@@ -117,3 +162,11 @@ parse_responses(
     _Expected
 ) ->
     Resp#{done => true}.
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
+    end.
