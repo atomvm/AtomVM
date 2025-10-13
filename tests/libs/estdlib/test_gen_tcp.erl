@@ -412,30 +412,104 @@ test_connect_parameters([Test | TestOpts], IP, Host, Port, Results) ->
     test_connect_parameters(TestOpts, IP, Host, Port, [Results, IpResult, HostResult]).
 
 test_connect_bad_address() ->
-    {error, nxdomain} = gen_tcp:connect("foo.bar.flurtleblurb", 80, []),
-    try gen_tcp:connect({532, 0, 0, 1}, 80, []) of
-        %{error, {getaddrinfo, _Er}} ->
-        %    ok;
-        {ok, Port} ->
-            gen_tcp:close(Port),
-            error(invalid_ipaddr_accepted);
-        Error ->
-            error({unexpected, Error})
-    catch
-        %& OTP
-        _:badarg ->
+    InetTest = test_connect_bad_address(inet_backend, []),
+    SocketTest =
+        case get_otp_version() of
+            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
+                test_connect_bad_address(socket_backend, [{inet_backend, socket}]);
+            _ ->
+                ok
+        end,
+    Result = [InetTest, SocketTest],
+    case Result of
+        [ok, ok] ->
             ok;
-        %& AtomVM
-        _:{badmatch, {error, {getaddrinfo, _Er}}}->
-            ok
-        %{error, {getaddrinfo, _Er}} ->
-        %    ok
-        %{getaddrinfo, _Er} ->
-        %    ok
-        %_:{error, {getaddrinfo, _Er}} ->
-        %    ok
-        %_:{getaddrinfo, _Er} ->
-        %    ok
+        _ ->
+            Result
+    end.
+
+test_connect_bad_address(Tag, Opts) ->
+    T0 =
+        try gen_tcp:connect({532, 0, 0, 1}, 80, Opts) of
+            {ok, Port0} ->
+                gen_tcp:close(Port0),
+                {addr_bad_range_test, Tag, failed, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_range_test, Tag, unexpected, {error, einval}}
+                end;
+            Error0 ->
+                {addr_bad_range_test, Tag, unexpected, Error0}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_range_test, Tag, caught, badarg}
+                end
+        end,
+    T1 =
+        try gen_tcp:connect({10, 1}, 80, Opts) of
+            {ok, Port1} ->
+                gen_tcp:close(Port1),
+                {addr_bad_tuple_test, Tag, error, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_tuple_test, Tag, unexpected, {error, einval}}
+                end;
+            Error1 ->
+                {addr_bad_tuple_test, Tag, unexpected, Error1}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_tuple_test, Tag, caught, badarg}
+                end
+        end,
+    T2 =
+        try gen_tcp:connect({127.0, 0, 0, 1.0}, 80, Opts) of
+            {ok, Port2} ->
+                gen_tcp:close(Port2),
+                {addr_float_test, Tag, error, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_float_test, Tag, unexpected, {error, einval}}
+                end;
+            Error2 ->
+                {addr_float_test, Tag, unexpected, Error2}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_float_test, Tag, caught, badarg}
+                end
+        end,
+    T3 =
+        case gen_tcp:connect("foo.bar.flurtleblurb", 80, Opts) of
+            {error, nxdomain} ->
+                ok;
+            Error3 ->
+                {inet_unresolvable_test, Tag, unexpected, Error3}
+        end,
+
+    Results = [T0, T1, T2, T3],
+    if
+        [ok, ok, ok, ok] =:= Results -> ok;
+        true -> Results
     end.
 
 test_tcp_double_close() ->
