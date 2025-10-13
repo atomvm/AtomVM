@@ -35,6 +35,8 @@
     get_machine_atom/0,
     expect_error/2,
     expect_overflow/1,
+    is_integer_helper/1,
+    is_number_helper/1,
     id/1
 ]).
 
@@ -61,6 +63,8 @@ start() ->
         conv_to_from_float() +
         external_term_decode() +
         test_big_literals() +
+        test_is_integer() +
+        test_is_number() +
         to_external_term() +
         test_band() +
         test_bxor() +
@@ -1785,6 +1789,124 @@ lit_ovf1() ->
 % even if this integer exceeds maximum integer capacity.
 lit_ovf2() ->
     ?MODULE:id(-16#10000000000000000000000000000000000000000000000000000000000000000).
+
+test_is_integer() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MaxPattern)),
+    true = is_integer(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MinPattern)),
+    true = is_integer(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(Pattern128)),
+    true = is_integer(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(Pattern128Neg)),
+    true = is_number(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(UINT64Max)),
+    true = is_number(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(UINT64MaxNeg)),
+    true = is_number(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(INT63MaxP1)),
+    true = is_number(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(INT63MinM1)),
+    true = is_number(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(RandomPattern)),
+    true = is_number(?MODULE:id(RandomPattern)),
+
+    0.
+
+is_integer_helper(I) when is_integer(I) ->
+    _ = ?MODULE:id(I),
+    ok;
+is_integer_helper(_I) ->
+    ?MODULE:id(error).
+
+test_is_number() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MinPattern)),
+    true = is_number(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(Pattern128)),
+    true = is_number(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(Pattern128Neg)),
+    true = is_number(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(UINT64Max)),
+    true = is_number(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(UINT64MaxNeg)),
+    true = is_number(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(INT63MaxP1)),
+    true = is_number(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(INT63MinM1)),
+    true = is_number(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    ok = ?MODULE:is_number_helper(?MODULE:id(RandomPattern)),
+    true = is_number(?MODULE:id(RandomPattern)),
+
+    0.
+
+is_number_helper(N) when is_number(N) ->
+    _ = ?MODULE:id(N),
+    ?MODULE:id(ok);
+is_number_helper(_N) ->
+    ?MODULE:id(error).
 
 to_external_term() ->
     % maximum
