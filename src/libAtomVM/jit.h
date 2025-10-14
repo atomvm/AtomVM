@@ -172,6 +172,7 @@ enum TrapAndLoadResult
 
 #define JIT_ARCH_X86_64 1
 #define JIT_ARCH_AARCH64 2
+#define JIT_ARCH_ARMV6M 3
 
 #define JIT_VARIANT_PIC 1
 
@@ -185,6 +186,11 @@ enum TrapAndLoadResult
 #if defined(__arm64__) || defined(__aarch64__)
 #define JIT_ARCH_TARGET JIT_ARCH_AARCH64
 #define JIT_JUMPTABLE_ENTRY_SIZE 4
+#endif
+
+#ifdef __arm__
+#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
+#define JIT_JUMPTABLE_ENTRY_SIZE 12
 #endif
 
 #ifndef JIT_ARCH_TARGET

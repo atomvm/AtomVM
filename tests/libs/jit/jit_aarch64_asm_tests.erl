@@ -20,9 +20,7 @@
 
 -module(jit_aarch64_asm_tests).
 
--ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
 -export([
     list_to_integer/1,

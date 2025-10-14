@@ -53,9 +53,15 @@ macro(pack_archive avm_name)
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
+    # Create emu target for source beams only
+    add_custom_target(
+        ${avm_name}_emu
+        DEPENDS ${avm_name}.avm
+    )
+    # Create main target (will be updated by pack_precompiled_archive if needed)
     add_custom_target(
         ${avm_name} ALL
-        DEPENDS ${avm_name}.avm
+        DEPENDS ${avm_name}_emu
     )
 endmacro()
 
@@ -110,6 +116,9 @@ macro(pack_precompiled_archive avm_name)
                 ${avm_name}_${jit_target_arch} ALL
                 DEPENDS ${avm_name}-${jit_target_arch}.avm
             )
+            # Ensure source beams are built before precompilation
+            add_dependencies(${avm_name}_${jit_target_arch} ${avm_name}_emu)
+            # Make main target depend on precompiled targets
             add_dependencies(${avm_name} ${avm_name}_${jit_target_arch})
         endforeach()
     endif()
@@ -184,6 +193,24 @@ macro(pack_lib avm_name)
         VERBATIM
     )
     set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
+
+    if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico.uf2 -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m-pico2.uf2
+            DEPENDS ${avm_name}-armv6m.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            VERBATIM
+        )
+        set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
+    endif()
 
     add_custom_target(
         ${avm_name} ALL
