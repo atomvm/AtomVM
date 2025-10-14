@@ -37,7 +37,12 @@
     expect_overflow/1,
     is_integer_helper/1,
     is_number_helper/1,
-    id/1
+    classify1/1,
+    classify2/1,
+    id/1,
+    idB/1,
+    t2/2,
+    fst/1
 ]).
 
 %
@@ -65,6 +70,7 @@ start() ->
         test_big_literals() +
         test_is_integer() +
         test_is_number() +
+        test_gt_lt_guards() +
         to_external_term() +
         test_band() +
         test_bxor() +
@@ -1908,6 +1914,77 @@ is_number_helper(N) when is_number(N) ->
 is_number_helper(_N) ->
     ?MODULE:id(error).
 
+test_gt_lt_guards() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(MaxPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(MinPattern)),
+    negative = ?MODULE:classify2(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(Pattern128)),
+    positive = ?MODULE:classify2(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(Pattern128Neg)),
+    negative = ?MODULE:classify2(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(UINT64Max)),
+    positive = ?MODULE:classify2(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(UINT64MaxNeg)),
+    negative = ?MODULE:classify2(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(INT63MaxP1)),
+    positive = ?MODULE:classify2(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(INT63MinM1)),
+    negative = ?MODULE:classify2(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(MaxPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    non_negative = ?MODULE:classify1(?MODULE:id(RandomPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(RandomPattern)),
+
+    0.
+
+classify1(X) when is_integer(X) andalso X >= 0 ->
+    ?MODULE:fst(?MODULE:t2(non_negative, X));
+classify1(X) when is_integer(X) ->
+    ?MODULE:fst(?MODULE:t2(negative, ?MODULE:idB(X)));
+classify1(X) ->
+    _ = ?MODULE:id(X),
+    error.
+
+classify2(X) when is_integer(X) andalso X < 0 ->
+    ?MODULE:fst(?MODULE:t2(negative, X));
+classify2(X) when X =:= 0 ->
+    ?MODULE:fst(?MODULE:t2(zero, ?MODULE:id(X)));
+classify2(X) when is_integer(X) ->
+    ?MODULE:fst(?MODULE:t2(positive, ?MODULE:idB(X)));
+classify2(X) ->
+    _ = ?MODULE:id(X),
+    error.
+
 to_external_term() ->
     % maximum
     <<131, 110, 32, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
@@ -2507,6 +2584,15 @@ test_bnot() ->
 
 id(X) ->
     X.
+
+idB(X) ->
+    X.
+
+t2(A, B) ->
+    {A, B}.
+
+fst({A, _B}) ->
+    A.
 
 choose_result(AResult, BResult) ->
     case get_machine_atom() of
