@@ -425,31 +425,38 @@ try_encode_single_pattern(Pattern, Size) ->
     %% Find runs of consecutive 1s and 0s
     case find_single_run_of_ones(Pattern, Size) of
         {ok, OnesCount, StartPos} ->
-            %% Calculate N, Immr, Imms
-            N =
-                case Size of
-                    64 -> 1;
-                    32 -> 0;
-                    16 -> 0;
-                    8 -> 0;
-                    4 -> 0;
-                    2 -> 0
-                end,
+            %% AArch64 cannot encode all-ones patterns as bitmask immediates
+            %% (all-zeros are already filtered by find_single_run_of_ones)
+            if
+                OnesCount =:= Size ->
+                    error;
+                true ->
+                    %% Calculate N, Immr, Imms
+                    N =
+                        case Size of
+                            64 -> 1;
+                            32 -> 0;
+                            16 -> 0;
+                            8 -> 0;
+                            4 -> 0;
+                            2 -> 0
+                        end,
 
-            %% For N=0 patterns, we need to encode the size in imms
-            Imms =
-                case Size of
-                    64 -> OnesCount - 1;
-                    32 -> OnesCount - 1;
-                    16 -> 2#100000 bor (OnesCount - 1);
-                    8 -> 2#110000 bor (OnesCount - 1);
-                    4 -> 2#111000 bor (OnesCount - 1);
-                    2 -> 2#111100 bor (OnesCount - 1)
-                end,
-            %% immr is the rotation amount (negate of start position)
-            Immr = (-StartPos) band (Size - 1),
+                    %% For N=0 patterns, we need to encode the size in imms
+                    Imms =
+                        case Size of
+                            64 -> OnesCount - 1;
+                            32 -> OnesCount - 1;
+                            16 -> 2#100000 bor (OnesCount - 1);
+                            8 -> 2#110000 bor (OnesCount - 1);
+                            4 -> 2#111000 bor (OnesCount - 1);
+                            2 -> 2#111100 bor (OnesCount - 1)
+                        end,
+                    %% immr is the rotation amount (negate of start position)
+                    Immr = (-StartPos) band (Size - 1),
 
-            {ok, N, Immr, Imms};
+                    {ok, N, Immr, Imms}
+            end;
         error ->
             error
     end.
@@ -464,6 +471,9 @@ find_single_run_of_ones(Pattern, Size) ->
 find_ones_run([], _, OnesCount, StartPos, in_ones) when OnesCount > 0 ->
     %% Reached end while in ones run
     {ok, OnesCount, StartPos};
+find_ones_run([], _, _, _, none) ->
+    %% Reached end without finding any ones (all zeros pattern)
+    error;
 find_ones_run([1 | Rest], Pos, 0, _, none) ->
     %% Start of ones run
     find_ones_run(Rest, Pos + 1, 1, Pos, in_ones);

@@ -356,7 +356,13 @@ orr_test_() ->
         ),
 
         %% Test orr with unencodable immediate
-        ?_assertError({unencodable_immediate, 16#123456}, jit_aarch64_asm:orr(r0, r0, 16#123456))
+        ?_assertError({unencodable_immediate, 16#123456}, jit_aarch64_asm:orr(r0, r0, 16#123456)),
+
+        %% Test orr with -1 (all ones) - should be unencodable as bitmask immediate
+        ?_assertError({unencodable_immediate, -1}, jit_aarch64_asm:orr(r8, xzr, -1)),
+
+        %% Test orr with 0 (all zeros) - should be unencodable as bitmask immediate
+        ?_assertError({unencodable_immediate, 0}, jit_aarch64_asm:orr(r8, xzr, 0))
     ].
 
 str_test_() ->
