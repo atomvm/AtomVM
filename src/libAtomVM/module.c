@@ -336,7 +336,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
-                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == JIT_VARIANT_PIC) {
+                uint16_t runtime_variant;
+#ifdef AVM_USE_SINGLE_PRECISION
+                runtime_variant = JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC;
+#else
+                runtime_variant = JIT_VARIANT_PIC;
+#endif
+                if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
                     ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
                     module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
@@ -622,7 +628,7 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
             }
             term type_tuple = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "t_bs_matchable")));
-            term_put_tuple_element(type_tuple, 1, term_from_int32(unit));
+            term_put_tuple_element(type_tuple, 1, term_from_int11(unit));
             return type_tuple;
 
         case BEAM_TYPE_CONS:
@@ -637,19 +643,26 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
         case (BEAM_TYPE_FLOAT | BEAM_TYPE_INTEGER):
             // {t_number, {LowerBound, UpperBound}}
             if (has_lower || has_upper) {
-                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                size_t heap_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
+                if (has_lower && (lower_bound < MIN_NOT_BOXED_INT || lower_bound > MAX_NOT_BOXED_INT)) {
+                    heap_size += BOXED_INT64_SIZE;
+                }
+                if (has_upper && (upper_bound < MIN_NOT_BOXED_INT || upper_bound > MAX_NOT_BOXED_INT)) {
+                    heap_size += BOXED_INT64_SIZE;
+                }
+                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
                 }
                 term bounds_tuple = term_alloc_tuple(2, &ctx->heap);
 
                 if (has_lower) {
-                    term_put_tuple_element(bounds_tuple, 0, term_from_int64(lower_bound));
+                    term_put_tuple_element(bounds_tuple, 0, term_make_maybe_boxed_int64(lower_bound, &ctx->heap));
                 } else {
                     term_put_tuple_element(bounds_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "-inf")));
                 }
 
                 if (has_upper) {
-                    term_put_tuple_element(bounds_tuple, 1, term_from_int64(upper_bound));
+                    term_put_tuple_element(bounds_tuple, 1, term_make_maybe_boxed_int64(upper_bound, &ctx->heap));
                 } else {
                     term_put_tuple_element(bounds_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "+inf")));
                 }
@@ -663,19 +676,26 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
 
         case BEAM_TYPE_INTEGER:
             if (has_lower || has_upper) {
-                if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+                size_t heap_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
+                if (has_lower && (lower_bound < MIN_NOT_BOXED_INT || lower_bound > MAX_NOT_BOXED_INT)) {
+                    heap_size += BOXED_INT64_SIZE;
+                }
+                if (has_upper && (upper_bound < MIN_NOT_BOXED_INT || upper_bound > MAX_NOT_BOXED_INT)) {
+                    heap_size += BOXED_INT64_SIZE;
+                }
+                if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     return globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "any"));
                 }
                 term bounds_tuple = term_alloc_tuple(2, &ctx->heap);
 
                 if (has_lower) {
-                    term_put_tuple_element(bounds_tuple, 0, term_from_int64(lower_bound));
+                    term_put_tuple_element(bounds_tuple, 0, term_make_maybe_boxed_int64(lower_bound, &ctx->heap));
                 } else {
                     term_put_tuple_element(bounds_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "-inf")));
                 }
 
                 if (has_upper) {
-                    term_put_tuple_element(bounds_tuple, 1, term_from_int64(upper_bound));
+                    term_put_tuple_element(bounds_tuple, 1, term_make_maybe_boxed_int64(upper_bound, &ctx->heap));
                 } else {
                     term_put_tuple_element(bounds_tuple, 1, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "+inf")));
                 }
