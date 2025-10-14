@@ -114,7 +114,8 @@
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [x86_64_register()],
     used_regs :: [x86_64_register()],
-    labels :: [{integer() | reference(), integer()}]
+    labels :: [{integer() | reference(), integer()}],
+    variant :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -156,6 +157,13 @@
 -define(X_REG(N), {16#30 + (N * ?WORD_SIZE), ?CTX_REG}).
 -define(CP, {16#B8, ?CTX_REG}).
 -define(FP_REGS, {16#C0, ?CTX_REG}).
+-define(FP_REG_OFFSET(State, F),
+    (F *
+        case (State)#state.variant band ?JIT_VARIANT_FLOAT32 of
+            0 -> 8;
+            _ -> 4
+        end)
+).
 -define(BS, {16#C8, ?CTX_REG}).
 -define(BS_OFFSET, {16#D0, ?CTX_REG}).
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
@@ -201,7 +209,7 @@ word_size() -> ?WORD_SIZE.
 %% @return New backend state
 %%-----------------------------------------------------------------------------
 -spec new(any(), module(), stream()) -> state().
-new(_Variant, StreamModule, Stream) ->
+new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
@@ -209,7 +217,8 @@ new(_Variant, StreamModule, Stream) ->
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
-        labels = []
+        labels = [],
+        variant = Variant
     }.
 
 %%-----------------------------------------------------------------------------
@@ -1028,6 +1037,18 @@ replace_reg0([{free, Reg} | T], Reg, Replacement, Acc) ->
 replace_reg0([Other | T], Reg, Replacement, Acc) ->
     replace_reg0(T, Reg, Replacement, [Other | Acc]).
 
+% Exchange registers in both Args and ArgsRegs lists
+exchange_reg(Args, ArgsRegs, Reg1, Reg2) ->
+    NewArgs = replace_reg(Args, Reg1, Reg2),
+    NewArgsRegs = lists:map(
+        fun
+            (R) when R =:= Reg1 -> Reg2;
+            (R) -> R
+        end,
+        ArgsRegs
+    ),
+    {NewArgs, NewArgsRegs}.
+
 set_args0([], [], [], _AvailGP, Acc) ->
     list_to_binary(lists:reverse(Acc));
 set_args0([{free, FreeVal} | ArgsT], ArgsRegs, ParamRegs, AvailGP, Acc) ->
@@ -1056,19 +1077,23 @@ set_args0([Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, 
     set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, [J | Acc]);
 set_args0(
     [Arg | ArgsT],
-    [_ArgReg | ArgsRegs],
+    [ArgReg | ArgsRegs],
     [ParamReg | ParamRegs],
-    [Avail | AvailGPT] = AvailGP,
+    AvailGP,
     Acc
 ) ->
-    J = set_args1(Arg, ParamReg),
     case lists:member(ParamReg, ArgsRegs) of
         false ->
+            % Normal case: ParamReg is free, just move Arg to ParamReg
+            J = set_args1(Arg, ParamReg),
             set_args0(ArgsT, ArgsRegs, ParamRegs, AvailGP, [J | Acc]);
         true ->
-            I = jit_x86_64_asm:movq(ParamReg, Avail),
-            NewArgsT = replace_reg(ArgsT, ParamReg, Avail),
-            set_args0(NewArgsT, ArgsRegs, ParamRegs, AvailGPT, [J, I | Acc])
+            % ParamReg is occupied by another argument that will go elsewhere
+            % Use xchg to swap ArgReg and ParamReg
+            % After xchg, the value from Arg (which was in ArgReg) is now in ParamReg
+            I = jit_x86_64_asm:xchgq(ArgReg, ParamReg),
+            {NewArgsT, NewArgsRegs} = exchange_reg(ArgsT, ArgsRegs, ParamReg, ArgReg),
+            set_args0(NewArgsT, NewArgsRegs, ParamRegs, AvailGP, [I | Acc])
     end.
 
 set_args1(Reg, Reg) ->
@@ -1232,7 +1257,7 @@ move_to_vm_register(
 ) when is_atom(Reg) ->
     I1 = jit_x86_64_asm:movq({8, Reg}, Reg),
     I2 = jit_x86_64_asm:movq(?FP_REGS, Temp),
-    I3 = jit_x86_64_asm:movq(Reg, {F * 8, Temp}),
+    I3 = jit_x86_64_asm:movq(Reg, {?FP_REG_OFFSET(State0, F), Temp}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = free_native_register(State0, Reg),
