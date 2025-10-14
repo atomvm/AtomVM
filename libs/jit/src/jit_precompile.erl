@@ -28,6 +28,28 @@ start() ->
     [Target, Dir | Files] = init:get_plain_arguments(),
     lists:foreach(fun(File) -> compile(Target, Dir, File) end, Files).
 
+%% @doc Parse target string to extract base architecture and requested variant
+%% Examples:
+%%   "armv6m" -> {"armv6m", ?JIT_VARIANT_PIC}
+%%   "armv6m+float32" -> {"armv6m", ?JIT_VARIANT_PIC + ?JIT_VARIANT_FLOAT32}
+%%   "x86_64" -> {"x86_64", ?JIT_VARIANT_PIC}
+parse_target(Target) ->
+    case string:split(Target, "+", all) of
+        [BaseTarget] ->
+            {BaseTarget, ?JIT_VARIANT_PIC};
+        [BaseTarget | Variants] ->
+            RequestedVariant = lists:foldl(
+                fun(Variant, Acc) ->
+                    case Variant of
+                        "float32" -> Acc + ?JIT_VARIANT_FLOAT32
+                    end
+                end,
+                ?JIT_VARIANT_PIC,
+                Variants
+            ),
+            {BaseTarget, RequestedVariant}
+    end.
+
 compile(Target, Dir, Path) ->
     try
         {ok, InitialBinary} = file:read_file(Path),
@@ -62,27 +84,33 @@ compile(Target, Dir, Path) ->
             end,
         TypeResolver = type_resolver(TypesChunk),
 
+        % Parse target to extract arch and variant
+        {BaseTarget, RequestedVariant} = parse_target(Target),
+        Backend = list_to_atom("jit_" ++ BaseTarget),
+
+        Arch =
+            case BaseTarget of
+                "x86_64" -> ?JIT_ARCH_X86_64;
+                "aarch64" -> ?JIT_ARCH_AARCH64;
+                "armv6m" -> ?JIT_ARCH_ARMV6M;
+                _ -> error({unsupported_target, Target})
+            end,
+
         Stream0 = jit_stream_binary:new(0),
         <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> =
             CodeChunk,
 
-        Arch =
-            case Target of
-                "x86_64" -> ?JIT_ARCH_X86_64;
-                "aarch64" -> ?JIT_ARCH_AARCH64;
-                _ -> error({unsupported_target, Target})
-            end,
-
         Stream1 = jit_stream_binary:append(
-            Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
+            Stream0, jit:beam_chunk_header(LabelsCount, Arch, RequestedVariant)
         ),
-        Backend = list_to_atom("jit_" ++ Target),
-        Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+
+        Stream2 = Backend:new(RequestedVariant, jit_stream_binary, Stream1),
         {LabelsCount, Stream3} = jit:compile(
             CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
         ),
         NativeCode = Backend:stream(Stream3),
         UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
+
         {ok, Binary} = beam_lib:build_module(UpdatedChunks),
         Basename = filename:basename(Path),
         UpdatedFile = filename:join(Dir, Basename),

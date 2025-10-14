@@ -142,9 +142,26 @@ test_create_with_unsupported_unaligned_int_size() ->
     atom_unsupported(fun() -> create_int_binary(16#FFFF, id(28)) end).
 
 test_create_with_int_little_endian() ->
-    ok = expect_equals(<<255, 255, 0, 0>>, create_int_binary_little_endian(16#FFFF, 32)),
-    ok = expect_equals(<<0, 4, 0, 0>>, create_int_binary_little_endian(1024, 32)),
-    ok = expect_equals(<<0>>, create_int_binary_little_endian(1024, 8)),
+    <<2, 1>> = create_int_binary_little_endian(16#0102, 16),
+    <<254, 255>> = create_int_binary_little_endian(16#FFFE, 16),
+    <<4, 3, 2, 1>> = create_int_binary_little_endian(16#01020304, 32),
+    <<252, 253, 254, 255>> = create_int_binary_little_endian(16#FFFEFDFC, 32),
+    <<0>> = create_int_binary_little_endian(1024, 8),
+
+    <<0, 2, 1>> = create_int_binary_little_endian(8, 16#0102, 16),
+    <<0, 254, 255>> = create_int_binary_little_endian(8, 16#FFFE, 16),
+    <<0, 4, 3, 2, 1>> = create_int_binary_little_endian(8, 16#01020304, 32),
+    <<0, 252, 253, 254, 255>> = create_int_binary_little_endian(8, 16#FFFEFDFC, 32),
+
+    <<0, 0, 2, 1>> = create_int_binary_little_endian(16, 16#0102, 16),
+    <<0, 0, 254, 255>> = create_int_binary_little_endian(16, 16#FFFE, 16),
+    <<0, 0, 4, 3, 2, 1>> = create_int_binary_little_endian(16, 16#01020304, 32),
+    <<0, 0, 252, 253, 254, 255>> = create_int_binary_little_endian(16, 16#FFFEFDFC, 32),
+
+    <<0, 0, 0, 2, 1>> = create_int_binary_little_endian(24, 16#0102, 16),
+    <<0, 0, 0, 254, 255>> = create_int_binary_little_endian(24, 16#FFFE, 16),
+    <<0, 0, 0, 4, 3, 2, 1>> = create_int_binary_little_endian(24, 16#01020304, 32),
+    <<0, 0, 0, 252, 253, 254, 255>> = create_int_binary_little_endian(24, 16#FFFEFDFC, 32),
     ok.
 
 test_create_with_int_signed() ->
@@ -175,10 +192,80 @@ test_get_with_unsupported_int_unit() ->
     ).
 
 test_get_with_int_little_endian() ->
-    expect_equals(1024, get_integer_little_unsigned(<<0, 4, 0, 0>>, 32)).
+    Bin1 = id(<<255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244>>),
+    Bin2 = id(<<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11>>),
+    16#FEFF = get_integer_little_unsigned(id(Bin1), 16),
+    16#0100 = get_integer_little_unsigned(id(Bin2), 16),
+    16#FCFDFEFF = get_integer_little_unsigned(id(Bin1), 32),
+    16#03020100 = get_integer_little_unsigned(id(Bin2), 32),
+    %   16#F8F9FAFBFCFDFEFF = get_integer_little_unsigned(id(Bin1), 64),
+    %   Even this fails as well until we have proper bigint support as we can't
+    %   represent 16#F8F9FAFBFCFDFEFF unsigned
+    %   X = get_integer_little_unsigned(id(Bin1), 64),
+    %   16#F8F9FAFB = X bsr 32,
+    %   16#FCFDFEFF = X band 16#FFFFFFFF,
+    16#0706050403020100 = get_integer_little_unsigned(id(Bin2), 64),
+
+    16#FDFE = get_integer_little_unsigned(8, id(Bin1), 16),
+    16#0201 = get_integer_little_unsigned(8, id(Bin2), 16),
+    16#FBFCFDFE = get_integer_little_unsigned(8, id(Bin1), 32),
+    16#04030201 = get_integer_little_unsigned(8, id(Bin2), 32),
+    %   16#F7F8F9FAFBFCFDFE = get_integer_little_unsigned(8, id(Bin1), 64),
+    16#0807060504030201 = get_integer_little_unsigned(8, id(Bin2), 64),
+
+    16#FCFD = get_integer_little_unsigned(16, id(Bin1), 16),
+    16#0302 = get_integer_little_unsigned(16, id(Bin2), 16),
+    16#FAFBFCFD = get_integer_little_unsigned(16, id(Bin1), 32),
+    16#05040302 = get_integer_little_unsigned(16, id(Bin2), 32),
+    %   16#F6F7F8F9FAFBFCFD = get_integer_little_unsigned(16, id(Bin1), 64),
+    16#0908070605040302 = get_integer_little_unsigned(16, id(Bin2), 64),
+
+    16#FBFC = get_integer_little_unsigned(24, id(Bin1), 16),
+    16#0403 = get_integer_little_unsigned(24, id(Bin2), 16),
+    16#F9FAFBFC = get_integer_little_unsigned(24, id(Bin1), 32),
+    16#06050403 = get_integer_little_unsigned(24, id(Bin2), 32),
+    %   16#F5F6F7F8F9FAFBFC = get_integer_little_unsigned(24, id(Bin1), 64),
+    16#0A09080706050403 = get_integer_little_unsigned(24, id(Bin2), 64),
+
+    ok.
 
 test_get_with_int_signed() ->
-    expect_equals(-1024, get_integer_big_signed(<<255, 255, 252, 0>>, 32)).
+    Bin1 = id(<<255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244>>),
+    Bin2 = id(<<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11>>),
+    Bin3 = id(<<128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139>>),
+    -16#0002 = get_integer_big_signed(id(Bin1), 16),
+    16#0001 = get_integer_big_signed(id(Bin2), 16),
+    -16#00010204 = get_integer_big_signed(id(Bin1), 32),
+    16#00010203 = get_integer_big_signed(id(Bin2), 32),
+    -16#01020304050608 = get_integer_big_signed(id(Bin1), 64),
+    16#01020304050607 = get_integer_big_signed(id(Bin2), 64),
+    -16#7F7E7D7C7B7A7979 = get_integer_big_signed(id(Bin3), 64),
+
+    -16#0103 = get_integer_big_signed(8, id(Bin1), 16),
+    16#0102 = get_integer_big_signed(8, id(Bin2), 16),
+    -16#01020305 = get_integer_big_signed(8, id(Bin1), 32),
+    16#01020304 = get_integer_big_signed(8, id(Bin2), 32),
+    -16#0102030405060709 = get_integer_big_signed(8, id(Bin1), 64),
+    16#0102030405060708 = get_integer_big_signed(8, id(Bin2), 64),
+    -16#7E7D7C7B7A797878 = get_integer_big_signed(8, id(Bin3), 64),
+
+    -16#0204 = get_integer_big_signed(16, id(Bin1), 16),
+    16#0203 = get_integer_big_signed(16, id(Bin2), 16),
+    -16#02030406 = get_integer_big_signed(16, id(Bin1), 32),
+    16#02030405 = get_integer_big_signed(16, id(Bin2), 32),
+    -16#020304050607080A = get_integer_big_signed(16, id(Bin1), 64),
+    16#0203040506070809 = get_integer_big_signed(16, id(Bin2), 64),
+    -16#7D7C7B7A79787777 = get_integer_big_signed(16, id(Bin3), 64),
+
+    -16#0305 = get_integer_big_signed(24, id(Bin1), 16),
+    16#0304 = get_integer_big_signed(24, id(Bin2), 16),
+    -16#03040507 = get_integer_big_signed(24, id(Bin1), 32),
+    16#03040506 = get_integer_big_signed(24, id(Bin2), 32),
+    -16#030405060708090B = get_integer_big_signed(24, id(Bin1), 64),
+    16#030405060708090A = get_integer_big_signed(24, id(Bin2), 64),
+    -16#7C7B7A7978777676 = get_integer_big_signed(24, id(Bin3), 64),
+
+    ok.
 
 test_get_with_unaligned_binary() ->
     atom_unsupported(fun() -> get_int_then_binary(<<1, 2, 3, 4>>, id(4), id(1)) end, fun(T) ->
@@ -193,6 +280,9 @@ create_int_binary(Value, Size) ->
 
 create_int_binary_little_endian(Value, Size) ->
     <<Value:Size/little>>.
+
+create_int_binary_little_endian(Skip, Value, Size) ->
+    <<0:Skip, Value:Size/little>>.
 
 create_int_binary_signed(Value, Size) ->
     <<Value:Size/signed>>.
@@ -215,8 +305,16 @@ get_integer_little_unsigned(Bin, Size) ->
     <<Value:Size/little, _Rest/binary>> = Bin,
     Value.
 
+get_integer_little_unsigned(Skip, Bin, Size) ->
+    <<_:Skip, Value:Size/little, _Rest/binary>> = Bin,
+    Value.
+
 get_integer_big_signed(Bin, Size) ->
     <<Value:Size/signed, _Rest/binary>> = Bin,
+    Value.
+
+get_integer_big_signed(Skip, Bin, Size) ->
+    <<_:Skip, Value:Size/signed, _Rest/binary>> = Bin,
     Value.
 
 get_int_then_binary(Bin, IntSize, BinSize) ->

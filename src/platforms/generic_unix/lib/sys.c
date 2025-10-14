@@ -842,7 +842,12 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
     }
     __builtin___clear_cache((char *) native_code_mmap, (char *) (native_code_mmap + size));
 #endif
+#if JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+    // Set thumb bit for armv6m
+    return (ModuleNativeEntryPoint) (native_code_mmap + offset + 1);
+#else
     return (ModuleNativeEntryPoint) (native_code_mmap + offset);
+#endif
 #else
     UNUSED(size);
     return (ModuleNativeEntryPoint) (native_code + offset);
