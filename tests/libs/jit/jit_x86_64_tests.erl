@@ -163,6 +163,60 @@ call_primitive_extended_regs_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_primitive_few_regs_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r11} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r10} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, r9} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+    {State5, r8} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+    {State6, rcx} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
+
+    CreatedBin = rax,
+    Offset = r11,
+    SrcReg = r8,
+    SizeValue = r9,
+    FlagsValue = rcx,
+
+    {State7, r8} = ?BACKEND:call_primitive(State6, ?PRIM_BITSTRING_INSERT_INTEGER, [
+        CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
+    ]),
+    Stream = ?BACKEND:stream(State7),
+    Dump =
+        <<
+            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+            "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+            "   8:	4c 8b 57 40          	mov    0x40(%rdi),%r10\n"
+            "   c:	4c 8b 4f 48          	mov    0x48(%rdi),%r9\n"
+            "  10:	4c 8b 47 50          	mov    0x50(%rdi),%r8\n"
+            "  14:	48 8b 4f 58          	mov    0x58(%rdi),%rcx\n"
+            "  18:	57                   	push   %rdi\n"
+            "  19:	56                   	push   %rsi\n"
+            "  1a:	52                   	push   %rdx\n"
+            "  1b:	41 51                	push   %r9\n"
+            "  1d:	41 52                	push   %r10\n"
+            "  1f:	41 53                	push   %r11\n"
+            "  21:	50                   	push   %rax\n"
+            "  22:	48 8b 92 c8 01 00 00 	mov    0x1c8(%rdx),%rdx\n"
+            "  29:	52                   	push   %rdx\n"
+            "  2a:	48 89 c7             	mov    %rax,%rdi\n"
+            "  2d:	4c 89 de             	mov    %r11,%rsi\n"
+            "  30:	4c 89 c2             	mov    %r8,%rdx\n"
+            "  33:	4c 87 c9             	xchg   %r9,%rcx\n"
+            "  36:	4d 89 c8             	mov    %r9,%r8\n"
+            "  39:	58                   	pop    %rax\n"
+            "  3a:	ff d0                	callq  *%rax\n"
+            "  3c:	49 89 c0             	mov    %rax,%r8\n"
+            "  3f:	58                   	pop    %rax\n"
+            "  40:	41 5b                	pop    %r11\n"
+            "  42:	41 5a                	pop    %r10\n"
+            "  44:	41 59                	pop    %r9\n"
+            "  46:	5a                   	pop    %rdx\n"
+            "  47:	5e                   	pop    %rsi\n"
+            "  48:	5f                   	pop    %rdi"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_ext_only_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
@@ -766,17 +820,35 @@ if_else_block_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_right_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:shift_right(State1, Reg, 3),
-    Stream = ?BACKEND:stream(State2),
-    Dump =
-        <<
-            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-            "   4:	48 c1 e8 03          	shr    $0x3,%rax"
-        >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+shift_right_test_() ->
+    [
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, Reg} = ?BACKEND:shift_right(State1, {free, Reg}, 3),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   4:	48 c1 e8 03          	shr    $0x3,%rax"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end),
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, OtherReg} = ?BACKEND:shift_right(State1, Reg, 3),
+            ?assertNotEqual(OtherReg, Reg),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   4:	49 89 c3             	mov    %rax,%r11\n"
+                    "   7:	49 c1 eb 03          	shr    $0x3,%r11"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end)
+    ].
 
 shift_left_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1504,6 +1576,21 @@ move_to_array_element_test_() ->
                 end)
             ]
         end}.
+
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, rax}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: leaq -0x7(%rip), %rax; addq %rax, %rax; jmpq *%rax
+    % With default offset 0, NetOffset = 0 - 0 = 0, but RIP-relative needs adjustment for instruction length
+    Dump =
+        <<
+            "   0:	48 8d 05 f9 ff ff ff 	lea    -0x7(%rip),%rax\n"
+            "   7:	48 01 c0             	add    %rax,%rax\n"
+            "   a:	ff e0                	jmpq   *%rax"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
