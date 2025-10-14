@@ -4545,7 +4545,7 @@ static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_atom);
-    VALIDATE_VALUE(argv[1], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_any_integer);
 
     avm_int64_t creation = term_maybe_unbox_int64(argv[1]);
     if (UNLIKELY(creation < 0 || creation > ((avm_int64_t) 1) << 32)) {
