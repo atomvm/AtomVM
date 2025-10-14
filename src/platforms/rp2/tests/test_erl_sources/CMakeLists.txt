@@ -19,11 +19,29 @@
 #
 
 include(ExternalProject)
+if(NOT AVM_DISABLE_JIT)
+set(host_atomvm_jit_target "--target=jit")
+else()
+set(host_atomvm_jit_target "")
+endif()
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
-    BUILD_COMMAND cmake --build . --target=atomvmlib --target=PackBEAM --target=UF2Tool
+    BUILD_COMMAND cmake --build . --target=atomvmlib ${host_atomvm_jit_target} --target=PackBEAM --target=UF2Tool
 )
+
+macro(jit_precompile module_name)
+    if(NOT AVM_DISABLE_JIT)
+        add_custom_command(
+            OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
+            COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
+                && erl -pa HostAtomVM-prefix/src/HostAtomVM-build/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+            DEPENDS ${module_name}.beam HostAtomVM
+            COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
+            VERBATIM
+        )
+    endif()
+endmacro()
 
 function(compile_erlang module_name module_src_dir)
     add_custom_command(
@@ -33,6 +51,7 @@ function(compile_erlang module_name module_src_dir)
         COMMENT "Compiling ${module_name}.erl"
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
+    jit_precompile(${module_name})
 
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
@@ -41,18 +60,26 @@ compile_erlang(test_clocks "")
 compile_erlang(test_smp "")
 compile_erlang(test_crypto ../../../esp32/test/main/test_erl_sources/)
 
+set(erlang_test_beams
+    test_clocks.beam
+    test_smp.beam
+    test_crypto.beam
+)
+
+if(NOT AVM_DISABLE_JIT)
+    set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
+    list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
+    list(APPEND erlang_test_beams ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+endif()
+
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i rp2_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
-        test_clocks.beam
-        test_smp.beam
-        test_crypto.beam
+        ${erlang_test_beams}
     DEPENDS
         HostAtomVM
-        "${CMAKE_CURRENT_BINARY_DIR}/test_clocks.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_smp.beam"
-        "${CMAKE_CURRENT_BINARY_DIR}/test_crypto.beam"
+        ${erlang_test_beams}
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )

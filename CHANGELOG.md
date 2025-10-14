@@ -170,6 +170,7 @@ network. (See issue #1094)
 - Fixed possible memory corruption when doing binary matching.
 - Fixed an issue related to binary matching and more precisely endianness of bit skipping with OTP 25 and lower
 - Fixed an issue with `bs_private_append` that shouldn't gc, affecting code compiled with OTP<25
+- Fixed a bug where `erlang:setnode/2` would not work with large creation passed by OTP28 epmd on 32bits platforms
 
 ### Changed
 
