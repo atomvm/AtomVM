@@ -603,6 +603,7 @@ struct Test tests[] = {
     TEST_CASE(test_node),
 
     TEST_CASE(bigint),
+    TEST_CASE(bigint_stress),
 
     TEST_CASE(test_list_to_bitstring),
     TEST_CASE(test_lists_member),
