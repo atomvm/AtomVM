@@ -43,7 +43,8 @@
     columns/1,
     getopts/0,
     getopts/1,
-    printable_range/0
+    printable_range/0,
+    system_time/0
 ]).
 
 -export_type([device/0, format/0, standard_io/0, standard_error/0, user/0]).
@@ -234,6 +235,15 @@ put_chars(standard_io, Chars) ->
     end;
 put_chars(standard_error, Chars) ->
     put_chars(standard_io, Chars).
+
+%%-----------------------------------------------------------------------------
+%% @returns An integer representing system time.
+%% @doc     Returns the current OS system time in native time unit.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_time() -> integer().
+system_time() ->
+    erlang:nif_error(undefined).
 
 %% @priv
 convert_request({requests, Requests}) ->
