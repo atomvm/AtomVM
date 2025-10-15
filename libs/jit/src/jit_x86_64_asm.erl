@@ -56,7 +56,8 @@
     popq/1,
     jmpq/1,
     retq/0,
-    cmpb/2
+    cmpb/2,
+    xchgq/2
 ]).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -569,3 +570,25 @@ jmpq({Reg}) ->
 
 retq() ->
     <<16#C3>>.
+
+%% XCHG r64, r64: Exchange two 64-bit registers
+%% Encoding: REX.W + 87 /r
+xchgq(rax, rax) ->
+    % NOP
+    <<16#90>>;
+xchgq(rax, Reg) when is_atom(Reg) ->
+    % Special short encoding for XCHG rax, r64
+    % For low registers: REX.W + 0x90 + reg
+    % For high registers: REX.W + REX.B + 0x90 + reg (need REX.B to access r8-r11)
+    case x86_64_x_reg(Reg) of
+        {0, Index} -> <<16#48, (16#90 + Index)>>;
+        {1, Index} -> <<16#49, (16#90 + Index)>>
+    end;
+xchgq(Reg, rax) when is_atom(Reg) ->
+    % XCHG is commutative
+    xchgq(rax, Reg);
+xchgq(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
+    % General form: REX.W + 87 /r
+    {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
+    {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#87, 3:2, MODRM_REG:3, MODRM_RM:3>>.

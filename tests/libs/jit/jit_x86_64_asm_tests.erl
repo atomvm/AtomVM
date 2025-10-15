@@ -957,3 +957,38 @@ retq_test_() ->
     [
         ?_assertAsmEqual(<<16#c3>>, "retq", jit_x86_64_asm:retq())
     ].
+
+xchgq_test_() ->
+    [
+        ?_assertAsmEqual(<<16#90>>, "xchg %rax,%rax", jit_x86_64_asm:xchgq(rax, rax)),
+        ?_assertAsmEqual(<<16#48, 16#91>>, "xchg %rax,%rcx", jit_x86_64_asm:xchgq(rax, rcx)),
+        ?_assertAsmEqual(<<16#48, 16#92>>, "xchg %rax,%rdx", jit_x86_64_asm:xchgq(rax, rdx)),
+        ?_assertAsmEqual(<<16#48, 16#96>>, "xchg %rax,%rsi", jit_x86_64_asm:xchgq(rax, rsi)),
+        ?_assertAsmEqual(<<16#48, 16#97>>, "xchg %rax,%rdi", jit_x86_64_asm:xchgq(rax, rdi)),
+        ?_assertAsmEqual(<<16#49, 16#90>>, "xchg %rax,%r8", jit_x86_64_asm:xchgq(rax, r8)),
+        ?_assertAsmEqual(<<16#49, 16#91>>, "xchg %rax,%r9", jit_x86_64_asm:xchgq(rax, r9)),
+        ?_assertAsmEqual(<<16#49, 16#92>>, "xchg %rax,%r10", jit_x86_64_asm:xchgq(rax, r10)),
+        ?_assertAsmEqual(<<16#49, 16#93>>, "xchg %rax,%r11", jit_x86_64_asm:xchgq(rax, r11)),
+
+        % xchg reg, rax - commutative, should use same short encoding
+        ?_assertAsmEqual(<<16#48, 16#91>>, "xchg %rcx,%rax", jit_x86_64_asm:xchgq(rcx, rax)),
+        ?_assertAsmEqual(<<16#48, 16#92>>, "xchg %rdx,%rax", jit_x86_64_asm:xchgq(rdx, rax)),
+        ?_assertAsmEqual(<<16#49, 16#91>>, "xchg %r9,%rax", jit_x86_64_asm:xchgq(r9, rax)),
+
+        % xchg reg, reg - general form (REX.W + 0x87 /r)
+        ?_assertAsmEqual(
+            <<16#48, 16#87, 16#D1>>, "xchg %rdx,%rcx", jit_x86_64_asm:xchgq(rdx, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#87, 16#F2>>, "xchg %rsi,%rdx", jit_x86_64_asm:xchgq(rsi, rdx)
+        ),
+        ?_assertAsmEqual(
+            <<16#4C, 16#87, 16#C1>>, "xchg %r8,%rcx", jit_x86_64_asm:xchgq(r8, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#4D, 16#87, 16#C8>>, "xchg %r9,%r8", jit_x86_64_asm:xchgq(r9, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#4D, 16#87, 16#D1>>, "xchg %r10,%r9", jit_x86_64_asm:xchgq(r10, r9)
+        )
+    ].
