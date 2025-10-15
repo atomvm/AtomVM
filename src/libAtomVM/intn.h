@@ -191,7 +191,7 @@ static inline int64_t intn_2_digits_to_int64(
         case 0:
             return 0;
         case 1:
-            return int32_cond_neg_unsigned(sign == IntNNegativeInteger, num[0]);
+            return int64_cond_neg_unsigned(sign == IntNNegativeInteger, num[0]);
         case 2: {
             uint64_t utmp = intn_digits_to_u64(num);
             return int64_cond_neg_unsigned(sign == IntNNegativeInteger, utmp);
