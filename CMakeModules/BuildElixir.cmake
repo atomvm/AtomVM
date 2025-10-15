@@ -48,7 +48,7 @@ macro(pack_archive avm_name)
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
-        DEPENDS ${avm_name}_beams PackBEAM
+        DEPENDS ${avm_name}_beams PackBEAM ${BEAMS}
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
@@ -93,7 +93,7 @@ macro(pack_runnable avm_name main)
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
-        DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM
+        DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${ARCHIVES}
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
@@ -170,7 +170,7 @@ macro(pack_test avm_name main)
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
-        DEPENDS ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM
+        DEPENDS ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
         COMMENT "Packing test ${avm_name}.avm"
         VERBATIM
