@@ -19,7 +19,7 @@ Currently, AtomVM implements a strict subset of the BEAM instruction set.
 A high level overview of the supported language features include:
 
 * All the major Erlang types, including
-  * integers (with size limits)
+  * integers (integers with 256-bit magnitude plus separate sign)
   * floats
   * tuples
   * [lists](./apidocs/erlang/estdlib/lists.md)
