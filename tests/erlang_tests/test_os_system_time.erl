@@ -30,10 +30,10 @@ start() ->
     0.
 
 test_os_system_time(SleepMs) ->
-    After = os:system_time(),
-    sleep(SleepMs),
     Before = os:system_time(),
-    true = (After < Before),
+    sleep(SleepMs),
+    After = os:system_time(),
+    true = (Before < After),
     ok.
 
 sleep(Ms) ->
