@@ -124,6 +124,8 @@ struct Module
     const uint8_t *line_refs_table;
     size_t locations_count;
     const uint8_t *locations_table;
+    uint8_t *binary;
+    size_t binary_size;
 #ifndef AVM_NO_JIT
     ModuleNativeEntryPoint native_code;
 #endif
