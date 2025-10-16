@@ -2228,6 +2228,14 @@ test_band() ->
         ?MODULE:id(?MODULE:id(Pattern13) band ?MODULE:id(Pattern14)), 16
     ),
 
+    Pattern15 = erlang:binary_to_integer(?MODULE:id(<<"80008000">>), 16),
+    Pattern16 = erlang:binary_to_integer(
+        ?MODULE:id(<<"7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
+    ),
+    <<"80008000">> = erlang:integer_to_binary(
+        ?MODULE:id(?MODULE:id(Pattern15) band ?MODULE:id(Pattern16)), 16
+    ),
+
     0.
 
 test_bxor() ->
