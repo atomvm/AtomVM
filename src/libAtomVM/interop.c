@@ -241,7 +241,7 @@ term interop_proplist_get_value_default(term list, term key, term default_value)
     return default_value;
 }
 
-inline InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fold_fun, interop_chardata_rest_fun rest_fun, void *accum)
+InteropFunctionResult interop_chardata_fold(term t, interop_chardata_fold_fun fold_fun, interop_chardata_rest_fun rest_fun, void *accum)
 {
     if (term_is_binary(t)) {
         return fold_fun(t, accum);

@@ -25,7 +25,7 @@
 #include "globalcontext.h"
 #include "mailbox.h"
 
-void test_mailbox_send()
+void test_mailbox_send(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);
@@ -48,7 +48,7 @@ void test_mailbox_send()
     globalcontext_destroy(glb);
 }
 
-void test_mailbox_next()
+void test_mailbox_next(void)
 {
     GlobalContext *glb = globalcontext_new();
     Context *ctx = context_new(glb);

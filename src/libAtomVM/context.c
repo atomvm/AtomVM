@@ -91,8 +91,14 @@ Context *context_new(GlobalContext *glb)
     ctx->native_handler = NULL;
 
     ctx->saved_module = NULL;
+#ifndef AVM_NO_EMU
     ctx->saved_ip = NULL;
-    ctx->restore_trap_handler = NULL;
+#else
+    ctx->saved_function_ptr = NULL;
+#endif
+#ifndef AVM_NO_EMU
+    ctx->waiting_with_timeout = false;
+#endif
 
     ctx->leader = 0;
 
@@ -205,6 +211,7 @@ void context_destroy(Context *ctx)
             case FlushInfoMonitorSignal:
             case LinkExitSignal: // target will not be found when processing this link
             case MonitorDownSignal: // likewise
+            case CodeServerResumeSignal:
                 break;
             case NormalMessage: {
                 UNREACHABLE();
@@ -452,6 +459,29 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
     }
     // If monitor was not found, it was removed and message should not be sent.
     // (flush option removes messages that were already sent)
+}
+
+void context_process_code_server_resume_signal(Context *ctx)
+{
+#ifndef AVM_NO_JIT
+    // jit_trap_and_load stores the label in saved_function_ptr
+    uint32_t label = (uint32_t) (uintptr_t) ctx->saved_function_ptr;
+    Module *module = ctx->saved_module;
+#ifndef AVM_NO_EMU
+    if (module->native_code) {
+        ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+    } else {
+        ctx->saved_ip = module->labels[label];
+    }
+#else
+    ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+#endif
+    // Fix CP to OP_INT_CALL_END
+    if (ctx->cp == module_address(module->module_index, 0)) {
+        ctx->cp = module_address(module->module_index, module->end_instruction_ii);
+    }
+#endif
+    context_update_flags(ctx, ~Trap, NoFlags);
 }
 
 void context_update_flags(Context *ctx, int mask, int value) CLANG_THREAD_SANITIZE_SAFE

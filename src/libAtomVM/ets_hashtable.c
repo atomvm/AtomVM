@@ -40,7 +40,7 @@ struct HNode
 
 static uint32_t hash_term(term t, GlobalContext *global);
 
-struct EtsHashTable *ets_hashtable_new()
+struct EtsHashTable *ets_hashtable_new(void)
 {
     struct EtsHashTable *htable = malloc(sizeof(struct EtsHashTable));
     if (IS_NULL_PTR(htable)) {

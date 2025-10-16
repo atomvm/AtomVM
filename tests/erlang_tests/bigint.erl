@@ -35,7 +35,14 @@
     get_machine_atom/0,
     expect_error/2,
     expect_overflow/1,
-    id/1
+    is_integer_helper/1,
+    is_number_helper/1,
+    classify1/1,
+    classify2/1,
+    id/1,
+    idB/1,
+    t2/2,
+    fst/1
 ]).
 
 %
@@ -60,7 +67,10 @@ start() ->
         test_cmp() +
         conv_to_from_float() +
         external_term_decode() +
-        big_literals() +
+        test_big_literals() +
+        test_is_integer() +
+        test_is_number() +
+        test_gt_lt_guards() +
         to_external_term() +
         test_band() +
         test_bxor() +
@@ -421,7 +431,9 @@ test_add() ->
     <<"8000000000000000">> = erlang:integer_to_binary(
         ?MODULE:id(16#7FFFFFFFFFFFFFFF) + ?MODULE:id(1), 16
     ),
-    -16#8000000000000001 = ?MODULE:id(-16#8000000000000000) + ?MODULE:id(-1),
+    <<"-8000000000000001">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#8000000000000000) + ?MODULE:id(-1), 16
+    ),
 
     ok = ?MODULE:expect_overflow(fun() -> Int0 + ?MODULE:id(2) end),
     ok = ?MODULE:expect_overflow(fun() -> Int0 + ?MODULE:id(16#7FFFFFFFFFFFFFFF) end),
@@ -576,11 +588,19 @@ test_sub() ->
         erlang:binary_to_integer(?MODULE:id(<<"-CAFE01234DEADCAF">>), 16) -
             erlang:binary_to_integer(?MODULE:id(<<"-FFFFFFFFFFFFFFFF">>), 16),
 
-    16#8000000000000000 = ?MODULE:id(16#7FFFFFFFFFFFFFFF) - ?MODULE:id(-1),
-    -16#8000000000000001 = ?MODULE:id(-16#8000000000000000) - ?MODULE:id(1),
+    <<"8000000000000000">> = erlang:integer_to_binary(
+        ?MODULE:id(16#7FFFFFFFFFFFFFFF) - ?MODULE:id(-1), 16
+    ),
+    <<"-8000000000000001">> = erlang:integer_to_binary(
+        ?MODULE:id(-16#8000000000000000) - ?MODULE:id(1), 16
+    ),
 
-    16#7FFFFFFFFFFFFFFF = ?MODULE:id(16#8000000000000000) - ?MODULE:id(1),
-    -16#8000000000000000 = ?MODULE:id(-16#8000000000000001) - ?MODULE:id(-1),
+    16#7FFFFFFFFFFFFFFF =
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)) -
+            ?MODULE:id(1),
+    -16#8000000000000000 =
+        ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-8000000000000001">>), 16)) -
+            ?MODULE:id(-1),
 
     ok = ?MODULE:expect_overflow(fun() -> Int0 - ?MODULE:id(-2) end),
     ok = ?MODULE:expect_overflow(fun() -> Int1 - ?MODULE:id(-1) end),
@@ -633,7 +653,9 @@ test_abs() ->
 
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(abs(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
-    <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(16#8000000000000000)), 16),
+    <<"8000000000000000">> = erlang:integer_to_binary(
+        abs(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)), 16
+    ),
     <<"8000000000000000">> = erlang:integer_to_binary(abs(?MODULE:id(-16#8000000000000000)), 16),
 
     0.
@@ -683,7 +705,9 @@ test_neg() ->
 
     <<"-7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(16#7FFFFFFFFFFFFFFF)), 16),
     <<"7FFFFFFFFFFFFFFF">> = erlang:integer_to_binary(-(?MODULE:id(-16#7FFFFFFFFFFFFFFF)), 16),
-    <<"-8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(16#8000000000000000)), 16),
+    <<"-8000000000000000">> = erlang:integer_to_binary(
+        -(erlang:binary_to_integer(?MODULE:id(<<"8000000000000000">>), 16)), 16
+    ),
     <<"8000000000000000">> = erlang:integer_to_binary(-(?MODULE:id(-16#8000000000000000)), 16),
 
     0.
@@ -1357,7 +1381,13 @@ external_term_decode() ->
 
     0.
 
-big_literals() ->
+test_big_literals() ->
+    % Note: big literals might be encoded in 2 different ways:
+    % - Inside the code stream, using an nbits compact term encoding
+    % - As literals in the literals table
+    % Big integers above a certain size are stored in the literals table.
+    % This function will test both encodings.
+
     <<"-CAFE1234ABCD9876EFAB0189FEDCBA98">> = ?MODULE:id(
         erlang:integer_to_binary(?MODULE:id(-16#CAFE1234ABCD9876EFAB0189FEDCBA98), 16)
     ),
@@ -1383,21 +1413,577 @@ big_literals() ->
         )
     ),
 
-    % this cannot be tested
-    % bigger literals, such as the one here, are encoded using an external term
-    % (having SMALL_BIG_EXT type).
-    % The reader function is not able to distinguish between different kind of invalid
-    % errors, such as overflow, so this cannot be tested.
+    % These cannot be tested (yet)
+    % bigger literals, such as the ones here below, are encoded using an external term
+    % (having SMALL_BIG_EXT type) inside the literal table.
+    % The reader function is not able to distinguish between different kind of errors,
+    % such as overflow, so this cannot be tested yet.
     % ok = expect_overflow(fun ?MODULE:lit_ovf1/0),
     % ok = expect_overflow(fun ?MODULE:lit_ovf2/0),
 
+    % Integers close to the INT64_MIN / INT64_MAX / (+-)UINT64_MAX boundary
+    <<"8000000000000000">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#8000000000000000), 16)
+    ),
+    <<"8000000000000001">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#8000000000000001), 16)
+    ),
+    <<"-8000000000000001">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#8000000000000001), 16)
+    ),
+    <<"FFFFFFFFFFFFFFFF">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#FFFFFFFFFFFFFFFF), 16)
+    ),
+    <<"-FFFFFFFFFFFFFFFF">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#FFFFFFFFFFFFFFFF), 16)
+    ),
+
+    % Random n-bits positive integers
+
+    % 64 bits
+    <<"5AE3C2DF4EBB8E47">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#5AE3C2DF4EBB8E47), 16)
+    ),
+    % 70 bits
+    <<"BD63E16950B2629E6">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#BD63E16950B2629E6), 16)
+    ),
+    % 72 bits
+    <<"94BC3A736478DBA666">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#94BC3A736478DBA666), 16)
+    ),
+    % 77 bits
+    <<"11AA908CAA57C6AC0D35">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#11AA908CAA57C6AC0D35), 16)
+    ),
+    % 80 bits
+    <<"44F043DBDE24FE653434">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#44F043DBDE24FE653434), 16)
+    ),
+    % 80 bits
+    <<"5EB9B1EC9951E212A487">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#5EB9B1EC9951E212A487), 16)
+    ),
+    % 84 bits
+    <<"ECDF4565C3B7DEC2FB494">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#ECDF4565C3B7DEC2FB494), 16)
+    ),
+    % 88 bits
+    <<"1053B376041F92B5726341">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#1053B376041F92B5726341), 16)
+    ),
+    % 91 bits
+    <<"57732E06A8E4A31A06F9063">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#57732E06A8E4A31A06F9063), 16)
+    ),
+    % 96 bits
+    <<"4866A8DB2B29CFAC068E9ECB">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#4866A8DB2B29CFAC068E9ECB), 16)
+    ),
+    % 96 bits
+    <<"AEF4EA41F77AF3767522B152">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#AEF4EA41F77AF3767522B152), 16)
+    ),
+    % 98 bits
+    <<"37C44D15824939B568A993235">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#37C44D15824939B568A993235), 16)
+    ),
+    % 104 bits
+    <<"B025687FEF2AFB2523D0F108DF">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#B025687FEF2AFB2523D0F108DF), 16)
+    ),
+    % 112 bits
+    <<"BC425FB3F10FD6792E11342466F9">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#BC425FB3F10FD6792E11342466F9), 16)
+    ),
+    % 119 bits
+    <<"14C20B9BBDE1DFC9F12F3E1728BD69">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#14C20B9BBDE1DFC9F12F3E1728BD69), 16)
+    ),
+    % 133 bits
+    <<"13828C529D8120F031B42006C90D7ADCA7">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#13828C529D8120F031B42006C90D7ADCA7), 16)
+    ),
+    % 168 bits
+    <<"AA031DB9E5BB7A2495374BA85FF072CFC3EEA03C26">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#AA031DB9E5BB7A2495374BA85FF072CFC3EEA03C26), 16)
+    ),
+    % 175 bits
+    <<"215D2DF589F57C5B14C75EE254D62DD616AE6DAFC3B9">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#215D2DF589F57C5B14C75EE254D62DD616AE6DAFC3B9), 16)
+    ),
+    % 184 bits
+    <<"8DF74EFF758D9FB749A6A6CA82E283972C92CDF467129F">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(16#8DF74EFF758D9FB749A6A6CA82E283972C92CDF467129F), 16)
+    ),
+    % 189 bits
+    <<"19962BED9F6051C550C8EC823426B68BAD3C4B8B70A3787B">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#19962BED9F6051C550C8EC823426B68BAD3C4B8B70A3787B), 16
+        )
+    ),
+    % 192 bits
+    <<"9B56F43583ED7B4F6DD67E27FB1C3961A1BD29F448397A5A">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#9B56F43583ED7B4F6DD67E27FB1C3961A1BD29F448397A5A), 16
+        )
+    ),
+    % 200 bits
+    <<"84A8A7E337383233C9AEF55265435F9AA1B8567E5D0EA101A">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#84A8A7E337383233C9AEF55265435F9AA1B8567E5D0EA101A), 16
+        )
+    ),
+    % 208 bits
+    <<"BB1346A60EE8CBCF889A4BFC465E96D55B7FB4114FA84376B23D">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#BB1346A60EE8CBCF889A4BFC465E96D55B7FB4114FA84376B23D), 16
+        )
+    ),
+    % 217 bits
+    <<"85824F4804BF631786F146BBDC36482A681B0E62EE182D8678EB4D">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#85824F4804BF631786F146BBDC36482A681B0E62EE182D8678EB4D), 16
+        )
+    ),
+    % 224 bits
+    <<"EF554FF3797C57396FF919966063F47F0217D79CC3A1A2DB9966E9A9">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#EF554FF3797C57396FF919966063F47F0217D79CC3A1A2DB9966E9A9), 16
+        )
+    ),
+    % 231 bits
+    <<"228271FD505D1AE685D9558BD1D916C5F0DB612F8A5E515A4CC610195F">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#228271FD505D1AE685D9558BD1D916C5F0DB612F8A5E515A4CC610195F), 16
+        )
+    ),
+    % 232 bits
+    <<"DAF21384A796A58CEDE99525AF336ECBCC7AC01C4AD4592E902EE4A046">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#DAF21384A796A58CEDE99525AF336ECBCC7AC01C4AD4592E902EE4A046), 16
+        )
+    ),
+    % 248 bits
+    <<"1D9D32C0A97D74D75266096C9D43DD9C108B060B0B33054A47ACB70F9C7082">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#1D9D32C0A97D74D75266096C9D43DD9C108B060B0B33054A47ACB70F9C7082), 16
+        )
+    ),
+    % 256 bits
+    <<"9A988604ED17067CFE04BBB5B1B96958D66F1E910B4C7C008DA2A9D56605F630">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(16#9A988604ED17067CFE04BBB5B1B96958D66F1E910B4C7C008DA2A9D56605F630), 16
+        )
+    ),
+
+    % Random n-bits negative integers
+
+    % 64 bits
+    <<"-50818490C479D1F">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#50818490C479D1F), 16)
+    ),
+    % 72 bits
+    <<"-7AB5EF1509FB36264D">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#7AB5EF1509FB36264D), 16)
+    ),
+    % 80 bits
+    <<"-A1425ECB24D0B8FB90F2">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#A1425ECB24D0B8FB90F2), 16)
+    ),
+    % 81 bits
+    <<"-77DF44280198DC720D93">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#77DF44280198DC720D93), 16)
+    ),
+    % 88 bits
+    <<"-362BF6716A0443139EC23A">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#362BF6716A0443139EC23A), 16)
+    ),
+    % 90 bits
+    <<"-147127EA7E81F288D1195EA">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#147127EA7E81F288D1195EA), 16)
+    ),
+    % 96 bits
+    <<"-6221559B9B8B13F17C279383">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#6221559B9B8B13F17C279383), 16)
+    ),
+    % 99 bits
+    <<"-319DEFD10B261A2C660209444">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#319DEFD10B261A2C660209444), 16)
+    ),
+    % 104 bits
+    <<"-1B144E948BEC42B88641A831A5">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#1B144E948BEC42B88641A831A5), 16)
+    ),
+    % 108 bits
+    <<"-4C63771CFE84846685BC0396B35">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#4C63771CFE84846685BC0396B35), 16)
+    ),
+    % 112 bits
+    <<"-F28ADD446F3A789187A438A40CCD">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#F28ADD446F3A789187A438A40CCD), 16)
+    ),
+    % 117 bits
+    <<"-2EDF2F4B2D52F77795D2B2BAD61C6">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#2EDF2F4B2D52F77795D2B2BAD61C6), 16)
+    ),
+    % 120 bits
+    <<"-EE1D7598927B405203453B5DA02DE3">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#EE1D7598927B405203453B5DA02DE3), 16)
+    ),
+    % 126 bits
+    <<"-168688DF9FBC275817A0855D76A45132">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#168688DF9FBC275817A0855D76A45132), 16)
+    ),
+    % 128 bits
+    <<"-AE485055D76AB0A72DD218C3125FBF8C">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#AE485055D76AB0A72DD218C3125FBF8C), 16)
+    ),
+    % 135 bits
+    <<"-7E440D81FA0C22C1E93FD5983673C647F2">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#7E440D81FA0C22C1E93FD5983673C647F2), 16)
+    ),
+    % 136 bits
+    <<"-ED98CC050A2296AF338C3687DA3ACF420F">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#ED98CC050A2296AF338C3687DA3ACF420F), 16)
+    ),
+    % 144 bits
+    <<"-3A1A12A0A958D70DF98188DB04615FC1F20B">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#3A1A12A0A958D70DF98188DB04615FC1F20B), 16)
+    ),
+    % 152 bits
+    <<"-33BADCFC1628C22A56CE3DD3BDE2FF1AF1362B">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#33BADCFC1628C22A56CE3DD3BDE2FF1AF1362B), 16)
+    ),
+    % 153 bits
+    <<"-1B83FB643871FFCEBEDEA6DA1D400AB825D2BAE">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#1B83FB643871FFCEBEDEA6DA1D400AB825D2BAE), 16)
+    ),
+    % 160 bits
+    <<"-86DCDAA30A967D5015E278476420B03FD735601C">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#86DCDAA30A967D5015E278476420B03FD735601C), 16)
+    ),
+    % 162 bits
+    <<"-2796D95EBA7CB2CF780A9445A21BF1FE8CDD0C424">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#2796D95EBA7CB2CF780A9445A21BF1FE8CDD0C424), 16)
+    ),
+    % 168 bits
+    <<"-7AD7CD85DE09B44F69940A3EFE46E762D6E3851140">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#7AD7CD85DE09B44F69940A3EFE46E762D6E3851140), 16)
+    ),
+    % 171 bits
+    <<"-2D72B15CED61DBBB23B49622CCA465257744D7909D0">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#2D72B15CED61DBBB23B49622CCA465257744D7909D0), 16)
+    ),
+    % 176 bits
+    <<"-3EBF0A61C92427B2A38ABE310B995CE3904BB021BCEB">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#3EBF0A61C92427B2A38ABE310B995CE3904BB021BCEB), 16)
+    ),
+    % 180 bits
+    <<"-D96EBE3BBA68169F689ACAEAA430BD45961DA58FCBDBC">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#D96EBE3BBA68169F689ACAEAA430BD45961DA58FCBDBC), 16)
+    ),
+    % 184 bits
+    <<"-27D044D547D4823D85598B77B1DC00C6F0F2B630318B50">> = ?MODULE:id(
+        erlang:integer_to_binary(?MODULE:id(-16#27D044D547D4823D85598B77B1DC00C6F0F2B630318B50), 16)
+    ),
+    % 189 bits
+    <<"-6839607C30B5339F8C9E651811FF69313D2946B27E0CEF7">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#6839607C30B5339F8C9E651811FF69313D2946B27E0CEF7), 16
+        )
+    ),
+    % 192 bits
+    <<"-241A871C25CB5CE38DD33B007C1A062CB87571F0F69A4A1C">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#241A871C25CB5CE38DD33B007C1A062CB87571F0F69A4A1C), 16
+        )
+    ),
+    % 198 bits
+    <<"-D6F7F1831498E593F970E7CEB7FA5140002D4B6C15B87B05A">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#D6F7F1831498E593F970E7CEB7FA5140002D4B6C15B87B05A), 16
+        )
+    ),
+    % 200 bits
+    <<"-C354EBE297757034B878D06A760C200FEDB44A54A294044B34">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#C354EBE297757034B878D06A760C200FEDB44A54A294044B34), 16
+        )
+    ),
+    % 207 bits
+    <<"-35F847B9EDE1F95AA0BD703EEC13B957A514EF7C9F9945C2BD2A">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#35F847B9EDE1F95AA0BD703EEC13B957A514EF7C9F9945C2BD2A), 16
+        )
+    ),
+    % 208 bits
+    <<"-80D50449943E584056D6C6132C6C9ECA4FCC17B683DD0D65B983">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#80D50449943E584056D6C6132C6C9ECA4FCC17B683DD0D65B983), 16
+        )
+    ),
+    % 216 bits
+    <<"-7E187419A7274C12DCD5414DC35EB750B6BEC9448EBFE52E235CE5">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#7E187419A7274C12DCD5414DC35EB750B6BEC9448EBFE52E235CE5), 16
+        )
+    ),
+    % 224 bits
+    <<"-A364C94BC4F37B2F61E79C605E7E105EB6DD9031B467289FDAA728A8">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#A364C94BC4F37B2F61E79C605E7E105EB6DD9031B467289FDAA728A8), 16
+        )
+    ),
+    % 225 bits
+    <<"-16D3D742124EF7F62F3A7AA59B5DEA065FCE1A4BD9121D3FD277A713C">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#16D3D742124EF7F62F3A7AA59B5DEA065FCE1A4BD9121D3FD277A713C), 16
+        )
+    ),
+    % 232 bits
+    <<"-858C6BD55C8ABE9EAD2A0BDED5CCB2B48C19257DE8576223992E63A5C2">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#858C6BD55C8ABE9EAD2A0BDED5CCB2B48C19257DE8576223992E63A5C2), 16
+        )
+    ),
+    % 234 bits
+    <<"-2CB07CC22D0ACDC310636D462BDA0510BC46078732929DAB10C35212BAC">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#2CB07CC22D0ACDC310636D462BDA0510BC46078732929DAB10C35212BAC), 16
+        )
+    ),
+    % 240 bits
+    <<"-7AB9F21FF113FD7F3B00DEBF3038BF66F573CC99B7B9042303C491B0C6EC">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#7AB9F21FF113FD7F3B00DEBF3038BF66F573CC99B7B9042303C491B0C6EC), 16
+        )
+    ),
+    % 243 bits
+    <<"-73986874A2F0F72F85E956DDC5933EB1E5A5380BE618FD93C07838DD9C543">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#73986874A2F0F72F85E956DDC5933EB1E5A5380BE618FD93C07838DD9C543), 16
+        )
+    ),
+    % 248 bits
+    <<"-4C62CACE1C39245B3571CDB3C36EA34C54B89542AC5D479B832396D74E3251">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#4C62CACE1C39245B3571CDB3C36EA34C54B89542AC5D479B832396D74E3251), 16
+        )
+    ),
+    % 252 bits
+    <<"-BC9820F853B21F8B1AAEF6BB7ECBC67FF9497B98E4846C3F7097259483623DE">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#BC9820F853B21F8B1AAEF6BB7ECBC67FF9497B98E4846C3F7097259483623DE), 16
+        )
+    ),
+    % 256 bits
+    <<"-AE0FA6658F605BD9D70AC5AB29BD4164992CE77586E39BFEA4F04E5D417D1E0B">> = ?MODULE:id(
+        erlang:integer_to_binary(
+            ?MODULE:id(-16#AE0FA6658F605BD9D70AC5AB29BD4164992CE77586E39BFEA4F04E5D417D1E0B), 16
+        )
+    ),
+
     0.
 
+% This function will never be called, we leave this to check if we are able to parse the BEAM file
+% even if this integer exceeds maximum integer capacity.
 lit_ovf1() ->
     ?MODULE:id(16#10000000000000000000000000000000000000000000000000000000000000000).
 
+% This function will never be called, we leave this to check if we are able to parse the BEAM file
+% even if this integer exceeds maximum integer capacity.
 lit_ovf2() ->
     ?MODULE:id(-16#10000000000000000000000000000000000000000000000000000000000000000).
+
+test_is_integer() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MaxPattern)),
+    true = is_integer(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MinPattern)),
+    true = is_integer(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(Pattern128)),
+    true = is_integer(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(Pattern128Neg)),
+    true = is_number(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(UINT64Max)),
+    true = is_number(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(UINT64MaxNeg)),
+    true = is_number(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(INT63MaxP1)),
+    true = is_number(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(INT63MinM1)),
+    true = is_number(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    ok = ?MODULE:is_integer_helper(?MODULE:id(RandomPattern)),
+    true = is_number(?MODULE:id(RandomPattern)),
+
+    0.
+
+is_integer_helper(I) when is_integer(I) ->
+    _ = ?MODULE:id(I),
+    ok;
+is_integer_helper(_I) ->
+    ?MODULE:id(error).
+
+test_is_number() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MinPattern)),
+    true = is_number(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(Pattern128)),
+    true = is_number(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(Pattern128Neg)),
+    true = is_number(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(UINT64Max)),
+    true = is_number(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(UINT64MaxNeg)),
+    true = is_number(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(INT63MaxP1)),
+    true = is_number(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(INT63MinM1)),
+    true = is_number(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    ok = ?MODULE:is_number_helper(?MODULE:id(MaxPattern)),
+    true = is_number(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    ok = ?MODULE:is_number_helper(?MODULE:id(RandomPattern)),
+    true = is_number(?MODULE:id(RandomPattern)),
+
+    0.
+
+is_number_helper(N) when is_number(N) ->
+    _ = ?MODULE:id(N),
+    ?MODULE:id(ok);
+is_number_helper(_N) ->
+    ?MODULE:id(error).
+
+test_gt_lt_guards() ->
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(MaxPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(MaxPattern)),
+
+    MinPatternBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MinPattern = erlang:binary_to_integer(?MODULE:id(MinPatternBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(MinPattern)),
+    negative = ?MODULE:classify2(?MODULE:id(MinPattern)),
+
+    Pattern128Bin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128 = erlang:binary_to_integer(?MODULE:id(Pattern128Bin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(Pattern128)),
+    positive = ?MODULE:classify2(?MODULE:id(Pattern128)),
+
+    Pattern128NegBin = <<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    Pattern128Neg = erlang:binary_to_integer(?MODULE:id(Pattern128NegBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(Pattern128Neg)),
+    negative = ?MODULE:classify2(?MODULE:id(Pattern128Neg)),
+
+    UINT64MaxBin = <<"FFFFFFFFFFFFFFFF">>,
+    UINT64Max = erlang:binary_to_integer(?MODULE:id(UINT64MaxBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(UINT64Max)),
+    positive = ?MODULE:classify2(?MODULE:id(UINT64Max)),
+
+    UINT64MaxNegBin = <<"-FFFFFFFFFFFFFFFF">>,
+    UINT64MaxNeg = erlang:binary_to_integer(?MODULE:id(UINT64MaxNegBin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(UINT64MaxNeg)),
+    negative = ?MODULE:classify2(?MODULE:id(UINT64MaxNeg)),
+
+    INT63MaxP1Bin = <<"8000000000000000">>,
+    INT63MaxP1 = erlang:binary_to_integer(?MODULE:id(INT63MaxP1Bin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(INT63MaxP1)),
+    positive = ?MODULE:classify2(?MODULE:id(INT63MaxP1)),
+
+    INT63MinM1Bin = <<"-8000000000000001">>,
+    INT63MinM1 = erlang:binary_to_integer(?MODULE:id(INT63MinM1Bin), 16),
+    negative = ?MODULE:classify1(?MODULE:id(INT63MinM1)),
+    negative = ?MODULE:classify2(?MODULE:id(INT63MinM1)),
+
+    MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,
+    MaxPattern = erlang:binary_to_integer(?MODULE:id(MaxPatternBin), 16),
+    non_negative = ?MODULE:classify1(?MODULE:id(MaxPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(MaxPattern)),
+
+    RandomPatternBin = <<"4LWS1KF502AD5JUXQCS">>,
+    RandomPattern = erlang:binary_to_integer(?MODULE:id(RandomPatternBin), 35),
+    non_negative = ?MODULE:classify1(?MODULE:id(RandomPattern)),
+    positive = ?MODULE:classify2(?MODULE:id(RandomPattern)),
+
+    0.
+
+classify1(X) when is_integer(X) andalso X >= 0 ->
+    ?MODULE:fst(?MODULE:t2(non_negative, X));
+classify1(X) when is_integer(X) ->
+    ?MODULE:fst(?MODULE:t2(negative, ?MODULE:idB(X)));
+classify1(X) ->
+    _ = ?MODULE:id(X),
+    error.
+
+classify2(X) when is_integer(X) andalso X < 0 ->
+    ?MODULE:fst(?MODULE:t2(negative, X));
+classify2(X) when X =:= 0 ->
+    ?MODULE:fst(?MODULE:t2(zero, ?MODULE:id(X)));
+classify2(X) when is_integer(X) ->
+    ?MODULE:fst(?MODULE:t2(positive, ?MODULE:idB(X)));
+classify2(X) ->
+    _ = ?MODULE:id(X),
+    error.
 
 to_external_term() ->
     % maximum
@@ -1998,6 +2584,15 @@ test_bnot() ->
 
 id(X) ->
     X.
+
+idB(X) ->
+    X.
+
+t2(A, B) ->
+    {A, B}.
+
+fst({A, _B}) ->
+    A.
 
 choose_result(AResult, BResult) ->
     case get_machine_atom() of

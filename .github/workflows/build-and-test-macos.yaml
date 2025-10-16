@@ -38,8 +38,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["macos-13", "macos-14", "macos-15"]
+        os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
         otp: ["24", "25", "26", "27", "28"]
+        cmake_opts_other: [""]
+
+        include:
+        - os: "macos-15-intel"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
+        - os: "macos-14"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+
+        - os: "macos-15"
+          otp: "28"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
 
     steps:
     # Setup
@@ -92,7 +106,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
+        cmake -DAVM_WARNINGS_ARE_ERRORS=ON ${{ matrix.cmake_opts_other }} -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
@@ -151,6 +165,12 @@ jobs:
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
+
+    - name: "Test: test_jit.avm"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        ./src/AtomVM tests/libs/jit/test_jit.avm
 
     - name: "Test: test_alisp.avm"
       timeout-minutes: 10

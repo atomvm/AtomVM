@@ -57,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added mock implementation for `current_stacktrace` in `process_info`
 - Added `erlang:list_to_bitstring`
 - Reimplemented `lists:keyfind`, `lists:keymember` and `lists:member` as NIFs
+- Added `AVM_PRINT_PROCESS_CRASH_DUMPS` option
 - Added support for big integers up to 256-bit (sign + 256-bit magnitude)
 - Added support for big integers in `binary_to_term/1` and `term_to_binary/1,2`
 

@@ -47,7 +47,7 @@ struct ValuesHashTable
     struct HNode **buckets;
 };
 
-struct ValuesHashTable *valueshashtable_new();
+struct ValuesHashTable *valueshashtable_new(void);
 int valueshashtable_insert(struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t value);
 uintptr_t valueshashtable_get_value(const struct ValuesHashTable *hash_table, uintptr_t key, uintptr_t default_value);
 int valueshashtable_has_key(const struct ValuesHashTable *hash_table, uintptr_t key);

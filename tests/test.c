@@ -32,6 +32,7 @@
 #include "bif.h"
 #include "context.h"
 #include "iff.h"
+#include "jit.h"
 #include "mapped_file.h"
 #include "module.h"
 #include "term.h"
@@ -410,6 +411,7 @@ struct Test tests[] = {
     TEST_CASE(test_bs_int_unaligned),
     TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
+    TEST_CASE_EXPECTED(bs_append_extra_words, 1),
     TEST_CASE(test_catch),
     TEST_CASE(test_gc),
     TEST_CASE_EXPECTED(test_raise, 7),
@@ -555,6 +557,8 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_create_bin),
 
+    TEST_CASE(test_code_server_nifs),
+
     // noisy tests, keep them at the end
     TEST_CASE_EXPECTED(spawn_opt_monitor_normal, 1),
     TEST_CASE_EXPECTED(spawn_opt_link_normal, 1),
@@ -694,6 +698,23 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
         perror("Error: ");
         return EXIT_FAILURE;
     }
+#ifndef AVM_NO_JIT
+    if (!beam) {
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+        if (chdir("x86_64") != 0) {
+            perror("Error: cannot find x86_64 directory");
+            return EXIT_FAILURE;
+        }
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+        if (chdir("aarch64") != 0) {
+            perror("Error: cannot find aarch64 directory");
+            return EXIT_FAILURE;
+        }
+#else
+#error Unknown JIT target
+#endif
+    }
+#endif
 
     int failed_tests = 0;
 

@@ -47,6 +47,7 @@
 #include "globalcontext.h"
 #include "interop.h"
 #include "intn.h"
+#include "jit.h"
 #include "mailbox.h"
 #include "memory.h"
 #include "module.h"
@@ -196,8 +197,20 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
+static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[]);
+static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
+#ifndef AVM_NO_JIT
+static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[]);
+static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
+#endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
+#ifndef AVM_NO_JIT
+static term nif_jit_backend_module(Context *ctx, int argc, term argv[]);
+#endif
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_lists_keyfind(Context *ctx, int argc, term argv[]);
 static term nif_lists_keymember(Context *ctx, int argc, term argv[]);
@@ -735,6 +748,38 @@ static const struct Nif code_ensure_loaded_nif = {
     .nif_ptr = nif_code_ensure_loaded
 };
 
+static const struct Nif code_server_is_loaded_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_is_loaded
+};
+static const struct Nif code_server_resume_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_resume
+};
+
+#ifndef AVM_NO_JIT
+static const struct Nif code_server_code_chunk_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_code_chunk
+};
+static const struct Nif code_server_atom_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_atom_resolver
+};
+static const struct Nif code_server_literal_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_literal_resolver
+};
+static const struct Nif code_server_type_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_type_resolver
+};
+static const struct Nif code_server_set_native_code_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_set_native_code
+};
+#endif
+
 static const struct Nif module_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_module_loaded
@@ -744,6 +789,13 @@ static const struct Nif nif_error_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_nif_error
 };
+
+#ifndef AVM_NO_JIT
+static const struct Nif jit_backend_module_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_jit_backend_module
+};
+#endif
 
 static const struct Nif lists_reverse_nif = {
     .base.type = NIFFunctionType,
@@ -857,6 +909,11 @@ DEFINE_MATH_NIF(tanh)
 #define IF_HAVE_GETCWD_PATHMAX(expr) (expr)
 #else
 #define IF_HAVE_GETCWD_PATHMAX(expr) NULL
+#endif
+#ifndef AVM_NO_JIT
+#define IF_HAVE_JIT(expr) (expr)
+#else
+#define IF_HAVE_JIT(expr) NULL
 #endif
 
 // Ignore warning caused by gperf generated code
@@ -1354,7 +1411,21 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     }
 
     new_ctx->saved_module = fun_module;
-    new_ctx->saved_ip = fun_module->labels[label];
+#ifndef AVM_NO_JIT
+    if (fun_module->native_code) {
+        new_ctx->saved_function_ptr = module_get_native_entry_point(fun_module, label);
+    } else {
+#endif
+#ifndef AVM_NO_EMU
+        new_ctx->saved_ip = fun_module->labels[label];
+#else
+    if (UNLIKELY(jit_trap_and_load(new_ctx, fun_module, label) != TRAP_AND_LOAD_OK)) {
+        mailbox_send_term_signal(new_ctx, KillSignal, UNDEF_ATOM);
+    }
+#endif
+#ifndef AVM_NO_JIT
+    }
+#endif
     new_ctx->cp = module_address(fun_module->module_index, fun_module->end_instruction_ii);
 
     return do_spawn(ctx, new_ctx, arity, n_freeze, opts_term);
@@ -1391,7 +1462,21 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
         AVM_ABORT();
     }
     new_ctx->saved_module = found_module;
-    new_ctx->saved_ip = found_module->labels[label];
+#ifndef AVM_NO_JIT
+    if (found_module->native_code) {
+        new_ctx->saved_function_ptr = module_get_native_entry_point(found_module, label);
+    } else {
+#endif
+#ifndef AVM_NO_EMU
+        new_ctx->saved_ip = found_module->labels[label];
+#else
+    if (UNLIKELY(jit_trap_and_load(new_ctx, found_module, label) != TRAP_AND_LOAD_OK)) {
+        return UNDEFINED_ATOM;
+    }
+#endif
+#ifndef AVM_NO_JIT
+    }
+#endif
     new_ctx->cp = module_address(found_module->module_index, found_module->end_instruction_ii);
 
     // TODO: check available registers count
@@ -2938,6 +3023,15 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_int32(ctx->global->online_schedulers);
 #else
         return term_from_int32(1);
+#endif
+    }
+    if (key == EMU_FLAVOR_ATOM) {
+#ifndef AVM_NO_EMU
+        return EMU_ATOM;
+#else
+        // Only say jit if emu is disabled. Precompiled execution with jit
+        // disabled should return emu
+        return JIT_ATOM;
 #endif
     }
     return sys_get_info(ctx, key);
@@ -5420,6 +5514,145 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
     return result;
 }
 
+static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term module_atom = argv[0];
+    if (UNLIKELY(!term_is_atom(module_atom))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    Module *found_module = globalcontext_get_module(ctx->global, term_to_atom_index(module_atom));
+
+    if (UNLIKELY(!found_module)) {
+        return FALSE_ATOM;
+    }
+
+#ifndef AVM_NO_JIT
+    if (IS_NULL_PTR(found_module->native_code)) {
+        return FALSE_ATOM;
+    }
+#endif
+    return TRUE_ATOM;
+}
+
+static term nif_code_server_resume(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term process_pid = argv[0];
+    if (UNLIKELY(!term_is_pid(process_pid))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    term load_result = argv[1];
+
+    Context *target = globalcontext_get_process_lock(ctx->global, term_to_local_process_id(process_pid));
+    if (IS_NULL_PTR(target)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (load_result == OK_ATOM) {
+        mailbox_send_empty_body_signal(target, CodeServerResumeSignal);
+    } else {
+        mailbox_send_immediate_signal(target, TrapExceptionSignal, load_result);
+    }
+
+    globalcontext_get_process_unlock(ctx->global, target);
+
+    return TRUE_ATOM;
+}
+
+#ifndef AVM_NO_JIT
+static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    size_t code_size = ENDIAN_SWAP_32(mod->code->size);
+    const void *code = &mod->code->info_size;
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFC_BINARY_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_from_const_binary(code, code_size, &ctx->heap, ctx->global);
+}
+
+static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int local_atom_id = term_to_int(argv[1]);
+    return module_get_atom_term_by_id(mod, local_atom_id);
+}
+
+static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int literal_index = term_to_int(argv[1]);
+    return module_load_literal(mod, literal_index, ctx);
+}
+
+static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int type_index = term_to_int(argv[1]);
+    return module_get_type_by_index(mod, type_index, ctx);
+}
+
+static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    ModuleNativeEntryPoint entry_point = jit_stream_entry_point(ctx, argv[2]);
+    if (IS_NULL_PTR(entry_point)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    SMP_MODULE_LOCK(mod);
+    if (mod->native_code == NULL) {
+        module_set_native_code(mod, term_to_int(argv[1]), entry_point);
+    }
+    SMP_MODULE_UNLOCK(mod);
+
+    return OK_ATOM;
+}
+#endif
+
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -5440,6 +5673,23 @@ static term nif_erlang_nif_error(Context *ctx, int argc, term argv[])
 
     RAISE_ERROR(UNDEF_ATOM);
 }
+
+#ifndef AVM_NO_JIT
+static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+    return JIT_X86_64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+    return JIT_AARCH64_ATOM;
+#else
+#error Unknown JIT target
+#endif
+}
+#endif
 
 static term nif_lists_reverse(Context *ctx, int argc, term argv[])
 {
@@ -6034,7 +6284,7 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
 typedef avm_float_t (*unary_math_f)(avm_float_t x);
 typedef avm_float_t (*binary_math_f)(avm_float_t x, avm_float_t y);
 
-static void maybe_clear_exceptions()
+static void maybe_clear_exceptions(void)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     feclearexcept(FE_DIVBYZERO | FE_INVALID);

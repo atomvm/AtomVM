@@ -141,12 +141,12 @@ void f(bool reverse) {
 - **Function spacing**: Separate function definitions with exactly one empty line [AVMCCS-F008]
 
   ```c
-  void first_function()
+  void first_function(void)
   {
       // implementation
   }
 
-  void second_function()
+  void second_function(void)
   {
       // implementation
   }
