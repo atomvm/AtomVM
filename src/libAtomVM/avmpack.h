@@ -39,6 +39,7 @@ extern "C" {
 #define END_OF_FILE 0
 #define BEAM_START_FLAG 1
 #define BEAM_CODE_FLAG 2
+#define END_OF_FILE_MASK 255
 
 struct AVMPackData;
 
@@ -104,12 +105,13 @@ typedef void *(*avmpack_fold_fun)(void *accum, const void *section_ptr, uint32_t
  * @details Finds an AVM Pack section that has certain flags set and returns a pointer to it, its size and its name.
  * @param avmpack_binary a pointer to valid AVM Pack file data.
  * @param flags_mask that will be matched against file sections.
+ * @param flags_value that will be matched against file sections.
  * @param ptr will point to the found file section.
  * @param size will be set to the file section size that has been found, if the section has not been found it will not be updated.
  * @param name the section name, as defined in the module header.
  * @returns 1 if the file section has been found, 0 otherwise.
  */
-int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, const void **ptr, uint32_t *size, const char **name);
+int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, uint32_t flags_value, const void **ptr, uint32_t *size, const char **name);
 
 /**
  * @brief Finds an AVM Pack section that has certain name.

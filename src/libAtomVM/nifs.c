@@ -4811,7 +4811,7 @@ static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[])
             uint32_t size;
             const void *beam;
             const char *module_name;
-            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, &beam, &size, &module_name)) {
+            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &beam, &size, &module_name)) {
                 synclist_unlock(&ctx->global->avmpack_data);
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
