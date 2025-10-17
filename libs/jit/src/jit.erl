@@ -22,7 +22,7 @@
 
 -export([
     stream/1,
-    backend/1,
+    backend/2,
     beam_chunk_header/3,
     compile/6
 ]).
@@ -148,7 +148,8 @@ compile(
     },
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
     MSt3 = second_pass(MMod, MSt2, State1),
-    {LabelsCount, MSt3};
+    MSt4 = MMod:flush(MSt3),
+    {LabelsCount, MSt4};
 compile(
     <<16:32, 0:32, OpcodeMax:32, _LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>>,
     _AtomResolver,
@@ -3852,7 +3853,7 @@ variant() ->
 
 %% @doc Instantiate backend for this platform
 %% @return A tuple with the backend module and the backend state for this platform
-backend({StreamModule, Stream}) ->
+backend(StreamModule, Stream) ->
     BackendModule = ?MODULE:backend_module(),
     Variant = ?MODULE:variant(),
     BackendState = BackendModule:new(Variant, StreamModule, Stream),
