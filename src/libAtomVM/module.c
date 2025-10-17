@@ -353,6 +353,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 fprintf(stderr, "Native code chunk found but no compatible architecture or variant found\n");
             }
         }
+    } else {
+        ModuleNativeEntryPoint module_entry_point;
+        uint32_t labels;
+        uint16_t version;
+        if (sys_get_cache_native_code(global, mod, &version, &module_entry_point, &labels) && version == JIT_FORMAT_VERSION) {
+            module_set_native_code(mod, labels, module_entry_point);
+        }
     }
 #endif
 
