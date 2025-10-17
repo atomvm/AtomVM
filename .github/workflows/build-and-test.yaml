@@ -301,6 +301,26 @@ jobs:
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "x86_64"
 
+        # arm64 builds
+        - os: "ubuntu-24.04-arm"
+          cc: "cc"
+          cxx: "c++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=OFF"
+
+        - os: "ubuntu-24.04-arm"
+          cc: "cc"
+          cxx: "c++"
+          cflags: ""
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          jit_target_arch: "aarch64"
+
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
@@ -324,7 +344,15 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
+      if: matrix.container != ''
       run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev
+
+    - name: "Install deps"
+      if: matrix.container == ''
+      run: |
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libmbedtls-dev libc6-dbg
+        # Get a more recent valgrind
+        sudo snap install valgrind --classic
 
     - name: "Checkout repo"
       uses: actions/checkout@v4
@@ -387,7 +415,7 @@ jobs:
 
     # Test
     - name: "Test: test-erlang"
-      timeout-minutes: 15
+      timeout-minutes: 30
       working-directory: build
       run: |
         ulimit -c unlimited
