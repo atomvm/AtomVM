@@ -853,4 +853,24 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
     return (ModuleNativeEntryPoint) (native_code + offset);
 #endif
 }
+
+bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *version, ModuleNativeEntryPoint *entry_point, uint32_t *labels)
+{
+    UNUSED(global);
+    UNUSED(mod);
+    UNUSED(version);
+    UNUSED(entry_point);
+    UNUSED(labels);
+    return false;
+}
+
+void sys_set_cache_native_code(GlobalContext *global, Module *mod, uint16_t version, ModuleNativeEntryPoint entry_point, uint32_t labels)
+{
+    UNUSED(global);
+    UNUSED(mod);
+    UNUSED(version);
+    UNUSED(entry_point);
+    UNUSED(labels);
+}
+
 #endif
