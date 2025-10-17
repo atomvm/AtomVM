@@ -31,7 +31,6 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpiodriver.c
-    jit_stream_flash.c
     networkdriver.c
     otp_crypto_platform.c
     platform_defaultatoms.c
@@ -108,6 +107,18 @@ if (PICO_CYW43_SUPPORTED)
 
     define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} getservbyname "netdb.h" PRIVATE HAVE_SERVBYNAME)
     define_if_function_exists(libAtomVM${PLATFORM_LIB_SUFFIX} gethostname "unistd.h" PRIVATE HAVE_GETHOSTNAME)
+endif()
+
+if (NOT AVM_DISABLE_JIT)
+    target_sources(
+        libAtomVM${PLATFORM_LIB_SUFFIX}
+        PRIVATE
+            jit_stream_flash_platform.c
+            ../../../../libAtomVM/jit_stream_flash.c
+            jit_stream_flash_platform.h
+            ../../../../libAtomVM/jit_stream_flash.h
+    )
+    target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,jit_stream_flash_get_nif")
 endif()
 
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif -Wl,-u -Wl,otp_crypto_nif")
