@@ -55,6 +55,10 @@ else()
     target_compile_definitions(AtomVM PRIVATE PICO_STDIO_USB_CONNECT_WAIT_TIMEOUT_MS=20000)
 endif()
 
+if (AVM_DISABLE_SMP)
+    target_compile_definitions(AtomVM PRIVATE PICO_FLASH_ASSUME_CORE1_SAFE)
+endif()
+
 if (AVM_WAIT_BOOTSEL_ON_EXIT)
     target_compile_definitions(AtomVM PRIVATE WAIT_BOOTSEL_ON_EXIT)
 endif()

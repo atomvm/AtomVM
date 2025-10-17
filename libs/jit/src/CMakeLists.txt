@@ -26,6 +26,7 @@ set(ERLANG_MODULES
     jit
     jit_precompile
     jit_stream_binary
+    jit_stream_flash
     jit_stream_mmap
     jit_aarch64
     jit_aarch64_asm

@@ -57,14 +57,17 @@ static void scheduler_core1_entry_point(void)
 {
     _Static_assert(sizeof(uintptr_t) == sizeof(uint32_t), "Expected pointers to be 32 bits");
     uint32_t ctx_int = multicore_fifo_pop_blocking();
+    multicore_lockout_victim_init();
     int result = scheduler_entry_point((GlobalContext *) ctx_int);
     UNUSED(result);
+    multicore_lockout_victim_deinit();
 }
 
 void smp_scheduler_start(GlobalContext *ctx)
 {
     multicore_launch_core1(scheduler_core1_entry_point);
     multicore_fifo_push_blocking((uint32_t) ctx);
+    multicore_lockout_victim_init();
 }
 
 bool smp_is_main_thread(GlobalContext *glb)

@@ -535,6 +535,19 @@ jobs:
         ulimit -c unlimited
         ./tests/test-heap
 
+    - name: "Test: test-jit_stream_flash with valgrind"
+      if: matrix.library-arch == ''
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        valgrind --error-exitcode=1 ./tests/test-jit_stream_flash
+
+    - name: "Test: test-jit_stream_flash"
+      working-directory: build
+      run: |
+        ulimit -c unlimited
+        ./tests/test-jit_stream_flash
+
     - name: "Test: test-mailbox with valgrind"
       if: matrix.library-arch == ''
       working-directory: build
