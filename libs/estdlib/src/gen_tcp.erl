@@ -31,7 +31,6 @@
 %% Caveats:
 %% <ul>
 %%     <li>Limited support for socket tuning parameters</li>
-%%     <li>No support for <b>controlling_process/2</b></li>
 %% </ul>
 %%
 %% <em><b>Note.</b>  Port drivers for this interface are not supported
