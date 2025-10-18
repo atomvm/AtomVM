@@ -96,11 +96,16 @@ peername({?GEN_TCP_MONIKER, Socket, Module}) ->
 %%-----------------------------------------------------------------------------
 -spec getaddr(Name :: ip_address() | hostname(), Family :: address_family()) ->
     {ok, ip_address()} | {error, Reason :: term()}.
-getaddr(Name, _Family) when is_tuple(Name) ->
+getaddr({A, B, C, D} = Name, _Family) when
+    is_integer(A) andalso A >= 0 andalso A < 256 andalso
+        is_integer(B) andalso B >= 0 andalso B < 256 andalso
+        is_integer(C) andalso C >= 0 andalso C < 256 andalso
+        is_integer(D) andalso D >= 0 andalso D < 256
+->
     {ok, Name};
 getaddr(Name, Family) when is_atom(Name) ->
     getaddr(atom_to_list(Name), Family);
-getaddr(Name, Family) ->
+getaddr(Name, Family) when is_list(Name) ->
     try net:getaddrinfo(Name) of
         {ok, Results} ->
             Filtered = [Addr || #{family := F, addr := #{addr := Addr}} <- Results, F =:= Family],
@@ -131,9 +136,13 @@ getaddr(Name, Family) ->
                 _ ->
                     {error, nxdomain}
             end;
+        {error, -5} ->
+            {error, nxdomain};
         {error, _} = Err ->
             Err
     catch
         error:function_clause ->
             {error, einval}
-    end.
+    end;
+getaddr(_Name, _Family) ->
+    {error, einval}.

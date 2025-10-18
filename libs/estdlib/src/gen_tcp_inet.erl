@@ -51,10 +51,27 @@
     Options :: [connect_option()]
 ) ->
     {ok, Socket :: inet:socket()} | {error, Reason :: reason()}.
-connect(Address, Port, Params0) ->
+connect({_A, _B, _C, _D} = Address, Port, Params0) ->
+    Address0 =
+        case is_valid_ip_range(Address) of
+            true ->
+                Address;
+            false ->
+                error(badarg)
+        end,
     Socket = open_port({spawn, "socket"}, []),
     Params = merge(Params0, ?DEFAULT_PARAMS),
-    connect(Socket, normalize_address(Address), Port, Params).
+    connect(Socket, normalize_address(Address0), Port, Params);
+connect(Address, Port, Params0) when is_atom(Address) ->
+    Socket = open_port({spawn, "socket"}, []),
+    Params = merge(Params0, ?DEFAULT_PARAMS),
+    connect(Socket, normalize_address(Address), Port, Params);
+connect(Address, Port, Params0) when is_list(Address) ->
+    Socket = open_port({spawn, "socket"}, []),
+    Params = merge(Params0, ?DEFAULT_PARAMS),
+    connect(Socket, Address, Port, Params);
+connect(_Address, _Port, _Params) ->
+    error(badarg).
 
 %% @hidden
 -spec send(Socket :: inet:socket(), Packet :: packet()) -> ok | {error, Reason :: reason()}.
@@ -161,6 +178,8 @@ connect(DriverPid, Address, Port, Params) ->
     case call(DriverPid, {init, InitParams}) of
         ok ->
             {ok, DriverPid};
+        {error, {getaddrinfo, _Err}} ->
+            {error, nxdomain};
         ErrorReason ->
             %% TODO close port
             ErrorReason
@@ -206,6 +225,17 @@ normalize_address({A, B, C, D}) when
         "." ++ integer_to_list(D).
 
 %% TODO IPv6
+
+%% @private
+is_valid_ip_range({A, B, C, D}) when
+    is_integer(A) andalso A >= 0 andalso A < 256 andalso
+        is_integer(B) andalso B >= 0 andalso B < 256 andalso
+        is_integer(C) andalso C >= 0 andalso C < 256 andalso
+        is_integer(D) andalso D >= 0 andalso D < 256
+->
+    true;
+is_valid_ip_range(_Address) ->
+    false.
 
 %%
 %% Internal operations

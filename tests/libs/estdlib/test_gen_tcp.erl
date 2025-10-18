@@ -28,6 +28,8 @@ test() ->
     ok = test_echo_server(),
     ok = test_echo_server(true),
     ok = test_listen_connect_parameters(),
+    ok = test_connect_parameters(),
+    ok = test_connect_bad_address(),
     ok = test_tcp_double_close(),
     ok.
 
@@ -346,6 +348,168 @@ test_listen_connect_parameters_server_loop(ListenMode, false = ListenActive, Soc
             end;
         Other ->
             {error, {unexpected_result, server, passive_receive, Other}}
+    end.
+
+test_connect_parameters() ->
+    IP =
+        case inet:getaddr("www.github.com", inet) of
+            {ok, IPAddress} ->
+                IPAddress;
+            Error ->
+                io:format(
+                    "Unable to resolve www.github.com, ~p; unable to complete connection tests.~n",
+                    [Error]
+                ),
+                throw(Error)
+        end,
+    Hostname = "www.atomvm.org",
+    Port = 80,
+    OptTests =
+        case get_otp_version() of
+            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
+                [
+                    [{active, true}],
+                    [{active, false}],
+                    [{inet_backend, socket}, {active, true}],
+                    [{inet_backend, socket}, {active, false}]
+                ];
+            _ ->
+                [
+                    [{active, true}],
+                    [{active, false}]
+                ]
+        end,
+    test_connect_parameters(OptTests, IP, Hostname, Port, []).
+
+test_connect_parameters([], _IP, _Host, _Port, Results) ->
+    case lists:flatten(Results) of
+        [] ->
+            ok;
+        ErrorList ->
+            ErrorList
+    end;
+test_connect_parameters([Test | TestOpts], IP, Host, Port, Results) ->
+    io:format("GEN_TCP_CONNECT-TEST> IP Address=~p (www.github.com) ClientConnectOptions=~p~n", [
+        IP, Test
+    ]),
+    IpResult =
+        case gen_tcp:connect(IP, Port, Test) of
+            {ok, Soc0} ->
+                ok = gen_tcp:close(Soc0),
+                [];
+            IpErr ->
+                {error, IpErr, {ip_connect, Test}}
+        end,
+    io:format("GEN_TCP_CONNECT-TEST> Hostname=~p ClientConnectOptions=~p~n", [Host, Test]),
+    HostResult =
+        case gen_tcp:connect(Host, Port, Test) of
+            {ok, Soc1} ->
+                ok = gen_tcp:close(Soc1),
+                [];
+            HostErr ->
+                {error, HostErr, {hostname_connect, Test}}
+        end,
+    test_connect_parameters(TestOpts, IP, Host, Port, [Results, IpResult, HostResult]).
+
+test_connect_bad_address() ->
+    InetTest = test_connect_bad_address(inet_backend, []),
+    SocketTest =
+        case get_otp_version() of
+            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
+                test_connect_bad_address(socket_backend, [{inet_backend, socket}]);
+            _ ->
+                ok
+        end,
+    Result = [InetTest, SocketTest],
+    case Result of
+        [ok, ok] ->
+            ok;
+        _ ->
+            Result
+    end.
+
+test_connect_bad_address(Tag, Opts) ->
+    T0 =
+        try gen_tcp:connect({532, 0, 0, 1}, 80, Opts) of
+            {ok, Port0} ->
+                gen_tcp:close(Port0),
+                {addr_bad_range_test, Tag, failed, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_range_test, Tag, unexpected, {error, einval}}
+                end;
+            Error0 ->
+                {addr_bad_range_test, Tag, unexpected, Error0}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_range_test, Tag, caught, badarg}
+                end
+        end,
+    T1 =
+        try gen_tcp:connect({10, 1}, 80, Opts) of
+            {ok, Port1} ->
+                gen_tcp:close(Port1),
+                {addr_bad_tuple_test, Tag, error, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_tuple_test, Tag, unexpected, {error, einval}}
+                end;
+            Error1 ->
+                {addr_bad_tuple_test, Tag, unexpected, Error1}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_bad_tuple_test, Tag, caught, badarg}
+                end
+        end,
+    T2 =
+        try gen_tcp:connect({127.0, 0, 0, 1.0}, 80, Opts) of
+            {ok, Port2} ->
+                gen_tcp:close(Port2),
+                {addr_float_test, Tag, error, invalid_ipaddr_accepted};
+            {error, einval} ->
+                case Tag of
+                    socket_backend ->
+                        ok;
+                    _ ->
+                        {addr_float_test, Tag, unexpected, {error, einval}}
+                end;
+            Error2 ->
+                {addr_float_test, Tag, unexpected, Error2}
+        catch
+            _:badarg ->
+                case Tag of
+                    inet_backend ->
+                        ok;
+                    _ ->
+                        {addr_float_test, Tag, caught, badarg}
+                end
+        end,
+    T3 =
+        case gen_tcp:connect("foo.bar.flurtleblurb", 80, Opts) of
+            {error, nxdomain} ->
+                ok;
+            Error3 ->
+                {inet_unresolvable_test, Tag, unexpected, Error3}
+        end,
+
+    Results = [T0, T1, T2, T3],
+    if
+        [ok, ok, ok, ok] =:= Results -> ok;
+        true -> Results
     end.
 
 test_tcp_double_close() ->
