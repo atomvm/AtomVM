@@ -26,7 +26,13 @@
 -module(binary).
 
 -export([
-    at/2, decode_hex/1, encode_hex/1, encode_hex/2, part/3, split/2, split/3, replace/3, replace/4
+    at/2,
+    copy/1, copy/2,
+    decode_hex/1,
+    encode_hex/1, encode_hex/2,
+    part/3,
+    split/2, split/3,
+    replace/3, replace/4
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -38,6 +44,27 @@
 %%-----------------------------------------------------------------------------
 -spec at(Binary :: binary(), Index :: non_neg_integer()) -> byte().
 at(_Binary, _Index) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary binary to copy
+%% @returns a copy of the binary
+%% @doc     Returns a copy of the binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec copy(Binary :: binary()) -> binary().
+copy(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary binary to copy
+%% @param   N      number of times to copy the binary
+%% @returns a binary containing N copies of the input binary
+%% @doc     Returns a binary containing N copies of the input binary.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec copy(Binary :: binary(), N :: non_neg_integer()) -> binary().
+copy(_Binary, _N) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
