@@ -350,6 +350,7 @@ elf(_State, _NativeCode) ->
 -define(EM_ARM, 40).
 -define(EM_X86_64, 62).
 -define(EM_AARCH64, 183).
+-define(EM_RISCV, 243).
 -define(SHT_PROGBITS, 1).
 -define(SHT_SYMTAB, 2).
 -define(SHT_STRTAB, 3).
@@ -369,7 +370,8 @@ elf(_State, _NativeCode) ->
 %% Map JIT backend to ELF machine type
 backend_to_machine_type(jit_x86_64) -> ?EM_X86_64;
 backend_to_machine_type(jit_aarch64) -> ?EM_AARCH64;
-backend_to_machine_type(jit_armv6m) -> ?EM_ARM.
+backend_to_machine_type(jit_armv6m) -> ?EM_ARM;
+backend_to_machine_type(jit_riscv32) -> ?EM_RISCV.
 
 %% Map JIT backend to ELF flags
 backend_to_elf_flags(jit_armv6m) ->
