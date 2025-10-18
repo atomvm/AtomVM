@@ -45,7 +45,7 @@ extern "C" {
             ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
     #endif
 
-    #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86) || defined(__aarch64__) || defined(_M_ARM64)
         #define READ_64_UNALIGNED(ptr) \
             __builtin_bswap64(*((uint64_t *) (ptr)))
 
