@@ -39,7 +39,7 @@
 #include <math.h>
 #include <stddef.h>
 
-// #define ENABLE_TRACE
+#define ENABLE_TRACE
 #include "trace.h"
 
 // Verify matching atom index in default_atoms.hrl
