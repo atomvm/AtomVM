@@ -237,6 +237,8 @@
 -define(PARAMETER_REGS, [a0, a1, a2, a3, a4, a5, a6, a7]).
 -define(SCRATCH_REGS, [t6, t5, t4, t2, t1, t0]).
 
+-include("jit_backend_dwarf_impl.hrl").
+
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
 %% sizeof(uintptr_t)
