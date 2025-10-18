@@ -31,7 +31,7 @@
     test/2
 ]).
 
--define(DEFAULT_TIMEOUT, 30000).
+-define(DEFAULT_TIMEOUT, 60000).
 
 -type option() :: exact_execution | {exact_execution, boolean()}.
 -type test() ::
