@@ -468,19 +468,13 @@ update_branches(
                         >>,
                         <<DirectBranch/binary, Nops/binary>>;
                     true ->
-                        % Keep far branch sequence: auipc + lw + jalr + data
-                        % RISC-V far branch is always 16 bytes
-                        case Size of
-                            16 ->
-                                % 16-byte sequence: auipc + lw + jalr + data
-                                I1 = jit_riscv32_asm:auipc(TempReg, 0),
-                                I2 = jit_riscv32_asm:lw(TempReg, TempReg, 8),
-                                I3 = jit_riscv32_asm:jalr(zero, TempReg, 0),
-                                % Calculate absolute target address
-                                TargetAddress = LabelOffset,
-                                I4 = <<TargetAddress:32/little>>,
-                                <<I1/binary, I2/binary, I3/binary, I4/binary>>
-                        end
+                        % Keep far branch sequence: auipc + jalr (PC-relative, 8 bytes)
+                        % Split the relative offset into upper 20 bits and lower 12 bits
+                        Hi20 = (Rel + 16#800) bsr 12,
+                        Lo12 = Rel - (Hi20 bsl 12),
+                        I1 = jit_riscv32_asm:auipc(TempReg, Hi20),
+                        I2 = jit_riscv32_asm:jalr(zero, TempReg, Lo12),
+                        <<I1/binary, I2/binary>>
                 end;
             jump_table_auipc_jalr ->
                 % Calculate PC-relative offset from AUIPC instruction to target
@@ -679,7 +673,8 @@ return_if_not_equal_to_ctx(
         end,
     I3 = jit_riscv32_asm:ret(),
     % Branch if equal (skip the return)
-    I1 = jit_riscv32_asm:beq(Reg, ?CTX_REG, byte_size(I2) + byte_size(I3)),
+    % Offset must account for the beq instruction itself (4 bytes) plus I2 and I3
+    I1 = jit_riscv32_asm:beq(Reg, ?CTX_REG, 4 + byte_size(I2) + byte_size(I3)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     {AvailableRegs1, UsedRegs1} = free_reg(
         AvailableRegs0, UsedRegs0, Reg
@@ -754,20 +749,30 @@ branch_to_offset_code(_State, Offset, TargetOffset) when
     Rel = TargetOffset - Offset,
     jit_riscv32_asm:j(Rel);
 branch_to_offset_code(
-    #state{available_regs = [TempReg | _]}, _Offset, TargetOffset
+    #state{available_regs = [TempReg | _]}, Offset, TargetOffset
 ) ->
-    % Far branch: use auipc + lw + jalr sequence (RISC-V)
-    % This creates a PC-relative load sequence - always 16 bytes (4-byte aligned)
+    % Far branch: use auipc + jalr sequence for PC-relative addressing
+    % This computes: PC + Immediate and jumps to it
 
-    % TempReg = PC
-    I1 = jit_riscv32_asm:auipc(TempReg, 0),
-    % TempReg = *(PC+8)
-    I2 = jit_riscv32_asm:lw(TempReg, TempReg, 8),
-    % Jump to TempReg
-    I3 = jit_riscv32_asm:jalr(zero, TempReg, 0),
-    % The literal value is the absolute target offset
-    I4 = <<TargetOffset:32/little>>,
-    <<I1/binary, I2/binary, I3/binary, I4/binary>>.
+    Rel = TargetOffset - Offset,
+    % Split the relative offset into upper 20 bits and lower 12 bits
+    % RISC-V PC-relative addressing: target = PC + (imm20 << 12) + sign_extend(imm12)
+    % Since jalr's imm12 is sign-extended, if bit 11 of Rel is set,
+    % we need to add 0x800 before splitting to compensate
+    Hi20 = (Rel + 16#800) bsr 12,
+    Lo12Unsigned = Rel band 16#FFF,
+    % Convert to signed 12-bit value: if bit 11 is set, subtract 4096
+    Lo12 =
+        if
+            Lo12Unsigned >= 16#800 -> Lo12Unsigned - 16#1000;
+            true -> Lo12Unsigned
+        end,
+
+    % TempReg = PC + (Hi20 << 12)
+    I1 = jit_riscv32_asm:auipc(TempReg, Hi20),
+    % Jump to TempReg + sign_extend(Lo12)
+    I2 = jit_riscv32_asm:jalr(zero, TempReg, Lo12),
+    <<I1/binary, I2/binary>>.
 
 branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) ->
     CodeBlock = branch_to_offset_code(State, Offset, LabelOffset),
@@ -775,17 +780,13 @@ branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) ->
 branch_to_label_code(
     #state{available_regs = [TempReg | _], branches = Branches} = State0, Offset, Label, false
 ) ->
-    % RISC-V: Far branch sequence - always 16 bytes (4-byte aligned)
+    % RISC-V: Far branch sequence using PC-relative auipc + jalr (8 bytes)
 
-    % Load PC into temp
+    % Placeholder: auipc TempReg, 0
     I1 = jit_riscv32_asm:auipc(TempReg, 0),
-    % Load offset from PC+8
-    I2 = jit_riscv32_asm:lw(TempReg, TempReg, 8),
-    % Jump to address
-    I3 = jit_riscv32_asm:jalr(zero, TempReg, 0),
-    % Placeholder offset
-    I4 = <<0:32/little>>,
-    CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    % Placeholder: jalr zero, TempReg, 0
+    I2 = jit_riscv32_asm:jalr(zero, TempReg, 0),
+    CodeBlock = <<I1/binary, I2/binary>>,
     SequenceSize = byte_size(CodeBlock),
     % Add relocation entry
     Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
@@ -795,17 +796,13 @@ branch_to_label_code(
     #state{available_regs = [], branches = Branches} = State0, Offset, Label, false
 ) ->
     % RISC-V: Use t6 as scratch (caller-saved, safe to clobber)
-    % Same sequence as when we have available regs - always 16 bytes (4-byte aligned)
+    % Far branch sequence using PC-relative auipc + jalr (8 bytes)
 
-    % Load PC into t6
+    % Placeholder: auipc t6, 0
     I1 = jit_riscv32_asm:auipc(t6, 0),
-    % Load offset from PC+8
-    I2 = jit_riscv32_asm:lw(t6, t6, 8),
-    % Jump to address
-    I3 = jit_riscv32_asm:jalr(zero, t6, 0),
-    % Placeholder offset
-    I4 = <<0:32/little>>,
-    CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
+    % Placeholder: jalr zero, t6, 0
+    I2 = jit_riscv32_asm:jalr(zero, t6, 0),
+    CodeBlock = <<I1/binary, I2/binary>>,
     SequenceSize = byte_size(CodeBlock),
     % Add relocation entry
     Reloc = {Label, Offset, {far_branch, SequenceSize, t6}},
@@ -1528,9 +1525,17 @@ call_func_ptr(
                 % Calculate stack offset: find register index in SavedRegs * 4 bytes
                 ResultReg = element(2, FuncPtrTuple),
                 RegIndex = index_of(ResultReg, SavedRegs),
-                StoreResultStackOffset = RegIndex * 4,
-                StoreResult = jit_riscv32_asm:sw(sp, a0, StoreResultStackOffset),
-                {StreamModule:append(Stream5, StoreResult), [ResultReg | UsedRegs1]};
+                case RegIndex >= 0 of
+                    true ->
+                        StoreResultStackOffset = RegIndex * 4,
+                        StoreResult = jit_riscv32_asm:sw(sp, a0, StoreResultStackOffset),
+                        {StreamModule:append(Stream5, StoreResult), [ResultReg | UsedRegs1]};
+                    false ->
+                        % FuncPtrReg was not in SavedRegs, use an available register
+                        [ResultReg1 | _] = AvailableRegs1 -- SavedRegs,
+                        MoveResult = jit_riscv32_asm:mv(ResultReg1, a0),
+                        {StreamModule:append(Stream5, MoveResult), [ResultReg1 | UsedRegs1]}
+                end;
             _ ->
                 % Use any free that is not in SavedRegs
                 [ResultReg | _] = AvailableRegs1 -- SavedRegs,
@@ -1632,8 +1637,8 @@ parameter_regs0([], _, Acc) ->
     lists:reverse(Acc);
 parameter_regs0([{avm_int64_t, _} | T], [a0, a1 | Rest], Acc) ->
     parameter_regs0(T, Rest, [a1, a0 | Acc]);
-parameter_regs0([{avm_int64_t, _} | T], [a1, a2, a3 | Rest], Acc) ->
-    parameter_regs0(T, Rest, [a3, a2 | Acc]);
+parameter_regs0([{avm_int64_t, _} | T], [a1, a2 | Rest], Acc) ->
+    parameter_regs0(T, Rest, [a2, a1 | Acc]);
 parameter_regs0([{avm_int64_t, _} | T], [a2, a3 | Rest], Acc) ->
     parameter_regs0(T, Rest, [a3, a2 | Acc]);
 parameter_regs0([_Other | T], [Reg | Rest], Acc) ->
@@ -2637,7 +2642,9 @@ decrement_reductions_and_maybe_schedule_next(
     I4 = jit_riscv32_asm:bne(Temp, zero, 0),
     % Set continuation to the next instruction
     ADROffset = BNEOffset + byte_size(I4),
-    I5 = pc_relative_address(Temp, 0),
+    % Use 8-byte placeholder (2 words of 0xFFFFFFFF) for pc_relative_address
+    % This ensures we can always rewrite with either auipc alone (4 bytes) or auipc+addi (8 bytes)
+    I5 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
     I6 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
     % Append the instructions to the stream
     Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary, I6/binary>>),
@@ -2647,7 +2654,17 @@ decrement_reductions_and_maybe_schedule_next(
     #state{stream = Stream3} = State2,
     NewOffset = StreamModule:offset(Stream3),
     NewI4 = jit_riscv32_asm:bne(Temp, zero, NewOffset - BNEOffset),
-    NewI5 = pc_relative_address(Temp, NewOffset - ADROffset),
+    NewI5Offset = NewOffset - ADROffset,
+    % Generate the new pc_relative_address instruction, padding with NOP if needed
+    NewI5 =
+        case pc_relative_address(Temp, NewI5Offset) of
+            I when byte_size(I) =:= 4 ->
+                % Only auipc, pad with NOP
+                <<I/binary, (jit_riscv32_asm:nop())/binary>>;
+            I when byte_size(I) =:= 8 ->
+                % auipc + addi, no padding needed
+                I
+        end,
     Stream4 = StreamModule:replace(
         Stream3, BNEOffset, <<NewI4/binary, NewI5/binary>>
     ),
@@ -2753,17 +2770,12 @@ set_cp(#state{available_regs = [TempReg | AvailT], used_regs = UsedRegs} = State
     % Reserve space for offset load instruction
     % li can generate 1 instruction (4 bytes) for small immediates (< 2048)
     % or 2 instructions (8 bytes) for large immediates
-    % Since we use (offset bsl 2), threshold is when offset >= 512 bytes
-    % To be safe, use same threshold as AArch64 relative to instruction encoding limits
-    {I2, I3} =
-        if
-            Offset >= 512 ->
-                % Need 2 instructions (lui + addi) for large offsets
-                {jit_riscv32_asm:nop(), jit_riscv32_asm:nop()};
-            true ->
-                % Need 1 instruction (addi) for small offsets
-                {jit_riscv32_asm:nop(), <<>>}
-        end,
+    % Since we don't know the final CP value yet (it depends on code size),
+    % we must always reserve 2 instructions (8 bytes) to be safe
+    % The final CP value is (final_offset << 2), and final_offset is unknown
+    % Use 0xFFFFFFFF placeholders for flash compatibility (can only flip 1->0)
+    I2 = <<16#FFFFFFFF:32/little>>,
+    I3 = <<16#FFFFFFFF:32/little>>,
     MOVOffset = Offset + byte_size(I1),
     % OR the module index with the offset (loaded in temp register)
     I4 = jit_riscv32_asm:or_(Reg, TempReg),
@@ -2783,8 +2795,16 @@ rewrite_cp_offset(
     TempReg
 ) ->
     NewOffset = StreamModule:offset(Stream0) - CodeOffset,
-    NewMoveInstr = jit_riscv32_asm:li(TempReg, NewOffset bsl 2),
-    Stream1 = StreamModule:replace(Stream0, RewriteOffset, NewMoveInstr),
+    CPValue = NewOffset bsl 2,
+    NewMoveInstr = jit_riscv32_asm:li(TempReg, CPValue),
+    % We reserved 8 bytes (2 instructions) for the CP value
+    % If li generates only 4 bytes, pad with a NOP to maintain alignment
+    PaddedInstr =
+        case byte_size(NewMoveInstr) of
+            4 -> <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary>>;
+            8 -> NewMoveInstr
+        end,
+    Stream1 = StreamModule:replace(Stream0, RewriteOffset, PaddedInstr),
     State0#state{stream = Stream1}.
 
 set_bs(

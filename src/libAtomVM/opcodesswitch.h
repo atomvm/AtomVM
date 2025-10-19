@@ -44,7 +44,7 @@
     #include "stacktrace.h"
 #endif
 
-#define ENABLE_TRACE
+//#define ENABLE_TRACE
 #include "trace.h"
 
 // These constants can be used to reduce the size of the VM for a specific
