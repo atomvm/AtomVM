@@ -196,7 +196,7 @@ macro(pack_lib avm_name)
     )
     set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
 
-    if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
+    if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST AVM_PRECOMPILED_TARGETS))
         add_custom_command(
             OUTPUT ${avm_name}-armv6m-pico.uf2
             DEPENDS ${avm_name}-armv6m.avm UF2Tool
@@ -212,6 +212,24 @@ macro(pack_lib avm_name)
             VERBATIM
         )
         set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
+    endif()
+
+    if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+float32" IN_LIST AVM_PRECOMPILED_TARGETS))
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m+float32-pico.uf2
+            DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico.uf2 -s 0x10100000 ${avm_name}-armv6m+float32.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m+float32.uf2"
+            VERBATIM
+        )
+        add_custom_command(
+            OUTPUT ${avm_name}-armv6m+float32-pico2.uf2
+            DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+float32.avm
+            COMMENT "Creating UF2 file ${avm_name}-armv6m+float32.uf2"
+            VERBATIM
+        )
+        set(target_deps ${target_deps} ${avm_name}-armv6m+float32-pico.uf2 ${avm_name}-armv6m+float32-pico2.uf2)
     endif()
 
     add_custom_target(
