@@ -774,7 +774,7 @@ int main(int argc, char **argv)
 {
     char *name = argv[0];
     time_t seed = time(NULL);
-    fprintf(stderr, "Seed is %li\n", seed);
+    fprintf(stderr, "Seed is %li\n", (long int) seed);
     srand(seed);
 
     if (chdir(dirname(name)) != 0) {
