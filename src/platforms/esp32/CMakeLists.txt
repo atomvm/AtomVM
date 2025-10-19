@@ -51,9 +51,8 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
-project(atomvm-esp32)
-
 # JIT is only supported on RISC-V targets (ESP32-C2, ESP32-C3, ESP32-C6, ESP32-H2, ESP32-P4)
+# Configuration comes from idf.py menuconfig (KConfig), not CMake options
 if(CONFIG_JIT_ENABLED)
     if (${IDF_TARGET} MATCHES "esp32c2|esp32c3|esp32c6|esp32h2|esp32p4")
         set(AVM_DISABLE_JIT OFF)
@@ -67,6 +66,8 @@ else()
     set(AVM_DISABLE_JIT ON)
     message(STATUS "JIT compilation disabled")
 endif()
+
+project(atomvm-esp32)
 
 # esp-idf does not use compile_feature but instead sets version in
 # c_compile_options
