@@ -88,6 +88,51 @@ call_primitive_2_args_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_primitive_5_args_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:call_primitive_last(State0, ?PRIM_ALLOCATE, [ctx, jit_state, 16, 32, 2]),
+    Stream = ?BACKEND:stream(State1),
+    Dump =
+        <<
+            "   0:	f9401447 	ldr	x7, [x2, #40]\n"
+            "   4:	d2800202 	mov	x2, #0x10                  	// #16\n"
+            "   8:	d2800403 	mov	x3, #0x20                  	// #32\n"
+            "   c:	d2800044 	mov	x4, #0x2                   	// #2\n"
+            "  10:	d61f00e0 	br	x7"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+call_primitive_6_args_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    % Get bin_ptr from x_reg 0 (similar to get_list_test pattern)
+    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:and_(State1, RegA, ?TERM_PRIMARY_CLEAR_MASK),
+    % Get another register for the last parameter to test {free, Reg} handling
+    {State3, OtherReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 1}),
+    % Call PRIM_BITSTRING_EXTRACT_INTEGER with 6 arguments
+    {State4, _ResultReg} = ?BACKEND:call_primitive(State3, ?PRIM_BITSTRING_EXTRACT_INTEGER, [
+        ctx, jit_state, {free, RegA}, 64, 8, {free, OtherReg}
+    ]),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+            "   4:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
+            "   8:	f9401c08 	ldr	x8, [x0, #56]\n"
+            "   c:	f940b850 	ldr	x16, [x2, #368]\n"
+            "  10:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+            "  14:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+            "  18:	aa0703e2 	mov	x2, x7\n"
+            "  1c:	d2800803 	mov	x3, #0x40                  	// #64\n"
+            "  20:	d2800104 	mov	x4, #0x8                   	// #8\n"
+            "  24:	aa0803e5 	mov	x5, x8\n"
+            "  28:	d63f0200 	blr	x16\n"
+            "  2c:	aa0003e7 	mov	x7, x0\n"
+            "  30:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+            "  34:	a8c103fe 	ldp	x30, x0, [sp], #16"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_primitive_extended_regs_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, RegA} = ?BACKEND:call_primitive(State0, ?PRIM_EXTENDED_REGISTER_PTR, [ctx, 19]),
@@ -146,6 +191,44 @@ call_primitive_extended_regs_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_primitive_few_free_regs_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg1} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, Reg2} = ?BACKEND:move_to_native_register(State1, 2),
+    {State3, Reg3} = ?BACKEND:move_to_native_register(State2, 3),
+    {State4, Reg4} = ?BACKEND:move_to_native_register(State3, 4),
+    {State5, Reg5} = ?BACKEND:move_to_native_register(State4, 5),
+    {State6, ResultReg} = ?BACKEND:call_primitive(State5, ?PRIM_BITSTRING_INSERT_INTEGER, [
+        Reg2, Reg1, {free, Reg4}, Reg3, {free, Reg5}
+    ]),
+    State7 = ?BACKEND:free_native_registers(State6, [ResultReg, Reg2, Reg1, Reg3]),
+    ?BACKEND:assert_all_native_free(State7),
+    Stream = ?BACKEND:stream(State7),
+    Dump = <<
+        "   0:	d2800027 	mov	x7, #0x1                   	// #1\n"
+        "   4:	d2800048 	mov	x8, #0x2                   	// #2\n"
+        "   8:	d2800069 	mov	x9, #0x3                   	// #3\n"
+        "   c:	d280008a 	mov	x10, #0x4                   	// #4\n"
+        "  10:	d28000ab 	mov	x11, #0x5                   	// #5\n"
+        "  14:	f940e450 	ldr	x16, [x2, #456]\n"
+        "  18:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "  1c:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "  20:	a9bf23e9 	stp	x9, x8, [sp, #-16]!\n"
+        "  24:	f81f0fe7 	str	x7, [sp, #-16]!\n"
+        "  28:	aa0803e0 	mov	x0, x8\n"
+        "  2c:	aa0703e1 	mov	x1, x7\n"
+        "  30:	aa0a03e2 	mov	x2, x10\n"
+        "  34:	aa0903e3 	mov	x3, x9\n"
+        "  38:	aa0b03e4 	mov	x4, x11\n"
+        "  3c:	d63f0200 	blr	x16\n"
+        "  40:	aa0003ea 	mov	x10, x0\n"
+        "  44:	f84107e7 	ldr	x7, [sp], #16\n"
+        "  48:	a8c123e9 	ldp	x9, x8, [sp], #16\n"
+        "  4c:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  50:	a8c103fe 	ldp	x30, x0, [sp], #16"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_ext_only_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     State1 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State0),
@@ -165,6 +248,23 @@ call_ext_only_test() ->
         "  28:	d2800043 	mov	x3, #0x2                   	// #2\n"
         "  2c:	92800004 	mov	x4, #0xffffffffffffffff    	// #-1\n"
         "  30:	d61f00e0 	br	x7"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+call_primitive_last_5_args_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_RAISE_ERROR_TUPLE, [
+        ctx, jit_state, offset, ?CASE_CLAUSE_ATOM, {free, RegA}
+    ]),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   4:	f9404c48 	ldr	x8, [x2, #152]\n"
+        "   8:	d2800102 	mov	x2, #0x8                   	// #8\n"
+        "   c:	d2805963 	mov	x3, #0x2cb                 	// #715\n"
+        "  10:	aa0703e4 	mov	x4, x7\n"
+        "  14:	d61f0100 	br	x8"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -760,17 +860,34 @@ if_else_block_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_right_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:shift_right(State1, Reg, 3),
-    Stream = ?BACKEND:stream(State2),
-    Dump =
-        <<
-            "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-            "   4:	d343fce7 	lsr	x7, x7, #3"
-        >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+shift_right_test_() ->
+    [
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, Reg} = ?BACKEND:shift_right(State1, {free, Reg}, 3),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   4:	d343fce7 	lsr	x7, x7, #3"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end),
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, OtherReg} = ?BACKEND:shift_right(State1, Reg, 3),
+            ?assertNotEqual(OtherReg, Reg),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                    "   4:	d343fce8 	lsr	x8, x7, #3"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end)
+    ].
 
 shift_left_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1018,6 +1135,179 @@ is_boolean_test() ->
         "   c:	f1002cff 	cmp	x7, #0xb\n"
         "  10:	54000040 	b.eq	0x18  // b.none\n"
         "  14:	14000041 	b	0x118"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test OP_WAIT_TIMEOUT pattern
+wait_timeout_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    Label = 42,
+    {State1, OffsetRef0} = ?BACKEND:set_continuation_to_offset(State0),
+    {State2, TimeoutReg} = ?BACKEND:move_to_native_register(State1, 5000),
+    State3 = ?BACKEND:call_primitive_last(State2, ?PRIM_WAIT_TIMEOUT, [
+        ctx, jit_state, {free, TimeoutReg}, Label
+    ]),
+    State4 = ?BACKEND:add_label(State3, OffsetRef0),
+    State5 = ?BACKEND:continuation_entry_point(State4),
+    {State6, ResultReg0} = ?BACKEND:call_primitive(State5, ?PRIM_PROCESS_SIGNAL_MESSAGES, [
+        ctx, jit_state
+    ]),
+    State7 = ?BACKEND:return_if_not_equal_to_ctx(State6, {free, ResultReg0}),
+    % ?WAITING_TIMEOUT_EXPIRED
+    {State8, ResultReg1} = ?BACKEND:call_primitive(State7, ?PRIM_CONTEXT_GET_FLAGS, [ctx, 2]),
+    State9 = ?BACKEND:if_block(State8, {{free, ResultReg1}, '==', 0}, fun(BlockSt) ->
+        ?BACKEND:call_primitive_last(BlockSt, ?PRIM_WAIT_TIMEOUT_TRAP_HANDLER, [
+            ctx, jit_state, Label
+        ])
+    end),
+    State10 = ?BACKEND:update_branches(State9),
+
+    Stream = ?BACKEND:stream(State10),
+    Dump = <<
+        "   0:	100000e7 	adr	x7, 0x1c\n"
+        "   4:	f9000427 	str	x7, [x1, #8]\n"
+        "   8:	d2827107 	mov	x7, #0x1388                	// #5000\n"
+        "   c:	f9407848 	ldr	x8, [x2, #240]\n"
+        "  10:	aa0703e2 	mov	x2, x7\n"
+        "  14:	d2800543 	mov	x3, #0x2a                  	// #42\n"
+        "  18:	d61f0100 	br	x8\n"
+        "  1c:	f9405450 	ldr	x16, [x2, #168]\n"
+        "  20:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "  24:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "  28:	d63f0200 	blr	x16\n"
+        "  2c:	aa0003e7 	mov	x7, x0\n"
+        "  30:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  34:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
+        "  38:	eb0000ff 	cmp	x7, x0\n"
+        "  3c:	54000060 	b.eq	0x48  // b.none\n"
+        "  40:	aa0703e0 	mov	x0, x7\n"
+        "  44:	d65f03c0 	ret\n"
+        "  48:	f9408450 	ldr	x16, [x2, #264]\n"
+        "  4c:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "  50:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "  54:	d2800041 	mov	x1, #0x2                   	// #2\n"
+        "  58:	d63f0200 	blr	x16\n"
+        "  5c:	aa0003e7 	mov	x7, x0\n"
+        "  60:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  64:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
+        "  68:	b5000087 	cbnz	x7, 0x78\n"
+        "  6c:	f9407c47 	ldr	x7, [x2, #248]\n"
+        "  70:	d2800542 	mov	x2, #0x2a                  	// #42\n"
+        "  74:	d61f00e0 	br	x7"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test OP_WAIT pattern that uses set_continuation_to_label
+wait_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:set_continuation_to_label(State2, Label),
+    State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	14000000 	b	0x0\n"
+        "   4:	14000000 	b	0x4\n"
+        "   8:	14000000 	b	0x8\n"
+        "   c:	14000000 	b	0xc\n"
+        "  10:	14000000 	b	0x10\n"
+        "  14:	14000000 	b	0x14\n"
+        "  18:	10000007 	adr	x7, 0x18\n"
+        "  1c:	f9000427 	str	x7, [x1, #8]\n"
+        "  20:	f9407447 	ldr	x7, [x2, #232]\n"
+        "  24:	d61f00e0 	br	x7"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+return_labels_and_lines_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    % Test return_labels_and_lines with some sample labels and lines
+    State1 = ?BACKEND:add_label(State0, 2, 32),
+    State2 = ?BACKEND:add_label(State1, 1, 16),
+
+    % {Line, Offset} pairs
+    SortedLines = [{10, 16}, {20, 32}],
+
+    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
+    Stream = ?BACKEND:stream(State3),
+
+    % Should have generated adr + ret + labels table + lines table
+    % adr = 4 bytes, ret = 4 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
+    % Total minimum: 36 bytes
+    ?assert(byte_size(Stream) >= 36),
+
+    % Expected: adr x0, #8 + ret + labels table + lines table
+    % The data tables start at offset 0x8, so we load PC + 8 into x0
+    Dump = <<
+        "   0:	10000040 	adr	x0, 0x8\n"
+        "   4:	d65f03c0 	ret\n"
+        "   8:	01000200 	.word	0x01000200\n"
+        "   c:	10000000 	adr	x0, 0xc\n"
+        "  10:	00000200 	.word	0x00000200\n"
+        "  14:	02002000 	.word	0x02002000\n"
+        "  18:	00000a00 	.word	0x00000a00\n"
+        "  1c:	14001000 	.word	0x14001000\n"
+        "  20:	20000000 	.word	0x20000000"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test call_primitive with {free, {x_reg, X}}
+gc_bif2_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, FuncPtr} = ?BACKEND:call_primitive(State0, ?PRIM_GET_IMPORTED_BIF, [jit_state, 42]),
+    {State2, _ResultReg} = ?BACKEND:call_func_ptr(State1, {free, FuncPtr}, [
+        ctx, 0, 3, {y_reg, 0}, {free, {x_reg, 0}}
+    ]),
+
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9402050 	ldr	x16, [x2, #64]\n"
+        "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "   c:	aa0103e0 	mov	x0, x1\n"
+        "  10:	d2800541 	mov	x1, #0x2a                  	// #42\n"
+        "  14:	d63f0200 	blr	x16\n"
+        "  18:	aa0003e7 	mov	x7, x0\n"
+        "  1c:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  20:	a8c103fe 	ldp	x30, x0, [sp], #16\n"
+        "  24:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "  28:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "  2c:	d2800001 	mov	x1, #0x0                   	// #0\n"
+        "  30:	d2800062 	mov	x2, #0x3                   	// #3\n"
+        "  34:	f9401403 	ldr	x3, [x0, #40]\n"
+        "  38:	f9400063 	ldr	x3, [x3]\n"
+        "  3c:	f9401804 	ldr	x4, [x0, #48]\n"
+        "  40:	d63f00e0 	blr	x7\n"
+        "  44:	aa0003e7 	mov	x7, x0\n"
+        "  48:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  4c:	a8c103fe 	ldp	x30, x0, [sp], #16"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test case where parameter value is in r1
+memory_ensure_free_with_roots_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, _FuncPtr} = ?BACKEND:call_primitive(State0, ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS, [
+        ctx, jit_state, {free, r1}, 4, 1
+    ]),
+
+    Stream = ?BACKEND:stream(State1),
+    Dump = <<
+        "   0:	f940b050 	ldr	x16, [x2, #352]\n"
+        "   4:	a9bf03fe 	stp	x30, x0, [sp, #-16]!\n"
+        "   8:	a9bf0be1 	stp	x1, x2, [sp, #-16]!\n"
+        "   c:	aa0103e2 	mov	x2, x1\n"
+        "  10:	d2800083 	mov	x3, #0x4                   	// #4\n"
+        "  14:	d2800024 	mov	x4, #0x1                   	// #1\n"
+        "  18:	d63f0200 	blr	x16\n"
+        "  1c:	aa0003e7 	mov	x7, x0\n"
+        "  20:	a8c10be1 	ldp	x1, x2, [sp], #16\n"
+        "  24:	a8c103fe 	ldp	x30, x0, [sp], #16"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1645,6 +1935,66 @@ move_to_native_register_test_() ->
             ]
         end}.
 
+add_test0(State0, Reg, Imm, Dump) ->
+    State1 = ?BACKEND:add(State0, Reg, Imm),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+add_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    add_test0(State0, r2, 2, <<
+                        "   0:	91000842 	add	x2, x2, #0x2"
+                    >>)
+                end),
+                ?_test(begin
+                    add_test0(State0, r2, 256, <<
+                        "   0:	91040042 	add	x2, x2, #0x100"
+                    >>)
+                end),
+                ?_test(begin
+                    add_test0(State0, r2, r3, <<
+                        "   0:	8b030042 	add	x2, x2, x3"
+                    >>)
+                end)
+            ]
+        end}.
+
+sub_test0(State0, Reg, Imm, Dump) ->
+    State1 = ?BACKEND:sub(State0, Reg, Imm),
+    Stream = ?BACKEND:stream(State1),
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+sub_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    sub_test0(State0, r2, 2, <<
+                        "   0:	d1000842 	sub	x2, x2, #0x2"
+                    >>)
+                end),
+                ?_test(begin
+                    sub_test0(State0, r2, 256, <<
+                        "   0:	d1040042 	sub	x2, x2, #0x100"
+                    >>)
+                end),
+                ?_test(begin
+                    sub_test0(State0, r2, r3, <<
+                        "   0:	cb030042 	sub	x2, x2, x3"
+                    >>)
+                end)
+            ]
+        end}.
+
 mul_test0(State0, Reg, Imm, Dump) ->
     State1 = ?BACKEND:mul(State0, Reg, Imm),
     Stream = ?BACKEND:stream(State1),
@@ -1718,6 +2068,21 @@ mul_test_() ->
                 end)
             ]
         end}.
+
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, r0}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: adr x7, NetOffset; add x7, x7, x0; br x7
+    % With default offset 0, NetOffset = 0 - 0 = 0, temp register is r7
+    Dump =
+        <<
+            "   0:	10000007 	adr	x7, 0x0\n"
+            "   4:	8b0000e7 	add	x7, x7, x0\n"
+            "   8:	d61f00e0 	br	x7"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).

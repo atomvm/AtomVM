@@ -37,6 +37,8 @@
     call_primitive_with_cp/3,
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
+    jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -69,6 +71,17 @@
     add_label/2,
     add_label/3
 ]).
+
+-ifdef(JIT_DWARF).
+-export([
+    dwarf_opcode/2,
+    dwarf_label/2,
+    dwarf_function/3,
+    dwarf_line/2
+]).
+-endif.
+
+-compile([warnings_as_errors]).
 
 -include_lib("jit.hrl").
 
@@ -133,7 +146,8 @@
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
     available_regs :: [aarch64_register()],
     used_regs :: [aarch64_register()],
-    labels :: [{integer() | reference(), integer()}]
+    labels :: [{integer() | reference(), integer()}],
+    variant :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -155,7 +169,8 @@
     | {'(int)', maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
     | {'(bool)', maybe_free_aarch64_register(), '==', false}
     | {'(bool)', maybe_free_aarch64_register(), '!=', false}
-    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}.
+    | {maybe_free_aarch64_register(), '&', non_neg_integer(), '!=', integer()}
+    | {{free, aarch64_register()}, '==', {free, aarch64_register()}}.
 
 % ctx->e is 0x28
 % ctx->x is 0x30
@@ -167,6 +182,13 @@
 -define(X_REG(N), {?CTX_REG, 16#30 + (N * ?WORD_SIZE)}).
 -define(CP, {?CTX_REG, 16#B8}).
 -define(FP_REGS, {?CTX_REG, 16#C0}).
+-define(FP_REG_OFFSET(State, F),
+    (F *
+        case (State)#state.variant band ?JIT_VARIANT_FLOAT32 of
+            0 -> 8;
+            _ -> 4
+        end)
+).
 -define(BS, {?CTX_REG, 16#C8}).
 -define(BS_OFFSET, {?CTX_REG, 16#D0}).
 -define(JITSTATE_MODULE, {?JITSTATE_REG, 0}).
@@ -187,6 +209,8 @@
 -define(AVAILABLE_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6]).
 -define(PARAMETER_REGS, [r0, r1, r2, r3, r4, r5]).
 -define(SCRATCH_REGS, [r7, r8, r9, r10, r11, r12, r13, r14, r15, r3, r4, r5, r6, r17]).
+
+-include("jit_backend_dwarf_impl.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
@@ -216,7 +240,7 @@ word_size() -> ?WORD_SIZE.
 %% @return New backend state
 %%-----------------------------------------------------------------------------
 -spec new(any(), module(), stream()) -> state().
-new(_Variant, StreamModule, Stream) ->
+new(Variant, StreamModule, Stream) ->
     #state{
         stream_module = StreamModule,
         stream = Stream,
@@ -224,7 +248,8 @@ new(_Variant, StreamModule, Stream) ->
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
-        labels = []
+        labels = [],
+        variant = Variant
     }.
 
 %%-----------------------------------------------------------------------------
@@ -520,6 +545,47 @@ jump_to_label(
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
 
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    Rel = TargetOffset - Offset,
+    I1 = jit_aarch64_asm:b(Rel),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
+
+%%-----------------------------------------------------------------------------
+%% @doc Jump to a continuation address stored in a register.
+%% This is used for optimized intra-module returns.
+%% @end
+%% @param State current backend state
+%% @param OffsetReg register containing the continuation offset
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+jump_to_continuation(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        offset = BaseOffset,
+        available_regs = [TempReg | _]
+    } = State,
+    {free, OffsetReg}
+) ->
+    % Calculate absolute address: native_code_base + target_offset
+    % where native_code_base = current_pc + (BaseOffset - CurrentStreamOffset)
+    CurrentStreamOffset = StreamModule:offset(Stream0),
+    NetOffset = BaseOffset - CurrentStreamOffset,
+
+    % Get native code base address into temporary register
+    I1 = jit_aarch64_asm:adr(TempReg, NetOffset),
+    % Add target offset to get final absolute address
+    I2 = jit_aarch64_asm:add(TempReg, TempReg, OffsetReg),
+    % Indirect branch to the calculated absolute address
+    I3 = jit_aarch64_asm:br(TempReg),
+
+    Code = <<I1/binary, I2/binary, I3/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Free all registers since this is a tail jump
+    State#state{stream = Stream1, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+
 %% @private
 -spec rewrite_branch_instruction(
     jit_aarch64_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()}, integer()
@@ -785,6 +851,20 @@ if_block_cond(
     {State2, ne, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {{free, Reg1}, '==', {free, Reg2}}
+) ->
+    % Compare two free registers
+    I1 = jit_aarch64_asm:cmp(Reg1, Reg2),
+    I2 = jit_aarch64_asm:bcc(ne, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    % Free both registers
+    State1 = if_block_free_reg({free, Reg1}, State0),
+    State2 = if_block_free_reg({free, Reg2}, State1),
+    State3 = State2#state{stream = Stream1},
+    {State3, ne, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
     {'(bool)', RegOrTuple, '==', false}
 ) ->
     Reg =
@@ -924,13 +1004,29 @@ merge_used_regs(State, []) ->
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
--spec shift_right(state(), aarch64_register(), non_neg_integer()) -> state().
-shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
+-spec shift_right(#state{}, maybe_free_aarch64_register(), non_neg_integer()) ->
+    {#state{}, aarch64_register()}.
+shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
     I = jit_aarch64_asm:lsr(Reg, Reg, Shift),
     Stream1 = StreamModule:append(Stream0, I),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+shift_right(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [ResultReg | T],
+        used_regs = UR
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I = jit_aarch64_asm:lsr(ResultReg, Reg, Shift),
+    Stream1 = StreamModule:append(Stream0, I),
+    {State#state{stream = Stream1, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a shift register left by a fixed number of bits, effectively
@@ -1273,7 +1369,7 @@ move_to_vm_register(
 ) ->
     I1 = jit_aarch64_asm:ldr(Reg, {Reg, ?WORD_SIZE}),
     I2 = jit_aarch64_asm:ldr(Temp, ?FP_REGS),
-    I3 = jit_aarch64_asm:str(Reg, {Temp, F * ?WORD_SIZE}),
+    I3 = jit_aarch64_asm:str(Reg, {Temp, ?FP_REG_OFFSET(State0, F)}),
     Code = <<I1/binary, I2/binary, I3/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = free_native_register(State0, Reg),
@@ -1550,7 +1646,19 @@ move_to_array_element(
 %% @param Value value to move (can be an immediate, vm register, pointer, or native register)
 %% @return Tuple of {Updated backend state, Native register containing the value}
 %%-----------------------------------------------------------------------------
--spec move_to_native_register(state(), value()) -> {state(), aarch64_register()}.
+-spec move_to_native_register(state(), value() | cp) -> {state(), aarch64_register()}.
+move_to_native_register(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [Reg | AvailT],
+        used_regs = Used
+    } = State,
+    cp
+) ->
+    I1 = jit_aarch64_asm:ldr(Reg, ?CP),
+    Stream1 = StreamModule:append(Stream0, I1),
+    {State#state{stream = Stream1, used_regs = [Reg | Used], available_regs = AvailT}, Reg};
 move_to_native_register(State, Reg) when is_atom(Reg) ->
     {State, Reg};
 move_to_native_register(

@@ -708,6 +708,16 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
             perror("Error: cannot find aarch64 directory");
             return EXIT_FAILURE;
         }
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+        if (chdir("armv6m") != 0) {
+            perror("Error: cannot find armv6m directory");
+            return EXIT_FAILURE;
+        }
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+        if (chdir("riscv32") != 0) {
+            perror("Error: cannot find riscv32 directory");
+            return EXIT_FAILURE;
+        }
 #else
 #error Unknown JIT target
 #endif
@@ -774,7 +784,7 @@ int main(int argc, char **argv)
 {
     char *name = argv[0];
     time_t seed = time(NULL);
-    fprintf(stderr, "Seed is %li\n", seed);
+    fprintf(stderr, "Seed is %li\n", (long int) seed);
     srand(seed);
 
     if (chdir(dirname(name)) != 0) {

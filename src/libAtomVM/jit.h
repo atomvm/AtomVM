@@ -172,8 +172,11 @@ enum TrapAndLoadResult
 
 #define JIT_ARCH_X86_64 1
 #define JIT_ARCH_AARCH64 2
+#define JIT_ARCH_ARMV6M 3
+#define JIT_ARCH_RISCV32 4
 
 #define JIT_VARIANT_PIC 1
+#define JIT_VARIANT_FLOAT32 2
 
 #ifndef AVM_NO_JIT
 
@@ -185,6 +188,16 @@ enum TrapAndLoadResult
 #if defined(__arm64__) || defined(__aarch64__)
 #define JIT_ARCH_TARGET JIT_ARCH_AARCH64
 #define JIT_JUMPTABLE_ENTRY_SIZE 4
+#endif
+
+#ifdef __arm__
+#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
+#define JIT_JUMPTABLE_ENTRY_SIZE 12
+#endif
+
+#if defined(__riscv) && (__riscv_xlen == 32)
+#define JIT_ARCH_TARGET JIT_ARCH_RISCV32
+#define JIT_JUMPTABLE_ENTRY_SIZE 8
 #endif
 
 #ifndef JIT_ARCH_TARGET
@@ -211,6 +224,34 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream);
  * @param label the label to resume the process to
  */
 enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t label);
+
+#ifndef AVM_NO_JIT_DWARF
+/**
+ * @brief Register JIT-compiled code with debug info with GDB/LLDB
+ *
+ * @details This function registers native code and associated DWARF debug
+ * information with the debugger using the GDB JIT interface. This allows
+ * debuggers to show function names and source line information for JIT code.
+ *
+ * @param mod The module containing the JIT code
+ * @param native_code Pointer to the native machine code
+ * @param native_size Size of the native code in bytes
+ * @param entry_point The actual mapped entry point address
+ */
+void jit_debug_register_code(Module *mod, const void *native_code, size_t native_size, ModuleNativeEntryPoint entry_point);
+
+/**
+ * @brief Unregister JIT-compiled code from debugger
+ *
+ * @details This function unregisters previously registered JIT code from
+ * the debugger. Should be called when a module is unloaded.
+ *
+ * @param ctx The context
+ * @param mod The module being unloaded
+ */
+void jit_debug_unregister_code(Context *ctx, Module *mod);
+
+#endif
 
 #ifdef __cplusplus
 }

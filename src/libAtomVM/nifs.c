@@ -209,6 +209,7 @@ static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
 static term nif_jit_backend_module(Context *ctx, int argc, term argv[]);
+static term nif_jit_variant(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_lists_reverse(Context *ctx, int argc, term argv[]);
 static term nif_lists_keyfind(Context *ctx, int argc, term argv[]);
@@ -793,6 +794,11 @@ static const struct Nif nif_error_nif = {
 static const struct Nif jit_backend_module_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_jit_backend_module
+};
+
+static const struct Nif jit_variant_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_jit_variant
 };
 #endif
 
@@ -4545,7 +4551,7 @@ static term nif_erlang_setnode_2(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_atom);
-    VALIDATE_VALUE(argv[1], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_any_integer);
 
     avm_int64_t creation = term_maybe_unbox_int64(argv[1]);
     if (UNLIKELY(creation < 0 || creation > ((avm_int64_t) 1) << 32)) {
@@ -5680,8 +5686,25 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_X86_64_ATOM;
 #elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
     return JIT_AARCH64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+    return JIT_ARMV6M_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+    return JIT_RISCV32_ATOM;
 #else
 #error Unknown JIT target
+#endif
+}
+
+static term nif_jit_variant(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+
+#ifdef AVM_USE_SINGLE_PRECISION
+    return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
+#else
+    return term_from_int(JIT_VARIANT_PIC);
 #endif
 }
 #endif
