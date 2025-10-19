@@ -1784,6 +1784,25 @@ test_big_literals() ->
         )
     ),
 
+    11778076840785789394209099624956350279955 = list_sum(
+        ?MODULE:id(
+            [
+                281532703474492501731626716290297310019,
+                93306314956976059883019272415387330003,
+                214607399141421462250690668733314471655,
+                278088529617771354220434498525634157025,
+                334122505095354375669507689190891893146,
+                97282639123841533893464348356498690111,
+                139101277621645745787465467869309404885,
+                336308780620891755582747031067683052383,
+                304507291449018005568388967257032414400,
+                89470201992235757207956459849942467761
+            ]
+        ),
+        1,
+        0
+    ),
+
     0.
 
 % This function will never be called, we leave this to check if we are able to parse the BEAM file
@@ -1795,6 +1814,11 @@ lit_ovf1() ->
 % even if this integer exceeds maximum integer capacity.
 lit_ovf2() ->
     ?MODULE:id(-16#10000000000000000000000000000000000000000000000000000000000000000).
+
+list_sum([], _Index, Acc) ->
+    Acc;
+list_sum([N | Tail], Index, Acc) ->
+    list_sum(Tail, Index + 1, N * Index + Acc).
 
 test_is_integer() ->
     MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,

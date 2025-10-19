@@ -574,12 +574,12 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             uint8_t sign_byte = external_term_buf[2];
             const uint8_t *int_bytes = external_term_buf + 3;
             bool is_negative = sign_byte != 0x00;
+            *eterm_size = SMALL_BIG_EXT_BASE_SIZE + int_len;
 
             if (int_len <= 8) {
                 avm_uint64_t unsigned_value = read_bytes(int_bytes, int_len);
                 if (!uint64_does_overflow_int64(unsigned_value, is_negative)) {
                     avm_int64_t value = int64_cond_neg_unsigned(is_negative, unsigned_value);
-                    *eterm_size = SMALL_BIG_EXT_BASE_SIZE + int_len;
                     return term_make_maybe_boxed_int64(value, heap);
                 }
             }
