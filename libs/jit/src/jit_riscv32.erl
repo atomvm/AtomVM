@@ -166,8 +166,7 @@
     available_regs :: [riscv32_register()],
     used_regs :: [riscv32_register()],
     labels :: [{integer() | reference(), integer()}],
-    variant :: non_neg_integer(),
-    literal_pool :: [{non_neg_integer(), riscv32_register(), non_neg_integer()}]
+    variant :: non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -275,8 +274,7 @@ new(Variant, StreamModule, Stream) ->
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
         labels = [],
-        variant = Variant,
-        literal_pool = []
+        variant = Variant
     }.
 
 %%-----------------------------------------------------------------------------
@@ -630,8 +628,7 @@ call_primitive_last(
                 State2 = set_registers_args(State1, ArgsForTailCall, 0),
                 tail_call_with_jit_state_registers_only(State2, Temp)
         end,
-    State5 = State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []},
-    flush_literal_pool(State5).
+    State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Tail call to address in register.
@@ -708,15 +705,13 @@ jump_to_label(
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State2 = State1#state{stream = Stream1},
-    flush_literal_pool(State2).
+    State1#state{stream = Stream1}.
 
 jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
     Offset = StreamModule:offset(Stream0),
     CodeBlock = branch_to_offset_code(State, Offset, TargetOffset),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State2 = State#state{stream = Stream1},
-    flush_literal_pool(State2).
+    State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to address in continuation pointer register
@@ -2530,35 +2525,6 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     I = jit_riscv32_asm:li(Reg, Val),
     Stream1 = StreamModule:append(Stream0, I),
     State#state{stream = Stream1}.
-
-flush_literal_pool(#state{literal_pool = []} = State) ->
-    State;
-flush_literal_pool(
-    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
-) ->
-    % Align
-    Offset = StreamModule:offset(Stream0),
-    Stream1 =
-        if
-            Offset rem 4 =:= 0 -> Stream0;
-            true -> StreamModule:append(Stream0, <<0:16>>)
-        end,
-    % Lay all values and update ldr instructions
-    Stream2 = lists:foldl(
-        fun({LdrInstructionAddr, Reg, Val}, AccStream) ->
-            LiteralPosition = StreamModule:offset(AccStream),
-            LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
-            LiteralOffset = LiteralPosition - LdrPC,
-            LdrInstruction = jit_riscv32_asm:lw(Reg, pc, LiteralOffset),
-            AccStream1 = StreamModule:append(AccStream, <<Val:32/little>>),
-            StreamModule:replace(
-                AccStream1, LdrInstructionAddr, LdrInstruction
-            )
-        end,
-        Stream1,
-        lists:reverse(LP)
-    ),
-    State#state{stream = Stream2, literal_pool = []}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     Val >= 0 andalso Val =< 255
