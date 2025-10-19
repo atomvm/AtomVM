@@ -72,9 +72,9 @@ uint32_t inet_addr4_to_uint32(term addr_tuple)
 term inet_make_addr4(uint32_t addr, Heap *heap)
 {
     term result = term_alloc_tuple(4, heap);
-    term_put_tuple_element(result, 0, term_from_int32((addr >> 24) & 0xFF));
-    term_put_tuple_element(result, 1, term_from_int32((addr >> 16) & 0xFF));
-    term_put_tuple_element(result, 2, term_from_int32((addr >> 8) & 0xFF));
-    term_put_tuple_element(result, 3, term_from_int32(addr & 0xFF));
+    term_put_tuple_element(result, 0, term_from_int11((addr >> 24) & 0xFF));
+    term_put_tuple_element(result, 1, term_from_int11((addr >> 16) & 0xFF));
+    term_put_tuple_element(result, 2, term_from_int11((addr >> 8) & 0xFF));
+    term_put_tuple_element(result, 3, term_from_int11(addr & 0xFF));
     return result;
 }
