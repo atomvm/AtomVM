@@ -545,6 +545,9 @@ struct Test tests[] = {
 
     TEST_CASE(test_code_all_available_loaded),
     TEST_CASE_EXPECTED(test_code_load_binary, 24),
+#ifndef AVM_NO_JIT
+    TEST_CASE(test_code_get_object_code),
+#endif
     TEST_CASE_EXPECTED(test_code_load_abs, 24),
     TEST_CASE(test_code_ensure_loaded),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_binary, 24),
