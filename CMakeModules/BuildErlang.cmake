@@ -196,7 +196,7 @@ macro(pack_lib avm_name)
     )
     set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
 
-    if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
+    if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST AVM_PRECOMPILED_TARGETS OR "armv6m+float32" IN_LIST AVM_PRECOMPILED_TARGETS))
         add_custom_command(
             OUTPUT ${avm_name}-armv6m-pico.uf2
             DEPENDS ${avm_name}-armv6m.avm UF2Tool
