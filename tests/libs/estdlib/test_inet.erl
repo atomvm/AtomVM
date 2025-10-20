@@ -33,6 +33,10 @@ test_getaddr() ->
     % RFC8880
     {ok, {192, 0, 0, LastByte}} = inet:getaddr("ipv4only.arpa", inet),
     true = LastByte =:= 170 orelse LastByte =:= 171,
+    {error, einval} = inet:getaddr(127, inet),
+    {error, einval} = inet:getaddr({127.0, 0, 0, 1.0}, inet),
+    {error, einval} = inet:getaddr({312, 0, 0, 1}, inet),
+    {error, einval} = inet:getaddr({foo, bar}, inet),
     {error, einval} = inet:getaddr(<<"localhost">>, inet),
     {error, _} = inet:getaddr("localhost.invalid", inet),
     ok.

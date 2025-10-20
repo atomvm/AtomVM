@@ -72,14 +72,25 @@ connect(Address, Port, Options) ->
     ControllingProcess = self(),
     case socket:open(inet, stream, tcp) of
         {ok, Socket} ->
-            case socket:connect(Socket, #{family => inet, addr => Address, port => Port}) of
-                ok ->
-                    EffectiveOptions = maps:merge(?DEFAULT_OPTIONS, proplist_to_map(Options)),
-                    gen_server:start_link(
-                        ?MODULE, {Socket, ControllingProcess, connect, EffectiveOptions}, []
-                    );
-                ConnectError ->
-                    ConnectError
+            case inet:getaddr(Address, inet) of
+                {ok, Address0} ->
+                    case
+                        socket:connect(Socket, #{family => inet, addr => Address0, port => Port})
+                    of
+                        ok ->
+                            EffectiveOptions = maps:merge(
+                                ?DEFAULT_OPTIONS, proplist_to_map(Options)
+                            ),
+                            gen_server:start_link(
+                                ?MODULE, {Socket, ControllingProcess, connect, EffectiveOptions}, []
+                            );
+                        ConnectError ->
+                            socket:close(Socket),
+                            ConnectError
+                    end;
+                ResolveError ->
+                    socket:close(Socket),
+                    ResolveError
             end;
         OpenError ->
             OpenError
