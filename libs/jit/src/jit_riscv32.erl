@@ -317,7 +317,7 @@ flush(#state{stream_module = StreamModule, stream = Stream0} = State) ->
 %%-----------------------------------------------------------------------------
 -spec debugger(state()) -> state().
 debugger(#state{stream_module = StreamModule, stream = Stream0} = State) ->
-    Stream1 = StreamModule:append(Stream0, jit_riscv32_asm:bkpt(0)),
+    Stream1 = StreamModule:append(Stream0, jit_riscv32_asm:c_ebreak()),
     State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
@@ -416,12 +416,7 @@ jump_table0(
     % Create jump table entry: AUIPC + JALR (8 bytes total)
     % This will be patched later in update_branches/2
     Offset = StreamModule:offset(Stream0),
-    % Placeholder: Load PC + upper20 bits
-    I1 = jit_riscv32_asm:auipc(a3, 0),
-    % Placeholder: Jump to a3 + lower12 bits
-    I2 = jit_riscv32_asm:jalr(zero, a3, 0),
-
-    JumpEntry = <<I1/binary, I2/binary>>,
+    JumpEntry = <<16#FFFFFFFF:32, 16#FFFFFFFF:32>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
 
     % Record both AUIPC and JALR offsets for patching
@@ -451,22 +446,37 @@ update_branches(
     Rel = LabelOffset - Offset,
     NewInstr =
         case Type of
-            {adr, Reg} when Rel rem 4 =:= 0 -> pc_relative_address(Reg, Rel);
-            {adr, Reg} when Rel rem 4 =:= 2 -> pc_relative_address(Reg, Rel + 2);
-            {far_branch, Size, TempReg} ->
+            {adr, Reg} when Rel rem 4 =:= 0 ->
+                % Generate pc_relative_address and pad to 8 bytes with NOP
+                I = pc_relative_address(Reg, Rel),
+                case byte_size(I) of
+                    4 -> <<I/binary, (jit_riscv32_asm:nop())/binary>>;
+                    6 -> <<I/binary, (jit_riscv32_asm:c_nop())/binary>>;
+                    8 -> I
+                end;
+            {adr, Reg} when Rel rem 4 =:= 2; Rel rem 4 =:= -2 ->
+                % Handle 2-byte aligned offsets and pad to 8 bytes
+                % Handle both positive and negative offsets (Erlang rem can be negative)
+                I = pc_relative_address(Reg, Rel),
+                case byte_size(I) of
+                    4 -> <<I/binary, (jit_riscv32_asm:nop())/binary>>;
+                    6 -> <<I/binary, (jit_riscv32_asm:c_nop())/binary>>;
+                    8 -> I
+                end;
+            {far_branch, TempReg} ->
                 % Check if branch can now be optimized to near branch
                 if
                     Rel >= -1048576 andalso Rel =< 1048574 andalso (Rel rem 2) =:= 0 ->
                         % RISC-V jal has ±1MB range
                         % Optimize to near branch: jal + nops to fill original size
                         DirectBranch = jit_riscv32_asm:jal(zero, Rel),
-                        % Fill remaining bytes with NOPs (RISC-V instructions are 4 bytes)
-                        NopCount = (Size - 4) div 4,
-                        Nops = <<
-                            <<(jit_riscv32_asm:nop())/binary>>
-                         || _ <- lists:seq(1, NopCount)
-                        >>,
-                        <<DirectBranch/binary, Nops/binary>>;
+                        case byte_size(DirectBranch) of
+                            2 ->
+                                <<DirectBranch/binary, (jit_riscv32_asm:c_nop())/binary,
+                                    (jit_riscv32_asm:nop())/binary>>;
+                            4 ->
+                                <<DirectBranch/binary, (jit_riscv32_asm:nop())/binary>>
+                        end;
                     true ->
                         % Keep far branch sequence: auipc + jalr (PC-relative, 8 bytes)
                         % Split the relative offset into upper 20 bits and lower 12 bits
@@ -474,7 +484,11 @@ update_branches(
                         Lo12 = Rel - (Hi20 bsl 12),
                         I1 = jit_riscv32_asm:auipc(TempReg, Hi20),
                         I2 = jit_riscv32_asm:jalr(zero, TempReg, Lo12),
-                        <<I1/binary, I2/binary>>
+                        Entry = <<I1/binary, I2/binary>>,
+                        case byte_size(Entry) of
+                            6 -> <<Entry/binary, (jit_riscv32_asm:c_nop())/binary>>;
+                            8 -> Entry
+                        end
                 end;
             jump_table_auipc_jalr ->
                 % Calculate PC-relative offset from AUIPC instruction to target
@@ -498,7 +512,12 @@ update_branches(
                 % Encode AUIPC and JALR with computed offsets
                 I1 = jit_riscv32_asm:auipc(a3, Upper20),
                 I2 = jit_riscv32_asm:jalr(zero, a3, Lower12Signed),
-                <<I1/binary, I2/binary>>
+                % Map to 8 bytes
+                JumpTableEntry = <<I1/binary, I2/binary>>,
+                case byte_size(JumpTableEntry) of
+                    6 -> <<JumpTableEntry/binary, (jit_riscv32_asm:c_nop())/binary>>;
+                    8 -> JumpTableEntry
+                end
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
@@ -783,13 +802,10 @@ branch_to_label_code(
     % RISC-V: Far branch sequence using PC-relative auipc + jalr (8 bytes)
 
     % Placeholder: auipc TempReg, 0
-    I1 = jit_riscv32_asm:auipc(TempReg, 0),
     % Placeholder: jalr zero, TempReg, 0
-    I2 = jit_riscv32_asm:jalr(zero, TempReg, 0),
-    CodeBlock = <<I1/binary, I2/binary>>,
-    SequenceSize = byte_size(CodeBlock),
+    CodeBlock = <<16#FFFFFFFF:32, 16#FFFFFFFF:32>>,
     % Add relocation entry
-    Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
+    Reloc = {Label, Offset, {far_branch, TempReg}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
 branch_to_label_code(
@@ -799,13 +815,10 @@ branch_to_label_code(
     % Far branch sequence using PC-relative auipc + jalr (8 bytes)
 
     % Placeholder: auipc t6, 0
-    I1 = jit_riscv32_asm:auipc(t6, 0),
     % Placeholder: jalr zero, t6, 0
-    I2 = jit_riscv32_asm:jalr(zero, t6, 0),
-    CodeBlock = <<I1/binary, I2/binary>>,
-    SequenceSize = byte_size(CodeBlock),
+    CodeBlock = <<16#FFFFFFFF:32, 16#FFFFFFFF:32>>,
     % Add relocation entry
-    Reloc = {Label, Offset, {far_branch, SequenceSize, t6}},
+    Reloc = {Label, Offset, {far_branch, t6}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
 branch_to_label_code(#state{available_regs = []}, _Offset, _Label, _LabelLookup) ->
@@ -1671,19 +1684,8 @@ set_registers_args0(
     AvailGP,
     StackOffset
 ) when is_integer(Value) ->
-    LowPartUnsigned = Value band 16#FFFFFFFF,
-    HighPartUnsigned = (Value bsr 32) band 16#FFFFFFFF,
-    % Convert to signed 32-bit values for RISC-V li instruction
-    LowPart =
-        if
-            LowPartUnsigned > 16#7FFFFFFF -> LowPartUnsigned - 16#100000000;
-            true -> LowPartUnsigned
-        end,
-    HighPart =
-        if
-            HighPartUnsigned > 16#7FFFFFFF -> HighPartUnsigned - 16#100000000;
-            true -> HighPartUnsigned
-        end,
+    LowPart = Value band 16#FFFFFFFF,
+    HighPart = (Value bsr 32) band 16#FFFFFFFF,
     set_registers_args0(
         State, [LowPart, HighPart | ArgsT], [imm | ArgsRegs], ParamRegs, AvailGP, StackOffset
     );
@@ -2356,8 +2358,9 @@ set_continuation_to_label(
     % resolved to point directly to the label's actual address (not the jump table entry)
     Offset = StreamModule:offset(Stream0),
     % Emit placeholder for pc_relative_address (auipc + addi)
+    % Reserve 8 bytes (2 x 32-bit instructions) with all-1s placeholder for flash programming
     % The relocation will replace these with the correct offset
-    I1 = pc_relative_address(Temp, 4),
+    I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
     Reloc = {Label, Offset, {adr, Temp}},
     % Store continuation (jit_state is in a1)
     I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
@@ -2379,7 +2382,8 @@ set_continuation_to_offset(
 ) ->
     OffsetRef = make_ref(),
     Offset = StreamModule:offset(Stream0),
-    I1 = pc_relative_address(Temp, 4),
+    % Reserve 8 bytes with all-1s placeholder for flash programming
+    I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
     Reloc = {OffsetRef, Offset, {adr, Temp}},
     % Store continuation (jit_state is in a1)
     I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
@@ -2659,8 +2663,11 @@ decrement_reductions_and_maybe_schedule_next(
     NewI5 =
         case pc_relative_address(Temp, NewI5Offset) of
             I when byte_size(I) =:= 4 ->
-                % Only auipc, pad with NOP
+                % Only auipc, pad with NOP (4 bytes)
                 <<I/binary, (jit_riscv32_asm:nop())/binary>>;
+            I when byte_size(I) =:= 6 ->
+                % auipc + c.addi, pad with c.nop (2 bytes)
+                <<I/binary, (jit_riscv32_asm:c_nop())/binary>>;
             I when byte_size(I) =:= 8 ->
                 % auipc + addi, no padding needed
                 I
@@ -2798,11 +2805,18 @@ rewrite_cp_offset(
     CPValue = NewOffset bsl 2,
     NewMoveInstr = jit_riscv32_asm:li(TempReg, CPValue),
     % We reserved 8 bytes (2 instructions) for the CP value
-    % If li generates only 4 bytes, pad with a NOP to maintain alignment
+    % Pad with NOP if needed to maintain alignment
     PaddedInstr =
         case byte_size(NewMoveInstr) of
-            4 -> <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary>>;
-            8 -> NewMoveInstr
+            2 ->
+                <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary,
+                    (jit_riscv32_asm:c_nop())/binary>>;
+            4 ->
+                <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary>>;
+            6 ->
+                <<NewMoveInstr/binary, (jit_riscv32_asm:c_nop())/binary>>;
+            8 ->
+                NewMoveInstr
         end,
     Stream1 = StreamModule:replace(Stream0, RewriteOffset, PaddedInstr),
     State0#state{stream = Stream1}.
@@ -2841,13 +2855,22 @@ return_labels_and_lines(
      || {Label, LabelOffset} <- Labels, is_integer(Label)
     ]),
 
-    I1 = pc_relative_address(a0, 12),
     I2 = jit_riscv32_asm:ret(),
+    % Assume total size is 10 bytes (8-byte I1 + 2-byte c.ret)
+    % If actual is 8 bytes (6-byte I1 + 2-byte c.ret), we'll pad with 2 bytes
+    I1 = pc_relative_address(a0, 10),
+    Prologue = <<I1/binary, I2/binary>>,
+    ProloguePadded =
+        case byte_size(Prologue) of
+            10 -> Prologue;
+            % 2-byte padding
+            8 -> <<Prologue/binary, 16#FFFF:16>>
+        end,
     LabelsTable = <<<<Label:16, Offset:32>> || {Label, Offset} <- SortedLabels>>,
     LinesTable = <<<<Line:16, Offset:32>> || {Line, Offset} <- SortedLines>>,
     Stream1 = StreamModule:append(
         Stream0,
-        <<I1/binary, I2/binary, (length(SortedLabels)):16, LabelsTable/binary,
+        <<ProloguePadded/binary, (length(SortedLabels)):16, LabelsTable/binary,
             (length(SortedLines)):16, LinesTable/binary>>
     ),
     State#state{stream = Stream1}.
@@ -3005,7 +3028,7 @@ args_regs(Args) ->
     ).
 
 %%-----------------------------------------------------------------------------
-%% @doc Add a label at the current offset. Eventually align it with a nop.
+%% @doc Add a label at the current offset.
 %% @end
 %% @param State current backend state
 %% @param Label the label number or reference
@@ -3014,15 +3037,7 @@ args_regs(Args) ->
 -spec add_label(state(), integer() | reference()) -> state().
 add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label) ->
     Offset0 = StreamModule:offset(Stream0),
-    {State1, Offset1} =
-        if
-            Offset0 rem 4 =:= 0 ->
-                {State0, Offset0};
-            true ->
-                Stream1 = StreamModule:append(Stream0, jit_riscv32_asm:nop()),
-                {State0#state{stream = Stream1}, Offset0 + 2}
-        end,
-    add_label(State1, Label, Offset1).
+    add_label(State0, Label, Offset0).
 
 %%-----------------------------------------------------------------------------
 %% @doc Add a label at a specific offset

@@ -78,6 +78,7 @@ find_binutils(Arch) ->
     ArchStr = atom_to_list(Arch),
     BinutilsList = [
         {ArchStr ++ "-esp-elf-as", ArchStr ++ "-esp-elf-objdump"},
+        {ArchStr ++ "-unknown-elf-as", ArchStr ++ "-unknown-elf-objdump"},
         {ArchStr ++ "-elf-as", ArchStr ++ "-elf-objdump"},
         {ArchStr ++ "-none-eabi-as", ArchStr ++ "-none-eabi-objdump"},
         {ArchStr ++ "-linux-gnu-as", ArchStr ++ "-linux-gnu-objdump"}
@@ -118,7 +119,7 @@ get_as_flags(aarch64) ->
 get_as_flags(x86_64) ->
     "--64";
 get_as_flags(riscv32) ->
-    "-march=rv32ima".
+    "-march=rv32imac".
 
 %% Parse objdump output lines and extract binary data
 -spec asm_lines([binary()], binary(), atom()) -> binary().
