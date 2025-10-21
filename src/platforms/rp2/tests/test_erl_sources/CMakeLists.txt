@@ -43,7 +43,7 @@ compile_erlang(test_crypto ../../../esp32/test/main/test_erl_sources/)
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/rp2_test_modules.avm"
-    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i rp2_test_modules.avm
+    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/packbeam create rp2_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_clocks.beam
         test_smp.beam
