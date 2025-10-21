@@ -640,6 +640,32 @@ static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
 }
 
 /**
+ * @brief Perform arithmetic right shift on 64-bit signed integer (\c int64_t)
+ *
+ * Performs a portable arithmetic right shift that preserves sign extension
+ * across different compilers and architectures. Unlike the C >> operator
+ * on signed integers (which has implementation-defined behavior for negative
+ * values), this function guarantees arithmetic shift semantics.
+ *
+ * @param n Signed 64-bit integer (\c int64_t) to shift
+ * @param rshift Number of bit positions to shift right
+ * @return Right-shifted value with sign extension preserved
+ *
+ * @warning For shift amounts >= 64, behavior is undefined. Use \c int64_bsr_safe()
+ *          for defined behavior with large shift amounts
+ *
+ * @note Negative values are sign-extended (arithmetic shift)
+ * @note Positive values are zero-extended (logical shift)
+ * @note Portable replacement for implementation-defined signed right shift
+ *
+ * @see int64_bsr_safe() for safe version with large shift handling
+ */
+static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
+{
+    return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
+}
+
+/**
  * @brief Safely perform arithmetic right shift on 32-bit signed integer (\c int32_t)
  *
  * Performs a portable arithmetic right shift with defined behavior for
@@ -663,6 +689,32 @@ static inline int32_t int32_bsr_safe(int32_t n, unsigned int rshift)
         return n < 0 ? -1 : 0;
     }
     return int32_bsr(n, rshift);
+}
+
+/**
+ * @brief Safely perform arithmetic right shift on 64-bit signed integer (\c int64_t)
+ *
+ * Performs a portable arithmetic right shift with defined behavior for
+ * shift amounts >= 64 bits. This follows Erlang's semantics where right
+ * shifts beyond the bit width converge to -1 for negative values and 0
+ * for non-negative values.
+ *
+ * @param n Signed 64-bit integer (\c int64_t) to shift
+ * @param rshift Number of bit positions to shift right
+ * @return Right-shifted value, or -1 (negative) / 0 (non-negative) for shifts >= 64
+ *
+ * @note For rshift >= 64: returns -1 if n < 0, returns 0 if n >= 0
+ * @note For rshift < 64: performs standard arithmetic right shift
+ * @note Erlang-inspired semantics for large shifts
+ *
+ * @see int64_bsr() for version without large shift protection
+ */
+static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
+{
+    if (rshift >= 64) {
+        return n < 0 ? -1 : 0;
+    }
+    return int64_bsr(n, rshift);
 }
 
 /**
@@ -696,58 +748,6 @@ static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *o
     *out = res;
     int32_t check = int32_bsr(res, lshift);
     return check != n;
-}
-
-/**
- * @brief Perform arithmetic right shift on 64-bit signed integer (\c int64_t)
- *
- * Performs a portable arithmetic right shift that preserves sign extension
- * across different compilers and architectures. Unlike the C >> operator
- * on signed integers (which has implementation-defined behavior for negative
- * values), this function guarantees arithmetic shift semantics.
- *
- * @param n Signed 64-bit integer (\c int64_t) to shift
- * @param rshift Number of bit positions to shift right
- * @return Right-shifted value with sign extension preserved
- *
- * @warning For shift amounts >= 64, behavior is undefined. Use \c int64_bsr_safe()
- *          for defined behavior with large shift amounts
- *
- * @note Negative values are sign-extended (arithmetic shift)
- * @note Positive values are zero-extended (logical shift)
- * @note Portable replacement for implementation-defined signed right shift
- *
- * @see int64_bsr_safe() for safe version with large shift handling
- */
-static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
-{
-    return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
-}
-
-/**
- * @brief Safely perform arithmetic right shift on 64-bit signed integer (\c int64_t)
- *
- * Performs a portable arithmetic right shift with defined behavior for
- * shift amounts >= 64 bits. This follows Erlang's semantics where right
- * shifts beyond the bit width converge to -1 for negative values and 0
- * for non-negative values.
- *
- * @param n Signed 64-bit integer (\c int64_t) to shift
- * @param rshift Number of bit positions to shift right
- * @return Right-shifted value, or -1 (negative) / 0 (non-negative) for shifts >= 64
- *
- * @note For rshift >= 64: returns -1 if n < 0, returns 0 if n >= 0
- * @note For rshift < 64: performs standard arithmetic right shift
- * @note Erlang-inspired semantics for large shifts
- *
- * @see int64_bsr() for version without large shift protection
- */
-static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
-{
-    if (rshift >= 64) {
-        return n < 0 ? -1 : 0;
-    }
-    return int64_bsr(n, rshift);
 }
 
 /**
