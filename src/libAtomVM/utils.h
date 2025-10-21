@@ -423,6 +423,58 @@ static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_ne
     return int64_safe_unsigned_abs(i64);
 }
 
+static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
+{
+    return (int32_t) ((n < 0) ? ~(~((uint32_t) n) >> rshift) : (((uint32_t) n) >> rshift));
+}
+
+static inline int32_t int32_bsr_safe(int32_t n, unsigned int rshift)
+{
+    if (rshift >= 32) {
+        return n < 0 ? -1 : 0;
+    }
+    return int32_bsr(n, rshift);
+}
+
+static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *out)
+{
+    if (lshift >= 32) {
+        *out = 0;
+        return (n != 0);
+    }
+
+    int32_t res = (int32_t) (((uint32_t) n) << lshift);
+    *out = res;
+    int32_t check = int32_bsr(res, lshift);
+    return check != n;
+}
+
+static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
+{
+    return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
+}
+
+static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
+{
+    if (rshift >= 64) {
+        return n < 0 ? -1 : 0;
+    }
+    return int64_bsr(n, rshift);
+}
+
+static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
+{
+    if (lshift >= 64) {
+        *out = 0;
+        return (n != 0);
+    }
+
+    int64_t res = (int64_t) (((uint64_t) n) << lshift);
+    *out = res;
+    int64_t check = int64_bsr(res, lshift);
+    return check != n;
+}
+
 #if INTPTR_MAX <= INT32_MAX
 #define INTPTR_WRITE_TO_ASCII_BUF_LEN (32 + 1)
 #elif INTPTR_MAX <= INT64_MAX

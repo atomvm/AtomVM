@@ -1691,32 +1691,6 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     }
 }
 
-static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
-{
-    return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
-}
-
-static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
-{
-    if (lshift >= 64) {
-        *out = 0;
-        return (n != 0);
-    }
-
-    int64_t res = (int64_t) (((uint64_t) n) << lshift);
-    *out = res;
-    int64_t check = int64_bsr(res, lshift);
-    return check != n;
-}
-
-static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
-{
-    if (rshift >= 64) {
-        return n < 0 ? -1 : 0;
-    }
-    return int64_bsr(n, rshift);
-}
-
 term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2)
 {
     if (LIKELY(term_is_any_integer(arg1) && term_is_non_neg_int(arg2))) {
