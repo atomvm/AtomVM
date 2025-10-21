@@ -54,6 +54,8 @@ set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
 # Likewise with EXECVE
 set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
+# getcwd is defined in newlib header but not implemented
+set(HAVE_GETCWD "" CACHE INTERNAL "Have symbol getcwd" FORCE)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)
