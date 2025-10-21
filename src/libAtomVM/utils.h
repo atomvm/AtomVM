@@ -634,7 +634,7 @@ static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_ne
  *
  * @see int32_bsr_safe() for safe version with large shift handling
  */
-static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
+static inline int32_t int32_bsr(int32_t n, size_t rshift)
 {
     return (int32_t) ((n < 0) ? ~(~((uint32_t) n) >> rshift) : (((uint32_t) n) >> rshift));
 }
@@ -660,7 +660,7 @@ static inline int32_t int32_bsr(int32_t n, unsigned int rshift)
  *
  * @see int64_bsr_safe() for safe version with large shift handling
  */
-static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
+static inline int64_t int64_bsr(int64_t n, size_t rshift)
 {
     return (int64_t) ((n < 0) ? ~(~((uint64_t) n) >> rshift) : (((uint64_t) n) >> rshift));
 }
@@ -683,7 +683,7 @@ static inline int64_t int64_bsr(int64_t n, unsigned int rshift)
  *
  * @see int32_bsr() for version without large shift protection
  */
-static inline int32_t int32_bsr_safe(int32_t n, unsigned int rshift)
+static inline int32_t int32_bsr_safe(int32_t n, size_t rshift)
 {
     if (rshift >= 32) {
         return n < 0 ? -1 : 0;
@@ -709,7 +709,7 @@ static inline int32_t int32_bsr_safe(int32_t n, unsigned int rshift)
  *
  * @see int64_bsr() for version without large shift protection
  */
-static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
+static inline int64_t int64_bsr_safe(int64_t n, size_t rshift)
 {
     if (rshift >= 64) {
         return n < 0 ? -1 : 0;
@@ -737,7 +737,7 @@ static inline int64_t int64_bsr_safe(int64_t n, unsigned int rshift)
  *
  * @see int32_bsr() used internally for overflow checking
  */
-static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *out)
+static inline bool int32_bsl_overflow(int32_t n, size_t lshift, int32_t *out)
 {
     if (lshift >= 32) {
         *out = 0;
@@ -771,7 +771,7 @@ static inline bool int32_bsl_overflow(int32_t n, unsigned int lshift, int32_t *o
  *
  * @see int64_bsr() used internally for overflow checking
  */
-static inline bool int64_bsl_overflow(int64_t n, unsigned int lshift, int64_t *out)
+static inline bool int64_bsl_overflow(int64_t n, size_t lshift, int64_t *out)
 {
     if (lshift >= 64) {
         *out = 0;

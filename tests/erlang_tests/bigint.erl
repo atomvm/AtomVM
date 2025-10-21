@@ -2490,6 +2490,9 @@ test_bsl() ->
     LS2 = erlang:binary_to_integer(?MODULE:id(<<"4000000000000000">>), 16),
     ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(LS2)) end),
     ok = expect_overflow_or_limit(fun() -> ?MODULE:id(?MODULE:id(-1) bsl ?MODULE:id(LS2)) end),
+    ok = expect_overflow_or_limit(fun() ->
+        ?MODULE:id(?MODULE:id(5) bsl ?MODULE:id(16#0000FFFF00000002))
+    end),
     0 = ?MODULE:id(?MODULE:id(0) bsl ?MODULE:id(LS2)),
 
     % Negative bsl is bsr
@@ -2550,6 +2553,9 @@ test_bsr() ->
     0 = ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(LS2)),
     -1 = ?MODULE:id(?MODULE:id(-1) bsr ?MODULE:id(LS2)),
     0 = ?MODULE:id(?MODULE:id(0) bsr ?MODULE:id(LS2)),
+
+    0 = ?MODULE:id(?MODULE:id(5) bsr ?MODULE:id(16#0000FFFF00000002)),
+    -1 = ?MODULE:id(?MODULE:id(-5) bsr ?MODULE:id(16#0000FFFF00000002)),
 
     % Negative bsr is bsl
     Pattern3 = erlang:binary_to_integer(?MODULE:id(<<"CAFE1234AABBCCDD98765432">>), 16),
