@@ -38,6 +38,16 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+/* Uncomment this for debug:
+void print_num(const intn_digit_t num[], int len)
+{
+    for (int i = 0; i < len; i++) {
+        fprintf(stderr, "0x%x ", (unsigned int) num[i]);
+    }
+    fprintf(stderr, "\n");
+}
+*/
+
 static size_t neg_and_count_in_place(intn_digit_t out[], size_t len);
 
 static inline size_t pad_uint16_to_digits(uint16_t n16[], size_t n16_len)
@@ -427,14 +437,6 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
     }
 
     return padded_q_len / UINT16_IN_A_DIGIT;
-}
-
-void print_num(const uint32_t num[], int len)
-{
-    for (int i = 0; i < len; i++) {
-        fprintf(stderr, "0x%x ", (unsigned int) num[i]);
-    }
-    fprintf(stderr, "\n");
 }
 
 // This function assumes no leading zeros (lenght is used in comparison)

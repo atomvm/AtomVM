@@ -70,6 +70,9 @@ typedef enum
 
 typedef uint32_t intn_digit_t;
 
+// Uncomment this for debug
+// void print_num(const intn_digit_t num[], int len);
+
 int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
 
 size_t intn_addmnu(
@@ -118,8 +121,6 @@ static inline size_t intn_divmn(const intn_digit_t m[], size_t m_len, intn_integ
     *qout_sign = intn_muldiv_sign(m_sign, n_sign);
     return intn_divmnu(m, m_len, n, n_len, q_out, r_out, r_out_len);
 }
-
-void print_num(const uint32_t num[], int len);
 
 size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
