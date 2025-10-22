@@ -899,8 +899,8 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     }
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
-    intn_mulmnu(bn1, bn1_len, bn2, bn2_len, bigres);
-    intn_integer_sign_t res_sign = intn_muldiv_sign(bn1_sign, bn2_sign);
+    intn_integer_sign_t res_sign;
+    intn_mulmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -1066,8 +1066,8 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     }
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
-    size_t bigres_len = intn_divmnu(bn1, bn1_len, bn2, bn2_len, bigres, NULL, NULL);
-    intn_integer_sign_t res_sign = intn_muldiv_sign(bn1_sign, bn2_sign);
+    intn_integer_sign_t res_sign;
+    size_t bigres_len = intn_divmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign, NULL, NULL);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }

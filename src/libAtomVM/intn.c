@@ -117,9 +117,9 @@ static void mulmnu32(const uint32_t u[], size_t m, const uint32_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
-    mulmnu32(u, m, v, n, w);
+    mulmnu32(m, m_len, n, n_len, out);
 }
 
 #else
@@ -170,10 +170,10 @@ static void mulmnu16(const uint16_t u[], size_t m, const uint16_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    mulmnu16((const uint16_t *) u, m * 2, (const uint16_t *) v, n * 2, (uint16_t *) w);
+    mulmnu16((const uint16_t *) m, m_len * 2, (const uint16_t *) n, n_len * 2, (uint16_t *) out);
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #error "Big endian not yet supported"
 #else
