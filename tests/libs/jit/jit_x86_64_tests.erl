@@ -820,17 +820,35 @@ if_else_block_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
-shift_right_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:shift_right(State1, Reg, 3),
-    Stream = ?BACKEND:stream(State2),
-    Dump =
-        <<
-            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-            "   4:	48 c1 e8 03          	shr    $0x3,%rax"
-        >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+shift_right_test_() ->
+    [
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, Reg} = ?BACKEND:shift_right(State1, {free, Reg}, 3),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   4:	48 c1 e8 03          	shr    $0x3,%rax"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end),
+        ?_test(begin
+            State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+            {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+            {State2, OtherReg} = ?BACKEND:shift_right(State1, Reg, 3),
+            ?assertNotEqual(OtherReg, Reg),
+            Stream = ?BACKEND:stream(State2),
+            Dump =
+                <<
+                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   4:	49 89 c3             	mov    %rax,%r11\n"
+                    "   7:	49 c1 eb 03          	shr    $0x3,%r11"
+                >>,
+            ?assertEqual(dump_to_bin(Dump), Stream)
+        end)
+    ].
 
 shift_left_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1558,6 +1576,21 @@ move_to_array_element_test_() ->
                 end)
             ]
         end}.
+
+%% Test jump_to_continuation optimization for intra-module returns
+jump_to_continuation_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_to_continuation(State0, {free, rax}),
+    Stream = ?BACKEND:stream(State1),
+    % Expected: leaq -0x7(%rip), %rax; addq %rax, %rax; jmpq *%rax
+    % With default offset 0, NetOffset = 0 - 0 = 0, but RIP-relative needs adjustment for instruction length
+    Dump =
+        <<
+            "   0:	48 8d 05 f9 ff ff ff 	lea    -0x7(%rip),%rax\n"
+            "   7:	48 01 c0             	add    %rax,%rax\n"
+            "   a:	ff e0                	jmpq   *%rax"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
 
 dump_to_bin(Dump) ->
     dump_to_bin0(Dump, addr, []).
