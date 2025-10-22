@@ -789,7 +789,7 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
     return res_count;
 }
 
-size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
+size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
 
@@ -866,7 +866,7 @@ void bsru(
 }
 
 size_t intn_bsr(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out)
+    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, intn_digit_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
     size_t counted_digits = intn_count_digits(num, len);

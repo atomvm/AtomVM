@@ -137,10 +137,10 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
 size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     intn_digit_t out[], intn_integer_sign_t *out_sign);
 
-size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out);
+size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *out);
 
 size_t intn_bsr(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out);
+    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, intn_digit_t *out);
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
 
@@ -172,7 +172,7 @@ static inline void intn_copy(
     memset(out + num_len, 0, (extend_to - num_len) * sizeof(intn_digit_t));
 }
 
-static inline void intn_u64_to_digits(uint64_t absu64, uint32_t out[])
+static inline void intn_u64_to_digits(uint64_t absu64, intn_digit_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     memcpy(out, &absu64, sizeof(absu64));
@@ -185,7 +185,7 @@ static inline void intn_u64_to_digits(uint64_t absu64, uint32_t out[])
 #endif
 }
 
-static inline void int64_to_intn_2(int64_t i64, uint32_t out[], intn_integer_sign_t *out_sign)
+static inline void int64_to_intn_2(int64_t i64, intn_digit_t out[], intn_integer_sign_t *out_sign)
 {
     bool is_negative;
     uint64_t absu64 = int64_safe_unsigned_abs_set_flag(i64, &is_negative);
