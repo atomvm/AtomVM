@@ -160,6 +160,11 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
 
 size_t intn_required_unsigned_integer_bytes(const intn_digit_t in[], size_t in_len);
 
+static inline size_t intn_required_digits_for_unsigned_integer(size_t size_in_bytes)
+{
+    return size_align_up_pow2(size_in_bytes, sizeof(intn_digit_t)) / sizeof(intn_digit_t);
+}
+
 static inline intn_integer_sign_t intn_negate_sign(intn_integer_sign_t sign)
 {
     return (sign == IntNPositiveInteger) ? IntNNegativeInteger : IntNPositiveInteger;

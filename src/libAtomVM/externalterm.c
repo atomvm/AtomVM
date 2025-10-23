@@ -1011,9 +1011,10 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
 
             // num_bytes > 8 bytes || uint64_does_overflow_int64
+            size_t required_digits = intn_required_digits_for_unsigned_integer(num_bytes);
             size_t data_size;
             size_t unused_rounded_len;
-            term_intn_to_term_size(num_bytes, &data_size, &unused_rounded_len);
+            term_intn_to_term_size(required_digits, &data_size, &unused_rounded_len);
             return BOXED_INTN_SIZE(data_size);
         }
 
