@@ -2302,9 +2302,30 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     if (debug_str_data) section_count++;
     if (debug_aranges_data) section_count++;
 
+    // Find the actual .text section size from the original ELF
+    const Elf_Ehdr *orig_ehdr = (const Elf_Ehdr *) original_elf_data;
+    const Elf_Shdr *orig_shdrs = (const Elf_Shdr *) (original_elf_data + orig_ehdr->e_shoff);
+
+    size_t code_size = 0;
+
+    // Look for .text section in original ELF
+    for (int i = 0; i < orig_ehdr->e_shnum; i++) {
+        const Elf_Shdr *shdr = &orig_shdrs[i];
+        if (shdr->sh_type == 1 && (shdr->sh_flags & 6) == 6) { // SHT_PROGBITS + SHF_ALLOC + SHF_EXECINSTR
+            code_size = shdr->sh_size;
+            break;
+        }
+    }
+
+    if (code_size == 0) {
+        fprintf(stderr, "ERROR: Could not find .text section in original ELF\n");
+        return NULL;
+    }
+
     // Calculate size of new minimal ELF (ELF header + 1 program header + section headers + data)
+    // IMPORTANT: We now include code_size so we can copy the actual JIT code into the file
     size_t elf_size = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (section_count * sizeof(Elf_Shdr)) +
-                     symtab_size + strtab_size + shstrtab_size +
+                     code_size + symtab_size + strtab_size + shstrtab_size +
                      debug_info_size + debug_line_size + debug_abbrev_size + debug_str_size + debug_aranges_size;
 
     uint8_t *new_elf = (uint8_t *) malloc(elf_size);
@@ -2315,11 +2336,11 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     memset(new_elf, 0, elf_size);
 
     // Create ELF header
-    const Elf_Ehdr *orig_ehdr = (const Elf_Ehdr *) original_elf_data;
     Elf_Ehdr *new_ehdr = (Elf_Ehdr *) new_elf;
     memcpy(new_ehdr->e_ident, orig_ehdr->e_ident, 16);
-    // Use ET_DYN for JIT debugging - GDB expects shared object type for JIT code
-    new_ehdr->e_type = 3; // ET_DYN
+    // Use ET_EXEC for JIT debugging - code is loaded at fixed address
+    // ET_EXEC is the correct type for executables with PT_LOAD at specific addresses
+    new_ehdr->e_type = 2; // ET_EXEC
     new_ehdr->e_machine = orig_ehdr->e_machine;
     new_ehdr->e_version = orig_ehdr->e_version;
     new_ehdr->e_entry = 0;
@@ -2338,43 +2359,25 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     new_phdr->p_type = PT_LOAD;
     new_phdr->p_flags = PF_R | PF_X;
 
-    new_phdr->p_offset = 0;
+    // PT_LOAD will start where code is in the file and map to load_address in memory
+    // p_offset will be set after we know where code is
+    new_phdr->p_offset = 0;  // Will be set after we copy code
     new_phdr->p_vaddr = load_address;
     new_phdr->p_paddr = load_address;
-
-    // Find the actual .text section size from the original ELF
-    const Elf_Shdr *orig_shdrs = (const Elf_Shdr *) (original_elf_data + orig_ehdr->e_shoff);
-
-    size_t code_size = 0;
-
-    // Look for .text section in original ELF
-    for (int i = 0; i < orig_ehdr->e_shnum; i++) {
-        const Elf_Shdr *shdr = &orig_shdrs[i];
-        if (shdr->sh_type == 1 && (shdr->sh_flags & 6) == 6) { // SHT_PROGBITS + SHF_ALLOC + SHF_EXECINSTR
-            code_size = shdr->sh_size;
-            break;
-        }
-    }
-
-    if (code_size == 0) {
-        fprintf(stderr, "ERROR: Could not find .text section in original ELF\n");
-        free(new_elf);
-        return NULL;
-    }
-
-    // PT_LOAD will cover code + DWARF sections in virtual memory
-    // This allows the debugger to apply base address relocation to DWARF
-    // We'll set p_memsz later after we know the total size
-    new_phdr->p_filesz = 0; // No actual code in this file
-    new_phdr->p_memsz = 0;  // Will be set later
+    new_phdr->p_filesz = 0;  // Will be set after we copy data
+    new_phdr->p_memsz = 0;   // Will be set later after we know total size
     new_phdr->p_align = 1;
 
     // Create section headers
     Elf_Shdr *new_shdrs = (Elf_Shdr *) (new_elf + sizeof(Elf_Ehdr) + sizeof(Elf_Phdr));
     size_t current_offset = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (section_count * sizeof(Elf_Shdr));
 
-    // Virtual address offset for DWARF sections (after code)
-    uintptr_t current_vaddr = load_address + code_size;
+    // Copy the actual JIT code into the file right after section headers
+    // This allows GDB's BFD to recognize it as a valid object file
+    uint8_t *code_dest = new_elf + current_offset;
+    memcpy(code_dest, (void*)load_address, code_size);
+    size_t code_file_offset = current_offset;
+    current_offset += code_size;
 
     // Section 0: null section (required)
     new_shdrs[0] = (Elf_Shdr){ 0 };
@@ -2384,8 +2387,8 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     new_shdrs[1].sh_type = 1; // SHT_PROGBITS
     new_shdrs[1].sh_flags = 6; // SHF_ALLOC | SHF_EXECINSTR
     new_shdrs[1].sh_addr = load_address;
-    new_shdrs[1].sh_offset = 0; // No actual .text data in this ELF, but debugger uses load_address
-    new_shdrs[1].sh_size = code_size; // Set proper size so debugger knows the extent
+    new_shdrs[1].sh_offset = code_file_offset; // Point to code we copied into the file
+    new_shdrs[1].sh_size = code_size;
     new_shdrs[1].sh_addralign = 1;
 
     // Section 2: .symtab
@@ -2421,19 +2424,19 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     current_offset += shstrtab_size;
 
     // Add DWARF sections if present
+    // DWARF sections don't need SHF_ALLOC - they're debug info only, not loaded at runtime
     int next_section = 5;
 
     // Section 5: .debug_info (if present)
     if (debug_info_data) {
         new_shdrs[next_section].sh_name = 33; // ".debug_info\0" at offset 33 in section names
         new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
-        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC - make it part of PT_LOAD
-        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_flags = 0; // No ALLOC - debug info only
+        new_shdrs[next_section].sh_addr = 0;
         new_shdrs[next_section].sh_offset = current_offset;
         new_shdrs[next_section].sh_size = debug_info_size;
         new_shdrs[next_section].sh_addralign = 1;
         current_offset += debug_info_size;
-        current_vaddr += debug_info_size;
         next_section++;
     }
 
@@ -2441,13 +2444,12 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     if (debug_line_data) {
         new_shdrs[next_section].sh_name = 45; // ".debug_line\0" at offset 45 in section names
         new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
-        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
-        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_flags = 0;
+        new_shdrs[next_section].sh_addr = 0;
         new_shdrs[next_section].sh_offset = current_offset;
         new_shdrs[next_section].sh_size = debug_line_size;
         new_shdrs[next_section].sh_addralign = 1;
         current_offset += debug_line_size;
-        current_vaddr += debug_line_size;
         next_section++;
     }
 
@@ -2455,13 +2457,12 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     if (debug_abbrev_data) {
         new_shdrs[next_section].sh_name = 57; // ".debug_abbrev\0" at offset 57 in section names
         new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
-        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
-        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_flags = 0;
+        new_shdrs[next_section].sh_addr = 0;
         new_shdrs[next_section].sh_offset = current_offset;
         new_shdrs[next_section].sh_size = debug_abbrev_size;
         new_shdrs[next_section].sh_addralign = 1;
         current_offset += debug_abbrev_size;
-        current_vaddr += debug_abbrev_size;
         next_section++;
     }
 
@@ -2469,20 +2470,23 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     if (debug_str_data) {
         new_shdrs[next_section].sh_name = 71; // ".debug_str\0" at offset 71 in section names
         new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
-        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
-        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_flags = 0;
+        new_shdrs[next_section].sh_addr = 0;
         new_shdrs[next_section].sh_offset = current_offset;
         new_shdrs[next_section].sh_size = debug_str_size;
         new_shdrs[next_section].sh_addralign = 1;
         current_offset += debug_str_size;
-        current_vaddr += debug_str_size;
         next_section++;
     }
 
-    // Now set PT_LOAD to cover code + DWARF sections in virtual memory
-    new_phdr->p_memsz = current_vaddr - load_address;
-    TRACE("PT_LOAD covers 0x%lx to 0x%lx (size=0x%lx)\n",
-          (unsigned long)load_address, (unsigned long)current_vaddr, (unsigned long)new_phdr->p_memsz);
+    // PT_LOAD covers only the .text section (code)
+    // DWARF sections are not loadable - they're debug info only
+    new_phdr->p_offset = code_file_offset;
+    new_phdr->p_memsz = code_size;
+    new_phdr->p_filesz = code_size;
+    TRACE("PT_LOAD covers 0x%lx to 0x%lx (size=0x%lx), filesz=0x%lx\n",
+          (unsigned long)load_address, (unsigned long)(load_address + code_size),
+          (unsigned long)new_phdr->p_memsz, (unsigned long)new_phdr->p_filesz);
 
     // Section 9: .debug_aranges (if present)
     // DISABLED: LLDB uses symbols for breakpoints, not .debug_aranges
