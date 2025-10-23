@@ -165,9 +165,12 @@ typedef struct
 #define PF_X 1 // Execute
 #define PF_R 4 // Read
 
+// ELF symbol type extraction
+#define ELF_ST_TYPE(info) ((info) & 0xf)
+
 #endif
 
-//#define ENABLE_TRACE
+#define ENABLE_TRACE
 #include "trace.h"
 
 // Verify matching atom index in default_atoms.hrl
@@ -1928,6 +1931,296 @@ void __attribute__((noinline)) __jit_debug_register_code(void)
     // GDB will set a breakpoint here
 }
 
+// DWARF parsing helpers for address patching
+
+// Read unsigned LEB128 (used in DWARF for variable-length integers)
+static size_t read_uleb128(const uint8_t *data, size_t *offset, uint64_t *value)
+{
+    *value = 0;
+    int shift = 0;
+    size_t start = *offset;
+
+    while (1) {
+        uint8_t byte = data[(*offset)++];
+        *value |= ((uint64_t)(byte & 0x7f)) << shift;
+        if ((byte & 0x80) == 0) {
+            break;
+        }
+        shift += 7;
+    }
+
+    return *offset - start;
+}
+
+// Structure to hold parsed abbreviation entry
+typedef struct {
+    uint64_t code;
+    uint64_t tag;
+    uint8_t has_children;
+    // Attributes stored as pairs of (name, form)
+    uint64_t *attrs;  // Dynamic array of attribute name/form pairs
+    size_t attr_count;
+} dwarf_abbrev_t;
+
+// Parse a single abbreviation from .debug_abbrev
+static bool parse_abbrev(const uint8_t *abbrev_data, size_t abbrev_size, size_t *offset, dwarf_abbrev_t *abbrev)
+{
+    if (*offset >= abbrev_size) {
+        return false;
+    }
+
+    // Read abbreviation code
+    read_uleb128(abbrev_data, offset, &abbrev->code);
+    if (abbrev->code == 0) {
+        return false;  // End of abbreviation table
+    }
+
+    // Read tag
+    read_uleb128(abbrev_data, offset, &abbrev->tag);
+
+    // Read has_children flag
+    abbrev->has_children = abbrev_data[(*offset)++];
+
+    // Count attributes first
+    size_t temp_offset = *offset;
+    size_t count = 0;
+    while (temp_offset < abbrev_size) {
+        uint64_t name, form;
+        read_uleb128(abbrev_data, &temp_offset, &name);
+        read_uleb128(abbrev_data, &temp_offset, &form);
+        if (name == 0 && form == 0) {
+            break;
+        }
+        count++;
+    }
+
+    // Allocate and read attributes
+    abbrev->attr_count = count;
+    if (count > 0) {
+        abbrev->attrs = malloc(count * 2 * sizeof(uint64_t));
+        for (size_t i = 0; i < count; i++) {
+            read_uleb128(abbrev_data, offset, &abbrev->attrs[i * 2]);      // name
+            read_uleb128(abbrev_data, offset, &abbrev->attrs[i * 2 + 1]);  // form
+        }
+    } else {
+        abbrev->attrs = NULL;
+    }
+
+    // Skip terminator (0, 0)
+    (*offset) += 2;
+
+    return true;
+}
+
+// Parse all abbreviations from .debug_abbrev
+static dwarf_abbrev_t *parse_abbrev_table(const uint8_t *abbrev_data, size_t abbrev_size, size_t *count)
+{
+    // First pass: count abbreviations
+    size_t offset = 0;
+    size_t abbrev_count = 0;
+
+    while (offset < abbrev_size) {
+        uint64_t code;
+        read_uleb128(abbrev_data, &offset, &code);
+        if (code == 0) {
+            break;
+        }
+
+        // Skip tag
+        uint64_t tag;
+        read_uleb128(abbrev_data, &offset, &tag);
+        offset++;  // has_children
+
+        // Skip attributes
+        while (offset < abbrev_size) {
+            uint64_t name, form;
+            read_uleb128(abbrev_data, &offset, &name);
+            read_uleb128(abbrev_data, &offset, &form);
+            if (name == 0 && form == 0) {
+                break;
+            }
+        }
+
+        abbrev_count++;
+    }
+
+    if (abbrev_count == 0) {
+        *count = 0;
+        return NULL;
+    }
+
+    // Second pass: parse abbreviations
+    dwarf_abbrev_t *abbrevs = calloc(abbrev_count, sizeof(dwarf_abbrev_t));
+    offset = 0;
+    size_t i = 0;
+
+    while (offset < abbrev_size && i < abbrev_count) {
+        if (!parse_abbrev(abbrev_data, abbrev_size, &offset, &abbrevs[i])) {
+            break;
+        }
+        i++;
+    }
+
+    *count = i;
+    return abbrevs;
+}
+
+// Free abbreviation table
+static void free_abbrev_table(dwarf_abbrev_t *abbrevs, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        free(abbrevs[i].attrs);
+    }
+    free(abbrevs);
+}
+
+// Find abbreviation by code
+static const dwarf_abbrev_t *find_abbrev(const dwarf_abbrev_t *abbrevs, size_t count, uint64_t code)
+{
+    for (size_t i = 0; i < count; i++) {
+        if (abbrevs[i].code == code) {
+            return &abbrevs[i];
+        }
+    }
+    return NULL;
+}
+
+// Get size of a DWARF form value
+static size_t get_form_size(uint64_t form, uint8_t addr_size, const uint8_t *data, size_t offset)
+{
+    switch (form) {
+        case 0x01:  // DW_FORM_addr
+            return addr_size;
+        case 0x03:  // DW_FORM_block2
+            return 2 + (data[offset] | (data[offset + 1] << 8));
+        case 0x04:  // DW_FORM_block4
+            return 4 + (data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24));
+        case 0x05:  // DW_FORM_data2
+            return 2;
+        case 0x06:  // DW_FORM_data4
+            return 4;
+        case 0x07:  // DW_FORM_data8
+            return 8;
+        case 0x08:  // DW_FORM_string
+            return strlen((const char *)&data[offset]) + 1;
+        case 0x09:  // DW_FORM_block
+        case 0x18:  // DW_FORM_exprloc
+            // Variable length - LEB128 size followed by data
+            {
+                uint64_t block_len;
+                size_t temp = offset;
+                size_t leb_size = read_uleb128(data, &temp, &block_len);
+                return leb_size + block_len;  // LEB128 size + block data
+            }
+        case 0x0f:  // DW_FORM_udata
+            // Just a LEB128 value
+            {
+                uint64_t val;
+                size_t temp = offset;
+                return read_uleb128(data, &temp, &val);
+            }
+        case 0x13:  // DW_FORM_ref4
+            return 4;
+        case 0x0b:  // DW_FORM_data1
+            return 1;
+        case 0x0e:  // DW_FORM_strp
+            return 4;
+        case 0x10:  // DW_FORM_ref_addr
+            return addr_size;
+        case 0x11:  // DW_FORM_ref1
+            return 1;
+        case 0x12:  // DW_FORM_ref2
+            return 2;
+        case 0x14:  // DW_FORM_ref8
+            return 8;
+        case 0x17:  // DW_FORM_sec_offset
+            return 4;
+        case 0x19:  // DW_FORM_flag_present
+            return 0;
+        default:
+            TRACE("Unknown DWARF form: 0x%llx\n", (unsigned long long)form);
+            return 0;
+    }
+}
+
+// Patch addresses in .debug_info using parsed abbreviations
+static void patch_debug_info_addresses(uint8_t *debug_info, size_t debug_info_size,
+                                       const dwarf_abbrev_t *abbrevs, size_t abbrev_count,
+                                       uintptr_t load_address)
+{
+    if (debug_info_size < 11) {
+        return;
+    }
+
+    // Parse compile unit header
+    uint8_t addr_size = debug_info[10];
+    TRACE("Patching .debug_info with addr_size=%d\n", addr_size);
+
+    // Skip: length(4) + version(2) + abbrev_offset(4) + addr_size(1) = 11 bytes
+    size_t offset = 11;
+    int patch_count = 0;
+
+    // Parse DIEs
+    while (offset < debug_info_size) {
+        uint64_t abbrev_code;
+        size_t code_size = read_uleb128(debug_info, &offset, &abbrev_code);
+
+        if (abbrev_code == 0) {
+            // Null DIE - end of siblings
+            continue;
+        }
+
+        const dwarf_abbrev_t *abbrev = find_abbrev(abbrevs, abbrev_count, abbrev_code);
+        if (!abbrev) {
+            TRACE("Warning: Unknown abbreviation code %llu at offset %zu\n",
+                  (unsigned long long)abbrev_code, offset - code_size);
+            break;
+        }
+
+        // Process attributes
+        for (size_t i = 0; i < abbrev->attr_count; i++) {
+            uint64_t attr_name = abbrev->attrs[i * 2];
+            uint64_t attr_form = abbrev->attrs[i * 2 + 1];
+
+            // Check if this is an address attribute (DW_FORM_addr)
+            if (attr_form == 0x01) {  // DW_FORM_addr
+                // This is an address - patch it
+                if (addr_size == 8) {
+                    uint64_t *addr = (uint64_t *)&debug_info[offset];
+                    uint64_t old_val = *addr;
+                    *addr += load_address;
+                    TRACE("Patched .debug_info[%zu] (attr 0x%llx): 0x%llx -> 0x%llx\n",
+                          offset, (unsigned long long)attr_name, (unsigned long long)old_val, (unsigned long long)*addr);
+                    patch_count++;
+                } else if (addr_size == 4) {
+                    uint32_t *addr = (uint32_t *)&debug_info[offset];
+                    uint32_t old_val = *addr;
+                    *addr += (uint32_t)load_address;
+                    TRACE("Patched .debug_info[%zu] (attr 0x%llx): 0x%x -> 0x%x\n",
+                          offset, (unsigned long long)attr_name, old_val, *addr);
+                    patch_count++;
+                }
+            }
+
+            // Skip to next attribute
+            size_t form_size = get_form_size(attr_form, addr_size, debug_info, offset);
+            if (form_size == 0) {
+                TRACE("Failed to get form size for form 0x%llx at offset %zu\n",
+                      (unsigned long long)attr_form, offset);
+                return;
+            }
+            offset += form_size;
+
+            if (offset > debug_info_size) {
+                TRACE("Offset exceeded debug_info size\n");
+                return;
+            }
+        }
+    }
+
+    TRACE("Total .debug_info patches: %d\n", patch_count);
+}
+
 // Create a minimal ELF file for debugging with proper PIE support
 static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_data, size_t original_elf_size,
     uintptr_t load_address, size_t *new_elf_size)
@@ -1935,13 +2228,23 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     TRACE("create_minimal_elf_for_debugging: original_elf_size=%zu, load_address=0x%lx\n",
         original_elf_size, load_address);
 
-    // Extract symbol table and string table from original ELF
+    // Extract symbol table, string table, and DWARF sections from original ELF
     const char *symtab_data = NULL;
     size_t symtab_size = 0;
     const char *strtab_data = NULL;
     size_t strtab_size = 0;
+    const char *debug_info_data = NULL;
+    size_t debug_info_size = 0;
+    const char *debug_line_data = NULL;
+    size_t debug_line_size = 0;
+    const char *debug_abbrev_data = NULL;
+    size_t debug_abbrev_size = 0;
+    const char *debug_str_data = NULL;
+    size_t debug_str_size = 0;
+    const char *debug_aranges_data = NULL;
+    size_t debug_aranges_size = 0;
 
-    // Parse original ELF to extract symbol and string tables
+    // Parse original ELF to extract symbol, string, and DWARF tables
     if (original_elf_size < sizeof(Elf_Ehdr)) {
         fprintf(stderr, "ERROR: Original ELF too small for header\n");
         return NULL;
@@ -1949,15 +2252,33 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
 
     const Elf_Ehdr *ehdr = (const Elf_Ehdr *) original_elf_data;
     const Elf_Shdr *shdrs = (const Elf_Shdr *) (original_elf_data + ehdr->e_shoff);
+    const char *shstrtab = (const char *) (original_elf_data + shdrs[ehdr->e_shstrndx].sh_offset);
 
-    // Find .symtab and .strtab sections
+    // Find .symtab, .strtab, and .debug_* sections
     for (int i = 0; i < ehdr->e_shnum; i++) {
+        const char *section_name = shstrtab + shdrs[i].sh_name;
+
         if (shdrs[i].sh_type == SHT_SYMTAB) {
             symtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
             symtab_size = shdrs[i].sh_size;
         } else if (shdrs[i].sh_type == SHT_STRTAB && i != ehdr->e_shstrndx) {
             strtab_data = (const char *) original_elf_data + shdrs[i].sh_offset;
             strtab_size = shdrs[i].sh_size;
+        } else if (strcmp(section_name, ".debug_info") == 0) {
+            debug_info_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            debug_info_size = shdrs[i].sh_size;
+        } else if (strcmp(section_name, ".debug_line") == 0) {
+            debug_line_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            debug_line_size = shdrs[i].sh_size;
+        } else if (strcmp(section_name, ".debug_abbrev") == 0) {
+            debug_abbrev_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            debug_abbrev_size = shdrs[i].sh_size;
+        } else if (strcmp(section_name, ".debug_str") == 0) {
+            debug_str_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            debug_str_size = shdrs[i].sh_size;
+        } else if (strcmp(section_name, ".debug_aranges") == 0) {
+            debug_aranges_data = (const char *) original_elf_data + shdrs[i].sh_offset;
+            debug_aranges_size = shdrs[i].sh_size;
         }
     }
 
@@ -1966,12 +2287,25 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
         return NULL;
     }
 
-    // Section name strings: "\0.text\0.symtab\0.strtab\0.shstrtab\0"
-    const char *section_names = "\0.text\0.symtab\0.strtab\0.shstrtab\0";
-    size_t shstrtab_size = 32; // strlen of section_names
+    TRACE("Found DWARF sections: .debug_info=%zu .debug_line=%zu .debug_abbrev=%zu .debug_str=%zu .debug_aranges=%zu\n",
+        debug_info_size, debug_line_size, debug_abbrev_size, debug_str_size, debug_aranges_size);
 
-    // Calculate size of new minimal ELF (ELF header + 1 program header + 5 section headers + data)
-    size_t elf_size = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr)) + symtab_size + strtab_size + shstrtab_size;
+    // Section name strings: "\0.text\0.symtab\0.strtab\0.shstrtab\0.debug_info\0.debug_line\0.debug_abbrev\0.debug_str\0.debug_aranges\0"
+    const char *section_names = "\0.text\0.symtab\0.strtab\0.shstrtab\0.debug_info\0.debug_line\0.debug_abbrev\0.debug_str\0.debug_aranges\0";
+    size_t shstrtab_size = 103; // strlen of section_names
+
+    // Count how many sections we have (null + .text + .symtab + .strtab + .shstrtab + debug sections)
+    int section_count = 5; // Base sections
+    if (debug_info_data) section_count++;
+    if (debug_line_data) section_count++;
+    if (debug_abbrev_data) section_count++;
+    if (debug_str_data) section_count++;
+    if (debug_aranges_data) section_count++;
+
+    // Calculate size of new minimal ELF (ELF header + 1 program header + section headers + data)
+    size_t elf_size = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (section_count * sizeof(Elf_Shdr)) +
+                     symtab_size + strtab_size + shstrtab_size +
+                     debug_info_size + debug_line_size + debug_abbrev_size + debug_str_size + debug_aranges_size;
 
     uint8_t *new_elf = (uint8_t *) malloc(elf_size);
     if (!new_elf) {
@@ -1984,7 +2318,8 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     const Elf_Ehdr *orig_ehdr = (const Elf_Ehdr *) original_elf_data;
     Elf_Ehdr *new_ehdr = (Elf_Ehdr *) new_elf;
     memcpy(new_ehdr->e_ident, orig_ehdr->e_ident, 16);
-    new_ehdr->e_type = orig_ehdr->e_type;
+    // Use ET_DYN for JIT debugging - GDB expects shared object type for JIT code
+    new_ehdr->e_type = 3; // ET_DYN
     new_ehdr->e_machine = orig_ehdr->e_machine;
     new_ehdr->e_version = orig_ehdr->e_version;
     new_ehdr->e_entry = 0;
@@ -1995,8 +2330,8 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     new_ehdr->e_phentsize = sizeof(Elf_Phdr);
     new_ehdr->e_phnum = 1;
     new_ehdr->e_shentsize = sizeof(Elf_Shdr);
-    new_ehdr->e_shnum = 5; // null, .text, .symtab, .strtab, .shstrtab
-    new_ehdr->e_shstrndx = 4; // .shstrtab is the section name string table
+    new_ehdr->e_shnum = section_count;
+    new_ehdr->e_shstrndx = 4; // .shstrtab is the section name string table (always section 4)
 
     // Create program header (PT_LOAD segment)
     Elf_Phdr *new_phdr = (Elf_Phdr *) (new_elf + sizeof(Elf_Ehdr));
@@ -2027,13 +2362,19 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
         return NULL;
     }
 
-    new_phdr->p_filesz = code_size; // Size in file
-    new_phdr->p_memsz = code_size;  // Size in memory
+    // PT_LOAD will cover code + DWARF sections in virtual memory
+    // This allows the debugger to apply base address relocation to DWARF
+    // We'll set p_memsz later after we know the total size
+    new_phdr->p_filesz = 0; // No actual code in this file
+    new_phdr->p_memsz = 0;  // Will be set later
     new_phdr->p_align = 1;
 
     // Create section headers
     Elf_Shdr *new_shdrs = (Elf_Shdr *) (new_elf + sizeof(Elf_Ehdr) + sizeof(Elf_Phdr));
-    size_t current_offset = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (5 * sizeof(Elf_Shdr));
+    size_t current_offset = sizeof(Elf_Ehdr) + sizeof(Elf_Phdr) + (section_count * sizeof(Elf_Shdr));
+
+    // Virtual address offset for DWARF sections (after code)
+    uintptr_t current_vaddr = load_address + code_size;
 
     // Section 0: null section (required)
     new_shdrs[0] = (Elf_Shdr){ 0 };
@@ -2077,19 +2418,185 @@ static uint8_t *create_minimal_elf_for_debugging(const uint8_t *original_elf_dat
     new_shdrs[4].sh_offset = current_offset;
     new_shdrs[4].sh_size = shstrtab_size;
     new_shdrs[4].sh_addralign = 1;
+    current_offset += shstrtab_size;
 
-    // Copy symbol table data and patch symbol addresses
+    // Add DWARF sections if present
+    int next_section = 5;
+
+    // Section 5: .debug_info (if present)
+    if (debug_info_data) {
+        new_shdrs[next_section].sh_name = 33; // ".debug_info\0" at offset 33 in section names
+        new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
+        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC - make it part of PT_LOAD
+        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_offset = current_offset;
+        new_shdrs[next_section].sh_size = debug_info_size;
+        new_shdrs[next_section].sh_addralign = 1;
+        current_offset += debug_info_size;
+        current_vaddr += debug_info_size;
+        next_section++;
+    }
+
+    // Section 6: .debug_line (if present)
+    if (debug_line_data) {
+        new_shdrs[next_section].sh_name = 45; // ".debug_line\0" at offset 45 in section names
+        new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
+        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
+        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_offset = current_offset;
+        new_shdrs[next_section].sh_size = debug_line_size;
+        new_shdrs[next_section].sh_addralign = 1;
+        current_offset += debug_line_size;
+        current_vaddr += debug_line_size;
+        next_section++;
+    }
+
+    // Section 7: .debug_abbrev (if present)
+    if (debug_abbrev_data) {
+        new_shdrs[next_section].sh_name = 57; // ".debug_abbrev\0" at offset 57 in section names
+        new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
+        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
+        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_offset = current_offset;
+        new_shdrs[next_section].sh_size = debug_abbrev_size;
+        new_shdrs[next_section].sh_addralign = 1;
+        current_offset += debug_abbrev_size;
+        current_vaddr += debug_abbrev_size;
+        next_section++;
+    }
+
+    // Section 8: .debug_str (if present)
+    if (debug_str_data) {
+        new_shdrs[next_section].sh_name = 71; // ".debug_str\0" at offset 71 in section names
+        new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
+        new_shdrs[next_section].sh_flags = 2; // SHF_ALLOC
+        new_shdrs[next_section].sh_addr = current_vaddr;
+        new_shdrs[next_section].sh_offset = current_offset;
+        new_shdrs[next_section].sh_size = debug_str_size;
+        new_shdrs[next_section].sh_addralign = 1;
+        current_offset += debug_str_size;
+        current_vaddr += debug_str_size;
+        next_section++;
+    }
+
+    // Now set PT_LOAD to cover code + DWARF sections in virtual memory
+    new_phdr->p_memsz = current_vaddr - load_address;
+    TRACE("PT_LOAD covers 0x%lx to 0x%lx (size=0x%lx)\n",
+          (unsigned long)load_address, (unsigned long)current_vaddr, (unsigned long)new_phdr->p_memsz);
+
+    // Section 9: .debug_aranges (if present)
+    // DISABLED: LLDB uses symbols for breakpoints, not .debug_aranges
+    // Keeping this corrupted actually made breakpoints work better!
+    if (false && debug_aranges_data) {
+        new_shdrs[next_section].sh_name = 82; // ".debug_aranges\0" at offset 82 in section names
+        new_shdrs[next_section].sh_type = 1; // SHT_PROGBITS
+        new_shdrs[next_section].sh_offset = current_offset;
+        new_shdrs[next_section].sh_size = debug_aranges_size;
+        new_shdrs[next_section].sh_addralign = 1;
+        current_offset += debug_aranges_size;
+        next_section++;
+    }
+
+    // Copy symbol table data
     uint8_t *new_symtab = new_elf + new_shdrs[2].sh_offset;
     memcpy(new_symtab, symtab_data, symtab_size);
 
-    // With PT_LOAD program header, the debugger should automatically apply the base address
     // Copy string table data
     uint8_t *new_strtab = new_elf + new_shdrs[3].sh_offset;
     memcpy(new_strtab, strtab_data, strtab_size);
 
+    TRACE("Copied symbol table: %zu bytes, %zu symbols\n", symtab_size, symtab_size / sizeof(Elf_Sym));
+
+    // Debug: print first few function symbols
+    Elf_Sym *syms = (Elf_Sym *)new_symtab;
+    size_t num_syms = symtab_size / sizeof(Elf_Sym);
+    for (size_t i = 0; i < num_syms && i < 10; i++) {
+        if (ELF_ST_TYPE(syms[i].st_info) == STT_FUNC) {
+            const char *sym_name = (const char *)(new_strtab + syms[i].st_name);
+            TRACE("  Symbol[%zu]: %s @ 0x%lx (size=%zu)\n", i, sym_name,
+                  (unsigned long)syms[i].st_value, (size_t)syms[i].st_size);
+        }
+    }
+
+    // With PT_LOAD program header, the debugger should automatically apply the base address
+
     // Copy section name string table data
     uint8_t *new_shstrtab = new_elf + new_shdrs[4].sh_offset;
     memcpy(new_shstrtab, section_names, shstrtab_size);
+
+    // Copy DWARF section data
+    next_section = 5;
+
+    if (debug_info_data) {
+        uint8_t *new_debug_info = new_elf + new_shdrs[next_section].sh_offset;
+        memcpy(new_debug_info, debug_info_data, debug_info_size);
+
+        // No need to patch DWARF addresses - PT_LOAD handles relocation automatically
+        // since DWARF sections now have SHF_ALLOC and virtual addresses
+        TRACE("DWARF sections in PT_LOAD - debugger will apply base address\n");
+
+        next_section++;
+    }
+
+    if (debug_line_data) {
+        uint8_t *new_debug_line = new_elf + new_shdrs[next_section].sh_offset;
+        memcpy(new_debug_line, debug_line_data, debug_line_size);
+        next_section++;
+    }
+
+    if (debug_abbrev_data) {
+        uint8_t *new_debug_abbrev = new_elf + new_shdrs[next_section].sh_offset;
+        memcpy(new_debug_abbrev, debug_abbrev_data, debug_abbrev_size);
+        next_section++;
+    }
+
+    if (debug_str_data) {
+        uint8_t *new_debug_str = new_elf + new_shdrs[next_section].sh_offset;
+        memcpy(new_debug_str, debug_str_data, debug_str_size);
+        next_section++;
+    }
+
+    // DISABLED: .debug_aranges not needed for LLDB breakpoints
+    if (false && debug_aranges_data) {
+        uint8_t *new_debug_aranges = new_elf + new_shdrs[next_section].sh_offset;
+        memcpy(new_debug_aranges, debug_aranges_data, debug_aranges_size);
+
+        // Patch .debug_aranges addresses to absolute addresses
+        // Structure: [length:4][version:2][debug_info_offset:4][addr_size:1][seg_size:1][padding:variable]
+        //            [address:addr_size][length:addr_size][terminator:addr_size*2]
+        // Header is 4+2+4+1+1 = 12 bytes, then padding to align to 2*addr_size
+        if (debug_aranges_size >= 12) {
+            uint8_t addr_size = new_debug_aranges[10];  // Address size field at offset 4+2+4 = 10
+            TRACE(".debug_aranges addr_size=%d\n", addr_size);
+
+            // Calculate padding: header is 8 bytes (after the length field), align to 2*addr_size
+            size_t header_size = 8;  // version(2) + debug_info_offset(4) + addr_size(1) + seg_size(1)
+            size_t tuple_alignment = 2 * addr_size;
+            size_t padding_size = (tuple_alignment - (header_size % tuple_alignment)) % tuple_alignment;
+            size_t descriptor_offset = 4 + header_size + padding_size;  // Skip length field + header + padding
+
+            TRACE(".debug_aranges descriptor at offset %zu (header=%zu, padding=%zu)\n",
+                  descriptor_offset, header_size, padding_size);
+
+            if (debug_aranges_size >= descriptor_offset + addr_size * 2) {
+                if (addr_size == 8) {
+                    // Patch the address range start address (64-bit)
+                    uint64_t *range_start = (uint64_t *)(new_debug_aranges + descriptor_offset);
+                    uint64_t old_addr = *range_start;
+                    *range_start += load_address;
+                    TRACE("Patched .debug_aranges: 0x%llx -> 0x%llx\n", (unsigned long long)old_addr, (unsigned long long)*range_start);
+                } else if (addr_size == 4) {
+                    // Patch the address range start address (32-bit)
+                    uint32_t *range_start = (uint32_t *)(new_debug_aranges + descriptor_offset);
+                    uint32_t old_addr = *range_start;
+                    *range_start += (uint32_t)load_address;
+                    TRACE("Patched .debug_aranges: 0x%x -> 0x%x\n", old_addr, *range_start);
+                }
+            }
+        }
+
+        next_section++;
+    }
 
     *new_elf_size = elf_size;
     return new_elf;
@@ -2144,6 +2651,14 @@ void jit_debug_register_code(Module *mod, const void *native_code, size_t native
     if (!new_elf) {
         fprintf(stderr, "ERROR: Failed to create minimal ELF for debugging\n");
         return;
+    }
+
+    // Debug: dump ELF to file for inspection
+    FILE *f = fopen("/tmp/jit_debug.elf", "wb");
+    if (f) {
+        fwrite(new_elf, 1, new_elf_size, f);
+        fclose(f);
+        TRACE("Wrote JIT ELF to /tmp/jit_debug.elf (%zu bytes)\n", new_elf_size);
     }
 
     // Initialize the entry with the new ELF

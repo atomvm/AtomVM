@@ -78,7 +78,8 @@
     dwarf_opcode/2,
     dwarf_label/2,
     dwarf_function/3,
-    dwarf_line/2
+    dwarf_line/2,
+    dwarf_ctx_register/0
 ]).
 -endif.
 
@@ -87,6 +88,10 @@
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
+
+-ifdef(JIT_DWARF).
+-include("jit_dwarf.hrl").
+-endif.
 
 -define(ASSERT(Expr), true = Expr).
 
@@ -3057,3 +3062,14 @@ add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label
 -spec add_label(state(), integer() | reference(), integer()) -> state().
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
+
+-ifdef(JIT_DWARF).
+%%-----------------------------------------------------------------------------
+%% @doc Return the DWARF register number for the ctx parameter
+%% @returns The DWARF register number where ctx is passed (a0 in RISC-V)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec dwarf_ctx_register() -> non_neg_integer().
+dwarf_ctx_register() ->
+    ?DWARF_A0_REG_RISCV32.
+-endif.

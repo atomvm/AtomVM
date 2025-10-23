@@ -20,6 +20,8 @@
 
 -module(jit_dwarf).
 
+-include("jit_dwarf.hrl").
+
 -record(dwarf, {
     % Backend module (jit_armv6m, etc.)
     backend :: module(),
@@ -279,6 +281,7 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
     DebugLineSection = generate_debug_line_section(State, SourceFile),
     DebugAbbrevSection = generate_debug_abbrev_section_with_opcodes(),
     DebugStrSection = generate_debug_str_section(State, SourceFile),
+    DebugArangesSection = generate_debug_aranges_section(State),
 
     % Generate symbol table sections for function names
     {SymtabSection, StrtabSection} = generate_symbol_table(State, Backend),
@@ -289,6 +292,7 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
         {<<".debug_line">>, DebugLineSection},
         {<<".debug_abbrev">>, DebugAbbrevSection},
         {<<".debug_str">>, DebugStrSection},
+        {<<".debug_aranges">>, DebugArangesSection},
         {<<".symtab">>, SymtabSection},
         {<<".strtab">>, StrtabSection}
     ],
@@ -314,58 +318,6 @@ elf(_State, _NativeCode) ->
 -endif.
 
 -ifdef(JIT_DWARF).
-
-%% DWARF constants
--define(DW_TAG_compile_unit, 16#11).
--define(DW_TAG_subprogram, 16#2e).
--define(DW_TAG_lexical_block, 16#0b).
--define(DW_TAG_label, 16#0a).
--define(DW_AT_name, 16#03).
--define(DW_AT_comp_dir, 16#1b).
--define(DW_AT_producer, 16#25).
--define(DW_AT_language, 16#13).
--define(DW_AT_low_pc, 16#11).
--define(DW_AT_high_pc, 16#12).
--define(DW_AT_stmt_list, 16#10).
--define(DW_FORM_string, 16#08).
--define(DW_FORM_addr, 16#01).
--define(DW_FORM_data4, 16#06).
--define(DW_FORM_data1, 16#0b).
--define(DW_FORM_udata, 16#0f).
--define(DW_LANG_C, 16#02).
--define(DW_LANG_Erlang, 16#46).
--define(DW_LANG_Elixir, 16#47).
--define(DW_LANG_Gleam, 16#48).
-
-%% ELF constants
--define(EI_MAG0, 16#7f).
--define(EI_MAG1, $E).
--define(EI_MAG2, $L).
--define(EI_MAG3, $F).
--define(ELFCLASS32, 1).
--define(ELFCLASS64, 2).
--define(ELFDATA2LSB, 1).
--define(EV_CURRENT, 1).
--define(ET_REL, 1).
--define(EM_ARM, 40).
--define(EM_X86_64, 62).
--define(EM_AARCH64, 183).
--define(EM_RISCV, 243).
--define(SHT_PROGBITS, 1).
--define(SHT_SYMTAB, 2).
--define(SHT_STRTAB, 3).
--define(SHT_ARM_ATTRIBUTES, 16#70000003).
--define(SHF_ALLOC, 2).
--define(SHF_EXECINSTR, 4).
-
-%% ARM EABI flags
-
-% EABI version 5
--define(EF_ARM_EABI_VER5, 16#05000000).
-% Soft float ABI
--define(EF_ARM_ABI_FLOAT_SOFT, 16#00000200).
-% ARM architecture v6-M (Thumb-only)
--define(EF_ARM_ARCH_V6M, 16#00000009).
 
 %% Map JIT backend to ELF machine type
 backend_to_machine_type(jit_x86_64) -> ?EM_X86_64;
@@ -477,6 +429,52 @@ generate_debug_str_section(#dwarf{module_name = ModuleName}, SourceFile) ->
     ],
     iolist_to_binary(Strings).
 
+generate_debug_aranges_section(#dwarf{backend = Backend} = State) ->
+    % Get word size and calculate address range
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
+    {LowPC, HighPC} = calculate_address_range(State),
+    Length = HighPC - LowPC,
+
+    % Calculate padding needed to align descriptor to 2*address_size
+    % Header so far: version(2) + debug_info_offset(4) + addr_size(1) + seg_size(1) = 8 bytes
+    % Need to align to 2*WordSize boundary
+    HeaderSize = 8,
+    TupleAlignment = 2 * WordSize,
+    PaddingSize = (TupleAlignment - (HeaderSize rem TupleAlignment)) rem TupleAlignment,
+    Padding = <<0:(PaddingSize*8)/little>>,
+
+    % Header
+    Header = <<
+        % DWARF version
+        2:16/little,
+        % Debug info offset (always 0 - first compile unit)
+        0:32/little,
+        % Address size
+        WordSize,
+        % Segment size (0 for flat address space)
+        0
+    >>,
+
+    % Address descriptors
+    Descriptors = <<
+        % Address range descriptor
+        LowPC:WordSizeInBits/little,  % Start address
+        Length:WordSizeInBits/little,  % Length
+        % Terminating entry (two zero addresses)
+        0:WordSizeInBits/little,
+        0:WordSizeInBits/little
+    >>,
+
+    % Combine all parts
+    HeaderAndTable = <<Header/binary, Padding/binary, Descriptors/binary>>,
+
+    % Calculate total length (header + table - 4 for the length field itself)
+    TotalLength = byte_size(HeaderAndTable),
+
+    % Build final section with length prefix
+    <<TotalLength:32/little, HeaderAndTable/binary>>.
+
 generate_debug_abbrev_section_with_opcodes() ->
     % Abbreviation table
     <<
@@ -508,7 +506,7 @@ generate_debug_abbrev_section_with_opcodes() ->
         ?DW_FORM_addr,
         % Statement list
         ?DW_AT_stmt_list,
-        ?DW_FORM_data4,
+        ?DW_FORM_sec_offset,
         % End of attributes
         0,
         0,
@@ -552,8 +550,8 @@ generate_debug_abbrev_section_with_opcodes() ->
         4,
         % Tag
         ?DW_TAG_subprogram,
-        % Has no children
-        0,
+        % Has children (ctx parameter)
+        1,
         % Name attribute (module:function/arity)
         ?DW_AT_name,
         ?DW_FORM_string,
@@ -567,17 +565,143 @@ generate_debug_abbrev_section_with_opcodes() ->
         0,
         0,
 
+        % Abbrev 5: DW_TAG_formal_parameter (for ctx parameter with type)
+        % Abbreviation code
+        5,
+        % Tag
+        ?DW_TAG_formal_parameter,
+        % Has no children
+        0,
+        % Name attribute (parameter name)
+        ?DW_AT_name,
+        ?DW_FORM_string,
+        % Type attribute (reference to type DIE)
+        ?DW_AT_type,
+        ?DW_FORM_ref4,
+        % Location attribute (register location)
+        ?DW_AT_location,
+        ?DW_FORM_exprloc,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 6: DW_TAG_base_type (for term/uintptr_t)
+        % Abbreviation code
+        6,
+        % Tag
+        ?DW_TAG_base_type,
+        % Has no children
+        0,
+        % Name attribute
+        ?DW_AT_name,
+        ?DW_FORM_string,
+        % Byte size
+        ?DW_AT_byte_size,
+        ?DW_FORM_data1,
+        % Encoding
+        ?DW_AT_encoding,
+        ?DW_FORM_data1,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 7: DW_TAG_pointer_type (for Context*)
+        % Abbreviation code
+        7,
+        % Tag
+        ?DW_TAG_pointer_type,
+        % Has no children
+        0,
+        % Byte size
+        ?DW_AT_byte_size,
+        ?DW_FORM_data1,
+        % Type attribute (points to Context structure)
+        ?DW_AT_type,
+        ?DW_FORM_ref4,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 8: DW_TAG_structure_type (for Context)
+        % Abbreviation code
+        8,
+        % Tag
+        ?DW_TAG_structure_type,
+        % Has children (members)
+        1,
+        % Name attribute
+        ?DW_AT_name,
+        ?DW_FORM_string,
+        % Byte size
+        ?DW_AT_byte_size,
+        ?DW_FORM_data4,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 9: DW_TAG_member (for structure members)
+        % Abbreviation code
+        9,
+        % Tag
+        ?DW_TAG_member,
+        % Has no children
+        0,
+        % Name attribute
+        ?DW_AT_name,
+        ?DW_FORM_string,
+        % Type attribute
+        ?DW_AT_type,
+        ?DW_FORM_ref4,
+        % Data member location (offset from structure start)
+        ?DW_AT_data_member_location,
+        ?DW_FORM_data4,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 10: DW_TAG_array_type (for term x[MAX_REG+1])
+        % Abbreviation code
+        10,
+        % Tag
+        ?DW_TAG_array_type,
+        % Has children (subrange)
+        1,
+        % Type attribute (element type)
+        ?DW_AT_type,
+        ?DW_FORM_ref4,
+        % End of attributes
+        0,
+        0,
+
+        % Abbrev 11: DW_TAG_subrange_type (for array bounds)
+        % Abbreviation code
+        11,
+        % Tag
+        ?DW_TAG_subrange_type,
+        % Has no children
+        0,
+        % Upper bound
+        ?DW_AT_upper_bound,
+        ?DW_FORM_data1,
+        % End of attributes
+        0,
+        0,
+
         % End of abbreviations
         0
     >>.
 
 generate_debug_info_section_with_opcodes(
-    #dwarf{functions = Functions, opcodes = Opcodes, labels = Labels, module_name = ModuleName} =
+    #dwarf{functions = Functions, opcodes = Opcodes, labels = Labels, module_name = ModuleName, backend = Backend} =
         State,
     SourceFile
 ) ->
     % Calculate address ranges
     {LowPC, HighPC} = calculate_address_range(State),
+
+    % Get word size from backend and convert to bits
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
 
     % Build content first to calculate actual length
     CompileUnitContent = <<
@@ -586,7 +710,7 @@ generate_debug_info_section_with_opcodes(
         % Abbreviation offset
         0:32/little,
         % Address size
-        4,
+        WordSize,
         % Compilation unit DIE (abbreviation 1)
         1,
         % DW_AT_name
@@ -601,24 +725,35 @@ generate_debug_info_section_with_opcodes(
         % DW_AT_language
         ?DW_LANG_Erlang:32/little, % for now, we always say Erlang
         % DW_AT_low_pc
-        LowPC:32/little,
+        LowPC:WordSizeInBits/little,
         % DW_AT_high_pc
-        HighPC:32/little,
+        HighPC:WordSizeInBits/little,
         % DW_AT_stmt_list (offset into .debug_line)
         0:32/little
     >>,
 
+    % Calculate base offset for type DIEs
+    % DW_FORM_ref4 offsets are relative to start of compile unit (the length field itself)
+    % So we need to add 4 bytes for the length field
+    % CompileUnitContent already includes the header (version + abbrev_offset + addr_size)
+    TypeDIEsBaseOffset = 4 + byte_size(CompileUnitContent),
+    io:format("DEBUG CU: ContentSize=~p + 4 (length) = ~p~n",
+              [byte_size(CompileUnitContent), TypeDIEsBaseOffset]),
+
+    % Generate type DIEs and get the Context* type offset
+    {TypeDIEs, ContextPtrTypeOffset} = generate_type_dies(State, TypeDIEsBaseOffset),
+
     % Generate DIEs for functions, opcodes and labels
-    FunctionDIEs = generate_function_dies_with_module(Functions, ModuleName),
-    OpcodeDIEs = generate_opcode_dies(Opcodes),
-    LabelDIEs = generate_label_dies(Labels),
+    FunctionDIEs = generate_function_dies_with_module(Functions, ModuleName, State, ContextPtrTypeOffset, HighPC),
+    OpcodeDIEs = generate_opcode_dies(Opcodes, Backend),
+    LabelDIEs = generate_label_dies(Labels, Backend),
 
     % End of children marker
     EndMarker = <<0>>,
 
     % Calculate actual unit length (everything after the length field)
     Content =
-        <<CompileUnitContent/binary, FunctionDIEs/binary, OpcodeDIEs/binary, LabelDIEs/binary,
+        <<CompileUnitContent/binary, TypeDIEs/binary, FunctionDIEs/binary, OpcodeDIEs/binary, LabelDIEs/binary,
             EndMarker/binary>>,
     UnitLength = byte_size(Content),
 
@@ -739,10 +874,18 @@ generate_debug_line_section(#dwarf{lines = Lines, opcodes = _Opcodes}, SourceFil
     FileMapping = lists:zip(UniqueFullPaths, lists:seq(1, length(FileEntries))),
     Program = generate_line_program(Lines, FileMapping),
 
-    % Calculate actual header length (everything from version to end of file table)
+    % Calculate actual header length (everything after header_length field to end of file table)
     HeaderPlusTablesContent = <<StdOpcodeLengths/binary, FileTable/binary>>,
-    % -4 for header_length field itself
-    HeaderLength = byte_size(HeaderContent) - 4 + byte_size(HeaderPlusTablesContent),
+    % -6 to exclude version (2 bytes) and header_length field itself (4 bytes)
+    DebugHeaderContentSize = byte_size(HeaderContent),
+    DebugStdOpcodeSize = byte_size(StdOpcodeLengths),
+    DebugFileTableSize = byte_size(FileTable),
+    DebugHeaderPlusTablesSize = byte_size(HeaderPlusTablesContent),
+    io:format("DEBUG: HeaderContent=~p StdOpcodes=~p FileTable=~p HeaderPlusTables=~p~n",
+              [DebugHeaderContentSize, DebugStdOpcodeSize, DebugFileTableSize, DebugHeaderPlusTablesSize]),
+    HeaderLength = byte_size(HeaderContent) - 6 + byte_size(HeaderPlusTablesContent),
+    io:format("DEBUG: HeaderLength = ~p - 6 + ~p = ~p~n",
+              [DebugHeaderContentSize, DebugHeaderPlusTablesSize, HeaderLength]),
 
     % Build corrected header with actual length
     CorrectedHeader = <<
@@ -1014,27 +1157,120 @@ encode_sleb128_negative(Value) ->
             <<ByteWithCont, Rest/binary>>
     end.
 
+%% Generate type DIEs for Context structure and return the Context* type offset
+generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
+    % Get word size from backend
+    WordSize = Backend:word_size(),
+
+    % Abbrev 6: term base type (uintptr_t)
+    TermTypeDIE = <<
+        6,  % Abbreviation code
+        "term", 0,  % Name
+        WordSize,  % Byte size
+        ?DW_ATE_unsigned  % Encoding (unsigned)
+    >>,
+    TermTypeOffset = BaseOffset,
+    io:format("DEBUG TYPE OFFSETS: Base=~p Term=~p~n", [BaseOffset, TermTypeOffset]),
+
+    % Abbrev 10: Array type for x[MAX_REG+1] (term x[17])
+    % Abbrev 11: Subrange type
+    XArraySubrangeDIE = <<
+        11,  % Abbreviation code
+        16  % Upper bound (MAX_REG = 16, so array is [0..16])
+    >>,
+    XArrayTypeDIE = <<
+        10,  % Abbreviation code
+        TermTypeOffset:32/little,  % Type (term)
+        XArraySubrangeDIE/binary,
+        0  % End of children
+    >>,
+    XArrayTypeOffset = BaseOffset + byte_size(TermTypeDIE),
+
+    % Abbrev 8: Context structure type
+    % Only include the x array member for now (most important for debugging)
+    XOffset = case Backend of
+        jit_x86_64 -> 16#30;
+        jit_aarch64 -> 16#30;
+        _ -> 16#18  % riscv32 and armv6m
+    end,
+    XMemberDIE = <<
+        9,  % Abbreviation code
+        "x", 0,  % Name
+        XArrayTypeOffset:32/little,  % Type (term array)
+        XOffset:32/little  % Data member location
+    >>,
+    % Estimate Context size (actual size varies, but this is good enough)
+    ContextSize = 512,
+    ContextStructDIE = <<
+        8,  % Abbreviation code
+        "Context", 0,  % Name
+        ContextSize:32/little,  % Byte size
+        XMemberDIE/binary,
+        0  % End of children
+    >>,
+    ContextStructOffset = BaseOffset + byte_size(TermTypeDIE) + byte_size(XArrayTypeDIE),
+
+    % Abbrev 7: Context* pointer type
+    ContextPtrTypeDIE = <<
+        7,  % Abbreviation code
+        WordSize,  % Byte size
+        ContextStructOffset:32/little  % Type (Context)
+    >>,
+    ContextPtrTypeOffset = BaseOffset + byte_size(TermTypeDIE) + byte_size(XArrayTypeDIE) + byte_size(ContextStructDIE),
+
+    % Combine all type DIEs
+    AllTypes = <<TermTypeDIE/binary, XArrayTypeDIE/binary, ContextStructDIE/binary, ContextPtrTypeDIE/binary>>,
+
+    {AllTypes, ContextPtrTypeOffset}.
+
 %% Generate DIEs for functions as DW_TAG_subprogram with module:func/arity naming
-generate_function_dies_with_module(Functions, ModuleName) ->
+generate_function_dies_with_module(Functions, ModuleName, #dwarf{backend = Backend}, ContextPtrTypeOffset, CodeSize) ->
     % Filter and sort functions by address
     ValidFunctions = lists:sort([
         {Offset, FunctionName, Arity}
      || {Offset, FunctionName, Arity} <- Functions, Offset >= 0
     ]),
 
+    % Calculate function sizes by finding the next function's offset
+    % For the last function, use CodeSize to determine its end
+    FunctionsWithSizes = case ValidFunctions of
+        [] -> [];
+        _ ->
+            lists:zipwith(
+                fun({Offset, Name, Arity}, NextFunc) ->
+                    Size = case NextFunc of
+                        {NextOffset, _, _} -> NextOffset - Offset;
+                        end_of_code -> CodeSize - Offset  % Last function extends to end of code
+                    end,
+                    {Offset, Name, Arity, Size}
+                end,
+                ValidFunctions,
+                tl(ValidFunctions) ++ [end_of_code]
+            )
+    end,
+
     % Generate DIE for each function
     FunctionDIEsList = [
-        generate_function_die_with_module(Offset, FunctionName, Arity, ModuleName)
-     || {Offset, FunctionName, Arity} <- ValidFunctions
+        generate_function_die_with_module(Offset, FunctionName, Arity, Size, ModuleName, Backend, ContextPtrTypeOffset)
+     || {Offset, FunctionName, Arity, Size} <- FunctionsWithSizes
     ],
     iolist_to_binary(FunctionDIEsList).
 
 %% Generate DIE for a single function with module name
-generate_function_die_with_module(Offset, FunctionName, Arity, ModuleName) ->
+generate_function_die_with_module(Offset, FunctionName, Arity, FunctionSize, ModuleName, Backend, ContextPtrTypeOffset) ->
     % Create module:function/arity format
     FunctionString = list_to_binary(io_lib:format("~s:~s/~B", [ModuleName, FunctionName, Arity])),
-    % Estimate function size (can be improved later)
-    FunctionSize = 100,
+
+    % Get the DWARF register number for ctx from the backend
+    CtxRegNum = Backend:dwarf_ctx_register(),
+
+    % Generate ctx parameter DIE
+    CtxParamDIE = generate_ctx_parameter_die(CtxRegNum, ContextPtrTypeOffset),
+
+    % Get word size for addresses and convert to bits
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
+
     <<
         % Abbreviation code (4 = DW_TAG_subprogram)
         4,
@@ -1042,23 +1278,52 @@ generate_function_die_with_module(Offset, FunctionName, Arity, ModuleName) ->
         FunctionString/binary,
         0,
         % DW_AT_low_pc
-        Offset:32/little,
+        Offset:WordSizeInBits/little,
         % DW_AT_high_pc (low_pc + size)
-        (Offset + FunctionSize):32/little
+        (Offset + FunctionSize):WordSizeInBits/little,
+        % Child: ctx parameter
+        CtxParamDIE/binary,
+        % End of children marker
+        0
+    >>.
+
+%% Generate DIE for ctx parameter
+generate_ctx_parameter_die(CtxRegNum, ContextPtrTypeOffset) ->
+    % DW_FORM_exprloc requires a ULEB128 length followed by the expression
+    % Expression: DW_OP_reg0 + register_number (single byte)
+    % DW_OP_regN means the value is in register N
+    RegOpcode = ?DW_OP_reg0 + CtxRegNum,
+    LocationExpr = <<RegOpcode>>,
+    LocationExprLen = encode_uleb128(byte_size(LocationExpr)),
+
+    <<
+        % Abbreviation code (5 = DW_TAG_formal_parameter)
+        5,
+        % DW_AT_name
+        "ctx",
+        0,
+        % DW_AT_type (reference to Context* type)
+        ContextPtrTypeOffset:32/little,
+        % DW_AT_location (exprloc: length + expression)
+        LocationExprLen/binary,
+        LocationExpr/binary
     >>.
 
 %% Generate DIEs for opcodes as DW_TAG_lexical_block
-generate_opcode_dies(Opcodes) ->
+generate_opcode_dies(Opcodes, Backend) ->
     % Filter and sort opcodes by address
     ValidOpcodes = lists:sort([{Offset, Opcode} || {Offset, Opcode} <- Opcodes, Offset >= 0]),
 
     % Generate DIE for each opcode
-    OpcodeDIEsList = [generate_opcode_die(Offset, Opcode) || {Offset, Opcode} <- ValidOpcodes],
+    OpcodeDIEsList = [generate_opcode_die(Offset, Opcode, Backend) || {Offset, Opcode} <- ValidOpcodes],
     iolist_to_binary(OpcodeDIEsList).
 
 %% Generate DIE for a single opcode
-generate_opcode_die(Offset, Opcode) ->
+generate_opcode_die(Offset, Opcode, Backend) ->
     OpcodeString = list_to_binary(io_lib:format("~s@~B", [Opcode, Offset])),
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
+
     <<
         % Abbreviation code (2 = DW_TAG_lexical_block)
         2,
@@ -1066,21 +1331,24 @@ generate_opcode_die(Offset, Opcode) ->
         OpcodeString/binary,
         0,
         % DW_AT_low_pc
-        Offset:32/little
+        Offset:WordSizeInBits/little
     >>.
 
 %% Generate DIEs for labels as DW_TAG_label
-generate_label_dies(Labels) ->
+generate_label_dies(Labels, Backend) ->
     % Filter and sort labels by address
     ValidLabels = lists:sort([{Offset, Label} || {Offset, Label} <- Labels, Offset >= 0]),
 
     % Generate DIE for each label
-    LabelDIEsList = [generate_label_die(Offset, Label) || {Offset, Label} <- ValidLabels],
+    LabelDIEsList = [generate_label_die(Offset, Label, Backend) || {Offset, Label} <- ValidLabels],
     iolist_to_binary(LabelDIEsList).
 
 %% Generate DIE for a single label
-generate_label_die(Offset, Label) ->
+generate_label_die(Offset, Label, Backend) ->
     LabelString = list_to_binary(io_lib:format("label_~B", [Label])),
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
+
     <<
         % Abbreviation code (3 = DW_TAG_label)
         3,
@@ -1088,7 +1356,7 @@ generate_label_die(Offset, Label) ->
         LabelString/binary,
         0,
         % DW_AT_low_pc
-        Offset:32/little
+        Offset:WordSizeInBits/little
     >>.
 
 %% Generate symbol table for function names and opcode symbols
