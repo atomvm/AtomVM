@@ -328,6 +328,8 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
+    mod->binary = beam_file;
+    mod->binary_size = size;
 #ifndef AVM_NO_JIT
     if (offsets[AVMN]) {
         NativeCodeChunk *native_code = (NativeCodeChunk *) (beam_file + offsets[AVMN]);
