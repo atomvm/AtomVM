@@ -434,18 +434,19 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
     return padded_q_len / UINT16_IN_A_DIGIT;
 }
 
-// This function assumes no leading zeros (lenght is used in comparison)
-// Caller must ensure this precondition
 int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len)
 {
-    if (a_len > b_len) {
+    size_t normal_a_len = intn_count_digits(a, a_len);
+    size_t normal_b_len = intn_count_digits(b, b_len);
+
+    if (normal_a_len > normal_b_len) {
         return 1;
     }
-    if (a_len < b_len) {
+    if (normal_a_len < normal_b_len) {
         return -1;
     }
 
-    for (size_t i = a_len; i > 0; i--) {
+    for (size_t i = normal_a_len; i > 0; i--) {
         if (a[i - 1] > b[i - 1]) {
             return 1;
         }
