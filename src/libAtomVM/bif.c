@@ -806,6 +806,7 @@ term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     }
 }
 
+// this function assumes that bigres_len is always <= bigres buffer capacity
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
@@ -1716,6 +1717,10 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 
         intn_digit_t bigres[INTN_MAX_RES_LEN];
         size_t bigres_len = intn_bsl(m, m_len, b, bigres);
+        // this check is required in order to avoid out-of-bounds read in make_bigint
+        if (UNLIKELY(bigres_len > INTN_MAX_RES_LEN)) {
+            RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+        }
 
         return make_bigint(ctx, fail_label, live, bigres, bigres_len, m_sign);
 
