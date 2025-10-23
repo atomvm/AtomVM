@@ -2051,6 +2051,8 @@ static term nif_erlang_binary_to_atom_1(Context *ctx, int argc, term argv[])
     return result;
 }
 
+// This make_bigint version doesn't do any overflow check and it doesn't normalize integers
+// These contraints are ok for parse_integer, since it checks this before calling make_bigint
 static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
 {
     size_t intn_data_size;
