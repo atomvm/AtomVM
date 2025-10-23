@@ -137,7 +137,7 @@ Following BEAM, there are two flavors of the emulator: jit and emu, but eventual
 - Native: the VM only runs native code and all code must be precompiled on the desktop using the JIT compiler (which effectively is a AOT or Ahead-of-Time compiler). In this mode, it is not necessary to bundle the jit compiler on the embedded target.
 - Hybrid: the VM can run native code as well as emulated BEAM code and some code is precompiled on the desktop.
 
-JIT is available on some platforms (currently only x86_64, aarch64 and armv6m) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
+JIT is available on some platforms (currently x86_64, aarch64, armv6m and riscv32) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
 
 Modules can include precompiled code in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1. This native code is executed by the jit-flavor of the emulator as well as the emu flavor if execution of precompiled is enabled.
 
@@ -154,9 +154,16 @@ The JIT compiler is written in Erlang and is therefore precompiled. When a proce
 
 JIT compiler is composed of two main interfaces : backend and stream.
 
-A backend implementation is required for each architecture. The backend is called by jit module as it translates bytecodes to machine code. The current implementations are `jit_x86_64` and `jit_aarch64` which are suitable for systems with System V X86 64 ABI or AArch64 ABI.
+A backend implementation is required for each architecture. The backend is called by jit module as it translates bytecodes to machine code. The current implementations are :
+- `jit_x86_64` for System V X86 64 ABI
+- `jit_aarch64` for AArch64 ABI
+- `jit_armv6m` for AArch32 ABI
+- `jit_riscv32` for rv32imc ilp32 ABI.
 
-A stream implementation is responsible for streaming the machine code, especially in the context of low memory. Two implementations currently exist: `jit_stream_binary` that streams assembly code to an Erlang binary, suitable for tests and precompilation on the desktop, and `jit_stream_mmap` that streams assembly code in an `mmap(2)` allocated page, suitable for JIT compilation on Unix.
+A stream implementation is responsible for streaming the machine code, especially in the context of low memory. Three implementations currently exist:
+- `jit_stream_binary` that streams assembly code to an Erlang binary, suitable for tests and precompilation on the desktop
+- `jit_stream_mmap` that streams assembly code in an `mmap(2)` allocated page, suitable for JIT compilation on Unix
+- `jit_stream_flash` available on Pico that allows for embedded JIT.
 
 ### Embedded JIT and Native
 
