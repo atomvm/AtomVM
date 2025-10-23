@@ -903,7 +903,8 @@ if_else_block(
     Stream2 = State2#state.stream,
     %% Emit unconditional branch to skip the else block (will be replaced)
     ElseJumpOffset = StreamModule:offset(Stream2),
-    ElseJumpInstr = jit_riscv32_asm:j(0),
+    %% Use all-1s placeholder for flash compatibility (can only flip 1->0)
+    ElseJumpInstr = <<16#FFFF:16>>,
     Stream3 = StreamModule:append(Stream2, ElseJumpInstr),
     %% Else block starts here.
     OffsetAfter = StreamModule:offset(Stream3),
@@ -923,6 +924,9 @@ if_else_block(
     %% Patch the unconditional branch to jump to the end
     FinalJumpOffset = OffsetFinal - ElseJumpOffset,
     NewElseJumpInstr = jit_riscv32_asm:j(FinalJumpOffset),
+    %% Assert that replacement is 2 bytes (c.j range: -2048..2046)
+    %% If this fails, the if/else blocks are too large
+    2 = byte_size(NewElseJumpInstr),
     Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
@@ -934,7 +938,7 @@ if_else_block(
     }.
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     %% RISC-V: bge Reg, zero, offset (branch if Reg >= 0, i.e., NOT negative/NOT less than 0)
-    BranchInstr = jit_riscv32_asm:bge(Reg, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = State0#state{stream = Stream1},
     {State1, {bge, Reg, zero}, 0};
@@ -949,7 +953,7 @@ if_block_cond(
     State1 = mov_immediate(State0, Temp, Val),
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-    BranchInstr = jit_riscv32_asm:bge(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = State1#state{stream = Stream2},
     {State2, {bge, Reg, Temp}, BranchDelta};
@@ -962,7 +966,7 @@ if_block_cond(
     State1 = mov_immediate(State0, Temp, Val),
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-    BranchInstr = jit_riscv32_asm:bge(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = State1#state{stream = Stream2},
     {State2, {bge, Reg, Temp}, BranchDelta};
@@ -976,7 +980,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     % RISC-V: bge Reg, RegB, offset (branch if Reg >= RegB, i.e., NOT less than)
-    BranchInstr = jit_riscv32_asm:bge(Reg, RegB, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
@@ -990,7 +994,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     %% RISC-V: bne Reg, zero, offset (branch if Reg != 0, i.e., NOT equal to 0)
-    BranchInstr = jit_riscv32_asm:bne(Reg, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
@@ -1005,7 +1009,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     %% RISC-V: bne Reg, RegB, offset (branch if Reg != RegB, i.e., NOT equal)
-    BranchInstr = jit_riscv32_asm:bne(Reg, RegB, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
@@ -1029,7 +1033,7 @@ if_block_cond(
     State1 = mov_immediate(State0, Temp, Val),
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-    BranchInstr = jit_riscv32_asm:beq(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
@@ -1044,7 +1048,7 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     %% RISC-V: beq Reg, Val, offset (branch if Reg == Val, i.e., NOT not-equal)
-    BranchInstr = jit_riscv32_asm:beq(Reg, Val, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
@@ -1065,7 +1069,7 @@ if_block_cond(
     State1 = mov_immediate(State0, Temp, Val),
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-    BranchInstr = jit_riscv32_asm:bne(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
@@ -1075,7 +1079,7 @@ if_block_cond(
     {{free, RegA}, '==', {free, RegB}}
 ) ->
     %% RISC-V: bne RegA, RegB, offset (branch if RegA != RegB, i.e., NOT equal)
-    BranchInstr = jit_riscv32_asm:bne(RegA, RegB, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
     State1 = State0#state{stream = Stream1},
     State2 = if_block_free_reg({free, RegA}, State1),
@@ -1095,7 +1099,7 @@ if_block_cond(
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     %% RISC-V: bne Reg, Temp, offset (branch if Reg != Temp, i.e., NOT equal)
-    BranchInstr = jit_riscv32_asm:bne(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
@@ -1114,7 +1118,7 @@ if_block_cond(
     Stream1 = State1#state.stream,
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     %% RISC-V: beq Reg, Temp, offset (branch if Reg == Temp, i.e., NOT not-equal)
-    BranchInstr = jit_riscv32_asm:beq(Reg, Temp, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
@@ -1135,7 +1139,7 @@ if_block_cond(
     %% RISC-V: Test bit 0 by shifting to MSB, then branch if negative (bit was 1, NOT false)
     I1 = jit_riscv32_asm:slli(Temp, Reg, 31),
     Stream1 = StreamModule:append(Stream0, I1),
-    BranchInstr = jit_riscv32_asm:blt(Temp, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream2},
@@ -1156,7 +1160,7 @@ if_block_cond(
     %% RISC-V: Test bit 0 by shifting to MSB, then branch if non-negative (bit was 0, NOT true)
     I1 = jit_riscv32_asm:slli(Temp, Reg, 31),
     Stream1 = StreamModule:append(Stream0, I1),
-    BranchInstr = jit_riscv32_asm:bge(Temp, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream2},
@@ -1190,7 +1194,7 @@ if_block_cond(
     Stream1 = StreamModule:append(Stream0, TestCode),
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     %% Branch if result is zero (no bits set, NOT != 0)
-    BranchInstr = jit_riscv32_asm:beq(Temp, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream2},
@@ -1207,7 +1211,7 @@ if_block_cond(
     I1 = jit_riscv32_asm:not_(Temp, Reg),
     I2 = jit_riscv32_asm:slli(Temp, Temp, 28),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    BranchInstr = jit_riscv32_asm:beq(Temp, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State1 = State0#state{stream = Stream2},
     {State1, {beq, Temp, zero}, byte_size(I1) + byte_size(I2)};
@@ -1222,7 +1226,7 @@ if_block_cond(
     I1 = jit_riscv32_asm:not_(Reg, Reg),
     I2 = jit_riscv32_asm:slli(Reg, Reg, 28),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    BranchInstr = jit_riscv32_asm:beq(Reg, zero, 0),
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
     State1 = State0#state{stream = Stream2},
     State2 = if_block_free_reg(RegTuple, State1),
@@ -1247,7 +1251,7 @@ if_block_cond(
         0 ->
             %% Optimize comparison with zero
             BranchDelta = StreamModule:offset(Stream2) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Temp, zero, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream3 = StreamModule:append(Stream2, BranchInstr),
             State3 = State2#state{
                 stream = Stream3, available_regs = [Temp | State2#state.available_regs]
@@ -1256,7 +1260,7 @@ if_block_cond(
         _ when ?IS_GPR(Val) ->
             %% Val is a register
             BranchDelta = StreamModule:offset(Stream2) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Temp, Val, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream3 = StreamModule:append(Stream2, BranchInstr),
             State3 = State2#state{
                 stream = Stream3, available_regs = [Temp | State2#state.available_regs]
@@ -1269,7 +1273,7 @@ if_block_cond(
             State3 = mov_immediate(State2#state{available_regs = AT2}, MaskReg, Val),
             Stream3 = State3#state.stream,
             BranchDelta = StreamModule:offset(Stream3) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Temp, MaskReg, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream4 = StreamModule:append(Stream3, BranchInstr),
             State4 = State3#state{
                 stream = Stream4, available_regs = [Temp, MaskReg | State3#state.available_regs]
@@ -1293,7 +1297,7 @@ if_block_cond(
         0 ->
             %% Optimize comparison with zero
             BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Reg, zero, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream2 = StreamModule:append(Stream1, BranchInstr),
             State2 = State1#state{stream = Stream2},
             State3 = if_block_free_reg(RegTuple, State2),
@@ -1301,7 +1305,7 @@ if_block_cond(
         _ when ?IS_GPR(Val) ->
             %% Val is a register
             BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Reg, Val, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream2 = StreamModule:append(Stream1, BranchInstr),
             State2 = State1#state{stream = Stream2},
             State3 = if_block_free_reg(RegTuple, State2),
@@ -1313,7 +1317,7 @@ if_block_cond(
             State2 = mov_immediate(State1#state{available_regs = AT}, MaskReg, Val),
             Stream2 = State2#state.stream,
             BranchDelta = StreamModule:offset(Stream2) - OffsetBefore,
-            BranchInstr = jit_riscv32_asm:beq(Reg, MaskReg, 0),
+            BranchInstr = <<16#FFFFFFFF:32/little>>,
             Stream3 = StreamModule:append(Stream2, BranchInstr),
             State3 = State2#state{stream = Stream3, available_regs = AvailRegs},
             State4 = if_block_free_reg(RegTuple, State3),
@@ -2643,7 +2647,7 @@ decrement_reductions_and_maybe_schedule_next(
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
     % Branch if reduction count is not zero
-    I4 = jit_riscv32_asm:bne(Temp, zero, 0),
+    I4 = <<16#FFFFFFFF:32/little>>,
     % Set continuation to the next instruction
     ADROffset = BNEOffset + byte_size(I4),
     % Use 8-byte placeholder (2 words of 0xFFFFFFFF) for pc_relative_address
