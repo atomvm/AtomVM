@@ -1,7 +1,0 @@
-{
-   bogus_memcpy_overlap
-   Memcheck:Overlap
-   fun:__memcpy_chk
-   fun:memmove
-   fun:intn_to_string
-}
