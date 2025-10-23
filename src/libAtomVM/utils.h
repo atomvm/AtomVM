@@ -360,6 +360,96 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
 #define MINI(A, B) ((A > B) ? (B) : (A))
 
 /**
+ * @brief Align size up to power-of-2 boundary
+ *
+ * Rounds up a size value to the next multiple of a power-of-2 alignment.
+ * This function uses bit manipulation for efficient alignment calculation
+ * and is faster than the general-purpose \c size_align_up().
+ *
+ * @param n Size value to align
+ * @param align Power-of-2 alignment boundary
+ * @return Size rounded up to next multiple of align
+ *
+ * @pre align must be a power of 2 (e.g., 2, 4, 8, 16, 32, ...)
+ * @warning Undefined behavior if align is not a power of 2
+ * @warning Undefined behavior if align is 0
+ *
+ * @note Result is always >= n
+ *
+ * @code
+ * size_t aligned = size_align_up_pow2(17, 8);  // Returns 24
+ * size_t aligned = size_align_up_pow2(16, 8);  // Returns 16 (already aligned)
+ * @endcode
+ *
+ * @see size_align_up() for arbitrary alignment values
+ */
+static inline size_t size_align_up_pow2(size_t n, size_t align)
+{
+    return (n + (align - 1)) & ~(align - 1);
+}
+
+/**
+ * @brief Align size up to arbitrary boundary
+ *
+ * Rounds up a size value to the next multiple of an alignment boundary.
+ * Works with any alignment value, not just powers of 2.
+ *
+ * @param n Size value to align
+ * @param align Alignment boundary (any positive value, or 0)
+ * @return Size rounded up to next multiple of align, or n if align is 0
+ *
+ * @note Returns n unchanged if align is 0 (no alignment)
+ * @note Result is always >= n
+ * @note For power-of-2 alignments, \c size_align_up_pow2() is more efficient
+ *
+ * @code
+ * size_t aligned = size_align_up(17, 10);  // Returns 20
+ * size_t aligned = size_align_up(20, 10);  // Returns 20 (already aligned)
+ * size_t aligned = size_align_up(17, 0);   // Returns 17 (no alignment)
+ * @endcode
+ *
+ * @see size_align_up_pow2() for optimized power-of-2 alignment
+ * @see size_align_down() for rounding down instead of up
+ */
+static inline size_t size_align_up(size_t n, size_t align)
+{
+    if (align == 0) {
+        return n;
+    }
+    return ((n + align - 1) / align) * align;
+}
+
+/**
+ * @brief Align size down to arbitrary boundary
+ *
+ * Rounds down a size value to the previous multiple of an alignment boundary.
+ * Works with any alignment value, not just powers of 2.
+ *
+ * @param n Size value to align
+ * @param align Alignment boundary (any positive value, or 0)
+ * @return Size rounded down to previous multiple of align, or n if align is 0
+ *
+ * @note Returns n unchanged if align is 0 (no alignment)
+ * @note Result is always <= n
+ * @note Commonly used for finding aligned base addresses within buffers
+ *
+ * @code
+ * size_t aligned = size_align_down(17, 10);  // Returns 10
+ * size_t aligned = size_align_down(20, 10);  // Returns 20 (already aligned)
+ * size_t aligned = size_align_down(7, 10);   // Returns 0
+ * @endcode
+ *
+ * @see size_align_up() for rounding up instead of down
+ */
+static inline size_t size_align_down(size_t n, size_t align)
+{
+    if (align == 0) {
+        return n;
+    }
+    return (n / align) * align;
+}
+
+/**
  * @brief Negate unsigned 32-bit value (\c uint32_t) to signed integer (\c int32_t)
  *
  * Converts an unsigned 32-bit value to its negated signed representation.

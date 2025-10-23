@@ -61,11 +61,6 @@ static inline size_t pad_uint16_to_digits(uint16_t n16[], size_t n16_len)
     return n16_len;
 }
 
-static inline size_t size_round_to(size_t n, size_t round_to)
-{
-    return (n + (round_to - 1)) & ~(round_to - 1);
-}
-
 /*
  * Multiplication
  */
@@ -799,7 +794,7 @@ size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *ou
     size_t counted_digits = intn_count_digits(num, len);
     size_t ms_digit_bits = 32 - uint32_nlz(num[counted_digits - 1]);
     size_t effective_bits_len = (counted_digits - 1) * digit_bit_size + ms_digit_bits;
-    size_t new_bits_len = size_round_to(effective_bits_len + n, digit_bit_size);
+    size_t new_bits_len = size_align_up_pow2(effective_bits_len + n, digit_bit_size);
 
     size_t new_digits_count = new_bits_len / digit_bit_size;
 
@@ -842,7 +837,7 @@ void bsru(
     size_t digit_right_bit_shift = n % digit_bit_size;
     size_t left_shift_n = (digit_bit_size - digit_right_bit_shift);
 
-    size_t len_in_digits = size_round_to(effective_bits_len, digit_bit_size) / digit_bit_size;
+    size_t len_in_digits = size_align_up_pow2(effective_bits_len, digit_bit_size) / digit_bit_size;
 
     // caller makes sure that discarded < len_in_digits
     size_t discarded = n / digit_bit_size;
@@ -878,7 +873,8 @@ size_t intn_bsr(
         return 1;
     }
 
-    size_t shifted_len = size_round_to(effective_bits_len - n, digit_bit_size) / digit_bit_size;
+    size_t shifted_len
+        = size_align_up_pow2(effective_bits_len - n, digit_bit_size) / digit_bit_size;
 
     if (num_sign == IntNPositiveInteger) {
         bsru(num, effective_bits_len, n, 0, out);
