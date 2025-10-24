@@ -52,6 +52,7 @@
 #define INTN_DIV_OUT_LEN(m, n) ((m) - (n) + 1 + 1)
 #define INTN_ABS_OUT_LEN(m) ((m) + 1)
 
+#define INTN_DIGIT_BITS 32
 #define INTN_MAX_UNSIGNED_BYTES_SIZE 32
 #define INTN_MAX_UNSIGNED_BITS_SIZE 256
 
