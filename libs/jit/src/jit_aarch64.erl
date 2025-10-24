@@ -1905,17 +1905,30 @@ set_continuation_to_label(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = [Temp | _],
-        branches = Branches
+        branches = Branches,
+        labels = Labels
     } = State,
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_aarch64_asm:adr(Temp, 0),
-    Reloc = {Label, Offset, {adr, Temp}},
-    I2 = jit_aarch64_asm:str(Temp, ?JITSTATE_CONTINUATION),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | Branches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct adr without relocation
+            Rel = LabelOffset - Offset,
+            I1 = jit_aarch64_asm:adr(Temp, Rel),
+            I2 = jit_aarch64_asm:str(Temp, ?JITSTATE_CONTINUATION),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            I1 = jit_aarch64_asm:adr(Temp, 0),
+            Reloc = {Label, Offset, {adr, Temp}},
+            I2 = jit_aarch64_asm:str(Temp, ?JITSTATE_CONTINUATION),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1, branches = [Reloc | Branches]}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @doc Set the continuation address to the current offset, creating a
@@ -2202,6 +2215,7 @@ call_only_or_schedule_next(
         stream_module = StreamModule,
         stream = Stream0,
         branches = Branches,
+        labels = Labels,
         available_regs = [Temp | _]
     } = State0,
     Label
@@ -2214,11 +2228,22 @@ call_only_or_schedule_next(
     I3 = jit_aarch64_asm:str_w(Temp, ?JITSTATE_REDUCTIONCOUNT),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
-    % Branch to label if reduction count is not zero
-    I4 = jit_aarch64_asm:bcc(ne, 0),
-    Reloc1 = {Label, BNEOffset, {bcc, ne}},
-    Stream2 = StreamModule:append(Stream1, I4),
-    State1 = State0#state{stream = Stream2, branches = [Reloc1 | Branches]},
+
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct branch with calculated offset
+            % Calculate relative offset (must be 4-byte aligned)
+            Rel = LabelOffset - BNEOffset,
+            I4 = jit_aarch64_asm:bcc(ne, Rel),
+            Stream2 = StreamModule:append(Stream1, I4),
+            State1 = State0#state{stream = Stream2};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            I4 = jit_aarch64_asm:bcc(ne, 0),
+            Reloc1 = {Label, BNEOffset, {bcc, ne}},
+            Stream2 = StreamModule:append(Stream1, I4),
+            State1 = State0#state{stream = Stream2, branches = [Reloc1 | Branches]}
+    end,
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
