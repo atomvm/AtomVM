@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -38,6 +39,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -75,7 +77,8 @@
 
 -include("primitives.hrl").
 
--define(ASSERT(Expr), true = Expr).
+%-define(ASSERT(Expr), true = Expr).
+-define(ASSERT(Expr), ok).
 
 %% ARMv6-M AAPCS32 ABI: r0-r3 are used for argument passing and return value.
 %% r0-r1 form a double-word for 64-bit returns, additional args passed on stack.
@@ -130,10 +133,12 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [armv6m_register()],
     used_regs :: [armv6m_register()],
     labels :: [{integer() | reference(), integer()}],
-    variant :: non_neg_integer()
+    variant :: non_neg_integer(),
+    literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}]
 }).
 
 -type state() :: #state{}.
@@ -242,11 +247,13 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
         labels = [],
-        variant = Variant
+        variant = Variant,
+        literal_pool = []
     }.
 
 %%-----------------------------------------------------------------------------
@@ -268,6 +275,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state, e.g. literal pools
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    flush_literal_pool(State).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
@@ -364,13 +381,14 @@ assert_all_native_free(#state{
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
@@ -380,18 +398,10 @@ jump_table0(
     I3 = jit_armv6m_asm:add(pc, r3),
     I4 = jit_armv6m_asm:nop(),
 
-    JumpEntry = <<I1/binary, I2/binary, I3/binary, I4/binary, 0:32>>,
+    JumpEntry = <<I1/binary, I2/binary, I3/binary, I4/binary, 16#FFFFFFFF:32>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
 
-    % Add relocation for the data entry so update_branches/2 can patch the jump target
-    DataOffset = StreamModule:offset(Stream1) - 4,
-    % Calculate the offset of the add instruction (3rd instruction, at offset 4 from entry start)
-    EntryStartOffset = StreamModule:offset(Stream1) - 12,
-    AddInstrOffset = EntryStartOffset + 4,
-    DataReloc = {N, DataOffset, {jump_table_data, AddInstrOffset}},
-    UpdatedState = State#state{stream = Stream1, branches = [DataReloc | Branches]},
-
-    jump_table0(UpdatedState, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -484,13 +494,7 @@ update_branches(
                                 I4 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary>>
                         end
-                end;
-            {jump_table_data, AddInstrOffset} ->
-                % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
-                % PC when add instruction executes
-                AddPC = AddInstrOffset + 4,
-                RelativeOffset = LabelOffset - AddPC,
-                <<RelativeOffset:32/little>>
+                end
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
@@ -631,7 +635,8 @@ call_primitive_last(
                 State2 = set_registers_args(State1, ArgsForTailCall, 0),
                 tail_call_with_jit_state_registers_only(State2, Temp)
         end,
-    State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State5 = State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State5).
 
 %%-----------------------------------------------------------------------------
 %% @doc Tail call to address in register, restoring prolog registers including
@@ -724,7 +729,15 @@ jump_to_label(
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State1#state{stream = Stream1}.
+    State2 = State1#state{stream = Stream1},
+    flush_literal_pool(State2).
+
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    CodeBlock = branch_to_offset_code(State, Offset, TargetOffset),
+    Stream1 = StreamModule:append(Stream0, CodeBlock),
+    State2 = State#state{stream = Stream1},
+    flush_literal_pool(State2).
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to address in continuation pointer register
@@ -786,17 +799,17 @@ jump_to_continuation(
     Code = <<I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
     Stream2 = StreamModule:append(State1#state.stream, Code),
     % Free all registers as this is a terminal instruction
-    State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State2 = State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State2).
 
-branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) when
-    LabelOffset - Offset =< 2050, LabelOffset - Offset >= -2044
+branch_to_offset_code(_State, Offset, TargetOffset) when
+    TargetOffset - Offset =< 2050, TargetOffset - Offset >= -2044
 ->
     % Near branch: use direct B instruction
-    Rel = LabelOffset - Offset,
-    CodeBlock = jit_armv6m_asm:b(Rel),
-    {State, CodeBlock};
-branch_to_label_code(
-    #state{available_regs = [TempReg | _]} = State0, Offset, Label, {Label, LabelOffset}
+    Rel = TargetOffset - Offset,
+    jit_armv6m_asm:b(Rel);
+branch_to_offset_code(
+    #state{available_regs = [TempReg | _]}, Offset, TargetOffset
 ) ->
     % Far branch: use register-based sequence, need temporary register
     if
@@ -807,23 +820,26 @@ branch_to_label_code(
             I3 = jit_armv6m_asm:bx(TempReg),
             % Unaligned : need nop
             I4 = jit_armv6m_asm:nop(),
-            LiteralValue = LabelOffset - Offset - 5,
+            LiteralValue = TargetOffset - Offset - 5,
             I5 = <<LiteralValue:32/little>>,
-            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
+            <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>;
         true ->
             % Unaligned
             I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
             I2 = jit_armv6m_asm:add(TempReg, pc),
             I3 = jit_armv6m_asm:bx(TempReg),
-            LiteralValue = LabelOffset - Offset - 5,
+            LiteralValue = TargetOffset - Offset - 5,
             I4 = <<LiteralValue:32/little>>,
-            CodeBlock = <<I1/binary, I2/binary, I3/binary, I4/binary>>
-    end,
-    {State0, CodeBlock};
+            <<I1/binary, I2/binary, I3/binary, I4/binary>>
+    end.
+
+branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) ->
+    CodeBlock = branch_to_offset_code(State, Offset, LabelOffset),
+    {State, CodeBlock};
 branch_to_label_code(
     #state{available_regs = [TempReg | _], branches = Branches} = State0, Offset, Label, false
 ) ->
-    {CodeBlock, SequenceSize} =
+    SequenceSize =
         if
             Offset rem 4 =:= 0 ->
                 % Aligned
@@ -835,7 +851,7 @@ branch_to_label_code(
                 % Placeholder offset
                 I5 = <<0:32/little>>,
                 Seq = <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
-                {Seq, byte_size(Seq)};
+                byte_size(Seq);
             true ->
                 % Unaligned
                 I1 = jit_armv6m_asm:ldr(TempReg, {pc, 4}),
@@ -844,16 +860,17 @@ branch_to_label_code(
                 % Placeholder offset
                 I4 = <<0:32/little>>,
                 Seq = <<I1/binary, I2/binary, I3/binary, I4/binary>>,
-                {Seq, byte_size(Seq)}
+                byte_size(Seq)
         end,
     % Add relocation entry
+    CodeBlock = binary:copy(<<16#FF>>, SequenceSize),
     Reloc = {Label, Offset, {far_branch, SequenceSize, TempReg}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
 branch_to_label_code(
     #state{available_regs = [], branches = Branches} = State0, Offset, Label, false
 ) ->
-    {CodeBlock, SequenceSize} =
+    SequenceSize =
         if
             Offset rem 4 =/= 0 ->
                 % Unaligned
@@ -871,7 +888,7 @@ branch_to_label_code(
                 Seq =
                     <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary, I7/binary,
                         I8/binary>>,
-                {Seq, byte_size(Seq)};
+                byte_size(Seq);
             true ->
                 % Aligned
                 I1 = jit_armv6m_asm:push([r0]),
@@ -885,9 +902,10 @@ branch_to_label_code(
                 I7 = <<0:32/little>>,
                 Seq =
                     <<I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
-                {Seq, byte_size(Seq)}
+                byte_size(Seq)
         end,
     % Add relocation entry
+    CodeBlock = binary:copy(<<16#FF>>, SequenceSize),
     Reloc = {Label, Offset, {far_branch, SequenceSize, ?IP_REG}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
@@ -971,7 +989,8 @@ if_else_block(
     Stream2 = State2#state.stream,
     %% Emit unconditional branch to skip the else block (will be replaced)
     ElseJumpOffset = StreamModule:offset(Stream2),
-    ElseJumpInstr = jit_armv6m_asm:b(0),
+    ?ASSERT(byte_size(jit_armv6m_asm:b(0)) =:= 2),
+    ElseJumpInstr = <<16#FFFF:16>>,
     Stream3 = StreamModule:append(Stream2, ElseJumpInstr),
     %% Else block starts here.
     OffsetAfter = StreamModule:offset(Stream3),
@@ -1004,24 +1023,22 @@ if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {
     %% Compare register with 0
     I1 = jit_armv6m_asm:cmp(Reg, 0),
     %% Branch if positive (N flag clear)
-    I2 = jit_armv6m_asm:bcc(pl, 0),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    CC = pl,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(pl, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = State0#state{stream = Stream1},
-    {State1, pl, byte_size(I1)};
+    {State1, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {Reg, '<', Val}
 ) when is_atom(Reg), is_integer(Val), Val >= 0, Val =< 255 ->
     I1 = jit_armv6m_asm:cmp(Reg, Val),
     % ge = greater than or equal
-    I2 = jit_armv6m_asm:bcc(ge, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = ge,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = State0#state{stream = Stream1},
-    {State1, ge, byte_size(I1)};
+    {State1, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, available_regs = [Temp | _]} = State0,
     {Reg, '<', Val}
@@ -1030,14 +1047,11 @@ if_block_cond(
     Stream0 = State1#state.stream,
     I1 = jit_armv6m_asm:cmp(Reg, Temp),
     % ge = greater than or equal
-    I2 = jit_armv6m_asm:bcc(ge, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = ge,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State2 = State1#state{stream = Stream1},
-    {State2, ge, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -1049,15 +1063,12 @@ if_block_cond(
         end,
     I1 = jit_armv6m_asm:cmp(Reg, RegB),
     % ge = greater than or equal
-    I2 = jit_armv6m_asm:bcc(ge, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = ge,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, ge, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '==', 0}
 ) ->
@@ -1069,11 +1080,12 @@ if_block_cond(
     %% Compare register with 0
     I1 = jit_armv6m_asm:cmp(Reg, 0),
     %% Branch if not equal
-    I2 = jit_armv6m_asm:bcc(ne, 0),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    CC = ne,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, ne, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 %% Delegate (int) forms to regular forms since we only have 32-bit words
 if_block_cond(State, {'(int)', RegOrTuple, '==', 0}) ->
     if_block_cond(State, {RegOrTuple, '==', 0});
@@ -1089,15 +1101,12 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_armv6m_asm:cmp(Reg, Val),
-    I2 = jit_armv6m_asm:bcc(eq, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, eq, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(State, {'(int)', RegOrTuple, '!=', Val}) when is_integer(Val) ->
     if_block_cond(State, {RegOrTuple, '!=', Val});
 if_block_cond(
@@ -1110,28 +1119,25 @@ if_block_cond(
             RegOrTuple -> RegOrTuple
         end,
     I1 = jit_armv6m_asm:cmp(Reg, Val),
-    I2 = jit_armv6m_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = ne,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, ne, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {{free, RegA}, '==', {free, RegB}}
 ) ->
     % Compare two free registers: cmp RegA, RegB; beq <target>
     I1 = jit_armv6m_asm:cmp(RegA, RegB),
-    Stream1 = StreamModule:append(Stream0, I1),
-    I2 = jit_armv6m_asm:bcc(ne, 0),
-    Stream2 = StreamModule:append(Stream1, I2),
-    State1 = State0#state{stream = Stream2},
+    CC = ne,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
+    State1 = State0#state{stream = Stream1},
     State2 = if_block_free_reg({free, RegA}, State1),
     State3 = if_block_free_reg({free, RegB}, State2),
-    {State3, ne, byte_size(I1)};
+    {State3, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
     {RegOrTuple, '==', Val}
@@ -1146,15 +1152,12 @@ if_block_cond(
     Stream1 = State1#state.stream,
     Offset1 = StreamModule:offset(Stream1),
     I1 = jit_armv6m_asm:cmp(Reg, Temp),
-    I2 = jit_armv6m_asm:bcc(ne, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream2 = StreamModule:append(Stream1, Code),
+    CC = ne,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, 16#FFFF:16>>),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
-    {State3, ne, Offset1 - Offset0 + byte_size(I1)};
+    {State3, CC, Offset1 - Offset0 + byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
     {RegOrTuple, '!=', Val}
@@ -1169,15 +1172,12 @@ if_block_cond(
     Stream1 = State1#state.stream,
     Offset1 = StreamModule:offset(Stream1),
     I1 = jit_armv6m_asm:cmp(Reg, Temp),
-    I2 = jit_armv6m_asm:bcc(eq, 0),
-    Code = <<
-        I1/binary,
-        I2/binary
-    >>,
-    Stream2 = StreamModule:append(Stream1, Code),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, 16#FFFF:16>>),
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
-    {State3, eq, Offset1 - Offset0 + byte_size(I1)};
+    {State3, CC, Offset1 - Offset0 + byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1194,12 +1194,12 @@ if_block_cond(
     % Test bit 0: shift bit 0 to MSB and branch if positive (bit was 0/false)
     I1 = jit_armv6m_asm:lsls(Temp, Reg, 31),
     % branch if negative (bit was 1/true)
-    I2 = jit_armv6m_asm:bcc(mi, 0),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = mi,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, mi, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1216,12 +1216,12 @@ if_block_cond(
     % Test bit 0: shift bit 0 to MSB and branch if negative (bit was 1/true)
     I1 = jit_armv6m_asm:lsls(Temp, Reg, 31),
     % branch if positive (bit was 0/false)
-    I2 = jit_armv6m_asm:bcc(pl, 0),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
+    CC = pl,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
-    {State2, pl, byte_size(I1)};
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1250,8 +1250,8 @@ if_block_cond(
                 TestCode1 = jit_armv6m_asm:tst(Reg, Temp),
                 {<<TestCode0/binary, TestCode1/binary>>, eq}
         end,
-    I2 = jit_armv6m_asm:bcc(BranchCond, 0),
-    Code = <<TestCode/binary, I2/binary>>,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(BranchCond, 0)) =:= 2),
+    Code = <<TestCode/binary, 16#FFFF:16>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State1 = if_block_free_reg(RegOrTuple, State0),
     State2 = State1#state{stream = Stream1},
@@ -1268,10 +1268,11 @@ if_block_cond(
     I1 = jit_armv6m_asm:mvns(Temp, Reg),
     % 32 - 4
     I2 = jit_armv6m_asm:lsls(Temp, Temp, 28),
-    I3 = jit_armv6m_asm:bcc(eq, 0),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, 16#FFFF:16>>),
     State1 = State0#state{stream = Stream1},
-    {State1, eq, byte_size(I1) + byte_size(I2)};
+    {State1, CC, byte_size(I1) + byte_size(I2)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1283,11 +1284,12 @@ if_block_cond(
     I1 = jit_armv6m_asm:mvns(Reg, Reg),
     % 32 - 4
     I2 = jit_armv6m_asm:lsls(Reg, Reg, 28),
-    I3 = jit_armv6m_asm:bcc(eq, 0),
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, I3/binary>>),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, 16#FFFF:16>>),
     State1 = State0#state{stream = Stream1},
     State2 = if_block_free_reg(RegTuple, State1),
-    {State2, eq, byte_size(I1) + byte_size(I2)};
+    {State2, CC, byte_size(I1) + byte_size(I2)};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1307,10 +1309,11 @@ if_block_cond(
     I2 = jit_armv6m_asm:cmp(Temp, Val),
     Stream3 = StreamModule:append(Stream2, I2),
     OffsetAfter = StreamModule:offset(Stream3),
-    I3 = jit_armv6m_asm:bcc(eq, 0),
-    Stream4 = StreamModule:append(Stream3, I3),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream4 = StreamModule:append(Stream3, <<16#FFFF:16>>),
     State3 = State2#state{stream = Stream4, available_regs = [Temp | State2#state.available_regs]},
-    {State3, eq, OffsetAfter - OffsetBefore};
+    {State3, CC, OffsetAfter - OffsetBefore};
 if_block_cond(
     #state{
         stream_module = StreamModule,
@@ -1326,11 +1329,12 @@ if_block_cond(
     I2 = jit_armv6m_asm:cmp(Reg, Val),
     Stream2 = StreamModule:append(Stream1, I2),
     OffsetAfter = StreamModule:offset(Stream2),
-    I3 = jit_armv6m_asm:bcc(eq, 0),
-    Stream3 = StreamModule:append(Stream2, I3),
+    CC = eq,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream3 = StreamModule:append(Stream2, <<16#FFFF:16>>),
     State3 = State1#state{stream = Stream3},
     State4 = if_block_free_reg(RegTuple, State3),
-    {State4, eq, OffsetAfter - OffsetBefore}.
+    {State4, CC, OffsetAfter - OffsetBefore}.
 
 -spec if_block_free_reg(armv6m_register() | {free, armv6m_register()}, state()) -> state().
 if_block_free_reg({free, Reg}, State0) ->
@@ -1381,12 +1385,29 @@ merge_used_regs(State, []) ->
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
-shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
+-spec shift_right(#state{}, maybe_free_armv6m_register(), non_neg_integer()) ->
+    {#state{}, armv6m_register()}.
+shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
     I = jit_armv6m_asm:lsrs(Reg, Reg, Shift),
     Stream1 = StreamModule:append(Stream0, I),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+shift_right(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [ResultReg | T],
+        used_regs = UR
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I = jit_armv6m_asm:lsrs(ResultReg, Reg, Shift),
+    Stream1 = StreamModule:append(Stream0, I),
+    {State#state{stream = Stream1, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a shift register left by a fixed number of bits, effectively
@@ -1710,7 +1731,7 @@ set_registers_args(
         UsedRegs,
         Args
     ),
-    State0#state{
+    State1#state{
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS -- ParamRegs -- NewUsedRegs,
         used_regs = ParamRegs ++ (NewUsedRegs -- ParamRegs)
@@ -1768,7 +1789,7 @@ set_registers_args0(
 set_registers_args0(
     State, [Arg | ArgsT], [_ArgReg | ArgsRegs], [?CTX_REG | ParamRegs], AvailGP, StackOffset
 ) ->
-    false = lists:member(?CTX_REG, ArgsRegs),
+    ?ASSERT(not lists:member(?CTX_REG, ArgsRegs)),
     State1 = set_registers_args1(State, Arg, ?CTX_REG, StackOffset),
     set_registers_args0(State1, ArgsT, ArgsRegs, ParamRegs, AvailGP, StackOffset);
 set_registers_args0(
@@ -2433,7 +2454,8 @@ set_continuation_to_offset(
 ) ->
     OffsetRef = make_ref(),
     Offset = StreamModule:offset(Stream0),
-    I1 = jit_armv6m_asm:adr(Temp, 4),
+    ?ASSERT(byte_size(jit_armv6m_asm:adr(Temp, 4)) =:= 2),
+    I1 = <<16#FFFF:16>>,
     Reloc = {OffsetRef, Offset, {adr, Temp}},
     % Set thumb bit (LSB = 1) by adding 1 to the 4-byte aligned address
     I2 = jit_armv6m_asm:adds(Temp, Temp, 1),
@@ -2594,41 +2616,42 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     I2 = jit_armv6m_asm:negs(Reg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
-mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    %% Use a literal pool with a branch instruction (branch-over pattern)
-    %% Calculate where literal will be placed (must be word-aligned)
-    %% After LDR (2 bytes) + Branch (2 bytes) = 4 bytes from current position
-    CurrentOffset = StreamModule:offset(Stream0),
-    OffsetAfterInstructions = CurrentOffset + 4,
-    %% Find next word-aligned position for literal
-    LiteralPosition =
-        case OffsetAfterInstructions rem 4 of
-            % Already aligned
-            0 -> OffsetAfterInstructions;
-            % Add 2 bytes padding to align
-            _ -> OffsetAfterInstructions + 2
+mov_immediate(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State, Reg, Val
+) ->
+    LdrInstructionAddr = StreamModule:offset(Stream0),
+    ?ASSERT(byte_size(jit_armv6m_asm:ldr(Reg, {pc, 0})) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<16#FFFF:16>>),
+    State#state{stream = Stream1, literal_pool = [{LdrInstructionAddr, Reg, Val} | LP]}.
+
+flush_literal_pool(#state{literal_pool = []} = State) ->
+    State;
+flush_literal_pool(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
+) ->
+    % Align
+    Offset = StreamModule:offset(Stream0),
+    Stream1 =
+        if
+            Offset rem 4 =:= 0 -> Stream0;
+            true -> StreamModule:append(Stream0, <<0:16>>)
         end,
-    PaddingNeeded = LiteralPosition - OffsetAfterInstructions,
-
-    %% Calculate LDR PC-relative offset
-    %% PC = (current_instruction_address & ~3) + 4
-    LdrInstructionAddr = CurrentOffset,
-    LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
-    LiteralOffset = LiteralPosition - LdrPC,
-
-    %% Generate: ldr rTemp, [pc, #LiteralOffset]  ; Load from literal
-    I1 = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
-    %% Calculate branch offset
-    %% Branch is at CurrentOffset + 2, need to jump past literal
-    BranchPosition = CurrentOffset + 2,
-    % After the 4-byte literal
-    TargetPosition = LiteralPosition + 4,
-    BranchOffset = TargetPosition - BranchPosition,
-    I2 = jit_armv6m_asm:b(BranchOffset),
-    %% Generate padding if needed (just zeros)
-    Padding = <<0:(PaddingNeeded * 8)>>,
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
-    State#state{stream = Stream1}.
+    % Lay all values and update ldr instructions
+    Stream2 = lists:foldl(
+        fun({LdrInstructionAddr, Reg, Val}, AccStream) ->
+            LiteralPosition = StreamModule:offset(AccStream),
+            LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
+            LiteralOffset = LiteralPosition - LdrPC,
+            LdrInstruction = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
+            AccStream1 = StreamModule:append(AccStream, <<Val:32/little>>),
+            StreamModule:replace(
+                AccStream1, LdrInstructionAddr, LdrInstruction
+            )
+        end,
+        Stream1,
+        lists:reverse(LP)
+    ),
+    State#state{stream = Stream2, literal_pool = []}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     (Val >= 0 andalso Val =< 255) orelse is_atom(Val)
@@ -2737,10 +2760,12 @@ decrement_reductions_and_maybe_schedule_next(
     Stream1 = StreamModule:append(Stream0, <<I0/binary, I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
     % Branch if reduction count is not zero
-    I4 = jit_armv6m_asm:bcc(ne, 0),
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(ne, 0)) =:= 2),
+    I4 = <<16#FFFF:16>>,
     % Set continuation to the next instruction
     ADROffset = BNEOffset + byte_size(I4),
-    I5 = jit_armv6m_asm:adr(Temp, 4),
+    ?ASSERT(byte_size(jit_armv6m_asm:adr(Temp, 4) =:= 2)),
+    I5 = <<16#FFFF:16>>,
     I6 = jit_armv6m_asm:adds(Temp, Temp, 1),
     I7 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
     % Append the instructions to the stream
@@ -2873,8 +2898,8 @@ set_cp(State0) ->
     Offset = StreamModule:offset(Stream0),
     % build cp with module_index << 24
     I1 = jit_armv6m_asm:lsls(Reg, Reg, 24),
-    % Emit a single nop as placeholder for offset load instruction
-    I2 = jit_armv6m_asm:nop(),
+    % Placeholder for offset load instruction
+    I2 = <<16#FFFF:16>>,
     MOVOffset = Offset + byte_size(I1),
     % OR the module index with the offset (loaded in temp register)
     I3 = jit_armv6m_asm:orrs(Reg, TempReg),
@@ -3107,5 +3132,34 @@ add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each jump table entry is 12 bytes:
+    % - ldr r3, [pc, 4] (2 bytes) at offset 0
+    % - push {...} (2 bytes) at offset 2
+    % - add pc, r3 (2 bytes) at offset 4
+    % - nop (2 bytes) at offset 6
+    % - data (4 bytes) at offset 8
+    JumpTableEntryStart = JumpTableStart + Label * 12,
+    DataOffset = JumpTableEntryStart + 8,
+    AddInstrOffset = JumpTableEntryStart + 4,
+
+    % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
+    % PC when add instruction executes
+    AddPC = AddInstrOffset + 4,
+    RelativeOffset = LabelOffset - AddPC,
+    DataBytes = <<RelativeOffset:32/little>>,
+
+    Stream1 = StreamModule:replace(Stream0, DataOffset, DataBytes),
+    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.

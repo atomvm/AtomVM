@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -38,6 +39,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -132,6 +134,7 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [aarch64_register()],
     used_regs :: [aarch64_register()],
     labels :: [{integer() | reference(), integer()}],
@@ -231,6 +234,7 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
@@ -257,6 +261,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state (unused on aarch64)
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    State.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
@@ -343,22 +357,21 @@ assert_all_native_free(#state{
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 -spec jump_table0(state(), non_neg_integer(), pos_integer()) -> state().
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
-    Offset = StreamModule:offset(Stream0),
     BranchInstr = jit_aarch64_asm:b(0),
-    Reloc = {N, Offset, b},
     Stream1 = StreamModule:append(Stream0, BranchInstr),
-    jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -530,6 +543,13 @@ jump_to_label(
             Stream1 = StreamModule:append(Stream0, I1),
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
+
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    Rel = TargetOffset - Offset,
+    I1 = jit_aarch64_asm:b(Rel),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
@@ -983,13 +1003,29 @@ merge_used_regs(State, []) ->
 %% @param Shift number of bits to shift
 %% @return new state
 %%-----------------------------------------------------------------------------
--spec shift_right(state(), aarch64_register(), non_neg_integer()) -> state().
-shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Shift) when
+-spec shift_right(#state{}, maybe_free_aarch64_register(), non_neg_integer()) ->
+    {#state{}, aarch64_register()}.
+shift_right(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Shift) when
     ?IS_GPR(Reg) andalso is_integer(Shift)
 ->
     I = jit_aarch64_asm:lsr(Reg, Reg, Shift),
     Stream1 = StreamModule:append(Stream0, I),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+shift_right(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = [ResultReg | T],
+        used_regs = UR
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I = jit_aarch64_asm:lsr(ResultReg, Reg, Shift),
+    Stream1 = StreamModule:append(Stream0, I),
+    {State#state{stream = Stream1, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a shift register left by a fixed number of bits, effectively
@@ -2299,5 +2335,22 @@ add_label(#state{stream_module = StreamModule, stream = Stream} = State, Label) 
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each b instruction is 4 bytes
+    JumpTableEntryOffset = JumpTableStart + Label * 4,
+    RelativeOffset = LabelOffset - JumpTableEntryOffset,
+    BranchInstr = jit_aarch64_asm:b(RelativeOffset),
+    Stream1 = StreamModule:replace(Stream0, JumpTableEntryOffset, BranchInstr),
+    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.

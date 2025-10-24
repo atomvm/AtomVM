@@ -87,9 +87,12 @@ static int app_main()
     if (!avmpack_is_valid(MAIN_AVM, XIP_SRAM_BASE - (uintptr_t) MAIN_AVM)) {
         sleep_ms(5000);
         fprintf(stderr, "Fatal error: invalid main.avm packbeam\n");
+        if (avmpack_is_valid(LIB_AVM, (uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM)) {
+            fprintf(stderr, "Lib avm packbeam is valid, though\n");
+        }
         AVM_ABORT();
     }
-    if (!avmpack_find_section_by_flag(MAIN_AVM, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_find_section_by_flag(MAIN_AVM, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         sleep_ms(5000);
         fprintf(stderr, "Fatal error: Failed to locate start module in main.avm packbeam.  (Did you flash a library by mistake?)");
         AVM_ABORT();

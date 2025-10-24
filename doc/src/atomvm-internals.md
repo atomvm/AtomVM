@@ -137,7 +137,7 @@ Following BEAM, there are two flavors of the emulator: jit and emu, but eventual
 - Native: the VM only runs native code and all code must be precompiled on the desktop using the JIT compiler (which effectively is a AOT or Ahead-of-Time compiler). In this mode, it is not necessary to bundle the jit compiler on the embedded target.
 - Hybrid: the VM can run native code as well as emulated BEAM code and some code is precompiled on the desktop.
 
-JIT is available on some platforms (currently only x86_64 and aarch64) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
+JIT is available on some platforms (currently only x86_64, aarch64 and armv6m) and compiles Erlang bytecode at runtime. Erlang bytecode is never interpreted. EMU is available on all platforms and Erlang bytecode is interpreted.
 
 Modules can include precompiled code in a dedicated beam chunk with name 'avmN'. The chunk can contain native code for several architectures, however it may only contain native code for a given version of the native interface. Current version is 1. This native code is executed by the jit-flavor of the emulator as well as the emu flavor if execution of precompiled is enabled.
 
@@ -157,6 +157,27 @@ JIT compiler is composed of two main interfaces : backend and stream.
 A backend implementation is required for each architecture. The backend is called by jit module as it translates bytecodes to machine code. The current implementations are `jit_x86_64` and `jit_aarch64` which are suitable for systems with System V X86 64 ABI or AArch64 ABI.
 
 A stream implementation is responsible for streaming the machine code, especially in the context of low memory. Two implementations currently exist: `jit_stream_binary` that streams assembly code to an Erlang binary, suitable for tests and precompilation on the desktop, and `jit_stream_mmap` that streams assembly code in an `mmap(2)` allocated page, suitable for JIT compilation on Unix.
+
+### Embedded JIT and Native
+
+On embedded devices, Native mode means the code is precompiled on the desktop and executed natively on the device. This currently works on all ARMv6M devices (Pico and STM32).
+
+The default partition scheme on all platforms is optimized for the Emulated VM which is larger than the JIT or Native VM, and for the Emulated atomvmlib (with no native code for estdlib and no jit library) which is smaller than the JIT atomvmlib (that includes native code for estdlib and jit library).
+
+JIT mode means the Erlang bytecode is compiled to native code directly on the device. This actually is possible on Raspberry Pi Pico by using the flash to store the native code. The first time the code is executed, it is compiled and streamed to flash, and for next runs (including at a future boot), the native code is directly executed.
+
+To achive embedded JIT, it is required to flash the device with the JIT compiler for armv6m which is part of the jit library. This library is quite large, so for Pico boards that come with 2MB of flash, it is required to remove jit modules for other backends. It is also required to change the way code is partitioned.
+
+For example, it is possible to have the following offsets defined in `src/platforms/rp2/src/main.c`:
+
+```
+#define LIB_AVM ((void *) 0x10060000)
+#define MAIN_AVM ((void *) 0x101B0000)
+```
+
+To fit in the lib partition, all networking modules should also be removed (the Pico doesn't have any networking capacity).
+
+After the first run, compiled modules in flash are used unless there is a version mismatch or the application avm or the library avm have been updated on the device. AVM packages end with a section called "end" (0x656E64). When the JIT compiler flashes native code, it changes this name to "END" (0x454E44), by effectively clearing 3 bits in the flash, which is possible without erasing any flash block. Any rewrite of these avm packages will overwrite the section names to "end".
 
 ## The Scheduler
 

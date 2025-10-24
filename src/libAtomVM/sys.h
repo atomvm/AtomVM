@@ -296,6 +296,33 @@ void sys_free_platform(GlobalContext *global);
  */
 ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset);
 
+/**
+ * @brief Get the cache (typically on flash) of native code for a given module
+ *
+ * @details If module is found in cache, return a pointer to the entry point.
+ * Only implemented on platforms with JIT. Implementations on flash typically
+ * check if the jit cache is valid (for lib or for app) and use the pointer to
+ * code as a key.
+ * @param global the global context
+ * @param mod module to return the cache native code for
+ * @param version version of the cache entry (for compatibility with the VM)
+ * @param entry_point entry point to the module, if found
+ * @param labels number of labels
+ * @return \c true if the cache entry was found
+ */
+bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *version, ModuleNativeEntryPoint *entry_point, uint32_t *labels);
+
+/**
+ * @brief Add native code to cache for a given module
+ *
+ * @param global the global context
+ * @param mod module to add the native code for
+ * @param version version of the native code
+ * @param entry_point entry point to the module
+ * @param labels number of labels
+ */
+void sys_set_cache_native_code(GlobalContext *global, Module *mod, uint16_t version, ModuleNativeEntryPoint entry_point, uint32_t labels);
+
 #ifdef __cplusplus
 }
 #endif

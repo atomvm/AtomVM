@@ -59,7 +59,7 @@ static int load_module(const char *path)
             const void *startup_beam = NULL;
             uint32_t startup_beam_size;
             const char *startup_module_name;
-            avmpack_find_section_by_flag(avmpack_data->data, 1, &startup_beam, &startup_beam_size, &startup_module_name);
+            avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name);
             if (startup_beam) {
                 avmpack_data->in_use = true;
                 main_module = module_new_from_iff_binary(global, startup_beam, startup_beam_size);
