@@ -70,6 +70,9 @@ typedef enum
 
 typedef uint32_t intn_digit_t;
 
+// Uncomment this for debug
+// void print_num(const intn_digit_t num[], int len);
+
 int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
 
 size_t intn_addmnu(
@@ -90,14 +93,34 @@ size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
 
 size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
+static inline intn_integer_sign_t intn_muldiv_sign(intn_integer_sign_t s1, intn_integer_sign_t s2)
+{
+    return (intn_integer_sign_t) ((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger;
+}
+
 void intn_mulmnu(
-    const intn_digit_t u[], size_t m, const intn_digit_t v[], size_t n, intn_digit_t w[]);
+    const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len, intn_digit_t out[]);
+
+static inline void intn_mulmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
+    intn_integer_sign_t *out_sign)
+{
+    *out_sign = intn_muldiv_sign(m_sign, n_sign);
+    intn_mulmnu(m, m_len, n, n_len, out);
+}
+
 void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
 size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
     intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len);
 
-void print_num(const uint32_t num[], int len);
+static inline size_t intn_divmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t q_out[],
+    intn_integer_sign_t *qout_sign, intn_digit_t r_out[], size_t *r_out_len)
+{
+    *qout_sign = intn_muldiv_sign(m_sign, n_sign);
+    return intn_divmnu(m, m_len, n, n_len, q_out, r_out, r_out_len);
+}
 
 size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
@@ -114,10 +137,10 @@ size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_s
 size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     intn_digit_t out[], intn_integer_sign_t *out_sign);
 
-size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out);
+size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *out);
 
 size_t intn_bsr(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out);
+    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, intn_digit_t *out);
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
 
@@ -149,7 +172,7 @@ static inline void intn_copy(
     memset(out + num_len, 0, (extend_to - num_len) * sizeof(intn_digit_t));
 }
 
-static inline void intn_u64_to_digits(uint64_t absu64, uint32_t out[])
+static inline void intn_u64_to_digits(uint64_t absu64, intn_digit_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     memcpy(out, &absu64, sizeof(absu64));
@@ -162,7 +185,7 @@ static inline void intn_u64_to_digits(uint64_t absu64, uint32_t out[])
 #endif
 }
 
-static inline void int64_to_intn_2(int64_t i64, uint32_t out[], intn_integer_sign_t *out_sign)
+static inline void int64_to_intn_2(int64_t i64, intn_digit_t out[], intn_integer_sign_t *out_sign)
 {
     bool is_negative;
     uint64_t absu64 = int64_safe_unsigned_abs_set_flag(i64, &is_negative);
@@ -210,11 +233,6 @@ static inline bool intn_fits_int64(const intn_digit_t num[], size_t len, intn_in
         return !uint64_does_overflow_int64(u64, sign == IntNNegativeInteger);
     }
     return false;
-}
-
-static inline intn_integer_sign_t intn_muldiv_sign(intn_integer_sign_t s1, intn_integer_sign_t s2)
-{
-    return (intn_integer_sign_t) ((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger;
 }
 
 #endif

@@ -38,6 +38,16 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+/* Uncomment this for debug:
+void print_num(const intn_digit_t num[], int len)
+{
+    for (int i = 0; i < len; i++) {
+        fprintf(stderr, "0x%x ", (unsigned int) num[i]);
+    }
+    fprintf(stderr, "\n");
+}
+*/
+
 static size_t neg_and_count_in_place(intn_digit_t out[], size_t len);
 
 static inline size_t pad_uint16_to_digits(uint16_t n16[], size_t n16_len)
@@ -117,9 +127,9 @@ static void mulmnu32(const uint32_t u[], size_t m, const uint32_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
-    mulmnu32(u, m, v, n, w);
+    mulmnu32(m, m_len, n, n_len, out);
 }
 
 #else
@@ -170,10 +180,10 @@ static void mulmnu16(const uint16_t u[], size_t m, const uint16_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t u[], size_t m, const uint32_t v[], size_t n, uint32_t w[])
+void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    mulmnu16((const uint16_t *) u, m * 2, (const uint16_t *) v, n * 2, (uint16_t *) w);
+    mulmnu16((const uint16_t *) m, m_len * 2, (const uint16_t *) n, n_len * 2, (uint16_t *) out);
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #error "Big endian not yet supported"
 #else
@@ -427,14 +437,6 @@ size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[],
     }
 
     return padded_q_len / UINT16_IN_A_DIGIT;
-}
-
-void print_num(const uint32_t num[], int len)
-{
-    for (int i = 0; i < len; i++) {
-        fprintf(stderr, "0x%x ", (unsigned int) num[i]);
-    }
-    fprintf(stderr, "\n");
 }
 
 // This function assumes no leading zeros (lenght is used in comparison)
@@ -787,7 +789,7 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
     return res_count;
 }
 
-size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, uint32_t *out)
+size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
 
@@ -864,7 +866,7 @@ void bsru(
 }
 
 size_t intn_bsr(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, uint32_t *out)
+    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, intn_digit_t *out)
 {
     size_t digit_bit_size = sizeof(uint32_t) * 8;
     size_t counted_digits = intn_count_digits(num, len);
