@@ -830,7 +830,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
 
         return bigres_term;
     } else {
-        int64_t res64 = intn_2_digits_to_int64(bigres, count, sign);
+        int64_t res64 = intn_to_int64(bigres, count, sign);
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
         return make_maybe_boxed_int64(ctx, fail_label, live, res64);
 #else
@@ -849,7 +849,7 @@ static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t
         *b1_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
     } else {
         avm_int64_t i64 = term_maybe_unbox_int64(arg1);
-        int64_to_intn_2(i64, tmp_buf1, b1_sign);
+        intn_from_int64(i64, tmp_buf1, b1_sign);
         *b1 = tmp_buf1;
         *b1_len = INTN_INT64_LEN;
     }
@@ -1063,7 +1063,7 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 static term int64_max_plus_one(Context *ctx, uint32_t fail_label, uint32_t live)
 {
     intn_digit_t int_buf[INTN_UINT64_LEN];
-    intn_u64_to_digits(((uint64_t) INT64_MAX) + 1, int_buf);
+    intn_from_uint64(((uint64_t) INT64_MAX) + 1, int_buf);
     return make_bigint(ctx, fail_label, live, int_buf, INTN_UINT64_LEN, IntNPositiveInteger);
 }
 

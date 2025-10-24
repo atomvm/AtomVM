@@ -192,10 +192,10 @@ void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_
 {
     intn_digit_t u[2];
     intn_integer_sign_t u_sign;
-    int64_to_intn_2(num1, u, &u_sign);
+    intn_from_int64(num1, u, &u_sign);
     intn_digit_t v[2];
     intn_integer_sign_t v_sign;
-    int64_to_intn_2(num2, v, &v_sign);
+    intn_from_int64(num2, v, &v_sign);
 
     *out_sign = intn_muldiv_sign(u_sign, v_sign);
     intn_mulmnu(u, 2, v, 2, (uint32_t *) out);
@@ -539,10 +539,10 @@ size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_intege
 {
     intn_digit_t u[2];
     intn_integer_sign_t u_sign;
-    int64_to_intn_2(num1, u, &u_sign);
+    intn_from_int64(num1, u, &u_sign);
     intn_digit_t v[2];
     intn_integer_sign_t v_sign;
-    int64_to_intn_2(num2, v, &v_sign);
+    intn_from_int64(num2, v, &v_sign);
 
     return intn_addmn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
@@ -583,10 +583,10 @@ size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_intege
 {
     intn_digit_t u[2];
     intn_integer_sign_t u_sign;
-    int64_to_intn_2(num1, u, &u_sign);
+    intn_from_int64(num1, u, &u_sign);
     intn_digit_t v[2];
     intn_integer_sign_t v_sign;
-    int64_to_intn_2(num2, v, &v_sign);
+    intn_from_int64(num2, v, &v_sign);
 
     return intn_submn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
@@ -1125,7 +1125,7 @@ int intn_parse(
 
         intn_integer_sign_t ignored_sign;
         intn_digit_t parsed_as_intn[2];
-        int64_to_intn_2(parsed_chunk, parsed_as_intn, &ignored_sign);
+        intn_from_int64(parsed_chunk, parsed_as_intn, &ignored_sign);
 
         out_len = intn_addmnu(new_out, new_out_len, parsed_as_intn, 2, out);
         if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {

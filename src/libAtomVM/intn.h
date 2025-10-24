@@ -178,7 +178,7 @@ static inline void intn_copy(
     memset(out + num_len, 0, (extend_to - num_len) * sizeof(intn_digit_t));
 }
 
-static inline void intn_u64_to_digits(uint64_t absu64, intn_digit_t out[])
+static inline void intn_from_uint64(uint64_t absu64, intn_digit_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     memcpy(out, &absu64, sizeof(absu64));
@@ -191,15 +191,15 @@ static inline void intn_u64_to_digits(uint64_t absu64, intn_digit_t out[])
 #endif
 }
 
-static inline void int64_to_intn_2(int64_t i64, intn_digit_t out[], intn_integer_sign_t *out_sign)
+static inline void intn_from_int64(int64_t i64, intn_digit_t out[], intn_integer_sign_t *out_sign)
 {
     bool is_negative;
     uint64_t absu64 = int64_safe_unsigned_abs_set_flag(i64, &is_negative);
     *out_sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
-    intn_u64_to_digits(absu64, out);
+    intn_from_uint64(absu64, out);
 }
 
-static inline uint64_t intn_digits_to_u64(const intn_digit_t num[])
+static inline uint64_t intn_to_uint64(const intn_digit_t num[])
 {
     uint64_t utmp;
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -213,8 +213,7 @@ static inline uint64_t intn_digits_to_u64(const intn_digit_t num[])
     return utmp;
 }
 
-static inline int64_t intn_2_digits_to_int64(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t sign)
+static inline int64_t intn_to_int64(const intn_digit_t num[], size_t len, intn_integer_sign_t sign)
 {
     switch (len) {
         case 0:
@@ -222,7 +221,7 @@ static inline int64_t intn_2_digits_to_int64(
         case 1:
             return int64_cond_neg_unsigned(sign == IntNNegativeInteger, num[0]);
         case 2: {
-            uint64_t utmp = intn_digits_to_u64(num);
+            uint64_t utmp = intn_to_uint64(num);
             return int64_cond_neg_unsigned(sign == IntNNegativeInteger, utmp);
         }
         default:
@@ -235,7 +234,7 @@ static inline bool intn_fits_int64(const intn_digit_t num[], size_t len, intn_in
     if (len < INTN_INT64_LEN) {
         return true;
     } else if (len == INTN_INT64_LEN) {
-        uint64_t u64 = intn_digits_to_u64(num);
+        uint64_t u64 = intn_to_uint64(num);
         return !uint64_does_overflow_int64(u64, sign == IntNNegativeInteger);
     }
     return false;
