@@ -893,6 +893,37 @@ call_only_or_schedule_next_and_label_relocation_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_only_or_schedule_next_known_label_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:add_label(State2, 2, 16#2a),
+    State4 = ?BACKEND:call_only_or_schedule_next(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
+    Dump =
+        <<
+            "   0:	e9 2a 00 00 00       	jmpq   0x2f\n"
+            "   5:	e9 05 00 00 00       	jmpq   0xf\n"
+            "   a:	e9 1b 00 00 00       	jmpq   0x2a\n"
+            "   f:	ff 4e 10             	decl   0x10(%rsi)\n"
+            "  12:	74 05                	je     0x19\n"
+            "  14:	e9 11 00 00 00       	jmpq   0x2a\n"
+            "  19:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x2a\n"
+            "  20:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+            "  24:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
+            "  28:	ff e0                	jmpq   *%rax\n"
+            "  2a:	48 8b 02             	mov    (%rdx),%rax\n"
+            "  2d:	ff e0                	jmpq   *%rax\n"
+            "  2f:	48 8b 42 08          	mov    0x8(%rdx),%rax\n"
+            "  33:	ff e0                	jmpq   *%rax\n"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, FuncPtr} = ?BACKEND:call_primitive(State0, 8, [jit_state, 2]),
@@ -1604,6 +1635,62 @@ jump_to_continuation_test() ->
             "   0:	48 8d 05 f9 ff ff ff 	lea    -0x7(%rip),%rax\n"
             "   7:	48 01 c0             	add    %rax,%rax\n"
             "   a:	ff e0                	jmpq   *%rax"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test set_continuation_to_label with unknown label
+wait_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:set_continuation_to_label(State2, Label),
+    State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	e9 ff ff ff ff       	jmpq   0x4\n"
+            "   5:	e9 14 00 00 00       	jmpq   0x1e\n"
+            "   a:	e9 f1 00 00 00       	jmpq   0x100\n"
+            "   f:	e9 ff ff ff ff       	jmpq   0x13\n"
+            "  14:	e9 ff ff ff ff       	jmpq   0x18\n"
+            "  19:	e9 ff ff ff ff       	jmpq   0x1d\n"
+            "  1e:	48 8d 05 db 00 00 00 	lea    0xdb(%rip),%rax\n"
+            "  25:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+            "  29:	48 8b 82 e8 00 00 00 	mov    0xe8(%rdx),%rax\n"
+            "  30:	ff e0                	jmpq   *%rax"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test set_continuation_to_label with known label
+wait_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:add_label(State2, Label, 16#100),
+    State4 = ?BACKEND:set_continuation_to_label(State3, Label),
+    State5 = ?BACKEND:call_primitive_last(State4, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State6 = ?BACKEND:update_branches(State5),
+
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	e9 ff ff ff ff       	jmpq   0x4\n"
+            "   5:	e9 14 00 00 00       	jmpq   0x1e\n"
+            "   a:	e9 f1 00 00 00       	jmpq   0x100\n"
+            "   f:	e9 ff ff ff ff       	jmpq   0x13\n"
+            "  14:	e9 ff ff ff ff       	jmpq   0x18\n"
+            "  19:	e9 ff ff ff ff       	jmpq   0x1d\n"
+            "  1e:	48 8d 05 db 00 00 00 	lea    0xdb(%rip),%rax\n"
+            "  25:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+            "  29:	48 8b 82 e8 00 00 00 	mov    0xe8(%rdx),%rax\n"
+            "  30:	ff e0                	jmpq   *%rax"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 

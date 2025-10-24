@@ -2373,23 +2373,32 @@ set_continuation_to_label(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = [Temp | _],
-        branches = Branches
+        branches = Branches,
+        labels = Labels
     } = State,
     Label
 ) ->
-    % Similar to AArch64: use pc_relative_address with a relocation that will be
-    % resolved to point directly to the label's actual address (not the jump table entry)
     Offset = StreamModule:offset(Stream0),
-    % Emit placeholder for pc_relative_address (auipc + addi)
-    % Reserve 8 bytes (2 x 32-bit instructions) with all-1s placeholder for flash programming
-    % The relocation will replace these with the correct offset
-    I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
-    Reloc = {Label, Offset, {adr, Temp}},
-    % Store continuation (jit_state is in a1)
-    I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | Branches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct pc-relative address without relocation
+            Rel = LabelOffset - Offset,
+            I1 = pc_relative_address(Temp, Rel),
+            I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            % Reserve 8 bytes (2 x 32-bit instructions) with all-1s placeholder for flash programming
+            % The relocation will replace these with the correct offset
+            I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
+            Reloc = {Label, Offset, {adr, Temp}},
+            I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1, branches = [Reloc | Branches]}
+    end.
 
 %% @doc Set the contination to a given offset
 %% Return a reference so the offset will be updated with update_branches
