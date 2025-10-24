@@ -560,7 +560,7 @@ jobs:
       working-directory: build
       run: |
         ulimit -c unlimited
-        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_etest.avm"
       timeout-minutes: 5

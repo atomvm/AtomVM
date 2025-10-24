@@ -35,7 +35,10 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      run: sudo apt install -y build-essential cmake gperf zlib1g-dev libmbedtls-dev valgrind
+      run: |
+        sudo apt install -y build-essential cmake gperf zlib1g-dev libmbedtls-dev
+        # Get a more recent valgrind
+        sudo snap install valgrind --classic
 
     # Builder info
     - name: "System info"
@@ -71,25 +74,40 @@ jobs:
       working-directory: build
       run: make dialyzer
 
+    - name: "Test: test_alisp.avm with valgrind"
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/etest/test_alisp.avm
+
     - name: "Test: test_alisp.avm"
       timeout-minutes: 5
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/etest/test_alisp.avm
-        valgrind ./src/AtomVM ./tests/libs/etest/test_alisp.avm
+
+    - name: "Test: test_etest.avm with valgrind"
+      timeout-minutes: 5
+      working-directory: build
+      run: |
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/etest/test_etest.avm
 
     - name: "Test: test_etest.avm"
       timeout-minutes: 5
       working-directory: build
       run: |
         ./src/AtomVM ./tests/libs/etest/test_etest.avm
-        valgrind ./src/AtomVM ./tests/libs/etest/test_etest.avm
+
+    - name: "Test: test_estdlib.avm with valgrind"
+      timeout-minutes: 10
+      working-directory: build
+      run: |
+        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Test: test_estdlib.avm"
       timeout-minutes: 10
       working-directory: build
       run: |
-        valgrind --error-exitcode=1 ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
         ./src/AtomVM ./tests/libs/estdlib/test_estdlib.avm
 
     - name: "Rename and write sha256sum"
