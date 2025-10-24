@@ -568,7 +568,7 @@ static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    bigres_len = intn_addmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    bigres_len = intn_add(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -706,7 +706,7 @@ static term sub_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    bigres_len = intn_submn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    bigres_len = intn_sub(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -887,7 +887,7 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    intn_mulmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    intn_mul(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -1055,7 +1055,7 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    size_t bigres_len = intn_divmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign, NULL, NULL);
+    size_t bigres_len = intn_div(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign, NULL, NULL);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -1377,7 +1377,7 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t q[INTN_MAX_RES_LEN];
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     size_t bigres_len;
-    intn_divmnu(bn1, bn1_len, bn2, bn2_len, q, bigres, &bigres_len);
+    intn_divu(bn1, bn1_len, bn2, bn2_len, q, bigres, &bigres_len);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, bn1_sign);
 }
@@ -1649,7 +1649,7 @@ term bif_erlang_bor_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 | arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bormn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bor);
     }
 }
 
@@ -1663,7 +1663,7 @@ term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_bandmn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_band);
     }
 }
 
@@ -1677,7 +1677,7 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxormn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxor);
     }
 }
 

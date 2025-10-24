@@ -76,19 +76,19 @@ typedef uint32_t intn_digit_t;
 
 int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
 
-size_t intn_addmnu(
+size_t intn_addu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
 
-size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_add(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
 size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
-size_t intn_submnu(
+size_t intn_subu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[]);
 
-size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_sub(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
@@ -99,39 +99,39 @@ static inline intn_integer_sign_t intn_muldiv_sign(intn_integer_sign_t s1, intn_
     return (intn_integer_sign_t) ((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger;
 }
 
-void intn_mulmnu(
+void intn_mulu(
     const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len, intn_digit_t out[]);
 
-static inline void intn_mulmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+static inline void intn_mul(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
     *out_sign = intn_muldiv_sign(m_sign, n_sign);
-    intn_mulmnu(m, m_len, n, n_len, out);
+    intn_mulu(m, m_len, n, n_len, out);
 }
 
 void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign);
 
-size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
+size_t intn_divu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
     intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len);
 
-static inline size_t intn_divmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+static inline size_t intn_div(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t q_out[],
     intn_integer_sign_t *qout_sign, intn_digit_t r_out[], size_t *r_out_len)
 {
     *qout_sign = intn_muldiv_sign(m_sign, n_sign);
-    return intn_divmnu(m, m_len, n, n_len, q_out, r_out, r_out_len);
+    return intn_divu(m, m_len, n, n_len, q_out, r_out, r_out_len);
 }
 
-size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_bor(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
-size_t intn_bandmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_band(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
-size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_bxor(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign);
 
@@ -140,8 +140,8 @@ size_t intn_bnot(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sig
 
 size_t intn_bsl(const intn_digit_t num[], size_t len, size_t n, intn_digit_t *out);
 
-size_t intn_bsr(
-    const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n, intn_digit_t *out);
+size_t intn_bsr(const intn_digit_t num[], size_t len, intn_integer_sign_t num_sign, size_t n,
+    intn_digit_t *out);
 
 size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
 

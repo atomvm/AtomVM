@@ -122,7 +122,7 @@ static void mulmnu32(const uint32_t u[], size_t m, const uint32_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
+void intn_mulu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
     mulmnu32(m, m_len, n, n_len, out);
 }
@@ -175,7 +175,7 @@ static void mulmnu16(const uint16_t u[], size_t m, const uint16_t v[], size_t n,
     */
 }
 
-void intn_mulmnu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
+void intn_mulu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     mulmnu16((const uint16_t *) m, m_len * 2, (const uint16_t *) n, n_len * 2, (uint16_t *) out);
@@ -198,7 +198,7 @@ void intn_mul_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_
     intn_from_int64(num2, v, &v_sign);
 
     *out_sign = intn_muldiv_sign(u_sign, v_sign);
-    intn_mulmnu(u, 2, v, 2, (uint32_t *) out);
+    intn_mulu(u, 2, v, 2, (uint32_t *) out);
 }
 
 /*
@@ -384,7 +384,7 @@ static void big_endian_uint16_to_digit_in_place(uint16_t num16[], size_t len16)
 }
 #endif
 
-size_t intn_divmnu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
+size_t intn_divu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], size_t n_len,
     intn_digit_t q_out[], intn_digit_t r_out[], size_t *r_out_len)
 {
     uint16_t *u;
@@ -458,7 +458,7 @@ int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_
     return 0;
 }
 
-size_t intn_addmnu(
+size_t intn_addu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
 {
     size_t n = MIN(a_len, b_len);
@@ -502,7 +502,7 @@ size_t intn_addmnu(
     return i;
 }
 
-size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_add(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
@@ -511,7 +511,7 @@ size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
     // Case 1: Same sign - add magnitudes, keep sign
     if (m_sign == n_sign) {
         *out_sign = m_sign;
-        result_len = intn_addmnu(m, m_len, n, n_len, out);
+        result_len = intn_addu(m, m_len, n, n_len, out);
     }
     // Case 2: Different signs - subtract smaller from larger
     else {
@@ -519,11 +519,11 @@ size_t intn_addmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_si
         if (cmp >= 0) {
             // |m| >= |n|, result takes sign of m
             *out_sign = m_sign;
-            result_len = intn_submnu(m, m_len, n, n_len, out);
+            result_len = intn_subu(m, m_len, n, n_len, out);
         } else {
             // |m| < |n|, result takes sign of n
             *out_sign = n_sign;
-            result_len = intn_submnu(n, n_len, m, m_len, out);
+            result_len = intn_subu(n, n_len, m, m_len, out);
         }
     }
 
@@ -544,12 +544,12 @@ size_t intn_add_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_intege
     intn_integer_sign_t v_sign;
     intn_from_int64(num2, v, &v_sign);
 
-    return intn_addmn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
+    return intn_add(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
 
 // This function assumes a >= b
 // Caller must ensure this precondition
-size_t intn_submnu(
+size_t intn_subu(
     const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len, intn_digit_t out[])
 {
     uint32_t borrow = 0;
@@ -570,13 +570,13 @@ size_t intn_submnu(
     return i;
 }
 
-size_t intn_submn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_sub(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
     // m - n = m + (-n)
     // Just flip the sign of n and call addition
-    return intn_addmn(m, m_len, m_sign, n, n_len, intn_negate_sign(n_sign), out, out_sign);
+    return intn_add(m, m_len, m_sign, n, n_len, intn_negate_sign(n_sign), out, out_sign);
 }
 
 size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_integer_sign_t *out_sign)
@@ -588,7 +588,7 @@ size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_intege
     intn_integer_sign_t v_sign;
     intn_from_int64(num2, v, &v_sign);
 
-    return intn_submn(u, 2, u_sign, v, 2, v_sign, out, out_sign);
+    return intn_sub(u, 2, u_sign, v, 2, v_sign, out, out_sign);
 }
 
 static void neg(const intn_digit_t in[], size_t in_len, intn_digit_t out[])
@@ -692,7 +692,7 @@ static inline intn_digit_t digit_bor(intn_digit_t a, intn_digit_t b)
     return a | b;
 }
 
-size_t intn_bormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_bor(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
@@ -719,7 +719,7 @@ static inline intn_digit_t digit_band(intn_digit_t a, intn_digit_t b)
     return a & b;
 }
 
-size_t intn_bandmn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_band(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
@@ -746,7 +746,7 @@ static inline intn_digit_t digit_bxor(intn_digit_t a, intn_digit_t b)
     return a ^ b;
 }
 
-size_t intn_bxormn(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+size_t intn_bxor(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
     const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign, intn_digit_t out[],
     intn_integer_sign_t *out_sign)
 {
@@ -1113,7 +1113,7 @@ int intn_parse(
             intn_digit_t mult[2];
             ipow(base, parsed_digits, mult);
             // TODO: check overflows
-            intn_mulmnu(out, out_len, mult, 2, new_out);
+            intn_mulu(out, out_len, mult, 2, new_out);
             new_out_len = MAX(2, intn_count_digits(new_out, INTN_MUL_OUT_LEN(out_len, 2)));
             if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
                 assert(out_len <= INTN_MAX_RES_LEN);
@@ -1127,7 +1127,7 @@ int intn_parse(
         intn_digit_t parsed_as_intn[2];
         intn_from_int64(parsed_chunk, parsed_as_intn, &ignored_sign);
 
-        out_len = intn_addmnu(new_out, new_out_len, parsed_as_intn, 2, out);
+        out_len = intn_addu(new_out, new_out_len, parsed_as_intn, 2, out);
         if (UNLIKELY(out_len > INTN_MAX_IN_LEN)) {
             assert(out_len <= INTN_MAX_RES_LEN);
             // we are above the allowed 256 bits, so it is going to be overflow
