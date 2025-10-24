@@ -115,6 +115,7 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [x86_64_register()],
     used_regs :: [x86_64_register()],
     labels :: [{integer() | reference(), integer()}],
@@ -218,6 +219,7 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
@@ -340,21 +342,21 @@ assert_all_native_free(State) ->
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
-    Offset = StreamModule:offset(Stream0),
-    {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
-    Reloc = {N, Offset + RelocOffset, 32},
+    % Placeholder, encodes with 0xffffffff
+    {_RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(4),
     Stream1 = StreamModule:append(Stream0, I1),
-    jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -2086,5 +2088,22 @@ add_label(#state{stream_module = StreamModule, stream = Stream} = State, Label) 
     add_label(State, Label, Offset).
 
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each jmp_rel32 instruction is 5 bytes
+    JumpTableEntryOffset = JumpTableStart + Label * 5,
+    RelativeOffset = LabelOffset - JumpTableEntryOffset,
+    {_RelocOffset, JmpInstruction} = jit_x86_64_asm:jmp_rel32(RelativeOffset),
+    Stream1 = StreamModule:replace(Stream0, JumpTableEntryOffset, JmpInstruction),
+    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.

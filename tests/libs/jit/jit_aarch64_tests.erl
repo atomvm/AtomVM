@@ -1012,11 +1012,12 @@ get_list_test() ->
 
 is_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
     Arg1 = {x_reg, 0},
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
-    State2 = ?BACKEND:if_block(
-        State1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(MSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, Arg1),
+    State3 = ?BACKEND:if_block(
+        State2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(MSt0) ->
             MSt1 = ?BACKEND:if_block(
                 MSt0, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BSt0) ->
                     ?BACKEND:jump_to_label(BSt0, Label)
@@ -1033,27 +1034,29 @@ is_integer_test() ->
             )
         end
     ),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    Offset = ?BACKEND:offset(State4),
+    State5 = ?BACKEND:add_label(State4, Label, Offset + 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	92400ce8 	and	x8, x7, #0xf\n"
-        "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	54000160 	b.eq	0x38  // b.none\n"
-        "  10:	924004e8 	and	x8, x7, #0x3\n"
-        "  14:	f100091f 	cmp	x8, #0x2\n"
-        "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	14000047 	b	0x138\n"
-        "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e7 	and	x7, x7, #0x3f\n"
-        "  2c:	f10020ff 	cmp	x7, #0x8\n"
-        "  30:	54000040 	b.eq	0x38  // b.none\n"
-        "  34:	14000041 	b	0x138"
+        "   0:	14000000 	b	0x0\n"
+        "   4:	1400004f 	b	0x140\n"
+        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   c:	92400ce8 	and	x8, x7, #0xf\n"
+        "  10:	f1003d1f 	cmp	x8, #0xf\n"
+        "  14:	54000160 	b.eq	0x40\n"
+        "  18:	924004e8 	and	x8, x7, #0x3\n"
+        "  1c:	f100091f 	cmp	x8, #0x2\n"
+        "  20:	54000040 	b.eq	0x28\n"
+        "  24:	14000047 	b	0x140\n"
+        "  28:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
+        "  2c:	f94000e7 	ldr	x7, [x7]\n"
+        "  30:	924014e7 	and	x7, x7, #0x3f\n"
+        "  34:	f10020ff 	cmp	x7, #0x8\n"
+        "  38:	54000040 	b.eq	0x40\n"
+        "  3c:	14000041 	b	0x140"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1064,11 +1067,12 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
 
 is_number_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
     Arg1 = {x_reg, 0},
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
-    State2 = ?BACKEND:if_block(
-        State1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, Arg1),
+    State3 = ?BACKEND:if_block(
+        State2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
             BSt1 = cond_jump_to_label(
                 {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, ?BACKEND, BSt0
             ),
@@ -1085,56 +1089,60 @@ is_number_test() ->
             )
         end
     ),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    Offset = ?BACKEND:offset(State4),
+    State5 = ?BACKEND:add_label(State4, Label, Offset + 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	92400ce8 	and	x8, x7, #0xf\n"
-        "   8:	f1003d1f 	cmp	x8, #0xf\n"
-        "   c:	540001c0 	b.eq	0x44  // b.none\n"
-        "  10:	924004e8 	and	x8, x7, #0x3\n"
-        "  14:	f100091f 	cmp	x8, #0x2\n"
-        "  18:	54000040 	b.eq	0x20  // b.none\n"
-        "  1c:	1400004a 	b	0x144\n"
-        "  20:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
-        "  24:	f94000e7 	ldr	x7, [x7]\n"
-        "  28:	924014e8 	and	x8, x7, #0x3f\n"
-        "  2c:	f100211f 	cmp	x8, #0x8\n"
-        "  30:	540000a0 	b.eq	0x44  // b.none\n"
-        "  34:	924014e7 	and	x7, x7, #0x3f\n"
-        "  38:	f10060ff 	cmp	x7, #0x18\n"
-        "  3c:	54000040 	b.eq	0x44  // b.none\n"
-        "  40:	14000041 	b	0x144"
+        "   0:	14000000 	b	0x0\n"
+        "   4:	14000052 	b	0x14c\n"
+        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   c:	92400ce8 	and	x8, x7, #0xf\n"
+        "  10:	f1003d1f 	cmp	x8, #0xf\n"
+        "  14:	540001c0 	b.eq	0x4c\n"
+        "  18:	924004e8 	and	x8, x7, #0x3\n"
+        "  1c:	f100091f 	cmp	x8, #0x2\n"
+        "  20:	54000040 	b.eq	0x28\n"
+        "  24:	1400004a 	b	0x14c\n"
+        "  28:	927ef4e7 	and	x7, x7, #0xfffffffffffffffc\n"
+        "  2c:	f94000e7 	ldr	x7, [x7]\n"
+        "  30:	924014e8 	and	x8, x7, #0x3f\n"
+        "  34:	f100211f 	cmp	x8, #0x8\n"
+        "  38:	540000a0 	b.eq	0x4c\n"
+        "  3c:	924014e7 	and	x7, x7, #0x3f\n"
+        "  40:	f10060ff 	cmp	x7, #0x18\n"
+        "  44:	54000040 	b.eq	0x4c\n"
+        "  48:	14000041 	b	0x14c"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
             ?BACKEND:jump_to_label(BSt1, Label)
         end)
     end),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    Offset = ?BACKEND:offset(State3),
-    State4 = ?BACKEND:add_label(State3, Label, Offset + 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
-    Offset = ?BACKEND:offset(State3),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    Offset = ?BACKEND:offset(State4),
+    State5 = ?BACKEND:add_label(State4, Label, Offset + 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
-        "   4:	f1012cff 	cmp	x7, #0x4b\n"
-        "   8:	54000080 	b.eq	0x18  // b.none\n"
-        "   c:	f1002cff 	cmp	x7, #0xb\n"
-        "  10:	54000040 	b.eq	0x18  // b.none\n"
-        "  14:	14000041 	b	0x118"
+        "   0:	14000000 	b	0x0\n"
+        "   4:	14000047 	b	0x120\n"
+        "   8:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   c:	f1012cff 	cmp	x7, #0x4b\n"
+        "  10:	54000080 	b.eq	0x20\n"
+        "  14:	f1002cff 	cmp	x7, #0xb\n"
+        "  18:	54000040 	b.eq	0x20\n"
+        "  1c:	14000041 	b	0x120"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1211,7 +1219,7 @@ wait_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump = <<
         "   0:	14000000 	b	0x0\n"
-        "   4:	14000000 	b	0x4\n"
+        "   4:	14000005 	b	0x18\n"
         "   8:	14000000 	b	0x8\n"
         "   c:	14000000 	b	0xc\n"
         "  10:	14000000 	b	0x10\n"
@@ -1225,34 +1233,34 @@ wait_test() ->
 
 return_labels_and_lines_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
 
     % Test return_labels_and_lines with some sample labels and lines
-    State1 = ?BACKEND:add_label(State0, 2, 32),
     State2 = ?BACKEND:add_label(State1, 1, 16),
-
     % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
-    Stream = ?BACKEND:stream(State3),
+    State3 = ?BACKEND:add_label(State2, 0),
 
-    % Should have generated adr + ret + labels table + lines table
-    % adr = 4 bytes, ret = 4 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
-    % Total minimum: 36 bytes
-    ?assert(byte_size(Stream) >= 36),
+    State4 = ?BACKEND:return_labels_and_lines(State3, SortedLines),
+    State5 = ?BACKEND:update_branches(State4),
+    Stream = ?BACKEND:stream(State5),
 
-    % Expected: adr x0, #8 + ret + labels table + lines table
-    % The data tables start at offset 0x8, so we load PC + 8 into x0
+    ?assert(byte_size(Stream) >= 44),
+
     Dump = <<
-        "   0:	10000040 	adr	x0, 0x8\n"
-        "   4:	d65f03c0 	ret\n"
-        "   8:	01000200 	.word	0x01000200\n"
-        "   c:	10000000 	adr	x0, 0xc\n"
-        "  10:	00000200 	.word	0x00000200\n"
-        "  14:	02002000 	.word	0x02002000\n"
-        "  18:	00000a00 	.word	0x00000a00\n"
-        "  1c:	14001000 	.word	0x14001000\n"
-        "  20:	20000000 	.word	0x20000000"
+        "   0:	14000003 	b	0xc\n"
+        "   4:	14000003 	b	0x10\n"
+        "   8:	14000000 	b	0x8\n"
+        "   c:	10000040 	adr	x0, 0x14\n"
+        "  10:	d65f03c0 	ret\n"
+        "  14:	00000200 	.inst	0x00000200\n"
+        "  18:	0c000000 	st4	{v0.8b-v3.8b}, [x0]\n"
+        "  1c:	00000100 	.inst	0x00000100\n"
+        "  20:	02001000 	.inst	0x02001000\n"
+        "  24:	00000a00 	.inst	0x00000a00\n"
+        "  28:	14001000 	b	0x4028\n"
+        "  2c:	20000000 	.inst	0x20000000"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1809,8 +1817,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(7, State1, [r8, r9]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
+                    State2 = setelement(8, State1, [r8, r9]),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -1823,8 +1831,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
-                    State2 = setelement(7, State1, [r8, r9]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [r8, r9]),
+                    State2 = setelement(8, State1, [r8, r9]),
                     [r8, r9] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, r8, r9, 1),
                     Stream = ?BACKEND:stream(State3),

@@ -152,7 +152,7 @@ set_native_code(_Module, _LabelsCount, _Stream) ->
 load(Module) ->
     case erlang:system_info(emu_flavor) of
         jit ->
-            % atomvm_heap_growth, fibonacci divides compilation time by two
+            % atomvm_heap_growth, fibonacci reduces compilation time
             {Pid, Ref} = spawn_opt(
                 fun() ->
                     try

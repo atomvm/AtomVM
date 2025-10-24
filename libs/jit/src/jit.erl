@@ -114,6 +114,14 @@
 -define(ASSERT_ALL_NATIVE_FREE(St), ok).
 -define(ASSERT(Expr), ok).
 
+%-define(JIT_INSTRUMENT, true).
+
+-ifdef(JIT_INSTRUMENT).
+-define(INSTRUMENT(Tag, State, MSt), instrument(Tag, State, MSt)).
+-else.
+-define(INSTRUMENT(Tag, State, MSt), ok).
+-endif.
+
 %%-----------------------------------------------------------------------------
 %% @param   LabelsCount number of labels
 %% @param   Arch code for the architecture
@@ -137,7 +145,6 @@ compile(
     MMod,
     MSt0
 ) when OpcodeMax =< ?OPCODE_MAX ->
-    MSt1 = MMod:jump_table(MSt0, LabelsCount),
     State0 = #state{
         line_offsets = [],
         labels_count = LabelsCount,
@@ -146,9 +153,15 @@ compile(
         type_resolver = TypeResolver,
         tail_cache = []
     },
+    ?INSTRUMENT("compile_start", State0, MSt0),
+    MSt1 = MMod:jump_table(MSt0, LabelsCount),
+    ?INSTRUMENT("after_jump_table", State0, MSt1),
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
+    ?INSTRUMENT("after_first_pass", State1, MSt2),
     MSt3 = second_pass(MMod, MSt2, State1),
+    ?INSTRUMENT("after_second_pass", State1, MSt3),
     MSt4 = MMod:flush(MSt3),
+    ?INSTRUMENT("after_flush", State1, MSt4),
     {LabelsCount, MSt4};
 compile(
     <<16:32, 0:32, OpcodeMax:32, _LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>>,
@@ -3858,3 +3871,37 @@ backend(StreamModule, Stream) ->
     Variant = ?MODULE:variant(),
     BackendState = BackendModule:new(Variant, StreamModule, Stream),
     {BackendModule, BackendState}.
+
+-ifdef(JIT_INSTRUMENT).
+instrument(Tag, #state{line_offsets = Lines, tail_cache = TC}, MSt) ->
+    StateSize = erts_debug:flat_size({Lines, TC}),
+    MStSize = erts_debug:flat_size(MSt),
+    LinesCount = length(Lines),
+    TCCount = length(TC),
+
+    % Extract branches count from backend state
+    % state record: {state, stream_module, stream, offset, branches, jump_table_start, ...}
+    BranchesCount =
+        case element(1, MSt) of
+            state -> length(element(5, MSt));
+            _ -> unknown
+        end,
+
+    {heap_size, HeapSize} = process_info(self(), heap_size),
+    {total_heap_size, TotalHeapSize} = process_info(self(), total_heap_size),
+
+    io:format(
+        "~s: mst=~p words, state=~p words (lines=~p, tc=~p, br=~p), "
+        "heap=~p, total_heap=~p~n",
+        [
+            Tag,
+            MStSize,
+            StateSize,
+            LinesCount,
+            TCCount,
+            BranchesCount,
+            HeapSize,
+            TotalHeapSize
+        ]
+    ).
+-endif.
