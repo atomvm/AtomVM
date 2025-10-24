@@ -359,6 +359,58 @@ jump_table0(
     jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
+%% @doc Patch a single branch in the stream
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param Offset offset of the branch to patch
+%% @param Size size of the branch in bits
+%% @param LabelOffset target label offset
+%% @return Updated stream
+%%-----------------------------------------------------------------------------
+-spec patch_branch(module(), stream(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
+    stream().
+patch_branch(StreamModule, Stream, Offset, Size, LabelOffset) ->
+    StreamModule:map(Stream, Offset, Size div 8, fun(<<Delta:Size/signed-little>>) ->
+        <<(Delta + LabelOffset - Offset):Size/little>>
+    end).
+
+%%-----------------------------------------------------------------------------
+%% @doc Patch all branches targeting a specific label and return remaining branches
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param TargetLabel label to patch branches for
+%% @param LabelOffset offset of the target label
+%% @param Branches list of pending branches
+%% @return {UpdatedStream, RemainingBranches}
+%%-----------------------------------------------------------------------------
+-spec patch_branches_for_label(
+    module(),
+    stream(),
+    integer(),
+    non_neg_integer(),
+    [{integer(), non_neg_integer(), non_neg_integer()}]
+) -> {stream(), [{integer(), non_neg_integer(), non_neg_integer()}]}.
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
+
+patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
+    {Stream, lists:reverse(Acc)};
+patch_branches_for_label(
+    StreamModule,
+    Stream0,
+    TargetLabel,
+    LabelOffset,
+    [{Label, Offset, Size} | Rest],
+    Acc
+) when Label =:= TargetLabel ->
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
+    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+
+%%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
 %% @end
 %% @param State current backend state
@@ -376,9 +428,7 @@ update_branches(
     } = State
 ) ->
     {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Stream1 = StreamModule:map(Stream0, Offset, Size div 8, fun(<<Delta:Size/signed-little>>) ->
-        <<(Delta + LabelOffset - Offset):Size/little>>
-    end),
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
 
 %%-----------------------------------------------------------------------------
@@ -2093,6 +2143,7 @@ add_label(
         stream_module = StreamModule,
         stream = Stream0,
         jump_table_start = JumpTableStart,
+        branches = Branches,
         labels = Labels
     } = State,
     Label,
@@ -2104,6 +2155,18 @@ add_label(
     RelativeOffset = LabelOffset - JumpTableEntryOffset,
     {_RelocOffset, JmpInstruction} = jit_x86_64_asm:jmp_rel32(RelativeOffset),
     Stream1 = StreamModule:replace(Stream0, JumpTableEntryOffset, JmpInstruction),
-    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
+
+    % Eagerly patch any branches targeting this label
+    {Stream2, RemainingBranches} = patch_branches_for_label(
+        StreamModule,
+        Stream1,
+        Label,
+        LabelOffset,
+        Branches
+    ),
+
+    State#state{
+        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+    };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
