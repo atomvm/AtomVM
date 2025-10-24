@@ -134,6 +134,7 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [armv6m_register()],
     used_regs :: [armv6m_register()],
     labels :: [{integer() | reference(), integer()}],
@@ -247,6 +248,7 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
@@ -380,13 +382,14 @@ assert_all_native_free(#state{
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
@@ -399,15 +402,7 @@ jump_table0(
     JumpEntry = <<I1/binary, I2/binary, I3/binary, I4/binary, 16#FFFFFFFF:32>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
 
-    % Add relocation for the data entry so update_branches/2 can patch the jump target
-    DataOffset = StreamModule:offset(Stream1) - 4,
-    % Calculate the offset of the add instruction (3rd instruction, at offset 4 from entry start)
-    EntryStartOffset = StreamModule:offset(Stream1) - 12,
-    AddInstrOffset = EntryStartOffset + 4,
-    DataReloc = {N, DataOffset, {jump_table_data, AddInstrOffset}},
-    UpdatedState = State#state{stream = Stream1, branches = [DataReloc | Branches]},
-
-    jump_table0(UpdatedState, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -500,13 +495,7 @@ update_branches(
                                 I4 = <<RelativeOffset:32/little>>,
                                 <<I1/binary, I2/binary, I3/binary, I4/binary>>
                         end
-                end;
-            {jump_table_data, AddInstrOffset} ->
-                % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
-                % PC when add instruction executes
-                AddPC = AddInstrOffset + 4,
-                RelativeOffset = LabelOffset - AddPC,
-                <<RelativeOffset:32/little>>
+                end
         end,
     Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
@@ -3288,5 +3277,34 @@ add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each jump table entry is 12 bytes:
+    % - ldr r3, [pc, 4] (2 bytes) at offset 0
+    % - push {...} (2 bytes) at offset 2
+    % - add pc, r3 (2 bytes) at offset 4
+    % - nop (2 bytes) at offset 6
+    % - data (4 bytes) at offset 8
+    JumpTableEntryStart = JumpTableStart + Label * 12,
+    DataOffset = JumpTableEntryStart + 8,
+    AddInstrOffset = JumpTableEntryStart + 4,
+
+    % Calculate offset from 'add pc, pc, r3' instruction + 4 to target label
+    % PC when add instruction executes
+    AddPC = AddInstrOffset + 4,
+    RelativeOffset = LabelOffset - AddPC,
+    DataBytes = <<RelativeOffset:32/little>>,
+
+    Stream1 = StreamModule:replace(Stream0, DataOffset, DataBytes),
+    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
