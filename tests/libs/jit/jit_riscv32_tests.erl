@@ -1188,6 +1188,42 @@ call_only_or_schedule_next_and_label_relocation_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_only_or_schedule_next_known_label_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:add_label(State2, 2, 16#36),
+    State4 = ?BACKEND:call_only_or_schedule_next(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
+    Dump =
+        <<
+            "   0:  00000697            auipc   a3,0x0\n"
+            "   4:  03c68067            jr  60(a3) # 0x3c\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  01068067            jr  16(a3) # 0x18\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  02668067            jr  38(a3) # 0x36\n"
+            "  18:  0085af83            lw  t6,8(a1)\n"
+            "  1c:  1ffd                    addi    t6,t6,-1\n"
+            "  1e:  01f5a423            sw  t6,8(a1)\n"
+            "  22:  000f9a63            bnez    t6,0x36\n"
+            "  26:  00000f97            auipc   t6,0x0\n"
+            "  2a:  0fc1                    addi    t6,t6,16 # 0x36\n"
+            "  2c:  01f5a223            sw  t6,4(a1)\n"
+            "  30:  00862f83            lw  t6,8(a2)\n"
+            "  34:  8f82                    jr  t6\n"
+            "  36:  00062f83            lw  t6,0(a2)\n"
+            "  3a:  8f82                    jr  t6\n"
+            "  3c:  00462f83            lw  t6,4(a2)\n"
+            "  40:  8f82                    jr  t6"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 %% Test with large gap (256+ bytes) to force mov_immediate path
 call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1654,8 +1690,52 @@ wait_test() ->
     State3 = ?BACKEND:set_continuation_to_label(State2, Label),
     State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
     State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
 
-    Stream = ?BACKEND:stream(State5),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  02868067            jr  40(a3) # 0x30\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  0f068067            jr  240(a3) # 0x100\n"
+            "  18:  ffff                .insn   2, 0xffff\n"
+            "  1a:  ffff                .insn   2, 0xffff\n"
+            "  1c:  ffff                .insn   2, 0xffff\n"
+            "  1e:  ffff                .insn   2, 0xffff\n"
+            "  20:  ffff                .insn   2, 0xffff\n"
+            "  22:  ffff                .insn   2, 0xffff\n"
+            "  24:  ffff                .insn   2, 0xffff\n"
+            "  26:  ffff                .insn   2, 0xffff\n"
+            "  28:  ffff                .insn   2, 0xffff\n"
+            "  2a:  ffff                .insn   2, 0xffff\n"
+            "  2c:  ffff                .insn   2, 0xffff\n"
+            "  2e:  ffff                .insn   2, 0xffff\n"
+            "  30:  00000f97            auipc   t6,0x0\n"
+            "  34:  0d0f8f93            addi    t6,t6,208 # 0x100\n"
+            "  38:  01f5a223            sw  t6,4(a1)\n"
+            "  3c:  07462f83            lw  t6,116(a2)\n"
+            "  40:  8f82                jr  t6"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test set_continuation_to_label with known label
+wait_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:add_label(State2, Label, 16#100),
+    State4 = ?BACKEND:set_continuation_to_label(State3, Label),
+    State5 = ?BACKEND:call_primitive_last(State4, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State6 = ?BACKEND:update_branches(State5),
+
+    Stream = ?BACKEND:stream(State6),
     Dump =
         <<
             "   0:  ffff                .insn   2, 0xffff\n"
