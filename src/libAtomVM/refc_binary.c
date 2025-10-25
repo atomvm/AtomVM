@@ -146,3 +146,86 @@ size_t refc_binary_total_size(Context *ctx)
     synclist_unlock(&ctx->global->refc_binaries);
     return size;
 }
+
+COLD_FUNC void refc_binary_dump_info(Context *ctx)
+{
+    struct ListHead *item;
+    struct ListHead *refc_binaries = synclist_rdlock(&ctx->global->refc_binaries);
+
+    // Note: This only counts non-const refc binaries (ones that allocate memory).
+    // Const binaries (created by term_from_const_binary) point to existing data
+    // and are never added to the global refc_binaries list, so they don't appear here.
+
+    // First pass: count and calculate total size
+    size_t count = 0;
+    size_t total_size = 0;
+    LIST_FOR_EACH (item, refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+        count++;
+        total_size += refc->size;
+    }
+
+    fprintf(stderr, "refc_binary_count = %d\n", (int) count);
+    fprintf(stderr, "refc_binary_total_size = %d\n", (int) total_size);
+
+    if (count == 0) {
+        synclist_unlock(&ctx->global->refc_binaries);
+        return;
+    }
+
+// Find top 5 largest binaries
+#define TOP_N 5
+    struct RefcBinary *top[TOP_N] = { NULL };
+    size_t top_indices[TOP_N] = { 0 };
+
+    size_t index = 0;
+    LIST_FOR_EACH (item, refc_binaries) {
+        struct RefcBinary *refc = GET_LIST_ENTRY(item, struct RefcBinary, head);
+
+        // Try to insert into top 5
+        for (size_t i = 0; i < TOP_N; i++) {
+            if (top[i] == NULL || refc->size > top[i]->size) {
+                // Shift down
+                for (size_t j = TOP_N - 1; j > i; j--) {
+                    top[j] = top[j - 1];
+                    top_indices[j] = top_indices[j - 1];
+                }
+                top[i] = refc;
+                top_indices[i] = index;
+                break;
+            }
+        }
+        index++;
+    }
+
+    // Display top binaries
+    fprintf(stderr, "\nTop %d largest refc binaries:\n", TOP_N);
+    for (size_t i = 0; i < TOP_N && top[i] != NULL; i++) {
+        struct RefcBinary *refc = top[i];
+        fprintf(stderr, "  [%zu] size=%d bytes (%.1f%%), refcount=%d",
+            top_indices[i],
+            (int) refc->size,
+            (double) refc->size * 100.0 / (double) total_size,
+            (int) refc->ref_count);
+
+        if (refc->resource_type) {
+            fprintf(stderr, " [resource]");
+        }
+
+        // Print first 32 bytes as hex
+        fprintf(stderr, "\n      data: ");
+        size_t print_size = refc->size < 32 ? refc->size : 32;
+        for (size_t j = 0; j < print_size; j++) {
+            fprintf(stderr, "%02x", refc->data[j]);
+            if (j % 4 == 3 && j < print_size - 1) {
+                fprintf(stderr, " ");
+            }
+        }
+        if (refc->size > 32) {
+            fprintf(stderr, "...");
+        }
+        fprintf(stderr, "\n");
+    }
+
+    synclist_unlock(&ctx->global->refc_binaries);
+}
