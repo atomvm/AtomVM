@@ -100,7 +100,8 @@
     labels_count :: pos_integer(),
     atom_resolver :: fun((integer()) -> atom()),
     literal_resolver :: fun((integer()) -> any()),
-    type_resolver :: fun((integer()) -> any())
+    type_resolver :: fun((integer()) -> any()),
+    tail_cache :: [{tuple(), non_neg_integer()}]
 }).
 
 -type stream() :: any().
@@ -142,7 +143,8 @@ compile(
         labels_count = LabelsCount,
         atom_resolver = AtomResolver,
         literal_resolver = LiteralResolver,
-        type_resolver = TypeResolver
+        type_resolver = TypeResolver,
+        tail_cache = []
     },
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
     MSt3 = second_pass(MMod, MSt2, State1),
@@ -170,18 +172,30 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest1, MMod, MSt1, State0);
 % 2
-first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_ModuleAtom, Rest1} = decode_atom(Rest0),
     {_FunctionName, Rest2} = decode_atom(Rest1),
     {_Arity, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [_ModuleAtom, _FunctionName, _Arity]),
-    % Implement function clause at the previous label. (TODO: optimize it out to save space)
-    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR, [
-        ctx, jit_state, offset, ?FUNCTION_CLAUSE_ATOM
-    ]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest3, MMod, MSt1, State0);
+    % Implement function clause at the previous label.
+    Offset = MMod:offset(MSt0),
+    {MSt1, OffsetReg} = MMod:move_to_native_register(MSt0, Offset),
+    TailCacheKey = {call_primitive_last, ?PRIM_RAISE_ERROR, [OffsetReg, ?FUNCTION_CLAUSE_ATOM]},
+    State1 =
+        case lists:keyfind(TailCacheKey, 1, TC) of
+            false ->
+                MSt3 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
+                    ctx, jit_state, {free, OffsetReg}, ?FUNCTION_CLAUSE_ATOM
+                ]),
+                State0#state{tail_cache = [{TailCacheKey, Offset} | TC]};
+            {TailCacheKey, CacheOffset} ->
+                MSt2 = MMod:jump_to_offset(MSt1, CacheOffset),
+                MSt3 = MMod:free_native_registers(MSt2, [OffsetReg]),
+                State0
+        end,
+    ?ASSERT_ALL_NATIVE_FREE(MSt3),
+    first_pass(Rest3, MMod, MSt3, State1);
 % 3
 first_pass(
     <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
@@ -203,26 +217,56 @@ first_pass(<<?OP_CALL, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest2, MMod, MSt1, State0);
 % 5
-first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_LAST, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Arity, Rest1} = decode_literal(Rest0),
     {Label, Rest2} = decode_label(Rest1),
     {NWords, Rest3} = decode_literal(Rest2),
     ?TRACE("OP_CALL_LAST ~p, ~p, ~p\n", [_Arity, Label, NWords]),
-    MSt1 = MMod:move_to_cp(MSt0, {y_reg, NWords}),
-    MSt2 = MMod:increment_sp(MSt1, NWords + 1),
-    MSt3 = MMod:call_only_or_schedule_next(MSt2, Label),
+    TailCacheKey0 = {op_call_last, NWords, Label},
+    case lists:keyfind(TailCacheKey0, 1, TC) of
+        false ->
+            Offset0 = MMod:offset(MSt0),
+            MSt1 = MMod:move_to_cp(MSt0, {y_reg, NWords}),
+            MSt2 = MMod:increment_sp(MSt1, NWords + 1),
+            TailCacheKey1 = {op_call_only, Label},
+            case lists:keyfind(TailCacheKey1, 1, TC) of
+                false ->
+                    Offset1 = MMod:offset(MSt2),
+                    MSt3 = MMod:call_only_or_schedule_next(MSt2, Label),
+                    State1 = State0#state{
+                        tail_cache = [{TailCacheKey1, Offset1}, {TailCacheKey0, Offset0} | TC]
+                    };
+                {TailCacheKey1, Offset1} ->
+                    MSt3 = MMod:jump_to_offset(MSt2, Offset1),
+                    State1 = State0#state{
+                        tail_cache = [{TailCacheKey0, Offset0} | TC]
+                    }
+            end;
+        {TailCacheKey0, Offset0} ->
+            MSt3 = MMod:jump_to_offset(MSt0, Offset0),
+            State1 = State0
+    end,
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
-    first_pass(Rest3, MMod, MSt3, State0);
+    first_pass(Rest3, MMod, MSt3, State1);
 % 6
-first_pass(<<?OP_CALL_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_CALL_ONLY, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {_Arity, Rest1} = decode_literal(Rest0),
     {Label, Rest2} = decode_label(Rest1),
     ?TRACE("OP_CALL_ONLY ~p, ~p\n", [_Arity, Label]),
-    MSt1 = MMod:call_only_or_schedule_next(MSt0, Label),
+    TailCacheKey = {op_call_only, Label},
+    case lists:keyfind(TailCacheKey, 1, TC) of
+        false ->
+            Offset = MMod:offset(MSt0),
+            MSt1 = MMod:call_only_or_schedule_next(MSt0, Label),
+            State1 = State0#state{tail_cache = [{TailCacheKey, Offset} | TC]};
+        {TailCacheKey, Offset} ->
+            MSt1 = MMod:jump_to_offset(MSt0, Offset),
+            State1 = State0
+    end,
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest2, MMod, MSt1, State0);
+    first_pass(Rest2, MMod, MSt1, State1);
 % 7
 first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -348,7 +392,7 @@ first_pass(<<?OP_DEALLOCATE, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest1, MMod, MSt2, State0);
 % 19
-first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     ?TRACE("OP_RETURN\n", []),
     % Optimized return: check if returning within same module
@@ -371,9 +415,18 @@ first_pass(<<?OP_RETURN, Rest/binary>>, MMod, MSt0, State0) ->
     ),
     MSt5 = MMod:free_native_registers(MSt4, [CpReg0]),
     % Different module: use existing slow path
-    MSt6 = MMod:call_primitive_last(MSt5, ?PRIM_RETURN, [ctx, jit_state]),
+    TailCacheKey = {call_primitive_last, ?PRIM_RETURN},
+    case lists:keyfind(TailCacheKey, 1, TC) of
+        false ->
+            Offset = MMod:offset(MSt5),
+            MSt6 = MMod:call_primitive_last(MSt5, ?PRIM_RETURN, [ctx, jit_state]),
+            State1 = State0#state{tail_cache = [{TailCacheKey, Offset} | TC]};
+        {TailCacheKey, Offset} ->
+            MSt6 = MMod:jump_to_offset(MSt5, Offset),
+            State1 = State0
+    end,
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
-    first_pass(Rest, MMod, MSt6, State0);
+    first_pass(Rest, MMod, MSt6, State1);
 % 20
 first_pass(<<?OP_SEND, Rest/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -836,13 +889,22 @@ first_pass(<<?OP_SELECT_TUPLE_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt5),
     first_pass(Rest4, MMod, MSt5, State0);
 % 61
-first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_JUMP, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_label(Rest0),
     ?TRACE("OP_JUMP ~p\n", [Label]),
-    MSt1 = MMod:call_only_or_schedule_next(MSt0, Label),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest1, MMod, MSt1, State0);
+    TailCacheKey = {op_call_only, Label},
+    case lists:keyfind(TailCacheKey, 1, TC) of
+        false ->
+            Offset = MMod:offset(MSt0),
+            MSt1 = MMod:call_only_or_schedule_next(MSt0, Label),
+            ?ASSERT_ALL_NATIVE_FREE(MSt1),
+            first_pass(Rest1, MMod, MSt1, State0#state{tail_cache = [{TailCacheKey, Offset} | TC]});
+        {TailCacheKey, Offset} ->
+            MSt1 = MMod:jump_to_offset(MSt0, Offset),
+            ?ASSERT_ALL_NATIVE_FREE(MSt1),
+            first_pass(Rest1, MMod, MSt1, State0)
+    end;
 % 62
 % Same implementation as OP_TRY, to confirm.
 first_pass(<<?OP_CATCH, Rest0/binary>>, MMod, MSt0, State0) ->
