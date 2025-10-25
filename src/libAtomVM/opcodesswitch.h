@@ -1557,6 +1557,8 @@ static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *o
 static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t **encoded)
 {
     const uint8_t *compact_term = *encoded;
+    // num_bytes is decoded from a 3 bits value and incremented by 2,
+    // meaning that minimum value is 0 and maximum value is 7
     switch (num_bytes) {
         case 0:
         case 1:
@@ -1815,8 +1817,11 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
     static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
     {
         const uint8_t *new_encoded = encoded;
-        unsigned int len;
+        uint32_t len;
         DECODE_LITERAL(len, new_encoded);
+        // TODO: check this: actually should be enough: len = *(new_encoded)++ >> 4;
+        // it seems that likely range is something like from 9 (9 + 0) to 24 (9 + 15)
+        // that is 192 bits integer
 
         len += 9;
 

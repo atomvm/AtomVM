@@ -1026,6 +1026,7 @@ term bif_erlang_fdiv_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
 
 static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
+    // 0 is always normalized to `term_from_int(0)`, so we can do this
     if (UNLIKELY(arg2 == term_from_int(0))) {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
@@ -1346,6 +1347,7 @@ term bif_erlang_abs_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
 static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1, term arg2)
 {
+    // 0 is always normalized to `term_from_int(0)`, so we can do this
     if (UNLIKELY(arg2 == term_from_int(0))) {
         RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
     }
