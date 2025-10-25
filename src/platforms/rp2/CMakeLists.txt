@@ -54,6 +54,8 @@ set(HAVE_MKFIFO "" CACHE INTERNAL "Have symbol mkfifo" FORCE)
 set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
 # Likewise with EXECVE
 set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
+# getcwd is defined in newlib header but not implemented
+set(HAVE_GETCWD "" CACHE INTERNAL "Have symbol getcwd" FORCE)
 
 # Options that make sense for this platform
 option(AVM_DISABLE_SMP "Disable SMP support." OFF)
@@ -69,8 +71,13 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
     if (NOT AVM_DISABLE_JIT)
         set(AVM_JIT_TARGET_ARCH "armv6m")
     endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^hazard3$")
+    # Pico2 RISC-V processor (Hazard3)
+    if (NOT AVM_DISABLE_JIT)
+        set(AVM_JIT_TARGET_ARCH "riscv32")
+    endif()
 else()
-    # Typically riscv is not supported yet
+    # Other processors not supported yet
     if (NOT AVM_DISABLE_JIT)
         message("JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
         set(AVM_DISABLE_JIT ON CACHE BOOL "Disable just in time compilation." FORCE)

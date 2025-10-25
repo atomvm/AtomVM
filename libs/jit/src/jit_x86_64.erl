@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -38,6 +39,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -113,6 +115,7 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [x86_64_register()],
     used_regs :: [x86_64_register()],
     labels :: [{integer() | reference(), integer()}],
@@ -216,6 +219,7 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
@@ -242,6 +246,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state (unused on x86-64)
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    State.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
@@ -328,21 +342,73 @@ assert_all_native_free(State) ->
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
-    Offset = StreamModule:offset(Stream0),
-    {RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(1),
-    Reloc = {N, Offset + RelocOffset, 32},
+    % Placeholder, encodes with 0xffffffff
+    {_RelocOffset, I1} = jit_x86_64_asm:jmp_rel32(4),
     Stream1 = StreamModule:append(Stream0, I1),
-    jump_table0(State#state{stream = Stream1, branches = [Reloc | Branches]}, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
+
+%%-----------------------------------------------------------------------------
+%% @doc Patch a single branch in the stream
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param Offset offset of the branch to patch
+%% @param Size size of the branch in bits
+%% @param LabelOffset target label offset
+%% @return Updated stream
+%%-----------------------------------------------------------------------------
+-spec patch_branch(module(), stream(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
+    stream().
+patch_branch(StreamModule, Stream, Offset, Size, LabelOffset) ->
+    StreamModule:map(Stream, Offset, Size div 8, fun(<<Delta:Size/signed-little>>) ->
+        <<(Delta + LabelOffset - Offset):Size/little>>
+    end).
+
+%%-----------------------------------------------------------------------------
+%% @doc Patch all branches targeting a specific label and return remaining branches
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param TargetLabel label to patch branches for
+%% @param LabelOffset offset of the target label
+%% @param Branches list of pending branches
+%% @return {UpdatedStream, RemainingBranches}
+%%-----------------------------------------------------------------------------
+-spec patch_branches_for_label(
+    module(),
+    stream(),
+    integer(),
+    non_neg_integer(),
+    [{integer(), non_neg_integer(), non_neg_integer()}]
+) -> {stream(), [{integer(), non_neg_integer(), non_neg_integer()}]}.
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
+
+patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
+    {Stream, lists:reverse(Acc)};
+patch_branches_for_label(
+    StreamModule,
+    Stream0,
+    TargetLabel,
+    LabelOffset,
+    [{Label, Offset, Size} | Rest],
+    Acc
+) when Label =:= TargetLabel ->
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
+    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
 
 %%-----------------------------------------------------------------------------
 %% @doc Rewrite stream to update all branches for labels.
@@ -362,9 +428,7 @@ update_branches(
     } = State
 ) ->
     {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
-    Stream1 = StreamModule:map(Stream0, Offset, Size div 8, fun(<<Delta:Size/signed-little>>) ->
-        <<(Delta + LabelOffset - Offset):Size/little>>
-    end),
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Size, LabelOffset),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
 
 %%-----------------------------------------------------------------------------
@@ -523,6 +587,13 @@ jump_to_label(
             Stream1 = StreamModule:append(Stream0, I1),
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
+
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    RelOffset = TargetOffset - Offset,
+    I1 = jit_x86_64_asm:jmp(RelOffset),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
@@ -1774,17 +1845,31 @@ set_continuation_to_label(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = [Temp | _],
-        branches = Branches
+        branches = Branches,
+        labels = Labels
     } = State,
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
-    {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Temp),
-    Reloc = {Label, Offset + RewriteLEAOffset, 32},
-    I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | Branches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct leaq without relocation
+            % leaq instruction is 7 bytes, RIP points to next instruction
+            RelOffset = LabelOffset - (Offset + 7),
+            I1 = jit_x86_64_asm:leaq({rip, RelOffset}, Temp),
+            I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            {RewriteLEAOffset, I1} = jit_x86_64_asm:leaq_rel32({-4, rip}, Temp),
+            Reloc = {Label, Offset + RewriteLEAOffset, 32},
+            I2 = jit_x86_64_asm:movq(Temp, ?JITSTATE_CONTINUATION),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1, branches = [Reloc | Branches]}
+    end.
 
 set_continuation_to_offset(
     #state{
@@ -1826,7 +1911,9 @@ get_module_index(
         Reg
     }.
 
-and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+and_(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Val) when
+    ?IS_GPR(Reg)
+->
     % 32 bits instructions on x86-64 zero the high 32 bits
     I1 =
         if
@@ -1834,7 +1921,28 @@ and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) -
             true -> jit_x86_64_asm:andq(Val, Reg)
         end,
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+and_(
+    #state{
+        stream_module = StreamModule,
+        available_regs = [ResultReg | T],
+        used_regs = UR,
+        stream = Stream0
+    } = State,
+    Reg,
+    Val
+) when
+    ?IS_GPR(Reg)
+->
+    I1 = jit_x86_64_asm:movq(Reg, ResultReg),
+    I2 =
+        if
+            Val >= 0, Val =< 16#FFFFFFFF -> jit_x86_64_asm:andl(Val, ResultReg);
+            true -> jit_x86_64_asm:andq(Val, ResultReg)
+        end,
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    {State#state{stream = Stream2, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:orq(Val, Reg),
@@ -1906,19 +2014,38 @@ call_only_or_schedule_next(
     #state{
         stream_module = StreamModule,
         stream = Stream0,
-        branches = Branches
+        branches = Branches,
+        labels = Labels
     } = State0,
     Label
 ) ->
     Offset = StreamModule:offset(Stream0),
     I1 = jit_x86_64_asm:decl(?JITSTATE_REMAINING_REDUCTIONS),
-    {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(1),
-    I2 = jit_x86_64_asm:jz(byte_size(I3) + 2),
-    Sz = byte_size(I1) + byte_size(I2),
-    Reloc1 = {Label, Offset + Sz + RewriteJMPOffset, 32},
-    Code = <<I1/binary, I2/binary, I3/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1, branches = [Reloc1 | Branches]},
+    I1Size = byte_size(I1),
+
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct jmp with calculated offset
+            % jz is 2 bytes, jmp_rel32 is 5 bytes
+            JmpSize = 5,
+            I2 = jit_x86_64_asm:jz(JmpSize + 2),
+            I2Size = byte_size(I2),
+            % Calculate relative offset: target - current
+            RelOffset = LabelOffset - (Offset + I1Size + I2Size),
+            {_RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(RelOffset),
+            Code = <<I1/binary, I2/binary, I3/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State1 = State0#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            {RewriteJMPOffset, I3} = jit_x86_64_asm:jmp_rel32(1),
+            I2 = jit_x86_64_asm:jz(byte_size(I3) + 2),
+            Sz = I1Size + byte_size(I2),
+            Reloc1 = {Label, Offset + Sz + RewriteJMPOffset, 32},
+            Code = <<I1/binary, I2/binary, I3/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State1 = State0#state{stream = Stream1, branches = [Reloc1 | Branches]}
+    end,
     State2 = set_continuation_to_label(State1, Label),
     call_primitive_last(State2, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]).
 
@@ -2044,5 +2171,35 @@ add_label(#state{stream_module = StreamModule, stream = Stream} = State, Label) 
     add_label(State, Label, Offset).
 
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        branches = Branches,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each jmp_rel32 instruction is 5 bytes
+    JumpTableEntryOffset = JumpTableStart + Label * 5,
+    RelativeOffset = LabelOffset - JumpTableEntryOffset,
+    {_RelocOffset, JmpInstruction} = jit_x86_64_asm:jmp_rel32(RelativeOffset),
+    Stream1 = StreamModule:replace(Stream0, JumpTableEntryOffset, JmpInstruction),
+
+    % Eagerly patch any branches targeting this label
+    {Stream2, RemainingBranches} = patch_branches_for_label(
+        StreamModule,
+        Stream1,
+        Label,
+        LabelOffset,
+        Branches
+    ),
+
+    State#state{
+        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+    };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
