@@ -1295,10 +1295,16 @@ static int jit_bitstring_utf16_size(int c)
     return utf16_size;
 }
 
-static term jit_term_create_empty_binary(Context *ctx, size_t len)
+static term jit_term_create_uninitialized_binary(Context *ctx, size_t len)
 {
-    TRACE("jit_term_create_empty_binary: len=%d\n", (int) len);
-    return term_create_empty_binary(len, &ctx->heap, ctx->global);
+    TRACE("jit_term_create_uninitialized_binary: len=%d\n", (int) len);
+    return term_create_uninitialized_binary(len, &ctx->heap, ctx->global);
+}
+
+static term jit_term_reuse_binary(Context *ctx, term src, size_t len)
+{
+    TRACE("jit_term_reuse_binary: src=0x%lx, len=%d\n", src, (int) len);
+    return term_reuse_binary(src, len, &ctx->heap, ctx->global);
 }
 
 static int jit_decode_flags_list(Context *ctx, JITState *jit_state, term flags)
@@ -1715,7 +1721,7 @@ const ModuleNativeInterface module_native_interface = {
     jit_term_find_map_pos,
     jit_bitstring_utf8_size,
     jit_bitstring_utf16_size,
-    jit_term_create_empty_binary,
+    jit_term_create_uninitialized_binary,
     jit_decode_flags_list,
     jit_bitstring_insert_utf8,
     jit_bitstring_insert_utf16,
@@ -1734,7 +1740,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
     term_copy_map,
-    jit_stacktrace_build
+    jit_stacktrace_build,
+    jit_term_reuse_binary
 };
 
 #endif
