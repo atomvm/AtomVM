@@ -4074,6 +4074,9 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -4122,6 +4125,9 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -4530,6 +4536,9 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     term t = term_create_empty_binary(0, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     ctx->bs = t;
                     ctx->bs_offset = 0;
@@ -4595,6 +4604,9 @@ wait_timeout_trap_handler:
                     TRACE("bs_append/8, fail=%u size=" AVM_INT_FMT " unit=%u src=0x%" TERM_X_FMT " dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
                     src = x_regs[live];
                     term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
 
                     ctx->bs = t;
@@ -4641,8 +4653,10 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
                     DECODE_COMPACT_TERM(src, src_pc)
-                    term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
-                    memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
+                    term t = term_reuse_binary(src, src_size + size_val / 8, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
 
                     ctx->bs = t;
                     ctx->bs_offset = src_size * 8;
@@ -6736,6 +6750,7 @@ wait_timeout_trap_handler:
                 // Verify parameters and compute binary size in first iteration
                 #ifdef IMPL_EXECUTE_LOOP
                     size_t binary_size = 0;
+                    bool reuse_binary = false;
                 #endif
                 for (size_t j = 0; j < nb_segments; j++) {
                     term atom_type;
@@ -6824,6 +6839,9 @@ wait_timeout_trap_handler:
                                     // We only support src as a binary of bytes here.
                                     segment_size = term_binary_size(src);
                                     segment_unit = 8;
+                                    if (atom_type == PRIVATE_APPEND_ATOM && j == 0) {
+                                        reuse_binary = true;
+                                    }
                                 } else {
                                     VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                     avm_int_t signed_size_value = term_to_int(size);
@@ -6864,7 +6882,16 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc + term_binary_heap_size(binary_size / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    term t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
+                    term t;
+                    if (!reuse_binary) {
+                        t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
+                        if (UNLIKELY(term_is_invalid_term(t))) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                    } else {
+                        // t will be created in the first segment (PRIVATE_APPEND case)
+                        t = term_invalid_term();
+                    }
                     size_t offset = 0;
 
                     for (size_t j = 0; j < nb_segments; j++) {
@@ -6968,9 +6995,17 @@ wait_timeout_trap_handler:
                                     TRACE("bs_create_bin/6: current offset (%d) is not evenly divisible by 8\n", (int) offset);
                                     RAISE_ERROR(UNSUPPORTED_ATOM);
                                 }
+                                size_t src_size = term_binary_size(src);
+                                if (reuse_binary && j == 0) {
+                                    t = term_reuse_binary(src, binary_size / 8, &ctx->heap, ctx->global);
+                                    if (UNLIKELY(term_is_invalid_term(t))) {
+                                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                    }
+                                    segment_size = src_size * 8;
+                                    break;
+                                }
                                 uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
                                 const uint8_t *bin = (const uint8_t *) term_binary_data(src);
-                                size_t binary_size = term_binary_size(src);
                                 if (size != ALL_ATOM) {
                                     VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                     avm_int_t signed_size_value = term_to_int(size);
@@ -6979,17 +7014,17 @@ wait_timeout_trap_handler:
                                         RAISE_ERROR(BADARG_ATOM);
                                     }
                                     size_value = (size_t) signed_size_value;
-                                    if (size_value > binary_size) {
+                                    if (size_value > src_size) {
                                         if (fail == 0) {
                                             RAISE_ERROR(BADARG_ATOM);
                                         } else {
                                             JUMP_TO_LABEL(mod, fail);
                                         }
                                     }
-                                    binary_size = size_value;
+                                    src_size = size_value;
                                 }
-                                memcpy(dst, bin, binary_size);
-                                segment_size = binary_size * 8;
+                                memcpy(dst, bin, src_size);
+                                segment_size = src_size * 8;
                                 break;
                             }
                             default:

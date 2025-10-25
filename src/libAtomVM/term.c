@@ -909,7 +909,7 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
         if (IS_NULL_PTR(refc)) {
             // TODO propagate error to callers of this function, e.g., as an invalid term
             fprintf(stderr, "memory_create_refc_binary: Unable to allocate %zu bytes for refc_binary.\n", size);
-            AVM_ABORT();
+            return term_invalid_term();
         }
         boxed_value[3] = (term) refc;
         refc->ref_count = 1; // added to mso list, increment ref count
@@ -917,6 +917,71 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
         synclist_append(&glb->refc_binaries, &refc->head);
     }
     return ret;
+}
+
+term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb)
+{
+    if (term_is_refc_binary(src) && !term_refc_binary_is_const(src)) {
+        term *boxed_value = term_to_term_ptr(src);
+        struct RefcBinary *old_refc = (struct RefcBinary *) boxed_value[3];
+        size_t old_size = old_refc->size;
+
+        // Only reuse if refcount is 1 (only this term references it)
+        if (old_refc->ref_count == 1) {
+            // Lock the list of refc binaries while we're trying to realloc.
+            struct ListHead *refc_binaries = synclist_wrlock(&glb->refc_binaries);
+
+            // Remove from list before realloc because realloc might move the memory
+            list_remove(&old_refc->head);
+
+            // Realloc to new size.
+            size_t n = sizeof(struct RefcBinary) + size;
+            struct RefcBinary *new_refc = realloc(old_refc, n);
+            if (IS_NULL_PTR(new_refc)) {
+                // Re-add to list before unlocking
+                // Some versions of gcc don't know that if allocation fails,
+                // original pointer is still valid
+#pragma GCC diagnostic push
+#if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12)
+#pragma GCC diagnostic ignored "-Wuse-after-free"
+#endif
+                list_append(refc_binaries, &old_refc->head);
+#pragma GCC diagnostic pop
+                synclist_unlock(&glb->refc_binaries);
+                fprintf(stderr, "term_reuse_binary: Unable to reallocate %zu bytes for refc_binary.\n", size);
+                return term_invalid_term();
+            }
+
+            // Update size
+            new_refc->size = size;
+
+            // Zero the new part if size increased
+            if (LIKELY(size > old_size)) {
+                memset((char *) &new_refc->data + old_size, 0, size - old_size);
+            }
+
+            // Update the boxed value to point to the new refc BEFORE unlocking
+            // so other threads see a consistent state
+            boxed_value[1] = (term) size;
+            boxed_value[3] = (term) new_refc;
+
+            // Re-add to list after realloc (whether pointer changed or not)
+            list_append(refc_binaries, &new_refc->head);
+
+            // Unlock the list of refc binaries
+            synclist_unlock(&glb->refc_binaries);
+
+            // Return the same term (boxed_value pointer hasn't changed)
+            return src;
+        }
+    }
+    // Not a refc binary or it's a const refc binary - create a new one
+    size_t src_size = term_binary_size(src);
+    term t = term_create_uninitialized_binary(size, heap, glb);
+    // Copy the source data (up to the smaller of src_size and size)
+    size_t copy_size = src_size < size ? src_size : size;
+    memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), copy_size);
+    return t;
 }
 
 static term find_binary(term binary_or_state)

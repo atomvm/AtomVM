@@ -1834,7 +1834,9 @@ get_module_index(
         Reg
     }.
 
-and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+and_(#state{stream_module = StreamModule, stream = Stream0} = State, {free, Reg}, Val) when
+    ?IS_GPR(Reg)
+->
     % 32 bits instructions on x86-64 zero the high 32 bits
     I1 =
         if
@@ -1842,7 +1844,28 @@ and_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) -
             true -> jit_x86_64_asm:andq(Val, Reg)
         end,
     Stream1 = StreamModule:append(Stream0, I1),
-    State#state{stream = Stream1}.
+    {State#state{stream = Stream1}, Reg};
+and_(
+    #state{
+        stream_module = StreamModule,
+        available_regs = [ResultReg | T],
+        used_regs = UR,
+        stream = Stream0
+    } = State,
+    Reg,
+    Val
+) when
+    ?IS_GPR(Reg)
+->
+    I1 = jit_x86_64_asm:movq(Reg, ResultReg),
+    I2 =
+        if
+            Val >= 0, Val =< 16#FFFFFFFF -> jit_x86_64_asm:andl(Val, ResultReg);
+            true -> jit_x86_64_asm:andq(Val, ResultReg)
+        end,
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    {State#state{stream = Stream2, available_regs = T, used_regs = [ResultReg | UR]}, ResultReg}.
 
 or_(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:orq(Val, Reg),

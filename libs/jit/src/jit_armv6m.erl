@@ -75,6 +75,7 @@
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
+-include("term.hrl").
 
 -define(ASSERT(Expr), true = Expr).
 
@@ -1310,7 +1311,7 @@ if_block_cond(
     I1 = jit_armv6m_asm:mov(Temp, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State1 = State0#state{stream = Stream1},
-    State2 = and_(State1#state{available_regs = AT}, Temp, Mask),
+    {State2, Temp} = and_(State1#state{available_regs = AT}, {free, Temp}, Mask),
     Stream2 = State2#state.stream,
     % Compare with value
     I2 = jit_armv6m_asm:cmp(Temp, Val),
@@ -1329,7 +1330,7 @@ if_block_cond(
 ) when ?IS_GPR(Reg) ->
     % AND with mask
     OffsetBefore = StreamModule:offset(Stream0),
-    State1 = and_(State0, Reg, Mask),
+    {State1, Reg} = and_(State0, RegTuple, Mask),
     Stream1 = State1#state.stream,
     % Compare with value
     I2 = jit_armv6m_asm:cmp(Reg, Val),
@@ -2517,34 +2518,34 @@ get_module_index(
 %% JIT currentl calls this with two values: ?TERM_PRIMARY_CLEAR_MASK (-4) to
 %% clear bits and ?TERM_BOXED_TAG_MASK (0x3F). We can avoid any literal pool
 %% by using BICS for -4.
-and_(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, 16#FFFFFF) ->
+and_(#state{stream_module = StreamModule, stream = Stream0} = State0, {free, Reg}, 16#FFFFFF) ->
     I1 = jit_armv6m_asm:lsls(Reg, Reg, 8),
     I2 = jit_armv6m_asm:lsrs(Reg, Reg, 8),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State0#state{stream = Stream1};
+    {State0#state{stream = Stream1}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) when Val < 0 andalso Val >= -256 ->
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, bnot (Val)),
     Stream1 = State1#state.stream,
     I = jit_armv6m_asm:bics(Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
-    State1#state{available_regs = [Temp | AT], stream = Stream2};
+    {State1#state{available_regs = [Temp | AT], stream = Stream2}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) ->
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
     Stream1 = State1#state.stream,
     I = jit_armv6m_asm:ands(Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
-    State1#state{available_regs = [Temp | AT], stream = Stream2};
+    {State1#state{available_regs = [Temp | AT], stream = Stream2}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = []} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) when Val < 0 andalso Val >= -256 ->
     % No available registers, use r0 as temp and save it to r12
@@ -2561,10 +2562,10 @@ and_(
     % Restore r0 from r12
     Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
     Stream4 = StreamModule:append(Stream3, Restore),
-    State0#state{stream = Stream4};
+    {State0#state{stream = Stream4}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = []} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) ->
     % No available registers, use r0 as temp and save it to r12
@@ -2581,7 +2582,17 @@ and_(
     % Restore r0 from r12
     Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
     Stream4 = StreamModule:append(Stream3, Restore),
-    State0#state{stream = Stream4}.
+    {State0#state{stream = Stream4}, Reg};
+and_(
+    #state{stream_module = StreamModule, available_regs = [ResultReg | AT], used_regs = UR} =
+        State0,
+    Reg,
+    ?TERM_PRIMARY_CLEAR_MASK
+) ->
+    I1 = jit_armv6m_asm:lsrs(ResultReg, Reg, 2),
+    I2 = jit_armv6m_asm:lsls(ResultReg, ResultReg, 2),
+    Stream1 = StreamModule:append(State0#state.stream, <<I1/binary, I2/binary>>),
+    {State0#state{stream = Stream1, available_regs = AT, used_regs = [ResultReg | UR]}, ResultReg}.
 
 or_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,

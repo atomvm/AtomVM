@@ -1301,6 +1301,12 @@ static term jit_term_create_empty_binary(Context *ctx, size_t len)
     return term_create_empty_binary(len, &ctx->heap, ctx->global);
 }
 
+static term jit_term_reuse_binary(Context *ctx, term src, size_t len)
+{
+    TRACE("jit_term_reuse_binary: src=0x%lx, len=%d\n", src, (int) len);
+    return term_reuse_binary(src, len, &ctx->heap, ctx->global);
+}
+
 static int jit_decode_flags_list(Context *ctx, JITState *jit_state, term flags)
 {
     int flags_value = 0;
@@ -1734,7 +1740,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf16,
     jit_bitstring_get_utf32,
     term_copy_map,
-    jit_stacktrace_build
+    jit_stacktrace_build,
+    jit_term_reuse_binary
 };
 
 #endif
