@@ -88,12 +88,8 @@ _Static_assert(
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign);
 
-static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1, size_t *b1_len,
-    intn_integer_sign_t *b1_sign);
-
-static void args_to_bigint(term arg1, term arg2, intn_digit_t *tmp_buf1, intn_digit_t *tmp_buf2,
-    intn_digit_t **b1, size_t *b1_len, intn_integer_sign_t *b1_sign, intn_digit_t **b2,
-    size_t *b2_len, intn_integer_sign_t *b2_sign);
+static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
+    size_t *b1_len, intn_integer_sign_t *b1_sign);
 
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
 {
@@ -556,14 +552,14 @@ static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t tmp_buf1[INTN_INT64_LEN];
     intn_digit_t tmp_buf2[INTN_INT64_LEN];
 
-    intn_digit_t *bn1;
+    const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    intn_digit_t *bn2;
+    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    args_to_bigint(
-        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_ADD_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -694,14 +690,14 @@ static term sub_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t tmp_buf1[INTN_INT64_LEN];
     intn_digit_t tmp_buf2[INTN_INT64_LEN];
 
-    intn_digit_t *bn1;
+    const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    intn_digit_t *bn2;
+    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    args_to_bigint(
-        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_SUB_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -842,8 +838,8 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     }
 }
 
-static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1, size_t *b1_len,
-    intn_integer_sign_t *b1_sign)
+static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
+    size_t *b1_len, intn_integer_sign_t *b1_sign)
 {
     if (term_is_boxed_integer(arg1)
         && (term_boxed_size(arg1) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term))) {
@@ -856,16 +852,6 @@ static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, intn_digit_t **b1,
         *b1 = tmp_buf1;
         *b1_len = INTN_INT64_LEN;
     }
-}
-
-static void args_to_bigint(term arg1, term arg2, intn_digit_t *tmp_buf1, intn_digit_t *tmp_buf2,
-    intn_digit_t **b1, size_t *b1_len, intn_integer_sign_t *b1_sign, intn_digit_t **b2,
-    size_t *b2_len, intn_integer_sign_t *b2_sign)
-{
-    // arg1 or arg2 may need to be "upgraded",
-    // in that case tmp_buf will hold the "upgraded" version
-    term_to_bigint(arg1, tmp_buf1, b1, b1_len, b1_sign);
-    term_to_bigint(arg2, tmp_buf2, b2, b2_len, b2_sign);
 }
 
 static term mul_int64_to_bigint(
@@ -884,14 +870,14 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t tmp_buf1[INTN_INT64_LEN];
     intn_digit_t tmp_buf2[INTN_INT64_LEN];
 
-    intn_digit_t *bn1;
+    const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    intn_digit_t *bn2;
+    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    args_to_bigint(
-        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_MUL_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -1047,14 +1033,14 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t tmp_buf1[INTN_INT64_LEN];
     intn_digit_t tmp_buf2[INTN_INT64_LEN];
 
-    intn_digit_t *bn1;
+    const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    intn_digit_t *bn2;
+    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    args_to_bigint(
-        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
     if (cmp_result < 0) {
@@ -1367,14 +1353,14 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t tmp_buf1[INTN_INT64_LEN];
     intn_digit_t tmp_buf2[INTN_INT64_LEN];
 
-    intn_digit_t *bn1;
+    const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    intn_digit_t *bn2;
+    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    args_to_bigint(
-        arg1, arg2, tmp_buf1, tmp_buf2, &bn1, &bn1_len, &bn1_sign, &bn2, &bn2_len, &bn2_sign);
+    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
     if (cmp_result < 0) {
@@ -1630,13 +1616,14 @@ static inline term bitwise_helper(
         } else {
             intn_digit_t tmp_buf1[INTN_INT64_LEN];
             intn_digit_t tmp_buf2[INTN_INT64_LEN];
-            intn_digit_t *m;
+            const intn_digit_t *m;
             size_t m_len;
             intn_integer_sign_t m_sign;
-            intn_digit_t *n;
+            term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+            const intn_digit_t *n;
             size_t n_len;
             intn_integer_sign_t n_sign;
-            args_to_bigint(arg1, arg2, tmp_buf1, tmp_buf2, &m, &m_len, &m_sign, &n, &n_len, &n_sign);
+            term_to_bigint(arg2, tmp_buf2, &n, &n_len, &n_sign);
 
             intn_digit_t bigres[INTN_MAX_RES_LEN];
             intn_integer_sign_t bigres_sign;
@@ -1709,7 +1696,7 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         }
 
         intn_digit_t tmp_buf1[INTN_INT64_LEN];
-        intn_digit_t *m;
+        const intn_digit_t *m;
         size_t m_len;
         intn_integer_sign_t m_sign;
         term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
@@ -1765,7 +1752,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         }
 
         intn_digit_t tmp_buf1[INTN_INT64_LEN];
-        intn_digit_t *m;
+        const intn_digit_t *m;
         size_t m_len;
         intn_integer_sign_t m_sign;
         term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
@@ -1826,7 +1813,7 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
             #endif
             default: {
                 intn_digit_t tmp_buf1[INTN_INT64_LEN];
-                intn_digit_t *m;
+                const intn_digit_t *m;
                 size_t m_len;
                 intn_integer_sign_t m_sign;
                 term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
