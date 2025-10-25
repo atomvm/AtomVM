@@ -34,6 +34,7 @@
 -define(TERM_BOXED_TUPLE, 16#0).
 -define(TERM_BOXED_BIN_MATCH_STATE, 16#4).
 -define(TERM_BOXED_POSITIVE_INTEGER, 16#8).
+-define(TERM_BOXED_NEGATIVE_INTEGER, 16#C).
 -define(TERM_BOXED_REF, 16#10).
 -define(TERM_BOXED_FUN, 16#14).
 -define(TERM_BOXED_FLOAT, 16#18).
@@ -45,7 +46,11 @@
 -define(TERM_BOXED_EXTERNAL_PORT, 16#34).
 -define(TERM_BOXED_EXTERNAL_REF, 16#38).
 
--define(TERM_BOXED_TAG_MASK_POSITIVE_INTEGER_OR_FLOAT, 16#2F).
+-define(TERM_BOXED_TAG_MASK_NO_SIGN, 16#3B).
+% Optimization : ((Reg & 0x3F) != 0x8) && ((Reg & 0x3F) != 0xC) && ((Reg & 0x3F) != 0x18)
+% is (almost) equivalent to (Reg & 0x2B) != 0x8. It will misidentify 0x1C,
+% but we are not using it and it has been marked as unavailable in term.h
+-define(TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT, 16#2B).
 -define(TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT, 16#8).
 
 -define(TERM_IMMED2_TAG_MASK, 16#3F).

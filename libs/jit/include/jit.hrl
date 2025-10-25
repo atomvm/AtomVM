@@ -20,6 +20,10 @@
 
 -define(JIT_FORMAT_VERSION, 1).
 
+% Before adding any new platform to the list below:
+% Is it 64-bit big endian? if so, `put_digits` function in jit.erl must be updated to support
+% big endian platforms.
+
 -define(JIT_ARCH_X86_64, 1).
 -define(JIT_ARCH_AARCH64, 2).
 -define(JIT_ARCH_ARMV6M, 3).

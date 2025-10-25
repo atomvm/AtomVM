@@ -58,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:list_to_bitstring`
 - Reimplemented `lists:keyfind`, `lists:keymember` and `lists:member` as NIFs
 - Added `AVM_PRINT_PROCESS_CRASH_DUMPS` option
+- Added support for big integers up to 256-bit (sign + 256-bit magnitude)
+- Added support for big integers in `binary_to_term/1` and `term_to_binary/1,2`
 
 ### Changed
 
@@ -68,6 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Entry point now is `init:boot/1` if it exists. It starts the kernel application and calls `start/0` from the
   identified startup module. Users who started kernel application (typically for distribution) must no longer
   do it. Startint `net_kernel` is still required.
+- All arithmetic operations (`+`, `-`, `*`, `div`, `rem`, `abs`, etc.) now support integers up to 256-bit
+- All bitwise operations (`band`, `bor`, `bxor`, `bnot`, `bsl`, `bsr`) now support integers up to 256-bit
+- Float conversion functions now support converting to/from big integers
+- `bsl` now properly checks for overflow
+
+### Changed
+- `binary_to_integer/1` no longer accepts binaries such as `<<"0xFF">>` or `<<"  123">>`
+- `binary_to_integer` and `list_to_integer` do not raise anymore `overflow` error, they raise
+instead `badarg`.
 
 ### Fixed
 
@@ -78,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - packbeam: fix memory leak preventing building with address sanitizer
 - Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
 - Fix a memory leak in distribution when a BEAM node would monitor a process by name.
+- Fix `list_to_integer`, it was likely buggy with integers close to INT64_MAX
 
 ## [0.6.7] - Unreleased
 

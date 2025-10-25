@@ -973,7 +973,13 @@ is_integer_test() ->
             MSt3 = ?BACKEND:move_array_element(MSt2, Reg, 0, Reg),
             ?BACKEND:if_block(
                 MSt3,
-                {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                {
+                    {free, Reg},
+                    '&',
+                    ?TERM_BOXED_TAG_MASK_NO_SIGN,
+                    '!=',
+                    ?TERM_BOXED_POSITIVE_INTEGER
+                },
                 fun(BSt0) ->
                     ?BACKEND:jump_to_label(BSt0, Label)
                 end
@@ -999,7 +1005,7 @@ is_integer_test() ->
         "  1e:	e9 13 01 00 00       	jmpq   0x136\n"
         "  23:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax\n"
         "  27:	48 8b 00             	mov    (%rax),%rax\n"
-        "  2a:	24 3f                	and    $0x3f,%al\n"
+        "  2a:	24 3b                	and    $0x3b,%al\n"
         "  2c:	80 f8 08             	cmp    $0x8,%al\n"
         "  2f:	74 05                	je     0x36\n"
         "  31:	e9 00 01 00 00       	jmpq   0x136"
@@ -1025,7 +1031,7 @@ is_number_test() ->
             BSt3 = ?BACKEND:move_array_element(BSt2, Reg, 0, Reg),
             cond_jump_to_label(
                 {'and', [
-                    {Reg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
+                    {Reg, '&', ?TERM_BOXED_TAG_MASK_NO_SIGN, '!=', ?TERM_BOXED_POSITIVE_INTEGER},
                     {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_FLOAT}
                 ]},
                 Label,
@@ -1054,7 +1060,7 @@ is_number_test() ->
         "  23:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax\n"
         "  27:	48 8b 00             	mov    (%rax),%rax\n"
         "  2a:	49 89 c3             	mov    %rax,%r11\n"
-        "  2d:	41 80 e3 3f          	and    $0x3f,%r11b\n"
+        "  2d:	41 80 e3 3b          	and    $0x3b,%r11b\n"
         "  31:	41 80 fb 08          	cmp    $0x8,%r11b\n"
         "  35:	74 0c                	je     0x43\n"
         "  37:	24 3f                	and    $0x3f,%al\n"

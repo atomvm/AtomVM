@@ -92,9 +92,14 @@
 -define(PRIM_BITSTRING_GET_UTF32, 69).
 -define(PRIM_TERM_COPY_MAP, 70).
 -define(PRIM_STACKTRACE_BUILD, 71).
+-define(PRIM_ALLOC_BIG_INTEGER_FRAGMENT, 72).
 
 % Parameters to ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS
 % -define(MEMORY_NO_SHRINK, 0).
 -define(MEMORY_CAN_SHRINK, 1).
 % -define(MEMORY_FORCE_SHRINK, 2).
 % -define(MEMORY_NO_GC, 3).
+
+% term_integer_sign_t sign parameter for PRIM_ALLOC_BIG_INTEGER_FRAGMENT
+-define(TERM_POSITIVE_INTEGER, 0).
+-define(TERM_NEGATIVE_INTEGER, 4).
