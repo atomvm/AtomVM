@@ -160,6 +160,7 @@ struct ModuleNativeInterface
     term (*stacktrace_build)(Context *ctx);
     term (*term_reuse_binary)(Context *ctx, term src, size_t len);
     term (*alloc_big_integer_fragment)(Context *ctx, size_t digits_len, term_integer_sign_t sign);
+    bool (*bitstring_insert_float)(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags);
 };
 
 extern const ModuleNativeInterface module_native_interface;

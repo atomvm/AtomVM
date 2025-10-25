@@ -2563,6 +2563,42 @@ first_pass_bs_create_bin_compute_size(
     MSt1 = verify_is_integer(Src, Fail, MMod, MSt0),
     {MSt1, AccLiteralSize0 + 32, AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
+    float, Src, Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
+) ->
+    MSt1 = verify_is_number(Src, Fail, MMod, MSt0),
+    % Verify and get the float size (defaults to 64 if nil)
+    case Size of
+        ?TERM_NIL ->
+            {MSt1, AccLiteralSize0 + 64, AccSizeReg0, State0};
+        _ ->
+            {MSt2, SizeValue} = term_to_int(Size, Fail, MMod, MSt1),
+            if
+                is_integer(SizeValue) ->
+                    % If size is a literal, compiler would only allow 16/32/64.
+                    {MSt2, AccLiteralSize0 + SizeValue, AccSizeReg0, State0};
+                is_atom(SizeValue) ->
+                    % Check if size is 16, 32, or 64 using 'and' of '!=' checks
+                    MSt3 = cond_raise_badarg_or_jump_to_fail_label(
+                        {'and', [
+                            {SizeValue, '!=', 16},
+                            {SizeValue, '!=', 32},
+                            {SizeValue, '!=', 64}
+                        ]},
+                        Fail,
+                        MMod,
+                        MSt2
+                    ),
+                    case AccSizeReg0 of
+                        undefined ->
+                            {MSt3, AccLiteralSize0, SizeValue, State0};
+                        _ ->
+                            MSt4 = MMod:add(MSt3, AccSizeReg0, SizeValue),
+                            MSt5 = MMod:free_native_registers(MSt4, [SizeValue]),
+                            {MSt5, AccLiteralSize0, AccSizeReg0, State0}
+                    end
+            end
+    end;
+first_pass_bs_create_bin_compute_size(
     integer, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
     MSt1 = verify_is_any_integer(Src, Fail, MMod, MSt0),
@@ -2717,6 +2753,31 @@ first_pass_bs_create_bin_insert_value(
         MMod, MSt6, Offset, SizeValue, 1
     ),
     {MSt7, NewOffset, CreatedBin};
+first_pass_bs_create_bin_insert_value(
+    float, Flags, Src, Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
+) ->
+    % Src is a term (boxed float or integer)
+    {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
+    {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
+    % Get the float size (defaults to 64 if nil)
+    {MSt3, SizeValue} =
+        case Size of
+            ?TERM_NIL ->
+                {MSt2, 64};
+            _ ->
+                term_to_int(Size, Fail, MMod, MSt2)
+        end,
+    % Call single primitive with size parameter
+    {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_FLOAT, [
+        CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
+    ]),
+    MSt5 = cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, BoolResult}, '==', false}, Fail, MMod, MSt4
+    ),
+    {MSt6, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt5, Offset, SizeValue, 1
+    ),
+    {MSt6, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     string, _Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
@@ -3328,6 +3389,13 @@ verify_is_any_integer(Arg1, Fail, MMod, MSt0) ->
         Fail,
         MMod,
         MSt0
+    ).
+
+verify_is_number(Arg1, Fail, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:copy_to_native_register(MSt0, Arg1),
+    {MSt2, IsNumber} = MMod:call_primitive(MSt1, ?PRIM_TERM_IS_NUMBER, [{free, Reg}]),
+    cond_raise_badarg_or_jump_to_fail_label(
+        {'(bool)', {free, IsNumber}, '==', false}, Fail, MMod, MSt2
     ).
 
 %%-----------------------------------------------------------------------------
