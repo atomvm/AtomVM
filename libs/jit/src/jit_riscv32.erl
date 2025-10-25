@@ -87,6 +87,7 @@
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
+-include("term.hrl").
 
 -define(ASSERT(Expr), true = Expr).
 
@@ -1244,7 +1245,7 @@ if_block_cond(
     I1 = jit_riscv32_asm:mv(Temp, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     State1 = State0#state{stream = Stream1},
-    State2 = and_(State1#state{available_regs = AT}, Temp, Mask),
+    {State2, Temp} = and_(State1#state{available_regs = AT}, {free, Temp}, Mask),
     Stream2 = State2#state.stream,
     %% Compare Temp with Val and branch if equal (NOT != Val)
     case Val of
@@ -1290,7 +1291,7 @@ if_block_cond(
 ) when ?IS_GPR(Reg) ->
     %% RISC-V: AND with mask, then compare with value
     OffsetBefore = StreamModule:offset(Stream0),
-    State1 = and_(State0, Reg, Mask),
+    {State1, Reg} = and_(State0, RegTuple, Mask),
     Stream1 = State1#state.stream,
     %% Compare Reg with Val and branch if equal (NOT != Val)
     case Val of
@@ -2426,14 +2427,14 @@ get_module_index(
 %% JIT currentl calls this with two values: ?TERM_PRIMARY_CLEAR_MASK (-4) to
 %% clear bits and ?TERM_BOXED_TAG_MASK (0x3F). We can avoid any literal pool
 %% by using BICS for -4.
-and_(#state{stream_module = StreamModule, stream = Stream0} = State0, Reg, 16#FFFFFF) ->
+and_(#state{stream_module = StreamModule, stream = Stream0} = State0, {free, Reg}, 16#FFFFFF) ->
     I1 = jit_riscv32_asm:slli(Reg, Reg, 8),
     I2 = jit_riscv32_asm:srli(Reg, Reg, 8),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
-    State0#state{stream = Stream1};
+    {State0#state{stream = Stream1}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) when Val < 0 andalso Val >= -256 ->
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, bnot (Val)),
@@ -2442,20 +2443,20 @@ and_(
     I1 = jit_riscv32_asm:not_(Temp, Temp),
     I2 = jit_riscv32_asm:and_(Reg, Reg, Temp),
     Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary>>),
-    State1#state{available_regs = [Temp | AT], stream = Stream2};
+    {State1#state{available_regs = [Temp | AT], stream = Stream2}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) ->
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
     Stream1 = State1#state.stream,
     I = jit_riscv32_asm:and_(Reg, Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
-    State1#state{available_regs = [Temp | AT], stream = Stream2};
+    {State1#state{available_regs = [Temp | AT], stream = Stream2}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = []} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) when Val < 0 andalso Val >= -256 ->
     % No available registers, use a0 as temp and save it to t3
@@ -2473,10 +2474,10 @@ and_(
     % Restore a0 from t3
     Restore = jit_riscv32_asm:mv(a0, ?IP_REG),
     Stream4 = StreamModule:append(Stream3, Restore),
-    State0#state{stream = Stream4};
+    {State0#state{stream = Stream4}, Reg};
 and_(
     #state{stream_module = StreamModule, available_regs = []} = State0,
-    Reg,
+    {free, Reg},
     Val
 ) ->
     % No available registers, use a0 as temp and save it to t3
@@ -2493,7 +2494,16 @@ and_(
     % Restore a0 from t3
     Restore = jit_riscv32_asm:mv(a0, ?IP_REG),
     Stream4 = StreamModule:append(Stream3, Restore),
-    State0#state{stream = Stream4}.
+    {State0#state{stream = Stream4}, Reg};
+and_(
+    #state{stream_module = StreamModule, available_regs = [ResultReg | AT], used_regs = UR} =
+        State0,
+    Reg,
+    ?TERM_PRIMARY_CLEAR_MASK
+) ->
+    I = jit_riscv32_asm:andi(ResultReg, Reg, -4),
+    Stream1 = StreamModule:append(State0#state.stream, I),
+    {State0#state{stream = Stream1, available_regs = AT, used_regs = [ResultReg | UR]}, ResultReg}.
 
 or_(
     #state{stream_module = StreamModule, available_regs = [Temp | AT]} = State0,
