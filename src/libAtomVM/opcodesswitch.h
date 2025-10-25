@@ -5297,6 +5297,9 @@ wait_timeout_trap_handler:
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     bool status;
                     switch (size_val) {
+                        case 16:
+                            status = bitstring_extract_f16(bs_bin, bs_offset, increment, flags_value, &value);
+                            break;
                         case 32:
                             status = bitstring_extract_f32(bs_bin, bs_offset, increment, flags_value, &value);
                             break;
@@ -6818,6 +6821,31 @@ wait_timeout_trap_handler:
                                 segment_size = signed_size_value;
                                 break;
                             }
+                            case FLOAT_ATOM: {
+                                if (!term_is_number(src)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                // size is optional for floats, defaults to 64
+                                avm_int_t signed_size_value = 64;
+                                if (size != term_nil()) {
+                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                    signed_size_value = term_to_int(size);
+                                    if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                                        if (fail == 0) {
+                                            RAISE_ERROR(BADARG_ATOM);
+                                        } else {
+                                            JUMP_TO_LABEL(mod, fail);
+                                        }
+                                    }
+                                }
+                                segment_size = signed_size_value;
+                                segment_unit = 1;
+                                break;
+                            }
                             case STRING_ATOM: {
                                 VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                 avm_int_t signed_size_value = term_to_int(size);
@@ -6916,6 +6944,7 @@ wait_timeout_trap_handler:
                             case UTF16_ATOM:
                             case UTF32_ATOM:
                             case INTEGER_ATOM:
+                            case FLOAT_ATOM:
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode);
                                 break;
                             default:
@@ -6938,6 +6967,13 @@ wait_timeout_trap_handler:
                             case INTEGER_ATOM:
                             case STRING_ATOM:
                                 size_value = (size_t) term_to_int(size);
+                                break;
+                            case FLOAT_ATOM:
+                                if (size != term_nil()) {
+                                    size_value = (size_t) term_to_int(size);
+                                } else {
+                                    size_value = 64;
+                                }
                                 break;
                             default:
                                 break;
@@ -6977,6 +7013,38 @@ wait_timeout_trap_handler:
                                 if (UNLIKELY(!result)) {
                                     TRACE("bs_create_bin/6: Failed to insert integer into binary\n");
                                     RAISE_ERROR(BADARG_ATOM);
+                                }
+                                segment_size = size_value;
+                                break;
+                            }
+                            case FLOAT_ATOM: {
+                                avm_float_t float_value;
+                                if (term_is_float(src)) {
+                                    float_value = term_to_float(src);
+                                } else if (term_is_any_integer(src)) {
+                                    float_value = (avm_float_t) term_maybe_unbox_int64(src);
+                                } else {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                bool result;
+                                if (size_value == 16) {
+                                    result = bitstring_insert_f16(t, offset, float_value, flags_value);
+                                } else if (size_value == 32) {
+                                    result = bitstring_insert_f32(t, offset, float_value, flags_value);
+                                } else {
+                                    result = bitstring_insert_f64(t, offset, float_value, flags_value);
+                                }
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert float into binary\n");
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
                                 }
                                 segment_size = size_value;
                                 break;
