@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -38,6 +39,7 @@
     return_if_not_equal_to_ctx/2,
     jump_to_label/2,
     jump_to_continuation/2,
+    jump_to_offset/2,
     if_block/3,
     if_else_block/4,
     shift_right/3,
@@ -257,6 +259,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state (unused on aarch64)
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    State.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
@@ -530,6 +542,13 @@ jump_to_label(
             Stream1 = StreamModule:append(Stream0, I1),
             State#state{stream = Stream1, branches = [Reloc | AccBranches]}
     end.
+
+jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
+    Offset = StreamModule:offset(Stream0),
+    Rel = TargetOffset - Offset,
+    I1 = jit_aarch64_asm:b(Rel),
+    Stream1 = StreamModule:append(Stream0, I1),
+    State#state{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to a continuation address stored in a register.
