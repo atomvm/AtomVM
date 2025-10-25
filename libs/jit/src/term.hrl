@@ -74,3 +74,5 @@
 -define(REFC_BINARY_MIN_64, 64).
 -define(TERM_BOXED_REFC_BINARY_SIZE, 6).
 -define(BINARY_HEADER_SIZE, 2).
+
+-define(TERM_INVALID_TERM, 0).
