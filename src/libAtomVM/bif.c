@@ -88,7 +88,7 @@ _Static_assert(
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign);
 
-static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
+static void conv_term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
     size_t *b1_len, intn_integer_sign_t *b1_sign);
 
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
@@ -555,11 +555,11 @@ static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    conv_term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
     const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
+    conv_term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_ADD_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -693,11 +693,11 @@ static term sub_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    conv_term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
     const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
+    conv_term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_SUB_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -839,7 +839,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     }
 }
 
-static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
+static void conv_term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
     size_t *b1_len, intn_integer_sign_t *b1_sign)
 {
     if (term_is_boxed_integer(arg1)
@@ -874,11 +874,11 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    conv_term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
     const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
+    conv_term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     size_t bigres_len = INTN_MUL_OUT_LEN(bn1_len, bn2_len);
     if (bigres_len > INTN_MAX_RES_LEN) {
@@ -1038,11 +1038,11 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    conv_term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
     const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
+    conv_term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
     if (cmp_result < 0) {
@@ -1146,7 +1146,7 @@ term bif_erlang_div_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 // that just copies the given term but changes the sign
 static term neg_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
 {
-    // update when updating term_to_bigint
+    // update when updating conv_term_to_bigint
     intn_digit_t *m = term_intn_data(arg1);
     size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
     intn_integer_sign_t m_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
@@ -1242,7 +1242,7 @@ term bif_erlang_neg_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 // that just copies the given term but changes the sign
 static term abs_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
 {
-    // update when updating term_to_bigint
+    // update when updating conv_term_to_bigint
     intn_digit_t *m = term_intn_data(arg1);
     size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
 
@@ -1359,11 +1359,11 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     const intn_digit_t *bn1;
     size_t bn1_len;
     intn_integer_sign_t bn1_sign;
-    term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
+    conv_term_to_bigint(arg1, tmp_buf1, &bn1, &bn1_len, &bn1_sign);
     const intn_digit_t *bn2;
     size_t bn2_len;
     intn_integer_sign_t bn2_sign;
-    term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
+    conv_term_to_bigint(arg2, tmp_buf2, &bn2, &bn2_len, &bn2_sign);
 
     int cmp_result = intn_cmp(bn1, bn1_len, bn2, bn2_len);
     if (cmp_result < 0) {
@@ -1622,11 +1622,11 @@ static inline term bitwise_helper(
             const intn_digit_t *m;
             size_t m_len;
             intn_integer_sign_t m_sign;
-            term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+            conv_term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
             const intn_digit_t *n;
             size_t n_len;
             intn_integer_sign_t n_sign;
-            term_to_bigint(arg2, tmp_buf2, &n, &n_len, &n_sign);
+            conv_term_to_bigint(arg2, tmp_buf2, &n, &n_len, &n_sign);
 
             intn_digit_t bigres[INTN_MAX_RES_LEN];
             intn_integer_sign_t bigres_sign;
@@ -1702,7 +1702,7 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         const intn_digit_t *m;
         size_t m_len;
         intn_integer_sign_t m_sign;
-        term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+        conv_term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
 
         intn_digit_t bigres[INTN_MAX_RES_LEN];
         size_t bigres_len = intn_bsl(m, m_len, b, bigres);
@@ -1762,7 +1762,7 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         const intn_digit_t *m;
         size_t m_len;
         intn_integer_sign_t m_sign;
-        term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+        conv_term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
 
         intn_digit_t bigres[INTN_MAX_RES_LEN];
         size_t bigres_len = intn_bsr(m, m_len, m_sign, b, bigres);
@@ -1823,7 +1823,7 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
                 const intn_digit_t *m;
                 size_t m_len;
                 intn_integer_sign_t m_sign;
-                term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
+                conv_term_to_bigint(arg1, tmp_buf1, &m, &m_len, &m_sign);
 
                 intn_digit_t bigres[INTN_MAX_RES_LEN];
                 intn_integer_sign_t bigres_sign;
