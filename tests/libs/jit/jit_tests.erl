@@ -74,6 +74,7 @@ compile_minimal_x86_64_test() ->
         fun(_) -> undefined end,
         fun(_) -> undefined end,
         fun(_) -> any end,
+        fun(_) -> undefined end,
         jit_x86_64,
         Stream2
     ),
@@ -117,10 +118,11 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     AtomResolver = jit_precompile:atom_resolver(?ATU8_CHUNK_1),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(?TYPE_CHUNK_1),
+    ImportResolver = fun(_) -> test_function end,
 
     % Compile with typed register support
     {_LabelsCount, Stream3} = jit:compile(
-        ?CODE_CHUNK_1, AtomResolver, LiteralResolver, TypeResolver, jit_x86_64, Stream2
+        ?CODE_CHUNK_1, AtomResolver, LiteralResolver, TypeResolver, ImportResolver, jit_x86_64, Stream2
     ),
     CompiledCode = jit_x86_64:stream(Stream3),
 
@@ -194,10 +196,11 @@ verify_is_function_typed_optimization_x86_64_test() ->
     AtomResolver = jit_precompile:atom_resolver(?ATU8_CHUNK_2),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(?TYPE_CHUNK_2),
+    ImportResolver = fun(_) -> test_function end,
 
     % Compile with typed register support
     {_LabelsCount, Stream3} = jit:compile(
-        ?CODE_CHUNK_2, AtomResolver, LiteralResolver, TypeResolver, jit_x86_64, Stream2
+        ?CODE_CHUNK_2, AtomResolver, LiteralResolver, TypeResolver, ImportResolver, jit_x86_64, Stream2
     ),
     CompiledCode = jit_x86_64:stream(Stream3),
 

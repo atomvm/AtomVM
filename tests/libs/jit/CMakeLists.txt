@@ -30,6 +30,8 @@ set(ERLANG_MODULES
     jit_aarch64_asm_tests
     jit_armv6m_tests
     jit_armv6m_asm_tests
+    jit_riscv32_tests
+    jit_riscv32_asm_tests
     jit_x86_64_tests
     jit_x86_64_asm_tests
 )

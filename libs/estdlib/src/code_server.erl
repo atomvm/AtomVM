@@ -39,6 +39,7 @@
     atom_resolver/2,
     literal_resolver/2,
     type_resolver/2,
+    import_resolver/2,
     set_native_code/3
 ]).
 
@@ -135,6 +136,14 @@ literal_resolver(_Module, _Index) ->
 type_resolver(_Module, _Index) ->
     erlang:nif_error(undefined).
 
+%% @doc Get an imported function triplet from its index
+%% @return The imported function as {Module, Function, Arity}
+%% @param Module module to get the imported function from
+%% @param Index imported function index in the module
+-spec import_resolver(Module :: module(), Index :: non_neg_integer()) -> {atom(), atom(), non_neg_integer()}.
+import_resolver(_Module, _Index) ->
+    erlang:nif_error(undefined).
+
 %% @doc Associate a native code stream with a module
 %% @return ok
 %% @param Module module to set the native code of
@@ -152,7 +161,7 @@ set_native_code(_Module, _LabelsCount, _Stream) ->
 load(Module) ->
     case erlang:system_info(emu_flavor) of
         jit ->
-            % atomvm_heap_growth, fibonacci divides compilation time by two
+            % atomvm_heap_growth, fibonacci reduces compilation time
             {Pid, Ref} = spawn_opt(
                 fun() ->
                     try
@@ -164,18 +173,23 @@ load(Module) ->
                             code_server:literal_resolver(Module, Index)
                         end,
                         TypeResolver = fun(Index) -> code_server:type_resolver(Module, Index) end,
-                        Stream0 = jit:stream(jit_mmap_size(byte_size(Code))),
-                        {BackendModule, BackendState0} = jit:backend(Stream0),
+                        ImportResolver = fun(Index) ->
+                            code_server:import_resolver(Module, Index)
+                        end,
+                        {StreamModule, Stream0} = jit:stream(jit_mmap_size(byte_size(Code))),
+                        {BackendModule, BackendState0} = jit:backend(StreamModule, Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
                             Code,
                             AtomResolver,
                             LiteralResolver,
                             TypeResolver,
+                            ImportResolver,
                             BackendModule,
                             BackendState0
                         ),
                         Stream1 = BackendModule:stream(BackendState1),
-                        code_server:set_native_code(Module, LabelsCount, Stream1),
+                        Stream2 = StreamModule:flush(Stream1),
+                        code_server:set_native_code(Module, LabelsCount, Stream2),
                         End = erlang:system_time(millisecond),
                         io:format("~B ms (bytecode: ~B bytes, native code: ~B bytes)\n", [
                             End - Start, byte_size(Code), BackendModule:offset(BackendState1)

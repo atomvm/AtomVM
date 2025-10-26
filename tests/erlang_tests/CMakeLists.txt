@@ -613,6 +613,8 @@ compile_erlang(test_lists_member)
 compile_erlang(test_lists_keymember)
 compile_erlang(test_lists_keyfind)
 
+compile_erlang(test_inline_arith)
+
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
         test_op_bs_start_match_asm.beam
@@ -1134,6 +1136,8 @@ set(erlang_test_beams
     test_lists_member.beam
     test_lists_keymember.beam
     test_lists_keyfind.beam
+
+    test_inline_arith.beam
 
     test_code_server_nifs.beam
 

@@ -948,6 +948,8 @@ sub(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm), Imm >= 0, Imm =
     RdNum = reg_to_num(Rd),
     RnNum = reg_to_num(Rn),
     <<(16#D1000000 bor ((Imm band 16#FFF) bsl 10) bor (RnNum bsl 5) bor RdNum):32/little>>;
+sub(_Rd, _Rn, Imm) when is_integer(Imm) ->
+    error({unencodable_immediate, Imm});
 sub(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
     sub(Rd, Rn, Rm, {lsl, 0}).
 

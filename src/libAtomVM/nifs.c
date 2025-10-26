@@ -203,6 +203,7 @@ static term nif_code_server_code_chunk(Context *ctx, int argc, term argv[]);
 static term nif_code_server_atom_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_literal_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
+static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
@@ -773,6 +774,10 @@ static const struct Nif code_server_literal_resolver_nif = {
 static const struct Nif code_server_type_resolver_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_server_type_resolver
+};
+static const struct Nif code_server_import_resolver_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_server_import_resolver
 };
 static const struct Nif code_server_set_native_code_nif = {
     .base.type = NIFFunctionType,
@@ -4806,7 +4811,7 @@ static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[])
             uint32_t size;
             const void *beam;
             const char *module_name;
-            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, &beam, &size, &module_name)) {
+            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &beam, &size, &module_name)) {
                 synclist_unlock(&ctx->global->avmpack_data);
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5622,16 +5627,68 @@ static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[])
     if (IS_NULL_PTR(mod)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+
     int type_index = term_to_int(argv[1]);
     return module_get_type_by_index(mod, type_index, ctx);
 }
 
+static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    VALIDATE_VALUE(argv[0], term_is_atom);
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    term module_name = argv[0];
+    Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
+    if (IS_NULL_PTR(mod)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int import_index = term_to_int(argv[1]);
+
+    // Get the imported function entry at the given index
+    if (IS_NULL_PTR(mod->imported_funcs) || import_index < 0) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Parse the import table to get the module, function, and arity
+    // Import table format: each entry is 12 bytes (module_atom_index, function_atom_index, arity)
+    const uint8_t *import_table = mod->import_table;
+    if (IS_NULL_PTR(import_table)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int functions_count = READ_32_UNALIGNED(import_table + 8);
+    if (import_index >= functions_count) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int local_module_atom_index = READ_32_UNALIGNED(import_table + import_index * 12 + 12);
+    int local_function_atom_index = READ_32_UNALIGNED(import_table + import_index * 12 + 4 + 12);
+    uint32_t arity = READ_32_UNALIGNED(import_table + import_index * 12 + 8 + 12);
+
+    term module_atom = module_get_atom_term_by_id(mod, local_module_atom_index);
+    term function_atom = module_get_atom_term_by_id(mod, local_function_atom_index);
+    term arity_term = term_from_int(arity);
+
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(result, 0, module_atom);
+    term_put_tuple_element(result, 1, function_atom);
+    term_put_tuple_element(result, 2, arity_term);
+
+    return result;
+}
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
     VALIDATE_VALUE(argv[0], term_is_atom);
     VALIDATE_VALUE(argv[1], term_is_integer);
+
+    avm_int_t labels_count = term_to_int(argv[1]);
 
     term module_name = argv[0];
     Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
@@ -5646,9 +5703,11 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
 
     SMP_MODULE_LOCK(mod);
     if (mod->native_code == NULL) {
-        module_set_native_code(mod, term_to_int(argv[1]), entry_point);
+        module_set_native_code(mod, labels_count, entry_point);
     }
     SMP_MODULE_UNLOCK(mod);
+
+    sys_set_cache_native_code(ctx->global, mod, JIT_FORMAT_VERSION, entry_point, labels_count);
 
     return OK_ATOM;
 }
@@ -5688,6 +5747,8 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_AARCH64_ATOM;
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
     return JIT_ARMV6M_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+    return JIT_RISCV32_ATOM;
 #else
 #error Unknown JIT target
 #endif

@@ -607,6 +607,8 @@ struct Test tests[] = {
     TEST_CASE(test_lists_keymember),
     TEST_CASE(test_lists_keyfind),
 
+    TEST_CASE(test_inline_arith),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
@@ -711,6 +713,11 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
         if (chdir("armv6m") != 0) {
             perror("Error: cannot find armv6m directory");
+            return EXIT_FAILURE;
+        }
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+        if (chdir("riscv32") != 0) {
+            perror("Error: cannot find riscv32 directory");
             return EXIT_FAILURE;
         }
 #else

@@ -27,7 +27,8 @@
     offset/1,
     append/2,
     replace/3,
-    map/4
+    map/4,
+    flush/1
 ]).
 
 %% Additional nif
@@ -108,4 +109,15 @@ map(Stream, Offset, Length, MapFunction) ->
 %%-----------------------------------------------------------------------------
 -spec read(stream(), non_neg_integer(), pos_integer()) -> binary().
 read(_Stream, _Offset, _Length) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param Stream        stream to flush
+%% @returns The stream flushed
+%% @doc     Flush the stream. Typically invalidates instruction cache.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec flush(stream()) -> stream().
+flush(_Stream) ->
     erlang:nif_error(undefined).
