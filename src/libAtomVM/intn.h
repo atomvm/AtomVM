@@ -79,12 +79,8 @@
  * ## Functions Requiring Normalized Input
  *
  * The following functions MUST receive normalized input for correct operation:
- * - \c intn_to_string() - for correct output
- * - \c intn_to_double() - for correct conversion
  * - \c intn_to_int64() - for correct conversion
  * - \c intn_fits_int64() - for accurate check
- * - \c intn_to_integer_bytes() - for correct size calculation
- * - \c intn_required_unsigned_integer_bytes() - for accurate size
  *
  * All other functions accept both normalized and non-normalized inputs.
  *
@@ -719,9 +715,9 @@ size_t intn_count_digits(const intn_digit_t *num, size_t num_len);
  * @return Newly allocated null-terminated string (caller must free)
  *
  * @pre base >= 2 && base <= 36
- * @pre Input must be normalized for correct output
  * @post Returned string must be freed by caller
  * @note Output format: uppercase letters, no base prefix
+ * @note Accepts both normalized and non-normalized inputs
  */
 char *intn_to_string(const intn_digit_t *num, size_t len, intn_integer_sign_t num_sign, int base,
     size_t *string_len);
@@ -763,9 +759,9 @@ int intn_parse(
  * @param sign Sign of integer
  * @return Double representation
  *
- * @pre Input must be normalized
  * @note Precision loss expected for integers > 53 bits
  * @note With current 256-bit limit, result always fits in double range
+ * @note Accepts both normalized and non-normalized inputs
  */
 double intn_to_double(const intn_digit_t *num, size_t len, intn_integer_sign_t sign);
 
