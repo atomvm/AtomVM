@@ -812,7 +812,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
         term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
         if (UNLIKELY(memory_ensure_free_with_roots(
-                         ctx, BOXED_INTN_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
+                         ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
                 != MEMORY_GC_OK)) {
             RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
         }

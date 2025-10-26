@@ -145,7 +145,6 @@ extern "C" {
 #define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
-#define BOXED_INTN_SIZE(term_size) ((term_size) + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
@@ -187,6 +186,17 @@ extern "C" {
 
 #define TERM_BINARY_HEAP_SIZE(size) \
     (TERM_BINARY_DATA_SIZE_IN_TERMS(size) + BINARY_HEADER_SIZE)
+
+/**
+ * @def BOXED_BIGINT_HEAP_SIZE(term_size)
+ * @brief Calculate total heap allocation size for a bigint including header
+ *
+ * @param term_size Data size in terms (from \c term_bigint_size_requirements())
+ * @return Total heap size needed including 1 term for boxed header
+ *
+ * @see term_bigint_size_requirements() which provides the term_size parameter
+ */
+#define BOXED_BIGINT_HEAP_SIZE(term_size) ((term_size) + 1)
 
 #define TERM_DEBUG_ASSERT(...)
 
@@ -1308,7 +1318,7 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
  * boxed header with size and sign information. The digit data area is left
  * uninitialized and must be filled using \c term_initialize_bigint().
  *
- * @param n Size of data area in terms (not digits)
+ * @param n Size of data area in terms (not digits), from \c term_bigint_size_requirements()
  * @param sign Sign of the integer (\c TERM_INTEGER_POSITIVE or \c TERM_INTEGER_NEGATIVE)
  * @param heap Heap to allocate from
  * @return Newly created uninitialized bigint term
@@ -1320,11 +1330,15 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
  * @post Header contains size and sign information
  * @post Data area is uninitialized and must be filled before use
  *
+ * @warning When ensuring heap space, use \c BOXED_BIGINT_HEAP_SIZE(n) to include
+ *          the header term in the allocation size
+ *
  * @note The size n is in terms, not \c intn_digit_t digits
  * @note Use \c term_bigint_size_requirements() to calculate appropriate n value
  *
  * @see term_initialize_bigint() to fill the allocated data area
  * @see term_bigint_size_requirements() to calculate required size
+ * @see BOXED_BIGINT_HEAP_SIZE() to calculate total heap allocation including header
  */
 static inline term term_create_uninitialized_bigint(size_t n, term_integer_sign_t sign, Heap *heap)
 {
@@ -1376,7 +1390,7 @@ static inline void term_initialize_bigint(
  * systems (where term = 2 × intn_digit_t), including alignment requirements.
  *
  * @param n Number of non-zero \c intn_digit_t digits in the integer
- * @param[out] intn_data_size Number of terms needed for storage
+ * @param[out] intn_data_size Number of terms needed for storage (excludes header)
  * @param[out] rounded_num_len Rounded number of digits for zero-padding
  *
  * @pre n > 0
@@ -1385,6 +1399,9 @@ static inline void term_initialize_bigint(
  *
  * @post *intn_data_size > \c BOXED_TERMS_REQUIRED_FOR_INT64 (ensures bigint distinction)
  * @post *rounded_num_len >= n (includes padding for alignment)
+ *
+ * @warning The returned intn_data_size does NOT include the boxed header term.
+ *          Use \c BOXED_BIGINT_HEAP_SIZE(intn_data_size) when allocating heap space.
  *
  * @note Forces minimum size > \c BOXED_TERMS_REQUIRED_FOR_INT64 to distinguish
  *       bigints from regular boxed int64 values (which use two's complement)
@@ -1396,9 +1413,15 @@ static inline void term_initialize_bigint(
  * size_t count = intn_count_digits(bigint, bigint_len);
  * size_t intn_data_size, rounded_res_len;
  * term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+ *
+ * // Ensure heap has space for data + header
+ * memory_ensure_free(ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size));
+ *
  * term t = term_create_uninitialized_bigint(intn_data_size, sign, heap);
  * term_initialize_bigint(t, bigint, count, rounded_res_len);
  * @endcode
+ *
+ * @see BOXED_BIGINT_HEAP_SIZE() to include header in heap allocation
  */
 static inline void term_bigint_size_requirements(
     size_t n, size_t *intn_data_size, size_t *rounded_num_len)

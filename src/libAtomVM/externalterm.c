@@ -1012,7 +1012,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             size_t data_size;
             size_t unused_rounded_len;
             term_bigint_size_requirements(required_digits, &data_size, &unused_rounded_len);
-            return BOXED_INTN_SIZE(data_size);
+            return BOXED_BIGINT_HEAP_SIZE(data_size);
         }
 
         case ATOM_UTF8_EXT:

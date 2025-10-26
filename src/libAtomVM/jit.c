@@ -629,7 +629,7 @@ static term jit_alloc_big_integer_fragment(
     size_t rounded_res_len;
     term_bigint_size_requirements(digits_len, &intn_data_size, &rounded_res_len);
 
-    if (UNLIKELY(memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         ctx->x[0] = ERROR_ATOM;
         ctx->x[1] = OUT_OF_MEMORY_ATOM;
         return term_invalid_term();

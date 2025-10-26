@@ -2059,7 +2059,7 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
     size_t rounded_res_len;
     term_bigint_size_requirements(bigres_len, &intn_data_size, &rounded_res_len);
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
