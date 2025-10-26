@@ -904,7 +904,8 @@ if_else_block(
     Stream2 = State2#state.stream,
     %% Emit unconditional branch to skip the else block (will be replaced)
     ElseJumpOffset = StreamModule:offset(Stream2),
-    ElseJumpInstr = jit_riscv32_asm:j(0),
+    %% Use all-1s placeholder for flash compatibility (can only flip 1->0)
+    ElseJumpInstr = <<16#FFFF:16>>,
     Stream3 = StreamModule:append(Stream2, ElseJumpInstr),
     %% Else block starts here.
     OffsetAfter = StreamModule:offset(Stream3),
@@ -924,6 +925,9 @@ if_else_block(
     %% Patch the unconditional branch to jump to the end
     FinalJumpOffset = OffsetFinal - ElseJumpOffset,
     NewElseJumpInstr = jit_riscv32_asm:j(FinalJumpOffset),
+    %% Assert that replacement is 2 bytes (c.j range: -2048..2046)
+    %% If this fails, the if/else blocks are too large
+    2 = byte_size(NewElseJumpInstr),
     Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
     merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
 
