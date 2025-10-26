@@ -568,7 +568,7 @@ static term add_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    bigres_len = intn_addmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    bigres_len = intn_add(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -706,7 +706,7 @@ static term sub_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    bigres_len = intn_submn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    bigres_len = intn_sub(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -830,7 +830,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
 
         return bigres_term;
     } else {
-        int64_t res64 = intn_2_digits_to_int64(bigres, count, sign);
+        int64_t res64 = intn_to_int64(bigres, count, sign);
 #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
         return make_maybe_boxed_int64(ctx, fail_label, live, res64);
 #else
@@ -849,7 +849,7 @@ static void term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t
         *b1_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
     } else {
         avm_int64_t i64 = term_maybe_unbox_int64(arg1);
-        int64_to_intn_2(i64, tmp_buf1, b1_sign);
+        intn_from_int64(i64, tmp_buf1, b1_sign);
         *b1 = tmp_buf1;
         *b1_len = INTN_INT64_LEN;
     }
@@ -887,7 +887,7 @@ static term mul_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    intn_mulmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
+    intn_mul(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -1055,7 +1055,7 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     intn_integer_sign_t res_sign;
-    size_t bigres_len = intn_divmn(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign, NULL, NULL);
+    size_t bigres_len = intn_div(bn1, bn1_len, bn1_sign, bn2, bn2_len, bn2_sign, bigres, &res_sign, NULL, NULL);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, res_sign);
 }
@@ -1063,7 +1063,7 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
 static term int64_max_plus_one(Context *ctx, uint32_t fail_label, uint32_t live)
 {
     intn_digit_t int_buf[INTN_UINT64_LEN];
-    intn_u64_to_digits(((uint64_t) INT64_MAX) + 1, int_buf);
+    intn_from_uint64(((uint64_t) INT64_MAX) + 1, int_buf);
     return make_bigint(ctx, fail_label, live, int_buf, INTN_UINT64_LEN, IntNPositiveInteger);
 }
 
@@ -1377,7 +1377,7 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_digit_t q[INTN_MAX_RES_LEN];
     intn_digit_t bigres[INTN_MAX_RES_LEN];
     size_t bigres_len;
-    intn_divmnu(bn1, bn1_len, bn2, bn2_len, q, bigres, &bigres_len);
+    intn_divu(bn1, bn1_len, bn2, bn2_len, q, bigres, &bigres_len);
 
     return make_bigint(ctx, fail_label, live, bigres, bigres_len, bn1_sign);
 }
@@ -1649,7 +1649,7 @@ term bif_erlang_bor_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 | arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bormn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bor, intn_bor);
     }
 }
 
@@ -1663,7 +1663,7 @@ term bif_erlang_band_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return arg1 & arg2;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_bandmn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, band, intn_band);
     }
 }
 
@@ -1677,7 +1677,7 @@ term bif_erlang_bxor_2(Context *ctx, uint32_t fail_label, int live, term arg1, t
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
         return (arg1 ^ arg2) | TERM_INTEGER_TAG;
     } else {
-        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxormn);
+        return bitwise_helper(ctx, fail_label, live, arg1, arg2, bxor, intn_bxor);
     }
 }
 
