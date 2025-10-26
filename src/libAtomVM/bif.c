@@ -809,7 +809,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     if (!intn_fits_int64(bigres, count, sign)) {
         size_t intn_data_size;
         size_t rounded_res_len;
-        term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+        term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
         if (UNLIKELY(memory_ensure_free_with_roots(
                          ctx, BOXED_INTN_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
@@ -817,7 +817,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
             RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
         }
 
-        term bigres_term = term_create_uninitialized_intn(
+        term bigres_term = term_create_uninitialized_bigint(
             intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
         term_initialize_bigint(bigres_term, bigres, count, rounded_res_len);
 

@@ -1840,7 +1840,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
             size_t intn_data_size;
             size_t rounded_res_len;
-            term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+            term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
             Heap heap;
             if (UNLIKELY(
@@ -1852,7 +1852,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
             }
 
             term bigint_term
-                = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
+                = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
             term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
 
             memory_heap_append_heap(&ctx->heap, &heap);

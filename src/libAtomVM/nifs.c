@@ -2057,14 +2057,14 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
 {
     size_t intn_data_size;
     size_t rounded_res_len;
-    term_intn_to_term_size(bigres_len, &intn_data_size, &rounded_res_len);
+    term_bigint_size_requirements(bigres_len, &intn_data_size, &rounded_res_len);
 
     if (UNLIKELY(memory_ensure_free(ctx, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term bigres_term
-        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
     term_initialize_bigint(bigres_term, bigres, bigres_len, rounded_res_len);
 
     return bigres_term;

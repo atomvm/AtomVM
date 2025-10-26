@@ -1301,7 +1301,32 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     }
 }
 
-static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t sign, Heap *heap)
+/**
+ * @brief Create an uninitialized bigint term with allocated storage
+ *
+ * Allocates heap space for a multi-precision integer term and sets up the
+ * boxed header with size and sign information. The digit data area is left
+ * uninitialized and must be filled using \c term_initialize_bigint().
+ *
+ * @param n Size of data area in terms (not digits)
+ * @param sign Sign of the integer (\c TERM_INTEGER_POSITIVE or \c TERM_INTEGER_NEGATIVE)
+ * @param heap Heap to allocate from
+ * @return Newly created uninitialized bigint term
+ *
+ * @pre n must be > \c BOXED_TERMS_REQUIRED_FOR_INT64 to ensure bigint distinction
+ * @pre heap must have at least (1 + n) terms of free space
+ *
+ * @post Allocates 1 header term + n data terms on the heap
+ * @post Header contains size and sign information
+ * @post Data area is uninitialized and must be filled before use
+ *
+ * @note The size n is in terms, not \c intn_digit_t digits
+ * @note Use \c term_bigint_size_requirements() to calculate appropriate n value
+ *
+ * @see term_initialize_bigint() to fill the allocated data area
+ * @see term_bigint_size_requirements() to calculate required size
+ */
+static inline term term_create_uninitialized_bigint(size_t n, term_integer_sign_t sign, Heap *heap)
 {
     term *boxed_int = memory_heap_alloc(heap, 1 + n);
     boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
@@ -1316,7 +1341,7 @@ static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t 
  * zero-extending to fill the entire allocated space. This function is used
  * after creating an uninitialized bigint term to populate it with actual data.
  *
- * @param t Uninitialized bigint term (created with \c term_create_uninitialized_intn())
+ * @param t Uninitialized bigint term (created with \c term_create_uninitialized_bigint())
  * @param bigint Source digit array to copy
  * @param bigint_len Number of digits in source array
  * @param uninitialized_size Total size of destination buffer in digits
@@ -1331,7 +1356,7 @@ static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t 
  * @note This function does not set the sign - that should be done when creating the term
  * @note The destination buffer size (uninitialized_size) is typically rounded up for alignment
  *
- * @see term_create_uninitialized_intn() to allocate the term before initialization
+ * @see term_create_uninitialized_bigint() to allocate the term before initialization
  * @see intn_copy() which performs the actual copy and zero-extension
  */
 static inline void term_initialize_bigint(
@@ -1342,18 +1367,52 @@ static inline void term_initialize_bigint(
     intn_copy(bigint, bigint_len, dest_buf, uninitialized_size);
 }
 
-static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+/**
+ * @brief Calculate term allocation size for multi-precision integer
+ *
+ * Converts the number of \c intn_digit_t digits needed for a bigint into the
+ * corresponding term allocation size and rounded digit count. Handles platform
+ * differences between 32-bit systems (where term = intn_digit_t) and 64-bit
+ * systems (where term = 2 × intn_digit_t), including alignment requirements.
+ *
+ * @param n Number of non-zero \c intn_digit_t digits in the integer
+ * @param[out] intn_data_size Number of terms needed for storage
+ * @param[out] rounded_num_len Rounded number of digits for zero-padding
+ *
+ * @pre n > 0
+ * @pre intn_data_size != NULL
+ * @pre rounded_num_len != NULL
+ *
+ * @post *intn_data_size > \c BOXED_TERMS_REQUIRED_FOR_INT64 (ensures bigint distinction)
+ * @post *rounded_num_len >= n (includes padding for alignment)
+ *
+ * @note Forces minimum size > \c BOXED_TERMS_REQUIRED_FOR_INT64 to distinguish
+ *       bigints from regular boxed int64 values (which use two's complement)
+ * @note Rounds up to 8-byte boundaries for alignment
+ * @note On 64-bit systems, 2 digits fit per term; on 32-bit systems, 1 digit per term
+ *
+ * @code
+ * // Example usage:
+ * size_t count = intn_count_digits(bigint, bigint_len);
+ * size_t intn_data_size, rounded_res_len;
+ * term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+ * term t = term_create_uninitialized_bigint(intn_data_size, sign, heap);
+ * term_initialize_bigint(t, bigint, count, rounded_res_len);
+ * @endcode
+ */
+static inline void term_bigint_size_requirements(
+    size_t n, size_t *intn_data_size, size_t *rounded_num_len)
 {
     size_t bytes = n * sizeof(intn_digit_t);
     size_t rounded = ((bytes + 7) >> 3) << 3;
     *intn_data_size = rounded / sizeof(term);
 
     if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
-        // we need to distinguish between "small" boxed integers, that are integers
-        // up to int64, and bigger integers.
-        // The real difference is that "small" boxed integers use 2-complement,
-        // real bigints not (and also endianess might differ).
-        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
+        // We need to distinguish between "small" boxed integers (up to int64)
+        // and true bigints. Small boxed integers use two's complement
+        // representation, while bigints use sign-magnitude (and endianness
+        // might also differ). To ensure this distinction, we force bigints
+        // to use > BOXED_TERMS_REQUIRED_FOR_INT64 terms.
         *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
         rounded = *intn_data_size * sizeof(term);
     }
