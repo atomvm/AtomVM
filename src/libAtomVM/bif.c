@@ -79,12 +79,6 @@
     #define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
 #endif
 
-static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
-    const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign);
-
-static void conv_term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
-    size_t *b1_len, intn_integer_sign_t *b1_sign);
-
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
 {
     const BifNameAndPtr *nameAndPtr = in_word_set(mfa, strlen(mfa));
@@ -530,6 +524,56 @@ static inline term make_maybe_boxed_int64(Context *ctx, uint32_t fail_label, uin
 }
 #endif
 
+// this function assumes that bigres_len is always <= bigres buffer capacity
+static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
+    const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
+{
+    size_t count = intn_count_digits(bigres, bigres_len);
+
+    if (UNLIKELY(count > INTN_MAX_IN_LEN)) {
+        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
+    }
+
+    if (!intn_fits_int64(bigres, count, sign)) {
+        size_t intn_data_size;
+        size_t rounded_res_len;
+        term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+
+        if (UNLIKELY(memory_ensure_free_with_roots(
+                         ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
+                != MEMORY_GC_OK)) {
+            RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
+        }
+
+        term bigres_term = term_create_uninitialized_bigint(
+            intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
+        term_initialize_bigint(bigres_term, bigres, count, rounded_res_len);
+
+        return bigres_term;
+    } else {
+        int64_t res64 = intn_to_int64(bigres, count, sign);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+        return make_maybe_boxed_int64(ctx, fail_label, live, res64);
+#else
+        return make_maybe_boxed_int(ctx, fail_label, live, res64);
+#endif
+    }
+}
+
+static void conv_term_to_bigint(term t, intn_digit_t *tmp_buf, const intn_digit_t **bigint,
+    size_t *bigint_len, intn_integer_sign_t *bigint_sign)
+{
+    if (term_is_bigint(t)) {
+        term_to_bigint(t, bigint, bigint_len, bigint_sign);
+
+    } else {
+        avm_int64_t i64 = term_maybe_unbox_int64(t);
+        intn_from_int64(i64, tmp_buf, bigint_sign);
+        *bigint = tmp_buf;
+        *bigint_len = INTN_INT64_LEN;
+    }
+}
+
 static term add_int64_to_bigint(
     Context *ctx, uint32_t fail_label, uint32_t live, int64_t val1, int64_t val2)
 {
@@ -793,56 +837,6 @@ term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
         }
     } else {
         return sub_boxed_helper(ctx, fail_label, live, arg1, arg2);
-    }
-}
-
-// this function assumes that bigres_len is always <= bigres buffer capacity
-static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
-    const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign)
-{
-    size_t count = intn_count_digits(bigres, bigres_len);
-
-    if (UNLIKELY(count > INTN_MAX_IN_LEN)) {
-        RAISE_ERROR_BIF(fail_label, OVERFLOW_ATOM);
-    }
-
-    if (!intn_fits_int64(bigres, count, sign)) {
-        size_t intn_data_size;
-        size_t rounded_res_len;
-        term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
-
-        if (UNLIKELY(memory_ensure_free_with_roots(
-                         ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size), live, ctx->x, MEMORY_CAN_SHRINK)
-                != MEMORY_GC_OK)) {
-            RAISE_ERROR_BIF(fail_label, OUT_OF_MEMORY_ATOM);
-        }
-
-        term bigres_term = term_create_uninitialized_bigint(
-            intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
-        term_initialize_bigint(bigres_term, bigres, count, rounded_res_len);
-
-        return bigres_term;
-    } else {
-        int64_t res64 = intn_to_int64(bigres, count, sign);
-#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-        return make_maybe_boxed_int64(ctx, fail_label, live, res64);
-#else
-        return make_maybe_boxed_int(ctx, fail_label, live, res64);
-#endif
-    }
-}
-
-static void conv_term_to_bigint(term t, intn_digit_t *tmp_buf, const intn_digit_t **bigint,
-    size_t *bigint_len, intn_integer_sign_t *bigint_sign)
-{
-    if (term_is_bigint(t)) {
-        term_to_bigint(t, bigint, bigint_len, bigint_sign);
-
-    } else {
-        avm_int64_t i64 = term_maybe_unbox_int64(t);
-        intn_from_int64(i64, tmp_buf, bigint_sign);
-        *bigint = tmp_buf;
-        *bigint_len = INTN_INT64_LEN;
     }
 }
 
