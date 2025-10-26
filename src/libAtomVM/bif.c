@@ -79,12 +79,6 @@
     #define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
 #endif
 
-// intn.h and term.h headers are decoupled. We check here that sign enum values are matching.
-_Static_assert(
-    (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
-_Static_assert(
-    (int) TermNegativeInteger == (int) IntNNegativeInteger, "term/intn definition mismatch");
-
 static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
     const intn_digit_t bigres[], size_t bigres_len, intn_integer_sign_t sign);
 
@@ -842,11 +836,9 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
 static void conv_term_to_bigint(term arg1, intn_digit_t *tmp_buf1, const intn_digit_t **b1,
     size_t *b1_len, intn_integer_sign_t *b1_sign)
 {
-    if (term_is_boxed_integer(arg1)
-        && (term_boxed_size(arg1) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term))) {
-        *b1 = term_intn_data(arg1);
-        *b1_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
-        *b1_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
+    if (term_is_bigint(arg1)) {
+        term_to_bigint(arg1, b1, b1_len, b1_sign);
+
     } else {
         avm_int64_t i64 = term_maybe_unbox_int64(arg1);
         intn_from_int64(i64, tmp_buf1, b1_sign);
@@ -1146,10 +1138,10 @@ term bif_erlang_div_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
 // that just copies the given term but changes the sign
 static term neg_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
 {
-    // update when updating conv_term_to_bigint
-    intn_digit_t *m = term_intn_data(arg1);
-    size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
-    intn_integer_sign_t m_sign = (intn_integer_sign_t) term_boxed_integer_sign(arg1);
+    const intn_digit_t *m;
+    size_t m_len;
+    intn_integer_sign_t m_sign;
+    term_to_bigint(arg1, &m, &m_len, &m_sign);
 
     intn_digit_t tmp_copy[INTN_MAX_RES_LEN];
     memcpy(tmp_copy, m, m_len * sizeof(intn_digit_t));
@@ -1242,9 +1234,10 @@ term bif_erlang_neg_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 // that just copies the given term but changes the sign
 static term abs_bigint(Context *ctx, uint32_t fail_label, uint32_t live, term arg1)
 {
-    // update when updating conv_term_to_bigint
-    intn_digit_t *m = term_intn_data(arg1);
-    size_t m_len = term_intn_size(arg1) * (sizeof(term) / sizeof(intn_digit_t));
+    const intn_digit_t *m;
+    size_t m_len;
+    intn_integer_sign_t discarded_sign;
+    term_to_bigint(arg1, &m, &m_len, &discarded_sign);
 
     intn_digit_t tmp_copy[INTN_MAX_RES_LEN];
     memcpy(tmp_copy, m, m_len * sizeof(intn_digit_t));

@@ -1315,12 +1315,6 @@ static inline void *term_intn_data(term t)
     return (void *) (boxed_value + 1);
 }
 
-static inline size_t term_intn_size(term t)
-{
-    const term *boxed_value = term_to_const_term_ptr(t);
-    return term_get_size_from_boxed_header(boxed_value[0]);
-}
-
 static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
 {
     size_t bytes = n * sizeof(intn_digit_t);
@@ -1338,6 +1332,85 @@ static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size
     }
 
     *rounded_num_len = rounded / sizeof(intn_digit_t);
+}
+
+/**
+ * @brief Check if term is a multi-precision integer larger than \c int64_t
+ *
+ * Tests whether a term represents a boxed integer that requires multi-precision
+ * representation (i.e., larger than can fit in \c int64_t). These are integers
+ * that need more than \c INTN_INT64_LEN digits for their representation.
+ *
+ * In the current implementation, a bigint is defined as a boxed integer with
+ * size greater than:
+ * - \c BOXED_TERMS_REQUIRED_FOR_INT64 on 32-bit systems
+ * - \c BOXED_TERMS_REQUIRED_FOR_INT on 64-bit systems
+ *
+ * This effectively identifies integers that cannot be represented in the
+ * platform's native integer types and require multi-precision arithmetic,
+ * while avoiding confusion with regular boxed \c int64_t values that still
+ * fit within standard integer ranges.
+ *
+ * @param t Term to check
+ * @return true if term is a multi-precision integer, false otherwise
+ *
+ * @note Returns false for integers that fit in \c int64_t, even if boxed
+ * @note This is the correct check before calling \c term_to_bigint()
+ *
+ * @see term_to_bigint() to extract the multi-precision integer data
+ * @see term_is_boxed_integer() for checking any boxed integer
+ * @see term_is_any_integer() for checking all integer representations
+ */
+static inline bool term_is_bigint(term t)
+{
+    return term_is_boxed_integer(t)
+        && (term_boxed_size(t) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term));
+}
+
+// intn doesn't depend on term
+_Static_assert(
+    (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
+_Static_assert(
+    (int) TermNegativeInteger == (int) IntNNegativeInteger, "term/intn definition mismatch");
+
+/**
+ * @brief Extract multi-precision integer data from boxed term
+ *
+ * Extracts the raw multi-precision integer representation from a boxed
+ * integer term. This function provides direct access to the internal
+ * digit array without copying, returning a pointer to the data within
+ * the term structure.
+ *
+ * @param t Boxed integer term to extract from
+ * @param[out] bigint Pointer to the digit array within the term (borrowed reference)
+ * @param[out] bigint_len Number of digits in the integer
+ * @param[out] bigint_sign Sign of the integer
+ *
+ * @pre \c term_is_bigint(t) must be true
+ * @pre bigint != NULL
+ * @pre bigint_len != NULL
+ * @pre bigint_sign != NULL
+ *
+ * @warning Returned pointer is a borrowed reference into the term structure
+ * @warning Data becomes invalid if term is garbage collected or modified
+ * @warning Caller must not free the returned pointer
+ *
+ * @note The digit array may not be normalized (may have leading zeros)
+ * @note Length is calculated as boxed_size * (sizeof(term) / sizeof(intn_digit_t))
+ *
+ * @see term_is_bigint() to check if term is a multi-precision integer
+ * @see term_boxed_integer_sign() to get the sign
+ */
+static inline void term_to_bigint(
+    term t, const intn_digit_t *bigint[], size_t *bigint_len, intn_integer_sign_t *bigint_sign)
+{
+    *bigint = (const intn_digit_t *) term_intn_data(t);
+
+    const term *boxed_value = term_to_const_term_ptr(t);
+    size_t boxed_size = term_get_size_from_boxed_header(boxed_value[0]);
+    *bigint_len = boxed_size * (sizeof(term) / sizeof(intn_digit_t));
+
+    *bigint_sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)

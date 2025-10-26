@@ -2396,12 +2396,11 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
             }
 #endif
             default: {
-                size_t boxed_size = term_intn_size(value);
-                size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
-                const intn_digit_t *intn_buf = (const intn_digit_t *) term_intn_data(value);
-                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(value);
-                *int_buf
-                    = intn_to_string(intn_buf, boxed_size * digits_per_term, sign, base, int_len);
+                const intn_digit_t *intn_buf;
+                size_t intn_buf_len;
+                intn_integer_sign_t sign;
+                term_to_bigint(value, &intn_buf, &intn_buf_len, &sign);
+                *int_buf = intn_to_string(intn_buf, intn_buf_len, sign, base, int_len);
                 *needs_cleanup = true;
             }
         }
