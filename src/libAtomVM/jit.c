@@ -637,7 +637,9 @@ static term jit_alloc_big_integer_fragment(
 
     term bigint_term
         = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
-    void *digits_mem = term_intn_data(bigint_term);
+    // Assumption: here we assume that bigints have standard boxed term layout
+    // This code might need to be updated when changing bigint memory layout
+    void *digits_mem = (void *) (term_to_const_term_ptr(bigint_term) + 1);
     // TODO: optimize: just initialize space that will not be used
     memset(digits_mem, 0, intn_data_size * sizeof(term));
 

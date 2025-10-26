@@ -2065,8 +2065,7 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
 
     term bigres_term
         = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
-    intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
-    intn_copy(bigres, bigres_len, dest_buf, rounded_res_len);
+    term_initialize_bigint(bigres_term, bigres, bigres_len, rounded_res_len);
 
     return bigres_term;
 }

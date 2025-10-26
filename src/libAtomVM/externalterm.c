@@ -597,8 +597,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
             intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
             term bigint_term
                 = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, heap);
-            intn_digit_t *dest_buf = (void *) term_intn_data(bigint_term);
-            intn_copy(bigint, count, dest_buf, rounded_res_len);
+            term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
 
             return bigint_term;
         }

@@ -1309,10 +1309,37 @@ static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t 
     return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
-static inline void *term_intn_data(term t)
+/**
+ * @brief Initialize multi-precision integer data in a pre-allocated term
+ *
+ * Copies multi-precision integer digits into an already allocated boxed term,
+ * zero-extending to fill the entire allocated space. This function is used
+ * after creating an uninitialized bigint term to populate it with actual data.
+ *
+ * @param t Uninitialized bigint term (created with \c term_create_uninitialized_intn())
+ * @param bigint Source digit array to copy
+ * @param bigint_len Number of digits in source array
+ * @param uninitialized_size Total size of destination buffer in digits
+ *
+ * @pre t must be a valid uninitialized bigint term
+ * @pre bigint != NULL
+ * @pre uninitialized_size must match the size allocated for the term
+ *
+ * @post Copies bigint_len digits from source to term
+ * @post Zero-fills remaining space from bigint_len to uninitialized_size
+ *
+ * @note This function does not set the sign - that should be done when creating the term
+ * @note The destination buffer size (uninitialized_size) is typically rounded up for alignment
+ *
+ * @see term_create_uninitialized_intn() to allocate the term before initialization
+ * @see intn_copy() which performs the actual copy and zero-extension
+ */
+static inline void term_initialize_bigint(
+    term t, const intn_digit_t *bigint, size_t bigint_len, size_t uninitialized_size)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
-    return (void *) (boxed_value + 1);
+    intn_digit_t *dest_buf = (intn_digit_t *) (boxed_value + 1);
+    intn_copy(bigint, bigint_len, dest_buf, uninitialized_size);
 }
 
 static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
@@ -1404,9 +1431,9 @@ _Static_assert(
 static inline void term_to_bigint(
     term t, const intn_digit_t *bigint[], size_t *bigint_len, intn_integer_sign_t *bigint_sign)
 {
-    *bigint = (const intn_digit_t *) term_intn_data(t);
-
     const term *boxed_value = term_to_const_term_ptr(t);
+    *bigint = (const intn_digit_t *) (boxed_value + 1);
+
     size_t boxed_size = term_get_size_from_boxed_header(boxed_value[0]);
     *bigint_len = boxed_size * (sizeof(term) / sizeof(intn_digit_t));
 

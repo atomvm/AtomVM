@@ -819,8 +819,7 @@ static term make_bigint(Context *ctx, uint32_t fail_label, uint32_t live,
 
         term bigres_term = term_create_uninitialized_intn(
             intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
-        intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
-        intn_copy(bigres, count, dest_buf, rounded_res_len);
+        term_initialize_bigint(bigres_term, bigres, count, rounded_res_len);
 
         return bigres_term;
     } else {
