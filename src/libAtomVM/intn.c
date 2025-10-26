@@ -899,8 +899,10 @@ size_t intn_count_digits(const intn_digit_t *num, size_t num_len)
     return count;
 }
 
-double intn_to_double(const intn_digit_t *num, size_t len, intn_integer_sign_t sign)
+double intn_to_double(const intn_digit_t *num, size_t num_len, intn_integer_sign_t sign)
 {
+    size_t len = intn_count_digits(num, num_len);
+
     double acc = 0.0;
     double base = ((double) (UINT32_MAX)) + 1;
 
