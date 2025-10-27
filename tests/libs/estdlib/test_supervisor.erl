@@ -95,7 +95,7 @@ test_count_children() ->
     [{specs, 0}, {active, 0}, {supervisors, 0}, {workers, 0}] = supervisor:count_children(SupPid),
 
     % Add a worker child and verify counts
-    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+    {ok, ChildPid} = supervisor:start_child(SupPid, #{
         id => test_worker,
         start => {ping_pong_server, start_link, [self()]},
         restart => permanent,
@@ -103,13 +103,16 @@ test_count_children() ->
         type => worker
     }),
 
+    % Receive message sent back so it won't be left for another test to receive erroneously.
+    ChildPid = get_and_test_server(),
+
     % Check count_children with one active worker
     [{specs, 1}, {active, 1}, {supervisors, 0}, {workers, 1}] = supervisor:count_children(SupPid),
 
-    % Add a supervisor child and verify counts
+    % Add a supervisor child with no children and verify counts
     {ok, _SupervisorPid} = supervisor:start_child(SupPid, #{
         id => test_supervisor,
-        start => {?MODULE, start_link, [self()]},
+        start => {supervisor, start_link, [?MODULE, {test_no_child, self()}]},
         restart => permanent,
         shutdown => infinity,
         type => supervisor
@@ -234,8 +237,8 @@ test_ping_pong(SupPid) ->
     end,
     no_restart =
         receive
-            {ping_pong_server_ready, Pid3} ->
-                Pid3
+            {ping_pong_server_ready, Pid4} ->
+                Pid4
         after 100 -> no_restart
         end,
     unlink(SupPid),
@@ -317,13 +320,16 @@ test_which_children() ->
     [] = supervisor:which_children(SupPid),
 
     % Add a child and test
-    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+    {ok, ChildPid} = supervisor:start_child(SupPid, #{
         id => test_child,
         start => {ping_pong_server, start_link, [self()]},
         restart => permanent,
         shutdown => 5000,
         type => worker
     }),
+
+    % Receive message sent back so it won't be left for another test to receive erroneously.
+    ChildPid = get_and_test_server(),
 
     % Check which_children returns the child info
     [{test_child, ChildPid, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
