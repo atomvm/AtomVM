@@ -114,6 +114,7 @@ X(STRING_ATOM, "\x6", "string")
 X(UTF8_ATOM, "\x4", "utf8")
 X(UTF16_ATOM, "\x5", "utf16")
 X(UTF32_ATOM, "\x5", "utf32")
+X(FLOAT_ATOM, "\x5", "float")
 
 X(COPY_ATOM, "\x4", "copy")
 X(REUSE_ATOM, "\x5", "reuse")

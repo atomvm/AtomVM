@@ -286,7 +286,8 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
  * @param is_const designates whether the data pointed to is "const", such as a term literal
  * @param heap the heap to allocate the binary in
  * @param glb the global context as refc binaries are global
- * @return a term (reference) pointing to the newly allocated binary in the process heap.
+ * @return a term (reference) pointing to the newly allocated binary in the process heap or
+ * `term_invalid_term()` if there isn't enough memory to allocate the refc buffer.
  */
 term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContext *glb);
 
@@ -1262,7 +1263,8 @@ static inline const char *term_binary_data(term t)
 * @param size size of binary data buffer.
 * @param heap the heap to allocate the binary in
 * @param glb the global context as refc binaries are global
-* @return a term pointing to the boxed binary pointer.
+* @return a term pointing to the boxed binary pointer or `term_invalid_term()`
+* if there isn't enough memory to allocate the refc buffer
 */
 static inline term term_create_uninitialized_binary(size_t size, Heap *heap, GlobalContext *glb)
 {
@@ -1350,7 +1352,9 @@ static inline void term_set_refc_binary_data(term t, const void *data)
 static inline term term_from_const_binary(const void *data, size_t size, Heap *heap, GlobalContext *glb)
 {
     term binary = term_alloc_refc_binary(size, true, heap, glb);
-    term_set_refc_binary_data(binary, data);
+    if (LIKELY(!term_is_invalid_term(binary))) {
+        term_set_refc_binary_data(binary, data);
+    }
     return binary;
 }
 
@@ -1366,9 +1370,24 @@ static inline term term_from_const_binary(const void *data, size_t size, Heap *h
 static inline term term_create_empty_binary(size_t size, Heap *heap, GlobalContext *glb)
 {
     term t = term_create_uninitialized_binary(size, heap, glb);
-    memset((char *) term_binary_data(t), 0x00, size);
+    if (LIKELY(!term_is_invalid_term(t))) {
+        memset((char *) term_binary_data(t), 0x00, size);
+    }
     return t;
 }
+
+/**
+* @brief Reuse a binary.  If the binary is a refc binary with a ref count of
+* 1, try to reuse it. Otherwise, create a new binary and copy the data.
+*
+* @details Try to reuse a binary and return a term pointing to it.
+* @param src binary to reuse.
+* @param size size of binary data buffer.
+* @param heap the heap to allocate memory in
+* @param glb the global context as refc binaries are global
+* @return a term pointing to the boxed binary pointer.
+*/
+term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb);
 
 static inline bool term_normalize_binary_pos_len(term binary, avm_int_t pos, avm_int_t len, BinaryPosLen *pos_len)
 {

@@ -107,7 +107,7 @@ call_primitive_6_args_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     % Get bin_ptr from x_reg 0 (similar to get_list_test pattern)
     {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:and_(State1, RegA, ?TERM_PRIMARY_CLEAR_MASK),
+    {State2, RegA} = ?BACKEND:and_(State1, {free, RegA}, ?TERM_PRIMARY_CLEAR_MASK),
     % Get another register for the last parameter to test {free, Reg} handling
     {State3, OtherReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 1}),
     % Call PRIM_BITSTRING_EXTRACT_INTEGER with 6 arguments
@@ -1549,7 +1549,7 @@ call_bif_with_large_literal_integer_test() ->
 get_list_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:and_(State1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+    {State2, Reg} = ?BACKEND:and_(State1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     State3 = ?BACKEND:move_array_element(State2, Reg, 1, {y_reg, 1}),
     State4 = ?BACKEND:move_array_element(State3, Reg, 0, {y_reg, 0}),
     State5 = ?BACKEND:free_native_registers(State4, [Reg]),
@@ -1580,7 +1580,7 @@ is_integer_test() ->
                     ?BACKEND:jump_to_label(BSt0, Label)
                 end
             ),
-            MSt2 = ?BACKEND:and_(MSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+            {MSt2, Reg} = ?BACKEND:and_(MSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
             MSt3 = ?BACKEND:move_array_element(MSt2, Reg, 0, Reg),
             ?BACKEND:if_block(
                 MSt3,
@@ -1642,7 +1642,7 @@ is_number_test() ->
             BSt1 = cond_jump_to_label(
                 {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, ?BACKEND, BSt0
             ),
-            BSt2 = ?BACKEND:and_(BSt1, Reg, ?TERM_PRIMARY_CLEAR_MASK),
+            {BSt2, Reg} = ?BACKEND:and_(BSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
             BSt3 = ?BACKEND:move_array_element(BSt2, Reg, 0, Reg),
             cond_jump_to_label(
                 {'and', [
@@ -2187,7 +2187,7 @@ call_fun_test() ->
             ])
         end
     ),
-    State5 = ?BACKEND:and_(State4, RegCopy, ?TERM_PRIMARY_CLEAR_MASK),
+    {State5, RegCopy} = ?BACKEND:and_(State4, {free, RegCopy}, ?TERM_PRIMARY_CLEAR_MASK),
     State6 = ?BACKEND:move_array_element(State5, RegCopy, 0, RegCopy),
     State7 = ?BACKEND:if_block(
         State6, {RegCopy, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_FUN}, fun(BSt0) ->
@@ -3184,7 +3184,7 @@ and_register_exhaustion_negative_test() ->
     {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
     {StateNoRegs, r1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
     % Test negative immediate (-4) which should use BICS with r0 as temp
-    StateResult = ?BACKEND:and_(StateNoRegs, r7, -4),
+    {StateResult, r7} = ?BACKEND:and_(StateNoRegs, {free, r7}, -4),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
@@ -3210,7 +3210,7 @@ and_register_exhaustion_positive_test() ->
     {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
     {StateNoRegs, r1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
     % Test positive immediate (0x3F) which should use ANDS with r0 as temp
-    StateResult = ?BACKEND:and_(StateNoRegs, r7, 16#3F),
+    {StateResult, r7} = ?BACKEND:and_(StateNoRegs, {free, r7}, 16#3F),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
         "   0:	6987      	ldr	r7, [r0, #24]\n"
