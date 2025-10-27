@@ -88,7 +88,7 @@
     start :: {module(), atom(), [any()] | undefined},
     restart :: restart(),
     shutdown :: shutdown(),
-    type :: child_type,
+    type :: child_type(),
     modules = [] :: [module()] | dynamic
 }).
 -record(state, {restart_strategy :: strategy(), children = [] :: [#child{}]}).
@@ -128,7 +128,7 @@ init({Mod, Args}) ->
             NewChildren = start_children(State#state.children, []),
             {ok, State#state{children = NewChildren}};
         Error ->
-            {stop, {bad_return, {mod, init, Error}}}
+            {stop, {bad_return, {Mod, init, Error}}}
     end.
 
 -spec child_spec_to_record(child_spec()) -> #child{}.
