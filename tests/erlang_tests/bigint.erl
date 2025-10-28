@@ -72,6 +72,7 @@ start() ->
         test_is_number() +
         test_gt_lt_guards() +
         to_external_term() +
+        test_pattern_match() +
         test_band() +
         test_bxor() +
         test_bor() +
@@ -2136,6 +2137,44 @@ to_external_term() ->
         )
     ),
 
+    0.
+
+test_pattern_match() ->
+    <<Int72:72/integer-little-signed>> = ?MODULE:id(<<23, 4, 222, 66, 172, 197, 113, 183, 80>>),
+    <<"50B771C5AC42DE0417">> = erlang:integer_to_binary(?MODULE:id(Int72), 16),
+    <<Int80:80/integer-little-signed>> = ?MODULE:id(
+        <<165, 63, 196, 58, 33, 96, 209, 59, 244, 213>>
+    ),
+    <<"-2A0BC42E9FDEC53BC05B">> = erlang:integer_to_binary(?MODULE:id(Int80), 16),
+    <<Int120:120/unsigned-big-integer>> = ?MODULE:id(
+        <<0, 242, 138, 221, 68, 111, 58, 120, 145, 135, 164, 56, 164, 12, 205>>
+    ),
+    <<"F28ADD446F3A789187A438A40CCD">> = erlang:integer_to_binary(?MODULE:id(Int120), 16),
+    <<Int256:256/unsigned-big-integer>> = ?MODULE:id(
+        <<202, 196, 64, 150, 63, 238, 50, 47, 214, 81, 247, 55, 151, 242, 169, 106, 162, 211, 73,
+            155, 211, 85, 164, 237, 153, 138, 191, 77, 87, 183, 204, 111>>
+    ),
+    <<"CAC440963FEE322FD651F73797F2A96AA2D3499BD355A4ED998ABF4D57B7CC6F">> = erlang:integer_to_binary(
+        ?MODULE:id(Int256), 16
+    ),
+
+    <<"foo", Int128:128/unsigned-little-integer, Bar/binary>> = ?MODULE:id(
+        <<102, 111, 111, 183, 226, 155, 102, 249, 246, 168, 101, 53, 36, 21, 10, 133, 223, 231, 10,
+            98, 97, 114>>
+    ),
+    <<"AE7DF850A15243565A8F6F9669BE2B7">> = erlang:integer_to_binary(?MODULE:id(Int128), 16),
+    <<"bar">> = ?MODULE:id(Bar),
+
+    ok =
+        case
+            ?MODULE:id(
+                <<102, 111, 111, 183, 226, 155, 102, 249, 246, 168, 101, 53, 36, 21, 10, 133, 223,
+                    231>>
+            )
+        of
+            <<"foo", _I128:128/unsigned-little-integer, Bar/binary>> -> error;
+            _ -> ok
+        end,
     0.
 
 test_band() ->
