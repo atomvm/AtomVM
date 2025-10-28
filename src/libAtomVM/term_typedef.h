@@ -86,6 +86,8 @@ typedef uint64_t avm_uint64_t;
     #error "term size must be either 32 bit or 64 bit."
 #endif
 
+_Static_assert(SIZE_MAX >= AVM_INT_MAX, "SIZE_MAX < AVM_INT_MAX is an unsupported configuration.");
+
 #define UNICODE_CHAR_MAX 0x10FFFF
 
 #define MIN_NOT_BOXED_INT (AVM_INT_MIN >> 4)
@@ -125,8 +127,6 @@ typedef uint64_t avm_uint64_t;
     _Static_assert(sizeof(avm_float_t) == 4, "avm_float_t must be a 32-bit float");
 #endif
 
-    #define INT64_MIN_AS_AVM_FLOAT -9223372036854775808.0
-    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775808.0
 #else
     typedef double avm_float_t;
     #define AVM_FLOAT_FMT "%lf"
@@ -135,8 +135,6 @@ typedef uint64_t avm_uint64_t;
     _Static_assert(sizeof(avm_float_t) == 8, "avm_float_t must be a 64-bit float");
 #endif
 
-    #define INT64_MIN_AS_AVM_FLOAT -9223372036854775808.0
-    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775808.0
 #endif
 
 typedef union {

@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "atom.h"
+#include "intn.h"
 #include "memory.h"
 #include "refc_binary.h"
 #include "utils.h"
@@ -96,10 +97,13 @@ extern "C" {
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
 #define TERM_BOXED_BIN_MATCH_STATE 0x4
-#define TERM_BOXED_POSITIVE_INTEGER 0x8
+#define TERM_BOXED_POSITIVE_INTEGER 0x8 // b1000 (b1s00)
+#define TERM_BOXED_NEGATIVE_INTEGER (TERM_BOXED_POSITIVE_INTEGER | TERM_BOXED_INTEGER_SIGN_BIT)
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
+// Do not assign 0x1C: an optimization in libs/jit/src/term.hrl will misidentify this as boxed
+// number: define(TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT, 16#2B).
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
@@ -108,6 +112,9 @@ extern "C" {
 #define TERM_BOXED_EXTERNAL_PID 0x30
 #define TERM_BOXED_EXTERNAL_PORT 0x34
 #define TERM_BOXED_EXTERNAL_REF 0x38
+
+#define TERM_BOXED_INTEGER_SIGN_BIT_POS 2 // 3rd bit
+#define TERM_BOXED_INTEGER_SIGN_BIT (1 << TERM_BOXED_INTEGER_SIGN_BIT_POS)
 
 #define TERM_IMMED2_TAG_MASK 0x3F
 #define TERM_IMMED2_TAG_SIZE 6
@@ -138,6 +145,7 @@ extern "C" {
 #define FUNCTION_REFERENCE_SIZE 4
 #define BOXED_INT_SIZE (BOXED_TERMS_REQUIRED_FOR_INT + 1)
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
+#define BOXED_INTN_SIZE(term_size) ((term_size) + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
@@ -251,6 +259,12 @@ typedef enum
     TermLessThan = 2,
     TermGreaterThan = 4
 } TermCompareResult;
+
+typedef enum
+{
+    TermPositiveInteger = 0,
+    TermNegativeInteger = TERM_BOXED_INTEGER_SIGN_BIT
+} term_integer_sign_t;
 
 #define TERM_MAP_NOT_FOUND -1
 #define TERM_MAP_MEMORY_ALLOC_FAIL -2
@@ -523,16 +537,53 @@ static inline bool term_is_sub_binary(term t)
 }
 
 /**
- * @brief Checks if a term is an integer value
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
  *
- * @details Returns \c true if a term is an integer value, otherwise \c false.
- * @param t the term that will be checked.
- * @return \c true if check succeeds, \c false otherwise.
+ * Tests whether a term represents an integer stored directly in the term
+ * word without boxing. Returns true only for integers that fit within the
+ * platform's unboxed integer range:
+ * - 32-bit builds: [-2^28, 2^28 - 1] (28-bit signed)
+ * - 64-bit builds: [-2^60, 2^60 - 1] (60-bit signed)
+ *
+ * Integers outside these ranges are stored as boxed integers on the heap
+ * and will return false from this function.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @note Returns false for boxed integers and big integers, even if their
+ *       values would fit in \c avm_int_t full range
+ * @note Values passing this check can be safely converted to \c avm_int_t
+ *       or \c size_t using \c term_to_int()
+ * @note Terms for which this functions returns true are not moved during
+ *       garbage collection
+ * @warning Values passing this check may NOT fit in \c int on platforms
+ *          where \c int is smaller than \c avm_int_t
+ *
+ * @see term_is_boxed_integer() for boxed integer checking
+ * @see term_is_any_integer() for checking all integer representations
+ * @see term_to_int() for extracting the integer value
  */
-static inline bool term_is_integer(term t)
+static inline bool term_is_int(term t)
 {
     /* integer: 11 11 */
     return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
+}
+
+/**
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
+ *
+ * @deprecated Use \c term_is_int() instead. This function will raise a warning
+ *             in the future and will eventually be removed.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @see term_is_int() for the replacement function
+ */
+static inline bool term_is_integer(term t)
+{
+    return term_is_int(t);
 }
 
 /**
@@ -551,7 +602,8 @@ static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
+        if (((boxed_value[0] & TERM_BOXED_TAG_MASK) | TERM_BOXED_INTEGER_SIGN_BIT)
+            == TERM_BOXED_NEGATIVE_INTEGER) {
             return true;
         }
     }
@@ -896,6 +948,31 @@ static inline int32_t term_to_int32(term t)
     return ((int32_t) t) >> 4;
 }
 
+/**
+ * @brief Extract \c avm_int_t value from unboxed integer term
+ *
+ * Extracts the \c avm_int_t value from a term that contains an unboxed
+ * integer. An unboxed integer is an integer value stored directly within
+ * the term itself, not as a separate allocation on the heap.
+ *
+ * @param t Term containing unboxed integer
+ * @return The extracted \c avm_int_t value
+ *
+ * @pre \c term_is_int(t) must be true
+ * @warning Undefined behavior if called on non-integer or boxed integer terms
+ *
+ * @note This function performs no type checking - validation must be done
+ *       by caller using \c term_is_int()
+ * @note Only extracts from unboxed integers (28-bit on 32-bit builds,
+ *       60-bit on 64-bit builds)
+ * @note Safe conversions: \c size_t s = term_to_int(t) is always valid
+ * @warning Unsafe conversions on 64-bit builds: \c int or \c int32_t may overflow
+ *          since \c avm_int_t can hold 60-bit values
+ *
+ * @see term_is_int() to validate term before extraction
+ * @see term_unbox_int() for extracting boxed integers
+ * @see term_maybe_unbox_int() for extracting from either unboxed or boxed integers
+ */
 static inline avm_int_t term_to_int(term t)
 {
     TERM_DEBUG_ASSERT(term_is_integer(t));
@@ -1009,6 +1086,100 @@ static inline term term_from_int(avm_int_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 }
 
+/**
+ * @brief Check if term is a non-negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer >= 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_non_neg_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v >= 0;
+    }
+    return false;
+}
+
+/**
+ * @brief Check if term is a positive (non-zero) unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer > 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_pos_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v > 0;
+    }
+
+    return false;
+}
+
+/**
+ * @brief Check if term is a negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer < 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_neg_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v < 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_pos_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_NEGATIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline term_integer_sign_t term_boxed_integer_sign(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (term_integer_sign_t) (boxed_value[0] & TERM_BOXED_INTEGER_SIGN_BIT);
+}
+
+static inline bool term_is_any_non_neg_integer(term t)
+{
+    return term_is_non_neg_int(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_pos_integer(term t)
+{
+    return term_is_pos_int(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_neg_integer(term t)
+{
+    return term_is_neg_int(t) || term_is_neg_boxed_integer(t);
+}
+
 static inline avm_int_t term_unbox_int(term boxed_int)
 {
     TERM_DEBUG_ASSERT(term_is_boxed_integer(boxed_int));
@@ -1062,18 +1233,26 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
     }
 }
 
+static inline term_integer_sign_t term_integer_sign_from_int(avm_int_t value)
+{
+    avm_uint_t uvalue = ((avm_uint_t) value);
+    return (term_integer_sign_t) ((uvalue >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS);
+}
+
 static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
+    avm_uint_t sign = (avm_uint_t) term_integer_sign_from_int(value);
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     boxed_int[1] = value;
     return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 {
+    avm_uint64_t sign = (((avm_uint64_t) large_int64) >> 63) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -1120,6 +1299,45 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     } else {
         return 0;
     }
+}
+
+static inline term term_create_uninitialized_intn(size_t n, term_integer_sign_t sign, Heap *heap)
+{
+    term *boxed_int = memory_heap_alloc(heap, 1 + n);
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
+
+    return ((term) boxed_int) | TERM_PRIMARY_BOXED;
+}
+
+static inline void *term_intn_data(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (void *) (boxed_value + 1);
+}
+
+static inline size_t term_intn_size(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return term_get_size_from_boxed_header(boxed_value[0]);
+}
+
+static inline void term_intn_to_term_size(size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+{
+    size_t bytes = n * sizeof(intn_digit_t);
+    size_t rounded = ((bytes + 7) >> 3) << 3;
+    *intn_data_size = rounded / sizeof(term);
+
+    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        // we need to distinguish between "small" boxed integers, that are integers
+        // up to int64, and bigger integers.
+        // The real difference is that "small" boxed integers use 2-complement,
+        // real bigints not (and also endianess might differ).
+        // So we force real bigints to be > BOXED_TERMS_REQUIRED_FOR_INT64 terms
+        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
+        rounded = *intn_data_size * sizeof(term);
+    }
+
+    *rounded_num_len = rounded / sizeof(intn_digit_t);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
@@ -1930,15 +2148,6 @@ static inline avm_float_t term_to_float(term t)
     return boxed_float->f;
 }
 
-static inline avm_float_t term_conv_to_float(term t)
-{
-    if (term_is_any_integer(t)) {
-        return term_maybe_unbox_int64(t);
-    } else {
-        return term_to_float(t);
-    }
-}
-
 static inline bool term_is_number(term t)
 {
     return term_is_any_integer(t) || term_is_float(t);
@@ -1987,6 +2196,8 @@ int term_fprint(FILE *fd, term t, const GlobalContext *global);
  * @returns the number of printed characters.
  */
 int term_snprint(char *buf, size_t size, term t, const GlobalContext *global);
+
+avm_float_t term_conv_to_float(term t);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)

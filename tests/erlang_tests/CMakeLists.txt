@@ -608,6 +608,9 @@ compile_assembler(test_op_bs_start_match_asm)
 compile_erlang(test_op_bs_create_bin)
 compile_assembler(test_op_bs_create_bin_asm)
 
+compile_erlang(bigint)
+compile_erlang(bigint_stress)
+
 compile_erlang(test_list_to_bitstring)
 compile_erlang(test_lists_member)
 compile_erlang(test_lists_keymember)
@@ -1139,6 +1142,9 @@ set(erlang_test_beams
 
     test_op_bs_start_match.beam
     test_op_bs_create_bin.beam
+
+    bigint.beam
+    bigint_stress.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
