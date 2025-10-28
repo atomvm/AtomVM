@@ -1476,12 +1476,6 @@ static inline bool term_is_bigint(term t)
         && (term_boxed_size(t) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term));
 }
 
-// intn doesn't depend on term
-_Static_assert(
-    (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
-_Static_assert(
-    (int) TermNegativeInteger == (int) IntNNegativeInteger, "term/intn definition mismatch");
-
 /**
  * @brief Extract multi-precision integer data from boxed term
  *

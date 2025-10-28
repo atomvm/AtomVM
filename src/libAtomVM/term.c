@@ -37,6 +37,15 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// intn doesn't depend on term
+_Static_assert(
+    (int) TermPositiveInteger == (int) IntNPositiveInteger, "term/intn definition mismatch");
+_Static_assert(
+    (int) TermNegativeInteger == (int) IntNNegativeInteger, "term/intn definition mismatch");
+
+// Make sure avm_int_t can always fit into size_t
+_Static_assert(SIZE_MAX >= AVM_INT_MAX, "SIZE_MAX < AVM_INT_MAX is an unsupported configuration.");
+
 enum TermTypeIndex {
     TERM_TYPE_INDEX_INVALID = 0,
     TERM_TYPE_INDEX_INTEGER = 1,
