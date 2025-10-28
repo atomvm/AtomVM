@@ -1001,20 +1001,30 @@ li(Rd, Imm) when Rd =/= zero, Imm >= -32, Imm =< 31 ->
 li(Rd, Imm) when Imm >= -2048, Imm =< 2047 ->
     % Small immediate: addi rd, x0, imm
     addi(Rd, zero, Imm);
-li(Rd, Imm) when Imm >= -16#80000000, Imm =< 16#7FFFFFFF ->
-    % Large immediate: lui + addi
+% Handle unsigned values that represent small signed values (e.g., 0xFFFFFFFF = -1)
+li(Rd, Imm) when Imm > 16#7FFFFFFF, Imm - 16#100000000 >= -2048 ->
+    % This unsigned value fits in 12-bit signed range when normalized
+    addi(Rd, zero, Imm - 16#100000000);
+li(Rd, Imm) when Imm >= -16#80000000, Imm =< 16#FFFFFFFF ->
+    % Large immediate: lui or lui + addi
     % Split into upper 20 bits and lower 12 bits
     % Need to account for sign extension of lower 12 bits
-    Lower = Imm band 16#FFF,
+    % Work with unsigned values to avoid issues with arithmetic right shift
+    UnsignedImm = if
+        Imm < 0 -> Imm + 16#100000000;
+        true -> Imm
+    end,
+    Lower = UnsignedImm band 16#FFF,
     % If lower 12 bits has sign bit set, we need to add 1 to upper
+    % because addi will sign-extend the immediate
     UpperRaw =
         if
             Lower >= 16#800 ->
-                (Imm bsr 12) + 1;
+                (UnsignedImm bsr 12) + 1;
             true ->
-                Imm bsr 12
+                UnsignedImm bsr 12
         end,
-    % Mask to 20 bits first, then sign extend if needed
+    % Mask to 20 bits first, then sign extend if needed for lui instruction
     UpperMasked = UpperRaw band 16#FFFFF,
     Upper =
         if
@@ -1026,17 +1036,24 @@ li(Rd, Imm) when Imm >= -16#80000000, Imm =< 16#7FFFFFFF ->
                 % Positive value
                 UpperMasked
         end,
-    % Sign extend lower 12 bits
-    LowerSigned =
-        if
-            Lower >= 16#800 -> Lower - 16#1000;
-            true -> Lower
-        end,
+    % Only emit addi if lower bits are non-zero
     LuiInstr = lui(Rd, Upper),
-    AddiInstr = addi(Rd, Rd, LowerSigned),
-    <<LuiInstr/binary, AddiInstr/binary>>;
+    if
+        Lower =:= 0 ->
+            % Just lui is sufficient when lower 12 bits are zero
+            LuiInstr;
+        true ->
+            % Sign extend lower 12 bits
+            LowerSigned =
+                if
+                    Lower >= 16#800 -> Lower - 16#1000;
+                    true -> Lower
+                end,
+            AddiInstr = addi(Rd, Rd, LowerSigned),
+            <<LuiInstr/binary, AddiInstr/binary>>
+    end;
 li(_Rd, Imm) ->
-    error({immediate_out_of_range, Imm, -16#80000000, 16#7FFFFFFF}).
+    error({immediate_out_of_range, Imm, -16#80000000, 16#FFFFFFFF}).
 
 %% MV - Move (copy register)
 %% Expands to: addi rd, rs, 0 or c.mv rd, rs

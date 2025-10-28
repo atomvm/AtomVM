@@ -1689,19 +1689,8 @@ set_registers_args0(
     AvailGP,
     StackOffset
 ) when is_integer(Value) ->
-    LowPartUnsigned = Value band 16#FFFFFFFF,
-    HighPartUnsigned = (Value bsr 32) band 16#FFFFFFFF,
-    % Convert to signed 32-bit values for RISC-V li instruction
-    LowPart =
-        if
-            LowPartUnsigned > 16#7FFFFFFF -> LowPartUnsigned - 16#100000000;
-            true -> LowPartUnsigned
-        end,
-    HighPart =
-        if
-            HighPartUnsigned > 16#7FFFFFFF -> HighPartUnsigned - 16#100000000;
-            true -> HighPartUnsigned
-        end,
+    LowPart = Value band 16#FFFFFFFF,
+    HighPart = (Value bsr 32) band 16#FFFFFFFF,
     set_registers_args0(
         State, [LowPart, HighPart | ArgsT], [imm | ArgsRegs], ParamRegs, AvailGP, StackOffset
     );
@@ -2833,6 +2822,7 @@ rewrite_cp_offset(
     % Pad with NOP if needed to maintain alignment
     PaddedInstr =
         case byte_size(NewMoveInstr) of
+            2 -> <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary, (jit_riscv32_asm:c_nop())/binary>>;
             4 -> <<NewMoveInstr/binary, (jit_riscv32_asm:nop())/binary>>;
             6 -> <<NewMoveInstr/binary, (jit_riscv32_asm:c_nop())/binary>>;
             8 -> NewMoveInstr

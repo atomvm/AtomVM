@@ -326,8 +326,16 @@ beq_test_() ->
         ?_assertAsmEqual(
             <<16#feb50ee3:32/little>>, "beq a0, a1, .-4", jit_riscv32_asm:beq(a0, a1, -4)
         ),
+        % Test c.beqz (compressed reg with zero)
         ?_assertAsmEqual(
             <<16#c101:16/little>>, "beq a0, zero, .", jit_riscv32_asm:beq(a0, zero, 0)
+        ),
+        ?_assertAsmEqual(
+            <<16#c9c9:16/little>>, "beq a5, zero, .+24", jit_riscv32_asm:beq(a5, zero, 24)
+        ),
+        % Test beq with non-compressed reg and zero (falls through to encode_b_type)
+        ?_assertAsmEqual(
+            <<16#00030463:32/little>>, "beq t1, zero, .+8", jit_riscv32_asm:beq(t1, zero, 8)
         )
     ].
 
@@ -338,6 +346,17 @@ bne_test_() ->
         ),
         ?_assertAsmEqual(
             <<16#feb51ee3:32/little>>, "bne a0, a1, .-4", jit_riscv32_asm:bne(a0, a1, -4)
+        ),
+        % Test c.bnez (compressed reg with zero)
+        ?_assertAsmEqual(
+            <<16#e901:16/little>>, "bne a2, zero, .+20", jit_riscv32_asm:bne(a2, zero, 20)
+        ),
+        ?_assertAsmEqual(
+            <<16#f3f5:16/little>>, "bne a5, zero, .-2", jit_riscv32_asm:bne(a5, zero, -2)
+        ),
+        % Test bne with non-compressed reg and zero (falls through to encode_b_type)
+        ?_assertAsmEqual(
+            <<16#00031463:32/little>>, "bne t1, zero, .+8", jit_riscv32_asm:bne(t1, zero, 8)
         )
     ].
 
@@ -393,6 +412,28 @@ jal_test_() ->
         ?_assertAsmEqual(
             <<16#3ff5:16/little>>, "jal .-4", jit_riscv32_asm:jal(ra, -4)
         ),
+        % Test c.j (jal zero, offset)
+        ?_assertAsmEqual(
+            <<16#a011:16/little>>, "j .+4", jit_riscv32_asm:jal(zero, 4)
+        ),
+        ?_assertAsmEqual(
+            <<16#bffd:16/little>>, "j .-2", jit_riscv32_asm:jal(zero, -2)
+        ),
+        % Test full J-type encoding (encode_j_type) with larger offsets
+        ?_assertAsmEqual(
+            <<16#008005ef:32/little>>, "jal a1, .+8", jit_riscv32_asm:jal(a1, 8)
+        ),
+        ?_assertAsmEqual(
+            <<16#ffdffa6f:32/little>>, "jal s4, .-4", jit_riscv32_asm:jal(s4, -4)
+        ),
+        % Test with maximum positive offset (1048574)
+        ?_assertAsmEqual(
+            <<16#7ffff56f:32/little>>, "jal a0, .+1048574", jit_riscv32_asm:jal(a0, 1048574)
+        ),
+        % Test with maximum negative offset (-1048576)
+        ?_assertAsmEqual(
+            <<16#800005ef:32/little>>, "jal a1, .-1048576", jit_riscv32_asm:jal(a1, -1048576)
+        ),
         ?_assertAsmEqual(
             <<16#00000517:32/little, 16#9502:16/little>>,
             "auipc a0, 0\njalr a0",
@@ -439,32 +480,73 @@ nop_test_() ->
         ?_assertAsmEqual(<<16#00000013:32/little>>, ".option norvc\nnop", jit_riscv32_asm:nop())
     ].
 
-li_small_test_() ->
+li_test_() ->
     [
         ?_assertAsmEqual(<<16#4529:16/little>>, "li a0, 10", jit_riscv32_asm:li(a0, 10)),
         ?_assertAsmEqual(<<16#557d:16/little>>, "li a0, -1", jit_riscv32_asm:li(a0, -1)),
-        ?_assertAsmEqual(<<16#7ff00513:32/little>>, "li a0, 2047", jit_riscv32_asm:li(a0, 2047))
-    ].
+        ?_assertAsmEqual(<<16#7ff00513:32/little>>, "li a0, 2047", jit_riscv32_asm:li(a0, 2047)),
 
-li_large_test_() ->
-    [
         % 0x12345 = 74565 - requires lui + addi
         ?_assertAsmEqual(
             <<16#6549:16/little, 16#34550513:32/little>>,
-            "lui a0, 0x12\naddi a0, a0, 0x345",
+            "li a0, 0x12345",
             jit_riscv32_asm:li(a0, 16#12345)
-        ),
-        % 0x80000000 = -2147483648 (minimum 32-bit signed)
-        ?_assertAsmEqual(
-            <<16#800005b7:32/little, 16#0581:16/little>>,
-            "lui a1, 0x80000\nc.addi a1, 0",
-            jit_riscv32_asm:li(a1, -16#80000000)
         ),
         % 0x7FFFFFFF = 2147483647 (maximum 32-bit signed)
         ?_assertAsmEqual(
             <<16#80000537:32/little, 16#157d:16/little>>,
-            "lui a0, 0x80000\naddi a0, a0, -1",
+            "li a0, 0x7fffffff",
             jit_riscv32_asm:li(a0, 16#7FFFFFFF)
+        ),
+        % 0xFFFFFFFF = 4294967295 (maximum 32-bit unsigned, interpreted as -1 signed)
+        ?_assertAsmEqual(
+            <<16#fff00513:32/little>>,
+            "li a0, 0xffffffff",
+            jit_riscv32_asm:li(a0, 16#FFFFFFFF)
+        ),
+        % Test lui-only cases (lower 12 bits are zero)
+        % 0x80000000 = 2147483648 (unsigned), -2147483648 (signed)
+        ?_assertAsmEqual(
+            <<16#800005b7:32/little>>,
+            "li a1, 0x80000000",
+            jit_riscv32_asm:li(a1, 16#80000000)
+        ),
+        % Same value as signed negative
+        ?_assertAsmEqual(
+            <<16#800005b7:32/little>>,
+            "li a1, -0x80000000",
+            jit_riscv32_asm:li(a1, -16#80000000)
+        ),
+        % 0x100000 = 1048576 (lower 12 bits zero)
+        ?_assertAsmEqual(
+            <<16#00100537:32/little>>,
+            "li a0, 0x100000",
+            jit_riscv32_asm:li(a0, 16#100000)
+        ),
+        % Test c.lui cases (2 bytes, -32 to 31, lower 12 bits zero)
+        % 0x1000 = 4096 (upper = 1)
+        ?_assertAsmEqual(
+            <<16#6505:16/little>>,
+            "li a0, 0x1000",
+            jit_riscv32_asm:li(a0, 16#1000)
+        ),
+        % 0x1f000 = 126976 (upper = 31, max for c.lui)
+        ?_assertAsmEqual(
+            <<16#657d:16/little>>,
+            "li a0, 0x1f000",
+            jit_riscv32_asm:li(a0, 16#1f000)
+        ),
+        % 0xfffffffffffe0000 = -131072 (upper = -32, min for c.lui)
+        ?_assertAsmEqual(
+            <<16#7501:16/little>>,
+            "li a0, -0x20000",
+            jit_riscv32_asm:li(a0, -16#20000)
+        ),
+        % 0x20000 = 131072 (upper = 32, just outside c.lui range, needs full lui)
+        ?_assertAsmEqual(
+            <<16#00020537:32/little>>,
+            "li a0, 0x20000",
+            jit_riscv32_asm:li(a0, 16#20000)
         )
     ].
 
