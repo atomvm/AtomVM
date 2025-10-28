@@ -234,14 +234,12 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
                 return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
             }
         } else {
-            size_t intn_size = term_intn_size(t);
-            size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
-            size_t bigint_len = intn_size * digits_per_term;
-            const intn_digit_t *bigint = (const intn_digit_t *) term_intn_data(t);
+            const intn_digit_t *bigint;
+            size_t bigint_len;
+            intn_integer_sign_t sign;
+            term_to_bigint(t, &bigint, &bigint_len, &sign);
             size_t num_bytes = intn_required_unsigned_integer_bytes(bigint, bigint_len);
             if (buf != NULL) {
-                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
-
                 buf[0] = SMALL_BIG_EXT;
                 buf[1] = num_bytes;
                 buf[2] = sign == IntNNegativeInteger ? 0x01 : 0x00;
@@ -594,13 +592,12 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 
             size_t intn_data_size;
             size_t rounded_res_len;
-            term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+            term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
             intn_integer_sign_t sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
             term bigint_term
-                = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, heap);
-            intn_digit_t *dest_buf = (void *) term_intn_data(bigint_term);
-            intn_copy(bigint, count, dest_buf, rounded_res_len);
+                = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, heap);
+            term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
 
             return bigint_term;
         }
@@ -1014,8 +1011,8 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             size_t required_digits = intn_required_digits_for_unsigned_integer(num_bytes);
             size_t data_size;
             size_t unused_rounded_len;
-            term_intn_to_term_size(required_digits, &data_size, &unused_rounded_len);
-            return BOXED_INTN_SIZE(data_size);
+            term_bigint_size_requirements(required_digits, &data_size, &unused_rounded_len);
+            return BOXED_BIGINT_HEAP_SIZE(data_size);
         }
 
         case ATOM_UTF8_EXT:

@@ -2057,16 +2057,15 @@ static term make_bigint(Context *ctx, const intn_digit_t bigres[], size_t bigres
 {
     size_t intn_data_size;
     size_t rounded_res_len;
-    term_intn_to_term_size(bigres_len, &intn_data_size, &rounded_res_len);
+    term_bigint_size_requirements(bigres_len, &intn_data_size, &rounded_res_len);
 
-    if (UNLIKELY(memory_ensure_free(ctx, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term bigres_term
-        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
-    intn_digit_t *dest_buf = (void *) term_intn_data(bigres_term);
-    intn_copy(bigres, bigres_len, dest_buf, rounded_res_len);
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &ctx->heap);
+    term_initialize_bigint(bigres_term, bigres, bigres_len, rounded_res_len);
 
     return bigres_term;
 }
@@ -2396,12 +2395,11 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
             }
 #endif
             default: {
-                size_t boxed_size = term_intn_size(value);
-                size_t digits_per_term = sizeof(term) / sizeof(intn_digit_t);
-                const intn_digit_t *intn_buf = (const intn_digit_t *) term_intn_data(value);
-                intn_integer_sign_t sign = (intn_integer_sign_t) term_boxed_integer_sign(value);
-                *int_buf
-                    = intn_to_string(intn_buf, boxed_size * digits_per_term, sign, base, int_len);
+                const intn_digit_t *intn_buf;
+                size_t intn_buf_len;
+                intn_integer_sign_t sign;
+                term_to_bigint(value, &intn_buf, &intn_buf_len, &sign);
+                *int_buf = intn_to_string(intn_buf, intn_buf_len, sign, base, int_len);
                 *needs_cleanup = true;
             }
         }

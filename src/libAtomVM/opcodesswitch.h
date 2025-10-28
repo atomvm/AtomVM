@@ -1840,11 +1840,11 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
             size_t intn_data_size;
             size_t rounded_res_len;
-            term_intn_to_term_size(count, &intn_data_size, &rounded_res_len);
+            term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
 
             Heap heap;
             if (UNLIKELY(
-                    memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+                    memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
                 ctx->x[0] = ERROR_ATOM;
                 ctx->x[1] = OUT_OF_MEMORY_ATOM;
                 *out_term = term_invalid_term();
@@ -1852,9 +1852,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
             }
 
             term bigint_term
-                = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
-            intn_digit_t *dest_buf = (void *) term_intn_data(bigint_term);
-            intn_copy(bigint, count, dest_buf, rounded_res_len);
+                = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+            term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
 
             memory_heap_append_heap(&ctx->heap, &heap);
 

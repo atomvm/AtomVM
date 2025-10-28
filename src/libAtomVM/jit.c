@@ -627,17 +627,19 @@ static term jit_alloc_big_integer_fragment(
 
     size_t intn_data_size;
     size_t rounded_res_len;
-    term_intn_to_term_size(digits_len, &intn_data_size, &rounded_res_len);
+    term_bigint_size_requirements(digits_len, &intn_data_size, &rounded_res_len);
 
-    if (UNLIKELY(memory_init_heap(&heap, BOXED_INTN_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
         ctx->x[0] = ERROR_ATOM;
         ctx->x[1] = OUT_OF_MEMORY_ATOM;
         return term_invalid_term();
     }
 
     term bigint_term
-        = term_create_uninitialized_intn(intn_data_size, (term_integer_sign_t) sign, &heap);
-    void *digits_mem = term_intn_data(bigint_term);
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+    // Assumption: here we assume that bigints have standard boxed term layout
+    // This code might need to be updated when changing bigint memory layout
+    void *digits_mem = (void *) (term_to_const_term_ptr(bigint_term) + 1);
     // TODO: optimize: just initialize space that will not be used
     memset(digits_mem, 0, intn_data_size * sizeof(term));
 
