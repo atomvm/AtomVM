@@ -941,7 +941,7 @@ if_block_cond(
 ) when ?IS_GPR(Reg) ->
     % AND with mask
     OffsetBefore = StreamModule:offset(Stream0),
-    State1 = and_(State0, Reg, Mask),
+    {State1, Reg} = and_(State0, RegTuple, Mask),
     Stream1 = State1#state.stream,
     % Compare with value
     I2 = jit_aarch64_asm:cmp(Reg, Val),
@@ -1953,9 +1953,18 @@ op_imm(#state{stream_module = StreamModule, stream = Stream0} = State, Op, RegA,
 %% @param Val immediate value to AND
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec and_(state(), aarch64_register(), integer()) -> state().
-and_(State, Reg, Val) ->
-    op_imm(State, and_, Reg, Reg, Val).
+and_(State, {free, Reg}, Val) ->
+    NewState = op_imm(State, and_, Reg, Reg, Val),
+    {NewState, Reg};
+and_(
+    #state{available_regs = [ResultReg | T], used_regs = UR} = State,
+    Reg,
+    Val
+) ->
+    NewState = op_imm(
+        State#state{available_regs = T, used_regs = [ResultReg | UR]}, and_, ResultReg, Reg, Val
+    ),
+    {NewState, ResultReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Perform bitwise OR of a register with an immediate value.
