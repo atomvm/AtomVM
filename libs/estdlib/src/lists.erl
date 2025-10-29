@@ -63,6 +63,7 @@
     merge/2, merge/3,
     split/2,
     usort/1, usort/2,
+    ukeysort/2,
     dropwhile/2,
     duplicate/2,
     sublist/2,
@@ -774,6 +775,29 @@ unique([X, Y | Tail], Fun) ->
         false ->
             [X | unique([Y | Tail], Fun)]
     end.
+
+%%-----------------------------------------------------------------------------
+%% @param   N           the position in the tuple to compare (1..tuple_size)
+%% @param   L           the list to sort
+%% @returns The list L sorted by Nth element with duplicates removed
+%% @doc     Sort a list of tuples by Nth element and remove duplicates.
+%%          Two tuples compare equal if their Nth elements compare equal.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec ukeysort(N :: pos_integer(), L :: [tuple()]) -> [tuple()].
+ukeysort(N, TupleList) ->
+    Sorted = keysort(N, TupleList),
+    unique_key(Sorted, N).
+
+%% @private
+unique_key([], _N) ->
+    [];
+unique_key([X], _N) ->
+    [X];
+unique_key([X, Y | Tail], N) when element(N, X) =:= element(N, Y) ->
+    unique_key([X | Tail], N);
+unique_key([X, Y | Tail], N) ->
+    [X | unique_key([Y | Tail], N)].
 
 %%-----------------------------------------------------------------------------
 %% @param   Pred the predicate to check against elements in List1
