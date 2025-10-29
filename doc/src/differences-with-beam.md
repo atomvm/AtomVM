@@ -81,6 +81,8 @@ changes.
 Please check AtomVM's [standard library documentation](./apidocs/erlang/estdlib/README.md) to find out differences
 and limitations of each module.
 
+See also [stubbed functions](./stubbed-functions.md) list.
+
 ### OTP architecture
 
 Support for OTP applications is currently very limited. `gen_server`, `gen_statem` and `supervisor`
