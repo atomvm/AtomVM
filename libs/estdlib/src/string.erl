@@ -27,7 +27,15 @@
 %%-----------------------------------------------------------------------------
 -module(string).
 
--export([to_upper/1, to_lower/1, split/2, split/3, trim/1, trim/2, find/2, find/3, length/1]).
+-export([
+    to_upper/1,
+    to_lower/1,
+    split/2, split/3,
+    trim/1, trim/2,
+    find/2, find/3,
+    length/1,
+    jaro_similarity/2
+]).
 
 %%-----------------------------------------------------------------------------
 %% @param Input a string or character to convert
@@ -262,3 +270,15 @@ length(String) when is_list(String) ->
     erlang:length(String);
 length(String) when is_binary(String) ->
     erlang:length(unicode:characters_to_list(String)).
+
+%%-----------------------------------------------------------------------------
+%% @param String1 first string to compare
+%% @param String2 second string to compare
+%% @doc Calculate the Jaro similarity between two strings (stub implementation).
+%%
+%% This is a stub implementation that always returns 0.0, used for compatibility.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec jaro_similarity(String1 :: unicode:chardata(), String2 :: unicode:chardata()) -> float().
+jaro_similarity(_String1, _String2) ->
+    0.0.

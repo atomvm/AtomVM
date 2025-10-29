@@ -31,6 +31,12 @@ The following functions are currently stubbed in AtomVM and always return a fixe
 |--------|----------|--------------|-------|
 | `io` | `set_ops/1,2` | `ok` | Standard IO options are currently ignored |
 
+### Other functions
+
+| Module | Function | Return Value | Notes |
+|--------|----------|--------------|-------|
+| `string` | `jaro_similarity/2` | `0.0` |  |
+
 ## Important Considerations
 
 When using AtomVM, be aware that stubbed functions will not provide the functionality you might
