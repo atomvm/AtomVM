@@ -93,6 +93,7 @@ instead `badarg`.
 - Fix a memory leak in distribution when a BEAM node would monitor a process by name.
 - Fix `list_to_integer`, it was likely buggy with integers close to INT64_MAX
 - Added missing support for supervisor `one_for_all` strategy.
+- Supervisor now honors period and intensity options.
 
 ## [0.6.7] - Unreleased
 

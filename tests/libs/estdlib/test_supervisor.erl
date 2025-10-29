@@ -36,6 +36,7 @@ test() ->
     ok = test_which_children(),
     ok = test_count_children(),
     ok = test_one_for_all(),
+    ok = test_crash_limits(),
     ok.
 
 test_basic_supervisor() ->
@@ -321,7 +322,19 @@ init({test_one_for_all, Parent}) ->
             modules => [notify_init_server]
         }
     ],
-    {ok, {#{strategy => one_for_all, intensity => 10000, period => 3600}, ChildSpecs}}.
+    {ok, {#{strategy => one_for_all, intensity => 10000, period => 3600}, ChildSpecs}};
+init({test_crash_limits, Intensity, Period, Parent}) ->
+    ChildSpec = [
+        #{
+            id => test_child,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => transient,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        }
+    ],
+    {ok, {#{strategy => one_for_one, intensity => Intensity, period => Period}, ChildSpec}}.
 
 test_supervisor_order() ->
     {ok, SupPid} = supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
@@ -440,3 +453,71 @@ test_one_for_all() ->
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.
+
+test_crash_limits() ->
+    %% Trap exits so this test doesn't shutdown with the supervisor
+    process_flag(trap_exit, true),
+    Intensity = 2,
+    Period = 5,
+    {ok, SupPid} = supervisor:start_link(
+        {local, test_crash_limits}, ?MODULE, {test_crash_limits, Intensity, Period, self()}
+    ),
+    Pid1 = get_ping_pong_pid(),
+    gen_server:call(Pid1, {stop, test_crash1}),
+    Pid2 = get_ping_pong_pid(),
+    gen_server:cast(Pid2, {crash, test_crash2}),
+    Pid3 = get_ping_pong_pid(),
+    %% Wait until period expires so we can test that stale shutdowns are purged from the shutdown list
+    timer:sleep(6000),
+
+    gen_server:call(Pid3, {stop, test_crash3}),
+    Pid4 = get_ping_pong_pid(),
+    gen_server:cast(Pid4, {crash, test_crash4}),
+    Pid5 = get_ping_pong_pid(),
+
+    %% The next crash will reach the restart threshold and shutdown the supervisor
+    gen_server:call(Pid5, {stop, test_crash5}),
+
+    %% Test supervisor has exited
+    ok =
+        receive
+            {'EXIT', SupPid, shutdown} ->
+                ok
+        after 2000 ->
+            error({supervisor_not_stopped, reached_max_restart_intensity})
+        end,
+    process_flag(trap_exit, false),
+
+    %% Test child crashed and was not restarted
+    ok =
+        try gen_server:call(Pid5, ping) of
+            pong -> error(not_stopped, Pid5)
+        catch
+            exit:{noproc, _MFA} -> ok
+        end,
+    ok =
+        try get_ping_pong_pid() of
+            Pid6 when is_pid(Pid6) ->
+                error({child_restarted, reached_max_restart_intensity})
+        catch
+            throw:timeout ->
+                ok
+        end,
+
+    ok =
+        try erlang:process_info(SupPid, links) of
+            {links, Links} when is_list(Links) ->
+                error({not_stopped, reached_max_restart_intensity});
+            undefined ->
+                ok
+        catch
+            error:badarg ->
+                ok
+        end,
+    ok.
+
+get_ping_pong_pid() ->
+    receive
+        {ping_pong_server_ready, Pid} -> Pid
+    after 2000 -> throw(timeout)
+    end.

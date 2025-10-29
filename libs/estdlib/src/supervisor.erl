@@ -91,8 +91,25 @@
     type :: child_type(),
     modules = [] :: [module()] | dynamic
 }).
+
+-define(DEFAULT_INTENSITY, 1).
+-define(DEFAULT_PERIOD, 5).
 %% note: the list of children should always be kept in order, with last to start at the head.
--record(state, {restart_strategy = one_for_one :: strategy(), children = [] :: [#child{}]}).
+-record(state, {
+    restart_strategy = one_for_one :: strategy(),
+    intensity = ?DEFAULT_INTENSITY :: non_neg_integer(),
+    period = ?DEFAULT_PERIOD :: pos_integer(),
+    restart_count = 0 :: non_neg_integer(),
+    restarts = [] :: [integer()],
+    children = [] :: [#child{}]
+}).
+
+%% Used to trim stale restarts when the 'intensity' value is large.
+%% The number of restarts before triggering a purge of restarts older
+%% than 'period', so stale restarts do not continue to consume ram for
+%% the sake of MCUs with limited memory. In the future a function
+%% could be used to set a sane default for the platform (OTP uses 1000).
+-define(STALE_RESTART_LIMIT, 100).
 
 start_link(Module, Args) ->
     gen_server:start_link(?MODULE, {Module, Args}, []).
@@ -121,12 +138,23 @@ count_children(Supervisor) ->
 init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
     case Mod:init(Args) of
-        {ok, {{Strategy, _Intensity, _Period}, StartSpec}} ->
-            State = init_state(StartSpec, #state{restart_strategy = Strategy}),
+        {ok, {{Strategy, Intensity, Period}, StartSpec}} ->
+            State = init_state(StartSpec, #state{
+                restart_strategy = Strategy,
+                intensity = Intensity,
+                period = Period
+            }),
             NewChildren = start_children(State#state.children, []),
             {ok, State#state{children = NewChildren}};
-        {ok, {#{strategy := Strategy}, StartSpec}} ->
-            State = init_state(StartSpec, #state{restart_strategy = Strategy}),
+        {ok, {#{} = SupSpec, StartSpec}} ->
+            Strategy = maps:get(strategy, SupSpec, one_for_one),
+            Intensity = maps:get(intensity, SupSpec, ?DEFAULT_INTENSITY),
+            Period = maps:get(period, SupSpec, ?DEFAULT_PERIOD),
+            State = init_state(StartSpec, #state{
+                restart_strategy = Strategy,
+                intensity = Intensity,
+                period = Period
+            }),
             NewChildren = start_children(State#state.children, []),
             {ok, State#state{children = NewChildren}};
         Error ->
@@ -322,7 +350,15 @@ handle_child_exit(Pid, Reason, State) ->
         #child{} = Child ->
             case should_restart(Reason, Child#child.restart) of
                 true ->
-                    handle_restart_strategy(Child, State);
+                    case add_restart(State) of
+                        {ok, State1} ->
+                            handle_restart_strategy(Child, State1);
+                        {shutdown, State1} ->
+                            RemainingChildren = lists:keydelete(
+                                Pid, #child.pid, State1#state.children
+                            ),
+                            {shutdown, State1#state{children = RemainingChildren}}
+                    end;
                 false ->
                     Children = lists:keydelete(Pid, #child.pid, State#state.children),
                     {noreply, State#state{children = Children}}
@@ -369,6 +405,8 @@ should_restart(Reason, transient) ->
     end.
 
 loop_terminate([#child{pid = undefined} | Tail], AccRemaining) ->
+    loop_terminate(Tail, AccRemaining);
+loop_terminate([#child{pid = {restarting, _}} | Tail], AccRemaining) ->
     loop_terminate(Tail, AccRemaining);
 loop_terminate([#child{pid = Pid} = Child | Tail], AccRemaining) when is_pid(Pid) ->
     do_terminate(Child),
@@ -453,6 +491,47 @@ do_terminate_one_for_all([Child | Children], StopPids) ->
         #child{pid = {restarting, _Pid}} = Child ->
             do_terminate_one_for_all(Children, StopPids)
     end.
+
+add_restart(
+    #state{
+        intensity = Intensity, period = Period, restart_count = RestartCount, restarts = Restarts
+    } = State
+) ->
+    Now = erlang:monotonic_time(millisecond),
+    Threshold = Now - Period * 1000,
+    case can_restart(Intensity, Threshold, Restarts, RestartCount) of
+        {true, RestartCount1, Restarts1} ->
+            {ok, State#state{
+                restarts = Restarts1 ++ [Now], restart_count = RestartCount1 + 1
+            }};
+        {false, _RestartCount1, _Restarts1} ->
+            % TODO: log supervisor shutdown due to maximum intensity exceeded
+            {shutdown, State}
+    end.
+
+can_restart(0, _, _, _) ->
+    {false, 0, []};
+can_restart(_, _, _, 0) ->
+    {true, 0, []};
+can_restart(Intensity, Threshold, Restarts, RestartCount) when
+    RestartCount >= ?STALE_RESTART_LIMIT
+->
+    {NewCount, Restarts1} = trim_expired_restarts(Threshold, lists:sort(Restarts)),
+    can_restart(Intensity, Threshold, Restarts1, NewCount);
+can_restart(Intensity, Threshold, [Restart | _] = Restarts, RestartCount) when
+    RestartCount >= Intensity andalso Restart < Threshold
+->
+    {NewCount, Restarts1} = trim_expired_restarts(Threshold, lists:sort(Restarts)),
+    can_restart(Intensity, Threshold, Restarts1, NewCount);
+can_restart(Intensity, _, Restarts, RestartCount) when RestartCount >= Intensity ->
+    {false, RestartCount, Restarts};
+can_restart(Intensity, _, Restarts, RestartCount) when RestartCount < Intensity ->
+    {true, RestartCount, Restarts}.
+
+trim_expired_restarts(Threshold, [Restart | Restarts]) when Restart < Threshold ->
+    trim_expired_restarts(Threshold, Restarts);
+trim_expired_restarts(_Threshold, Restarts) ->
+    {length(Restarts), Restarts}.
 
 child_to_info(#child{id = Id, pid = Pid, type = Type, modules = Modules}) ->
     Child =
