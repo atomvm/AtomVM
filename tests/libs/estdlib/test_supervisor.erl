@@ -35,6 +35,7 @@ test() ->
     ok = test_terminate_timeout(),
     ok = test_which_children(),
     ok = test_count_children(),
+    ok = test_one_for_all(),
     ok.
 
 test_basic_supervisor() ->
@@ -292,7 +293,35 @@ init({test_supervisor_order, Parent}) ->
     ],
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
 init({test_no_child, _Parent}) ->
-    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}}.
+    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}};
+init({test_one_for_all, Parent}) ->
+    ChildSpecs = [
+        #{
+            id => ping_pong_1,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        },
+        #{
+            id => ping_pong_2,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => transient,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        },
+        #{
+            id => ready_0,
+            start => {notify_init_server, start_link, [{Parent, ready_0}]},
+            restart => temporary,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [notify_init_server]
+        }
+    ],
+    {ok, {#{strategy => one_for_all, intensity => 10000, period => 3600}, ChildSpecs}}.
 
 test_supervisor_order() ->
     {ok, SupPid} = supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
@@ -342,6 +371,71 @@ test_which_children() ->
     % Delete the child and check empty list
     ok = supervisor:delete_child(SupPid, test_child),
     [] = supervisor:which_children(SupPid),
+
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_one_for_all() ->
+    {ok, SupPid} = supervisor:start_link({local, allforone}, ?MODULE, {test_one_for_all, self()}),
+    % Collect startup message from permanent ping_pong_server
+    Server_1 = get_and_test_server(),
+    % Collect startup message from transient ping_pong_server
+    Server_2 = get_and_test_server(),
+    % Collect startup message from temporary notify_init_server
+    ready_0 =
+        receive
+            Msg1 -> Msg1
+        after 1000 -> error({timeout, {start, ready_0}})
+        end,
+
+    [{specs, 3}, {active, 3}, {supervisors, 0}, {workers, 3}] = supervisor:count_children(SupPid),
+
+    %% Monitor transient Server_2 to make sure it is stopped, and restarted when
+    %% permanent Server_1 is shutdown.
+    MonRef = monitor(process, Server_2),
+    ok = gen_server:call(Server_1, {stop, test_crash}),
+    %% Server_2 should exit before the first child is restarted, but exit messages from
+    %% monitored processes may take some time to be received so we may get the message
+    %% from the first restarted child first.
+    First =
+        receive
+            {'DOWN', MonRef, process, Server_2, killed} ->
+                down;
+            {ping_pong_server_ready, Restart1} when is_pid(Restart1) ->
+                ready
+        after 1000 ->
+            error({timeout, restart_after_crash})
+        end,
+    ok =
+        case First of
+            down ->
+                receive
+                    {ping_pong_server_ready, Restart_1} when is_pid(Restart_1) -> ok
+                after 1000 ->
+                    error({timeout, restart_after_crash})
+                end;
+            ready ->
+                receive
+                    {'DOWN', MonRef, process, Server_2, killed} -> ok
+                after 1000 ->
+                    error({timeout, restart_after_crash})
+                end
+        end,
+
+    demonitor(MonRef),
+
+    % Collect startup message from restarted transient ping_pong_server child
+    _Restart_2 = get_and_test_server(),
+    % Make sure temporary notify_init_server is not restarted
+    no_start =
+        receive
+            ready_0 -> error({error, restarted_temporary})
+        after 1000 -> no_start
+        end,
+
+    % Ensure correct number of children
+    [{specs, 2}, {active, 2}, {supervisors, 0}, {workers, 2}] = supervisor:count_children(SupPid),
 
     unlink(SupPid),
     exit(SupPid, shutdown),

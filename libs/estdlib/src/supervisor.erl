@@ -83,7 +83,7 @@
     }.
 
 -record(child, {
-    pid = undefined,
+    pid = undefined :: pid() | undefined | {restarting, pid()} | {restarting, undefined},
     id :: any(),
     start :: {module(), atom(), [any()] | undefined},
     restart :: restart(),
@@ -91,10 +91,12 @@
     type :: child_type(),
     modules = [] :: [module()] | dynamic
 }).
--record(state, {restart_strategy :: strategy(), children = [] :: [#child{}]}).
+%% note: the list of children should always be kept in order, with last to start at the head.
+-record(state, {restart_strategy = one_for_one :: strategy(), children = [] :: [#child{}]}).
 
 start_link(Module, Args) ->
     gen_server:start_link(?MODULE, {Module, Args}, []).
+
 start_link(SupName, Module, Args) ->
     gen_server:start_link(SupName, ?MODULE, {Module, Args}, []).
 
@@ -172,7 +174,7 @@ child_spec_to_record(#{id := ChildId, start := MFA} = ChildMap) ->
 init_state([ChildSpec | T], State) ->
     Child = child_spec_to_record(ChildSpec),
     NewChildren = [Child | State#state.children],
-    init_state(T, #state{children = NewChildren});
+    init_state(T, State#state{children = NewChildren});
 init_state([], State) ->
     State#state{children = lists:reverse(State#state.children)}.
 
@@ -190,12 +192,16 @@ handle_call({start_child, ChildSpec}, _From, #state{children = Children} = State
     case lists:keyfind(ID, #child.id, State#state.children) of
         #child{pid = undefined} ->
             {reply, {error, already_present}, State};
+        #child{pid = {restarting, _Pid}} ->
+            {reply, {error, restarting}, State};
         #child{pid = Pid} ->
             {reply, {error, {already_started, Pid}}, State};
         false ->
             case try_start(Child) of
                 {ok, Pid, Result} ->
                     UpdatedChild = Child#child{pid = Pid},
+                    %% The last child to start should always be at the end of the child
+                    %% start list.
                     {reply, Result, State#state{children = [UpdatedChild | Children]}};
                 {error, _Reason} = ErrorT ->
                     {reply, ErrorT, State}
@@ -226,6 +232,8 @@ handle_call({restart_child, ID}, _From, #state{children = Children} = State) ->
                 {error, _Reason} = ErrorT ->
                     {reply, ErrorT, State}
             end;
+        #child{pid = {restarting, _}} ->
+            {reply, {error, restarting}, State};
         #child{} ->
             {reply, {error, running}, State};
         false ->
@@ -236,6 +244,8 @@ handle_call({delete_child, ID}, _From, #state{children = Children} = State) ->
         #child{pid = undefined} ->
             NewChildren = lists:keydelete(ID, #child.id, Children),
             {reply, ok, State#state{children = NewChildren}};
+        #child{pid = {restarting, _}} ->
+            {reply, {error, restarting}, State};
         #child{} ->
             {reply, {error, running}, State};
         false ->
@@ -254,12 +264,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'EXIT', Pid, Reason}, State) ->
-    case handle_child_exit(Pid, Reason, State) of
-        {ok, State1} ->
-            {noreply, State1};
-        {shutdown, State1} ->
-            {stop, shutdown, State1}
-    end;
+    handle_child_exit(Pid, Reason, State);
 handle_info({ensure_killed, Pid}, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
         false ->
@@ -268,12 +273,31 @@ handle_info({ensure_killed, Pid}, State) ->
             exit(Pid, kill),
             {noreply, State}
     end;
+handle_info({restart_many_children, []}, State) ->
+    {noreply, State};
+handle_info(
+    {restart_many_children, [#child{pid = {restarting, _Pid0} = Pid} = Child | Children]}, State
+) ->
+    case try_start(Child) of
+        {ok, NewPid, _Result} ->
+            NewChild = Child#child{pid = NewPid},
+            NewChildren = lists:keyreplace(
+                Pid, #child.pid, State#state.children, NewChild
+            ),
+            {noreply, State#state{children = NewChildren},
+                {timeout, 0, {restart_many_children, Children}}};
+        {error, Reason} ->
+            handle_child_exit(Pid, Reason, State)
+    end;
+handle_info({restart_many_children, [#child{pid = undefined} = _Child | Children]}, State) ->
+    {noreply, State, {timeout, 0, {restart_many_children, Children}}};
 handle_info(_Msg, State) ->
     %TODO: log unexpected message
     {noreply, State}.
 
 %% @hidden
 terminate(_Reason, #state{children = Children} = State) ->
+    %% Shutdown children last to first.
     RemainingChildren = loop_terminate(Children, []),
     loop_wait_termination(RemainingChildren),
     {ok, State}.
@@ -284,33 +308,55 @@ terminate(_Reason, #state{children = Children} = State) ->
 handle_child_exit(Pid, Reason, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
         false ->
-            {ok, State};
+            {noreply, State};
         #child{restart = {terminating, temporary, From}} ->
             gen_server:reply(From, ok),
             NewChildren = lists:keydelete(Pid, #child.pid, State#state.children),
-            {ok, State#state{children = NewChildren}};
+            {noreply, State#state{children = NewChildren}};
         #child{restart = {terminating, Restart, From}} = Child ->
             gen_server:reply(From, ok),
             NewChildren = lists:keyreplace(Pid, #child.pid, State#state.children, Child#child{
                 pid = undefined, restart = Restart
             }),
-            {ok, State#state{children = NewChildren}};
+            {noreply, State#state{children = NewChildren}};
         #child{} = Child ->
             case should_restart(Reason, Child#child.restart) of
                 true ->
-                    case try_start(Child) of
-                        {ok, NewPid, _Result} ->
-                            NewChild = Child#child{pid = NewPid},
-                            Children = lists:keyreplace(
-                                Pid, #child.pid, State#state.children, NewChild
-                            ),
-                            {ok, State#state{children = Children}}
-                    end;
+                    handle_restart_strategy(Child, State);
                 false ->
                     Children = lists:keydelete(Pid, #child.pid, State#state.children),
-                    {ok, State#state{children = Children}}
+                    {noreply, State#state{children = Children}}
             end
     end.
+
+handle_restart_strategy(
+    #child{id = Id} = Child, #state{restart_strategy = one_for_one} = State
+) ->
+    case try_start(Child) of
+        {ok, NewPid, _Result} ->
+            NewChild = Child#child{pid = NewPid},
+            Children = lists:keyreplace(
+                Id, #child.id, State#state.children, NewChild
+            ),
+            {noreply, State#state{children = Children}}
+    end;
+handle_restart_strategy(
+    #child{pid = Pid} = Child, #state{restart_strategy = one_for_all} = State
+) ->
+    Children =
+        case Pid of
+            {restarting, _} ->
+                State#state.children;
+            Pid when is_pid(Pid) ->
+                lists:keyreplace(Pid, #child.pid, State#state.children, Child#child{
+                    pid = {restarting, Pid}
+                })
+        end,
+    ok = terminate_one_for_all(Children),
+    {ok, NewChildren} = get_restart_children(Children),
+    %% NewChildren is startup order (first at head) and needs to be reversed to keep Children in correct order in #state{}
+    {noreply, State#state{children = lists:reverse(NewChildren)},
+        {timeout, 0, {restart_many_children, NewChildren}}}.
 
 should_restart(_Reason, permanent) ->
     true;
@@ -341,8 +387,7 @@ loop_wait_termination(RemainingChildren0) ->
             case lists:member(Pid, RemainingChildren0) of
                 true ->
                     exit(Pid, kill),
-                    RemainingChildren1 = lists:delete(Pid, RemainingChildren0),
-                    loop_wait_termination(RemainingChildren1);
+                    loop_wait_termination(RemainingChildren0);
                 false ->
                     loop_wait_termination(RemainingChildren0)
             end
@@ -365,6 +410,48 @@ try_start(#child{start = {M, F, Args}} = Record) ->
     catch
         error:Error ->
             {error, {{'EXIT', Error}, Record}}
+    end.
+
+get_restart_children(Children) ->
+    get_restart_children(Children, []).
+
+get_restart_children([], NewChildren) ->
+    {ok, NewChildren};
+get_restart_children([Child | Children], NewChildren) ->
+    case Child of
+        #child{restart = {terminating, temporary, _From}} ->
+            get_restart_children(Children, NewChildren);
+        #child{restart = {terminating, _Restart, _From}} ->
+            get_restart_children(Children, [Child | NewChildren]);
+        #child{pid = undefined, restart = temporary} ->
+            get_restart_children(Children, NewChildren);
+        #child{pid = undefined} = Child ->
+            get_restart_children(Children, [Child | NewChildren]);
+        #child{pid = {restarting, _Pid}} = Child ->
+            get_restart_children(Children, [Child | NewChildren]);
+        #child{pid = Pid, restart = temporary} = Child when is_pid(Pid) ->
+            get_restart_children(Children, NewChildren);
+        #child{pid = Pid} = Child when is_pid(Pid) ->
+            get_restart_children(Children, [Child#child{pid = {restarting, Pid}} | NewChildren])
+    end.
+
+terminate_one_for_all(Children) ->
+    %% Always shut down last child first
+    do_terminate_one_for_all(Children, []).
+
+do_terminate_one_for_all([], StopPids) ->
+    ok = loop_wait_termination(StopPids),
+    %% After accumulation NewChildren are in correct order for restart.
+    ok;
+do_terminate_one_for_all([Child | Children], StopPids) ->
+    case Child of
+        #child{pid = Pid} = Child when is_pid(Pid) ->
+            do_terminate(Child),
+            do_terminate_one_for_all(Children, [Pid | StopPids]);
+        #child{pid = undefined} ->
+            do_terminate_one_for_all(Children, StopPids);
+        #child{pid = {restarting, _Pid}} = Child ->
+            do_terminate_one_for_all(Children, StopPids)
     end.
 
 child_to_info(#child{id = Id, pid = Pid, type = Type, modules = Modules}) ->
