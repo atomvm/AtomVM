@@ -618,79 +618,16 @@ defmodule Protocol do
         {impl_for!, definitions} = List.keytake(definitions, {:impl_for!, 1}, 0)
         {struct_impl_for, definitions} = List.keytake(definitions, {:struct_impl_for, 1}, 0)
 
-        protocol_funs = get_protocol_functions(protocol_def)
-
         protocol_def = change_protocol(protocol_def, types)
         impl_for = change_impl_for(impl_for, protocol, types)
         struct_impl_for = change_struct_impl_for(struct_impl_for, protocol, types, structs)
-        new_signatures = new_signatures(definitions, protocol_funs, protocol, types)
 
         definitions = [protocol_def, impl_for, impl_for!, struct_impl_for] ++ definitions
-        signatures = Enum.into(new_signatures, signatures)
         {:ok, definitions, signatures}
 
       nil ->
         {:error, :not_a_protocol}
     end
-  end
-
-  defp new_signatures(definitions, protocol_funs, protocol, types) do
-    alias Module.Types.Descr
-
-    clauses =
-      types
-      |> List.delete(Any)
-      |> Enum.map(fn impl ->
-        {[Module.Types.Of.impl(impl)], Descr.atom([__concat__(protocol, impl)])}
-      end)
-
-    {domain, impl_for, impl_for!} =
-      case clauses do
-        [] ->
-          if Any in types do
-            clauses = [{[Descr.term()], Descr.atom([__concat__(protocol, Any)])}]
-            {Descr.term(), clauses, clauses}
-          else
-            {Descr.none(), [{[Descr.term()], Descr.atom([nil])}],
-             [{[Descr.none()], Descr.none()}]}
-          end
-
-        _ ->
-          domain =
-            clauses
-            |> Enum.map(fn {[domain], _} -> domain end)
-            |> Enum.reduce(&Descr.union/2)
-
-          not_domain = Descr.negation(domain)
-
-          if Any in types do
-            clauses =
-              clauses ++ [{[not_domain], Descr.atom([__concat__(protocol, Any)])}]
-
-            {Descr.term(), clauses, clauses}
-          else
-            {domain, clauses ++ [{[not_domain], Descr.atom([nil])}], clauses}
-          end
-      end
-
-    new_signatures =
-      for {{_fun, arity} = fun_arity, :def, _, _} <- definitions,
-          fun_arity in protocol_funs do
-        rest = List.duplicate(Descr.term(), arity - 1)
-        {fun_arity, {:strong, nil, [{[domain | rest], Descr.dynamic()}]}}
-      end
-
-    [
-      {{:impl_for, 1}, {:strong, [Descr.term()], impl_for}},
-      {{:impl_for!, 1}, {:strong, [domain], impl_for!}}
-    ] ++ new_signatures
-  end
-
-  defp get_protocol_functions({_name, _kind, _meta, clauses}) do
-    Enum.find_value(clauses, fn
-      {_meta, [:functions], [], clauses} -> clauses
-      _ -> nil
-    end) || raise "could not find protocol functions"
   end
 
   defp change_protocol({_name, _kind, meta, clauses}, types) do

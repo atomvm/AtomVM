@@ -22,6 +22,7 @@
 #
 
 defmodule Base do
+  @compile {:autoload, false}
   @moduledoc """
   This module provides data encoding and decoding functions
   according to [RFC 4648](https://tools.ietf.org/html/rfc4648).
