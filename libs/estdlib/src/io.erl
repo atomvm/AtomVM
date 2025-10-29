@@ -43,6 +43,8 @@
     columns/1,
     getopts/0,
     getopts/1,
+    setopts/1,
+    setopts/2,
     printable_range/0
 ]).
 
@@ -110,6 +112,26 @@ getopts(standard_io) ->
         {stderr, true},
         {stdin, true}
     ].
+
+%%-----------------------------------------------------------------------------
+%% @equiv setopts(standard_io, Opts)
+%% @doc Set options for standard I/O
+%% @end
+%%-----------------------------------------------------------------------------
+-spec setopts(Opts :: [getopt()]) -> ok | {error, Reason :: any()}.
+setopts(Opts) ->
+    setopts(standard_io, Opts).
+
+%%-----------------------------------------------------------------------------
+%% @param IODevice IO device to set options for
+%% @param Opts Options to set
+%% @doc Set options for a given IODevice. Currently a no-op stub.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec setopts(IODevice :: device(), Opts :: [getopt()]) -> ok | {error, Reason :: any()}.
+setopts(_IODevice, _Opts) ->
+    %% TODO: Actually implement option setting when needed
+    ok.
 
 %%-----------------------------------------------------------------------------
 %% @doc Returns the user-requested range of printable Unicode characters.
