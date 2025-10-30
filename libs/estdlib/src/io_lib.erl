@@ -33,6 +33,7 @@
     fwrite/2,
     latin1_char_list/1,
     write_atom/1,
+    write_binary/3,
     printable_list/1,
     write_string/1,
     write_string/2,
@@ -408,6 +409,13 @@ write_atom_maybe_quote_escape([$' | T], _Quote, Acc) ->
     write_atom_maybe_quote_escape(T, true, [$', $\\ | Acc]);
 write_atom_maybe_quote_escape([C | T], _Quote, Acc) ->
     write_atom_maybe_quote_escape(T, true, [C | Acc]).
+
+-spec write_binary(Binary :: binary(), Depth :: integer(), CharLimit :: integer()) ->
+    {iodata(), binary()}.
+write_binary(T, _Depth, _CharLimit) ->
+    L = erlang:binary_to_list(T),
+    FormattedStr = lists:join($,, [integer_to_list(B) || B <- L]),
+    {[$<, $<, FormattedStr, $>, $>], <<>>}.
 
 %% @private
 format_integer(#format{control = C, precision = Precision0}, T0) when
