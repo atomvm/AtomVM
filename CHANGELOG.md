@@ -58,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erlang:list_to_bitstring`
 - Reimplemented `lists:keyfind`, `lists:keymember` and `lists:member` as NIFs
 - Added `AVM_PRINT_PROCESS_CRASH_DUMPS` option
+- Added `os:system_time/0`
 
 ### Changed
 

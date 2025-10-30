@@ -102,6 +102,7 @@ static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_binary_match(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_os_getenv_1(Context *ctx, int argc, term argv[]);
+static term nif_os_system_time_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_atom_to_list_1(Context *ctx, int argc, term argv[]);
@@ -501,6 +502,12 @@ static const struct Nif timestamp_nif = {
 static const struct Nif system_time_to_universal_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_calendar_system_time_to_universal_time_2
+};
+
+static const struct Nif os_system_time_0_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_os_system_time_0
 };
 
 const struct Nif os_getenv_nif = {
@@ -1663,7 +1670,6 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
     struct timespec ts;
@@ -1812,6 +1818,17 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
 
     struct tm broken_down_time;
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
+}
+
+term nif_os_system_time_0(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    struct timespec ts;
+    sys_time(&ts);
+
+    return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000000ULL + ts.tv_nsec);
 }
 
 static term nif_os_getenv_1(Context *ctx, int argc, term argv[])

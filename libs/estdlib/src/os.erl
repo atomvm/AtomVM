@@ -19,7 +19,7 @@
 %
 -module(os).
 
--export([getenv/1]).
+-export([getenv/1, system_time/0]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Name name of the environment variable
@@ -29,4 +29,13 @@
 %%-----------------------------------------------------------------------------
 -spec getenv(Name :: nonempty_string()) -> nonempty_string() | false.
 getenv(_VarName) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns An integer representing system time.
+%% @doc     Returns the current OS system time in nanoseconds.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_time() -> integer().
+system_time() ->
     erlang:nif_error(undefined).
