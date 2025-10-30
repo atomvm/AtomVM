@@ -25,13 +25,11 @@ ignored
 
 The following functions are currently stubbed in AtomVM and always return a fixed value:
 
-<!--
-### Foo Bar Functions
+### I/O Functions
 
 | Module | Function | Return Value | Notes |
 |--------|----------|--------------|-------|
-| `erlang` | `foo/0` | `[]` | Not applicable on AtomVM |
--->
+| `io` | `set_ops/1,2` | `ok` | Standard IO options are currently ignored |
 
 ## Important Considerations
 
