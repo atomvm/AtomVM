@@ -3418,6 +3418,12 @@ skip_compact_term(<<_:4, ?COMPACT_INTEGER:4, _Rest/binary>> = Bin) ->
     Rest;
 skip_compact_term(<<_Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, _NextByte, Rest/binary>>) ->
     Rest;
+skip_compact_term(<<7:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Rest/binary>>) ->
+    {DecodedLen, Rest0} = decode_literal(Rest),
+    % 7 actually means 7 + 2, that means an integer that is >= 9 bytes
+    IntegerByteLen = DecodedLen + 9,
+    <<_Value:IntegerByteLen/binary, Rest/binary>> = Rest0,
+    Rest;
 skip_compact_term(
     <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, _Value:(8 * (Size0 + 2))/signed, Rest/binary>>
 ) ->
