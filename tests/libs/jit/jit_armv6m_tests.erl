@@ -32,7 +32,7 @@
 -define(BACKEND, jit_armv6m).
 
 % disassembly obtained with:
-% arm-elf-objdump -b binary -D dump.bin -M arm
+%  arm-elf-objdump -D -b binary -marm --disassembler-options=force-thumb -z
 
 call_primitive_0_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -2057,61 +2057,47 @@ wait_timeout_test() ->
 wait_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
 
-    State1 = ?BACKEND:jump_table(State0, 5),
+    State1 = ?BACKEND:jump_table(State0, 2),
     State2 = ?BACKEND:add_label(State1, 1),
     Label = 2,
     State3 = ?BACKEND:set_continuation_to_label(State2, Label),
     State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State5 = ?BACKEND:add_label(State4, 2),
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:update_branches(State6),
 
-    Stream = ?BACKEND:stream(State4),
+    Stream = ?BACKEND:stream(State7),
     Dump = <<
         "   0:	4b01      	ldr	r3, [pc, #4]	; (0x8)\n"
         "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "   4:	449f      	add	pc, r3\n"
         "   6:	46c0      	nop			; (mov r8, r8)\n"
-        "   8:	0000      	movs	r0, r0\n"
+        "   8:	0034      	movs	r4, r6\n"
         "   a:	0000      	movs	r0, r0\n"
         "   c:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0000      	movs	r0, r0\n"
+        "  14:	0010      	movs	r0, r2\n"
         "  16:	0000      	movs	r0, r0\n"
         "  18:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
         "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  1c:	449f      	add	pc, r3\n"
         "  1e:	46c0      	nop			; (mov r8, r8)\n"
-        "  20:	0000      	movs	r0, r0\n"
+        "  20:	001c      	movs	r4, r3\n"
         "  22:	0000      	movs	r0, r0\n"
-        "  24:	4b01      	ldr	r3, [pc, #4]	; (0x2c)\n"
-        "  26:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-        "  28:	449f      	add	pc, r3\n"
-        "  2a:	46c0      	nop			; (mov r8, r8)\n"
-        "  2c:	0000      	movs	r0, r0\n"
-        "  2e:	0000      	movs	r0, r0\n"
-        "  30:	4b01      	ldr	r3, [pc, #4]	; (0x38)\n"
-        "  32:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-        "  34:	449f      	add	pc, r3\n"
-        "  36:	46c0      	nop			; (mov r8, r8)\n"
-        "  38:	0000      	movs	r0, r0\n"
-        "  3a:	0000      	movs	r0, r0\n"
-        "  3c:	4b01      	ldr	r3, [pc, #4]	; (0x44)\n"
-        "  3e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-        "  40:	449f      	add	pc, r3\n"
-        "  42:	46c0      	nop			; (mov r8, r8)\n"
-        "  44:	0000      	movs	r0, r0\n"
-        "  46:	0000      	movs	r0, r0\n"
-        "  48:	a700      	add	r7, pc, #0	; (adr r7, 0x4c)\n"
-        "  4a:	2633      	movs	r6, #51	; 0x33\n"
-        "  4c:	4276      	negs	r6, r6\n"
-        "  4e:	19f6      	adds	r6, r6, r7\n"
-        "  50:	9f00      	ldr	r7, [sp, #0]\n"
-        "  52:	607e      	str	r6, [r7, #4]\n"
-        "  54:	6f57      	ldr	r7, [r2, #116]	; 0x74\n"
-        "  56:	9e05      	ldr	r6, [sp, #20]\n"
-        "  58:	9705      	str	r7, [sp, #20]\n"
-        "  5a:	46b6      	mov	lr, r6\n"
-        "  5c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}"
+        "  24:	a700      	add	r7, pc, #0	; (adr r7, 0x28)\n"
+        "  26:	260f      	movs	r6, #15\n"
+        "  28:	4276      	negs	r6, r6\n"
+        "  2a:	19f6      	adds	r6, r6, r7\n"
+        "  2c:	9f00      	ldr	r7, [sp, #0]\n"
+        "  2e:	607e      	str	r6, [r7, #4]\n"
+        "  30:	6f57      	ldr	r7, [r2, #116]	; 0x74\n"
+        "  32:	9e05      	ldr	r6, [sp, #20]\n"
+        "  34:	9705      	str	r7, [sp, #20]\n"
+        "  36:	46b6      	mov	lr, r6\n"
+        "  38:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  3a:	46c0      	nop			; (mov r8, r8)"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
