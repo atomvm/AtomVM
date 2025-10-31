@@ -193,6 +193,28 @@ static term nif_jit_stream_mmap_read(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(js_obj->stream_base + offset, len, &ctx->heap, ctx->global);
 }
 
+static term nif_jit_stream_mmap_flush(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    void *js_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], jit_stream_mmap_resource_type, &js_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct JITStreamMMap *js_obj = (struct JITStreamMMap *) js_obj_ptr;
+    if (IS_NULL_PTR(js_obj->stream_base)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#if defined(__APPLE__)
+    sys_icache_invalidate(js_obj->stream_base, js_obj->stream_size);
+#elif defined(__GNUC__)
+    __builtin___clear_cache(js_obj->stream_base, js_obj->stream_base + js_obj->stream_size);
+#endif
+
+    return argv[0];
+}
+
 static term nif_jit_stream_module(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -226,6 +248,10 @@ static const struct Nif jit_stream_mmap_read_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_jit_stream_mmap_read
 };
+static const struct Nif jit_stream_mmap_flush_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_jit_stream_mmap_flush
+};
 
 ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
 {
@@ -239,11 +265,6 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
         return NULL;
     }
 
-#if defined(__APPLE__)
-    sys_icache_invalidate(js_obj->stream_base, js_obj->stream_size);
-#elif defined(__GNUC__)
-    __builtin___clear_cache(js_obj->stream_base, js_obj->stream_base + js_obj->stream_size);
-#endif
 #if JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
     // Set thumb bit for armv6m
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base + 1;
@@ -251,6 +272,7 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
 #endif
 
+    // Prevent module from being unmapped by dtor
     js_obj->stream_base = NULL;
     return result;
 }
@@ -290,6 +312,9 @@ const struct Nif *jit_stream_mmap_get_nif(const char *nifname)
         }
         if (strcmp("read/3", rest) == 0) {
             return &jit_stream_mmap_read_nif;
+        }
+        if (strcmp("flush/1", rest) == 0) {
+            return &jit_stream_mmap_flush_nif;
         }
     }
     return NULL;

@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -135,7 +136,8 @@
     available_regs :: [armv6m_register()],
     used_regs :: [armv6m_register()],
     labels :: [{integer() | reference(), integer()}],
-    variant :: non_neg_integer()
+    variant :: non_neg_integer(),
+    literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}]
 }).
 
 -type state() :: #state{}.
@@ -248,7 +250,8 @@ new(Variant, StreamModule, Stream) ->
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
         labels = [],
-        variant = Variant
+        variant = Variant,
+        literal_pool = []
     }.
 
 %%-----------------------------------------------------------------------------
@@ -270,6 +273,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state, e.g. literal pools
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    flush_literal_pool(State).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
@@ -633,7 +646,8 @@ call_primitive_last(
                 State2 = set_registers_args(State1, ArgsForTailCall, 0),
                 tail_call_with_jit_state_registers_only(State2, Temp)
         end,
-    State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State5 = State4#state{available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State5).
 
 %%-----------------------------------------------------------------------------
 %% @doc Tail call to address in register, restoring prolog registers including
@@ -726,13 +740,15 @@ jump_to_label(
     Offset = StreamModule:offset(Stream0),
     {State1, CodeBlock} = branch_to_label_code(State0, Offset, Label, LabelLookupResult),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State1#state{stream = Stream1}.
+    State2 = State1#state{stream = Stream1},
+    flush_literal_pool(State2).
 
 jump_to_offset(#state{stream_module = StreamModule, stream = Stream0} = State, TargetOffset) ->
     Offset = StreamModule:offset(Stream0),
     CodeBlock = branch_to_offset_code(State, Offset, TargetOffset),
     Stream1 = StreamModule:append(Stream0, CodeBlock),
-    State#state{stream = Stream1}.
+    State2 = State#state{stream = Stream1},
+    flush_literal_pool(State2).
 
 %%-----------------------------------------------------------------------------
 %% @doc Jump to address in continuation pointer register
@@ -794,7 +810,8 @@ jump_to_continuation(
     Code = <<I3/binary, I4/binary, I5/binary, I6/binary, I7/binary>>,
     Stream2 = StreamModule:append(State1#state.stream, Code),
     % Free all registers as this is a terminal instruction
-    State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []}.
+    State2 = State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS, used_regs = []},
+    flush_literal_pool(State2).
 
 branch_to_offset_code(_State, Offset, TargetOffset) when
     TargetOffset - Offset =< 2050, TargetOffset - Offset >= -2044
@@ -1010,6 +1027,47 @@ if_else_block(
         jit_armv6m_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()},
         non_neg_integer()
     }.
+%% Handle {Val, '<', Reg} which means "Val < Reg" or "Reg > Val"
+%% For immediate value 0-255
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_armv6m_asm:cmp(Reg, Val),
+    %% Branch if less than or equal (to skip the block when Val >= Reg)
+    I2 = jit_armv6m_asm:bcc(le, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, le, byte_size(I1)};
+%% Handle {Val, '<', Reg} for values > 255, need to load into temp register
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    Offset0 = StreamModule:offset(Stream0),
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    Offset1 = StreamModule:offset(Stream1),
+    I1 = jit_armv6m_asm:cmp(Reg, Temp),
+    %% Branch if less than or equal (to skip the block when Val >= Reg)
+    I2 = jit_armv6m_asm:bcc(le, 0),
+    Code = <<I1/binary, I2/binary>>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, le, Offset1 - Offset0 + byte_size(I1)};
 if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
     %% Compare register with 0
     I1 = jit_armv6m_asm:cmp(Reg, 0),
@@ -1033,11 +1091,13 @@ if_block_cond(
     State1 = State0#state{stream = Stream1},
     {State1, ge, byte_size(I1)};
 if_block_cond(
-    #state{stream_module = StreamModule, available_regs = [Temp | _]} = State0,
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
     {Reg, '<', Val}
 ) when is_atom(Reg), is_integer(Val) ->
+    Offset0 = StreamModule:offset(Stream0),
     State1 = mov_immediate(State0, Temp, Val),
-    Stream0 = State1#state.stream,
+    Stream1 = State1#state.stream,
+    Offset1 = StreamModule:offset(Stream1),
     I1 = jit_armv6m_asm:cmp(Reg, Temp),
     % ge = greater than or equal
     I2 = jit_armv6m_asm:bcc(ge, 0),
@@ -1045,9 +1105,9 @@ if_block_cond(
         I1/binary,
         I2/binary
     >>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State2 = State1#state{stream = Stream1},
-    {State2, ge, byte_size(I1)};
+    Stream2 = StreamModule:append(Stream1, Code),
+    State2 = State1#state{stream = Stream2},
+    {State2, ge, Offset1 - Offset0 + byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -1737,7 +1797,7 @@ set_registers_args(
         UsedRegs,
         Args
     ),
-    State0#state{
+    State1#state{
         stream = Stream1,
         available_regs = ?AVAILABLE_REGS -- ParamRegs -- NewUsedRegs,
         used_regs = ParamRegs ++ (NewUsedRegs -- ParamRegs)
@@ -2631,41 +2691,132 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
     I2 = jit_armv6m_asm:negs(Reg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
-mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
-    %% Use a literal pool with a branch instruction (branch-over pattern)
-    %% Calculate where literal will be placed (must be word-aligned)
-    %% After LDR (2 bytes) + Branch (2 bytes) = 4 bytes from current position
-    CurrentOffset = StreamModule:offset(Stream0),
-    OffsetAfterInstructions = CurrentOffset + 4,
-    %% Find next word-aligned position for literal
-    LiteralPosition =
-        case OffsetAfterInstructions rem 4 of
-            % Already aligned
-            0 -> OffsetAfterInstructions;
-            % Add 2 bytes padding to align
-            _ -> OffsetAfterInstructions + 2
+%% Values that can be represented as (0-255) + (0-255)
+mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
+    Val > 255 andalso Val =< 510
+->
+    % Val = 255 + (Val - 255) where both are in 0-255
+    Add = Val - 255,
+    I1 = jit_armv6m_asm:movs(Reg, 255),
+    I2 = jit_armv6m_asm:adds(Reg, Reg, Add),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+%% Values where ~Val is a byte (inverted byte using MVN)
+%% Only handle -256, since -255 to -1 are already covered by negs clause above
+mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
+    Val =:= -256
+->
+    % ~(-256) = 255, use MVN
+    I1 = jit_armv6m_asm:movs(Reg, 255),
+    I2 = jit_armv6m_asm:mvns(Reg, Reg),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    State#state{stream = Stream1};
+%% Values that can be represented as (1-255) << N where N is 1-31
+mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
+    Val > 510 andalso Val =< 16#7FFFFFFF
+->
+    % Try to express as a shifted 8-bit value
+    case find_shifted_byte(Val) of
+        {ok, Byte, Shift} ->
+            I1 = jit_armv6m_asm:movs(Reg, Byte),
+            I2 = jit_armv6m_asm:lsls(Reg, Reg, Shift),
+            Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+            State#state{stream = Stream1};
+        not_encodable ->
+            % Fall back to literal pool
+            mov_immediate_literal_pool(State, Reg, Val)
+    end;
+mov_immediate(
+    #state{} = State, Reg, Val
+) ->
+    % Fall back to literal pool for all other cases
+    mov_immediate_literal_pool(State, Reg, Val).
+
+%% Helper to add value to literal pool
+mov_immediate_literal_pool(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State0, Reg, Val
+) ->
+    LdrInstructionAddr = StreamModule:offset(Stream0),
+    ?ASSERT(byte_size(jit_armv6m_asm:ldr(Reg, {pc, 0})) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<16#FFFF:16>>),
+    State1 = State0#state{stream = Stream1, literal_pool = [{LdrInstructionAddr, Reg, Val} | LP]},
+    maybe_flush_literal_pool(State1).
+
+%% Find if a value can be encoded as (0-255) << N
+find_shifted_byte(Val) when Val > 255, Val =< 16#7FFFFFFF ->
+    find_shifted_byte(Val, 1, 31).
+
+find_shifted_byte(_Val, Shift, MaxShift) when Shift > MaxShift ->
+    not_encodable;
+find_shifted_byte(Val, Shift, MaxShift) ->
+    case Val band ((1 bsl Shift) - 1) of
+        0 ->
+            % Lower bits are zero, check if upper bits fit in a byte
+            ShiftedDown = Val bsr Shift,
+            if
+                ShiftedDown >= 0 andalso ShiftedDown =< 255 ->
+                    {ok, ShiftedDown, Shift};
+                true ->
+                    find_shifted_byte(Val, Shift + 1, MaxShift)
+            end;
+        _ ->
+            find_shifted_byte(Val, Shift + 1, MaxShift)
+    end.
+
+maybe_flush_literal_pool(#state{literal_pool = []} = State) ->
+    State;
+maybe_flush_literal_pool(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
+) ->
+    % Determine the offset of the last item.
+    Offset = StreamModule:offset(Stream0),
+    {Addr, _, _} = lists:last(LP),
+    % Heuristically set the threshold at 900
+    if
+        Offset - Addr > 900 ->
+            NbLiterals = length(LP),
+            Continuation = NbLiterals * 4 + 4 - (Offset rem 4),
+            Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:b(Continuation)),
+            Stream2 =
+                if
+                    Offset rem 4 =:= 0 ->
+                        StreamModule:append(Stream1, <<16#FFFF:16>>);
+                    true ->
+                        Stream1
+                end,
+            flush_literal_pool(State#state{stream = Stream2});
+        true ->
+            State
+    end.
+
+flush_literal_pool(#state{literal_pool = []} = State) ->
+    State;
+flush_literal_pool(
+    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
+) ->
+    % Align
+    Offset = StreamModule:offset(Stream0),
+    Stream1 =
+        if
+            Offset rem 4 =:= 0 -> Stream0;
+            true -> StreamModule:append(Stream0, <<0:16>>)
         end,
-    PaddingNeeded = LiteralPosition - OffsetAfterInstructions,
-
-    %% Calculate LDR PC-relative offset
-    %% PC = (current_instruction_address & ~3) + 4
-    LdrInstructionAddr = CurrentOffset,
-    LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
-    LiteralOffset = LiteralPosition - LdrPC,
-
-    %% Generate: ldr rTemp, [pc, #LiteralOffset]  ; Load from literal
-    I1 = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
-    %% Calculate branch offset
-    %% Branch is at CurrentOffset + 2, need to jump past literal
-    BranchPosition = CurrentOffset + 2,
-    % After the 4-byte literal
-    TargetPosition = LiteralPosition + 4,
-    BranchOffset = TargetPosition - BranchPosition,
-    I2 = jit_armv6m_asm:b(BranchOffset),
-    %% Generate padding if needed (just zeros)
-    Padding = <<0:(PaddingNeeded * 8)>>,
-    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary, Padding/binary, Val:32/little>>),
-    State#state{stream = Stream1}.
+    % Lay all values and update ldr instructions
+    Stream2 = lists:foldl(
+        fun({LdrInstructionAddr, Reg, Val}, AccStream) ->
+            LiteralPosition = StreamModule:offset(AccStream),
+            LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
+            LiteralOffset = LiteralPosition - LdrPC,
+            LdrInstruction = jit_armv6m_asm:ldr(Reg, {pc, LiteralOffset}),
+            AccStream1 = StreamModule:append(AccStream, <<Val:32/little>>),
+            StreamModule:replace(
+                AccStream1, LdrInstructionAddr, LdrInstruction
+            )
+        end,
+        Stream1,
+        lists:reverse(LP)
+    ),
+    State#state{stream = Stream2, literal_pool = []}.
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     (Val >= 0 andalso Val =< 255) orelse is_atom(Val)

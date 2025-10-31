@@ -25,6 +25,7 @@
     new/3,
     stream/1,
     offset/1,
+    flush/1,
     debugger/1,
     used_regs/1,
     available_regs/1,
@@ -258,6 +259,16 @@ stream(#state{stream = Stream}) ->
 -spec offset(state()) -> non_neg_integer().
 offset(#state{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
+
+%%-----------------------------------------------------------------------------
+%% @doc Flush the current state (unused on aarch64)
+%% @end
+%% @param State current backend state
+%% @return The flushed state
+%%-----------------------------------------------------------------------------
+-spec flush(state()) -> state().
+flush(#state{} = State) ->
+    State.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a debugger of breakpoint instruction. This is used for debugging
