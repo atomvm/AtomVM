@@ -388,6 +388,15 @@ jobs:
     - name: "Setup cross compilation architecture"
       if: matrix.library-arch != ''
       run: |
+        # Replace Azure mirrors with official Ubuntu repositories
+        sudo sed -i 's|azure\.||g' /etc/apt/sources.list
+        sudo sed -i 's|azure\.||g' /etc/apt/sources.list.d/*.list 2>/dev/null || true
+
+        # Handle new DEB822 format
+        if [ -f /etc/apt/apt-mirrors.txt ]; then
+          sudo sed -i 's|azure\.||g' /etc/apt/apt-mirrors.txt
+        fi
+
         sudo dpkg --add-architecture ${{ matrix.arch }}
         cat > ${RUNNER_TEMP}/cross-compile-sources.list <<EOF
         deb [arch=${{ matrix.arch }}] http://ports.ubuntu.com/ noble main restricted
