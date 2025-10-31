@@ -36,8 +36,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-atomvmlib:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: "apt update"
+        run: sudo apt update
+
+      - name: "Install deps"
+        run: |
+          sudo apt install -y \
+              cmake doxygen gperf ninja-build gcc-arm-none-eabi \
+              libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
+              erlang-base erlang-dev erlang-dialyzer erlang-eunit rebar3
+
+      - name: Build atomvmlib-pico.uf2/atomvmlib-pico2.uf2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir build
+          cd build
+          cmake .. -G Ninja
+          cmake --build . -t atomvmlib
+
+      - name: Upload atomvmlib artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: atomvmlib-uf2-files
+          path: build/libs/*.uf2
+
+      - name: Upload uf2tool artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uf2tool
+          path: build/tools/uf2tool/uf2tool
+
   pico:
     runs-on: ubuntu-24.04
+    needs: build-atomvmlib
     strategy:
       matrix:
         board: ["pico", "pico_w", "pico2"]
@@ -46,6 +84,23 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+
+    - name: Set and escape ref name
+      shell: bash
+      run: |
+          echo "AVM_REF_NAME=${{ github.ref_name }}" | tr '/' '-' >> "$GITHUB_ENV";
+
+    - name: Download atomvmlib artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: atomvmlib-uf2-files
+        path: build/libs/
+
+    - name: Download uf2tool artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: uf2tool
+        path: .
 
     - name: "apt update"
       run: sudo apt update
@@ -111,40 +166,43 @@ jobs:
         npm install
         npx tsx run-tests.ts ../build.nosmp/tests/rp2_tests.uf2 ../build.nosmp/tests/test_erl_sources/rp2_test_modules.uf2
 
-    - name: Build atomvmlib.uf2
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w'
-      shell: bash
-      run: |
-        set -euo pipefail
-        mkdir build
-        cd build
-        cmake ..
-        make atomvmlib-${{ matrix.board }}.uf2
-
     - name: Rename AtomVM and write sha256sum
-      if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       run: |
         pushd src/platforms/rp2/build
-        ATOMVM_UF2=AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
+        ATOMVM_UF2=AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
         mv src/AtomVM.uf2 "src/${ATOMVM_UF2}"
         sha256sum "src/${ATOMVM_UF2}" > "src/${ATOMVM_UF2}.sha256"
         popd
-        pushd build/libs
-        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-        mv atomvmlib.uf2 "${ATOMVMLIB_FILE}"
-        sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
-        popd
+
+    - name: Upload AtomVM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        path: src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-*.uf2
 
     - name: Rename atomvmlib and write sha256sum
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w'
       shell: bash
       run: |
         pushd build/libs
-        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-        mv atomvmlib-${{ matrix.board }}.uf2 "${ATOMVMLIB_FILE}"
+        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        mv atomvmlib-${{matrix.board == 'pico_w' && 'pico' || matrix.board}}.uf2 "${ATOMVMLIB_FILE}"
         sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
         popd
+
+    - name: Combine uf2 using uf2tool
+      shell: bash
+      run: |
+        ATOMVM_COMBINED_FILE=AtomVM-combined-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        ./uf2tool join -o "${ATOMVM_COMBINED_FILE}" src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2 build/libs/atomvmlib-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        sha256sum "${ATOMVM_COMBINED_FILE}" > "${ATOMVM_COMBINED_FILE}.sha256"
+        echo "ATOMVM_COMBINED_FILE=${ATOMVM_COMBINED_FILE}" >> $GITHUB_ENV
+
+    - name: Upload combined AtomVM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ env.ATOMVM_COMBINED_FILE }}
+        path: ${{ env.ATOMVM_COMBINED_FILE }}
 
     - name: Release (Pico & Pico2)
       uses: softprops/action-gh-release@v1
@@ -157,6 +215,8 @@ jobs:
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
           build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
           build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
+          ${{ env.ATOMVM_COMBINED_FILE }}
+          ${{ env.ATOMVM_COMBINED_FILE }}.sha256
 
     - name: Release (PicoW)
       uses: softprops/action-gh-release@v1
@@ -167,3 +227,5 @@ jobs:
         files: |
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
+          ${{ env.ATOMVM_COMBINED_FILE }}
+          ${{ env.ATOMVM_COMBINED_FILE }}.sha256
