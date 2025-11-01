@@ -406,3 +406,20 @@ bool bitstring_extract_f64(
         return false;
     }
 }
+
+intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf)
+{
+    intn_from_integer_options_t converted = IntnUnsignedBigEndian;
+    if (bf & LittleEndianInteger) {
+        converted |= IntnLittleEndian;
+    }
+    if (bf & SignedInteger) {
+        converted |= IntnSigned;
+    }
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    if (bf & NativeEndianInteger) {
+        converted |= IntnLittleEndian;
+    }
+#endif
+    return converted;
+}

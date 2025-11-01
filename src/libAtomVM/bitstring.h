@@ -22,6 +22,7 @@
 #ifndef _BITSTRING_H_
 #define _BITSTRING_H_
 
+#include "intn.h"
 #include "term.h"
 #include "unicode.h"
 
@@ -527,6 +528,8 @@ bool bitstring_extract_f32(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
 bool bitstring_extract_f64(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
+
+intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf);
 
 #ifdef __cplusplus
 }

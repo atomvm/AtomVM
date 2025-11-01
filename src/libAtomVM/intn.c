@@ -1182,6 +1182,8 @@ int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_intege
             sign = IntNNegativeInteger;
         }
         *out_sign = sign;
+    } else if (out_sign) {
+        *out_sign = IntNPositiveInteger;
     }
 
     memset(out, filler, INTN_MAX_RES_LEN * sizeof(intn_digit_t));
