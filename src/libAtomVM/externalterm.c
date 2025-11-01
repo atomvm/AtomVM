@@ -222,13 +222,12 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
                 }
                 return INTEGER_EXT_SIZE;
             } else {
-                bool is_negative;
-                avm_uint64_t unsigned_val = int64_safe_unsigned_abs_set_flag(val, &is_negative);
+                avm_uint64_t unsigned_val = int64_safe_unsigned_abs(val);
                 uint8_t num_bytes = get_num_bytes(unsigned_val);
                 if (buf != NULL) {
                     buf[0] = SMALL_BIG_EXT;
                     buf[1] = num_bytes;
-                    buf[2] = is_negative ? 0x01 : 0x00;
+                    buf[2] = val < 0 ? 0x01 : 0x00;
                     write_bytes(buf + 3, unsigned_val);
                 }
                 return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
