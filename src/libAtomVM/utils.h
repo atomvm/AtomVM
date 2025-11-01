@@ -622,34 +622,6 @@ static inline uint64_t int64_safe_unsigned_abs(int64_t i64)
 }
 
 /**
- * @brief Check if 32-bit signed integer (\c int32_t) is negative
- *
- * Efficient predicate to test if a 32-bit signed integer is negative,
- * equivalent to \c (i32 < 0).
- *
- * @param i32 Signed 32-bit integer to test
- * @return true if negative, false if zero or positive
- */
-static inline bool int32_is_negative(int32_t i32)
-{
-    return ((uint32_t) i32) >> 31;
-}
-
-/**
- * @brief Check if 64-bit signed integer (\c int64_t) is negative
- *
- * Efficient predicate to test if a 64-bit signed integer is negative,
- * equivalent to (i64 < 0).
- *
- * @param i64 Signed 64-bit integer to test
- * @return true if negative, false if zero or positive
- */
-static inline bool int64_is_negative(int64_t i64)
-{
-    return ((uint64_t) i64) >> 63;
-}
-
-/**
  * @brief Get absolute value as uint32_t and sign of 32-bit integer
  *
  * Computes the absolute value of a signed 32-bit integer (\c int32_t) as
@@ -672,7 +644,7 @@ static inline bool int64_is_negative(int64_t i64)
  */
 static inline uint32_t int32_safe_unsigned_abs_set_flag(int32_t i32, bool *is_negative)
 {
-    *is_negative = int32_is_negative(i32);
+    *is_negative = i32 < 0;
     return int32_safe_unsigned_abs(i32);
 }
 
@@ -699,7 +671,7 @@ static inline uint32_t int32_safe_unsigned_abs_set_flag(int32_t i32, bool *is_ne
  */
 static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_negative)
 {
-    *is_negative = int64_is_negative(i64);
+    *is_negative = i64 < 0;
     return int64_safe_unsigned_abs(i64);
 }
 
