@@ -622,60 +622,6 @@ static inline uint64_t int64_safe_unsigned_abs(int64_t i64)
 }
 
 /**
- * @brief Get absolute value as uint32_t and sign of 32-bit integer
- *
- * Computes the absolute value of a signed 32-bit integer (\c int32_t) as
- * unsigned (\c uint32_t) and sets a flag indicating whether the original
- * value was negative. Combines sign extraction and absolute value computation
- * for efficiency. Commonly used when serializing integers where the sign is
- * stored separately from the magnitude.
- *
- * @param i32 Signed integer to process
- * @param[out] is_negative Set to true if i32 is negative, false otherwise
- * @return Absolute value as unsigned 32-bit integer (\c uint32_t)
- *
- * @pre is_negative != NULL
- *
- * @note Useful for integer formatting and parsing operations
- * @note Handles \c INT32_MIN correctly
- *
- * @see int32_safe_unsigned_abs() for absolute value without sign flag
- * @see int32_is_negative() for sign checking only
- */
-static inline uint32_t int32_safe_unsigned_abs_set_flag(int32_t i32, bool *is_negative)
-{
-    *is_negative = i32 < 0;
-    return int32_safe_unsigned_abs(i32);
-}
-
-/**
- * @brief Get absolute value as uint64_t and sign of 64-bit integer
- *
- * Computes the absolute value of a signed 64-bit integer (\c int64_t) as
- * unsigned (\c uint64_t) and sets a flag indicating whether the original
- * value was negative. Combines sign extraction and absolute value computation
- * for efficiency. Commonly used when serializing integers where the sign is
- * stored separately from the magnitude.
- *
- * @param i64 Signed integer to process
- * @param[out] is_negative Set to true if i64 is negative, false otherwise
- * @return Absolute value as unsigned 64-bit integer (\c uint64_t)
- *
- * @pre is_negative != NULL
- *
- * @note Useful for integer formatting and parsing operations
- * @note Handles \c INT64_MIN correctly
- *
- * @see int64_safe_unsigned_abs() for absolute value without sign flag
- * @see int64_is_negative() for sign checking only
- */
-static inline uint64_t int64_safe_unsigned_abs_set_flag(int64_t i64, bool *is_negative)
-{
-    *is_negative = i64 < 0;
-    return int64_safe_unsigned_abs(i64);
-}
-
-/**
  * @brief Perform arithmetic right shift on 32-bit signed integer (\c int32_t)
  *
  * Performs a portable arithmetic right shift that preserves sign extension
