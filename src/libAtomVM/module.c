@@ -38,6 +38,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// #define ENABLE_TRACE
+#include "trace.h"
+
 #ifdef WITH_ZLIB
 #include <zlib.h>
 #endif
