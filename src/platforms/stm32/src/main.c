@@ -271,7 +271,7 @@ int main()
     AVM_LOGI(TAG, "Starting: %s...\n", startup_module_name);
     fprintf(stdout, "---\n");
 
-    run_result_t result = globalcontext_run(glb, mod, stdout);
+    run_result_t result = globalcontext_run(glb, mod, stdout, 0, NULL);
 
     bool reboot_on_not_ok =
 #if defined(CONFIG_REBOOT_ON_NOT_OK)

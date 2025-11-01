@@ -29,6 +29,7 @@
 #include "context.h"
 #include "defaultatoms.h"
 #include "erl_nif_priv.h"
+#include "interop.h"
 #include "list.h"
 #include "mailbox.h"
 #include "posix_nifs.h"
@@ -720,21 +721,62 @@ Module *globalcontext_get_module_by_index(GlobalContext *global, int index)
     return result;
 }
 
-run_result_t globalcontext_run(GlobalContext *glb, Module *startup_module, FILE *out_f)
+run_result_t globalcontext_run(GlobalContext *glb, Module *startup_module, FILE *out_f, int argc, char **argv)
 {
     Context *ctx = context_new(glb);
     ctx->leader = 1;
     Module *init_module = globalcontext_get_module(glb, INIT_ATOM_INDEX);
     if (IS_NULL_PTR(init_module)) {
+        if (IS_NULL_PTR(startup_module)) {
+            fprintf(stderr, "Unable to locate entrypoint.\n");
+            return RUN_NO_ENTRY_POINT;
+        }
         context_execute_loop(ctx, startup_module, "start", 0);
     } else {
-        if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(2) + LIST_SIZE(2, 0)) != MEMORY_GC_OK)) {
-            fprintf(stderr, "Unable to allocate arguments.\n");
-            return RUN_MEMORY_FAILURE;
+        // Build boot arguments based on whether we're in embedded mode
+        if (argc > 0 && argv != NULL) {
+            // Embedded mode: ["-s", escript, "--" | argv_strings]
+            // Calculate heap size needed
+            size_t heap_needed = term_binary_heap_size(2) + // "-s"
+                term_binary_heap_size(2) + // "--"
+                LIST_SIZE(3, 0); // list for ["-s", escript, "--"]
+
+            // Calculate space for argv strings
+            for (int i = 0; i < argc; i++) {
+                size_t arg_len = strlen(argv[i]);
+                heap_needed += CONS_SIZE * arg_len + LIST_SIZE(1, 0);
+            }
+
+            if (UNLIKELY(memory_ensure_free(ctx, heap_needed) != MEMORY_GC_OK)) {
+                fprintf(stderr, "Unable to allocate arguments.\n");
+                return RUN_MEMORY_FAILURE;
+            }
+
+            // Build the argv list in reverse: [argvn, ..., argv0, "--", escript, "-s"]
+            term args_list = term_nil();
+            for (int i = argc - 1; i >= 0; i--) {
+                term arg = interop_chars_to_list(argv[i], strlen(argv[i]), &ctx->heap);
+                args_list = term_list_prepend(arg, args_list, &ctx->heap);
+            }
+
+            term separator = term_from_literal_binary("--", strlen("--"), &ctx->heap, glb);
+            args_list = term_list_prepend(separator, args_list, &ctx->heap);
+
+            term escript_atom = globalcontext_make_atom(glb, ATOM_STR("\x7", "escript"));
+            args_list = term_list_prepend(escript_atom, args_list, &ctx->heap);
+
+            term s_opt = term_from_literal_binary("-s", strlen("-s"), &ctx->heap, glb);
+            ctx->x[0] = term_list_prepend(s_opt, args_list, &ctx->heap);
+        } else {
+            // Non-embedded mode: ["-s", startup_module]
+            if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(2) + LIST_SIZE(2, 0)) != MEMORY_GC_OK)) {
+                fprintf(stderr, "Unable to allocate arguments.\n");
+                return RUN_MEMORY_FAILURE;
+            }
+            term s_opt = term_from_literal_binary("-s", strlen("-s"), &ctx->heap, glb);
+            term list = term_list_prepend(module_get_name(startup_module), term_nil(), &ctx->heap);
+            ctx->x[0] = term_list_prepend(s_opt, list, &ctx->heap);
         }
-        term s_opt = term_from_literal_binary("-s", strlen("-s"), &ctx->heap, glb);
-        term list = term_list_prepend(module_get_name(startup_module), term_nil(), &ctx->heap);
-        ctx->x[0] = term_list_prepend(s_opt, list, &ctx->heap);
 
         context_execute_loop(ctx, init_module, "boot", 1);
     }
