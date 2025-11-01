@@ -49,6 +49,7 @@ test() ->
     ok = test_sort(),
     ok = test_split(),
     ok = test_usort(),
+    ok = test_ukeysort(),
     ok = test_dropwhile(),
     ok = test_duplicate(),
     ok = test_filtermap(),
@@ -377,6 +378,47 @@ test_usort() ->
     ?ASSERT_ERROR(lists:usort(1), function_clause),
     ?ASSERT_ERROR(lists:usort(fun(A, B) -> A > B end, 1), function_clause),
     ?ASSERT_ERROR(lists:usort(1, [1]), function_clause),
+    ok.
+
+test_ukeysort() ->
+    % Empty list
+    ?ASSERT_MATCH(lists:ukeysort(1, []), []),
+
+    % Single element
+    ?ASSERT_MATCH(lists:ukeysort(1, [{1, a}]), [{1, a}]),
+
+    % No duplicates
+    ?ASSERT_MATCH(lists:ukeysort(1, [{2, foo}, {1, bar}]), [{1, bar}, {2, foo}]),
+
+    % With duplicates - first occurrence kept (stable sort)
+    ?ASSERT_MATCH(lists:ukeysort(1, [{2, foo}, {1, bar}, {2, baz}]), [{1, bar}, {2, foo}]),
+    ?ASSERT_MATCH(lists:ukeysort(1, [{1, first}, {1, second}, {1, third}]), [{1, first}]),
+
+    % Mixed duplicates
+    ?ASSERT_MATCH(
+        lists:ukeysort(1, [{3, a}, {2, b}, {1, c}, {2, d}, {3, e}]),
+        [{1, c}, {2, b}, {3, a}]
+    ),
+
+    % Sorting on second element
+    ?ASSERT_MATCH(lists:ukeysort(2, [{foo, 2}, {bar, 1}]), [{bar, 1}, {foo, 2}]),
+    ?ASSERT_MATCH(
+        lists:ukeysort(2, [{a, 2}, {b, 1}, {c, 2}]),
+        [{b, 1}, {a, 2}]
+    ),
+
+    % Already sorted
+    ?ASSERT_MATCH(lists:ukeysort(1, [{1, a}, {2, b}, {3, c}]), [{1, a}, {2, b}, {3, c}]),
+
+    % Reverse sorted
+    ?ASSERT_MATCH(lists:ukeysort(1, [{3, a}, {2, b}, {1, c}]), [{1, c}, {2, b}, {3, a}]),
+
+    % Stability test - when keys are equal, first element is kept
+    ?ASSERT_MATCH(
+        lists:ukeysort(1, [{2, first}, {1, x}, {2, second}, {2, third}]),
+        [{1, x}, {2, first}]
+    ),
+
     ok.
 
 test_dropwhile() ->
