@@ -2771,9 +2771,10 @@ maybe_flush_literal_pool(
     % Determine the offset of the last item.
     Offset = StreamModule:offset(Stream0),
     {Addr, _, _} = lists:last(LP),
-    % Heuristically set the threshold at 900
+    % Heuristically set the threshold at 512 (half the range of ldr inst.).
+    % bigint.beam currently requires 663 or lower to compile.
     if
-        Offset - Addr > 900 ->
+        Offset - Addr > 512 ->
             NbLiterals = length(LP),
             Continuation = NbLiterals * 4 + 4 - (Offset rem 4),
             Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:b(Continuation)),

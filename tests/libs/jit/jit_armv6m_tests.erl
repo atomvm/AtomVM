@@ -3055,27 +3055,27 @@ move_to_native_register_test_() ->
                             ?BACKEND:free_native_registers(AccSt4, [RegA])
                         end,
                         State0,
-                        lists:seq(1025, 1140)
+                        lists:seq(1025, 1090)
                     ),
                     State2 = ?BACKEND:flush(State1),
                     Stream = ?BACKEND:stream(State2),
-                    {_, LoadAndBranch0} = split_binary(Stream, 16#38a),
+                    {_, LoadAndBranch0} = split_binary(Stream, 16#210),
                     {LoadAndBranch, _} = split_binary(LoadAndBranch0, 10),
                     LoadAndBranchDump = <<
-                        " 38a:   4f62            ldr     r7, [pc, #392]  ; (0x514)\n"
-                        " 38c:   e0c4            b.n     0x518\n"
-                        " 38e:   ffff .dword\n\n"
-                        " 392:   0401 .dword\n\n"
-                        " 394:   0000 .dword"
+                        " 210:	4f38      	ldr	r7, [pc, #224]	; (0x2f4)\n"
+                        " 212:	e071      	b.n	0x2f8\n"
+                        " 214:  0401        .dword 0x0401\n\n"
+                        " 216:  0000        .dword 0x0000\n\n"
+                        " 218:  0402        .dword 0x0402\n\n"
                     >>,
                     ?assertEqual(dump_to_bin(LoadAndBranchDump), LoadAndBranch),
-                    {_, Continuation0} = split_binary(Stream, 16#518),
+                    {_, Continuation0} = split_binary(Stream, 16#2f8),
                     {Continuation, _} = split_binary(Continuation0, 8),
                     ContinuationDump = <<
-                        " 518:   19ff            adds    r7, r7, r7\n"
-                        " 51a:   19ff            adds    r7, r7, r7\n"
-                        " 51c:   19ff            adds    r7, r7, r7\n"
-                        " 51e:   278e            movs    r7, #142        ; 0x8e"
+                        " 2f8:   19ff       adds    r7, r7, r7\n"
+                        " 2fa:   19ff       adds    r7, r7, r7\n"
+                        " 2fc:   19ff       adds    r7, r7, r7\n"
+                        " 2fe:   4f02       ldr	    r7, [pc, #8]	; (0x308)"
                     >>,
                     ?assertEqual(dump_to_bin(ContinuationDump), Continuation)
                 end),
@@ -3091,26 +3091,28 @@ move_to_native_register_test_() ->
                             ?BACKEND:free_native_registers(AccSt4, [RegA])
                         end,
                         State1,
-                        lists:seq(1025, 1140)
+                        lists:seq(1025, 1090)
                     ),
                     State3 = ?BACKEND:flush(State2),
                     Stream = ?BACKEND:stream(State3),
-                    {_, LoadAndBranch0} = split_binary(Stream, 16#38c),
-                    {LoadAndBranch, _} = split_binary(LoadAndBranch0, 8),
+                    {_, LoadAndBranch0} = split_binary(Stream, 16#212),
+                    {LoadAndBranch, _} = split_binary(LoadAndBranch0, 10),
                     LoadAndBranchDump = <<
-                        " 38c:   4e61            ldr     r6, [pc, #388]  ; (0x514)\n"
-                        " 38e:   e0c3            b.n     0x518\n"
-                        " 390:   0401            lsls    r1, r0, #16\n"
-                        " 392:   0000            movs    r0, r0"
+                        " 212:   4e39       ldr	r6, [pc, #228]	; (0x2f8)\n"
+                        " 214:   e072       b.n	0x2fc\n"
+                        % padding
+                        " 216:   ffff       .dword 0xffff\n\n"
+                        " 218:   0401       .dword 0x401\n\n"
+                        " 21a:   0000       .dword 0x000"
                     >>,
                     ?assertEqual(dump_to_bin(LoadAndBranchDump), LoadAndBranch),
-                    {_, Continuation0} = split_binary(Stream, 16#518),
+                    {_, Continuation0} = split_binary(Stream, 16#2fc),
                     {Continuation, _} = split_binary(Continuation0, 8),
                     ContinuationDump = <<
-                        " 518:   19b6            adds    r6, r6, r6\n"
-                        " 51a:   19b6            adds    r6, r6, r6\n"
-                        " 51c:   19b6            adds    r6, r6, r6\n"
-                        " 51e:   268e            movs    r6, #142        ; 0x8e"
+                        " 2fc:   19b6       adds    r6, r6, r6\n"
+                        " 2fe:   19b6       adds    r6, r6, r6\n"
+                        " 300:   19b6       adds    r6, r6, r6\n"
+                        " 302:   4e02      	ldr     r6, [pc, #8]	; (0x30c)"
                     >>,
                     ?assertEqual(dump_to_bin(ContinuationDump), Continuation)
                 end)
