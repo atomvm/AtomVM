@@ -452,25 +452,12 @@ any(Fun, L) ->
 %%-----------------------------------------------------------------------------
 %% @param   L the list to flatten
 %% @returns flattened list
-%% @doc     recursively flattens elements of L into a single list
+%% @doc     Flattens elements of L into a single list
 %% @end
 %%-----------------------------------------------------------------------------
 -spec flatten(L :: list()) -> list().
-flatten(L) when is_list(L) ->
-    flatten(L, []).
-
-%% @private
-%% pre: Accum is flattened
-flatten([], Accum) ->
-    Accum;
-flatten([H | T], Accum) when is_list(H) ->
-    FlattenedT = flatten(T, Accum),
-    flatten(H, FlattenedT);
-flatten([H | T], Accum) ->
-    FlattenedT = flatten(T, Accum),
-    [H | FlattenedT].
-
-%% post: return is flattened
+flatten(_L) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   F the function to apply to elements of L
