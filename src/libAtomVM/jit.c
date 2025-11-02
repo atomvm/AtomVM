@@ -627,6 +627,36 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     }
 }
 
+static term jit_alloc_big_integer_fragment(
+    Context *ctx, size_t digits_len, term_integer_sign_t sign)
+{
+    TRACE("jit_alloc_big_integer_fragment: len=%lu sign=%i\n", (unsigned long) digits_len,
+        (int) sign);
+    Heap heap;
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_bigint_size_requirements(digits_len, &intn_data_size, &rounded_res_len);
+
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        ctx->x[0] = ERROR_ATOM;
+        ctx->x[1] = OUT_OF_MEMORY_ATOM;
+        return term_invalid_term();
+    }
+
+    term bigint_term
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+    // Assumption: here we assume that bigints have standard boxed term layout
+    // This code might need to be updated when changing bigint memory layout
+    void *digits_mem = (void *) (term_to_const_term_ptr(bigint_term) + 1);
+    // TODO: optimize: just initialize space that will not be used
+    memset(digits_mem, 0, intn_data_size * sizeof(term));
+
+    memory_heap_append_heap(&ctx->heap, &heap);
+
+    return bigint_term;
+}
+
 static term jit_term_alloc_tuple(Context *ctx, uint32_t size)
 {
     TRACE("jit_term_alloc_tuple: size=%u\n", size);
@@ -1223,19 +1253,64 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
 
-static term jit_bitstring_extract_integer(Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
+static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *bytes,
+    size_t bytes_size, intn_from_integer_options_t opts)
 {
-    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%d n=%d bs_flags=%d\n", (void *) bin_ptr, (int) offset, n, bs_flags);
-    union maybe_unsigned_int64 value;
-    bool status = bitstring_extract_integer(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
-    if (UNLIKELY(!status)) {
+    intn_integer_sign_t sign;
+    intn_digit_t bigint[INTN_MAX_RES_LEN];
+    int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
+    // count will be always >= 0, caller ensures that bits <= INTN_MAX_UNSIGNED_BITS_SIZE
+
+    size_t intn_data_size;
+    size_t rounded_res_len;
+    term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         return FALSE_ATOM;
     }
-    term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-    if (UNLIKELY(term_is_invalid_term(t))) {
-        set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+
+    term bigint_term
+        = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+    term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
+
+    memory_heap_append_heap(&ctx->heap, &heap);
+
+    return bigint_term;
+}
+
+static term jit_bitstring_extract_integer(
+    Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
+{
+    TRACE("jit_bitstring_extract_integer: bin_ptr=%p offset=%d n=%d bs_flags=%d\n",
+        (void *) bin_ptr, (int) offset, n, bs_flags);
+    if (n <= 64) {
+        union maybe_unsigned_int64 value;
+        bool status = bitstring_extract_integer(
+            ((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+        if (UNLIKELY(!status)) {
+            return FALSE_ATOM;
+        }
+        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+        if (UNLIKELY(term_is_invalid_term(t))) {
+            set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
+        }
+        return t;
+    } else if ((offset % 8 == 0) && (n % 8 == 0) && (n <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
+        term bs_bin = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
+        unsigned long capacity = term_binary_size(bs_bin);
+        if (8 * capacity - offset < (unsigned long) n) {
+            return FALSE_ATOM;
+        }
+        size_t byte_offset = offset / 8;
+        const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
+
+        return extract_bigint(
+            ctx, jit_state, int_bytes + byte_offset, n / 8, bitstring_flags_to_intn_opts(bs_flags));
+    } else {
+        return FALSE_ATOM;
     }
-    return t;
 }
 
 static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offset, int n, int bs_flags)
@@ -1741,7 +1816,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_bitstring_get_utf32,
     term_copy_map,
     jit_stacktrace_build,
-    jit_term_reuse_binary
+    jit_term_reuse_binary,
+    jit_alloc_big_integer_fragment
 };
 
 #endif

@@ -31,6 +31,7 @@
 #include "defaultatoms.h"
 #include "dist_nifs.h"
 #include "exportedfunction.h"
+#include "intn.h"
 #include "jit.h"
 #include "nifs.h"
 #include "opcodes.h"
@@ -223,13 +224,11 @@ typedef dreg_t dreg_gc_safe_t;
                     break;                                                              \
                 case COMPACT_NBITS_VALUE:{                                              \
                     int sz = (first_byte >> 5) + 2;                                     \
-                    if (UNLIKELY(sz > 8)) {                                             \
-                        /* TODO: when first_byte >> 5 is 7, a different encoding is used */ \
-                        fprintf(stderr, "Unexpected nbits vaue @ %" PRIuPTR "\n", (uintptr_t) ((decode_pc) - 1)); \
-                        AVM_ABORT();                                                    \
-                        break;                                                          \
+                    if (LIKELY(sz <= 8)) {                                              \
+                        (decode_pc) += sz;                                              \
+                    } else {                                                            \
+                        (decode_pc) += decode_nbits_integer(NULL, (decode_pc), NULL);   \
                     }                                                                   \
-                    (decode_pc) += sz;                                                  \
                     break;                                                              \
                 }                                                                       \
                 default:                                                                \
@@ -722,11 +721,10 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
                                                                                                                         \
                 case COMPACT_NBITS_VALUE: {                                                                             \
                     size_t num_bytes = (first_byte >> 5) + 2;                                                           \
-                    dest_term = large_integer_to_term(ctx, num_bytes, decode_pc);                                       \
+                    dest_term = large_integer_to_term(ctx, num_bytes, &decode_pc);                                      \
                     if (UNLIKELY(term_is_invalid_term(dest_term))) {                                                    \
                         HANDLE_ERROR();                                                                                 \
                     }                                                                                                   \
-                    (decode_pc) += num_bytes;                                                                           \
                     break;                                                                                              \
                 }                                                                                                       \
                 default:                                                                                                \
@@ -1554,21 +1552,33 @@ static inline term maybe_alloc_boxed_integer_fragment_helper(Context *ctx, avm_i
 
 #ifndef AVM_NO_EMU
 
-static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *compact_term)
+static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term);
+
+static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t **encoded)
 {
+    const uint8_t *compact_term = *encoded;
+    // num_bytes is decoded from a 3 bits value and incremented by 2,
+    // meaning that minimum value is 0 and maximum value is 7
     switch (num_bytes) {
+        case 0:
+        case 1:
+            UNREACHABLE();
+
         case 2: {
+            *encoded += 2;
             int16_t ret_val16 = ((int16_t) compact_term[0]) << 8 | compact_term[1];
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val16, 2);
         }
 
         case 3: {
+            *encoded += 3;
             struct Int24 ret_val24;
             ret_val24.val24 = ((int32_t) compact_term[0]) << 16 | ((int32_t) compact_term[1] << 8) | compact_term[2];
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val24.val24, 3);
         }
 
         case 4: {
+            *encoded += 4;
             int32_t ret_val32;
             ret_val32 = ((int32_t) compact_term[0]) << 24 | ((int32_t) compact_term[1] << 16)
                 | ((int32_t) compact_term[2] << 8) | compact_term[3];
@@ -1576,6 +1586,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 5: {
+            *encoded += 5;
             struct Int40 ret_val40;
             ret_val40.val40 = ((int64_t) compact_term[0]) << 32 | ((int64_t) compact_term[1] << 24)
                 | ((int64_t) compact_term[2] << 16) | ((int64_t) compact_term[3] << 8)
@@ -1585,6 +1596,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 6: {
+            *encoded += 6;
             struct Int48 ret_val48;
             ret_val48.val48 = ((int64_t) compact_term[0]) << 40 | ((int64_t) compact_term[1] << 32)
                 | ((int64_t) compact_term[2] << 24) | ((int64_t) compact_term[3] << 16)
@@ -1594,6 +1606,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 7: {
+            *encoded += 7;
             struct Int56 ret_val56;
             ret_val56.val56 = ((int64_t) compact_term[0]) << 48 | ((int64_t) compact_term[1] << 40)
                 | ((int64_t) compact_term[2] << 32) | ((int64_t) compact_term[3] << 24)
@@ -1604,6 +1617,7 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
         }
 
         case 8: {
+            *encoded += 8;
             int64_t ret_val64;
             ret_val64 = ((int64_t) compact_term[0]) << 56 | ((int64_t) compact_term[1] << 48)
                 | ((int64_t) compact_term[2] << 40) | ((int64_t) compact_term[3] << 32)
@@ -1613,10 +1627,15 @@ static term large_integer_to_term(Context *ctx, int num_bytes, const uint8_t *co
             return maybe_alloc_boxed_integer_fragment_helper(ctx, ret_val64, 8);
         }
 
-        default:
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OVERFLOW_ATOM;
-            return term_invalid_term();
+        case 9: {
+            term int_term;
+            *encoded += decode_nbits_integer(ctx, compact_term, &int_term);
+            return int_term;
+        }
+
+        default: {
+            UNREACHABLE();
+        }
     }
 }
 
@@ -1792,6 +1811,60 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 #endif
 
+#endif
+
+#ifndef AVM_NO_EMU
+    static term extract_nbits_integer(Context *ctx, const uint8_t *bytes, size_t bytes_size, intn_from_integer_options_t opts)
+    {
+        intn_integer_sign_t sign;
+        intn_digit_t bigint[INTN_MAX_RES_LEN];
+        int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
+        if (UNLIKELY(count < 0)) {
+            // this is likely unreachable, compiler seem to generate an external term
+            // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OVERFLOW_ATOM;
+            return term_invalid_term();
+        }
+
+        size_t intn_data_size;
+        size_t rounded_res_len;
+        term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+
+        Heap heap;
+        if (UNLIKELY(
+                memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
+            ctx->x[0] = ERROR_ATOM;
+            ctx->x[1] = OUT_OF_MEMORY_ATOM;
+            return term_invalid_term();
+        }
+
+        term bigint_term
+            = term_create_uninitialized_bigint(intn_data_size, (term_integer_sign_t) sign, &heap);
+        term_initialize_bigint(bigint_term, bigint, count, rounded_res_len);
+
+        memory_heap_append_heap(&ctx->heap, &heap);
+
+        return bigint_term;
+    }
+
+    static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
+    {
+        const uint8_t *new_encoded = encoded;
+        uint32_t len;
+        DECODE_LITERAL(len, new_encoded);
+        // TODO: check this: actually should be enough: len = *(new_encoded)++ >> 4;
+        // it seems that likely range is something like from 9 (9 + 0) to 24 (9 + 15)
+        // that is 192 bits integer
+
+        len += 9;
+
+        if (out_term) {
+            *out_term = extract_nbits_integer(ctx, new_encoded, len, IntnSigned);
+        }
+
+        return (new_encoded - encoded) + len;
+    }
 #endif
 
 #ifndef __clang__
@@ -5241,25 +5314,44 @@ wait_timeout_trap_handler:
                     union maybe_unsigned_int64 value;
                     term bs_bin = term_get_match_state_binary(src);
                     avm_int_t bs_offset = term_get_match_state_offset(src);
-                    bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
-                    if (UNLIKELY(!status)) {
-                        TRACE("bs_get_integer2: error extracting integer.\n");
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    } else {
-                        term_set_match_state_offset(src, bs_offset + increment);
+                    term t;
+                    if (increment <= 64) {
+                        bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                        if (UNLIKELY(!status)) {
+                            TRACE("bs_get_integer2: error extracting integer.\n");
+                            JUMP_TO_ADDRESS(mod->labels[fail]);
+                        } else {
+                            term_set_match_state_offset(src, bs_offset + increment);
 
-                        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-                        if (UNLIKELY(term_is_invalid_term(t))) {
+                            t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                            if (UNLIKELY(term_is_invalid_term(t))) {
+                                HANDLE_ERROR();
+                            }
+                        }
+                    } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
+                        unsigned long capacity = term_binary_size(bs_bin);
+                        if (8 * capacity - bs_offset < (unsigned long) increment) {
+                            JUMP_TO_ADDRESS(mod->labels[fail]);
+                        }
+                        size_t byte_offset = bs_offset / 8;
+                        const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
+
+                        t = extract_nbits_integer(ctx, int_bytes + byte_offset, increment / 8,
+                            bitstring_flags_to_intn_opts(flags_value));
+                        term_set_match_state_offset(src, bs_offset + increment);
+                        if (term_is_invalid_term(t)) {
                             HANDLE_ERROR();
                         }
+                    } else {
+                        JUMP_TO_ADDRESS(mod->labels[fail]);
+                    }
                 #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                        WRITE_REGISTER(dreg, t);
-                    }
+                    WRITE_REGISTER(dreg, t);
                 #endif
                 break;
             }
@@ -6253,7 +6345,11 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(!term_is_number(src_value))) {
                         RAISE_ERROR(BADARITH_ATOM);
                     }
-                    ctx->fr[freg] = term_conv_to_float(src_value);
+                    avm_float_t converted = term_conv_to_float(src_value);
+                    if (UNLIKELY(!isfinite(converted))) {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                    ctx->fr[freg] = converted;
                 #endif
 
                 #ifdef IMPL_CODE_LOADER
@@ -7241,14 +7337,34 @@ wait_timeout_trap_handler:
                                 avm_int_t size_val = term_to_int(size);
                                 avm_int_t increment = size_val * unit;
                                 union maybe_unsigned_int64 value;
-                                bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
-                                if (UNLIKELY(!status)) {
-                                    TRACE("bs_match/3: error extracting integer.\n");
+                                term t;
+                                if (increment <= 64) {
+                                    bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                                    if (UNLIKELY(!status)) {
+                                        TRACE("bs_match/3: error extracting integer.\n");
+                                        goto bs_match_jump_to_fail;
+                                    }
+                                    //FIXME: handling of 64-bit unsigned integers is not reliable
+                                    t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                    if (UNLIKELY(term_is_invalid_term(t))) {
+                                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                    }
+                                } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
+                                    unsigned long capacity = term_binary_size(bs_bin);
+                                    if (8 * capacity - bs_offset < (unsigned long) increment) {
+                                        goto bs_match_jump_to_fail;
+                                    }
+                                    size_t byte_offset = bs_offset / 8;
+                                    const uint8_t *int_bytes
+                                        = (const uint8_t *) term_binary_data(bs_bin);
+
+                                    t = extract_nbits_integer(ctx, int_bytes + byte_offset,
+                                        increment / 8, bitstring_flags_to_intn_opts(flags_value));
+                                    if (term_is_invalid_term(t)) {
+                                        HANDLE_ERROR();
+                                    }
+                                } else {
                                     goto bs_match_jump_to_fail;
-                                }
-                                term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-                                if (UNLIKELY(term_is_invalid_term(t))) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                 }
                             #endif
                             DEST_REGISTER(dreg);
@@ -7356,6 +7472,10 @@ wait_timeout_trap_handler:
                             DECODE_LITERAL(pattern_value, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
+                                if (size > 64) {
+                                    // TODO: implement support for big integers also here
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
                                 union maybe_unsigned_int64 matched_value;
                                 bool status = bitstring_extract_integer(bs_bin, bs_offset, size, 0, &matched_value);
                                 if (UNLIKELY(!status)) {

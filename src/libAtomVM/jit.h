@@ -159,6 +159,7 @@ struct ModuleNativeInterface
     term (*term_copy_map)(Context *ctx, term src);
     term (*stacktrace_build)(Context *ctx);
     term (*term_reuse_binary)(Context *ctx, term src, size_t len);
+    term (*alloc_big_integer_fragment)(Context *ctx, size_t digits_len, term_integer_sign_t sign);
 };
 
 extern const ModuleNativeInterface module_native_interface;

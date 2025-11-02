@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "atom.h"
+#include "intn.h"
 #include "memory.h"
 #include "refc_binary.h"
 #include "utils.h"
@@ -96,10 +97,13 @@ extern "C" {
 #define TERM_BOXED_TAG_MASK 0x3F
 #define TERM_BOXED_TUPLE 0x0
 #define TERM_BOXED_BIN_MATCH_STATE 0x4
-#define TERM_BOXED_POSITIVE_INTEGER 0x8
+#define TERM_BOXED_POSITIVE_INTEGER 0x8 // b1000 (b1s00)
+#define TERM_BOXED_NEGATIVE_INTEGER (TERM_BOXED_POSITIVE_INTEGER | TERM_BOXED_INTEGER_SIGN_BIT)
 #define TERM_BOXED_REF 0x10
 #define TERM_BOXED_FUN 0x14
 #define TERM_BOXED_FLOAT 0x18
+// Do not assign 0x1C: an optimization in libs/jit/src/term.hrl will misidentify this as boxed
+// number: define(TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT, 16#2B).
 #define TERM_BOXED_REFC_BINARY 0x20
 #define TERM_BOXED_HEAP_BINARY 0x24
 #define TERM_BOXED_SUB_BINARY 0x28
@@ -108,6 +112,9 @@ extern "C" {
 #define TERM_BOXED_EXTERNAL_PID 0x30
 #define TERM_BOXED_EXTERNAL_PORT 0x34
 #define TERM_BOXED_EXTERNAL_REF 0x38
+
+#define TERM_BOXED_INTEGER_SIGN_BIT_POS 2 // 3rd bit
+#define TERM_BOXED_INTEGER_SIGN_BIT (1 << TERM_BOXED_INTEGER_SIGN_BIT_POS)
 
 #define TERM_IMMED2_TAG_MASK 0x3F
 #define TERM_IMMED2_TAG_SIZE 6
@@ -180,6 +187,17 @@ extern "C" {
 #define TERM_BINARY_HEAP_SIZE(size) \
     (TERM_BINARY_DATA_SIZE_IN_TERMS(size) + BINARY_HEADER_SIZE)
 
+/**
+ * @def BOXED_BIGINT_HEAP_SIZE(term_size)
+ * @brief Calculate total heap allocation size for a bigint including header
+ *
+ * @param term_size Data size in terms (from \c term_bigint_size_requirements())
+ * @return Total heap size needed including 1 term for boxed header
+ *
+ * @see term_bigint_size_requirements() which provides the term_size parameter
+ */
+#define BOXED_BIGINT_HEAP_SIZE(term_size) ((term_size) + 1)
+
 #define TERM_DEBUG_ASSERT(...)
 
 #define TERM_FROM_ATOM_INDEX(atom_index) ((atom_index << TERM_IMMED2_TAG_SIZE) | TERM_IMMED2_ATOM)
@@ -251,6 +269,12 @@ typedef enum
     TermLessThan = 2,
     TermGreaterThan = 4
 } TermCompareResult;
+
+typedef enum
+{
+    TermPositiveInteger = 0,
+    TermNegativeInteger = TERM_BOXED_INTEGER_SIGN_BIT
+} term_integer_sign_t;
 
 #define TERM_MAP_NOT_FOUND -1
 #define TERM_MAP_MEMORY_ALLOC_FAIL -2
@@ -524,16 +548,53 @@ static inline bool term_is_sub_binary(term t)
 }
 
 /**
- * @brief Checks if a term is an integer value
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
  *
- * @details Returns \c true if a term is an integer value, otherwise \c false.
- * @param t the term that will be checked.
- * @return \c true if check succeeds, \c false otherwise.
+ * Tests whether a term represents an integer stored directly in the term
+ * word without boxing. Returns true only for integers that fit within the
+ * platform's unboxed integer range:
+ * - 32-bit builds: [-2^28, 2^28 - 1] (28-bit signed)
+ * - 64-bit builds: [-2^60, 2^60 - 1] (60-bit signed)
+ *
+ * Integers outside these ranges are stored as boxed integers on the heap
+ * and will return false from this function.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @note Returns false for boxed integers and big integers, even if their
+ *       values would fit in \c avm_int_t full range
+ * @note Values passing this check can be safely converted to \c avm_int_t
+ *       or \c size_t using \c term_to_int()
+ * @note Terms for which this functions returns true are not moved during
+ *       garbage collection
+ * @warning Values passing this check may NOT fit in \c int on platforms
+ *          where \c int is smaller than \c avm_int_t
+ *
+ * @see term_is_boxed_integer() for boxed integer checking
+ * @see term_is_any_integer() for checking all integer representations
+ * @see term_to_int() for extracting the integer value
  */
-static inline bool term_is_integer(term t)
+static inline bool term_is_int(term t)
 {
     /* integer: 11 11 */
     return ((t & TERM_IMMED_TAG_MASK) == TERM_INTEGER_TAG);
+}
+
+/**
+ * @brief Check if term is an integer within platform-specific \c avm_int_t range
+ *
+ * @deprecated Use \c term_is_int() instead. This function will raise a warning
+ *             in the future and will eventually be removed.
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer, false otherwise
+ *
+ * @see term_is_int() for the replacement function
+ */
+static inline bool term_is_integer(term t)
+{
+    return term_is_int(t);
 }
 
 /**
@@ -552,7 +613,8 @@ static inline bool term_is_boxed_integer(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER) {
+        if (((boxed_value[0] & TERM_BOXED_TAG_MASK) | TERM_BOXED_INTEGER_SIGN_BIT)
+            == TERM_BOXED_NEGATIVE_INTEGER) {
             return true;
         }
     }
@@ -897,6 +959,31 @@ static inline int32_t term_to_int32(term t)
     return ((int32_t) t) >> 4;
 }
 
+/**
+ * @brief Extract \c avm_int_t value from unboxed integer term
+ *
+ * Extracts the \c avm_int_t value from a term that contains an unboxed
+ * integer. An unboxed integer is an integer value stored directly within
+ * the term itself, not as a separate allocation on the heap.
+ *
+ * @param t Term containing unboxed integer
+ * @return The extracted \c avm_int_t value
+ *
+ * @pre \c term_is_int(t) must be true
+ * @warning Undefined behavior if called on non-integer or boxed integer terms
+ *
+ * @note This function performs no type checking - validation must be done
+ *       by caller using \c term_is_int()
+ * @note Only extracts from unboxed integers (28-bit on 32-bit builds,
+ *       60-bit on 64-bit builds)
+ * @note Safe conversions: \c size_t s = term_to_int(t) is always valid
+ * @warning Unsafe conversions on 64-bit builds: \c int or \c int32_t may overflow
+ *          since \c avm_int_t can hold 60-bit values
+ *
+ * @see term_is_int() to validate term before extraction
+ * @see term_unbox_int() for extracting boxed integers
+ * @see term_maybe_unbox_int() for extracting from either unboxed or boxed integers
+ */
 static inline avm_int_t term_to_int(term t)
 {
     TERM_DEBUG_ASSERT(term_is_integer(t));
@@ -1010,6 +1097,100 @@ static inline term term_from_int(avm_int_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 }
 
+/**
+ * @brief Check if term is a non-negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer >= 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_non_neg_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v >= 0;
+    }
+    return false;
+}
+
+/**
+ * @brief Check if term is a positive (non-zero) unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer > 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_pos_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v > 0;
+    }
+
+    return false;
+}
+
+/**
+ * @brief Check if term is a negative unboxed integer
+ *
+ * @param t Term to check
+ * @return true if term is an unboxed integer < 0, false otherwise
+ *
+ * @see term_is_int() for unboxed integer details
+ */
+static inline bool term_is_neg_int(term t)
+{
+    if (term_is_int(t)) {
+        avm_int_t v = term_to_int(t);
+        return v < 0;
+    }
+
+    return false;
+}
+
+static inline bool term_is_pos_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_POSITIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline bool term_is_neg_boxed_integer(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return ((boxed_value[0] & TERM_BOXED_TAG_MASK) == TERM_BOXED_NEGATIVE_INTEGER);
+    }
+
+    return false;
+}
+
+static inline term_integer_sign_t term_boxed_integer_sign(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (term_integer_sign_t) (boxed_value[0] & TERM_BOXED_INTEGER_SIGN_BIT);
+}
+
+static inline bool term_is_any_non_neg_integer(term t)
+{
+    return term_is_non_neg_int(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_pos_integer(term t)
+{
+    return term_is_pos_int(t) || term_is_pos_boxed_integer(t);
+}
+
+static inline bool term_is_any_neg_integer(term t)
+{
+    return term_is_neg_int(t) || term_is_neg_boxed_integer(t);
+}
+
 static inline avm_int_t term_unbox_int(term boxed_int)
 {
     TERM_DEBUG_ASSERT(term_is_boxed_integer(boxed_int));
@@ -1063,18 +1244,26 @@ static inline avm_int64_t term_maybe_unbox_int64(term maybe_boxed_int)
     }
 }
 
+static inline term_integer_sign_t term_integer_sign_from_int(avm_int_t value)
+{
+    avm_uint_t uvalue = ((avm_uint_t) value);
+    return (term_integer_sign_t) ((uvalue >> (TERM_BITS - 1)) << TERM_BOXED_INTEGER_SIGN_BIT_POS);
+}
+
 static inline term term_make_boxed_int(avm_int_t value, Heap *heap)
 {
+    avm_uint_t sign = (avm_uint_t) term_integer_sign_from_int(value);
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     boxed_int[1] = value;
     return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 {
+    avm_uint64_t sign = (((avm_uint64_t) large_int64) >> 63) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
-    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER; // OR sign bit
+    boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
     #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
         boxed_int[1] = large_int64;
     #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
@@ -1121,6 +1310,211 @@ static inline size_t term_boxed_integer_size(avm_int64_t value)
     } else {
         return 0;
     }
+}
+
+/**
+ * @brief Create an uninitialized bigint term with allocated storage
+ *
+ * Allocates heap space for a multi-precision integer term and sets up the
+ * boxed header with size and sign information. The digit data area is left
+ * uninitialized and must be filled using \c term_initialize_bigint().
+ *
+ * @param n Size of data area in terms (not digits), from \c term_bigint_size_requirements()
+ * @param sign Sign of the integer (\c TERM_INTEGER_POSITIVE or \c TERM_INTEGER_NEGATIVE)
+ * @param heap Heap to allocate from
+ * @return Newly created uninitialized bigint term
+ *
+ * @pre n must be > \c BOXED_TERMS_REQUIRED_FOR_INT64 to ensure bigint distinction
+ * @pre heap must have at least (1 + n) terms of free space
+ *
+ * @post Allocates 1 header term + n data terms on the heap
+ * @post Header contains size and sign information
+ * @post Data area is uninitialized and must be filled before use
+ *
+ * @warning When ensuring heap space, use \c BOXED_BIGINT_HEAP_SIZE(n) to include
+ *          the header term in the allocation size
+ *
+ * @note The size n is in terms, not \c intn_digit_t digits
+ * @note Use \c term_bigint_size_requirements() to calculate appropriate n value
+ *
+ * @see term_initialize_bigint() to fill the allocated data area
+ * @see term_bigint_size_requirements() to calculate required size
+ * @see BOXED_BIGINT_HEAP_SIZE() to calculate total heap allocation including header
+ */
+static inline term term_create_uninitialized_bigint(size_t n, term_integer_sign_t sign, Heap *heap)
+{
+    term *boxed_int = memory_heap_alloc(heap, 1 + n);
+    boxed_int[0] = (n << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
+
+    return ((term) boxed_int) | TERM_PRIMARY_BOXED;
+}
+
+/**
+ * @brief Initialize multi-precision integer data in a pre-allocated term
+ *
+ * Copies multi-precision integer digits into an already allocated boxed term,
+ * zero-extending to fill the entire allocated space. This function is used
+ * after creating an uninitialized bigint term to populate it with actual data.
+ *
+ * @param t Uninitialized bigint term (created with \c term_create_uninitialized_bigint())
+ * @param bigint Source digit array to copy
+ * @param bigint_len Number of digits in source array
+ * @param uninitialized_size Total size of destination buffer in digits
+ *
+ * @pre t must be a valid uninitialized bigint term
+ * @pre bigint != NULL
+ * @pre uninitialized_size must match the size allocated for the term
+ *
+ * @post Copies bigint_len digits from source to term
+ * @post Zero-fills remaining space from bigint_len to uninitialized_size
+ *
+ * @note This function does not set the sign - that should be done when creating the term
+ * @note The destination buffer size (uninitialized_size) is typically rounded up for alignment
+ *
+ * @see term_create_uninitialized_bigint() to allocate the term before initialization
+ * @see intn_copy() which performs the actual copy and zero-extension
+ */
+static inline void term_initialize_bigint(
+    term t, const intn_digit_t *bigint, size_t bigint_len, size_t uninitialized_size)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    intn_digit_t *dest_buf = (intn_digit_t *) (boxed_value + 1);
+    intn_copy(bigint, bigint_len, dest_buf, uninitialized_size);
+}
+
+/**
+ * @brief Calculate term allocation size for multi-precision integer
+ *
+ * Converts the number of \c intn_digit_t digits needed for a bigint into the
+ * corresponding term allocation size and rounded digit count. Handles platform
+ * differences between 32-bit systems (where term = intn_digit_t) and 64-bit
+ * systems (where term = 2 × intn_digit_t), including alignment requirements.
+ *
+ * @param n Number of non-zero \c intn_digit_t digits in the integer
+ * @param[out] intn_data_size Number of terms needed for storage (excludes header)
+ * @param[out] rounded_num_len Rounded number of digits for zero-padding
+ *
+ * @pre n > 0
+ * @pre intn_data_size != NULL
+ * @pre rounded_num_len != NULL
+ *
+ * @post *intn_data_size > \c BOXED_TERMS_REQUIRED_FOR_INT64 (ensures bigint distinction)
+ * @post *rounded_num_len >= n (includes padding for alignment)
+ *
+ * @warning The returned intn_data_size does NOT include the boxed header term.
+ *          Use \c BOXED_BIGINT_HEAP_SIZE(intn_data_size) when allocating heap space.
+ *
+ * @note Forces minimum size > \c BOXED_TERMS_REQUIRED_FOR_INT64 to distinguish
+ *       bigints from regular boxed int64 values (which use two's complement)
+ * @note Rounds up to 8-byte boundaries for alignment
+ * @note On 64-bit systems, 2 digits fit per term; on 32-bit systems, 1 digit per term
+ *
+ * @code
+ * // Example usage:
+ * size_t count = intn_count_digits(bigint, bigint_len);
+ * size_t intn_data_size, rounded_res_len;
+ * term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
+ *
+ * // Ensure heap has space for data + header
+ * memory_ensure_free(ctx, BOXED_BIGINT_HEAP_SIZE(intn_data_size));
+ *
+ * term t = term_create_uninitialized_bigint(intn_data_size, sign, heap);
+ * term_initialize_bigint(t, bigint, count, rounded_res_len);
+ * @endcode
+ *
+ * @see BOXED_BIGINT_HEAP_SIZE() to include header in heap allocation
+ */
+static inline void term_bigint_size_requirements(
+    size_t n, size_t *intn_data_size, size_t *rounded_num_len)
+{
+    size_t bytes = n * sizeof(intn_digit_t);
+    size_t rounded = ((bytes + 7) >> 3) << 3;
+    *intn_data_size = rounded / sizeof(term);
+
+    if (*intn_data_size == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        // We need to distinguish between "small" boxed integers (up to int64)
+        // and true bigints. Small boxed integers use two's complement
+        // representation, while bigints use sign-magnitude (and endianness
+        // might also differ). To ensure this distinction, we force bigints
+        // to use > BOXED_TERMS_REQUIRED_FOR_INT64 terms.
+        *intn_data_size = BOXED_TERMS_REQUIRED_FOR_INT64 + 1;
+        rounded = *intn_data_size * sizeof(term);
+    }
+
+    *rounded_num_len = rounded / sizeof(intn_digit_t);
+}
+
+/**
+ * @brief Check if term is a multi-precision integer larger than \c int64_t
+ *
+ * Tests whether a term represents a boxed integer that requires multi-precision
+ * representation (i.e., larger than can fit in \c int64_t). These are integers
+ * that need more than \c INTN_INT64_LEN digits for their representation.
+ *
+ * In the current implementation, a bigint is defined as a boxed integer with
+ * size greater than:
+ * - \c BOXED_TERMS_REQUIRED_FOR_INT64 on 32-bit systems
+ * - \c BOXED_TERMS_REQUIRED_FOR_INT on 64-bit systems
+ *
+ * This effectively identifies integers that cannot be represented in the
+ * platform's native integer types and require multi-precision arithmetic,
+ * while avoiding confusion with regular boxed \c int64_t values that still
+ * fit within standard integer ranges.
+ *
+ * @param t Term to check
+ * @return true if term is a multi-precision integer, false otherwise
+ *
+ * @note Returns false for integers that fit in \c int64_t, even if boxed
+ * @note This is the correct check before calling \c term_to_bigint()
+ *
+ * @see term_to_bigint() to extract the multi-precision integer data
+ * @see term_is_boxed_integer() for checking any boxed integer
+ * @see term_is_any_integer() for checking all integer representations
+ */
+static inline bool term_is_bigint(term t)
+{
+    return term_is_boxed_integer(t)
+        && (term_boxed_size(t) > (INTN_INT64_LEN * sizeof(intn_digit_t)) / sizeof(term));
+}
+
+/**
+ * @brief Extract multi-precision integer data from boxed term
+ *
+ * Extracts the raw multi-precision integer representation from a boxed
+ * integer term. This function provides direct access to the internal
+ * digit array without copying, returning a pointer to the data within
+ * the term structure.
+ *
+ * @param t Boxed integer term to extract from
+ * @param[out] bigint Pointer to the digit array within the term (borrowed reference)
+ * @param[out] bigint_len Number of digits in the integer
+ * @param[out] bigint_sign Sign of the integer
+ *
+ * @pre \c term_is_bigint(t) must be true
+ * @pre bigint != NULL
+ * @pre bigint_len != NULL
+ * @pre bigint_sign != NULL
+ *
+ * @warning Returned pointer is a borrowed reference into the term structure
+ * @warning Data becomes invalid if term is garbage collected or modified
+ * @warning Caller must not free the returned pointer
+ *
+ * @note The digit array may not be normalized (may have leading zeros)
+ * @note Length is calculated as boxed_size * (sizeof(term) / sizeof(intn_digit_t))
+ *
+ * @see term_is_bigint() to check if term is a multi-precision integer
+ * @see term_boxed_integer_sign() to get the sign
+ */
+static inline void term_to_bigint(
+    term t, const intn_digit_t *bigint[], size_t *bigint_len, intn_integer_sign_t *bigint_sign)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    *bigint = (const intn_digit_t *) (boxed_value + 1);
+
+    size_t boxed_size = term_get_size_from_boxed_header(boxed_value[0]);
+    *bigint_len = boxed_size * (sizeof(term) / sizeof(intn_digit_t));
+
+    *bigint_sign = (intn_integer_sign_t) term_boxed_integer_sign(t);
 }
 
 static inline term term_from_catch_label(unsigned int module_index, unsigned int label)
@@ -1949,15 +2343,6 @@ static inline avm_float_t term_to_float(term t)
     return boxed_float->f;
 }
 
-static inline avm_float_t term_conv_to_float(term t)
-{
-    if (term_is_any_integer(t)) {
-        return term_maybe_unbox_int64(t);
-    } else {
-        return term_to_float(t);
-    }
-}
-
 static inline bool term_is_number(term t)
 {
     return term_is_any_integer(t) || term_is_float(t);
@@ -2006,6 +2391,8 @@ int term_fprint(FILE *fd, term t, const GlobalContext *global);
  * @returns the number of printed characters.
  */
 int term_snprint(char *buf, size_t size, term t, const GlobalContext *global);
+
+avm_float_t term_conv_to_float(term t);
 
 /**
  * @brief Checks if a term is a string (i.e., a list of characters)

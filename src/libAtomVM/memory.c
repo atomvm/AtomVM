@@ -610,6 +610,10 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
                         TRACE("- Found boxed pos int.\n");
                         break;
 
+                    case TERM_BOXED_NEGATIVE_INTEGER:
+                        TRACE("- Found boxed neg int.\n");
+                        break;
+
                     case TERM_BOXED_REF:
                         TRACE("- Found ref.\n");
                         break;
@@ -739,6 +743,10 @@ static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_s
                 }
 
                 case TERM_BOXED_POSITIVE_INTEGER:
+                    ptr += term_get_size_from_boxed_header(t);
+                    break;
+
+                case TERM_BOXED_NEGATIVE_INTEGER:
                     ptr += term_get_size_from_boxed_header(t);
                     break;
 

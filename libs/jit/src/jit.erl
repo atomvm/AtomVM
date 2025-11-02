@@ -658,9 +658,7 @@ first_pass(<<?OP_IS_INTEGER, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_INTEGER ~p, ~p\n", [Label, Arg1]),
-    MSt2 = verify_is_immediate_or_boxed(
-        {free, Arg1}, ?TERM_INTEGER_TAG, ?TERM_BOXED_POSITIVE_INTEGER, Label, MMod, MSt1
-    ),
+    MSt2 = verify_is_any_integer({free, Arg1}, Label, MMod, MSt1),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 46
@@ -678,33 +676,17 @@ first_pass(<<?OP_IS_NUMBER, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_NUMBER ~p, ~p\n", [Label, Arg1]),
-    % test term_is_integer
-    {MSt2, Reg} = MMod:move_to_native_register(MSt1, Arg1),
-    MSt3 = MMod:if_block(MSt2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
-        % test term_is_boxed
-        BSt1 = cond_jump_to_label(
-            {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, MMod, BSt0
-        ),
-        {BSt2, Reg} = MMod:and_(BSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
-        BSt3 = MMod:move_array_element(BSt2, Reg, 0, Reg),
-        % Optimization : ((Reg & 0x3F) != 0x8) && ((Reg & 0x3F) != 0x18)
-        % is equivalent to (Reg & 0x2F) != 0x8
-        cond_jump_to_label(
-            {
-                {free, Reg},
-                '&',
-                ?TERM_BOXED_TAG_MASK_POSITIVE_INTEGER_OR_FLOAT,
-                '!=',
-                ?TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT
-            },
-            Label,
-            MMod,
-            BSt3
-        )
-    end),
-    MSt4 = MMod:free_native_registers(MSt3, [Reg]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt4),
-    first_pass(Rest2, MMod, MSt4, State0);
+    MSt2 = verify_is_immediate_or_boxed(
+        {free, Arg1},
+        ?TERM_INTEGER_TAG,
+        ?TERM_BOXED_TAG_MASK_INTEGER_OR_FLOAT,
+        ?TERM_BOXED_TAG_POSITIVE_INTEGER_OR_FLOAT,
+        Label,
+        MMod,
+        MSt1
+    ),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    first_pass(Rest2, MMod, MSt2, State0);
 % 48
 first_pass(<<?OP_IS_ATOM, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -3215,20 +3197,23 @@ verify_is_binary_or_match_state(Label, Src, MMod, MSt0) ->
     ),
     MMod:free_native_registers(MSt6, [Reg]).
 
-verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, MSt0) when is_atom(Reg) ->
+verify_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt0) ->
+    verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TAG_MASK, BoxedTag, MMod, MSt0).
+
+verify_is_boxed_with_tag(Label, {free, Reg}, BoxedMask, BoxedTag, MMod, MSt0) when is_atom(Reg) ->
     MSt1 = verify_is_boxed(MMod, MSt0, Reg, Label),
     {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt3 = MMod:move_array_element(MSt2, Reg, 0, Reg),
     cond_raise_badarg_or_jump_to_fail_label(
-        {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt3
+        {{free, Reg}, '&', BoxedMask, '!=', BoxedTag}, Label, MMod, MSt3
     );
-verify_is_boxed_with_tag(Label, Arg1, BoxedTag, MMod, MSt1) ->
+verify_is_boxed_with_tag(Label, Arg1, BoxedMask, BoxedTag, MMod, MSt1) ->
     {MSt2, Reg} = MMod:copy_to_native_register(MSt1, Arg1),
     MSt3 = verify_is_boxed(MMod, MSt2, Reg, Label),
     {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 0, Reg),
     cond_raise_badarg_or_jump_to_fail_label(
-        {{free, Reg}, '&', ?TERM_BOXED_TAG_MASK, '!=', BoxedTag}, Label, MMod, MSt5
+        {{free, Reg}, '&', BoxedMask, '!=', BoxedTag}, Label, MMod, MSt5
     ).
 
 verify_is_boxed(MMod, MSt0, Reg) ->
@@ -3287,16 +3272,25 @@ verify_is_integer(Arg1, Fail, MMod, MSt0) ->
 verify_is_atom(Arg1, Fail, MMod, MSt0) ->
     verify_is_immediate(Arg1, ?TERM_IMMED2_TAG_MASK, ?TERM_IMMED2_ATOM, Fail, MMod, MSt0).
 
-verify_is_immediate_or_boxed(Arg1, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0) when
-    is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
-->
-    MSt0;
-verify_is_immediate_or_boxed({free, Arg1}, ImmediateTag, _BoxedTag, _FailLabel, _MMod, MSt0) when
+verify_is_immediate_or_boxed(Arg1, ImmediateTag, BoxedTag, FailLabel, MMod, MSt0) ->
+    verify_is_immediate_or_boxed(
+        Arg1, ImmediateTag, ?TERM_BOXED_TAG_MASK, BoxedTag, FailLabel, MMod, MSt0
+    ).
+
+verify_is_immediate_or_boxed(
+    Arg1, ImmediateTag, _BoxedMask, _BoxedTag, _FailLabel, _MMod, MSt0
+) when
     is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
 ->
     MSt0;
 verify_is_immediate_or_boxed(
-    ArgOrTuple, ImmediateTag, BoxedTag, Label, MMod, MSt0
+    {free, Arg1}, ImmediateTag, _BoxedMask, _BoxedTag, _FailLabel, _MMod, MSt0
+) when
+    is_integer(Arg1) andalso Arg1 band ?TERM_IMMED_TAG_MASK =:= ImmediateTag
+->
+    MSt0;
+verify_is_immediate_or_boxed(
+    ArgOrTuple, ImmediateTag, BoxedMask, BoxedTag, Label, MMod, MSt0
 ) ->
     {MSt1, Reg} =
         case ArgOrTuple of
@@ -3304,13 +3298,19 @@ verify_is_immediate_or_boxed(
             _ -> MMod:copy_to_native_register(MSt0, ArgOrTuple)
         end,
     MSt2 = MMod:if_block(MSt1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ImmediateTag}, fun(BSt0) ->
-        verify_is_boxed_with_tag(Label, {free, Reg}, BoxedTag, MMod, BSt0)
+        verify_is_boxed_with_tag(Label, {free, Reg}, BoxedMask, BoxedTag, MMod, BSt0)
     end),
     MMod:free_native_registers(MSt2, [Reg]).
 
 verify_is_any_integer(Arg1, Fail, MMod, MSt0) ->
     verify_is_immediate_or_boxed(
-        Arg1, ?TERM_INTEGER_TAG, ?TERM_BOXED_POSITIVE_INTEGER, Fail, MMod, MSt0
+        Arg1,
+        ?TERM_INTEGER_TAG,
+        ?TERM_BOXED_TAG_MASK_NO_SIGN,
+        ?TERM_BOXED_POSITIVE_INTEGER,
+        Fail,
+        MMod,
+        MSt0
     ).
 
 %%-----------------------------------------------------------------------------
@@ -3499,6 +3499,17 @@ decode_compact_term(
 ) ->
     {MSt, term_from_int((Val bsl 8) bor NextByte), Rest};
 decode_compact_term(
+    <<7:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Rest/binary>>,
+    MMod,
+    MSt,
+    _State
+) ->
+    {DecodedLen, Rest1} = decode_literal(Rest),
+    % 7 actually means 7 + 2, that means an integer that is >= 9 bytes
+    IntegerByteLen = DecodedLen + 9,
+    <<Value:(IntegerByteLen * 8)/signed-big-integer, Rest2/binary>> = Rest1,
+    decode_compact_term_big_integer(Value, MMod, MSt, Rest2);
+decode_compact_term(
     <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Value:(8 * (Size0 + 2))/signed, Rest/binary>>,
     MMod,
     MSt,
@@ -3544,6 +3555,12 @@ skip_compact_term(<<_:4, ?COMPACT_INTEGER:4, _Rest/binary>> = Bin) ->
     {_Value, Rest} = decode_value64(Bin),
     Rest;
 skip_compact_term(<<_Val:3, ?COMPACT_LARGE_INTEGER_11BITS:5, _NextByte, Rest/binary>>) ->
+    Rest;
+skip_compact_term(<<7:3, ?COMPACT_LARGE_INTEGER_NBITS:5, Rest/binary>>) ->
+    {DecodedLen, Rest0} = decode_literal(Rest),
+    % 7 actually means 7 + 2, that means an integer that is >= 9 bytes
+    IntegerByteLen = DecodedLen + 9,
+    <<_Value:IntegerByteLen/binary, Rest/binary>> = Rest0,
     Rest;
 skip_compact_term(
     <<Size0:3, ?COMPACT_LARGE_INTEGER_NBITS:5, _Value:(8 * (Size0 + 2))/signed, Rest/binary>>
@@ -3654,6 +3671,55 @@ decode_compact_term_integer(Value, MMod, MSt0, Rest) ->
     ),
     ?TRACE("(alloc_boxed_integer_fragment(~p) => ~p)", [Value, Reg]),
     {MSt1, Reg, Rest}.
+
+decode_compact_term_big_integer(Value, MMod, MSt0, Rest) ->
+    Sign =
+        case Value of
+            Pos when Pos >= 0 -> ?TERM_POSITIVE_INTEGER;
+            _Neg -> ?TERM_NEGATIVE_INTEGER
+        end,
+    AbsValue = abs(Value),
+    % Len is in intn_digit_t units, not words/term unit
+    Len = count_big_int_digits(AbsValue, 0),
+    {MSt1, Reg} = MMod:call_primitive(
+        MSt0, ?PRIM_ALLOC_BIG_INTEGER_FRAGMENT, [ctx, Len, Sign]
+    ),
+    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    WordSize = MMod:word_size(),
+    % Do not write at Index 0, since it contains boxed header, start from 1 instead
+    MSt3 = put_digits(AbsValue, 1, MSt2, Reg, WordSize, MMod),
+    MSt4 = MMod:or_(MSt3, Reg, ?TERM_PRIMARY_BOXED),
+    {MSt4, Reg, Rest}.
+
+% Assuming 32-bit digits, this code has to be kept in sync when changing intn_digit_t size.
+count_big_int_digits(0, Acc) ->
+    Acc;
+count_big_int_digits(N, Acc) ->
+    count_big_int_digits(N bsr 32, Acc + 1).
+
+% put_digits puts 32-bit digits (intn_digit_t) inside a boxed big integer.
+%
+% Big integers are encoded starting from the least significant digit to the most significant digit.
+% Each 32-bit digit is a regular native integer internally encoded with native endianess,
+% but since digits order is from least to most significant, it means that we can cast a pair of
+% digits to uint64 only on little endian platforms.
+%
+% After the most significant there might be an additional 0 (as padding) on 64-bit platforms.
+%
+% Value must be an absolute value, sign is kept in boxed header.
+%
+% This code has to be kept in sync when changing intn_digit_t size.
+put_digits(0, _Index, Mst0, _Reg, _WordSize, _MMod) ->
+    Mst0;
+put_digits(Value, Index, MSt0, Reg, 4, MMod) ->
+    Digit = Value band 16#FFFFFFFF,
+    MSt1 = MMod:move_to_array_element(MSt0, Digit, Reg, Index),
+    put_digits(Value bsr 32, Index + 1, MSt1, Reg, 4, MMod);
+put_digits(Value, Index, MSt0, Reg, 8, MMod) ->
+    % Assuming little endian, see above for more info about encoding
+    Word = Value band 16#FFFFFFFFFFFFFFFF,
+    MSt1 = MMod:move_to_array_element(MSt0, Word, Reg, Index),
+    put_digits(Value bsr 64, Index + 1, MSt1, Reg, 8, MMod).
 
 decode_dest(<<RegIndex:4, ?COMPACT_XREG:4, Rest/binary>>, _MMod, MSt) ->
     {MSt, {x_reg, RegIndex}, Rest};

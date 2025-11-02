@@ -19,7 +19,7 @@ Currently, AtomVM implements a strict subset of the BEAM instruction set.
 A high level overview of the supported language features include:
 
 * All the major Erlang types, including
-  * integers (with size limits)
+  * integers (integers with 256-bit magnitude plus separate sign)
   * floats
   * tuples
   * [lists](./apidocs/erlang/estdlib/lists.md)
@@ -740,7 +740,7 @@ The following Erlang type specification enumerates this type:
 Erlang/OTP uses the Christian epoch to count time units from year 0 in the Gregorian calendar.  The, for example, the value 0 in Gregorian seconds represents the date Jan 1, year 0, and midnight (UTC), or in Erlang terms, `{{0, 1, 1}, {0, 0, 0}}`.
 
 ```{attention}
-AtomVM is currently limited to representing integers in at most 64 bits, with one bit representing the sign bit.
+AtomVM is currently limited to representing time in at most 64 bits, with one bit representing the sign bit.
 However, even with this limitation, AtomVM is able to resolve microsecond values in the Gregorian calendar for over
 292,000 years, likely well past the likely lifetime of an AtomVM application (unless perhaps launched on a deep
 space probe).
