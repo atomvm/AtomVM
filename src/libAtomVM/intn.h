@@ -917,9 +917,8 @@ static inline void intn_from_uint64(uint64_t absu64, intn_digit_t out[])
  */
 static inline void intn_from_int64(int64_t i64, intn_digit_t out[], intn_integer_sign_t *out_sign)
 {
-    bool is_negative;
-    uint64_t absu64 = int64_safe_unsigned_abs_set_flag(i64, &is_negative);
-    *out_sign = is_negative ? IntNNegativeInteger : IntNPositiveInteger;
+    uint64_t absu64 = int64_safe_unsigned_abs(i64);
+    *out_sign = i64 < 0 ? IntNNegativeInteger : IntNPositiveInteger;
     intn_from_uint64(absu64, out);
 }
 
