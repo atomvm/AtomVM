@@ -315,7 +315,28 @@ handle_info(
             {noreply, State#state{children = NewChildren},
                 {timeout, 0, {restart_many_children, Children}}};
         {error, Reason} ->
-            handle_child_exit(Pid, Reason, State)
+            handle_child_exit(Pid, {restart, Reason}, State)
+    end;
+handle_info({try_again_restart, Id}, State) ->
+    case lists:keyfind(Id, #child.id, State#state.children) of
+        false ->
+            {noreply, State};
+        Child ->
+            case add_restart(State) of
+                {ok, State1} ->
+                    case try_start(Child) of
+                        {ok, NewPid, _Result} ->
+                            UpdatedChildren = lists:keyreplace(
+                                Id, Child#child.id, State1#state.children, Child#child{pid = NewPid}
+                            ),
+                            {noreply, State1#state{children = UpdatedChildren}};
+                        {error, {_, _}} ->
+                            {noreply, State1, {timeout, 0, {try_again_restart, Id}}}
+                    end;
+                {shutdown, State1} ->
+                    RemainingChildren = lists:keydelete(Id, #child.id, State1#state.children),
+                    {stop, shutdown, State1#state{children = RemainingChildren}}
+            end
     end;
 handle_info({restart_many_children, [#child{pid = undefined} = _Child | Children]}, State) ->
     {noreply, State, {timeout, 0, {restart_many_children, Children}}};
@@ -357,7 +378,7 @@ handle_child_exit(Pid, Reason, State) ->
                             RemainingChildren = lists:keydelete(
                                 Pid, #child.pid, State1#state.children
                             ),
-                            {shutdown, State1#state{children = RemainingChildren}}
+                            {stop, shutdown, State1#state{children = RemainingChildren}}
                     end;
                 false ->
                     Children = lists:keydelete(Pid, #child.pid, State#state.children),
@@ -374,7 +395,13 @@ handle_restart_strategy(
             Children = lists:keyreplace(
                 Id, #child.id, State#state.children, NewChild
             ),
-            {noreply, State#state{children = Children}}
+            {noreply, State#state{children = Children}};
+        {error, _} ->
+            NewChild = Child#child{pid = {restarting, Child#child.pid}},
+            Children = lists:keyreplace(
+                Id, #child.id, State#state.children, NewChild
+            ),
+            {noreply, State#state{children = Children}, {timeout, 0, {try_again_restart, Id}}}
     end;
 handle_restart_strategy(
     #child{pid = Pid} = Child, #state{restart_strategy = one_for_all} = State

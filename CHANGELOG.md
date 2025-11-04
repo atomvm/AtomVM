@@ -94,6 +94,7 @@ instead `badarg`.
 - Fix `list_to_integer`, it was likely buggy with integers close to INT64_MAX
 - Added missing support for supervisor `one_for_all` strategy.
 - Supervisor now honors period and intensity options.
+- Fix supervisor crash if a `one_for_one` child fails to restart.
 
 ## [0.6.7] - Unreleased
 
