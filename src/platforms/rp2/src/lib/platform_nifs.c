@@ -44,13 +44,6 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#define VALIDATE_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM;                  \
-        argv[1] = BADARG_ATOM;                 \
-        return term_invalid_term();            \
-    }
-
 static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
