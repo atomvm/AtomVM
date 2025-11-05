@@ -69,10 +69,25 @@
 
 #define FLOAT_BUF_SIZE 64
 
-#define RAISE(a, b)  \
-    ctx->x[0] = (a); \
-    ctx->x[1] = (b); \
-    return term_invalid_term();
+#define RAISE(a, b)                 \
+    do {                            \
+        term _tmp_a = (a);          \
+        term _tmp_b = (b);          \
+        ctx->x[0] = _tmp_a;         \
+        ctx->x[1] = _tmp_b;         \
+        return term_invalid_term(); \
+    } while (0)
+
+#define RAISE_WITH_STACKTRACE(a, b, c) \
+    do {                               \
+        term _tmp_a = (a);             \
+        term _tmp_b = (b);             \
+        term _tmp_c = (c);             \
+        ctx->x[0] = _tmp_a;            \
+        ctx->x[1] = _tmp_b;            \
+        ctx->x[2] = _tmp_c;            \
+        return term_invalid_term();    \
+    } while (0)
 
 #ifndef MAX
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -3068,9 +3083,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         int new_value = term_to_int(value);
         int nb_processors = smp_get_online_processors();
         if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
-            argv[0] = ERROR_ATOM;
-            argv[1] = BADARG_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(BADARG_ATOM);
         }
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
         };
@@ -3615,11 +3628,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term t = argv[0];
-
-    ctx->x[0] = THROW_ATOM;
-    ctx->x[1] = t;
-    return term_invalid_term();
+    RAISE(THROW_ATOM, argv[0]);
 }
 
 static term nif_erlang_raise(Context *ctx, int argc, term argv[])
@@ -3630,10 +3639,7 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
         return BADARG_ATOM;
     }
-    ctx->x[0] = ex_class;
-    ctx->x[1] = argv[1];
-    ctx->x[2] = term_nil();
-    return term_invalid_term();
+    RAISE_WITH_STACKTRACE(ex_class, argv[1], term_nil());
 }
 
 static term nif_ets_new(Context *ctx, int argc, term argv[])
