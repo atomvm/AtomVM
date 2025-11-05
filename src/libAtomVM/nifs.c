@@ -68,9 +68,9 @@
 
 #define FLOAT_BUF_SIZE 64
 
-#define RAISE(a, b)  \
-    ctx->x[0] = (a); \
-    ctx->x[1] = (b); \
+#define RAISE(a, b)              \
+    ctx->exception_class = (a);  \
+    ctx->exception_reason = (b); \
     return term_invalid_term();
 
 #ifndef MAX

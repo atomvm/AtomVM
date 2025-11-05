@@ -59,23 +59,24 @@ extern "C" {
 #ifdef IMPL_EXECUTE_LOOP
 
 #if AVM_NO_JIT
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)           \
+    ctx->exception_class = ERROR_ATOM;       \
+    ctx->exception_reason = error_type_atom; \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
 #elif AVM_NO_EMU
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)           \
+    ctx->exception_class = ERROR_ATOM;       \
+    ctx->exception_reason = error_type_atom; \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
 #else
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    if (mod->native_code) {                                             \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM); \
-    } else {                                                            \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
+#define SET_ERROR(error_type_atom)                                                          \
+    ctx->exception_class = ERROR_ATOM;                                                      \
+    ctx->exception_reason = error_type_atom;                                                \
+    if (mod->native_code) {                                                                 \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod,                         \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);  \
+    } else {                                                                                \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
     }
 #endif
 
@@ -1312,7 +1313,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #endif
 
 #define HANDLE_ERROR()                                                  \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ctx->exception_class);  \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name, label)           \
@@ -3973,6 +3974,9 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     // clears the catch value on stack
                     WRITE_REGISTER(dreg, term_nil());
+                    ctx->x[0] = ctx->exception_class;
+                    ctx->x[1] = ctx->exception_reason;
+                    ctx->x[2] = ctx->exception_stacktrace;
                 #endif
                 break;
             }
@@ -4020,9 +4024,9 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
-                    x_regs[0] = stacktrace_exception_class(stacktrace);
-                    x_regs[1] = exc_value;
-                    x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    ctx->exception_class = stacktrace_exception_class(stacktrace);
+                    ctx->exception_reason = exc_value;
+                    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, saved_pc - code, ctx->exception_class);
                     goto handle_error;
                 #endif
 
@@ -4053,19 +4057,19 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg, term_nil());
                     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
-                    switch (term_to_atom_index(x_regs[0])) {
+                    switch (term_to_atom_index(ctx->exception_class)) {
                         case THROW_ATOM_INDEX:
-                            x_regs[0] = x_regs[1];
+                            x_regs[0] = ctx->exception_reason;
                             break;
 
                         case ERROR_ATOM_INDEX: {
-                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
+                            x_regs[2] = stacktrace_build(ctx);
                             // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
                             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                             term reason_tuple = term_alloc_tuple(2, &ctx->heap);
-                            term_put_tuple_element(reason_tuple, 0, x_regs[1]);
+                            term_put_tuple_element(reason_tuple, 0, ctx->exception_reason);
                             term_put_tuple_element(reason_tuple, 1, x_regs[2]);
                             term exit_tuple = term_alloc_tuple(2, &ctx->heap);
                             term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
@@ -4081,7 +4085,7 @@ wait_timeout_trap_handler:
                             }
                             term exit_tuple = term_alloc_tuple(2, &ctx->heap);
                             term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
-                            term_put_tuple_element(exit_tuple, 1, x_regs[1]);
+                            term_put_tuple_element(exit_tuple, 1, ctx->exception_reason);
                             x_regs[0] = exit_tuple;
 
                             break;
@@ -6569,9 +6573,7 @@ wait_timeout_trap_handler:
                 TRACE("build_stacktrace/0\n");
 
                 #ifdef IMPL_EXECUTE_LOOP
-
-                    x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
-
+                    x_regs[0] = stacktrace_build(ctx);
                 #endif
                 break;
             }
@@ -6590,6 +6592,9 @@ wait_timeout_trap_handler:
                                 ex_class != THROW_ATOM)) {
                         x_regs[0] = BADARG_ATOM;
                     } else {
+                        ctx->exception_class = x_regs[0];
+                        ctx->exception_reason = x_regs[1];
+                        ctx->exception_stacktrace = x_regs[2];
                         goto handle_error;
                     }
                 #endif
@@ -7567,15 +7572,15 @@ handle_error:
 
 #ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
         // Do not print crash dump if reason is normal or shutdown.
-        if (x_regs[0] != LOWERCASE_EXIT_ATOM || (x_regs[1] != NORMAL_ATOM && x_regs[1] != SHUTDOWN_ATOM)) {
+        if (ctx->exception_class != LOWERCASE_EXIT_ATOM || (ctx->exception_reason != NORMAL_ATOM && ctx->exception_reason != SHUTDOWN_ATOM)) {
             context_dump(ctx);
         }
 #endif
 
-        if (x_regs[0] == LOWERCASE_EXIT_ATOM) {
-            ctx->exit_reason = x_regs[1];
+        if (ctx->exception_class == LOWERCASE_EXIT_ATOM) {
+            ctx->exit_reason = ctx->exception_reason;
         } else {
-            bool throw = ctx->x[0] == THROW_ATOM;
+            bool throw = ctx->exception_class == THROW_ATOM;
 
             int exit_reason_tuple_size = (throw ? TUPLE_SIZE(2) : 0) + TUPLE_SIZE(2);
             if (memory_ensure_free_with_roots(ctx, exit_reason_tuple_size, 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -7585,10 +7590,10 @@ handle_error:
                 if (throw) {
                     error_term = term_alloc_tuple(2, &ctx->heap);
                     term_put_tuple_element(error_term, 0, NOCATCH_ATOM);
-                    term_put_tuple_element(error_term, 1, x_regs[1]);
+                    term_put_tuple_element(error_term, 1, ctx->exception_reason);
                 } else {
                     // error
-                    error_term = x_regs[1];
+                    error_term = ctx->exception_reason;
                 }
 
                 term exit_reason_tuple = term_alloc_tuple(2, &ctx->heap);
