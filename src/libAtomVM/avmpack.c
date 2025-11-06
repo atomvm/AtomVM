@@ -35,6 +35,7 @@ static inline int pad(int size)
 
 bool avmpack_is_valid(const void *avmpack_binary, uint32_t size)
 {
+    // "#!/usr/bin/env AtomVM"
     const unsigned char pack_header[AVMPACK_SIZE] = {
         0x23, 0x21, 0x2f, 0x75,
         0x73, 0x72, 0x2f, 0x62,
@@ -51,7 +52,7 @@ bool avmpack_is_valid(const void *avmpack_binary, uint32_t size)
     return memcmp(avmpack_binary, pack_header, AVMPACK_SIZE) == 0;
 }
 
-int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, const void **ptr, uint32_t *size, const char **name)
+int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask, uint32_t flags_val, const void **ptr, uint32_t *size, const char **name)
 {
     int offset = AVMPACK_SIZE;
     const uint32_t *flags;
@@ -60,7 +61,7 @@ int avmpack_find_section_by_flag(const void *avmpack_binary, uint32_t flags_mask
         const uint32_t *sizes = ((const uint32_t *) (avmpack_binary)) + offset / sizeof(uint32_t);
         flags = ((const uint32_t *) (avmpack_binary)) + 1 + offset / sizeof(uint32_t);
 
-        if ((ENDIAN_SWAP_32(*flags) & flags_mask) == flags_mask) {
+        if ((ENDIAN_SWAP_32(*flags) & flags_mask) == flags_val) {
             const char *found_section_name = (const char *) (sizes + 3);
             int section_name_len = pad(strlen(found_section_name) + 1);
 

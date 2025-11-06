@@ -248,7 +248,7 @@ int main()
     port_driver_init_all(glb);
     nif_collection_init_all(glb);
 
-    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_is_valid(flashed_avm, size) || !avmpack_find_section_by_flag(flashed_avm, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         AVM_LOGE(TAG, "Invalid AVM Pack");
         AVM_ABORT();
     }

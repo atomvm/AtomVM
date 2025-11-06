@@ -4811,7 +4811,7 @@ static term nif_atomvm_get_start_beam(Context *ctx, int argc, term argv[])
             uint32_t size;
             const void *beam;
             const char *module_name;
-            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, &beam, &size, &module_name)) {
+            if (!avmpack_find_section_by_flag(avmpack_data->data, BEAM_START_FLAG, BEAM_START_FLAG, &beam, &size, &module_name)) {
                 synclist_unlock(&ctx->global->avmpack_data);
                 if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
                     RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -5638,6 +5638,8 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[0], term_is_atom);
     VALIDATE_VALUE(argv[1], term_is_integer);
 
+    avm_int_t labels_count = term_to_int(argv[1]);
+
     term module_name = argv[0];
     Module *mod = globalcontext_get_module(ctx->global, term_to_atom_index(module_name));
     if (IS_NULL_PTR(mod)) {
@@ -5651,9 +5653,11 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
 
     SMP_MODULE_LOCK(mod);
     if (mod->native_code == NULL) {
-        module_set_native_code(mod, term_to_int(argv[1]), entry_point);
+        module_set_native_code(mod, labels_count, entry_point);
     }
     SMP_MODULE_UNLOCK(mod);
+
+    sys_set_cache_native_code(ctx->global, mod, JIT_FORMAT_VERSION, entry_point, labels_count);
 
     return OK_ATOM;
 }

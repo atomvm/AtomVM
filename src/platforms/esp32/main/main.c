@@ -98,7 +98,7 @@ void app_main()
         ESP_LOGE(TAG, "Invalid startup avmpack. size=%u", size);
         AVM_ABORT();
     }
-    if (!avmpack_find_section_by_flag(startup_avm, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
+    if (!avmpack_find_section_by_flag(startup_avm, BEAM_START_FLAG, BEAM_START_FLAG, &startup_beam, &startup_beam_size, &startup_module_name)) {
         ESP_LOGE(TAG, "Error: Failed to locate start module in startup partition. (Did you flash a library by mistake?)");
         AVM_ABORT();
     }
