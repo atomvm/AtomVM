@@ -184,7 +184,7 @@ start_children([Child | T], StartedC) ->
 start_children([], StartedC) ->
     StartedC.
 
-restart_child(Pid, Reason, State) ->
+handle_child_exit(Pid, Reason, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
         false ->
             {ok, State};
@@ -295,7 +295,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({'EXIT', Pid, Reason}, State) ->
-    case restart_child(Pid, Reason, State) of
+    case handle_child_exit(Pid, Reason, State) of
         {ok, State1} ->
             {noreply, State1};
         {shutdown, State1} ->
