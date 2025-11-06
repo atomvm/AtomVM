@@ -184,47 +184,6 @@ start_children([Child | T], StartedC) ->
 start_children([], StartedC) ->
     StartedC.
 
-handle_child_exit(Pid, Reason, State) ->
-    case lists:keyfind(Pid, #child.pid, State#state.children) of
-        false ->
-            {ok, State};
-        #child{restart = {terminating, temporary, From}} ->
-            gen_server:reply(From, ok),
-            NewChildren = lists:keydelete(Pid, #child.pid, State#state.children),
-            {ok, State#state{children = NewChildren}};
-        #child{restart = {terminating, Restart, From}} = Child ->
-            gen_server:reply(From, ok),
-            NewChildren = lists:keyreplace(Pid, #child.pid, State#state.children, Child#child{
-                pid = undefined, restart = Restart
-            }),
-            {ok, State#state{children = NewChildren}};
-        #child{} = Child ->
-            case should_restart(Reason, Child#child.restart) of
-                true ->
-                    case try_start(Child) of
-                        {ok, NewPid, _Result} ->
-                            NewChild = Child#child{pid = NewPid},
-                            Children = lists:keyreplace(
-                                Pid, #child.pid, State#state.children, NewChild
-                            ),
-                            {ok, State#state{children = Children}}
-                    end;
-                false ->
-                    Children = lists:keydelete(Pid, #child.pid, State#state.children),
-                    {ok, State#state{children = Children}}
-            end
-    end.
-
-should_restart(_Reason, permanent) ->
-    true;
-should_restart(_Reason, temporary) ->
-    false;
-should_restart(Reason, transient) ->
-    case Reason of
-        normal -> false;
-        _any -> true
-    end.
-
 handle_call({start_child, ChildSpec}, _From, #state{children = Children} = State) ->
     Child = child_spec_to_record(ChildSpec),
     #child{id = ID} = Child,
@@ -318,6 +277,50 @@ terminate(_Reason, #state{children = Children} = State) ->
     RemainingChildren = loop_terminate(Children, []),
     loop_wait_termination(RemainingChildren),
     {ok, State}.
+
+%% Internal Private Functions
+
+%% @private
+handle_child_exit(Pid, Reason, State) ->
+    case lists:keyfind(Pid, #child.pid, State#state.children) of
+        false ->
+            {ok, State};
+        #child{restart = {terminating, temporary, From}} ->
+            gen_server:reply(From, ok),
+            NewChildren = lists:keydelete(Pid, #child.pid, State#state.children),
+            {ok, State#state{children = NewChildren}};
+        #child{restart = {terminating, Restart, From}} = Child ->
+            gen_server:reply(From, ok),
+            NewChildren = lists:keyreplace(Pid, #child.pid, State#state.children, Child#child{
+                pid = undefined, restart = Restart
+            }),
+            {ok, State#state{children = NewChildren}};
+        #child{} = Child ->
+            case should_restart(Reason, Child#child.restart) of
+                true ->
+                    case try_start(Child) of
+                        {ok, NewPid, _Result} ->
+                            NewChild = Child#child{pid = NewPid},
+                            Children = lists:keyreplace(
+                                Pid, #child.pid, State#state.children, NewChild
+                            ),
+                            {ok, State#state{children = Children}}
+                    end;
+                false ->
+                    Children = lists:keydelete(Pid, #child.pid, State#state.children),
+                    {ok, State#state{children = Children}}
+            end
+    end.
+
+should_restart(_Reason, permanent) ->
+    true;
+should_restart(_Reason, temporary) ->
+    false;
+should_restart(Reason, transient) ->
+    case Reason of
+        normal -> false;
+        _any -> true
+    end.
 
 loop_terminate([#child{pid = undefined} | Tail], AccRemaining) ->
     loop_terminate(Tail, AccRemaining);
