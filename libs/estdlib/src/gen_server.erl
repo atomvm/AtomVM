@@ -73,30 +73,35 @@
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
-    | {ok, State :: StateType, timeout() | {continue, term()}}
+    | {ok, State :: StateType, timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {stop, Reason :: any()}.
 
 -type handle_continue_result(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {noreply, NewState :: StateType,
+        timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {stop, Reason :: term(), NewState :: StateType}.
 
 -type handle_call_result(StateType) ::
     {reply, Reply :: any(), NewState :: StateType}
-    | {reply, Reply :: any(), NewState :: StateType, timeout() | {continue, term()}}
+    | {reply, Reply :: any(), NewState :: StateType,
+        timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {noreply, NewState :: StateType,
+        timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {stop, Reason :: any(), Reply :: any(), NewState :: StateType}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_cast_result(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {noreply, NewState :: StateType,
+        timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -type handle_info(StateType) ::
     {noreply, NewState :: StateType}
-    | {noreply, NewState :: StateType, timeout() | {continue, term()}}
+    | {noreply, NewState :: StateType,
+        timeout() | {timeout, timeout(), Msg :: any()} | {continue, term()}}
     | {stop, Reason :: any(), NewState :: StateType}.
 
 -callback init(Args :: any()) ->
@@ -107,7 +112,7 @@
     handle_call_result(StateType).
 -callback handle_cast(Request :: any(), State :: StateType) ->
     handle_cast_result(StateType).
--callback handle_info(Info :: timeout() | any(), State :: StateType) ->
+-callback handle_info(Info :: timeout() | {timeout, timeout(), any()} | any(), State :: StateType) ->
     handle_info(StateType).
 -callback terminate(Reason :: normal | any(), State :: any()) ->
     any().
@@ -504,11 +509,29 @@ loop(Parent, #state{mod = Mod, mod_state = ModState} = State, {continue, Continu
             loop(Parent, State#state{mod_state = NewModState}, infinity);
         {noreply, NewModState, {continue, NewContinue}} ->
             loop(Parent, State#state{mod_state = NewModState}, {continue, NewContinue});
+        {noreply, NewModState, Timeout} ->
+            loop(Parent, State#state{mod_state = NewModState}, Timeout);
         {stop, Reason, NewModState} ->
             do_terminate(State, Reason, NewModState)
     end;
-loop(Parent, #state{mod = Mod, mod_state = ModState} = State, Timeout) ->
+loop(Parent, State, {timeout, Timeout, Info}) ->
     receive
+        Msg ->
+            handle_msg(Msg, Parent, State)
+    after Timeout ->
+        handle_timeout(Parent, Info, State)
+    end;
+loop(Parent, State, Timeout) ->
+    receive
+        Msg ->
+            handle_msg(Msg, Parent, State)
+    after Timeout ->
+        handle_timeout(Parent, timeout, State)
+    end.
+
+%% @private
+handle_msg(Msg, Parent, #state{mod = Mod, mod_state = ModState} = State) ->
+    case Msg of
         {'$gen_call', {_Pid, _Ref} = From, Request} ->
             case Mod:handle_call(Request, From, ModState) of
                 {reply, Reply, NewModState} ->
@@ -562,20 +585,20 @@ loop(Parent, #state{mod = Mod, mod_state = ModState} = State, Timeout) ->
                 _ ->
                     do_terminate(State, {error, unexpected_reply}, ModState)
             end
-    after Timeout ->
-        case Mod:handle_info(timeout, ModState) of
-            {noreply, NewModState} ->
-                loop(Parent, State#state{mod_state = NewModState}, infinity);
-            {noreply, NewModState, NewTimeout} ->
-                loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
-            {stop, Reason, NewModState} ->
-                do_terminate(State, Reason, NewModState);
-            _ ->
-                do_terminate(State, {error, unexpected_reply}, ModState)
-        end
     end.
 
-%% @private
+handle_timeout(Parent, Msg, #state{mod = Mod, mod_state = ModState} = State) ->
+    case Mod:handle_info(Msg, ModState) of
+        {noreply, NewModState} ->
+            loop(Parent, State#state{mod_state = NewModState}, infinity);
+        {noreply, NewModState, NewTimeout} ->
+            loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+        {stop, Reason, NewModState} ->
+            do_terminate(State, Reason, NewModState);
+        _ ->
+            do_terminate(State, {error, unexpected_reply}, ModState)
+    end.
+
 do_terminate(#state{mod = Mod} = _State, Reason, ModState) ->
     case erlang:function_exported(Mod, terminate, 2) of
         true ->
