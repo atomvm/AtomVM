@@ -54,7 +54,9 @@
 
 -export_type([
     server_ref/0,
-    from/0
+    from/0,
+    start_ret/0,
+    start_mon_ret/0
 ]).
 
 -record(state, {
@@ -64,6 +66,8 @@
 }).
 
 -type options() :: list({atom(), term()}).
+-type start_ret() :: {ok, pid()} | {error, Reason :: term()}.
+-type start_mon_ret() :: {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
 -type server_ref() :: atom() | pid().
 -type from() :: any().
 
@@ -258,7 +262,7 @@ crash_report(ErrStr, Parent, E, S) ->
     Module :: module(),
     Args :: term(),
     Options :: options()
-) -> {ok, pid()} | {error, Reason :: term()}.
+) -> start_ret().
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
     spawn_if_not_registered(Name, Module, Args, Options, []).
 
@@ -275,7 +279,7 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start(Module :: module(), Args :: term(), Options :: options()) ->
-    {ok, pid()} | {error, Reason :: term()}.
+    start_ret().
 start(Module, Args, Options) ->
     do_spawn(Module, Args, Options, []).
 
@@ -299,7 +303,7 @@ start(Module, Args, Options) ->
     Module :: module(),
     Args :: term(),
     Options :: options()
-) -> {ok, pid()} | {error, Reason :: term()}.
+) -> start_ret().
 start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
     spawn_if_not_registered(Name, Module, Args, Options, [link]).
 
@@ -316,7 +320,7 @@ start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start_link(Module :: module(), Args :: term(), Options :: options()) ->
-    {ok, pid()} | {error, Reason :: term()}.
+    start_ret().
 start_link(Module, Args, Options) ->
     do_spawn(Module, Args, Options, [link]).
 
@@ -334,7 +338,7 @@ start_link(Module, Args, Options) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start_monitor(Module :: module(), Args :: term(), Options :: options()) ->
-    {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+    start_mon_ret().
 start_monitor(Module, Args, Options) ->
     do_spawn(Module, Args, Options, [monitor]).
 
@@ -359,7 +363,7 @@ start_monitor(Module, Args, Options) ->
     Module :: module(),
     Args :: term(),
     Options :: options()
-) -> {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
+) -> start_mon_ret().
 start_monitor({local, Name}, Module, Args, Options) when is_atom(Name) ->
     spawn_if_not_registered(Name, Module, Args, Options, [monitor]).
 
