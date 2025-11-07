@@ -1829,57 +1829,83 @@ is_number_test() ->
 
 is_boolean_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
             ?BACKEND:jump_to_label(BSt1, Label)
         end)
     end),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
-        "   4:	d006      	beq.n	0x14\n"
-        "   6:	2f0b      	cmp	r7, #11\n"
-        "   8:	d004      	beq.n	0x14\n"
-        "   a:	e079      	b.n	0x100\n"
-        "   c:	46c0      	nop			; (mov r8, r8)\n"
-        "   e:	46c0      	nop			; (mov r8, r8)\n"
-        "  10:	46c0      	nop			; (mov r8, r8)\n"
-        "  12:	46c0      	nop			; (mov r8, r8)"
+        "   0:	4b01      	ldr	r3, [pc, #4]\n"
+        "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   4:	449f      	add	pc, r3\n"
+        "   6:	46c0      	nop\n"
+        "   8:	ffff      	.short	0xffff\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	4b01      	ldr	r3, [pc, #4]\n"
+        "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  10:	449f      	add	pc, r3\n"
+        "  12:	46c0      	nop\n"
+        "  14:	00ec      	lsls	r4, r5, #3\n"
+        "  16:	0000      	movs	r0, r0\n"
+        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  1a:	2f4b      	cmp	r7, #75\n"
+        "  1c:	d006      	beq.n	0x2c\n"
+        "  1e:	2f0b      	cmp	r7, #11\n"
+        "  20:	d004      	beq.n	0x2c\n"
+        "  22:	e06d      	b.n	0x100\n"
+        "  24:	46c0      	nop\n"
+        "  26:	46c0      	nop\n"
+        "  28:	46c0      	nop\n"
+        "  2a:	46c0      	nop"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_far_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
             ?BACKEND:jump_to_label(BSt1, Label)
         end)
     end),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#1000),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:add_label(State4, Label, 16#1000),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
-        "   4:	d006      	beq.n	0x14\n"
-        "   6:	2f0b      	cmp	r7, #11\n"
-        "   8:	d004      	beq.n	0x14\n"
-        "   a:	4e01      	ldr	r6, [pc, #4]	; (0x10)\n"
-        "   c:	447e      	add	r6, pc\n"
-        "   e:	4730      	bx	r6\n"
-        "  10:	0ff1      	lsrs	r0, r6, #31\n"
-        "  12:	0000      	movs	r0, r0"
+        "   0:	4b01      	ldr	r3, [pc, #4]\n"
+        "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   4:	449f      	add	pc, r3\n"
+        "   6:	46c0      	nop\n"
+        "   8:	ffff      	.short	0xffff\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	4b01      	ldr	r3, [pc, #4]\n"
+        "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  10:	449f      	add	pc, r3\n"
+        "  12:	46c0      	nop\n"
+        "  14:	0fec      	lsrs	r4, r5, #31\n"
+        "  16:	0000      	movs	r0, r0\n"
+        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  1a:	2f4b      	cmp	r7, #75\n"
+        "  1c:	d006      	beq.n	0x2c\n"
+        "  1e:	2f0b      	cmp	r7, #11\n"
+        "  20:	d004      	beq.n	0x2c\n"
+        "  22:	4e01      	ldr	r6, [pc, #4]\n"
+        "  24:	447e      	add	r6, pc\n"
+        "  26:	4730      	bx	r6\n"
+        "  28:	0fd9      	lsrs	r1, r3, #31\n"
+        "  2a:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1921,29 +1947,42 @@ is_boolean_far_unaligned_test() ->
 
 is_boolean_far_known_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
-    State1 = ?BACKEND:add_label(State0, Label, 16#1000),
-    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
-    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+    State2 = ?BACKEND:add_label(State1, Label, 16#1000),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State4 = ?BACKEND:if_block(State3, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
             ?BACKEND:jump_to_label(BSt1, Label)
         end)
     end),
-    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
-    ?BACKEND:assert_all_native_free(State4),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State5 = ?BACKEND:free_native_registers(State4, [Reg]),
+    ?BACKEND:assert_all_native_free(State5),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	2f4b      	cmp	r7, #75	; 0x4b\n"
-        "   4:	d006      	beq.n	0x14\n"
-        "   6:	2f0b      	cmp	r7, #11\n"
-        "   8:	d004      	beq.n	0x14\n"
-        "   a:	4e01      	ldr	r6, [pc, #4]	; (0x10)\n"
-        "   c:	447e      	add	r6, pc\n"
-        "   e:	4730      	bx	r6\n"
-        "  10:	0ff1      	lsrs	r1, r6, #31\n"
-        "  12:	0000      	movs	r0, r0"
+        "   0:	4b01      	ldr	r3, [pc, #4]\n"
+        "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   4:	449f      	add	pc, r3\n"
+        "   6:	46c0      	nop\n"
+        "   8:	ffff      	.short	0xffff\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	4b01      	ldr	r3, [pc, #4]\n"
+        "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  10:	449f      	add	pc, r3\n"
+        "  12:	46c0      	nop\n"
+        "  14:	0fec      	lsrs	r4, r5, #31\n"
+        "  16:	0000      	movs	r0, r0\n"
+        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  1a:	2f4b      	cmp	r7, #75\n"
+        "  1c:	d006      	beq.n	0x2c\n"
+        "  1e:	2f0b      	cmp	r7, #11\n"
+        "  20:	d004      	beq.n	0x2c\n"
+        "  22:	4e01      	ldr	r6, [pc, #4]\n"
+        "  24:	447e      	add	r6, pc\n"
+        "  26:	4730      	bx	r6\n"
+        "  28:	0fd9      	lsrs	r1, r3, #31\n"
+        "  2a:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1954,32 +1993,45 @@ is_boolean_far_known_unaligned_test() ->
     TempState = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     TempStream = jit_stream_binary:append(?BACKEND:stream(TempState), PaddingInstruction),
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
+    State1 = ?BACKEND:jump_table(State0, 1),
 
     Label = 1,
-    State1 = ?BACKEND:add_label(State0, Label, 16#1000),
-    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
-    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+    State2 = ?BACKEND:add_label(State1, Label, 16#1000),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State4 = ?BACKEND:if_block(State3, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
             ?BACKEND:jump_to_label(BSt1, Label)
         end)
     end),
-    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
-    ?BACKEND:assert_all_native_free(State4),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State5 = ?BACKEND:free_native_registers(State4, [Reg]),
+    ?BACKEND:assert_all_native_free(State5),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
         "   0:	4770      	bx	lr\n"
-        "   2:	6987      	ldr	r7, [r0, #24]\n"
-        "   4:	2f4b      	cmp	r7, #75	; 0x4b\n"
-        "   6:	d007      	beq.n	0x18\n"
-        "   8:	2f0b      	cmp	r7, #11\n"
-        "   a:	d005      	beq.n	0x18\n"
-        "   c:	4e01      	ldr	r6, [pc, #4]	; (0x14)\n"
-        "   e:	447e      	add	r6, pc\n"
-        "  10:	4730      	bx	r6\n"
-        "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0fef      	lsrs	r7, r5, #31\n"
-        "  16:	0000      	movs	r0, r0"
+        "   2:	4b01      	ldr	r3, [pc, #4]\n"
+        "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   6:	449f      	add	pc, r3\n"
+        "   8:	46c0      	nop\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	ffff      	.short	0xffff\n"
+        "   e:	4b01      	ldr	r3, [pc, #4]\n"
+        "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  12:	449f      	add	pc, r3\n"
+        "  14:	46c0      	nop\n"
+        "  16:	0fea      	lsrs	r2, r5, #31\n"
+        "  18:	0000      	movs	r0, r0\n"
+        "  1a:	6987      	ldr	r7, [r0, #24]\n"
+        "  1c:	2f4b      	cmp	r7, #75\n"
+        "  1e:	d007      	beq.n	0x30\n"
+        "  20:	2f0b      	cmp	r7, #11\n"
+        "  22:	d005      	beq.n	0x30\n"
+        "  24:	4e01      	ldr	r6, [pc, #4]\n"
+        "  26:	447e      	add	r6, pc\n"
+        "  28:	4730      	bx	r6\n"
+        "  2a:	46c0      	nop\n"
+        "  2c:	0fd7      	lsrs	r7, r2, #31\n"
+        "  2e:	0000      	movs	r0, r0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -2104,41 +2156,59 @@ wait_test() ->
 %% Test return_labels_and_lines/2 function
 return_labels_and_lines_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
 
     % Test return_labels_and_lines with some sample labels and lines
-    State1 = ?BACKEND:add_label(State0, 2, 32),
-    State2 = ?BACKEND:add_label(State1, 1, 16),
+    State2 = ?BACKEND:add_label(State1, 2, 32),
+    State3 = ?BACKEND:add_label(State2, 1, 16),
 
     % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
-    Stream = ?BACKEND:stream(State3),
+    State4 = ?BACKEND:return_labels_and_lines(State3, SortedLines),
+    Stream = ?BACKEND:stream(State4),
 
     % Should have generated adr + pop {r1,r4,r5,r6,r7,pc} + labels table + lines table
     % adr = 4 bytes, pop = 2 bytes, labels table = 6*2 = 12 bytes, lines table = 6*2 = 12 bytes
     % Total minimum: 30 bytes
     ?assert(byte_size(Stream) >= 30),
 
-    % Expected: adr r0, <offset> + pop {r1,r4,r5,r6,r7,pc} + labels table + lines table
-    % The data tables start at offset 4, so adr should be adr r0, 4 not adr r0, 8
+    % Expected: jump table (3 entries) + adr r0, <offset> + pop {r1,r4,r5,r6,r7,pc} + labels table + lines table
     Dump = <<
-        "   0:	a000      	add	r0, pc, #0	; (adr r0, 0x4)\n"
-        "   2:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        "   4:	0200      	lsls	r0, r0, #8\n"
-        "   6:	0100      	lsls	r0, r0, #4\n"
-        "   8:	0000      	movs	r0, r0\n"
-        "   a:	1000      	asrs	r0, r0, #32\n"
-        "   c:	0200      	lsls	r0, r0, #8\n"
-        "   e:	0000      	movs	r0, r0\n"
-        "  10:	2000      	movs	r0, #0\n"
-        "  12:	0200      	lsls	r0, r0, #8\n"
-        "  14:	0a00      	lsrs	r0, r0, #8\n"
-        "  16:	0000      	movs	r0, r0\n"
-        "  18:	1000      	asrs	r0, r0, #32\n"
-        "  1a:	1400      	asrs	r0, r0, #16\n"
-        "  1c:	0000      	movs	r0, r0\n"
-        "  1e:	2000      	movs	r0, #0"
+        "   0:	4b01      	ldr	r3, [pc, #4]\n"
+        "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   4:	449f      	add	pc, r3\n"
+        "   6:	46c0      	nop\n"
+        "   8:	ffff      	.short	0xffff\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	4b01      	ldr	r3, [pc, #4]\n"
+        "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  10:	449f      	add	pc, r3\n"
+        "  12:	46c0      	nop\n"
+        "  14:	fffc      	.short	0xfffc\n"
+        "  16:	ffff      	.short	0xffff\n"
+        "  18:	4b01      	ldr	r3, [pc, #4]\n"
+        "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  1c:	449f      	add	pc, r3\n"
+        "  1e:	46c0      	nop\n"
+        "  20:	0000      	movs	r0, r0\n"
+        "  22:	0000      	movs	r0, r0\n"
+        "  24:	a000      	add	r0, pc, #0\n"
+        "  26:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  28:	0200      	lsls	r0, r0, #8\n"
+        "  2a:	0100      	lsls	r0, r0, #4\n"
+        "  2c:	0000      	movs	r0, r0\n"
+        "  2e:	1000      	asrs	r0, r0, #32\n"
+        "  30:	0200      	lsls	r0, r0, #8\n"
+        "  32:	0000      	movs	r0, r0\n"
+        "  34:	2000      	movs	r0, #0\n"
+        "  36:	0200      	lsls	r0, r0, #8\n"
+        "  38:	0a00      	lsrs	r0, r0, #8\n"
+        "  3a:	0000      	movs	r0, r0\n"
+        "  3c:	1000      	asrs	r0, r0, #32\n"
+        "  3e:	1400      	asrs	r0, r0, #16\n"
+        "  40:	0000      	movs	r0, r0\n"
+        "  42:	2000      	movs	r0, #0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -2150,36 +2220,55 @@ return_labels_and_lines_unaligned_test() ->
     TempState = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     TempStream = jit_stream_binary:append(?BACKEND:stream(TempState), PaddingInstruction),
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, TempStream),
+    State1 = ?BACKEND:jump_table(State0, 2),
 
     % Test return_labels_and_lines with some sample labels and lines
-    State1 = ?BACKEND:add_label(State0, 2, 32),
-    State2 = ?BACKEND:add_label(State1, 1, 16),
+    State2 = ?BACKEND:add_label(State1, 2, 32),
+    State3 = ?BACKEND:add_label(State2, 1, 16),
 
     % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
-    Stream = ?BACKEND:stream(State3),
+    State4 = ?BACKEND:return_labels_and_lines(State3, SortedLines),
+    Stream = ?BACKEND:stream(State4),
 
     Dump = <<
         "   0:	4770      	bx	lr\n"
-        "2:	a001      	add	r0, pc, #4	; (adr r0, 0x8)\n"
-        "4:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-        "6:	0000      	movs	r0, r0\n"
-        "8:	0200      	lsls	r0, r0, #8\n"
-        "a:	0100      	lsls	r0, r0, #4\n"
-        "c:	0000      	movs	r0, r0\n"
-        "e:	1000      	asrs	r0, r0, #32\n"
-        "10:	0200      	lsls	r0, r0, #8\n"
-        "12:	0000      	movs	r0, r0\n"
-        "14:	2000      	movs	r0, #0\n"
-        "16:	0200      	lsls	r0, r0, #8\n"
-        "18:	0a00      	lsrs	r0, r0, #8\n"
-        "1a:	0000      	movs	r0, r0\n"
-        "1c:	1000      	asrs	r0, r0, #32\n"
-        "1e:	1400      	asrs	r0, r0, #16\n"
-        "20:	0000      	movs	r0, r0\n"
-        "22:	2000      	movs	r0, #0"
+        "   2:	4b01      	ldr	r3, [pc, #4]\n"
+        "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "   6:	449f      	add	pc, r3\n"
+        "   8:	46c0      	nop\n"
+        "   a:	ffff      	.short	0xffff\n"
+        "   c:	ffff      	.short	0xffff\n"
+        "   e:	4b01      	ldr	r3, [pc, #4]\n"
+        "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  12:	449f      	add	pc, r3\n"
+        "  14:	46c0      	nop\n"
+        "  16:	fffa      	.short	0xfffa\n"
+        "  18:	ffff      	.short	0xffff\n"
+        "  1a:	4b01      	ldr	r3, [pc, #4]\n"
+        "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
+        "  1e:	449f      	add	pc, r3\n"
+        "  20:	46c0      	nop\n"
+        "  22:	fffe      	.short	0xfffe\n"
+        "  24:	ffff      	.short	0xffff\n"
+        "  26:	a001      	add	r0, pc, #4\n"
+        "  28:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        "  2a:	0000      	movs	r0, r0\n"
+        "  2c:	0200      	lsls	r0, r0, #8\n"
+        "  2e:	0100      	lsls	r0, r0, #4\n"
+        "  30:	0000      	movs	r0, r0\n"
+        "  32:	1000      	asrs	r0, r0, #32\n"
+        "  34:	0200      	lsls	r0, r0, #8\n"
+        "  36:	0000      	movs	r0, r0\n"
+        "  38:	2000      	movs	r0, #0\n"
+        "  3a:	0200      	lsls	r0, r0, #8\n"
+        "  3c:	0a00      	lsrs	r0, r0, #8\n"
+        "  3e:	0000      	movs	r0, r0\n"
+        "  40:	1000      	asrs	r0, r0, #32\n"
+        "  42:	1400      	asrs	r0, r0, #16\n"
+        "  44:	0000      	movs	r0, r0\n"
+        "  46:	2000      	movs	r0, #0"
     >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -2853,8 +2942,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
-                    State2 = setelement(7, State1, [r3, r4]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
+                    State2 = setelement(8, State1, [r3, r4]),
                     [r3, r4] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -2868,8 +2957,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
-                    State2 = setelement(7, State1, [r3, r4]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [r3, r4]),
+                    State2 = setelement(8, State1, [r3, r4]),
                     [r3, r4] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
