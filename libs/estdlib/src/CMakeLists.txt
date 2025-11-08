@@ -57,6 +57,7 @@ set(ERLANG_MODULES
     maps
     math
     net
+    proc_lib
     file
     logger
     logger_std_h
