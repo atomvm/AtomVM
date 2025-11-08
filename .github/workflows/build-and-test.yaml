@@ -379,6 +379,20 @@ jobs:
           arch: "riscv32"
           library-arch: riscv32-linux-gnu-ilp32
 
+        # riscv32-ilp32 build + jit
+        - os: "ubuntu-24.04"
+          cc: "riscv32-unknown-linux-gnu-gcc"
+          cxx: "riscv32-unknown-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=riscv32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
+          compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv32"
+          library-arch: riscv32-linux-gnu-ilp32
+          jit_target_arch: "riscv32"
+
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
