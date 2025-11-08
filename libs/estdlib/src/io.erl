@@ -65,7 +65,7 @@
     | {stdout, boolean()}
     | {stderr, boolean()}.
 
-%% @priv
+%% @private
 requests(Requests) ->
     execute_request(group_leader(), {requests, Requests}).
 
@@ -257,7 +257,7 @@ put_chars(standard_io, Chars) ->
 put_chars(standard_error, Chars) ->
     put_chars(standard_io, Chars).
 
-%% @priv
+%% @private
 convert_request({requests, Requests}) ->
     {requests, [convert_request(Request) || Request <- Requests]};
 convert_request(nl) ->
@@ -265,7 +265,7 @@ convert_request(nl) ->
 convert_request(Other) ->
     Other.
 
-%% @priv
+%% @private
 execute_request(Device, Request) when is_pid(Device) ->
     Converted = convert_request(Request),
     Ref = make_ref(),
