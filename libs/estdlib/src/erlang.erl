@@ -131,12 +131,17 @@
     dist_ctrl_get_data/1,
     dist_ctrl_put_data/2,
     unique_integer/0,
-    unique_integer/1
+    unique_integer/1,
+    raise/3
 ]).
 
 -export_type([
     time_unit/0,
-    timestamp/0
+    timestamp/0,
+    atomvm_heap_growth_strategy/0,
+    stacktrace/0,
+    stacktrace_extrainfo/0,
+    raise_stacktrace/0
 ]).
 
 %%
@@ -161,7 +166,7 @@
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
 
--type heap_growth_strategy() ::
+-type atomvm_heap_growth_strategy() ::
     bounded_free
     | minimum
     | fibonacci.
@@ -169,7 +174,7 @@
 -type spawn_option() ::
     {min_heap_size, pos_integer()}
     | {max_heap_size, pos_integer()}
-    | {atomvm_heap_growth, heap_growth_strategy()}
+    | {atomvm_heap_growth, atomvm_heap_growth_strategy()}
     | link
     | monitor.
 
@@ -180,6 +185,22 @@
 
 % Current type until we make these references
 -type resource() :: binary().
+
+-type stacktrace_extrainfo() ::
+    {line, pos_integer()}
+    | {file, unicode:chardata()}
+    | {error_info, #{module => module(), function => atom(), cause => term()}}
+    | {atom(), term()}.
+
+-type stacktrace() ::
+    [
+        {module(), atom(), arity() | [term()], [stacktrace_extrainfo()]}
+        | {function(), arity() | [term()], [stacktrace_extrainfo()]}
+    ].
+
+%% Extended `stacktrace()' that can be passed to `raise/3'
+-type raise_stacktrace() ::
+    [{module(), atom(), arity() | [term()]} | {function(), arity() | [term()]}] | stacktrace().
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -205,6 +226,7 @@ start_timer(Time, Dest, Msg) ->
 %%          Time ms, where TimerRef is the reference returned from this function.
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
 %%-----------------------------------------------------------------------------
 -spec start_timer(
     Time :: non_neg_integer(), Dest :: pid() | atom(), Msg :: term(), _Options :: list()
@@ -223,6 +245,7 @@ start_timer(Time, Dest, Msg, _Options) ->
 %%          Time ms, where TimerRef is the reference returned from this function.
 %%
 %%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @end
 %%-----------------------------------------------------------------------------
 -spec cancel_timer(TimerRef :: reference()) -> ok.
 cancel_timer(TimerRef) ->
@@ -1528,4 +1551,17 @@ unique_integer(_Options) ->
 %% @private
 -spec nif_error(Reason :: any()) -> no_return().
 nif_error(_Reason) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Options list of options.
+%% @returns a unique integer
+%% @doc     Return a unique integer. If positive is passed, returned integer is
+%%          positive. If monotonic is passed, returned integer is monotonically increasing
+%%          across all processes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec raise(error | exit | throw, Reason :: term(), Stacktrace :: raise_stacktrace()) ->
+    no_return().
+raise(_Class, _Reason, _Stacktrace) ->
     erlang:nif_error(undefined).

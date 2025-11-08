@@ -40,6 +40,7 @@ set(ERLANG_MODULES
     test_net
     test_net_kernel
     test_os
+    test_proc_lib
     test_sets
     test_spawn
     test_ssl
