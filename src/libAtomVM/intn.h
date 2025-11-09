@@ -405,7 +405,7 @@ size_t intn_sub_int64(int64_t num1, int64_t num2, intn_digit_t *out, intn_intege
  */
 static inline intn_integer_sign_t intn_muldiv_sign(intn_integer_sign_t s1, intn_integer_sign_t s2)
 {
-    return (intn_integer_sign_t) ((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger;
+    return (intn_integer_sign_t) (((unsigned int) s1 ^ (unsigned int) s2) & IntNNegativeInteger);
 }
 
 /**

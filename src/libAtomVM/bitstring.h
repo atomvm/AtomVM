@@ -75,6 +75,8 @@ extern "C" {
 // these values are the same used from opcodes such as bs_get_utf16
 enum BitstringFlags
 {
+    // Big endian & unsigned are the default
+    BigEndianInteger = 0x0,
     LittleEndianInteger = 0x2,
     SignedInteger = 0x4,
     NativeEndianInteger = 0x10,
@@ -369,7 +371,7 @@ static inline bool bitstring_utf8_size(uint32_t c, size_t *out_size)
  * unicode character
  */
 static inline bool bitstring_utf16_size(uint32_t c, size_t *out_size) {
-    return bitstring_utf16_encode(c, NULL, 0, out_size);
+    return bitstring_utf16_encode(c, NULL, BigEndianInteger, out_size);
 }
 
 /**
