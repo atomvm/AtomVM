@@ -459,7 +459,7 @@ static inline bool globalcontext_is_term_equal_to_atom_string(GlobalContext *glo
  */
 static inline term globalcontext_make_atom(GlobalContext *glb, AtomString atom_string)
 {
-    return globalcontext_insert_atom_maybe_copy(glb, atom_string_data(atom_string), atom_string_len(atom_string), false);
+    return globalcontext_insert_atom_maybe_copy(glb, (const uint8_t *) atom_string_data(atom_string), atom_string_len(atom_string), false);
 }
 
 /**
