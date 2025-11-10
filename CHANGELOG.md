@@ -62,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for big integers up to 256-bit (sign + 256-bit magnitude)
 - Added support for big integers in `binary_to_term/1` and `term_to_binary/1,2`
 - Added `proc_lib`
+- Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 
 ### Changed
 

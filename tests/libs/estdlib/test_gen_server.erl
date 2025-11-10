@@ -44,6 +44,7 @@ test() ->
     ok = test_timeout_call(),
     ok = test_timeout_cast(),
     ok = test_timeout_info(),
+    ok = test_timeout_tuple_return(),
     ok = test_register(),
     ok = test_call_unregistered(),
     ok = test_cast_unregistered(),
@@ -316,6 +317,74 @@ test_timeout_info_repeats(Pid, Sleep) ->
             test_timeout_info_repeats(Pid, 2 * Sleep)
     end.
 
+test_timeout_tuple_return() ->
+    case get_otp_version() of
+        %% Test on AtomVM and OTP 28 and later
+        Version when Version >= 28 ->
+            Self = self(),
+            %% test timeout tuple in init
+            {ok, Pid0} = gen_server:start(?MODULE, {timeout, Self}, []),
+            ok =
+                receive
+                    {reply_from_timeout, init} ->
+                        ok
+                after 1000 ->
+                    {error, no_timeout_reply_after_init}
+                end,
+            gen_server:stop(Pid0),
+
+            %% test timeout tuple in continue, and proceed through callback tests
+            {ok, Pid1} = gen_server:start(?MODULE, {continue_timeout, Self}, []),
+            ok =
+                receive
+                    {reply_from_timeout, continue} ->
+                        ok
+                after 1000 ->
+                    {error, no_timeout_reply_after_continue}
+                end,
+
+            %% Test handle_call
+            {ok, Ref} = gen_server:call(Pid1, {req_timeout_reply, Self}),
+            ok =
+                receive
+                    {reply_from_timeout, Ref} ->
+                        ok
+                after 2000 ->
+                    {error, no_timeout_reply_after_call}
+                end,
+
+            %% Test handle_cast
+            gen_server:cast(Pid1, {req_timeout_reply, Self}),
+            ok =
+                receive
+                    {reply_from_timeout, cast} ->
+                        ok
+                after 2000 ->
+                    {error, no_timeout_reply_after_cast}
+                end,
+
+            %% Test handle_info
+            gen_server:cast(Pid1, {request_info_timeout, Self}),
+            ok =
+                receive
+                    {reply_from_timeout, info} ->
+                        ok
+                after 2000 ->
+                    {error, no_info_timeout_reply}
+                end,
+            gen_server:stop(Pid1),
+
+            {ok, Pid2} = gen_server:start(?MODULE, [], []),
+            0 = gen_server:call(Pid2, get_num_timeouts),
+            ok = gen_server:cast(Pid2, {tuple_timeout, 10}),
+            timer:sleep(100),
+            10 = gen_server:call(Pid2, get_num_timeouts),
+
+            gen_server:stop(Pid2);
+        _ ->
+            ok
+    end.
+
 test_register() ->
     {ok, Pid} = gen_server:start({local, ?MODULE}, ?MODULE, [], []),
     Pid = whereis(?MODULE),
@@ -436,6 +505,10 @@ init({continue, Pid}) ->
     io:format("init(continue) -> ~p~n", [Pid]),
     self() ! {after_continue, Pid},
     {ok, [], {continue, {message, Pid}}};
+init({timeout, Pid}) ->
+    {ok, [], {timeout, 1, {timeout_reply, Pid, init}}};
+init({continue_timeout, Pid}) ->
+    {ok, [], {continue, {timeout_reply, Pid}}};
 init(_) ->
     {ok, #state{}}.
 
@@ -451,7 +524,9 @@ handle_continue({message, Pid}, State) ->
 handle_continue({message, Pid, From}, State) ->
     Pid ! {self(), continue},
     gen_server:reply(From, ok),
-    {noreply, State}.
+    {noreply, State};
+handle_continue({timeout_reply, Pid}, State) ->
+    {noreply, State, {timeout, 1, {timeout_reply, Pid, continue}}}.
 
 handle_call(ping, _From, State) ->
     {reply, pong, State};
@@ -493,7 +568,10 @@ handle_call(crash_me, _From, State) ->
     exit(crash_me),
     {reply, noop, State};
 handle_call(crash_in_terminate, _From, State) ->
-    {reply, ok, State#state{crash_in_terminate = true}}.
+    {reply, ok, State#state{crash_in_terminate = true}};
+handle_call({req_timeout_reply, Replyto}, _From, State) ->
+    Ref = make_ref(),
+    {reply, {ok, Ref}, State, {timeout, 1, {timeout_reply, Replyto, Ref}}}.
 
 handle_cast({continue_noreply, Pid}, State) ->
     self() ! {after_continue, Pid},
@@ -504,8 +582,14 @@ handle_cast(ping, #state{num_casts = NumCasts} = State) ->
     {noreply, State#state{num_casts = NumCasts + 1}};
 handle_cast({cast_timeout, Timeout}, State) ->
     {noreply, State, Timeout};
+handle_cast({tuple_timeout, Timeouts}, State) ->
+    {noreply, State, {timeout, 1, {do_tuple_timeouts, Timeouts}}};
 handle_cast({set_info_timeout, Timeout}, State) ->
     {noreply, State#state{info_timeout = Timeout}};
+handle_cast({req_timeout_reply, Pid}, State) ->
+    {noreply, State, {timeout, 1, {timeout_reply, Pid, cast}}};
+handle_cast({request_info_timeout, Pid}, State) ->
+    {noreply, State, {timeout, 1, {request_info_timeout, Pid}}};
 handle_cast(_Request, State) ->
     {noreply, State}.
 
@@ -536,6 +620,19 @@ handle_info(timeout, #state{num_timeouts = NumTimeouts, info_timeout = InfoTimeo
         Other ->
             {noreply, NewState, Other}
     end;
+handle_info({timeout_reply, From, Tag} = _Info, State) ->
+    From ! {reply_from_timeout, Tag},
+    {noreply, State};
+handle_info({request_info_timeout, From}, State) ->
+    {noreply, State, {timeout, 1, {info_timeout_reply, From}}};
+handle_info({info_timeout_reply, From}, State) ->
+    From ! {reply_from_timeout, info},
+    {noreply, State};
+handle_info({do_tuple_timeouts, 0}, State) ->
+    {noreply, State};
+handle_info({do_tuple_timeouts, Timeouts}, #state{num_timeouts = TimeoutCt} = State) ->
+    {noreply, State#state{num_timeouts = TimeoutCt + 1},
+        {timeout, 1, {do_tuple_timeouts, Timeouts - 1}}};
 handle_info(_Info, #state{info_timeout = InfoTimeout} = State) ->
     case InfoTimeout of
         none ->
