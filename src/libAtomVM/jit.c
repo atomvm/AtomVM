@@ -207,9 +207,11 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     }
 
     // Do not print crash dump if reason is normal or shutdown.
+#ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
     if (ctx->x[0] != LOWERCASE_EXIT_ATOM || (ctx->x[1] != NORMAL_ATOM && ctx->x[1] != SHUTDOWN_ATOM)) {
         context_dump(ctx);
     }
+#endif
 
     if (ctx->x[0] == LOWERCASE_EXIT_ATOM) {
         ctx->exit_reason = ctx->x[1];
