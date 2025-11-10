@@ -21,7 +21,7 @@
 -module(test_proc_lib).
 
 -export([test/0]).
--export([init_ok/1, init_crash/1, init_initial_call_ancestors/1]).
+-export([init_ok/1, init_crash/1, init_initial_call_ancestors/1, spawn_func/1]).
 
 test() ->
     ok = test_start_sync(),
@@ -31,6 +31,7 @@ test() ->
     ok = test_start_timeout(),
     ok = test_start_crash(),
     ok = test_initial_call_and_ancestors(),
+    ok = test_spawn(),
     ok.
 
 test_start_sync() ->
@@ -147,6 +148,81 @@ test_initial_call_and_ancestors() ->
     Ret = proc_lib:start(?MODULE, init_initial_call_ancestors, [Parent]),
     {ok, {?MODULE, init_initial_call_ancestors, 1}, [Parent, ImaginaryAncestor]} = Ret,
     exit(ImaginaryAncestor, normal),
+    erase('$ancestors'),
+    ok.
+
+spawn_func(Parent) ->
+    {links, Links} = process_info(self(), links),
+    Parent ! {self(), ancestors, get('$ancestors')},
+    Parent ! {self(), initial_call, get('$initial_call')},
+    Parent ! {self(), links, Links}.
+
+test_spawn() ->
+    Parent = self(),
+    SpawnPid1 = proc_lib:spawn(fun() -> spawn_func(Parent) end),
+    [Parent] =
+        receive
+            {SpawnPid1, ancestors, Ancestors1} -> Ancestors1
+        after 1000 -> timeout
+        end,
+    {FunInfoModule, _FunInfoFunction1, FunInfoArity} =
+        receive
+            {SpawnPid1, initial_call, InitialCall1} -> InitialCall1
+        after 1000 -> timeout
+        end,
+    [] =
+        receive
+            {SpawnPid1, links, Links1} -> Links1
+        after 1000 -> timeout
+        end,
+    SpawnPid2 = proc_lib:spawn(?MODULE, spawn_func, [Parent]),
+    [Parent] =
+        receive
+            {SpawnPid2, ancestors, Ancestors2} -> Ancestors2
+        after 1000 -> timeout
+        end,
+    {test_proc_lib, spawn_func, 1} =
+        receive
+            {SpawnPid2, initial_call, InitialCall2} -> InitialCall2
+        after 1000 -> timeout
+        end,
+    [] =
+        receive
+            {SpawnPid2, links, Links2} -> Links2
+        after 1000 -> timeout
+        end,
+    SpawnPid3 = proc_lib:spawn_link(fun() -> spawn_func(Parent) end),
+    [Parent] =
+        receive
+            {SpawnPid3, ancestors, Ancestors3} -> Ancestors3
+        after 1000 -> timeout
+        end,
+    {FunInfoModule, _FunInfoFunction2, FunInfoArity} =
+        receive
+            {SpawnPid3, initial_call, InitialCall3} -> InitialCall3
+        after 1000 -> timeout
+        end,
+    [Parent] =
+        receive
+            {SpawnPid3, links, Links3} -> Links3
+        after 1000 -> timeout
+        end,
+    SpawnPid4 = proc_lib:spawn_link(?MODULE, spawn_func, [Parent]),
+    [Parent] =
+        receive
+            {SpawnPid4, ancestors, Ancestors4} -> Ancestors4
+        after 1000 -> timeout
+        end,
+    {test_proc_lib, spawn_func, 1} =
+        receive
+            {SpawnPid4, initial_call, InitialCall4} -> InitialCall4
+        after 1000 -> timeout
+        end,
+    [Parent] =
+        receive
+            {SpawnPid4, links, Links4} -> Links4
+        after 1000 -> timeout
+        end,
     ok.
 
 init_ok(Parent) ->
