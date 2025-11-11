@@ -20,6 +20,26 @@
 
 -module(supervisor).
 
+%%-----------------------------------------------------------------------------
+%% @doc An implementation of the Erlang/OTP supervisor interface.
+%%
+%% This module implements a strict subset of the Erlang/OTP supervisor
+%% interface, supporting operations for local creation and management of
+%% supervisor instances.
+%%
+%% This module is designed to be API-compatible with supervisor, with exceptions
+%%  noted below.
+%%
+%% Caveats:
+%% <ul>
+%%     <li>Support only for locally named procs</li>
+%%     <li>No support for simple_one_for_one or one_for_rest strategies</li>
+%%     <li>No support for hibernate</li>
+%%     <li>No support for automatic shutdown</li>
+%% </ul>
+%% @end
+%%-----------------------------------------------------------------------------
+
 -behavior(gen_server).
 
 -export([
@@ -43,8 +63,13 @@
 
 -export_type([
     child_spec/0,
+    startchild_ret/0,
+    startlink_ret/0,
+    startlink_err/0,
     strategy/0,
-    sup_flags/0
+    sup_flags/0,
+    sup_name/0,
+    sup_ref/0
 ]).
 
 -type restart() ::
@@ -53,7 +78,9 @@
     | temporary
     | {terminating, permanent | transient | temporary, gen_server:from()}.
 -type shutdown() :: brutal_kill | timeout().
--type child_type() :: worker | supervisor.
+-type worker() :: worker | supervisor.
+-type child_id() :: term().
+-type child() :: undefined | pid().
 
 -type strategy() :: one_for_all | one_for_one.
 -type sup_flags() ::
@@ -70,7 +97,7 @@
         start := {module(), atom(), [any()]},
         restart => restart(),
         shutdown => shutdown(),
-        type => child_type(),
+        type => worker(),
         modules => [module()] | dynamic
     }
     | {
@@ -78,9 +105,20 @@
         StartFunc :: {module(), atom(), [any()]},
         Restart :: restart(),
         Shutdown :: shutdown(),
-        Type :: child_type(),
+        Type :: worker(),
         Modules :: [module()] | dynamic
     }.
+
+-type startlink_ret() :: {ok, pid()} | ignore | {error, startlink_err()}.
+-type startlink_err() :: {already_started, pid()} | {shutdown, term()} | term().
+-type startchild_ret() ::
+    {ok, Child :: child()} | {ok, Child :: child(), Info :: term()} | {error, startchild_err()}.
+-type startchild_err() :: already_present | {already_started, Child :: child()} | term().
+-type sup_name() :: {local, Name :: atom()}.
+-type sup_ref() ::
+    (Name :: atom())
+    | {Name :: atom(), Node :: node()}
+    | pid().
 
 -record(child, {
     pid = undefined :: pid() | undefined | {restarting, pid()} | {restarting, undefined},
@@ -88,7 +126,7 @@
     start :: {module(), atom(), [any()] | undefined},
     restart :: restart(),
     shutdown :: shutdown(),
-    type :: child_type(),
+    type :: worker(),
     modules = [] :: [module()] | dynamic
 }).
 
@@ -111,30 +149,59 @@
 %% could be used to set a sane default for the platform (OTP uses 1000).
 -define(STALE_RESTART_LIMIT, 100).
 
+-spec start_link(Module :: module(), Args :: [any()]) -> startlink_ret().
 start_link(Module, Args) ->
     gen_server:start_link(?MODULE, {Module, Args}, []).
 
+-spec start_link(SupName :: sup_name(), Module :: module(), Args :: [any()]) -> startlink_ret().
 start_link(SupName, Module, Args) ->
     gen_server:start_link(SupName, ?MODULE, {Module, Args}, []).
 
+-spec start_child(Supervisor :: sup_ref(), ChildSpec :: child_spec()) -> startchild_ret().
 start_child(Supervisor, ChildSpec) ->
     gen_server:call(Supervisor, {start_child, ChildSpec}).
 
+-spec terminate_child(Supervisor :: sup_ref(), ChildId :: any()) -> ok | {error, not_found}.
 terminate_child(Supervisor, ChildId) ->
     gen_server:call(Supervisor, {terminate_child, ChildId}).
 
+-spec restart_child(Supervisor :: sup_ref(), ChildId :: any()) ->
+    {ok, Child :: child()}
+    | {ok, Child :: child(), Info :: term()}
+    | {error, Reason :: running | restarting | not_found | term()}.
 restart_child(Supervisor, ChildId) ->
     gen_server:call(Supervisor, {restart_child, ChildId}).
 
+-spec delete_child(Supervisor :: sup_ref(), ChildId :: any()) ->
+    ok | {error, Reason :: running | restarting | not_found}.
 delete_child(Supervisor, ChildId) ->
     gen_server:call(Supervisor, {delete_child, ChildId}).
 
+-spec which_children(Supervisor :: sup_ref()) ->
+    [
+        {
+            Id :: child_id() | undefined,
+            Child :: child() | restarting,
+            Type :: worker(),
+            Modules :: [module()]
+        }
+    ].
 which_children(Supervisor) ->
     gen_server:call(Supervisor, which_children).
 
+-spec count_children(Supervisor :: sup_ref()) ->
+    [
+        {specs, ChildSpecCount :: non_neg_integer()}
+        | {active, ActiveProcessCount :: non_neg_integer()}
+        | {supervisors, ChildSupervisorCount :: non_neg_integer()}
+        | {workers, ChildWorkerCount :: non_neg_integer()}
+    ].
 count_children(Supervisor) ->
     gen_server:call(Supervisor, count_children).
 
+% @hidden
+-spec init({Mod :: module(), Args :: [any()]}) ->
+    {ok, State :: #state{}} | {stop, {bad_return, {Mod :: module(), init, Reason :: term()}}}.
 init({Mod, Args}) ->
     erlang:process_flag(trap_exit, true),
     case Mod:init(Args) of
@@ -158,6 +225,7 @@ init({Mod, Args}) ->
             NewChildren = start_children(State#state.children, []),
             {ok, State#state{children = NewChildren}};
         Error ->
+            % TODO: log supervisor init failure
             {stop, {bad_return, {Mod, init, Error}}}
     end.
 
@@ -199,6 +267,8 @@ child_spec_to_record(#{id := ChildId, start := MFA} = ChildMap) ->
         modules = Modules
     }.
 
+% @hidden
+-spec init_state(ChildSpecs :: [child_spec()], State :: #state{}) -> State :: #state{}.
 init_state([ChildSpec | T], State) ->
     Child = child_spec_to_record(ChildSpec),
     NewChildren = [Child | State#state.children],
@@ -206,6 +276,8 @@ init_state([ChildSpec | T], State) ->
 init_state([], State) ->
     State#state{children = lists:reverse(State#state.children)}.
 
+-spec start_children(ChildSpecs :: [child_spec()], State :: #state{}) ->
+    ChildSpecs :: [child_spec()].
 start_children([Child | T], StartedC) ->
     case try_start(Child) of
         {ok, Pid, _Result} ->
@@ -214,6 +286,7 @@ start_children([Child | T], StartedC) ->
 start_children([], StartedC) ->
     StartedC.
 
+% @hidden
 handle_call({start_child, ChildSpec}, _From, #state{children = Children} = State) ->
     Child = child_spec_to_record(ChildSpec),
     #child{id = ID} = Child,
@@ -288,10 +361,13 @@ handle_call(count_children, _From, #state{children = Children} = State) ->
     Reply = [{specs, Specs}, {active, Active}, {supervisors, Supers}, {workers, Workers}],
     {reply, Reply, State}.
 
+% @hidden
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+% @hidden
 handle_info({'EXIT', Pid, Reason}, State) ->
+    % TODO: log crash report
     handle_child_exit(Pid, Reason, State);
 handle_info({ensure_killed, Pid}, State) ->
     case lists:keyfind(Pid, #child.pid, State#state.children) of
@@ -331,17 +407,19 @@ handle_info({try_again_restart, Id}, State) ->
                             ),
                             {noreply, State1#state{children = UpdatedChildren}};
                         {error, {_, _}} ->
+                            % TODO: log crash report
                             {noreply, State1, {timeout, 0, {try_again_restart, Id}}}
                     end;
                 {shutdown, State1} ->
                     RemainingChildren = lists:keydelete(Id, #child.id, State1#state.children),
+                    % TODO: log supervisor shutdown
                     {stop, shutdown, State1#state{children = RemainingChildren}}
             end
     end;
 handle_info({restart_many_children, [#child{pid = undefined} = _Child | Children]}, State) ->
     {noreply, State, {timeout, 0, {restart_many_children, Children}}};
 handle_info(_Msg, State) ->
-    %TODO: log unexpected message
+    %TODO: log unexpected message to debug
     {noreply, State}.
 
 %% @hidden
@@ -378,6 +456,7 @@ handle_child_exit(Pid, Reason, State) ->
                             RemainingChildren = lists:keydelete(
                                 Pid, #child.pid, State1#state.children
                             ),
+                            % TODO: log supervisor shutdown
                             {stop, shutdown, State1#state{children = RemainingChildren}}
                     end;
                 false ->
