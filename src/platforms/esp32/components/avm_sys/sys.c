@@ -236,7 +236,11 @@ void sys_init_platform(GlobalContext *glb)
     // other cores, supposing it's pinned to core 0.
     esp_pthread_cfg_t esp_pthread_cfg = esp_pthread_get_default_config();
     esp_pthread_cfg.prio = uxTaskPriorityGet(NULL);
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+    BaseType_t affinity = xTaskGetCoreID(NULL);
+#else
     BaseType_t affinity = xTaskGetAffinity(NULL);
+#endif
     if (affinity == -1) {
         esp_pthread_cfg.pin_to_core = tskNO_AFFINITY;
     } else {
