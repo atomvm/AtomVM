@@ -36,6 +36,7 @@ set(ERLANG_MODULES
     erts_debug
     ets
     file
+    gen
     gen_event
     gen_server
     gen_statem
@@ -58,6 +59,7 @@ set(ERLANG_MODULES
     math
     net
     proc_lib
+    sys
     file
     logger
     logger_std_h

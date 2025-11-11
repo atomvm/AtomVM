@@ -28,6 +28,12 @@ test() ->
     ok = test_start_monitor_badarg(),
     ok = test_start_link_sync(),
     ok = test_start_link_opt_sync(),
+    case get_otp_version() of
+        Version when Version >= 23 ->
+            ok = test_start_monitor_sync();
+        _ ->
+            ok
+    end,
     ok = test_start_timeout(),
     ok = test_start_crash(),
     ok = test_initial_call_and_ancestors(),
@@ -45,7 +51,7 @@ test_start_sync() ->
         end,
     true = is_process_alive(Pid),
     {links, []} = process_info(Pid, links),
-    exit(Pid, normal),
+    exit(Pid, kill),
     ok.
 
 test_start_monitor_badarg() ->
@@ -72,7 +78,7 @@ test_start_link_sync() ->
     true = is_process_alive(Pid),
     {links, [Parent]} = process_info(Pid, links),
     unlink(Pid),
-    exit(Pid, normal),
+    exit(Pid, kill),
     ok.
 
 test_start_link_opt_sync() ->
@@ -87,7 +93,27 @@ test_start_link_opt_sync() ->
     true = is_process_alive(Pid),
     {links, [Parent]} = process_info(Pid, links),
     unlink(Pid),
-    exit(Pid, normal),
+    exit(Pid, kill),
+    ok.
+
+test_start_monitor_sync() ->
+    Parent = self(),
+    {Ret, Monitor} = proc_lib:start_monitor(?MODULE, init_ok, [Parent]),
+    ok = Ret,
+    true = is_reference(Monitor),
+    {ok, Pid} =
+        receive
+            {Process, inited} -> {ok, Process}
+        after 0 -> fail
+        end,
+    true = is_process_alive(Pid),
+    {links, []} = process_info(Pid, links),
+    exit(Pid, kill),
+    killed =
+        receive
+            {'DOWN', Monitor, process, Pid, Reason} -> Reason
+        after 500 -> timeout
+        end,
     ok.
 
 test_start_timeout() ->
@@ -242,3 +268,11 @@ init_crash({Class, Reason, Stacktrace}) ->
 
 init_initial_call_ancestors(Parent) ->
     proc_lib:init_ack(Parent, {ok, get('$initial_call'), get('$ancestors')}).
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            list_to_integer(erlang:system_info(otp_release));
+        _ ->
+            atomvm
+    end.

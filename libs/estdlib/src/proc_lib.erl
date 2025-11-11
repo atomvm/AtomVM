@@ -45,6 +45,9 @@
     start_link/3,
     start_link/4,
     start_link/5,
+    start_monitor/3,
+    start_monitor/4,
+    start_monitor/5,
     init_ack/1,
     init_ack/2,
 
@@ -129,7 +132,7 @@ start(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, SpawnOpts, false).
+    start0(Module, Function, Args, Timeout, SpawnOpts, false, false).
 
 %% @equiv start_link(Module, Function, Args, infinity)
 -spec start_link(module(), atom(), [any()]) -> any().
@@ -153,33 +156,61 @@ start_link(Module, Function, Args, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec start_link(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
 start_link(Module, Function, Args, Timeout, SpawnOpts) ->
-    start0(Module, Function, Args, Timeout, [link | SpawnOpts], true).
+    start0(Module, Function, Args, Timeout, [link | SpawnOpts], true, false).
+
+%% @equiv start_monitor(Module, Function, Args, infinity)
+-spec start_monitor(module(), atom(), [any()]) -> any().
+start_monitor(Module, Function, Args) ->
+    start_monitor(Module, Function, Args, infinity).
+
+%% @equiv start_monitor(Module, Function, Args, Timeout, [])
+-spec start_monitor(module(), atom(), [any()], timeout()) -> any().
+start_monitor(Module, Function, Args, Timeout) ->
+    start_monitor(Module, Function, Args, Timeout, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module the module in which the callbacks are defined
+%% @param   Function to call for initialization
+%% @param   Args arguments to pass to the function
+%% @param   Timeout timeout for the initialization to be done
+%% @param   SpawnOpts options passed to spawn_link. `monitor' is not allowed.
+%% @doc     Start a new process synchronously and atomically link it.
+%%          Wait for the process to call `init_ack/1,2' or `init_fail/2,3'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start_monitor(module(), atom(), [any()], timeout(), [start_spawn_option()]) -> any().
+start_monitor(Module, Function, Args, Timeout, SpawnOpts) ->
+    start0(Module, Function, Args, Timeout, SpawnOpts, true, true).
 
 %% @private
-start0(Module, Function, Args, Timeout, SpawnOpts, Link) ->
+start0(Module, Function, Args, Timeout, SpawnOpts, Link, Monitor) ->
     case lists:member(monitor, SpawnOpts) of
         true -> error(badarg);
         false -> ok
     end,
     Parent = self(),
     Ancestors = get_ancestors(),
-    {Pid, Monitor} = spawn_opt(?MODULE, init_p, [Parent, Ancestors, Module, Function, Args], [
+    {Pid, MonitorRef} = spawn_opt(?MODULE, init_p, [Parent, Ancestors, Module, Function, Args], [
         monitor | SpawnOpts
     ]),
     receive
+        {ack, Pid, Result} when Monitor ->
+            {Result, MonitorRef};
         {ack, Pid, Result} ->
-            erlang:demonitor(Monitor, [flush]),
+            erlang:demonitor(MonitorRef, [flush]),
             Result;
-        {'DOWN', Monitor, process, Pid, Reason} when Link ->
+        {'DOWN', MonitorRef, process, Pid, Reason} when Link ->
             receive
                 {'EXIT', Pid, _} -> ok
             after 0 -> ok
             end,
             receive
-                {'DOWN', Monitor, process, Pid, _} -> ok
+                {'DOWN', MonitorRef, process, Pid, _} -> ok
             end,
             {error, Reason};
-        {'DOWN', Monitor, process, Pid, Reason} ->
+        {'DOWN', MonitorRef, process, Pid, Reason} when Monitor ->
+            {{error, Reason}, MonitorRef};
+        {'DOWN', MonitorRef, process, Pid, Reason} ->
             {error, Reason}
     after Timeout ->
         if
@@ -194,9 +225,14 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link) ->
                 exit(Pid, kill)
         end,
         receive
-            {'DOWN', Monitor, process, Pid, _} -> ok
+            {'DOWN', MonitorRef, process, Pid, _} -> ok
         end,
-        {error, timeout}
+        case Monitor of
+            true ->
+                {{error, timeout}, MonitorRef};
+            false ->
+                {error, timeout}
+        end
     end.
 
 %% @private

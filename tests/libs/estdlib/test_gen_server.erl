@@ -21,7 +21,15 @@
 -module(test_gen_server).
 
 -export([test/0]).
--export([init/1, handle_continue/2, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([
+    init/1,
+    handle_continue/2,
+    handle_call/3,
+    handle_cast/2,
+    handle_info/2,
+    code_change/3,
+    terminate/2
+]).
 
 -record(state, {
     num_casts = 0,
@@ -37,6 +45,7 @@ test() ->
     ok = test_info(),
     ok = test_start_link(),
     ok = test_start_monitor(),
+    ok = test_start_name(),
     ok = test_continue(),
     ok = test_init_exception(),
     ok = test_late_reply(),
@@ -54,6 +63,9 @@ test() ->
     ok = test_crash_in_terminate(),
     ok = test_call_noproc(),
     ok = test_stop_noproc(),
+    ok = test_sys_get_state_status(),
+    ok = test_sys_suspend_resume(),
+    ok = test_sys_change_code(),
     ok.
 
 test_call() ->
@@ -71,19 +83,20 @@ test_start_link() ->
 
     pong = gen_server:call(Pid, ping),
     pong = gen_server:call(Pid, reply_ping),
-    false = erlang:process_flag(trap_exit, true),
+    PreviousTrapExit = erlang:process_flag(trap_exit, true),
     ok = gen_server:cast(Pid, crash),
     ok =
         receive
             {'EXIT', Pid, _Reason} -> ok
         after 30000 -> timeout
         end,
-    true = erlang:process_flag(trap_exit, false),
+    true = erlang:process_flag(trap_exit, PreviousTrapExit),
     ok.
 
 test_start_monitor() ->
     case get_otp_version() of
-        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 23) ->
+        %% Test on AtomVM and OTP 23 and later
+        Version when Version >= 23 ->
             {ok, {Pid, Ref}} = gen_server:start_monitor(?MODULE, [], []),
 
             pong = gen_server:call(Pid, ping),
@@ -98,6 +111,32 @@ test_start_monitor() ->
         _ ->
             ok
     end.
+
+test_start_name() ->
+    undefined = whereis(?MODULE),
+    {ok, Pid1} = gen_server:start({local, ?MODULE}, ?MODULE, [], []),
+    Pid1 = whereis(?MODULE),
+    ok = gen_server:stop(Pid1),
+    undefined = whereis(?MODULE),
+
+    {ok, Pid2} = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
+    Pid2 = whereis(?MODULE),
+    ok = gen_server:stop(Pid2),
+    undefined = whereis(?MODULE),
+
+    case get_otp_version() of
+        %% Test on AtomVM and OTP 23 and later
+        Version when Version >= 23 ->
+            {ok, {Pid3, MonitorRef}} = gen_server:start_monitor({local, ?MODULE}, ?MODULE, [], []),
+            Pid3 = whereis(?MODULE),
+            % Demonitor to avoid any DOWN message
+            true = demonitor(MonitorRef),
+            ok = gen_server:stop(Pid3),
+            undefined = whereis(?MODULE);
+        _ ->
+            ok
+    end,
+    ok.
 
 test_continue() ->
     {ok, Pid} = gen_server:start_link(?MODULE, {continue, self()}, []),
@@ -487,6 +526,44 @@ test_stop_noproc() ->
             ok
     end.
 
+test_sys_get_state_status() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+    #state{} = sys:get_state(Pid),
+    {status, Pid, {module, gen_server}, _Extra} = sys:get_status(Pid),
+    ok = gen_server:stop(Pid),
+    ok.
+
+test_sys_suspend_resume() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+    ok = sys:suspend(Pid),
+    ok =
+        try
+            gen_server:call(Pid, ping, 500),
+            unexpected
+        catch
+            exit:{timeout, {gen_server, call, [Pid, ping, 500]}} -> ok
+        end,
+    ok = sys:resume(Pid),
+    pong = gen_server:call(Pid, ping, 500),
+    ok = gen_server:stop(Pid),
+    ok.
+
+test_sys_change_code() ->
+    {ok, Pid} = gen_server:start(?MODULE, [], []),
+    ok = gen_server:cast(Pid, ping),
+    1 = gen_server:call(Pid, get_num_casts),
+    ok = sys:suspend(Pid),
+    ok = sys:change_code(Pid, ?MODULE, "old_vsn", {extra, self()}),
+    ok =
+        receive
+            {Pid, updated, "old_vsn"} -> ok
+        after 500 -> timeout
+        end,
+    ok = sys:resume(Pid),
+    0 = gen_server:call(Pid, get_num_casts),
+    ok = gen_server:stop(Pid),
+    ok.
+
 get_otp_version() ->
     case erlang:system_info(machine) of
         "BEAM" ->
@@ -640,6 +717,10 @@ handle_info(_Info, #state{info_timeout = InfoTimeout} = State) ->
         Other ->
             {noreply, State, Other}
     end.
+
+code_change(OldVsn, State, {extra, Pid}) ->
+    Pid ! {self(), updated, OldVsn},
+    {ok, State#state{num_casts = 0}}.
 
 terminate(_Reason, #state{crash_in_terminate = true} = _State) ->
     error(crash_in_terminate);

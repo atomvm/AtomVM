@@ -45,6 +45,7 @@ set(ERLANG_MODULES
     test_spawn
     test_ssl
     test_string
+    test_sys
     test_proplists
     test_queue
     test_timer
