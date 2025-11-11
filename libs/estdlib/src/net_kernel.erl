@@ -73,6 +73,8 @@
 %% @param Options options for distribution. Supported options are:
 %% - `name_domain' : whether name should be short or long
 %% - `proto_dist' : the module used for distribution (e.g. `socket_dist')
+%% - `dist_listen_min' : defines the min port range for the listener socket.
+%% - `dist_listen_max' : defines the max port range for the listener socket.
 %%-----------------------------------------------------------------------------
 -spec start(atom(), map()) -> {ok, pid()}.
 start(Name, Options0) when is_atom(Name) andalso is_map(Options0) ->
@@ -81,11 +83,31 @@ start(Name, Options0) when is_atom(Name) andalso is_map(Options0) ->
             case Key of
                 name_domain when Val =:= shortnames orelse Val =:= longnames -> ok;
                 proto_dist when is_atom(Val) -> ok;
+                dist_listen_min when is_integer(Val) -> ok;
+                dist_listen_max when is_integer(Val) -> ok;
                 _ -> error({invalid_option, Key, Val}, [Name, Options0])
             end
         end,
         Options0
     ),
+    % Check that if one of dist_listen_min and dist_listen_max are configured, both are configured.
+    % And verify dist_listen_max is larger or equal to dist_listen_min.
+    ok =
+        case {maps:is_key(dist_listen_min, Options0), maps:is_key(dist_listen_max, Options0)} of
+            {true, false} ->
+                error(missing_dist_listen_max, [Name, Options0]);
+            {false, true} ->
+                error(missing_dist_listen_min, [Name, Options0]);
+            {true, true} ->
+                Min = maps:get(dist_listen_min, Options0),
+                Max = maps:get(dist_listen_max, Options0),
+                if
+                    Min > Max -> error(invalid_port_range, [Name, Options0]);
+                    true -> ok
+                end;
+            _ ->
+                ok
+        end,
     Options1 = Options0#{name => Name},
     Options2 = split_name(Options1),
     net_kernel_sup:start(Options2);
@@ -189,13 +211,16 @@ init(Options) ->
     process_flag(trap_exit, true),
     LongNames = maps:get(name_domain, Options, longnames) =:= longnames,
     ProtoDist = maps:get(proto_dist, Options, socket_dist),
+    DistPortMin = maps:get(dist_listen_min, Options, 0),
+    DistPortMax = maps:get(dist_listen_max, Options, 0),
     Name = maps:get(name, Options),
     Node = maps:get(node, Options),
     Cookie = crypto:strong_rand_bytes(16),
     TickInterval = (?NET_TICK_TIME * 1000) div ?NET_TICK_INTENSITY,
     Self = self(),
     Ticker = spawn_link(fun() -> ticker(Self, TickInterval) end),
-    case ProtoDist:listen(Name) of
+    % Try ports in range until one succeeds
+    case try_listen_ports(ProtoDist, Name, DistPortMin, DistPortMax) of
         {ok, {Listen, _Address, Creation}} ->
             true = erlang:setnode(Node, Creation),
             AcceptPid = ProtoDist:accept(Listen),
@@ -212,6 +237,18 @@ init(Options) ->
             }};
         {error, Reason} ->
             {stop, Reason}
+    end.
+
+%% @hidden
+try_listen_ports(ProtoDist, Name, DistPortMin, DistPortMax) ->
+    try_listen_ports(ProtoDist, Name, DistPortMin, DistPortMax, DistPortMin).
+
+try_listen_ports(_ProtoDist, _Name, _DistPortMin, DistPortMax, Port) when Port > DistPortMax ->
+    {error, no_port_available};
+try_listen_ports(ProtoDist, Name, DistPortMin, DistPortMax, Port) ->
+    case ProtoDist:listen(Name, Port) of
+        {ok, _} = Success -> Success;
+        {error, _} -> try_listen_ports(ProtoDist, Name, DistPortMin, DistPortMax, Port + 1)
     end.
 
 %% @hidden
