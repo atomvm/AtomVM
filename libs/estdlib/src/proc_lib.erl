@@ -19,16 +19,26 @@
 %
 
 %%-----------------------------------------------------------------------------
-%% @doc An implementation of the Erlang/OTP gen_server interface.
+%% @doc An implementation of the Erlang/OTP proc_lib interface.
 %%
 %% This module implements a strict subset of the Erlang/OTP proc_lib
 %% interface.
+%%
+%% When spawning a single function, calling `spawn/1' or `spawn_link/1',
+%% Erlang/OTP proc_lib sets `initial_call' to a tuple with a unique
+%% atom determining where the function was created, for example
+%% ``{some_module, '-work/3-fun-0-', 0}''. AtomVM literaly calls `erlang:apply/2'
+%% and therefore in these cases, `initial_call` is `{erlang, apply, 2}'.
 %%-----------------------------------------------------------------------------
 
 -module(proc_lib).
 
 %% Public API
 -export([
+    spawn/1,
+    spawn/3,
+    spawn_link/1,
+    spawn_link/3,
     start/3,
     start/4,
     start/5,
@@ -50,6 +60,8 @@
     start_spawn_option/0
 ]).
 
+-compile({no_auto_import, [spawn/3, spawn_link/3]}).
+
 -include_lib("kernel/include/logger.hrl").
 
 %% @doc Restricted set of spawn options. `monitor' is not supported.
@@ -59,7 +71,43 @@
     | {atomvm_heap_growth, erlang:atomvm_heap_growth_strategy()}
     | link.
 
-%% @equiv start_link(Module, Function, Args, infinity)
+%% @equiv spawn(erlang, apply, [Fun, []])
+-spec spawn(fun(() -> any())) -> pid().
+spawn(Fun) ->
+    spawn(erlang, apply, [Fun, []]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module of the function to call
+%% @param   Function to call
+%% @param   Args arguments to pass to the function
+%% @doc     Spawn a new process and initialize it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn(module(), atom(), [any()]) -> pid().
+spawn(Module, Function, Args) ->
+    Parent = self(),
+    Ancestors = get_ancestors(),
+    erlang:spawn(?MODULE, init_p, [Parent, Ancestors, Module, Function, Args]).
+
+%% @equiv spawn_link(erlang, apply, [Fun, []])
+-spec spawn_link(fun(() -> any())) -> pid().
+spawn_link(Fun) ->
+    spawn_link(erlang, apply, [Fun, []]).
+
+%%-----------------------------------------------------------------------------
+%% @param   Module of the function to call
+%% @param   Function to call
+%% @param   Args arguments to pass to the function
+%% @doc     Spawn and atomically link a new process and initialize it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec spawn_link(module(), atom(), [any()]) -> pid().
+spawn_link(Module, Function, Args) ->
+    Parent = self(),
+    Ancestors = get_ancestors(),
+    erlang:spawn_link(?MODULE, init_p, [Parent, Ancestors, Module, Function, Args]).
+
+%% @equiv start(Module, Function, Args, infinity)
 -spec start(module(), atom(), [any()]) -> any().
 start(Module, Function, Args) ->
     start(Module, Function, Args, infinity).
@@ -114,11 +162,7 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link) ->
         false -> ok
     end,
     Parent = self(),
-    Ancestors =
-        case get('$ancestors') of
-            A when is_list(A) -> A;
-            _ -> []
-        end,
+    Ancestors = get_ancestors(),
     {Pid, Monitor} = spawn_opt(?MODULE, init_p, [Parent, Ancestors, Module, Function, Args], [
         monitor | SpawnOpts
     ]),
@@ -153,6 +197,13 @@ start0(Module, Function, Args, Timeout, SpawnOpts, Link) ->
             {'DOWN', Monitor, process, Pid, _} -> ok
         end,
         {error, timeout}
+    end.
+
+%% @private
+get_ancestors() ->
+    case get('$ancestors') of
+        A when is_list(A) -> A;
+        _ -> []
     end.
 
 %%-----------------------------------------------------------------------------
@@ -237,7 +288,7 @@ crash_report(Class, Reason, MFA, Stacktrace) ->
             ICA,
             self(),
             {Class, Reason},
-            get('$ancestors'),
+            get_ancestors(),
             MessageQueueLen,
             Links,
             TotalHeapSize,
