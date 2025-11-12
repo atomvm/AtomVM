@@ -66,7 +66,11 @@ static void *scheduler_thread_entry_point(void *arg)
 {
     g_sub_main_thread = true;
     void *result = (void *) scheduler_entry_point((GlobalContext *) arg);
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+    BaseType_t core = xTaskGetCoreID(NULL);
+#else
     BaseType_t core = xTaskGetAffinity(NULL);
+#endif
     if (core != -1) {
         uint32_t desired = 1;
         uint32_t expected = 3;
