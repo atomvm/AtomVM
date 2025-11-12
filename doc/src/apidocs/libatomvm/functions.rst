@@ -49,19 +49,15 @@ Functions
 .. doxygenfunction:: context_get_process_info
 .. doxygenfunction:: context_is_port_driver
 .. doxygenfunction:: context_is_term_equal_to_atom_string
-.. doxygenfunction:: context_link
 .. doxygenfunction:: context_message_queue_len
-.. doxygenfunction:: context_monitor
 .. doxygenfunction:: context_new
 .. doxygenfunction:: context_process_flush_monitor_signal
 .. doxygenfunction:: context_process_kill_signal
 .. doxygenfunction:: context_process_process_info_request_signal
 .. doxygenfunction:: context_process_signal_trap_answer
-.. doxygenfunction:: context_resource_monitor
 .. doxygenfunction:: context_size
 .. doxygenfunction:: context_stack_base
 .. doxygenfunction:: context_stack_size
-.. doxygenfunction:: context_unlink
 .. doxygenfunction:: context_update_flags
 .. doxygenfunction:: debug_dump_context
 .. doxygenfunction:: debug_dump_heap
@@ -84,7 +80,6 @@ Functions
 .. doxygenfunction:: event_listener_is_event
 .. doxygenfunction:: externalterm_from_binary
 .. doxygenfunction:: externalterm_to_binary
-.. doxygenfunction:: externalterm_to_term
 .. TODO: figure out why  Doxgen cant find externalterm_to_term_internal in externalterm.c
 .. c:function:: static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts, size_t *bytes_read, bool copy)
 
@@ -100,8 +95,6 @@ Functions
                          `external_term` is a const binary and will not be deallocated)
    :returns:             the parsed term
 
-.. doxygenfunction:: globalcontext_atomstring_from_term
-.. doxygenfunction:: globalcontext_demonitor
 .. doxygenfunction:: globalcontext_destroy
 .. doxygenfunction:: globalcontext_existing_term_from_atom_string
 .. doxygenfunction:: globalcontext_get_module
@@ -112,7 +105,6 @@ Functions
 .. doxygenfunction:: globalcontext_get_registered_process
 .. doxygenfunction:: globalcontext_get_registered_name_process
 .. doxygenfunction:: globalcontext_init_process
-.. doxygenfunction:: globalcontext_insert_atom
 .. doxygenfunction:: globalcontext_insert_atom_maybe_copy
 .. doxygenfunction:: globalcontext_insert_module
 .. doxygenfunction:: globalcontext_is_atom_index_equal_to_atom_string
@@ -154,7 +146,6 @@ Functions
 .. doxygenfunction:: mailbox_reset
 .. doxygenfunction:: mailbox_send
 .. doxygenfunction:: mailbox_send_built_in_atom_request_signal
-.. doxygenfunction:: mailbox_send_built_in_atom_signal
 .. doxygenfunction:: mailbox_send_empty_body_signal
 .. doxygenfunction:: mailbox_send_ref_signal
 .. doxygenfunction:: mailbox_send_term_signal
@@ -179,7 +170,6 @@ Functions
 .. doxygenfunction:: memory_init_heap
 .. doxygenfunction:: memory_init_heap_root_fragment
 .. doxygenfunction:: memory_sweep_mso_list
-.. doxygenfunction:: module_get_atom_string_by_id
 .. doxygenfunction:: module_get_atom_term_by_id
 .. doxygenfunction:: module_get_exported_functions
 .. doxygenfunction:: module_get_exported_functions_count
@@ -243,7 +233,6 @@ Functions
 .. doxygenfunction:: sys_get_info
 .. doxygenfunction:: sys_init_platform
 .. doxygenfunction:: sys_listener_destroy
-.. doxygenfunction:: sys_load_module
 .. doxygenfunction:: sys_monotonic_time
 .. doxygenfunction:: sys_monotonic_time_ms_to_u64
 .. doxygenfunction:: sys_monotonic_time_u64
@@ -293,7 +282,6 @@ Functions
 .. doxygenfunction:: term_is_integer
 .. doxygenfunction:: term_is_invalid_term
 .. doxygenfunction:: term_is_list
-.. doxygenfunction:: term_is_movable_boxed
 .. doxygenfunction:: term_is_nil
 .. doxygenfunction:: term_is_nonempty_list
 .. doxygenfunction:: term_is_otp_socket
