@@ -310,7 +310,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
                 break;
             }
 
-#if ESP_IDF_VERSION_MAJOR >= 5 && ESP_IDF_VERSION_MINOR >= 2
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
             case WIFI_EVENT_HOME_CHANNEL_CHANGE: {
                 wifi_event_home_channel_change_t *chan_data = (wifi_event_home_channel_change_t *) event_data;
                 ESP_LOGD(TAG, "WIFI_EVENT home channel changed from %u to %u.", chan_data->old_chan, chan_data->new_chan);

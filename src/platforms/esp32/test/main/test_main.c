@@ -324,7 +324,7 @@ TEST_CASE("test_monotonic_time", "[test_run]")
 
 #if !CONFIG_IDF_TARGET_ESP32C3 && CONFIG_ETH_USE_OPENETH
 // this test is failing on v5.0.7 due to some kind of problem with atomvm:posix_open
-#if ESP_IDF_VERSION_MAJOR >= 5 && ESP_IDF_VERSION_MINOR >= 1
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0))
 TEST_CASE("test_mount", "[test_run]")
 {
     term ret_value = avm_test_case("test_mount.beam");
