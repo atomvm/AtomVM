@@ -186,6 +186,12 @@ TEST_CASE("test_esp_partition", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 0);
 }
 
+TEST_CASE("test_esp_timer_get_time", "[test_run]")
+{
+    term ret_value = avm_test_case("test_esp_timer_get_time.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 // SDMMC works all esp-idf versions for esp32 - still no support c3.
 // only run in QEMU (eg. OPENETH configured)
 #if !CONFIG_IDF_TARGET_ESP32C3 && CONFIG_ETH_USE_OPENETH

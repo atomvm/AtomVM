@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `proc_lib`
 - Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 - Added `sys`
+- Added `esp:timer_get_time/0`
 
 ### Changed
 
