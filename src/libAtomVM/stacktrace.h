@@ -37,7 +37,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
  * @param live          number of x registers to preserve, which should include stack_info
  * @return the built stack trace
  */
-term stacktrace_build(Context *ctx, term *stack_info, uint32_t live);
+term stacktrace_build(Context *ctx);
 term stacktrace_exception_class(term stack_info);
 
 #ifdef __cplusplus
