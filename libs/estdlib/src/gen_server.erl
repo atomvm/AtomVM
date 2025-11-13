@@ -422,8 +422,8 @@ call(ServerRef, Request) ->
 -spec call(ServerRef :: server_ref(), Request :: term(), TimeoutMs :: timeout()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request, TimeoutMs) ->
-    try
-        gen:call(ServerRef, '$gen_call', Request, TimeoutMs)
+    try gen:call(ServerRef, '$gen_call', Request, TimeoutMs) of
+        {ok, Result} -> Result
     catch
         exit:Reason ->
             exit({Reason, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request, TimeoutMs]}})

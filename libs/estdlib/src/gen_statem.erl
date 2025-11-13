@@ -210,8 +210,8 @@ call(ServerRef, Request) ->
 -spec call(ServerRef :: server_ref(), Request :: term(), Timeout :: timeout()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request, Timeout) ->
-    try
-        gen:call(ServerRef, '$gen_call', Request, Timeout)
+    try gen:call(ServerRef, '$gen_call', Request, Timeout) of
+        {ok, Reply} -> Reply
     catch
         exit:Reason ->
             exit({Reason, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}})

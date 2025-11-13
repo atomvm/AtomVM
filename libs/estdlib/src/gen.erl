@@ -36,9 +36,18 @@
 -type server_ref() :: atom() | pid().
 -type from() :: {pid(), reference()}.
 
-%% @private
+%%-----------------------------------------------------------------------------
+%% @doc     Perform a call on a gen server. This API not documented by OTP,
+%% yet Elixir uses it, so this function matches the current OTP-28 behavior.
+%% @end
+%% @param ServerRef the server to call
+%% @param Label the label for the message, typically `system' or `$gen_call'
+%% @param Request the message to send
+%% @param Timeout timeout for sending the message
+%% @returns `{ok, Result}' or raises an exit exception
+%%-----------------------------------------------------------------------------
 -spec call(ServerRef :: server_ref(), Label :: atom(), Request :: term(), Timeout :: timeout()) ->
-    Reply :: term() | {error, Reason :: term()}.
+    {ok, Reply :: term()} | {error, Reason :: term()}.
 call(ServerRef, Label, Request, Timeout) ->
     MonitorRef = monitor(process, ServerRef),
     ok =
@@ -59,7 +68,7 @@ call(ServerRef, Label, Request, Timeout) ->
             exit(Atom);
         {MonitorRef, Reply} ->
             demonitor(MonitorRef, [flush]),
-            Reply
+            {ok, Reply}
     after Timeout ->
         % If Timeout is small enough (0), the error message might be timeout
         % instead of noproc as there could be a race condition with the monitor.
