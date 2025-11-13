@@ -51,6 +51,7 @@
 ]).
 
 -export([init_it/4, init_it/5]).
+-export([system_continue/3, system_terminate/4, system_code_change/4, system_get_state/1]).
 
 -export_type([
     server_ref/0,
@@ -62,14 +63,15 @@
 -record(state, {
     name = undefined :: atom(),
     mod :: module(),
-    mod_state :: term()
+    mod_state :: term(),
+    timeout :: {continue, term()} | {timeout, timeout(), Msg :: any()} | timeout()
 }).
 
 -type options() :: list({atom(), term()}).
 -type start_ret() :: {ok, pid()} | {error, Reason :: term()}.
 -type start_mon_ret() :: {ok, {Pid :: pid(), MonRef :: reference()}} | {error, Reason :: term()}.
 -type server_ref() :: atom() | pid().
--type from() :: any().
+-type from() :: {pid(), reference()}.
 
 -type init_result(StateType) ::
     {ok, State :: StateType}
@@ -117,31 +119,6 @@
 -callback terminate(Reason :: normal | any(), State :: any()) ->
     any().
 
-%% @private
-do_spawn(Module, Args, Options, SpawnOpts) ->
-    PidOrMonRet = spawn_opt(?MODULE, init_it, [self(), Module, Args, Options], SpawnOpts),
-    case wait_ack(PidOrMonRet) of
-        ok -> {ok, PidOrMonRet};
-        {error, Reason} -> {error, Reason}
-    end.
-
-%% @private
-do_spawn(Name, Module, Args, Options, SpawnOpts) ->
-    Pid = spawn_opt(?MODULE, init_it, [self(), Name, Module, Args, Options], SpawnOpts),
-    case wait_ack(Pid) of
-        ok -> {ok, Pid};
-        {error, Reason} -> {error, Reason}
-    end.
-
-%% @private
-spawn_if_not_registered(Name, Module, Args, Options, SpawnOpts) ->
-    case erlang:whereis(Name) of
-        undefined ->
-            do_spawn(Name, Module, Args, [{name, Name} | Options], SpawnOpts);
-        Pid ->
-            {error, {already_started, Pid}}
-    end.
-
 init_it(Starter, Name, Module, Args, Options) ->
     try erlang:register(Name, self()) of
         true ->
@@ -163,7 +140,7 @@ init_it(Starter, Name, Module, Args, Options) ->
                 ErrorT,
                 S
             ),
-            init_ack(Starter, {error, ErrorT})
+            proc_lib:init_ack(Starter, {error, ErrorT})
     end.
 
 init_it(Starter, Module, Args, Options) ->
@@ -171,40 +148,34 @@ init_it(Starter, Module, Args, Options) ->
         try
             case Module:init(Args) of
                 {ok, ModState} ->
-                    init_ack(Starter, ok),
-                    {
-                        #state{
-                            name = proplists:get_value(name, Options),
-                            mod = Module,
-                            mod_state = ModState
-                        },
-                        infinity
+                    proc_lib:init_ack(Starter, {ok, self()}),
+                    #state{
+                        name = proplists:get_value(name, Options),
+                        mod = Module,
+                        mod_state = ModState,
+                        timeout = infinity
                     };
                 {ok, ModState, {continue, NewContinue}} ->
-                    init_ack(Starter, ok),
-                    {
-                        #state{
-                            name = proplists:get_value(name, Options),
-                            mod = Module,
-                            mod_state = ModState
-                        },
-                        {continue, NewContinue}
+                    proc_lib:init_ack(Starter, {ok, self()}),
+                    #state{
+                        name = proplists:get_value(name, Options),
+                        mod = Module,
+                        mod_state = ModState,
+                        timeout = {continue, NewContinue}
                     };
                 {ok, ModState, InitTimeout} ->
-                    init_ack(Starter, ok),
-                    {
-                        #state{
-                            name = proplists:get_value(name, Options),
-                            mod = Module,
-                            mod_state = ModState
-                        },
-                        InitTimeout
+                    proc_lib:init_ack(Starter, {ok, self()}),
+                    #state{
+                        name = proplists:get_value(name, Options),
+                        mod = Module,
+                        mod_state = ModState,
+                        timeout = InitTimeout
                     };
                 {stop, Reason} ->
-                    init_ack(Starter, {error, {init_stopped, Reason}}),
+                    proc_lib:init_ack(Starter, {error, {init_stopped, Reason}}),
                     undefined;
                 Reply ->
-                    init_ack(Starter, {error, {unexpected_reply_from_init, Reply}}),
+                    proc_lib:init_ack(Starter, {error, {unexpected_reply_from_init, Reply}}),
                     undefined
             end
         catch
@@ -215,26 +186,12 @@ init_it(Starter, Module, Args, Options) ->
                     E,
                     S
                 ),
-                init_ack(Starter, {error, {bad_return_value, E}}),
+                proc_lib:init_ack(Starter, {error, {bad_return_value, E}}),
                 undefined
         end,
     case StateT of
         undefined -> ok;
-        {State, {continue, Continue}} -> loop(Starter, State, {continue, Continue});
-        {State, Timeout} -> loop(Starter, State, Timeout)
-    end.
-
-init_ack(Parent, Return) ->
-    Parent ! {ack, self(), Return},
-    ok.
-
-wait_ack(Pid) when is_pid(Pid) ->
-    receive
-        {ack, Pid, Return} -> Return
-    end;
-wait_ack({Pid, _MonRef}) when is_pid(Pid) ->
-    receive
-        {ack, Pid, Return} -> Return
+        #state{} = State -> system_continue(Starter, [], State)
     end.
 
 crash_report(ErrStr, Parent, E, S) ->
@@ -269,7 +226,12 @@ crash_report(ErrStr, Parent, E, S) ->
     Options :: options()
 ) -> start_ret().
 start({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    spawn_if_not_registered(Name, Module, Args, Options, []).
+    case erlang:whereis(Name) of
+        undefined ->
+            proc_lib:start(?MODULE, init_it, [self(), Name, Module, Args, [{name, Name} | Options]]);
+        Pid ->
+            {error, {already_started, Pid}}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -286,7 +248,7 @@ start({local, Name}, Module, Args, Options) when is_atom(Name) ->
 -spec start(Module :: module(), Args :: term(), Options :: options()) ->
     start_ret().
 start(Module, Args, Options) ->
-    do_spawn(Module, Args, Options, []).
+    proc_lib:start(?MODULE, init_it, [self(), Module, Args, Options]).
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -310,7 +272,14 @@ start(Module, Args, Options) ->
     Options :: options()
 ) -> start_ret().
 start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    spawn_if_not_registered(Name, Module, Args, Options, [link]).
+    case erlang:whereis(Name) of
+        undefined ->
+            proc_lib:start_link(?MODULE, init_it, [
+                self(), Name, Module, Args, [{name, Name} | Options]
+            ]);
+        Pid ->
+            {error, {already_started, Pid}}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -327,7 +296,7 @@ start_link({local, Name}, Module, Args, Options) when is_atom(Name) ->
 -spec start_link(Module :: module(), Args :: term(), Options :: options()) ->
     start_ret().
 start_link(Module, Args, Options) ->
-    do_spawn(Module, Args, Options, [link]).
+    proc_lib:start_link(?MODULE, init_it, [self(), Module, Args, Options]).
 
 %%-----------------------------------------------------------------------------
 %% @param   Module the module in which the gen_server callbacks are defined
@@ -345,7 +314,13 @@ start_link(Module, Args, Options) ->
 -spec start_monitor(Module :: module(), Args :: term(), Options :: options()) ->
     start_mon_ret().
 start_monitor(Module, Args, Options) ->
-    do_spawn(Module, Args, Options, [monitor]).
+    {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [self(), Module, Args, Options]),
+    case Result of
+        {ok, Pid} ->
+            {ok, {Pid, Monitor}};
+        _ ->
+            Result
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerName the name with which to register the gen_server
@@ -370,7 +345,20 @@ start_monitor(Module, Args, Options) ->
     Options :: options()
 ) -> start_mon_ret().
 start_monitor({local, Name}, Module, Args, Options) when is_atom(Name) ->
-    spawn_if_not_registered(Name, Module, Args, Options, [monitor]).
+    case erlang:whereis(Name) of
+        undefined ->
+            {Result, Monitor} = proc_lib:start_monitor(?MODULE, init_it, [
+                self(), Name, Module, Args, [{name, Name} | Options]
+            ]),
+            case Result of
+                {ok, Pid} ->
+                    {ok, {Pid, Monitor}};
+                _ ->
+                    Result
+            end;
+        Pid ->
+            {error, {already_started, Pid}}
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @equiv   stop(ServerRef, normal, infinity)
@@ -434,31 +422,11 @@ call(ServerRef, Request) ->
 -spec call(ServerRef :: server_ref(), Request :: term(), TimeoutMs :: timeout()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request, TimeoutMs) ->
-    MonitorRef = monitor(process, ServerRef),
-    ok =
-        try
-            ServerRef ! {'$gen_call', {self(), MonitorRef}, Request},
-            ok
-        catch
-            error:badarg ->
-                % Process no longer exists, monitor will send a message
-                ok
-        end,
-    receive
-        {'DOWN', MonitorRef, process, _, {E, []} = _Reason} ->
-            erlang:exit({E, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}});
-        {'DOWN', MonitorRef, process, _, {_E, _L} = Reason} ->
-            erlang:exit(Reason);
-        {'DOWN', MonitorRef, process, _, Atom} when is_atom(Atom) ->
-            erlang:exit({Atom, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}});
-        {MonitorRef, Reply} ->
-            demonitor(MonitorRef, [flush]),
-            Reply
-    after TimeoutMs ->
-        % If TimeoutMS is small enough (0), the error message might be timeout
-        % instead of noproc as there could be a race condition with the monitor.
-        demonitor(MonitorRef, [flush]),
-        erlang:exit({timeout, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}})
+    try
+        gen:call(ServerRef, '$gen_call', Request, TimeoutMs)
+    catch
+        exit:Reason ->
+            exit({Reason, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request, TimeoutMs]}})
     end.
 
 %%-----------------------------------------------------------------------------
@@ -473,140 +441,180 @@ call(ServerRef, Request, TimeoutMs) ->
 %%-----------------------------------------------------------------------------
 -spec cast(ServerRef :: server_ref(), Request :: term()) -> ok | {error, Reason :: term()}.
 cast(ServerRef, Request) ->
-    try
-        ServerRef ! {'$gen_cast', Request}
-    catch
-        error:badarg ->
-            % Process does not exist, ignore error
-            ok
-    end,
-    ok.
+    gen:cast(ServerRef, Request).
 
 %%-----------------------------------------------------------------------------
 %% @param   From the client to whom to send the reply
 %% @param   Reply the reply to send to the client
-%% @returns an arbitrary term, that should be ignored
+%% @returns `ok'
 %% @doc     Send a reply to a calling client.
 %%
 %%          This function will send the specified reply back to the specified
-%%          gen_server client (e.g, via call/3).  The return value of this
-%%          function can be safely ignored.
+%%          gen_server client (e.g, via call/3).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec reply(From :: from(), Reply :: term()) -> term().
-reply({Pid, Ref}, Reply) ->
-    Pid ! {Ref, Reply},
-    ok.
+reply(From, Reply) ->
+    gen:reply(From, Reply).
 
 %%
 %% Internal operations
 %%
 
 %% @private
-loop(Parent, #state{mod = Mod, mod_state = ModState} = State, {continue, Continue}) ->
+system_continue(
+    Parent, Debug, #state{mod = Mod, mod_state = ModState, timeout = {continue, Continue}} = State
+) ->
     case Mod:handle_continue(Continue, ModState) of
         {noreply, NewModState} ->
-            loop(Parent, State#state{mod_state = NewModState}, infinity);
+            system_continue(Parent, Debug, State#state{mod_state = NewModState, timeout = infinity});
         {noreply, NewModState, {continue, NewContinue}} ->
-            loop(Parent, State#state{mod_state = NewModState}, {continue, NewContinue});
+            system_continue(Parent, Debug, State#state{
+                mod_state = NewModState, timeout = {continue, NewContinue}
+            });
         {noreply, NewModState, Timeout} ->
-            loop(Parent, State#state{mod_state = NewModState}, Timeout);
+            system_continue(Parent, Debug, State#state{mod_state = NewModState, timeout = Timeout});
         {stop, Reason, NewModState} ->
-            do_terminate(State, Reason, NewModState)
+            system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState})
     end;
-loop(Parent, State, {timeout, Timeout, Info}) ->
+system_continue(Parent, Debug, #state{timeout = {timeout, Timeout, Info}} = State) ->
     receive
         Msg ->
-            handle_msg(Msg, Parent, State)
+            handle_msg(Msg, Parent, Debug, State)
     after Timeout ->
-        handle_timeout(Parent, Info, State)
+        handle_timeout(Parent, Info, Debug, State)
     end;
-loop(Parent, State, Timeout) ->
+system_continue(Parent, Debug, #state{timeout = Timeout} = State) ->
     receive
         Msg ->
-            handle_msg(Msg, Parent, State)
+            handle_msg(Msg, Parent, Debug, State)
     after Timeout ->
-        handle_timeout(Parent, timeout, State)
+        handle_timeout(Parent, timeout, Debug, State)
     end.
 
 %% @private
-handle_msg(Msg, Parent, #state{mod = Mod, mod_state = ModState} = State) ->
+handle_msg(Msg, Parent, Debug, #state{mod = Mod, mod_state = ModState} = State) ->
     case Msg of
+        {system, From, Req} ->
+            sys:handle_system_msg(Req, From, Parent, ?MODULE, Debug, State);
         {'$gen_call', {_Pid, _Ref} = From, Request} ->
             case Mod:handle_call(Request, From, ModState) of
                 {reply, Reply, NewModState} ->
                     ok = reply(From, Reply),
-                    loop(Parent, State#state{mod_state = NewModState}, infinity);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = infinity
+                    });
                 {reply, Reply, NewModState, {continue, Continue}} ->
                     ok = reply(From, Reply),
-                    loop(Parent, State#state{mod_state = NewModState}, {continue, Continue});
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = {continue, Continue}
+                    });
                 {reply, Reply, NewModState, NewTimeout} ->
                     ok = reply(From, Reply),
-                    loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = NewTimeout
+                    });
                 {noreply, NewModState} ->
-                    loop(Parent, State#state{mod_state = NewModState}, infinity);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = infinity
+                    });
                 {noreply, NewModState, {continue, Continue}} ->
-                    loop(Parent, State#state{mod_state = NewModState}, {continue, Continue});
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = {continue, Continue}
+                    });
                 {noreply, NewModState, NewTimeout} ->
-                    loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = NewTimeout
+                    });
                 {stop, Reason, Reply, NewModState} ->
                     ok = reply(From, Reply),
-                    do_terminate(State, Reason, NewModState);
+                    system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState});
                 {stop, Reason, NewModState} ->
-                    do_terminate(State, Reason, NewModState);
+                    system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState});
                 _ ->
-                    do_terminate(State, {error, unexpected_reply}, ModState)
+                    system_terminate({error, unexpected_reply}, Parent, Debug, State)
             end;
         {'$gen_cast', Request} ->
             case Mod:handle_cast(Request, ModState) of
                 {noreply, NewModState} ->
-                    loop(Parent, State#state{mod_state = NewModState}, infinity);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = infinity
+                    });
                 {noreply, NewModState, {continue, Continue}} ->
-                    loop(Parent, State#state{mod_state = NewModState}, {continue, Continue});
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = {continue, Continue}
+                    });
                 {noreply, NewModState, NewTimeout} ->
-                    loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = NewTimeout
+                    });
                 {stop, Reason, NewModState} ->
-                    do_terminate(State, Reason, NewModState);
+                    system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState});
                 _ ->
-                    do_terminate(State, {error, unexpected_reply}, ModState)
+                    system_terminate({error, unexpected_reply}, Parent, Debug, State)
             end;
         {'$stop', Reason} ->
-            do_terminate(State, Reason, ModState);
+            system_terminate(Reason, Parent, Debug, State);
         {'EXIT', Parent, Reason} ->
-            do_terminate(State, Reason, ModState);
+            system_terminate(Reason, Parent, Debug, State);
         Info ->
             case Mod:handle_info(Info, ModState) of
                 {noreply, NewModState} ->
-                    loop(Parent, State#state{mod_state = NewModState}, infinity);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = infinity
+                    });
                 {noreply, NewModState, NewTimeout} ->
-                    loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+                    system_continue(Parent, Debug, State#state{
+                        mod_state = NewModState, timeout = NewTimeout
+                    });
                 {stop, Reason, NewModState} ->
-                    do_terminate(State, Reason, NewModState);
+                    system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState});
                 _ ->
-                    do_terminate(State, {error, unexpected_reply}, ModState)
+                    system_terminate({error, unexpected_reply}, Parent, Debug, State)
             end
     end.
 
-handle_timeout(Parent, Msg, #state{mod = Mod, mod_state = ModState} = State) ->
+%% @private
+handle_timeout(Parent, Msg, Debug, #state{mod = Mod, mod_state = ModState} = State) ->
     case Mod:handle_info(Msg, ModState) of
         {noreply, NewModState} ->
-            loop(Parent, State#state{mod_state = NewModState}, infinity);
+            system_continue(Parent, Debug, State#state{mod_state = NewModState, timeout = infinity});
         {noreply, NewModState, NewTimeout} ->
-            loop(Parent, State#state{mod_state = NewModState}, NewTimeout);
+            system_continue(Parent, Debug, State#state{
+                mod_state = NewModState, timeout = NewTimeout
+            });
         {stop, Reason, NewModState} ->
-            do_terminate(State, Reason, NewModState);
+            system_terminate(Reason, Parent, Debug, State#state{mod_state = NewModState});
         _ ->
-            do_terminate(State, {error, unexpected_reply}, ModState)
+            system_terminate({error, unexpected_reply}, Parent, Debug, State)
     end.
 
-do_terminate(#state{mod = Mod} = _State, Reason, ModState) ->
+%% @private
+system_terminate(Reason, _Parent, _Debug, #state{mod = Mod, mod_state = ModState} = _State) ->
     case erlang:function_exported(Mod, terminate, 2) of
         true ->
             Mod:terminate(Reason, ModState);
         false ->
             ok
     end,
-    case Reason of
-        normal -> ok;
-        Other -> exit(Other)
+    exit(Reason).
+
+%% @private
+system_code_change(
+    #state{mod_state = ModState, mod = Module} = State, _ChangeModule, OldVsn, Extra
+) ->
+    case erlang:function_exported(Module, code_change, 3) of
+        true ->
+            case catch Module:code_change(OldVsn, ModState, Extra) of
+                {ok, NewModState} ->
+                    {ok, State#state{mod_state = NewModState}};
+                Other ->
+                    Other
+            end;
+        false ->
+            {ok, State}
     end.
+
+%% @private
+system_get_state(#state{mod_state = ModState}) ->
+    {ok, ModState}.

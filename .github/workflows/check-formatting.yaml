@@ -56,14 +56,14 @@ jobs:
 
   erlfmt-check:
     runs-on: ubuntu-24.04
-    container: erlang:27
+    container: erlang:28
     steps:
     - uses: actions/checkout@v4
 
     - name: "Check formatting with Erlang fmt"
       run: |
         cd ..
-        git clone --depth 1 -b v1.1.0 https://github.com/WhatsApp/erlfmt.git
+        git clone --depth 1 -b v1.7.0 https://github.com/WhatsApp/erlfmt.git
         cd erlfmt
         rebar3 as release escriptize
         cd ../AtomVM

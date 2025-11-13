@@ -56,6 +56,7 @@
 
 -type options() :: list({atom(), term()}).
 -type server_ref() :: atom() | pid().
+-type from() :: {pid(), reference()}.
 
 -type action() ::
     {reply, From :: pid(), Reply :: any()}
@@ -209,7 +210,12 @@ call(ServerRef, Request) ->
 -spec call(ServerRef :: server_ref(), Request :: term(), Timeout :: timeout()) ->
     Reply :: term() | {error, Reason :: term()}.
 call(ServerRef, Request, Timeout) ->
-    gen_server:call(ServerRef, Request, Timeout).
+    try
+        gen:call(ServerRef, '$gen_call', Request, Timeout)
+    catch
+        exit:Reason ->
+            exit({Reason, {?MODULE, ?FUNCTION_NAME, [ServerRef, Request]}})
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   ServerRef a reference to the gen_statem acquired via start
@@ -223,22 +229,21 @@ call(ServerRef, Request, Timeout) ->
 %%-----------------------------------------------------------------------------
 -spec cast(ServerRef :: server_ref(), Request :: term()) -> ok | {error, Reason :: term()}.
 cast(ServerRef, Request) ->
-    gen_server:cast(ServerRef, Request).
+    gen:cast(ServerRef, Request).
 
 %%-----------------------------------------------------------------------------
 %% @param   Client the client to whom to send the reply
 %% @param   Reply the reply to send to the client
-%% @returns an arbitrary term, that should be ignored
+%% @returns `ok'
 %% @doc     Send a reply to a calling client.
 %%
 %%          This function will send the specified reply back to the specified
-%%          gen_statem client (e.g, via call/3).  The return value of this
-%%          function can be safely ignored.
+%%          gen_statem client (e.g, via call/3).
 %% @end
 %%-----------------------------------------------------------------------------
--spec reply(Client :: pid(), Reply :: term()) -> term().
-reply(Client, Reply) ->
-    gen_server:reply(Client, Reply).
+-spec reply(From :: from(), Reply :: term()) -> ok.
+reply(From, Reply) ->
+    gen:reply(From, Reply).
 
 %%
 %% gen_statem callbacks
