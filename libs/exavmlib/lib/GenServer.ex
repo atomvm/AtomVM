@@ -322,7 +322,9 @@ defmodule GenServer do
           :exit, reason ->
             exit({reason, {__MODULE__, :call, [server, request, timeout]}})
         else
-          {:ok, res} -> res
+          # :gen.call/4 returns res on AtomVM
+          # {:ok, res} -> res
+          res -> res
         end
     end
   end
