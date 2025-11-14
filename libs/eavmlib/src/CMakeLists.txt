@@ -30,6 +30,7 @@ set(ERLANG_MODULES
     emscripten
     epmd
     esp
+    esp_dac
     esp_adc
     gpio
     i2c

@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 - Added `sys`
 - Added `esp:timer_get_time/0`
+- Added `esp_dac` module, exposing DAC oneshot mode on ESPs that support it
 
 ### Changed
 
