@@ -130,7 +130,8 @@ change_code(Name, Module, OldVsn, Extra) ->
     Timeout :: timeout()
 ) -> ok | {error, any()}.
 change_code(Name, Module, OldVsn, Extra, Timeout) ->
-    gen:call(Name, system, {change_code, Module, OldVsn, Extra}, Timeout).
+    {ok, Reply} = gen:call(Name, system, {change_code, Module, OldVsn, Extra}, Timeout),
+    Reply.
 
 %% @equiv get_state(Name, 5000)
 -spec get_state(Name :: name()) -> any().
@@ -147,7 +148,8 @@ get_state(Name) ->
 %%-----------------------------------------------------------------------------
 -spec get_state(Name :: name(), timeout()) -> any().
 get_state(Name, Timeout) ->
-    case gen:call(Name, system, get_state, Timeout) of
+    {ok, Reply} = gen:call(Name, system, get_state, Timeout),
+    case Reply of
         {ok, State} -> State;
         {error, Reason} -> error(Reason)
     end.
@@ -168,7 +170,8 @@ get_status(Name) ->
 -spec get_status(Name :: name(), Timeout :: timeout()) ->
     {status, pid(), {module, module()}, [SItem :: any()]}.
 get_status(Name, Timeout) ->
-    gen:call(Name, system, get_status, Timeout).
+    {ok, Reply} = gen:call(Name, system, get_status, Timeout),
+    Reply.
 
 %% @equiv replace_state(Name, StateFun, 5000)
 -spec replace_state(Name :: name(), StateFun :: fun((any()) -> any())) -> ok.
@@ -185,7 +188,8 @@ replace_state(Name, StateFun) ->
 %%-----------------------------------------------------------------------------
 -spec replace_state(Name :: name(), StateFun :: fun((any()) -> any()), Timeout :: timeout()) -> ok.
 replace_state(Name, StateFun, Timeout) ->
-    case gen:call(Name, system, {replace_state, StateFun}, Timeout) of
+    {ok, Reply} = gen:call(Name, system, {replace_state, StateFun}, Timeout),
+    case Reply of
         {ok, State} -> State;
         {error, Reason} -> error(Reason)
     end.
@@ -204,7 +208,8 @@ resume(Name) ->
 %%-----------------------------------------------------------------------------
 -spec resume(Name :: name(), Timeout :: timeout()) -> ok.
 resume(Name, Timeout) ->
-    gen:call(Name, system, resume, Timeout).
+    {ok, ok} = gen:call(Name, system, resume, Timeout),
+    ok.
 
 %% @equiv suspend(Name, 5000)
 -spec suspend(Name :: name()) -> ok.
@@ -221,7 +226,8 @@ suspend(Name) ->
 %%-----------------------------------------------------------------------------
 -spec suspend(Name :: name(), Timeout :: timeout()) -> ok.
 suspend(Name, Timeout) ->
-    gen:call(Name, system, suspend, Timeout).
+    {ok, ok} = gen:call(Name, system, suspend, Timeout),
+    ok.
 
 %% @equiv terminate(Name, Reason, 5000)
 -spec terminate(Name :: name(), Reason :: any()) -> ok.
@@ -238,7 +244,8 @@ terminate(Name, Reason) ->
 %%-----------------------------------------------------------------------------
 -spec terminate(Name :: name(), Reason :: any(), Timeout :: timeout()) -> ok.
 terminate(Name, Reason, Timeout) ->
-    gen:call(Name, system, {terminate, Reason}, Timeout).
+    {ok, ok} = gen:call(Name, system, {terminate, Reason}, Timeout),
+    ok.
 
 %% @equiv trace(Name, Flag, 5000)
 -spec trace(Name :: name(), Flag :: boolean()) -> ok.
@@ -255,7 +262,8 @@ trace(Name, Flag) ->
 %%-----------------------------------------------------------------------------
 -spec trace(Name :: name(), Flag :: boolean(), Timeout :: timeout()) -> ok.
 trace(Name, Flag, Timeout) ->
-    gen:call(Name, system, {debug, {trace, Flag}}, Timeout).
+    {ok, ok} = gen:call(Name, system, {debug, {trace, Flag}}, Timeout),
+    ok.
 
 %%-----------------------------------------------------------------------------
 %% Process Implementation Functions
