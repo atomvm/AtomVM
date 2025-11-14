@@ -1,0 +1,30 @@
+-module(esp_dac).
+
+-export([
+    new_channel/2,
+    oneshot_output_voltage/2,
+    oneshot_del_channel/1
+]).
+
+-type dac_rsrc() :: {'$dac', Resource :: binary(), Ref :: reference()}.
+
+-type oneshot_channel_opts() :: [{chan_id, 0 | 1}].
+
+-spec new_channel(oneshot, Opts :: oneshot_channel_opts()) -> {ok, Channel :: dac_rsrc()} | {error, Reason :: term()}.
+new_channel(oneshot, Opts) ->
+    case Opts of
+      [{chan_id, 0}] ->
+        ?MODULE:oneshot_new_channel_p(0);
+      [{chan_id, 1}] ->
+        ?MODULE:oneshot_new_channel_p(1);
+      _Else ->
+        {error, badarg}
+    end.
+
+-spec oneshot_output_voltage(Channel :: dac_rsrc(), Level :: 0..255) -> ok | {error, Reason :: term()}.
+oneshot_output_voltage(_res, _level) ->
+    erlang:nif_error(undefined).
+
+-spec oneshot_del_channel(Channel :: dac_rsrc()) -> ok | {error, Reason :: term()}.
+oneshot_del_channel(_res) ->
+    erlang:nif_error(undefined).

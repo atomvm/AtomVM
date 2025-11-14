@@ -19,6 +19,7 @@
 #
 
 set(AVM_BUILTIN_COMPONENT_SRCS
+    "dac_driver.c"
     "gpio_driver.c"
     "i2c_driver.c"
     "i2c_resource.c"
@@ -39,6 +40,9 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
     set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
     set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
+    if (IDF_VERSION_MINOR GREATER_EQUAL 1)
+      set(ADDITIONAL_PRIV_REQUIRES "esp_driver_dac" ${ADDITIONAL_PRIV_REQUIRES})
+    endif()
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
 endif()
