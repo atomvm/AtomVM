@@ -1,0 +1,43 @@
+# This file is an example IDF component manifest for AtomVM on ESP32.
+#
+# Usage:
+# 1) Copy this file to `idf_component.yml` in the same directory:
+#    cp idf_component.yml.example idf_component.yml
+# 2) Edit and uncomment the dependencies you need below.
+# 3) Run `idf.py build` to build the project.
+#
+# Note: `idf_component.yml` is user-specific and is ignored by git.
+#
+# Read more on the IDF component manager here:
+# https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-guides/tools/idf-component-manager.html
+#
+# Do check the readme for each dependency for more information on the install and usage.
+#
+dependencies:
+  # atomgl:
+  #   git: https://github.com/atomvm/atomgl
+  #   version: "main"
+  # atomvm_mqtt_client:
+  #   git: https://github.com/atomvm/atomvm_mqtt_client
+  #   version: "main"
+  # atomvm_esp32cam:
+  #   #NB requires certain sdkconfig options to be set, see the readme
+  #   git: https://github.com/atomvm/atomvm_esp32cam
+  #   version: "main"
+  # atomvm_gps:
+  #   git: https://github.com/atomvm/atomvm_gps
+  #   version: "main"
+  # atomvm_neopixel:
+  #   git: https://github.com/atomvm/atomvm_neopixel
+  #   version: "main"
+  # atomvm_m5:
+  #   git: https://github.com/pguyot/atomvm_m5
+  #   version: "main"
+  # my_nif:
+  #   # example for local development
+  #   # replace with your own nif in same top level directory as AtomVM
+  #   path: ../../../../../my_nif
+  # atomvm_mqtt_client:
+  #   # example for local development
+  #   # where a nif is git cloned in same top level directory as AtomVM
+  #   path: ../../../../../atomvm_mqtt_client

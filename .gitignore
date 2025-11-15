@@ -19,6 +19,8 @@ src/platforms/esp32/test/__pycache__/**
 src/platforms/esp32/components/**
 src/platforms/esp32/managed_components/**
 src/platforms/esp32/sdkconfig
+src/platforms/esp32/main/idf_component.yml
+src/platforms/esp32/dependencies.lock
 !src/platforms/esp32/components/avm_builtins/
 !src/platforms/esp32/components/avm_builtins/**
 !src/platforms/esp32/components/avm_sys/
