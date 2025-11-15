@@ -366,6 +366,33 @@ jobs:
           arch: "s390x"
           library-arch: s390x-linux-gnu
 
+        # riscv32-ilp32 build
+        - os: "ubuntu-24.04"
+          cc: "riscv32-unknown-linux-gnu-gcc"
+          cxx: "riscv32-unknown-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
+          compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv32"
+          library-arch: riscv32-linux-gnu-ilp32
+
+        # riscv32-ilp32 build + jit
+        - os: "ubuntu-24.04"
+          cc: "riscv32-unknown-linux-gnu-gcc"
+          cxx: "riscv32-unknown-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=riscv32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
+          compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv32"
+          library-arch: riscv32-linux-gnu-ilp32
+          jit_target_arch: "riscv32"
+
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
       CC: ${{ matrix.cc }}
@@ -386,7 +413,7 @@ jobs:
       run: sudo dpkg --add-architecture i386
 
     - name: "Setup cross compilation architecture"
-      if: matrix.library-arch != ''
+      if: matrix.library-arch != '' && matrix.library-arch != 'riscv32-linux-gnu-ilp32'
       run: |
         # Replace Azure mirrors with official Ubuntu repositories
         sudo sed -i 's|azure\.||g' /etc/apt/sources.list
@@ -419,6 +446,97 @@ jobs:
         set(MBEDTLS_ROOT_DIR /usr)
         set(MBEDTLS_LIBRARIES_DIR /usr/lib/${{ matrix.library-arch }})
         EOF
+
+    - name: "Setup cross compilation architecture (riscv32)"
+      if: matrix.library-arch == 'riscv32-linux-gnu-ilp32'
+      run: |
+        sudo dpkg --add-architecture ${{ matrix.arch }}
+
+        # Download toolchain and libraries from release
+        gh release download riscv-toolchain-2025.10.18 \
+          -R pguyot/crossbuild-essential-riscv32 \
+          --pattern 'riscv32-gnu-toolchain-ilp32_2025.10.18_amd64.deb' \
+          --pattern 'libc6-ilp32_2.39-0ubuntu1_riscv32.deb' \
+          --pattern 'libc6-dev-ilp32_2.39-0ubuntu1_riscv32.deb' \
+          --pattern 'libc6-dbg-ilp32_2.39-0ubuntu1_riscv32.deb' \
+          --pattern 'zlib1g-ilp32_1.3.1-0ubuntu1_riscv32.deb' \
+          --pattern 'zlib1g-dev-ilp32_1.3.1-0ubuntu1_riscv32.deb' \
+          --pattern 'libmbedcrypto7-ilp32_2.28.8-0ubuntu1_riscv32.deb' \
+          --pattern 'libmbedtls-dev-ilp32_2.28.8-0ubuntu1_riscv32.deb' \
+          --pattern 'libmbedtls14-ilp32_2.28.8-0ubuntu1_riscv32.deb' \
+          --pattern 'libmbedx509-1-ilp32_2.28.8-0ubuntu1_riscv32.deb'
+
+        # Install the toolchain
+        sudo dpkg -i riscv32-gnu-toolchain-ilp32_2025.10.18_amd64.deb
+
+        # Add to PATH for all subsequent steps
+        echo "/opt/riscv32-ilp32/bin" >> $GITHUB_PATH
+
+        # Install the libs
+        sudo dpkg -i libc6-ilp32_2.39-0ubuntu1_riscv32.deb
+        sudo dpkg -i libc6-dev-ilp32_2.39-0ubuntu1_riscv32.deb
+        sudo dpkg -i libc6-dbg-ilp32_2.39-0ubuntu1_riscv32.deb
+
+        sudo dpkg -i zlib1g-ilp32_1.3.1-0ubuntu1_riscv32.deb
+        sudo dpkg -i zlib1g-dev-ilp32_1.3.1-0ubuntu1_riscv32.deb
+
+        # Install mbedtls runtime packages first (in dependency order)
+        sudo dpkg -i libmbedcrypto7-ilp32_2.28.8-0ubuntu1_riscv32.deb
+        sudo dpkg -i libmbedx509-1-ilp32_2.28.8-0ubuntu1_riscv32.deb
+        sudo dpkg -i libmbedtls14-ilp32_2.28.8-0ubuntu1_riscv32.deb
+        # Then install the dev package
+        sudo dpkg -i libmbedtls-dev-ilp32_2.28.8-0ubuntu1_riscv32.deb
+
+        sudo sed -i '/Types: deb/a Architectures: amd64' /etc/apt/sources.list.d/ubuntu.sources
+
+        cat > ${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake <<'EOF'
+        # Toolchain file for RISC-V32 ILP32 (RV32-IMAC) cross-compilation
+        set(CMAKE_SYSTEM_NAME Linux)
+        set(CMAKE_SYSTEM_PROCESSOR riscv32)
+        set(CMAKE_C_LIBRARY_ARCHITECTURE riscv32-linux-gnu-ilp32)
+
+        # Specify the cross compiler
+        set(CMAKE_C_COMPILER riscv32-unknown-linux-gnu-gcc)
+        set(CMAKE_CXX_COMPILER riscv32-unknown-linux-gnu-g++)
+
+        # Specify the target architecture
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=rv32imac -mabi=ilp32" CACHE STRING "" FORCE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=rv32imac -mabi=ilp32" CACHE STRING "" FORCE)
+
+        # Set up paths for cross-compiled libraries
+        set(ZLIB_LIBRARY /usr/lib/riscv32-linux-gnu-ilp32/libz.so CACHE FILEPATH "")
+        set(ZLIB_INCLUDE_DIR /usr/include/riscv32-linux-gnu CACHE PATH "")
+        set(ZLIB_FOUND TRUE CACHE BOOL "")
+
+        # MbedTLS configuration
+        set(MBEDTLS_ROOT_DIR /usr)
+        set(MBEDTLS_LIBRARIES_DIR /usr/lib/riscv32-linux-gnu-ilp32)
+
+        # Add cross-compilation include path to compiler flags
+        include_directories(SYSTEM /usr/include/riscv32-linux-gnu)
+
+        # Search for programs in the build host directories
+        set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+
+        # Search for libraries and headers in the target directories
+        set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+        set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+        set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+        EOF
+
+        # Set up qemu-user binfmt to find libraries
+        sudo ln -s /opt/riscv32-ilp32/sysroot/lib/ld-linux-riscv32-ilp32.so.1 /lib/ld-linux-riscv32-ilp32.so.1
+        sudo mkdir -p /usr/gnemul
+        sudo ln -s /opt/riscv32-ilp32/sysroot /usr/gnemul/qemu-riscv32
+
+        # Copy cross-compiled libraries to sysroot for qemu-user
+        sudo cp /usr/lib/${{ matrix.library-arch }}/libz.so.1* /opt/riscv32-ilp32/sysroot/lib/
+        sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedtls.so.14 /opt/riscv32-ilp32/sysroot/lib/
+        sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedcrypto.so.7 /opt/riscv32-ilp32/sysroot/lib/
+        sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedx509.so.1 /opt/riscv32-ilp32/sysroot/lib/
+
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: "APT update"
       run: sudo apt update -y
@@ -630,7 +748,7 @@ jobs:
         valgrind --error-exitcode=1 ./src/AtomVM tests/libs/jit/test_jit.avm
 
     - name: "Test: test_jit.avm"
-      timeout-minutes: 20
+      timeout-minutes: 60
       if: matrix.otp != '21' && matrix.otp != '22'
       working-directory: build
       run: |

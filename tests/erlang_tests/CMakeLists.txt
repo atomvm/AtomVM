@@ -42,6 +42,10 @@ macro(jit_precompile module_name)
 endmacro()
 
 function(compile_erlang module_name)
+    # Parse optional DEPENDS argument
+    set(multiValueArgs DEPENDS)
+    cmake_parse_arguments(COMPILE_ERLANG "" "" "${multiValueArgs}" ${ARGN})
+
     if(AVM_DISABLE_JIT)
         set(erlc_define -DAVM_DISABLE_JIT)
     else()
@@ -51,7 +55,7 @@ function(compile_erlang module_name)
     add_custom_command(
         OUTPUT ${module_name}.beam
         COMMAND erlc ${erlc_define} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl ${COMPILE_ERLANG_DEPENDS}
         COMMENT "Compiling ${module_name}.erl"
     )
     jit_precompile(${module_name})
@@ -566,12 +570,12 @@ compile_erlang(small_big_ext)
 compile_erlang(test_crypto)
 
 compile_erlang(test_code_all_available_loaded)
-compile_erlang(test_code_load_binary)
+compile_erlang(test_code_load_binary DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/export_test_module_data.hrl)
 compile_erlang(test_code_load_abs)
 compile_erlang(test_code_ensure_loaded)
-compile_erlang(test_add_avm_pack_binary)
+compile_erlang(test_add_avm_pack_binary DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/code_load_pack_data.hrl)
 compile_erlang(test_add_avm_pack_file)
-compile_erlang(test_close_avm_pack)
+compile_erlang(test_close_avm_pack DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/code_load_pack_data.hrl)
 
 compile_erlang(test_module_info)
 compile_erlang(erlang_module_loaded)
