@@ -86,7 +86,7 @@ extern "C" {
 #define TERM_PRIMARY_BOXED 0x2
 #define TERM_PRIMARY_IMMED 0x3
 
-#define TERM_BOXED_VALUE_TAG _Pragma ("TERM_BOXED_VALUE_TAG is deprecated, use TERM_PRIMARY_BOXED instead") TERM_PRIMARY_BOXED
+#define TERM_BOXED_VALUE_TAG _Pragma("TERM_BOXED_VALUE_TAG is deprecated, use TERM_PRIMARY_BOXED instead") TERM_PRIMARY_BOXED
 
 #define TERM_IMMED_TAG_MASK 0xF
 #define TERM_PID_TAG 0x3
@@ -130,13 +130,13 @@ extern "C" {
 #define TERM_BOXED_SUB_BINARY_SIZE 4
 #define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFC_BINARY_SIZE
 #if TERM_BYTES == 8
-    #define REFC_BINARY_MIN 64
-    #define SUB_BINARY_MIN 16
+#define REFC_BINARY_MIN 64
+#define SUB_BINARY_MIN 16
 #elif TERM_BYTES == 4
-    #define REFC_BINARY_MIN 32
-    #define SUB_BINARY_MIN 8
+#define REFC_BINARY_MIN 32
+#define SUB_BINARY_MIN 8
 #else
-    #error
+#error
 #endif
 
 #define TERM_MAX_LOCAL_PROCESS_ID ((1 << 28) - 1)
@@ -149,19 +149,19 @@ extern "C" {
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
 #if TERM_BYTES == 8
-    #define EXTERNAL_PID_SIZE 3
+#define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
-    #define EXTERNAL_PID_SIZE 5
+#define EXTERNAL_PID_SIZE 5
 #else
-    #error
+#error
 #endif
 #define EXTERNAL_PORT_SIZE EXTERNAL_PID_SIZE
 #if TERM_BYTES == 8
-    #define EXTERNAL_REF_SIZE(words) (3 + (words / 2))
+#define EXTERNAL_REF_SIZE(words) (3 + (words / 2))
 #elif TERM_BYTES == 4
-    #define EXTERNAL_REF_SIZE(words) (3 + words)
+#define EXTERNAL_REF_SIZE(words) (3 + words)
 #else
-    #error
+#error
 #endif
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
@@ -1047,7 +1047,7 @@ static inline term term_from_int32(int32_t value)
 #if TERM_BITS == 32
     // 268435455 == 0x0FFFFFFF
     if (UNLIKELY((value > 268435455) || (value < -268435455))) {
-        //TODO: unimplemented on heap integer value
+        // TODO: unimplemented on heap integer value
         fprintf(stderr, "term_from_int32: unimplemented: term should be moved to heap.");
         AVM_ABORT();
 
@@ -1059,7 +1059,7 @@ static inline term term_from_int32(int32_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 
 #else
-    #error "Wrong TERM_BITS define"
+#error "Wrong TERM_BITS define"
 #endif
 }
 
@@ -1068,7 +1068,7 @@ static inline term term_from_int64(int64_t value)
 #if TERM_BITS == 32
     // 268435455 == 0x0FFFFFFF
     if (UNLIKELY((value > 268435455) || (value < -268435455))) {
-        //TODO: unimplemented on heap integer value
+        // TODO: unimplemented on heap integer value
         fprintf(stderr, "term_from_int64: unimplemented: term should be moved to heap.");
         AVM_ABORT();
 
@@ -1079,7 +1079,7 @@ static inline term term_from_int64(int64_t value)
 #elif TERM_BITS == 64
     // 1152921504606846975 = 0x0FFFFFFFFFFFFFFF
     if (UNLIKELY((value > 1152921504606846975) || (value < -1152921504606846975))) {
-        //TODO: unimplemented on heap integer value
+        // TODO: unimplemented on heap integer value
         fprintf(stderr, "unimplemented: term should be moved to heap.");
         AVM_ABORT();
 
@@ -1088,7 +1088,7 @@ static inline term term_from_int64(int64_t value)
     }
 
 #else
-    #error "Wrong TERM_BITS define"
+#error "Wrong TERM_BITS define"
 #endif
 }
 
@@ -1206,20 +1206,20 @@ static inline avm_int64_t term_unbox_int64(term boxed_long)
 
     const term *boxed_value = term_to_const_term_ptr(boxed_long);
 
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-        return (avm_int64_t) boxed_value[1];
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+    return (avm_int64_t) boxed_value[1];
 
-    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-            return (avm_int64_t) ((avm_uint64_t) boxed_value[1] | ((avm_uint64_t) boxed_value[2] << 32));
-        #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-            return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
-        #else
-            #error "unsupported endianness."
-        #endif
-    #else
-        #error "unsupported configuration."
-    #endif
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    return (avm_int64_t) ((avm_uint64_t) boxed_value[1] | ((avm_uint64_t) boxed_value[2] << 32));
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
+#else
+#error "unsupported endianness."
+#endif
+#else
+#error "unsupported configuration."
+#endif
 }
 
 static inline avm_int_t term_maybe_unbox_int(term maybe_boxed_int)
@@ -1264,31 +1264,31 @@ static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
     avm_uint64_t sign = (((avm_uint64_t) large_int64) >> 63) << TERM_BOXED_INTEGER_SIGN_BIT_POS;
     term *boxed_int = memory_heap_alloc(heap, 1 + BOXED_TERMS_REQUIRED_FOR_INT64);
     boxed_int[0] = (BOXED_TERMS_REQUIRED_FOR_INT64 << 6) | TERM_BOXED_POSITIVE_INTEGER | sign;
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-        boxed_int[1] = large_int64;
-    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-            boxed_int[1] = large_int64;
-            boxed_int[2] = large_int64 >> 32;
-        #elif  __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-            boxed_int[2] = large_int64;
-            boxed_int[1] = large_int64 >> 32;
-        #else
-            #error "unsupported endianness."
-        #endif
-    #else
-        #error "unsupported configuration."
-    #endif
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+    boxed_int[1] = large_int64;
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    boxed_int[1] = large_int64;
+    boxed_int[2] = large_int64 >> 32;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    boxed_int[2] = large_int64;
+    boxed_int[1] = large_int64 >> 32;
+#else
+#error "unsupported endianness."
+#endif
+#else
+#error "unsupported configuration."
+#endif
     return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
 
 static inline term term_make_maybe_boxed_int64(avm_int64_t value, Heap *heap)
 {
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-            return term_make_boxed_int64(value, heap);
-        }
-    #endif
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+    if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+        return term_make_boxed_int64(value, heap);
+    }
+#endif
 
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         return term_make_boxed_int(value, heap);
@@ -1300,11 +1300,11 @@ static inline term term_make_maybe_boxed_int64(avm_int64_t value, Heap *heap)
 
 static inline size_t term_boxed_integer_size(avm_int64_t value)
 {
-    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-        if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
-            return BOXED_INT64_SIZE;
-        }
-    #endif
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+    if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
+        return BOXED_INT64_SIZE;
+    }
+#endif
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         return BOXED_INT_SIZE;
     } else {
@@ -1570,11 +1570,11 @@ static inline size_t term_binary_data_size_in_terms(size_t size)
 {
     if (term_binary_size_is_heap_binary(size)) {
 #if TERM_BYTES == 4
-    return ((size + 4 - 1) >> 2) + 1;
+        return ((size + 4 - 1) >> 2) + 1;
 #elif TERM_BYTES == 8
-    return ((size + 8 - 1) >> 3) + 1;
+        return ((size + 8 - 1) >> 3) + 1;
 #else
-    #error
+#error
 #endif
     } else {
         return TERM_BOXED_REFC_BINARY_SIZE;
@@ -1648,18 +1648,18 @@ static inline const char *term_binary_data(term t)
 }
 
 /**
-* @brief Create an uninitialized binary.
-*
-* @details Allocates a binary on the heap, and returns a term pointing to it.
-* Note that the data in the binary is uninitialized and could contain any garbage.
-* Make sure to initialize before use, if needed (e.g., via memset).
-* The binary may be allocated as a refc if it is large enough.
-* @param size size of binary data buffer.
-* @param heap the heap to allocate the binary in
-* @param glb the global context as refc binaries are global
-* @return a term pointing to the boxed binary pointer or `term_invalid_term()`
-* if there isn't enough memory to allocate the refc buffer
-*/
+ * @brief Create an uninitialized binary.
+ *
+ * @details Allocates a binary on the heap, and returns a term pointing to it.
+ * Note that the data in the binary is uninitialized and could contain any garbage.
+ * Make sure to initialize before use, if needed (e.g., via memset).
+ * The binary may be allocated as a refc if it is large enough.
+ * @param size size of binary data buffer.
+ * @param heap the heap to allocate the binary in
+ * @param glb the global context as refc binaries are global
+ * @return a term pointing to the boxed binary pointer or `term_invalid_term()`
+ * if there isn't enough memory to allocate the refc buffer
+ */
 static inline term term_create_uninitialized_binary(size_t size, Heap *heap, GlobalContext *glb)
 {
     if (term_binary_size_is_heap_binary(size)) {
@@ -1753,14 +1753,14 @@ static inline term term_from_const_binary(const void *data, size_t size, Heap *h
 }
 
 /**
-* @brief Create an empty binary.  All bytes in the binary are initialized to 0x00
-*
-* @details Allocates a binary on the heap, and returns a term pointing to it.
-* @param size size of binary data buffer.
-* @param heap the heap to allocate memory in
-* @param glb the global context as refc binaries are global
-* @return a term pointing to the boxed binary pointer.
-*/
+ * @brief Create an empty binary.  All bytes in the binary are initialized to 0x00
+ *
+ * @details Allocates a binary on the heap, and returns a term pointing to it.
+ * @param size size of binary data buffer.
+ * @param heap the heap to allocate memory in
+ * @param glb the global context as refc binaries are global
+ * @return a term pointing to the boxed binary pointer.
+ */
 static inline term term_create_empty_binary(size_t size, Heap *heap, GlobalContext *glb)
 {
     term t = term_create_uninitialized_binary(size, heap, glb);
@@ -1771,16 +1771,16 @@ static inline term term_create_empty_binary(size_t size, Heap *heap, GlobalConte
 }
 
 /**
-* @brief Reuse a binary.  If the binary is a refc binary with a ref count of
-* 1, try to reuse it. Otherwise, create a new binary and copy the data.
-*
-* @details Try to reuse a binary and return a term pointing to it.
-* @param src binary to reuse.
-* @param size size of binary data buffer.
-* @param heap the heap to allocate memory in
-* @param glb the global context as refc binaries are global
-* @return a term pointing to the boxed binary pointer.
-*/
+ * @brief Reuse a binary.  If the binary is a refc binary with a ref count of
+ * 1, try to reuse it. Otherwise, create a new binary and copy the data.
+ *
+ * @details Try to reuse a binary and return a term pointing to it.
+ * @param src binary to reuse.
+ * @param size size of binary data buffer.
+ * @param heap the heap to allocate memory in
+ * @param glb the global context as refc binaries are global
+ * @return a term pointing to the boxed binary pointer.
+ */
 term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb);
 
 static inline bool term_normalize_binary_pos_len(term binary, avm_int_t pos, avm_int_t len, BinaryPosLen *pos_len)
@@ -1807,25 +1807,25 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
-    return (BinaryPosLen) { .pos = -1, .len = -1 };
+    return (BinaryPosLen){ .pos = -1, .len = -1 };
 }
 
 /**
-* @brief Insert an binary into a binary (using bit syntax).
-*
-* @details Insert the data from the input binary, starting
-* at the bit position starting in offset.
-* @param t a term pointing to binary data. Fails if t is not a binary term.
-* @param offset the bitwise offset in t at which to start writing the integer value
-* @param src binary source to insert binary data into.
-* @param n the number of low-order bits from value to write.
-* @return 0 on success; non-zero value if:
-*           t is not a binary term
-*           n is greater than the number of bits in an integer
-*           there is insufficient capacity in the binary to write these bits
-* In general, none of these conditions should apply, if this function is being
-* called in the context of generated bit syntax instructions.
-*/
+ * @brief Insert an binary into a binary (using bit syntax).
+ *
+ * @details Insert the data from the input binary, starting
+ * at the bit position starting in offset.
+ * @param t a term pointing to binary data. Fails if t is not a binary term.
+ * @param offset the bitwise offset in t at which to start writing the integer value
+ * @param src binary source to insert binary data into.
+ * @param n the number of low-order bits from value to write.
+ * @return 0 on success; non-zero value if:
+ *           t is not a binary term
+ *           n is greater than the number of bits in an integer
+ *           there is insufficient capacity in the binary to write these bits
+ * In general, none of these conditions should apply, if this function is being
+ * called in the context of generated bit syntax instructions.
+ */
 static inline int term_bs_insert_binary(term t, int offset, term src, int n)
 {
     if (!term_is_binary(t)) {
@@ -1863,16 +1863,16 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
     term *boxed_value = memory_heap_alloc(heap, REF_SIZE);
     boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
 
-    #if TERM_BYTES == 8
-        boxed_value[1] = (term) ref_ticks;
+#if TERM_BYTES == 8
+    boxed_value[1] = (term) ref_ticks;
 
-    #elif TERM_BYTES == 4
-        boxed_value[1] = (ref_ticks >> 4);
-        boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+#elif TERM_BYTES == 4
+    boxed_value[1] = (ref_ticks >> 4);
+    boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
 
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
@@ -1883,15 +1883,15 @@ static inline uint64_t term_to_ref_ticks(term rt)
 
     const term *boxed_value = term_to_const_term_ptr(rt);
 
-    #if TERM_BYTES == 8
-        return boxed_value[1];
+#if TERM_BYTES == 8
+    return boxed_value[1];
 
-    #elif TERM_BYTES == 4
-        return (boxed_value[1] << 4) | boxed_value[2];
+#elif TERM_BYTES == 4
+    return (boxed_value[1] << 4) | boxed_value[2];
 
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
 }
 
 /**
@@ -2039,24 +2039,24 @@ static inline term term_make_external_reference(term node, uint16_t len, uint32_
     boxed_value[0] = ((EXTERNAL_REF_SIZE(len) - 1) << 6) | TERM_BOXED_EXTERNAL_REF;
     uint32_t *external_thing_words = (uint32_t *) &boxed_value[1];
 
-    #if TERM_BYTES == 8
-        external_thing_words[0] = atom_index;
-        external_thing_words[1] = creation;
-        external_thing_words[2] = len;
-        for (int i = 0; i < len; i++) {
-            external_thing_words[3 + i] = data[i];
-        }
+#if TERM_BYTES == 8
+    external_thing_words[0] = atom_index;
+    external_thing_words[1] = creation;
+    external_thing_words[2] = len;
+    for (int i = 0; i < len; i++) {
+        external_thing_words[3 + i] = data[i];
+    }
 
-    #elif TERM_BYTES == 4
-        external_thing_words[0] = atom_index;
-        external_thing_words[1] = creation;
-        for (int i = 0; i < len; i++) {
-            external_thing_words[2 + i] = data[i];
-        }
+#elif TERM_BYTES == 4
+    external_thing_words[0] = atom_index;
+    external_thing_words[1] = creation;
+    for (int i = 0; i < len; i++) {
+        external_thing_words[2 + i] = data[i];
+    }
 
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
@@ -2073,16 +2073,16 @@ static inline uint32_t term_get_external_reference_len(term t)
 
     const term *boxed_value = term_to_const_term_ptr(t);
 
-    #if TERM_BYTES == 8
-        const uint32_t *external_thing_words = (const uint32_t *) &boxed_value[1];
-        return (uint32_t) external_thing_words[2];
+#if TERM_BYTES == 8
+    const uint32_t *external_thing_words = (const uint32_t *) &boxed_value[1];
+    return (uint32_t) external_thing_words[2];
 
-    #elif TERM_BYTES == 4
-        return (uint32_t) (boxed_value[0] >> 6) - 2;
+#elif TERM_BYTES == 4
+    return (uint32_t) (boxed_value[0] >> 6) - 2;
 
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
 }
 
 /**
@@ -2098,15 +2098,15 @@ static inline const uint32_t *term_get_external_reference_words(term t)
     const term *boxed_value = term_to_const_term_ptr(t);
     const uint32_t *external_thing_words = (const uint32_t *) &boxed_value[1];
 
-    #if TERM_BYTES == 8
-        return external_thing_words + 3;
+#if TERM_BYTES == 8
+    return external_thing_words + 3;
 
-    #elif TERM_BYTES == 4
-        return external_thing_words + 2;
+#elif TERM_BYTES == 4
+    return external_thing_words + 2;
 
-    #else
-        #error "terms must be either 32 or 64 bit wide"
-    #endif
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
 }
 
 /**
@@ -2119,10 +2119,10 @@ static inline const uint32_t *term_get_external_reference_words(term t)
  */
 static inline term term_alloc_tuple(uint32_t size, Heap *heap)
 {
-    //TODO: write a real implementation
-    //align constraints here
+    // TODO: write a real implementation
+    // align constraints here
     term *boxed_value = memory_heap_alloc(heap, 1 + size);
-    boxed_value[0] = (size << 6); //tuple
+    boxed_value[0] = (size << 6); // tuple
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
@@ -2191,8 +2191,8 @@ static inline int term_get_tuple_arity(term t)
  */
 static inline term term_from_string(const uint8_t *data, uint16_t size, Heap *heap)
 {
-    //TODO: write a real implementation
-    //align constraints here
+    // TODO: write a real implementation
+    // align constraints here
     term *list_cells = memory_heap_alloc(heap, size * 2);
     for (int i = 0; i < size * 2; i += 2) {
         list_cells[i] = (term) &list_cells[i + 2] | 0x1;

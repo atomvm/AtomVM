@@ -46,7 +46,8 @@ _Static_assert(
 // Make sure avm_int_t can always fit into size_t
 _Static_assert(SIZE_MAX >= AVM_INT_MAX, "SIZE_MAX < AVM_INT_MAX is an unsupported configuration.");
 
-enum TermTypeIndex {
+enum TermTypeIndex
+{
     TERM_TYPE_INDEX_INVALID = 0,
     TERM_TYPE_INDEX_INTEGER = 1,
     TERM_TYPE_INDEX_FLOAT = 2,
@@ -118,8 +119,7 @@ int term_fprint(FILE *stream, term t, const GlobalContext *global)
 {
     struct FprintfFun fprintf_fun = {
         .base = {
-            .print = fprintf_printer
-        },
+            .print = fprintf_printer },
         .stream = stream
     };
 
@@ -130,8 +130,7 @@ int term_snprint(char *buf, size_t size, term t, const GlobalContext *global)
 {
     struct SnprintfFun snprintf_fun = {
         .base = {
-            .print = snprintf_printer
-        },
+            .print = snprintf_printer },
         .buf = buf,
         .size = size
     };
@@ -492,8 +491,7 @@ static enum TermTypeIndex term_type_to_index(term t)
                 default:
                     UNREACHABLE();
             }
-        }
-        break;
+        } break;
         case TERM_PRIMARY_IMMED:
             switch (t & TERM_IMMED_TAG_MASK) {
                 case TERM_PID_TAG:
@@ -523,15 +521,15 @@ static enum TermTypeIndex term_type_to_index(term t)
 #define BEGIN_MAP_KEY TERM_RESERVED_MARKER(1)
 #define END_MAP_KEY TERM_RESERVED_MARKER(0)
 
-#define CMP_POP_AND_CONTINUE()                                                                     \
-    other = temp_stack_pop(&temp_stack);                                                           \
-    if (other == BEGIN_MAP_KEY) {                                                                  \
-        map_key_nesting++;                                                                       \
-        other = temp_stack_pop(&temp_stack);                                                       \
-    } else if (other == END_MAP_KEY) {                                                             \
-        map_key_nesting--;                                                                       \
-        other = temp_stack_pop(&temp_stack);                                                       \
-    }                                                                                              \
+#define CMP_POP_AND_CONTINUE()               \
+    other = temp_stack_pop(&temp_stack);     \
+    if (other == BEGIN_MAP_KEY) {            \
+        map_key_nesting++;                   \
+        other = temp_stack_pop(&temp_stack); \
+    } else if (other == END_MAP_KEY) {       \
+        map_key_nesting--;                   \
+        other = temp_stack_pop(&temp_stack); \
+    }                                        \
     t = temp_stack_pop(&temp_stack);
 
 TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalContext *global)
@@ -857,8 +855,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             CMP_POP_AND_CONTINUE();
                             break;
                         }
-                    }
-                    break;
+                    } break;
                     case TERM_TYPE_INDEX_FLOAT: {
                         avm_float_t t_float = term_to_float(t);
                         avm_float_t other_float = term_to_float(other);
@@ -869,8 +866,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             result = (t_float > other_float) ? TermGreaterThan : TermLessThan;
                             goto unequal;
                         }
-                    }
-                    break;
+                    } break;
                     case TERM_TYPE_INDEX_ATOM: {
                         int t_atom_index = term_to_atom_index(t);
                         int other_atom_index = term_to_atom_index(other);
@@ -945,7 +941,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                         UNREACHABLE();
                 }
             } else if ((((type_t == TERM_TYPE_INDEX_FLOAT && type_other == TERM_TYPE_INDEX_INTEGER)
-                || (type_t == TERM_TYPE_INDEX_INTEGER && type_other == TERM_TYPE_INDEX_FLOAT)))
+                           || (type_t == TERM_TYPE_INDEX_INTEGER && type_other == TERM_TYPE_INDEX_FLOAT)))
                 && ((opts & TermCompareExact) != TermCompareExact) && (map_key_nesting == 0)) {
                 avm_float_t t_float = term_conv_to_float(t);
                 avm_float_t other_float = term_conv_to_float(other);

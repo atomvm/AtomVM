@@ -20,8 +20,8 @@
 
 #include "bif.h"
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "atom.h"
 #include "bitstring.h"
@@ -37,7 +37,7 @@
 #include "unicode.h"
 #include "utils.h"
 
-//Ignore warning caused by gperf generated code
+// Ignore warning caused by gperf generated code
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #include "bifs_hash.h"
@@ -72,11 +72,11 @@
  * do not use `(avm_float_t) INT64_MIN` or `(avm_float_t) INT64_MAX`.
  */
 #ifdef AVM_USE_SINGLE_PRECISION
-    #define INT64_MIN_AS_AVM_FLOAT -9223372586610590720.0 // 0xDF000000 = -2^63
-    #define INT64_MAX_AS_AVM_FLOAT 9223371761976868863.0 // 0x5F000000 = 2^63
+#define INT64_MIN_AS_AVM_FLOAT -9223372586610590720.0 // 0xDF000000 = -2^63
+#define INT64_MAX_AS_AVM_FLOAT 9223371761976868863.0 // 0x5F000000 = 2^63
 #else
-    #define INT64_MIN_AS_AVM_FLOAT -9223372036854776832.0 // 0xC3E0000000000000 = -2^63
-    #define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
+#define INT64_MIN_AS_AVM_FLOAT -9223372036854776832.0 // 0xC3E0000000000000 = -2^63
+#define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
 #endif
 
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
@@ -638,21 +638,21 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 avm_int_t res;
 
                 if (BUILTIN_ADD_OVERFLOW_INT(val1, val2, &res)) {
-                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
-                        return make_boxed_int64(ctx, fail_label, live, res64);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 + (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, fail_label, live, res64);
 
-                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        return add_int64_to_bigint(ctx, fail_label, live, val1, val2);
-                    #else
-                        #error "Unsupported configuration."
-                    #endif
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    return add_int64_to_bigint(ctx, fail_label, live, val1, val2);
+#else
+#error "Unsupported configuration."
+#endif
                 }
 
                 return make_maybe_boxed_int(ctx, fail_label, live, res);
             }
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val1 = term_maybe_unbox_int64(arg1);
                 avm_int64_t val2 = term_maybe_unbox_int64(arg2);
@@ -664,7 +664,7 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, res);
             }
-        #endif
+#endif
 
             default:
                 return add_maybe_bigint(ctx, fail_label, live, arg1, arg2);
@@ -689,7 +689,7 @@ term bif_erlang_add_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        //TODO: use long integer instead, and term_to_longint
+        // TODO: use long integer instead, and term_to_longint
         avm_int_t res;
         if (!BUILTIN_ADD_OVERFLOW((avm_int_t) (arg1 & ~TERM_INTEGER_TAG), (avm_int_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
             return res | TERM_INTEGER_TAG;
@@ -777,21 +777,21 @@ static term sub_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 avm_int_t res;
 
                 if (BUILTIN_SUB_OVERFLOW_INT(val1, val2, &res)) {
-                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        avm_int64_t res64 = (avm_int64_t) val1 - (avm_int64_t) val2;
-                        return make_boxed_int64(ctx, fail_label, live, res64);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 - (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, fail_label, live, res64);
 
-                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        return sub_int64_to_bigint(ctx, fail_label, live, val1, val2);
-                    #else
-                        #error "Unsupported configuration."
-                    #endif
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    return sub_int64_to_bigint(ctx, fail_label, live, val1, val2);
+#else
+#error "Unsupported configuration."
+#endif
                 }
 
                 return make_maybe_boxed_int(ctx, fail_label, live, res);
             }
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val1 = term_maybe_unbox_int64(arg1);
                 avm_int64_t val2 = term_maybe_unbox_int64(arg2);
@@ -803,7 +803,7 @@ static term sub_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, res);
             }
-        #endif
+#endif
 
             default:
                 return sub_maybe_bigint(ctx, fail_label, live, arg1, arg2);
@@ -828,7 +828,7 @@ term bif_erlang_sub_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
     UNUSED(live);
 
     if (LIKELY(term_is_integer(arg1) && term_is_integer(arg2))) {
-        //TODO: use long integer instead, and term_to_longint
+        // TODO: use long integer instead, and term_to_longint
         avm_int_t res;
         if (!BUILTIN_SUB_OVERFLOW((avm_int_t) (arg1 & ~TERM_INTEGER_TAG), (avm_int_t) (arg2 & ~TERM_INTEGER_TAG), &res)) {
             return res | TERM_INTEGER_TAG;
@@ -920,21 +920,21 @@ static term mul_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 avm_int_t res;
 
                 if (BUILTIN_MUL_OVERFLOW_INT(val1, val2, &res)) {
-                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
-                        return make_boxed_int64(ctx, fail_label, live, res64);
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    avm_int64_t res64 = (avm_int64_t) val1 * (avm_int64_t) val2;
+                    return make_boxed_int64(ctx, fail_label, live, res64);
 
-                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
-                    #else
-                        #error "Unsupported configuration."
-                    #endif
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
+#else
+#error "Unsupported configuration."
+#endif
                 }
 
                 return make_maybe_boxed_int(ctx, fail_label, live, res);
             }
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val1 = term_maybe_unbox_int64(arg1);
                 avm_int64_t val2 = term_maybe_unbox_int64(arg2);
@@ -946,7 +946,7 @@ static term mul_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, res);
             }
-        #endif
+#endif
 
             default:
                 return mul_maybe_bigint(ctx, fail_label, live, arg1, arg2);
@@ -1070,18 +1070,18 @@ static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
 
                 } else if (UNLIKELY((val2 == -1) && (val1 == AVM_INT_MIN))) {
-                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) AVM_INT_MIN));
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) AVM_INT_MIN));
 
-                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        return int64_max_plus_one(ctx, fail_label, live);
-                    #endif
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    return int64_max_plus_one(ctx, fail_label, live);
+#endif
                 }
 
                 return make_maybe_boxed_int(ctx, fail_label, live, val1 / val2);
             }
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val1 = term_maybe_unbox_int64(arg1);
                 avm_int64_t val2 = term_maybe_unbox_int64(arg2);
@@ -1095,7 +1095,7 @@ static term div_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
                 return make_maybe_boxed_int64(ctx, fail_label, live, val1 / val2);
             }
-        #endif
+#endif
 
             default:
                 return div_maybe_bigint(ctx, fail_label, live, arg1, arg2);
@@ -1160,7 +1160,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
             case 0:
-                //BUG
+                // BUG
                 AVM_ABORT();
 
             case 1: {
@@ -1170,22 +1170,22 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                         return term_from_int(MIN_NOT_BOXED_INT);
 
                     case AVM_INT_MIN:
-                        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                            return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                        return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
 
-                        #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                            return int64_max_plus_one(ctx, fail_label, live);
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                        return int64_max_plus_one(ctx, fail_label, live);
 
-                        #else
-                            #error "Unsupported configuration."
-                        #endif
+#else
+#error "Unsupported configuration."
+#endif
 
                     default:
                         return make_boxed_int(ctx, fail_label, live, -val);
                 }
             }
 
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val = term_unbox_int64(arg1);
 
@@ -1198,7 +1198,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     return make_maybe_boxed_int64(ctx, fail_label, live, -val);
                 }
             }
-            #endif
+#endif
             default:
                 return neg_bigint(ctx, fail_label, live, arg1);
         }
@@ -1244,11 +1244,11 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
     if (term_is_float(arg1)) {
         avm_float_t farg1 = term_conv_to_float(arg1);
         avm_float_t fresult;
-        #if AVM_USE_SINGLE_PRECISION
-            fresult = fabsf(farg1);
-        #else
-            fresult = fabs(farg1);
-        #endif
+#if AVM_USE_SINGLE_PRECISION
+        fresult = fabsf(farg1);
+#else
+        fresult = fabs(farg1);
+#endif
 
         if (UNLIKELY(!isfinite(fresult))) {
             RAISE_ERROR_BIF(fail_label, BADARITH_ATOM);
@@ -1262,7 +1262,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
             case 0:
-                //BUG
+                // BUG
                 AVM_ABORT();
 
             case 1: {
@@ -1272,22 +1272,22 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                 }
 
                 if (val == AVM_INT_MIN) {
-                    #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-                        return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+                    return make_boxed_int64(ctx, fail_label, live, -((avm_int64_t) val));
 
-                    #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
-                        return int64_max_plus_one(ctx, fail_label, live);
+#elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
+                    return int64_max_plus_one(ctx, fail_label, live);
 
-                    #else
-                        #error "Unsupported configuration."
-                    #endif
+#else
+#error "Unsupported configuration."
+#endif
 
                 } else {
                     return make_boxed_int(ctx, fail_label, live, -val);
                 }
             }
 
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val = term_unbox_int64(arg1);
                 if (val >= 0) {
@@ -1301,7 +1301,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     return make_boxed_int64(ctx, fail_label, live, -val);
                 }
             }
-            #endif
+#endif
             default:
                 return abs_bigint(ctx, fail_label, live, arg1);
         }
@@ -1387,7 +1387,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
     switch (size) {
         case 0: {
-            //BUG
+            // BUG
             AVM_ABORT();
         }
 
@@ -1401,7 +1401,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
             return make_maybe_boxed_int(ctx, fail_label, live, val1 % val2);
         }
 
-        #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
         case 2:
         case 3: {
             avm_int64_t val1 = term_maybe_unbox_int64(arg1);
@@ -1412,7 +1412,7 @@ static term rem_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 
             return make_maybe_boxed_int64(ctx, fail_label, live, val1 % val2);
         }
-        #endif
+#endif
 
         default:
             return rem_maybe_bigint(ctx, fail_label, live, arg1, arg2);
@@ -1583,9 +1583,9 @@ term bif_erlang_float_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 
 typedef int64_t (*bitwise_op)(int64_t a, int64_t b);
 typedef size_t (*bitwise_big_op)(
-        const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
-        const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign,
-        intn_digit_t out[], intn_integer_sign_t *out_sign);
+    const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign,
+    const intn_digit_t n[], size_t n_len, intn_integer_sign_t n_sign,
+    intn_digit_t out[], intn_integer_sign_t *out_sign);
 
 static inline term bitwise_helper(
     Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, bitwise_op op, bitwise_big_op big_op)
@@ -1677,11 +1677,11 @@ term bif_erlang_bsl_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
             int64_t a = term_maybe_unbox_int64(arg1);
             int64_t result;
             if (!int64_bsl_overflow(a, b, &result)) {
-                #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                    return make_maybe_boxed_int64(ctx, fail_label, live, result);
-                #else
-                    return make_maybe_boxed_int(ctx, fail_label, live, result);
-                #endif
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+                return make_maybe_boxed_int64(ctx, fail_label, live, result);
+#else
+                return make_maybe_boxed_int(ctx, fail_label, live, result);
+#endif
             }
         }
 
@@ -1738,11 +1738,11 @@ term bif_erlang_bsr_2(Context *ctx, uint32_t fail_label, int live, term arg1, te
             int64_t a = term_maybe_unbox_int64(arg1);
             int64_t result = int64_bsr_safe(a, b);
 
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
-                return make_maybe_boxed_int64(ctx, fail_label, live, result);
-            #else
-                return make_maybe_boxed_int(ctx, fail_label, live, result);
-            #endif
+#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+            return make_maybe_boxed_int64(ctx, fail_label, live, result);
+#else
+            return make_maybe_boxed_int(ctx, fail_label, live, result);
+#endif
         }
 
         intn_digit_t tmp_buf1[INTN_INT64_LEN];
@@ -1791,7 +1791,7 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
     if (term_is_boxed_integer(arg1)) {
         switch (term_boxed_size(arg1)) {
             case 0:
-                //BUG
+                // BUG
                 AVM_ABORT();
 
             case 1: {
@@ -1799,12 +1799,12 @@ static term bnot_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, 
                 return make_boxed_int(ctx, fail_label, live, ~val);
             }
 
-            #if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
+#if BOXED_TERMS_REQUIRED_FOR_INT64 == 2
             case 2: {
                 avm_int64_t val = term_unbox_int64(arg1);
                 return make_boxed_int64(ctx, fail_label, live, ~val);
             }
-            #endif
+#endif
             default: {
                 intn_digit_t tmp_buf1[INTN_INT64_LEN];
                 const intn_digit_t *m;
@@ -1934,7 +1934,7 @@ term bif_erlang_not_equal_to_2(Context *ctx, uint32_t fail_label, term arg1, ter
 
 term bif_erlang_exactly_equal_to_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
 {
-    //TODO: 5.0 != 5
+    // TODO: 5.0 != 5
     TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
     if (result == TermEquals) {
         return TRUE_ATOM;

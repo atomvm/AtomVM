@@ -34,7 +34,7 @@
 #include "term.h"
 #include <stdlib.h>
 
-//#define ENABLE_TRACE
+// #define ENABLE_TRACE
 #include "trace.h"
 
 #define VALIDATE_VALUE(value, verify_function) \
@@ -77,13 +77,11 @@ static term nif_atomvm_random(Context *ctx, int argc, term argv[])
     return term_make_boxed_int(value, &ctx->heap);
 }
 
-static const struct Nif atomvm_rand_bytes_nif =
-{
+static const struct Nif atomvm_rand_bytes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_rand_bytes
 };
-static const struct Nif atomvm_random_nif =
-{
+static const struct Nif atomvm_random_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_random
 };
@@ -98,8 +96,7 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     return GENERIC_UNIX_ATOM;
 }
 
-static const struct Nif atomvm_platform_nif =
-{
+static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };
