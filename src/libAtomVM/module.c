@@ -30,10 +30,10 @@
 #include "jit.h"
 #include "list.h"
 #include "nifs.h"
+#include "smp.h"
+#include "sys.h"
 #include "term.h"
 #include "utils.h"
-#include "sys.h"
-#include "smp.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,22 +44,22 @@
 
 // BEAM Type constants from OTP source code:
 // /opt/src/otp/lib/compiler/src/beam_types.erl lines 1446-1461
-#define BEAM_TYPE_ATOM          (1 << 0)
-#define BEAM_TYPE_BITSTRING     (1 << 1)
-#define BEAM_TYPE_CONS          (1 << 2)
-#define BEAM_TYPE_FLOAT         (1 << 3)
-#define BEAM_TYPE_FUN           (1 << 4)
-#define BEAM_TYPE_INTEGER       (1 << 5)
-#define BEAM_TYPE_MAP           (1 << 6)
-#define BEAM_TYPE_NIL           (1 << 7)
-#define BEAM_TYPE_PID           (1 << 8)
-#define BEAM_TYPE_PORT          (1 << 9)
-#define BEAM_TYPE_REFERENCE     (1 << 10)
-#define BEAM_TYPE_TUPLE         (1 << 11)
+#define BEAM_TYPE_ATOM (1 << 0)
+#define BEAM_TYPE_BITSTRING (1 << 1)
+#define BEAM_TYPE_CONS (1 << 2)
+#define BEAM_TYPE_FLOAT (1 << 3)
+#define BEAM_TYPE_FUN (1 << 4)
+#define BEAM_TYPE_INTEGER (1 << 5)
+#define BEAM_TYPE_MAP (1 << 6)
+#define BEAM_TYPE_NIL (1 << 7)
+#define BEAM_TYPE_PID (1 << 8)
+#define BEAM_TYPE_PORT (1 << 9)
+#define BEAM_TYPE_REFERENCE (1 << 10)
+#define BEAM_TYPE_TUPLE (1 << 11)
 
 #define BEAM_TYPE_HAS_LOWER_BOUND (1 << 12)
 #define BEAM_TYPE_HAS_UPPER_BOUND (1 << 13)
-#define BEAM_TYPE_HAS_UNIT        (1 << 14)
+#define BEAM_TYPE_HAS_UNIT (1 << 14)
 
 // BEAM Types version from OTP source code:
 // /opt/src/otp/lib/compiler/src/beam_types.hrl line 22
@@ -76,7 +76,7 @@
 
 static bool module_are_literals_compressed(const uint8_t *litT);
 #ifdef WITH_ZLIB
-    static void *module_uncompress_literals(const uint8_t *litT, int size);
+static void *module_uncompress_literals(const uint8_t *litT, int size);
 #endif
 static struct LiteralEntry *module_build_literals_table(const void *literalsBuf);
 #ifndef AVM_NO_EMU
@@ -387,18 +387,18 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             mod->free_literals_data = 0;
 
         } else {
-            #ifdef WITH_ZLIB
-                mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
-                if (IS_NULL_PTR(mod->literals_data)) {
-                    module_destroy(mod);
-                    return NULL;
-                }
-                mod->free_literals_data = 1;
-            #else
-                fprintf(stderr, "Error: zlib required to uncompress literals.\n");
+#ifdef WITH_ZLIB
+            mod->literals_data = module_uncompress_literals(beam_file + offsets[LITT], sizes[LITT]);
+            if (IS_NULL_PTR(mod->literals_data)) {
                 module_destroy(mod);
                 return NULL;
-            #endif
+            }
+            mod->free_literals_data = 1;
+#else
+            fprintf(stderr, "Error: zlib required to uncompress literals.\n");
+            module_destroy(mod);
+            return NULL;
+#endif
         }
 
         mod->literals_table = module_build_literals_table(mod->literals_data);
@@ -590,9 +590,15 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
         pos += 2;
 
         // Skip extra data if present
-        if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) pos += 8;
-        if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) pos += 8;
-        if (type_bits & BEAM_TYPE_HAS_UNIT) pos += 1;
+        if (type_bits & BEAM_TYPE_HAS_LOWER_BOUND) {
+            pos += 8;
+        }
+        if (type_bits & BEAM_TYPE_HAS_UPPER_BOUND) {
+            pos += 8;
+        }
+        if (type_bits & BEAM_TYPE_HAS_UNIT) {
+            pos += 1;
+        }
     }
 
     // Read the target type
@@ -986,7 +992,6 @@ static bool module_get_line_ref(Module *mod, uint16_t line_ref, uint32_t *out_li
     return false;
 }
 
-
 static bool module_get_location(Module *mod, uint16_t location_ix, size_t *filename_len, const uint8_t **filename)
 {
     // 0 is module.erl
@@ -1001,7 +1006,7 @@ static bool module_get_location(Module *mod, uint16_t location_ix, size_t *filen
     const uint8_t *pos = mod->locations_table;
     for (size_t i = 1; i <= mod->locations_count; i++) {
         uint16_t size = READ_16_UNALIGNED(pos);
-        pos +=2;
+        pos += 2;
         if (i == location_ix) {
             *filename_len = size;
             if (filename) {

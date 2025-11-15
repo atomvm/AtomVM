@@ -39,166 +39,159 @@ extern "C" {
 #endif
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    #ifdef __GNUC__
-        #define READ_32_ALIGNED(ptr) \
-            __builtin_bswap32(*((uint32_t *) (ptr)))
-    #else
-        #define READ_32_ALIGNED(ptr) \
-            ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
-    #endif
+#ifdef __GNUC__
+#define READ_32_ALIGNED(ptr) \
+    __builtin_bswap32(*((uint32_t *) (ptr)))
+#else
+#define READ_32_ALIGNED(ptr) \
+    ((((uint8_t *) (ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *) (ptr))[2] << 8) | ((uint8_t *) (ptr))[3])
+#endif
 
-    #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86) || defined(__aarch64__) || defined(_M_ARM64)
-        #define READ_64_UNALIGNED(ptr) \
-            __builtin_bswap64(*((uint64_t *) (ptr)))
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86) || defined(__aarch64__) || defined(_M_ARM64)
+#define READ_64_UNALIGNED(ptr) \
+    __builtin_bswap64(*((uint64_t *) (ptr)))
 
-        #define WRITE_64_UNALIGNED(ptr, val) \
-            *((uint64_t *) (ptr)) = __builtin_bswap64(val)
+#define WRITE_64_UNALIGNED(ptr, val) \
+    *((uint64_t *) (ptr)) = __builtin_bswap64(val)
 
-        #define READ_32_UNALIGNED(ptr) \
-            __builtin_bswap32(*((uint32_t *) (ptr)))
+#define READ_32_UNALIGNED(ptr) \
+    __builtin_bswap32(*((uint32_t *) (ptr)))
 
-        #define WRITE_32_UNALIGNED(ptr, val) \
-            *((uint32_t *) (ptr)) = __builtin_bswap32(val)
+#define WRITE_32_UNALIGNED(ptr, val) \
+    *((uint32_t *) (ptr)) = __builtin_bswap32(val)
 
-        #define READ_16_UNALIGNED(ptr) \
-            __builtin_bswap16(*((uint16_t *) (ptr)))
+#define READ_16_UNALIGNED(ptr) \
+    __builtin_bswap16(*((uint16_t *) (ptr)))
 
-        #define WRITE_16_UNALIGNED(ptr, val) \
-            *((uint16_t *) (ptr)) = __builtin_bswap16(val)
+#define WRITE_16_UNALIGNED(ptr, val) \
+    *((uint16_t *) (ptr)) = __builtin_bswap16(val)
 
-    #else
-        #define READ_64_UNALIGNED(ptr) \
-            ( (((uint64_t) ((uint8_t *)(ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | \
-              (((uint64_t) ((uint8_t *)(ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | \
-              (((uint64_t) ((uint8_t *)(ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | \
-              (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
+#else
+#define READ_64_UNALIGNED(ptr) \
+    ((((uint64_t) ((uint8_t *) (ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])))
 
-        #define WRITE_64_UNALIGNED(ptr, val) \
-            { \
-                ((uint8_t *)(ptr))[0] = (((uint64_t) val) >> 56) & 0xff; \
-                ((uint8_t *)(ptr))[1] = (((uint64_t) val) >> 48) & 0xff; \
-                ((uint8_t *)(ptr))[2] = (((uint64_t) val) >> 40) & 0xff; \
-                ((uint8_t *)(ptr))[3] = (((uint64_t) val) >> 32) & 0xff; \
-                ((uint8_t *)(ptr))[4] = (((uint64_t) val) >> 24) & 0xff; \
-                ((uint8_t *)(ptr))[5] = (((uint64_t) val) >> 16) & 0xff; \
-                ((uint8_t *)(ptr))[6] = (((uint64_t) val) >> 8) & 0xff; \
-                ((uint8_t *)(ptr))[7] = ((uint64_t) val) & 0xff; \
-            }
+#define WRITE_64_UNALIGNED(ptr, val)                              \
+    {                                                             \
+        ((uint8_t *) (ptr))[0] = (((uint64_t) val) >> 56) & 0xff; \
+        ((uint8_t *) (ptr))[1] = (((uint64_t) val) >> 48) & 0xff; \
+        ((uint8_t *) (ptr))[2] = (((uint64_t) val) >> 40) & 0xff; \
+        ((uint8_t *) (ptr))[3] = (((uint64_t) val) >> 32) & 0xff; \
+        ((uint8_t *) (ptr))[4] = (((uint64_t) val) >> 24) & 0xff; \
+        ((uint8_t *) (ptr))[5] = (((uint64_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[6] = (((uint64_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[7] = ((uint64_t) val) & 0xff;         \
+    }
 
-        #define READ_32_UNALIGNED(ptr) \
-            ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+#define READ_32_UNALIGNED(ptr) \
+    ((((uint8_t *) (ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *) (ptr))[2] << 8) | ((uint8_t *) (ptr))[3])
 
-        #define WRITE_32_UNALIGNED(ptr, val) \
-            { \
-                ((uint8_t *)(ptr))[0] = (((uint32_t) val) >> 24) & 0xff; \
-                ((uint8_t *)(ptr))[1] = (((uint32_t) val) >> 16) & 0xff; \
-                ((uint8_t *)(ptr))[2] = (((uint32_t) val) >> 8) & 0xff; \
-                ((uint8_t *)(ptr))[3] = ((uint32_t) val) & 0xff; \
-            }
+#define WRITE_32_UNALIGNED(ptr, val)                              \
+    {                                                             \
+        ((uint8_t *) (ptr))[0] = (((uint32_t) val) >> 24) & 0xff; \
+        ((uint8_t *) (ptr))[1] = (((uint32_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[2] = (((uint32_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[3] = ((uint32_t) val) & 0xff;         \
+    }
 
-        #define READ_16_UNALIGNED(ptr) \
-            ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
+#define READ_16_UNALIGNED(ptr) \
+    ((((uint8_t *) (ptr))[0] << 8) | ((uint8_t *) (ptr))[1])
 
-        #define WRITE_16_UNALIGNED(ptr, val) \
-            { \
-                ((uint8_t *)(ptr))[0] = (((uint16_t) val) >> 8) & 0xff; \
-                ((uint8_t *)(ptr))[1] = ((uint16_t) val) & 0xff; \
-            }
-    #endif
+#define WRITE_16_UNALIGNED(ptr, val)                             \
+    {                                                            \
+        ((uint8_t *) (ptr))[0] = (((uint16_t) val) >> 8) & 0xff; \
+        ((uint8_t *) (ptr))[1] = ((uint16_t) val) & 0xff;        \
+    }
+#endif
 
-    #ifdef __GNUC__
-        #define ENDIAN_SWAP_32(value) __builtin_bswap32(value)
-    #else
-        #define ENDIAN_SWAP_32(value) ((((value) & 0xFF) << 24) | (((value) & 0xFF00) << 8) | (((value) & 0xFF0000) >> 8) | (((value) & 0xFF000000) >> 24))
-    #endif
+#ifdef __GNUC__
+#define ENDIAN_SWAP_32(value) __builtin_bswap32(value)
+#else
+#define ENDIAN_SWAP_32(value) ((((value) &0xFF) << 24) | (((value) &0xFF00) << 8) | (((value) &0xFF0000) >> 8) | (((value) &0xFF000000) >> 24))
+#endif
 
-    #ifdef __GNUC__
-        #define ENDIAN_SWAP_16(value) __builtin_bswap16(value)
-    #else
-        #define ENDIAN_SWAP_16(value) ((((value) & 0xFF) << 8) | (((value) & 0xFF00) >> 8))
-    #endif
+#ifdef __GNUC__
+#define ENDIAN_SWAP_16(value) __builtin_bswap16(value)
+#else
+#define ENDIAN_SWAP_16(value) ((((value) &0xFF) << 8) | (((value) &0xFF00) >> 8))
+#endif
 
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
-    #define READ_64_UNALIGNED(ptr) \
-        ( (((uint64_t) ((uint8_t *)(ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | \
-            (((uint64_t) ((uint8_t *)(ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | \
-            (((uint64_t) ((uint8_t *)(ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | \
-            (((uint64_t) ((uint8_t *)(ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])) )
+#define READ_64_UNALIGNED(ptr) \
+    ((((uint64_t) ((uint8_t *) (ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])))
 
-    #define WRITE_64_UNALIGNED(ptr, val) \
-        { \
-            ((uint8_t *)(ptr))[0] = (((uint64_t) val) >> 56) & 0xff; \
-            ((uint8_t *)(ptr))[1] = (((uint64_t) val) >> 48) & 0xff; \
-            ((uint8_t *)(ptr))[2] = (((uint64_t) val) >> 40) & 0xff; \
-            ((uint8_t *)(ptr))[3] = (((uint64_t) val) >> 32) & 0xff; \
-            ((uint8_t *)(ptr))[4] = (((uint64_t) val) >> 24) & 0xff; \
-            ((uint8_t *)(ptr))[5] = (((uint64_t) val) >> 16) & 0xff; \
-            ((uint8_t *)(ptr))[6] = (((uint64_t) val) >> 8) & 0xff; \
-            ((uint8_t *)(ptr))[7] = ((uint64_t) val) & 0xff; \
-        }
+#define WRITE_64_UNALIGNED(ptr, val)                              \
+    {                                                             \
+        ((uint8_t *) (ptr))[0] = (((uint64_t) val) >> 56) & 0xff; \
+        ((uint8_t *) (ptr))[1] = (((uint64_t) val) >> 48) & 0xff; \
+        ((uint8_t *) (ptr))[2] = (((uint64_t) val) >> 40) & 0xff; \
+        ((uint8_t *) (ptr))[3] = (((uint64_t) val) >> 32) & 0xff; \
+        ((uint8_t *) (ptr))[4] = (((uint64_t) val) >> 24) & 0xff; \
+        ((uint8_t *) (ptr))[5] = (((uint64_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[6] = (((uint64_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[7] = ((uint64_t) val) & 0xff;         \
+    }
 
-    #define READ_32_ALIGNED(ptr) \
-        (*((uint32_t *) (ptr)))
+#define READ_32_ALIGNED(ptr) \
+    (*((uint32_t *) (ptr)))
 
-    #define READ_32_UNALIGNED(ptr) \
-        ( (((uint8_t *)(ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *)(ptr))[2] << 8) | ((uint8_t *)(ptr))[3] )
+#define READ_32_UNALIGNED(ptr) \
+    ((((uint8_t *) (ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *) (ptr))[2] << 8) | ((uint8_t *) (ptr))[3])
 
-    #define WRITE_32_UNALIGNED(ptr, val) \
-        { \
-            ((uint8_t *)(ptr))[0] = (((uint32_t) val) >> 24) & 0xff; \
-            ((uint8_t *)(ptr))[1] = (((uint32_t) val) >> 16) & 0xff; \
-            ((uint8_t *)(ptr))[2] = (((uint32_t) val) >> 8) & 0xff; \
-            ((uint8_t *)(ptr))[3] = ((uint32_t) val) & 0xff; \
-        }
+#define WRITE_32_UNALIGNED(ptr, val)                              \
+    {                                                             \
+        ((uint8_t *) (ptr))[0] = (((uint32_t) val) >> 24) & 0xff; \
+        ((uint8_t *) (ptr))[1] = (((uint32_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[2] = (((uint32_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[3] = ((uint32_t) val) & 0xff;         \
+    }
 
-    #define READ_16_UNALIGNED(ptr) \
-        ( (((uint8_t *)(ptr))[0] << 8) | ((uint8_t *)(ptr))[1] )
+#define READ_16_UNALIGNED(ptr) \
+    ((((uint8_t *) (ptr))[0] << 8) | ((uint8_t *) (ptr))[1])
 
-    #define WRITE_16_UNALIGNED(ptr, val) \
-        { \
-            ((uint8_t *)(ptr))[0] = (((uint16_t) val) >> 8) & 0xff; \
-            ((uint8_t *)(ptr))[1] = ((uint16_t) val) & 0xff; \
-        }
+#define WRITE_16_UNALIGNED(ptr, val)                             \
+    {                                                            \
+        ((uint8_t *) (ptr))[0] = (((uint16_t) val) >> 8) & 0xff; \
+        ((uint8_t *) (ptr))[1] = ((uint16_t) val) & 0xff;        \
+    }
 
-    #define ENDIAN_SWAP_32(value) (value)
-    #define ENDIAN_SWAP_16(value) (value)
+#define ENDIAN_SWAP_32(value) (value)
+#define ENDIAN_SWAP_16(value) (value)
 
 #else
-    #error "Unsupported __BYTE_ORDER__ value."
+#error "Unsupported __BYTE_ORDER__ value."
 #endif
 
 #define UNUSED(x) (void) (x);
 
-
 #ifdef __GNUC__
-    #define IS_NULL_PTR(x) __builtin_expect((x) == NULL, 0)
-    #define LIKELY(x) __builtin_expect(!!(x), 1)
-    #define UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define IS_NULL_PTR(x) __builtin_expect((x) == NULL, 0)
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+#define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
-    #define IS_NULL_PTR(x) ((x) == NULL)
-    #define LIKELY(x) (x)
-    #define UNLIKELY(x) (x)
+#define IS_NULL_PTR(x) ((x) == NULL)
+#define LIKELY(x) (x)
+#define UNLIKELY(x) (x)
 #endif
 
 #ifdef __GNUC__
-    #define HOT_FUNC __attribute__ ((hot))
-    #define COLD_FUNC __attribute__ ((cold))
+#define HOT_FUNC __attribute__((hot))
+#define COLD_FUNC __attribute__((cold))
 #else
-    #define HOT_FUNC
-    #define COLD_FUNC
+#define HOT_FUNC
+#define COLD_FUNC
 #endif
 
 #ifdef __GNUC__
-    #define MALLOC_LIKE __attribute__((malloc))
+#define MALLOC_LIKE __attribute__((malloc))
 #else
-    #define MALLOC_LIKE
+#define MALLOC_LIKE
 #endif
 
 #ifdef __GNUC__
-    #define MUST_CHECK __attribute__((warn_unused_result))
+#define MUST_CHECK __attribute__((warn_unused_result))
 #else
-    #define MUST_CHECK
+#define MUST_CHECK
 #endif
 
 #ifdef ALLOC_RANDOM_FAILURE
@@ -316,24 +309,24 @@ static inline __attribute__((always_inline)) func_ptr_t cast_void_to_func_ptr(vo
     ((type *) (((char *) (ptr)) - offsetof(type, member)))
 
 #ifdef __GNUC__
-    #define PRINTF_FORMAT_ARGS(str_pos, arg_pos) \
-        __attribute__ ((format (printf, str_pos, arg_pos)))
+#define PRINTF_FORMAT_ARGS(str_pos, arg_pos) \
+    __attribute__((format(printf, str_pos, arg_pos)))
 #else
-    #define PRINTF_FORMAT_ARGS(...)
+#define PRINTF_FORMAT_ARGS(...)
 #endif
 
 #ifdef __GNUC__
-    #define NO_DISCARD \
-        __attribute__ ((warn_unused_result))
+#define NO_DISCARD \
+    __attribute__((warn_unused_result))
 #else
-    #define NO_DISCARD(...)
+#define NO_DISCARD(...)
 #endif
 
 #ifdef __GNUC__
-    #define UNREACHABLE() \
-        __builtin_unreachable()
+#define UNREACHABLE() \
+    __builtin_unreachable()
 #else
-    #define UNREACHABLE(...)
+#define UNREACHABLE(...)
 #endif
 
 #if defined(__GNUC__) && !defined(__clang__)

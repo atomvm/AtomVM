@@ -34,42 +34,39 @@ extern "C" {
 #endif
 
 #define READ_16LE_UNALIGNED(ptr) \
-    ( (((uint8_t *)(ptr))[1] << 8) | ((uint8_t *)(ptr))[0] )
+    ((((uint8_t *) (ptr))[1] << 8) | ((uint8_t *) (ptr))[0])
 
-#define WRITE_16LE_UNALIGNED(ptr, val) \
-    do { \
-        ((uint8_t *)(ptr))[0] = ((uint16_t) val) & 0xff; \
-        ((uint8_t *)(ptr))[1] = (((uint16_t) val) >> 8) & 0xff; \
-    } while(0)
+#define WRITE_16LE_UNALIGNED(ptr, val)                           \
+    do {                                                         \
+        ((uint8_t *) (ptr))[0] = ((uint16_t) val) & 0xff;        \
+        ((uint8_t *) (ptr))[1] = (((uint16_t) val) >> 8) & 0xff; \
+    } while (0)
 
 #define READ_32LE_UNALIGNED(ptr) \
-    ( (((uint8_t *)(ptr))[3] << 24) | (((uint8_t *) (ptr))[2] << 16) | (((uint8_t *)(ptr))[1] << 8) | ((uint8_t *)(ptr))[0] )
+    ((((uint8_t *) (ptr))[3] << 24) | (((uint8_t *) (ptr))[2] << 16) | (((uint8_t *) (ptr))[1] << 8) | ((uint8_t *) (ptr))[0])
 
-#define WRITE_32LE_UNALIGNED(ptr, val) \
-    do { \
-        ((uint8_t *)(ptr))[0] = ((uint32_t) val) & 0xff; \
-        ((uint8_t *)(ptr))[1] = (((uint32_t) val) >> 8) & 0xff; \
-        ((uint8_t *)(ptr))[2] = (((uint32_t) val) >> 16) & 0xff; \
-        ((uint8_t *)(ptr))[3] = (((uint32_t) val) >> 24) & 0xff; \
-    } while(0)
+#define WRITE_32LE_UNALIGNED(ptr, val)                            \
+    do {                                                          \
+        ((uint8_t *) (ptr))[0] = ((uint32_t) val) & 0xff;         \
+        ((uint8_t *) (ptr))[1] = (((uint32_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[2] = (((uint32_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[3] = (((uint32_t) val) >> 24) & 0xff; \
+    } while (0)
 
 #define READ_64LE_UNALIGNED(ptr) \
-    ( (((uint64_t) ((uint8_t *)(ptr))[7]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 48) | \
-        (((uint64_t) ((uint8_t *)(ptr))[5]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 32) | \
-        (((uint64_t) ((uint8_t *)(ptr))[3]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 16) | \
-        (((uint64_t) ((uint8_t *)(ptr))[1]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[0])) )
+    ((((uint64_t) ((uint8_t *) (ptr))[7]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 48) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 32) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 16) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[0])))
 
-#define WRITE_64LE_UNALIGNED(ptr, val) \
-    do { \
-        ((uint8_t *)(ptr))[0] = ((uint64_t) val) & 0xff; \
-        ((uint8_t *)(ptr))[1] = (((uint64_t) val) >> 8) & 0xff; \
-        ((uint8_t *)(ptr))[2] = (((uint64_t) val) >> 16) & 0xff; \
-        ((uint8_t *)(ptr))[3] = (((uint64_t) val) >> 24) & 0xff; \
-        ((uint8_t *)(ptr))[4] = (((uint64_t) val) >> 32) & 0xff; \
-        ((uint8_t *)(ptr))[5] = (((uint64_t) val) >> 40) & 0xff; \
-        ((uint8_t *)(ptr))[6] = (((uint64_t) val) >> 48) & 0xff; \
-        ((uint8_t *)(ptr))[7] = (((uint64_t) val) >> 56) & 0xff; \
-    } while(0)
+#define WRITE_64LE_UNALIGNED(ptr, val)                            \
+    do {                                                          \
+        ((uint8_t *) (ptr))[0] = ((uint64_t) val) & 0xff;         \
+        ((uint8_t *) (ptr))[1] = (((uint64_t) val) >> 8) & 0xff;  \
+        ((uint8_t *) (ptr))[2] = (((uint64_t) val) >> 16) & 0xff; \
+        ((uint8_t *) (ptr))[3] = (((uint64_t) val) >> 24) & 0xff; \
+        ((uint8_t *) (ptr))[4] = (((uint64_t) val) >> 32) & 0xff; \
+        ((uint8_t *) (ptr))[5] = (((uint64_t) val) >> 40) & 0xff; \
+        ((uint8_t *) (ptr))[6] = (((uint64_t) val) >> 48) & 0xff; \
+        ((uint8_t *) (ptr))[7] = (((uint64_t) val) >> 56) & 0xff; \
+    } while (0)
 
 // do not change the values
 // these values are the same used from opcodes such as bs_get_utf16
@@ -370,7 +367,8 @@ static inline bool bitstring_utf8_size(uint32_t c, size_t *out_size)
  * @return \c true if encoding was successful, \c false if c is not a valid
  * unicode character
  */
-static inline bool bitstring_utf16_size(uint32_t c, size_t *out_size) {
+static inline bool bitstring_utf16_size(uint32_t c, size_t *out_size)
+{
     return bitstring_utf16_encode(c, NULL, BigEndianInteger, out_size);
 }
 

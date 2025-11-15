@@ -243,7 +243,7 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
                 buf[1] = num_bytes;
                 buf[2] = sign == IntNNegativeInteger ? 0x01 : 0x00;
                 intn_to_integer_bytes(bigint, bigint_len, IntNPositiveInteger, IntnLittleEndian,
-                        buf + 3, num_bytes);
+                    buf + 3, num_bytes);
             }
             return SMALL_BIG_EXT_BASE_SIZE + num_bytes;
         }
@@ -252,7 +252,8 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         if (!IS_NULL_PTR(buf)) {
             avm_float_t val = term_to_float(t);
             buf[0] = NEW_FLOAT_EXT;
-            union {
+            union
+            {
                 uint64_t intvalue;
                 double doublevalue;
             } v;
@@ -543,7 +544,8 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
 {
     switch (external_term_buf[0]) {
         case NEW_FLOAT_EXT: {
-            union {
+            union
+            {
                 uint64_t intvalue;
                 double doublevalue;
             } v;
@@ -1150,13 +1152,13 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             *eterm_size = BINARY_EXT_BASE_SIZE + binary_size;
 
-            #if TERM_BYTES == 4
-                int size_in_terms = ((binary_size + 4 - 1) >> 2);
-            #elif TERM_BYTES == 8
-                int size_in_terms = ((binary_size + 8 - 1) >> 3);
-            #else
-                #error
-            #endif
+#if TERM_BYTES == 4
+            int size_in_terms = ((binary_size + 4 - 1) >> 2);
+#elif TERM_BYTES == 8
+            int size_in_terms = ((binary_size + 8 - 1) >> 3);
+#else
+#error
+#endif
 
             if (copy && term_binary_size_is_heap_binary(binary_size)) {
                 return 2 + size_in_terms;
