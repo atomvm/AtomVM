@@ -153,7 +153,7 @@ macro(pack_lib avm_name)
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
-        DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
+        DEPENDS ${pack_lib_${avm_name}_archive_targets} ${pack_lib_${avm_name}_emu_archives} ${pack_lib_${avm_name}_archives} PackBEAM
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${pack_lib_${avm_name}_emu_archives} ${pack_lib_${avm_name}_archives}
         COMMENT "Packing lib ${avm_name}.avm"
         VERBATIM
@@ -172,7 +172,7 @@ macro(pack_lib avm_name)
 
             add_custom_command(
                 OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
-                DEPENDS ${pack_lib_${avm_name}_archive_targets} PackBEAM
+                DEPENDS ${pack_lib_${avm_name}_archive_targets} ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} PackBEAM
                 COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} ${pack_lib_${avm_name}_archives}
                 COMMENT "Packing lib ${avm_name}-${jit_target_arch_variant}.avm"
                 VERBATIM
