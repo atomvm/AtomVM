@@ -18,7 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(examples_gleam)
+project(supervise_actor)
 
-add_subdirectory(hello_atomvm)
-add_subdirectory(supervise_actor)
+include(BuildGleam)
+
+pack_gleam_runnable(supervise_actor supervise_actor estdlib)

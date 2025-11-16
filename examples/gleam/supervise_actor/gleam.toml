@@ -18,7 +18,19 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(examples_gleam)
+name = "supervise_actor"
+version = "1.0.0"
 
-add_subdirectory(hello_atomvm)
-add_subdirectory(supervise_actor)
+description = "Supervisor and Actor example"
+licences = ["Apache-2.0", "LGPL-2.1-or-later"]
+
+# For a full reference of all the available options, you can have a look at
+# https://gleam.run/writing-gleam/gleam-toml/.
+
+[dependencies]
+gleam_stdlib = ">= 0.65.0 and < 1.0.0"
+gleam_erlang = ">= 1.3.0 and < 2.0.0"
+gleam_otp = ">= 1.2.0 and < 2.0.0"
+
+[dev-dependencies]
+gleeunit = ">= 1.0.0 and < 2.0.0"
