@@ -52,6 +52,7 @@ macro(pack_gleam_runnable avm_name main)
 
     list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/${main}.gleam)
     list(APPEND BEAMS ${CMAKE_CURRENT_BINARY_DIR}/build/prod/erlang/${main}/ebin/${main}.beam)
+    list(APPEND BEAMS ${CMAKE_CURRENT_BINARY_DIR}/build/prod/erlang/*/ebin/*.beam)
 
     if(AVM_RELEASE)
         set(INCLUDE_LINES "")
@@ -74,7 +75,7 @@ macro(pack_gleam_runnable avm_name main)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gleam.toml ${CMAKE_CURRENT_SOURCE_DIR}/manifest.toml ${CMAKE_CURRENT_BINARY_DIR}/
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/src
         COMMAND gleam export erlang-shipment
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS} build/prod/erlang/gleam_stdlib/ebin/*.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS} ${ARCHIVES}
         COMMENT "Packing gleam runnable ${avm_name}.avm"
     )
 
