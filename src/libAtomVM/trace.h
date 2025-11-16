@@ -23,7 +23,7 @@
 
 #ifndef TRACE
 #ifdef ENABLE_TRACE
-#define TRACE printf
+#define TRACE(...) do { printf(__VA_ARGS__); printf("\n"); } while(0)
 #define DEBUG_FAIL_NULL(expr) assert((expr) != NULL)
 #else
 #define TRACE(...)
