@@ -95,9 +95,9 @@ char reg_type_c(int reg_type);
 void debug_print_processes_list(struct ListHead *processes);
 
 #ifdef ENABLE_STACK_TRACE
-    #define DEBUG_DUMP_STACK debug_dump_stack
+#define DEBUG_DUMP_STACK debug_dump_stack
 #else
-    #define DEBUG_DUMP_STACK(...)
+#define DEBUG_DUMP_STACK(...)
 #endif
 
 #ifdef __cplusplus

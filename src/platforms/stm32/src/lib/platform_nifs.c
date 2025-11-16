@@ -23,7 +23,7 @@
 #include <platform_nifs.h>
 #include <term.h>
 
-//#define ENABLE_TRACE
+// #define ENABLE_TRACE
 #include <trace.h>
 
 #include "stm_sys.h"
@@ -36,8 +36,7 @@ static term nif_atomvm_platform(Context *ctx, int argc, term argv[])
     return STM32_ATOM;
 }
 
-static const struct Nif atomvm_platform_nif =
-{
+static const struct Nif atomvm_platform_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_platform
 };

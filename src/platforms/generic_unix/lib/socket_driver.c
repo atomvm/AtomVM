@@ -83,6 +83,7 @@ typedef struct SocketDriverData
     PassiveRecvListener *passive_listener;
 } SocketDriverData;
 
+// clang-format off
 // TODO define in defaultatoms
 const char *const send_a = "\x4" "send";
 const char *const sendto_a = "\x6" "sendto";
@@ -100,6 +101,7 @@ const char *const controlling_process_a = "\x13" "controlling_process";
 const char *const not_owner_a = "\x9" "not_owner";
 
 const char *const close_internal = "\x14" "$atomvm_socket_close";
+// clang-format on
 
 static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
 static const char *native_tcp_module_atom = ATOM_STR("\xC", "gen_tcp_inet");

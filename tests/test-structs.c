@@ -25,6 +25,7 @@
 #include "utils.h"
 #include "valueshashtable.h"
 
+// clang-format off
 static const char *const false_atom = "\x05" "false";
 static const char *const true_atom = "\x04" "true";
 
@@ -158,6 +159,7 @@ static const char *const atomvm_heap_growth_atom = "\x12" "atomvm_heap_growth";
 static const char *const bounded_free_atom = "\xC" "bounded_free";
 static const char *const minimum_atom = "\x7" "minimum";
 static const char *const fibonacci_atom = "\x9" "fibonacci";
+// clang-format on
 
 void test_valueshashtable(void)
 {
