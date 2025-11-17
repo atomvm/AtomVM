@@ -1,5 +1,5 @@
 <!---
-  Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+  Copyright 2025 Mikael Karlsson <mikael.karlsson@creado.se>
 
   SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 -->
