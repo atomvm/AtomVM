@@ -899,7 +899,7 @@ static inline void intn_from_uint64(uint64_t absu64, intn_digit_t out[])
     out[0] = i32[1];
     out[1] = i32[0];
 #else
-#error "Unsupported endianness"
+#    error "Unsupported endianness"
 #endif
 }
 
@@ -940,7 +940,7 @@ static inline uint64_t intn_to_uint64(const intn_digit_t num[])
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     utmp = (((uint64_t) num[1] << 32) | (uint64_t) num[0]);
 #else
-#error "Unsupported endianness"
+#    error "Unsupported endianness"
 #endif
 
     return utmp;

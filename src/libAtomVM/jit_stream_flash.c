@@ -907,12 +907,12 @@ bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *ver
             *entry_point = (ModuleNativeEntryPoint) ep_addr;
             *labels = jit_entry->labels;
 
-#ifdef ENABLE_TRACE
+#    ifdef ENABLE_TRACE
             // Compute CRC of entire module for verification
             uint32_t module_crc = crc32((const uint8_t *) jit_entry, sizeof(struct JITEntry) + jit_entry->size);
             TRACE("Loading from cache - jit_entry=%p CRC32=0x%08x (entry+code size=%u)\n",
                 (void *) jit_entry, (unsigned int) module_crc, (unsigned int) (sizeof(struct JITEntry) + jit_entry->size));
-#endif
+#    endif
 
             return true;
         }

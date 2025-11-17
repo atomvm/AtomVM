@@ -30,76 +30,76 @@
 #define _SMP_H_
 
 #if defined(__has_feature)
-#if __has_feature(thread_sanitizer)
-#define CLANG_THREAD_SANITIZE_SAFE __attribute__((no_sanitize("thread")))
-#endif
+#    if __has_feature(thread_sanitizer)
+#        define CLANG_THREAD_SANITIZE_SAFE __attribute__((no_sanitize("thread")))
+#    endif
 #endif
 #ifndef CLANG_THREAD_SANITIZE_SAFE
-#define CLANG_THREAD_SANITIZE_SAFE
+#    define CLANG_THREAD_SANITIZE_SAFE
 #endif
 
 #ifndef AVM_NO_SMP
 
-#include <stdbool.h>
+#    include <stdbool.h>
 
-#ifdef HAVE_PLATFORM_SMP_H
-#include "platform_smp.h"
-#endif
+#    ifdef HAVE_PLATFORM_SMP_H
+#        include "platform_smp.h"
+#    endif
 
-#ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
-#else
-#if defined(HAVE_ATOMIC)
-#include <stdatomic.h>
-#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
-#endif
-#endif
+#    ifdef HAVE_PLATFORM_ATOMIC_H
+#        include "platform_atomic.h"
+#    else
+#        if defined(HAVE_ATOMIC)
+#            include <stdatomic.h>
+#            define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
+#        endif
+#    endif
 
 // spinlocks are implemented using atomics
-#if !defined(SMP_PLATFORM_SPINLOCK)
-#if defined(HAVE_ATOMIC) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
-#else
-#define ATOMIC
-#endif
-#endif
+#    if !defined(SMP_PLATFORM_SPINLOCK)
+#        if defined(HAVE_ATOMIC) && !defined(__cplusplus)
+#            include <stdatomic.h>
+#            define ATOMIC _Atomic
+#        else
+#            define ATOMIC
+#        endif
+#    endif
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 extern "C" {
-#endif
+#    endif
 
-#ifndef TYPEDEF_MUTEX
-#define TYPEDEF_MUTEX
+#    ifndef TYPEDEF_MUTEX
+#        define TYPEDEF_MUTEX
 typedef struct Mutex Mutex;
-#endif
+#    endif
 
-#ifndef TYPEDEF_SPINLOCK
-#define TYPEDEF_SPINLOCK
+#    ifndef TYPEDEF_SPINLOCK
+#        define TYPEDEF_SPINLOCK
 typedef struct SpinLock SpinLock;
-#endif
+#    endif
 
-#ifndef TYPEDEF_CONDVAR
-#define TYPEDEF_CONDVAR
+#    ifndef TYPEDEF_CONDVAR
+#        define TYPEDEF_CONDVAR
 typedef struct CondVar CondVar;
-#endif
+#    endif
 
-#ifndef TYPEDEF_RWLOCK
-#define TYPEDEF_RWLOCK
+#    ifndef TYPEDEF_RWLOCK
+#        define TYPEDEF_RWLOCK
 typedef struct RWLock RWLock;
-#endif
+#    endif
 
-#ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    ifndef TYPEDEF_GLOBALCONTEXT
+#        define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
-#endif
+#    endif
 
-#if !defined(SMP_PLATFORM_SPINLOCK)
+#    if !defined(SMP_PLATFORM_SPINLOCK)
 struct SpinLock
 {
     int ATOMIC lock;
 };
-#endif
+#    endif
 
 /**
  * @brief Create a new mutex.
@@ -196,7 +196,7 @@ void smp_rwlock_wrlock(RWLock *lock);
  */
 void smp_rwlock_unlock(RWLock *lock);
 
-#if !defined(__cplusplus) && !defined(SMP_PLATFORM_SPINLOCK)
+#    if !defined(__cplusplus) && !defined(SMP_PLATFORM_SPINLOCK)
 
 /**
  * @brief Initialize a spinlock based on atomics.
@@ -239,7 +239,7 @@ static inline void smp_spinlock_unlock(SpinLock *lock)
     lock->lock = 0;
 }
 
-#endif
+#    endif
 
 /**
  * @brief Get the number of online processors to configure schedulers.
@@ -262,33 +262,33 @@ void smp_scheduler_start(GlobalContext *glb);
  */
 bool smp_is_main_thread(GlobalContext *glb);
 
-#define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
-#define SMP_SPINLOCK_TRYLOCK(spinlock) smp_spinlock_trylock(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock) smp_spinlock_unlock(spinlock)
-#define SMP_MUTEX_LOCK(mutex) smp_mutex_lock(mutex)
-#define SMP_MUTEX_TRYLOCK(mutex) smp_mutex_trylock(mutex)
-#define SMP_MUTEX_UNLOCK(mutex) smp_mutex_unlock(mutex)
-#define SMP_RWLOCK_RDLOCK(lock) smp_rwlock_rdlock(lock)
-#define SMP_RWLOCK_TRYRDLOCK(lock) smp_rwlock_tryrdlock(lock)
-#define SMP_RWLOCK_WRLOCK(lock) smp_rwlock_wrlock(lock)
-#define SMP_RWLOCK_UNLOCK(lock) smp_rwlock_unlock(lock)
+#    define SMP_SPINLOCK_LOCK(spinlock) smp_spinlock_lock(spinlock)
+#    define SMP_SPINLOCK_TRYLOCK(spinlock) smp_spinlock_trylock(spinlock)
+#    define SMP_SPINLOCK_UNLOCK(spinlock) smp_spinlock_unlock(spinlock)
+#    define SMP_MUTEX_LOCK(mutex) smp_mutex_lock(mutex)
+#    define SMP_MUTEX_TRYLOCK(mutex) smp_mutex_trylock(mutex)
+#    define SMP_MUTEX_UNLOCK(mutex) smp_mutex_unlock(mutex)
+#    define SMP_RWLOCK_RDLOCK(lock) smp_rwlock_rdlock(lock)
+#    define SMP_RWLOCK_TRYRDLOCK(lock) smp_rwlock_tryrdlock(lock)
+#    define SMP_RWLOCK_WRLOCK(lock) smp_rwlock_wrlock(lock)
+#    define SMP_RWLOCK_UNLOCK(lock) smp_rwlock_unlock(lock)
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 }
-#endif
+#    endif
 
 #else
 
-#define SMP_SPINLOCK_LOCK(spinlock)
-#define SMP_SPINLOCK_TRYLOCK(spinlock)
-#define SMP_SPINLOCK_UNLOCK(spinlock)
-#define SMP_MUTEX_LOCK(mutex)
-#define SMP_MUTEX_TRYLOCK(mutex)
-#define SMP_MUTEX_UNLOCK(mutex)
-#define SMP_RWLOCK_RDLOCK(lock)
-#define SMP_RWLOCK_TRYRDLOCK(lock)
-#define SMP_RWLOCK_WRLOCK(lock)
-#define SMP_RWLOCK_UNLOCK(lock)
+#    define SMP_SPINLOCK_LOCK(spinlock)
+#    define SMP_SPINLOCK_TRYLOCK(spinlock)
+#    define SMP_SPINLOCK_UNLOCK(spinlock)
+#    define SMP_MUTEX_LOCK(mutex)
+#    define SMP_MUTEX_TRYLOCK(mutex)
+#    define SMP_MUTEX_UNLOCK(mutex)
+#    define SMP_RWLOCK_RDLOCK(lock)
+#    define SMP_RWLOCK_TRYRDLOCK(lock)
+#    define SMP_RWLOCK_WRLOCK(lock)
+#    define SMP_RWLOCK_UNLOCK(lock)
 #endif
 
 #endif

@@ -68,12 +68,12 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
     const void **new_locations_set = realloc(locations_set, (locations_set_size + 1) * sizeof(const uint8_t *));
     if (IS_NULL_PTR(new_locations_set)) {
         // Some versions of gcc don't know that if allocation fails, original pointer should still be freed
-#pragma GCC diagnostic push
-#if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12)
-#pragma GCC diagnostic ignored "-Wuse-after-free"
-#endif
+#    pragma GCC diagnostic push
+#    if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12)
+#        pragma GCC diagnostic ignored "-Wuse-after-free"
+#    endif
         free(locations_set);
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
         *io_locations_set = NULL;
         fprintf(stderr, "Unable to allocate space for locations set.  No stacktrace will be created\n");
         return false;

@@ -30,43 +30,43 @@ extern "C" {
 #endif
 
 #ifdef __GNUC__
-#if __GNUC__ >= 5
-#define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
-#define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
-#define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
+#    if __GNUC__ >= 5
+#        define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
+#        define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
+#        define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
 
-#define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
-#define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
-#define BUILTIN_MUL_OVERFLOW_INT __builtin_mul_overflow
+#        define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
+#        define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
+#        define BUILTIN_MUL_OVERFLOW_INT __builtin_mul_overflow
 
-#define BUILTIN_ADD_OVERFLOW_INT64 __builtin_add_overflow
-#define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
-#define BUILTIN_MUL_OVERFLOW_INT64 __builtin_mul_overflow
-#endif
+#        define BUILTIN_ADD_OVERFLOW_INT64 __builtin_add_overflow
+#        define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
+#        define BUILTIN_MUL_OVERFLOW_INT64 __builtin_mul_overflow
+#    endif
 #endif
 
 #ifdef __has_builtin
-#if __has_builtin(__builtin_add_overflow)
-#define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
-#define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
-#define BUILTIN_ADD_OVERFLOW_INT64 __builtin_add_overflow
-#endif
-#if __has_builtin(__builtin_sub_overflow)
-#define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
-#define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
-#define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
-#endif
-#if __has_builtin(__builtin_mul_overflow)
-#define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
-#define BUILTIN_MUL_OVERFLOW_INT __builtin_mul_overflow
-#define BUILTIN_MUL_OVERFLOW_INT64 __builtin_mul_overflow
-#endif
+#    if __has_builtin(__builtin_add_overflow)
+#        define BUILTIN_ADD_OVERFLOW __builtin_add_overflow
+#        define BUILTIN_ADD_OVERFLOW_INT __builtin_add_overflow
+#        define BUILTIN_ADD_OVERFLOW_INT64 __builtin_add_overflow
+#    endif
+#    if __has_builtin(__builtin_sub_overflow)
+#        define BUILTIN_SUB_OVERFLOW __builtin_sub_overflow
+#        define BUILTIN_SUB_OVERFLOW_INT __builtin_sub_overflow
+#        define BUILTIN_SUB_OVERFLOW_INT64 __builtin_sub_overflow
+#    endif
+#    if __has_builtin(__builtin_mul_overflow)
+#        define BUILTIN_MUL_OVERFLOW __builtin_mul_overflow
+#        define BUILTIN_MUL_OVERFLOW_INT __builtin_mul_overflow
+#        define BUILTIN_MUL_OVERFLOW_INT64 __builtin_mul_overflow
+#    endif
 #endif
 
 #ifndef BUILTIN_ADD_OVERFLOW
-#define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
-#define BUILTIN_ADD_OVERFLOW_INT atomvm_add_overflow_int
-#define BUILTIN_ADD_OVERFLOW_INT64 atomvm_add_overflow_int64
+#    define BUILTIN_ADD_OVERFLOW atomvm_add_overflow
+#    define BUILTIN_ADD_OVERFLOW_INT atomvm_add_overflow_int
+#    define BUILTIN_ADD_OVERFLOW_INT64 atomvm_add_overflow_int64
 
 static inline int atomvm_add_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
@@ -91,11 +91,11 @@ static inline int atomvm_add_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 #endif
 
 #ifndef BUILTIN_SUB_OVERFLOW
-#define BUILTIN_SUB_OVERFLOW atomvm_sub_overflow
-#define BUILTIN_SUB_OVERFLOW_INT atomvm_sub_overflow_int
-#define BUILTIN_SUB_OVERFLOW_INT64 atomvm_sub_overflow_int64
+#    define BUILTIN_SUB_OVERFLOW atomvm_sub_overflow
+#    define BUILTIN_SUB_OVERFLOW_INT atomvm_sub_overflow_int
+#    define BUILTIN_SUB_OVERFLOW_INT64 atomvm_sub_overflow_int64
 
-#include <stdint.h>
+#    include <stdint.h>
 
 static inline int atomvm_sub_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
@@ -121,9 +121,9 @@ static inline int atomvm_sub_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 #endif
 
 #ifndef BUILTIN_MUL_OVERFLOW
-#define BUILTIN_MUL_OVERFLOW atomvm_mul_overflow
-#define BUILTIN_MUL_OVERFLOW_INT atomvm_mul_overflow_int
-#define BUILTIN_MUL_OVERFLOW_INT64 atomvm_mul_overflow_int64
+#    define BUILTIN_MUL_OVERFLOW atomvm_mul_overflow
+#    define BUILTIN_MUL_OVERFLOW_INT atomvm_mul_overflow_int
+#    define BUILTIN_MUL_OVERFLOW_INT64 atomvm_mul_overflow_int64
 
 static inline int atomvm_mul_overflow_int(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
@@ -147,18 +147,18 @@ static inline int atomvm_mul_overflow_int64(avm_int64_t a, avm_int64_t b, avm_in
 
 static inline int atomvm_mul_overflow(avm_int_t a, avm_int_t b, avm_int_t *res)
 {
-#if AVM_INT_MAX < INT64_MAX
+#    if AVM_INT_MAX < INT64_MAX
     avm_int64_t mul = (avm_int64_t) (a >> 2) * (avm_int64_t) (b >> 2);
     *res = mul << 4;
     return ((mul > MAX_NOT_BOXED_INT) || (mul < MIN_NOT_BOXED_INT));
-#elif AVM_INT_MAX == INT64_MAX
+#    elif AVM_INT_MAX == INT64_MAX
     int64_t mul;
     int ovf = atomvm_mul_overflow_int64(a >> 2, b >> 2, &mul);
     *res = mul << 4;
     return ovf || ((mul > MAX_NOT_BOXED_INT) || (mul < MIN_NOT_BOXED_INT));
-#else
-#error "Unsupported AVM_INT_MAX size"
-#endif
+#    else
+#        error "Unsupported AVM_INT_MAX size"
+#    endif
 }
 #endif
 

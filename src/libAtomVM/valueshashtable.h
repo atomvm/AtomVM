@@ -31,10 +31,10 @@ extern "C" {
 #define TO_VALUESHASHTABLE_VALUE(value) ((uintptr_t) (value))
 
 #ifndef AVM_NO_SMP
-#ifndef TYPEDEF_RWLOCK
-#define TYPEDEF_RWLOCK
+#    ifndef TYPEDEF_RWLOCK
+#        define TYPEDEF_RWLOCK
 typedef struct RWLock RWLock;
-#endif
+#    endif
 #endif
 
 struct ValuesHashTable

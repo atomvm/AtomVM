@@ -43,9 +43,9 @@ extern const struct Nif atomvm_posix_write_nif;
 extern const struct Nif atomvm_posix_select_read_nif;
 extern const struct Nif atomvm_posix_select_write_nif;
 extern const struct Nif atomvm_posix_select_stop_nif;
-#if HAVE_EXECVE
+#    if HAVE_EXECVE
 extern const struct Nif atomvm_subprocess_nif;
-#endif
+#    endif
 #endif
 #if HAVE_MKFIFO
 extern const struct Nif atomvm_posix_mkfifo_nif;

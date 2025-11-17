@@ -31,17 +31,17 @@
 #include "term.h"
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
-#define TYPEDEF_MODULENATIVEINTERFACE
+#    define TYPEDEF_MODULENATIVEINTERFACE
 typedef struct ModuleNativeInterface ModuleNativeInterface;
 #endif
 
 #ifndef TYPEDEF_JITSTATE
-#define TYPEDEF_JITSTATE
+#    define TYPEDEF_JITSTATE
 typedef struct JITState JITState;
 #endif
 

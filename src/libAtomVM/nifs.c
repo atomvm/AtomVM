@@ -19,7 +19,7 @@
  */
 
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE
+#    define _GNU_SOURCE
 #endif
 
 #include "nifs.h"
@@ -64,7 +64,7 @@
 #include "unicode.h"
 #include "utils.h"
 #ifdef WITH_ZLIB
-#include "zlib.h"
+#    include "zlib.h"
 #endif
 
 #define FLOAT_BUF_SIZE 64
@@ -75,7 +75,7 @@
     return term_invalid_term();
 
 #ifndef MAX
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#    define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #endif
 
 #define NOT_FOUND (0xFF)
@@ -885,47 +885,47 @@ DEFINE_MATH_NIF(tanh)
 
 // Handle optional nifs
 #if HAVE_OPEN && HAVE_CLOSE
-#define IF_HAVE_OPEN_CLOSE(expr) (expr)
-#if HAVE_EXECVE
-#define IF_HAVE_EXECVE(expr) (expr)
+#    define IF_HAVE_OPEN_CLOSE(expr) (expr)
+#    if HAVE_EXECVE
+#        define IF_HAVE_EXECVE(expr) (expr)
+#    else
+#        define IF_HAVE_EXECVE(expr) NULL
+#    endif
 #else
-#define IF_HAVE_EXECVE(expr) NULL
-#endif
-#else
-#define IF_HAVE_OPEN_CLOSE(expr) NULL
-#define IF_HAVE_EXECVE(expr) NULL
+#    define IF_HAVE_OPEN_CLOSE(expr) NULL
+#    define IF_HAVE_EXECVE(expr) NULL
 #endif
 #if HAVE_MKFIFO
-#define IF_HAVE_MKFIFO(expr) (expr)
+#    define IF_HAVE_MKFIFO(expr) (expr)
 #else
-#define IF_HAVE_MKFIFO(expr) NULL
+#    define IF_HAVE_MKFIFO(expr) NULL
 #endif
 #if HAVE_UNLINK
-#define IF_HAVE_UNLINK(expr) (expr)
+#    define IF_HAVE_UNLINK(expr) (expr)
 #else
-#define IF_HAVE_UNLINK(expr) NULL
+#    define IF_HAVE_UNLINK(expr) NULL
 #endif
 #if HAVE_CLOCK_SETTIME
-#define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) (expr)
+#    define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) (expr)
 #elif HAVE_SETTIMEOFDAY
-#define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) (expr)
+#    define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) (expr)
 #else
-#define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) NULL
+#    define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) NULL
 #endif
 #if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
-#define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) (expr)
+#    define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) (expr)
 #else
-#define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
+#    define IF_HAVE_OPENDIR_READDIR_CLOSEDIR(expr) NULL
 #endif
 #if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
-#define IF_HAVE_GETCWD_PATHMAX(expr) (expr)
+#    define IF_HAVE_GETCWD_PATHMAX(expr) (expr)
 #else
-#define IF_HAVE_GETCWD_PATHMAX(expr) NULL
+#    define IF_HAVE_GETCWD_PATHMAX(expr) NULL
 #endif
 #ifndef AVM_NO_JIT
-#define IF_HAVE_JIT(expr) (expr)
+#    define IF_HAVE_JIT(expr) (expr)
 #else
-#define IF_HAVE_JIT(expr) NULL
+#    define IF_HAVE_JIT(expr) NULL
 #endif
 
 // Ignore warning caused by gperf generated code
@@ -5697,15 +5697,15 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
+#    if JIT_ARCH_TARGET == JIT_ARCH_X86_64
     return JIT_X86_64_ATOM;
-#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+#    elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
     return JIT_AARCH64_ATOM;
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+#    elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
     return JIT_ARMV6M_ATOM;
-#else
-#error Unknown JIT target
-#endif
+#    else
+#        error Unknown JIT target
+#    endif
 }
 
 static term nif_jit_variant(Context *ctx, int argc, term argv[])
@@ -5714,11 +5714,11 @@ static term nif_jit_variant(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-#ifdef AVM_USE_SINGLE_PRECISION
+#    ifdef AVM_USE_SINGLE_PRECISION
     return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
-#else
+#    else
     return term_from_int(JIT_VARIANT_PIC);
-#endif
+#    endif
 }
 #endif
 
@@ -6438,7 +6438,7 @@ static void maybe_clear_exceptions(void)
 static term get_exception(avm_float_t f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    pragma STDC FENV_ACCESS ON
     UNUSED(f)
     if (fetestexcept(FE_DIVBYZERO | FE_INVALID)) {
         return BADARITH_ATOM;
@@ -6453,7 +6453,7 @@ static term get_exception(avm_float_t f)
 static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     maybe_clear_exceptions();
@@ -6472,7 +6472,7 @@ static term math_unary_op(Context *ctx, term x_term, unary_math_f f)
 static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f f)
 {
 #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    pragma STDC FENV_ACCESS ON
 #endif
     avm_float_t x = term_conv_to_float(x_term);
     avm_float_t y = term_conv_to_float(y_term);

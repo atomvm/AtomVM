@@ -36,14 +36,14 @@
 #include "utils.h"
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
+#    include "platform_atomic.h"
 #endif
 
 #if defined(HAVE_ATOMIC) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
+#    include <stdatomic.h>
+#    define ATOMIC _Atomic
 #else
-#define ATOMIC
+#    define ATOMIC
 #endif
 
 #ifdef __cplusplus
@@ -53,29 +53,29 @@ extern "C" {
 struct Context;
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 
 struct Heap;
 
 #ifndef TYPEDEF_HEAP
-#define TYPEDEF_HEAP
+#    define TYPEDEF_HEAP
 typedef struct Heap Heap;
 #endif
 
 #ifndef TYPEDEF_MAILBOXMESSAGE
-#define TYPEDEF_MAILBOXMESSAGE
+#    define TYPEDEF_MAILBOXMESSAGE
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
 #ifndef TYPEDEF_MESSAGE
-#define TYPEDEF_MESSAGE
+#    define TYPEDEF_MESSAGE
 typedef struct Message Message;
 #endif
 

@@ -40,7 +40,7 @@
 #include <mbedtls/ssl.h>
 
 #if defined(MBEDTLS_PSA_CRYPTO_C)
-#include <psa/crypto.h>
+#    include <psa/crypto.h>
 #endif
 
 // #define ENABLE_TRACE
@@ -49,7 +49,7 @@
 #define TAG "otp_ssl"
 
 #ifndef MBEDTLS_PRIVATE
-#define MBEDTLS_PRIVATE(member) member
+#    define MBEDTLS_PRIVATE(member) member
 #endif
 
 // Default read buffer if mbedtls_ssl_get_max_in_record_payload fails
@@ -57,7 +57,7 @@
 
 #if defined(MBEDTLS_DEBUG_C) && defined(ENABLE_TRACE)
 
-#include <mbedtls/debug.h>
+#    include <mbedtls/debug.h>
 
 static void mbedtls_debug_cb(void *ctx, int level, const char *filename, int line, const char *msg)
 {
@@ -534,10 +534,10 @@ static term make_err_result(int err, Context *ctx)
 #if MBEDTLS_VERSION_NUMBER >= 0x020B0000
         case MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "async_in_progress"));
-#if MBEDTLS_VERSION_NUMBER >= 0x020E0000
+#    if MBEDTLS_VERSION_NUMBER >= 0x020E0000
         case MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS:
             return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "crypto_in_progress"));
-#endif
+#    endif
 #endif
         default: {
             if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {

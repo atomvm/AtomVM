@@ -30,13 +30,13 @@ extern "C" {
 #endif
 
 #if !defined(OTP_SOCKET_BSD) && !defined(OTP_SOCKET_LWIP)
-#if HAVE_SOCKET && HAVE_SELECT
-#define OTP_SOCKET_BSD 1
-#elif HAVE_LWIP_RAW
-#define OTP_SOCKET_LWIP 1
-#else
-#error OTP Socket requires BSD Socket or lwIP
-#endif
+#    if HAVE_SOCKET && HAVE_SELECT
+#        define OTP_SOCKET_BSD 1
+#    elif HAVE_LWIP_RAW
+#        define OTP_SOCKET_LWIP 1
+#    else
+#        error OTP Socket requires BSD Socket or lwIP
+#    endif
 #endif
 
 enum SocketErrors

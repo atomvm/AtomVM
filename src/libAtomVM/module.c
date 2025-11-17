@@ -39,7 +39,7 @@
 #include <stdlib.h>
 
 #ifdef WITH_ZLIB
-#include <zlib.h>
+#    include <zlib.h>
 #endif
 
 // BEAM Type constants from OTP source code:
@@ -92,10 +92,10 @@ struct LineRefOffset
 };
 
 #ifndef AVM_NO_EMU
-#define IMPL_CODE_LOADER 1
-#include "opcodesswitch.h"
-#undef TRACE
-#undef IMPL_CODE_LOADER
+#    define IMPL_CODE_LOADER 1
+#    include "opcodesswitch.h"
+#    undef TRACE
+#    undef IMPL_CODE_LOADER
 #endif
 
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
@@ -337,11 +337,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
                 uint16_t runtime_variant;
-#ifdef AVM_USE_SINGLE_PRECISION
+#    ifdef AVM_USE_SINGLE_PRECISION
                 runtime_variant = JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC;
-#else
+#    else
                 runtime_variant = JIT_VARIANT_PIC;
-#endif
+#    endif
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
                     ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
@@ -1141,9 +1141,9 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
         }
         return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
     } else {
-#if defined(AVM_NO_EMU)
+#    if defined(AVM_NO_EMU)
         return false;
-#endif
+#    endif
 #endif
 #ifndef AVM_NO_EMU
         uint32_t line_ref;
