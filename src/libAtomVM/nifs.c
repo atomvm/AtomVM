@@ -198,6 +198,7 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[]);
 static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
@@ -749,6 +750,11 @@ static const struct Nif code_load_binary_nif = {
 static const struct Nif code_ensure_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
+};
+
+static const struct Nif code_get_object_code_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_get_object_code
 };
 
 static const struct Nif code_server_is_loaded_nif = {
@@ -5523,6 +5529,48 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
         term_put_tuple_element(result, 1, module_atom);
     }
 
+    return result;
+}
+
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term module_atom = argv[0];
+    VALIDATE_VALUE(module_atom, term_is_atom);
+
+    size_t module_name_len;
+    const uint8_t *module_name = atom_table_get_atom_string(ctx->global->atom_table, term_to_atom_index(module_atom), &module_name_len);
+
+    size_t filename_len = module_name_len + 6;
+    char *module_file_name = malloc(filename_len);
+    if (IS_NULL_PTR(module_file_name)) {
+        return ERROR_ATOM;
+    }
+    memcpy(module_file_name, module_name, module_name_len);
+    memcpy(module_file_name + module_name_len, ".beam", 6);
+    Module *module = globalcontext_get_module(ctx->global, term_to_atom_index(module_atom));
+
+    if (UNLIKELY(!module)) {
+        free(module_file_name);
+        return ERROR_ATOM;
+    }
+    size_t result_size = TUPLE_SIZE(3) + term_binary_heap_size(module->binary_size) + LIST_SIZE(filename_len, 1);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, result_size, 1, &module_atom, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(module_file_name);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    // Note: this assumes constness of module->binary and could be use-after-free if we allowed changing module bitcode at runtime.
+    // TODO: update this code when module unloading will be supported.
+    term binary = term_from_literal_binary((void *) module->binary, module->binary_size, &ctx->heap, ctx->global);
+    // TODO: this code has to be changed to return the complete path
+    term filename_term = term_from_string((const uint8_t *) module_file_name, filename_len, &ctx->heap);
+    term result = term_alloc_tuple(3, &ctx->heap);
+
+    term_put_tuple_element(result, 0, module_atom);
+    term_put_tuple_element(result, 1, binary);
+    term_put_tuple_element(result, 2, filename_term);
+
+    free(module_file_name);
     return result;
 }
 
