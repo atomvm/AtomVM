@@ -7,7 +7,7 @@
 # supervise_actor
 
 This is a basic supervised actors program created with
-`gleam new supeervise_actor`.
+`gleam new supervise_actor`.
 
 AtomVM currently requires a `start/0` function which has been added to
 `supervise_actor.gleam` and simply calls `main()` function.
