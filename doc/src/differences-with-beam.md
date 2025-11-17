@@ -184,8 +184,8 @@ See also [stubbed functions](./stubbed-functions.md) list.
 
 ### OTP architecture
 
-Support for OTP applications is currently very limited. `gen_server`, `gen_statem` and `supervisor`
-are partially supported, but `proc_lib` is not.
+Support for OTP applications is currently very limited. `gen_server`, `gen_statem`, `supervisor`,
+`proc_lib` and `sys` only implement a subset of what OTP provides.
 
 ## Memory usage and speed
 
@@ -220,8 +220,8 @@ Ports are also executed by the schedulers and should return quickly.
 ### Resources
 
 AtomVM supports resources but for historical reasons these appear as zero-length binaries as they
-used to with OTP21, and not as references as they currently do with recent versions of the BEAM.
-This has some consequences on matching.
+used to before OTP20, and not as references as they currently do with recent versions of the BEAM.
+This has some consequences on matching and serialization.
 
 ### BEAM file compatibility
 
