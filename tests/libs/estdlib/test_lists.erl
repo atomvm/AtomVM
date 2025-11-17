@@ -236,6 +236,7 @@ test_list_match() ->
 
 test_flatten() ->
     ?ASSERT_MATCH(lists:flatten([]), []),
+    ?ASSERT_MATCH(lists:flatten([[]]), []),
     ?ASSERT_MATCH(lists:flatten([a]), [a]),
     ?ASSERT_MATCH(lists:flatten([a, []]), [a]),
     ?ASSERT_MATCH(lists:flatten([[[[[[[[a]]]]]]]]), [a]),
@@ -248,6 +249,9 @@ test_flatten() ->
         lists:flatten([[a, b, c], [d, e, f], [g, h, i]]),
         [a, b, c, d, e, f, g, h, i]
     ),
+    ?ASSERT_ERROR(lists:flatten([7 | {}])),
+    ?ASSERT_ERROR(lists:flatten([[] | [5 | 5]])),
+    ?ASSERT_ERROR(lists:flatten([[7 | 4], 2])),
     ok.
 
 test_flatmap() ->
