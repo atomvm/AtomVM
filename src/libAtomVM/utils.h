@@ -67,8 +67,15 @@ extern "C" {
             *((uint16_t *) (ptr)) = __builtin_bswap16(val)
 
 #    else
-#        define READ_64_UNALIGNED(ptr) \
-            ((((uint64_t) ((uint8_t *) (ptr))[0]) << 56) | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) | (((uint64_t) ((uint8_t *) (ptr))[2]) << 40) | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) | (((uint64_t) ((uint8_t *) (ptr))[4]) << 24) | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) | (((uint64_t) ((uint8_t *) (ptr))[6]) << 8) | (((uint64_t) ((uint8_t *) (ptr))[7])))
+#        define READ_64_UNALIGNED(ptr)                        \
+            ((((uint64_t) ((uint8_t *) (ptr))[0]) << 56)      \
+                | (((uint64_t) ((uint8_t *) (ptr))[1]) << 48) \
+                | (((uint64_t) ((uint8_t *) (ptr))[2]) << 40) \
+                | (((uint64_t) ((uint8_t *) (ptr))[3]) << 32) \
+                | (((uint64_t) ((uint8_t *) (ptr))[4]) << 24) \
+                | (((uint64_t) ((uint8_t *) (ptr))[5]) << 16) \
+                | (((uint64_t) ((uint8_t *) (ptr))[6]) << 8)  \
+                | (((uint64_t) ((uint8_t *) (ptr))[7])))
 
 #        define WRITE_64_UNALIGNED(ptr, val)                              \
             {                                                             \
@@ -82,8 +89,9 @@ extern "C" {
                 ((uint8_t *) (ptr))[7] = ((uint64_t) val) & 0xff;         \
             }
 
-#        define READ_32_UNALIGNED(ptr) \
-            ((((uint8_t *) (ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) | (((uint8_t *) (ptr))[2] << 8) | ((uint8_t *) (ptr))[3])
+#        define READ_32_UNALIGNED(ptr)                                       \
+            ((((uint8_t *) (ptr))[0] << 24) | (((uint8_t *) (ptr))[1] << 16) \
+                | (((uint8_t *) (ptr))[2] << 8) | ((uint8_t *) (ptr))[3])
 
 #        define WRITE_32_UNALIGNED(ptr, val)                              \
             {                                                             \
@@ -106,7 +114,9 @@ extern "C" {
 #    ifdef __GNUC__
 #        define ENDIAN_SWAP_32(value) __builtin_bswap32(value)
 #    else
-#        define ENDIAN_SWAP_32(value) ((((value) & 0xFF) << 24) | (((value) & 0xFF00) << 8) | (((value) & 0xFF0000) >> 8) | (((value) & 0xFF000000) >> 24))
+#        define ENDIAN_SWAP_32(value)                                                           \
+            ((((value) & 0xFF) << 24) | (((value) & 0xFF00) << 8) | (((value) & 0xFF0000) >> 8) \
+                | (((value) & 0xFF000000) >> 24))
 #    endif
 
 #    ifdef __GNUC__
@@ -593,7 +603,7 @@ static inline bool uint64_does_overflow_int64(uint64_t u64, bool is_negative)
  */
 static inline uint32_t int32_safe_unsigned_abs(int32_t i32)
 {
-    return (i32 < 0) ? ((uint32_t) - (i32 + 1)) + 1 : (uint32_t) i32;
+    return (i32 < 0) ? ((uint32_t) -(i32 + 1)) + 1 : (uint32_t) i32;
 }
 
 /**
@@ -611,7 +621,7 @@ static inline uint32_t int32_safe_unsigned_abs(int32_t i32)
  */
 static inline uint64_t int64_safe_unsigned_abs(int64_t i64)
 {
-    return (i64 < 0) ? ((uint64_t) - (i64 + 1)) + 1 : (uint64_t) i64;
+    return (i64 < 0) ? ((uint64_t) -(i64 + 1)) + 1 : (uint64_t) i64;
 }
 
 /**

@@ -427,7 +427,7 @@ static inline int read_encoded_len(const uint8_t **len_bytes)
 }
 
 // -1 is not a valid atom index as we're limited to 2^20
-#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) -1)
+#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) - 1)
 
 enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, size_t count,
     atom_index_t *translate_table, enum EnsureAtomsOpt opt)

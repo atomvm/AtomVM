@@ -1807,7 +1807,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
-    return (BinaryPosLen){ .pos = -1, .len = -1 };
+    return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
 
 /**
