@@ -2124,12 +2124,11 @@ first_pass(<<?OP_BS_GET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt3, Reg} = MMod:move_to_native_register(MSt2, Src),
     {MSt4, Reg} = MMod:and_(MSt3, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
     MSt5 = MMod:move_array_element(MSt4, Reg, 2, Reg),
-    MSt6 = MMod:shift_left(MSt5, Reg, 4),
-    MSt7 = MMod:or_(MSt6, Reg, ?TERM_INTEGER_TAG),
-    MSt8 = MMod:move_to_vm_register(MSt7, Reg, Dest),
-    MSt9 = MMod:free_native_registers(MSt8, [Reg, Dest]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt9),
-    first_pass(Rest3, MMod, MSt9, State0);
+    {MSt6, Reg} = term_from_int(Reg, MMod, MSt5),
+    MSt7 = MMod:move_to_vm_register(MSt6, Reg, Dest),
+    MSt8 = MMod:free_native_registers(MSt7, [Reg, Dest]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt8),
+    first_pass(Rest3, MMod, MSt8, State0);
 % 168
 first_pass(<<?OP_BS_SET_POSITION, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2769,20 +2768,38 @@ first_pass_bs_create_bin_insert_value(
     ),
     {MSt5, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
-    AtomType, _Flags, Src, Size, _SegmentUnit, _Fail, CreatedBin, Offset, MMod, MSt0
+    AtomType, _Flags, Src, Size, SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
-    {MSt1, SizeValue} = MMod:call_primitive(MSt0, ?PRIM_BITSTRING_COPY_BINARY, [
-        ctx, jit_state, CreatedBin, Offset, Src, Size
+    {MSt4, SizeInBits} =
+        if
+            is_integer(Size) andalso Size band 16#F =:= ?TERM_INTEGER_TAG ->
+                {MSt0, term_from_int(SegmentUnit * (Size bsr 4))};
+            Size =:= ?ALL_ATOM ->
+                {MSt0, Size};
+            SegmentUnit =:= 1 ->
+                {MSt1, SizeReg} = MMod:move_to_native_register(MSt0, Size),
+                MSt2 = cond_raise_badarg_or_jump_to_fail_label(
+                    {SizeReg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, Fail, MMod, MSt1
+                ),
+                {MSt2, {free, SizeReg}};
+            true ->
+                {MSt1, SizeReg} = term_to_int(Size, Fail, MMod, MSt0),
+                MSt2 = MMod:mul(MSt1, SizeReg, SegmentUnit),
+                {MSt3, SizeReg} = term_from_int(SizeReg, MMod, MSt2),
+                {MSt3, {free, SizeReg}}
+        end,
+    {MSt5, SizeValue} = MMod:call_primitive(MSt4, ?PRIM_BITSTRING_COPY_BINARY, [
+        ctx, jit_state, CreatedBin, Offset, Src, SizeInBits
     ]),
-    MSt2 = MMod:if_block(MSt1, {SizeValue, '<', 0}, fun(BlockSt) ->
+    MSt6 = MMod:if_block(MSt5, {SizeValue, '<', 0}, fun(BlockSt) ->
         MMod:call_primitive_last(BlockSt, ?PRIM_HANDLE_ERROR, [
             ctx, jit_state, offset
         ])
     end),
-    {MSt3, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
-        MMod, MSt2, Offset, SizeValue, 1
+    {MSt7, NewOffset} = first_pass_bs_create_bin_insert_value_increment_offset(
+        MMod, MSt6, Offset, SizeValue, 1
     ),
-    {MSt3, NewOffset, CreatedBin};
+    {MSt7, NewOffset, CreatedBin};
 first_pass_bs_create_bin_insert_value(
     _OtherType, _Flag, _Src, _Size, _SegmentUnit, _Fail, CreatedBin, Offset, _MMod, MSt0
 ) ->
@@ -3785,6 +3802,13 @@ decode_allocator_list0(MMod, AccNeed, Remaining, Rest0) ->
 
 term_from_int(Int) when is_integer(Int) ->
     (Int bsl 4) bor ?TERM_INTEGER_TAG.
+
+term_from_int(Int, _MMod, MSt0) when is_integer(Int) ->
+    {MSt0, term_from_int(Int)};
+term_from_int(Reg, MMod, MSt0) when is_atom(Reg) ->
+    MSt1 = MMod:shift_left(MSt0, Reg, 4),
+    MSt2 = MMod:or_(MSt1, Reg, ?TERM_INTEGER_TAG),
+    {MSt2, Reg}.
 
 term_get_tuple_arity(Tuple, MMod, MSt0) ->
     {MSt1, Reg} =

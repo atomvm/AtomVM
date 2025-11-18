@@ -6948,8 +6948,14 @@ wait_timeout_trap_handler:
                                             JUMP_TO_LABEL(mod, fail);
                                         }
                                     }
+                                    avm_int_t size_in_bits = signed_size_value * segment_unit;
+                                    if (size_in_bits % 8) {
+                                        TRACE("bs_create_bin/6: size in bits (%d) is not evenly divisible by 8\n", (int) size_in_bits);
+                                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                                    }
+                                    avm_int_t size_in_bytes = size_in_bits / 8;
                                     size_t binary_size = term_binary_size(src);
-                                    if ((size_t) signed_size_value > binary_size) {
+                                    if ((size_t) size_in_bytes > binary_size) {
                                         if (fail == 0) {
                                             RAISE_ERROR(BADARG_ATOM);
                                         } else {
@@ -7109,7 +7115,8 @@ wait_timeout_trap_handler:
                                         TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
                                         RAISE_ERROR(BADARG_ATOM);
                                     }
-                                    size_value = (size_t) signed_size_value;
+                                    // We checked earlier it's a multiple of 8
+                                    size_value = ((size_t) signed_size_value) * segment_unit / 8;
                                     if (size_value > src_size) {
                                         if (fail == 0) {
                                             RAISE_ERROR(BADARG_ATOM);
