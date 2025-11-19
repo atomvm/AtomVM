@@ -1333,10 +1333,6 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt5, BSOffsetReg0} = MMod:get_array_element(MSt4, MatchStateRegPtr, 2),
     MSt6 =
         if
-            Unit =/= 8 ->
-                MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, offset, ?UNSUPPORTED_ATOM
-                ]);
             FlagsValue =/= 0 ->
                 MMod:call_primitive_last(MSt5, ?PRIM_RAISE_ERROR, [
                     ctx, jit_state, offset, ?UNSUPPORTED_ATOM
@@ -1357,12 +1353,17 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                 {MSt11, SizeReg};
             is_integer(Size) ->
                 % SizeReg is binary size
-                % Size is a tagged integer: (N bsl 4) bor 0xF
-                % SizeBytes is the raw byte count
-                SizeBytes = Size bsr 4,
-                MSt11 = MMod:sub(MSt10, SizeReg, SizeBytes),
+                MSt11 =
+                    if
+                        (Size * Unit) rem 8 =/= 0 ->
+                            MMod:call_primitive_last(MSt10, ?PRIM_RAISE_ERROR, [
+                                ctx, jit_state, offset, ?UNSUPPORTED_ATOM
+                            ]);
+                        true ->
+                            MMod:sub(MSt10, SizeReg, (Size * Unit) div 8)
+                    end,
                 MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg1}, Fail, MMod, MSt11),
-                {MSt12, SizeBytes};
+                {MSt12, (Size * Unit) div 8};
             true ->
                 {MSt11, SizeValReg} = MMod:move_to_native_register(MSt10, Size),
                 MSt12 = MMod:if_else_block(
@@ -1374,10 +1375,32 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                     end,
                     fun(BSt0) ->
                         {BSt1, SizeValReg} = term_to_int(SizeValReg, 0, MMod, BSt0),
-                        BSt2 = MMod:sub(BSt1, SizeReg, SizeValReg),
-                        BSt3 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt2),
-                        BSt4 = MMod:move_to_native_register(BSt3, SizeValReg, SizeReg),
-                        MMod:free_native_registers(BSt4, [SizeValReg])
+                        {BSt2, SizeValReg2} =
+                            if
+                                is_integer(SizeValReg) ->
+                                    if
+                                        (SizeValReg * Unit) rem 8 =/= 0 ->
+                                            MMod:call_primitive_last(BSt1, ?PRIM_RAISE_ERROR, [
+                                                ctx, jit_state, offset, ?UNSUPPORTED_ATOM
+                                            ]);
+                                        true ->
+                                            {BSt1, (SizeValReg * Unit) div 8}
+                                    end;
+                                true ->
+                                    BBSt1 = MMod:mul(BSt1, SizeValReg, Unit),
+                                    BBSt2 = MMod:if_block(
+                                        BBSt1, {SizeValReg, '&', 16#7, '!=', 0}, fun(BlockSt) ->
+                                            MMod:call_primitive_last(BlockSt, ?PRIM_RAISE_ERROR, [
+                                                ctx, jit_state, offset, ?UNSUPPORTED_ATOM
+                                            ])
+                                        end
+                                    ),
+                                    MMod:shift_right(BBSt2, SizeValReg, 3)
+                            end,
+                        BSt3 = MMod:sub(BSt2, SizeReg, SizeValReg2),
+                        BSt4 = cond_jump_to_label({SizeReg, '<', BSOffsetReg1}, Fail, MMod, BSt3),
+                        BSt5 = MMod:move_to_native_register(BSt4, SizeValReg2, SizeReg),
+                        MMod:free_native_registers(BSt5, [SizeValReg])
                     end
                 ),
                 {MSt12, SizeReg}
