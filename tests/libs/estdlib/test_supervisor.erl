@@ -35,6 +35,9 @@ test() ->
     ok = test_terminate_timeout(),
     ok = test_which_children(),
     ok = test_count_children(),
+    ok = test_one_for_all(),
+    ok = test_crash_limits(),
+    ok = try_again_restart(),
     ok.
 
 test_basic_supervisor() ->
@@ -95,7 +98,7 @@ test_count_children() ->
     [{specs, 0}, {active, 0}, {supervisors, 0}, {workers, 0}] = supervisor:count_children(SupPid),
 
     % Add a worker child and verify counts
-    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+    {ok, ChildPid} = supervisor:start_child(SupPid, #{
         id => test_worker,
         start => {ping_pong_server, start_link, [self()]},
         restart => permanent,
@@ -103,13 +106,16 @@ test_count_children() ->
         type => worker
     }),
 
+    % Receive message sent back so it won't be left for another test to receive erroneously.
+    ChildPid = get_and_test_server(),
+
     % Check count_children with one active worker
     [{specs, 1}, {active, 1}, {supervisors, 0}, {workers, 1}] = supervisor:count_children(SupPid),
 
-    % Add a supervisor child and verify counts
+    % Add a supervisor child with no children and verify counts
     {ok, _SupervisorPid} = supervisor:start_child(SupPid, #{
         id => test_supervisor,
-        start => {?MODULE, start_link, [self()]},
+        start => {supervisor, start_link, [?MODULE, {test_no_child, self()}]},
         restart => permanent,
         shutdown => infinity,
         type => supervisor
@@ -215,7 +221,51 @@ child_start({trap_exit, Parent}) ->
             ok -> ok
         end
     end),
-    {ok, Pid}.
+    {ok, Pid};
+child_start({get_permission, Arbitrator, Parent}) ->
+    Arbitrator ! {can_start, self()},
+    CanStart =
+        receive
+            {do_start, Start} -> Start
+        after 2000 ->
+            {timeout, arbitrator}
+        end,
+    case CanStart of
+        true ->
+            Pid = spawn_link(fun() ->
+                receive
+                    stop -> exit(normal)
+                end
+            end),
+            register(crashy, Pid),
+            Parent ! Pid,
+            {ok, Pid};
+        false ->
+            {error, start_denied};
+        Error ->
+            {error, Error}
+    end.
+
+arbitrator_start(Deny) when is_integer(Deny) ->
+    receive
+        {can_start, From} ->
+            From ! {do_start, true}
+    end,
+    arbitrator(Deny).
+
+arbitrator(Deny) ->
+    Allow =
+        if
+            Deny =< 0 -> true;
+            true -> false
+        end,
+    receive
+        {can_start, From} ->
+            From ! {do_start, Allow},
+            arbitrator(Deny - 1);
+        shutdown ->
+            ok
+    end.
 
 test_ping_pong(SupPid) ->
     Pid1 = get_and_test_server(),
@@ -234,8 +284,8 @@ test_ping_pong(SupPid) ->
     end,
     no_restart =
         receive
-            {ping_pong_server_ready, Pid3} ->
-                Pid3
+            {ping_pong_server_ready, Pid4} ->
+                Pid4
         after 100 -> no_restart
         end,
     unlink(SupPid),
@@ -289,7 +339,79 @@ init({test_supervisor_order, Parent}) ->
     ],
     {ok, {{one_for_one, 10000, 3600}, ChildSpecs}};
 init({test_no_child, _Parent}) ->
-    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}}.
+    {ok, {#{strategy => one_for_one, intensity => 10000, period => 3600}, []}};
+init({test_one_for_all, Parent}) ->
+    ChildSpecs = [
+        #{
+            id => ping_pong_1,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        },
+        #{
+            id => ping_pong_2,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => transient,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        },
+        #{
+            id => ready_0,
+            start => {notify_init_server, start_link, [{Parent, ready_0}]},
+            restart => temporary,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [notify_init_server]
+        }
+    ],
+    {ok, {#{strategy => one_for_all, intensity => 10000, period => 3600}, ChildSpecs}};
+init({test_crash_limits, Intensity, Period, Parent}) ->
+    ChildSpec = [
+        #{
+            id => test_child,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => transient,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        }
+    ],
+    {ok, {#{strategy => one_for_one, intensity => Intensity, period => Period}, ChildSpec}};
+init({test_try_again, Arbitrator, Parent}) ->
+    ChildSpec = [
+        #{
+            id => finicky_child,
+            start => {?MODULE, child_start, [{get_permission, Arbitrator, Parent}]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [?MODULE]
+        }
+    ],
+    {ok, {#{strategy => one_for_one, intensity => 5, period => 10}, ChildSpec}};
+init({test_retry_one_for_all, Arbitrator, Parent}) ->
+    ChildSpec = [
+        #{
+            id => ping,
+            start => {ping_pong_server, start_link, [Parent]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [ping_pong_server]
+        },
+        #{
+            id => crashy_child,
+            start => {?MODULE, child_start, [{get_permission, Arbitrator, Parent}]},
+            restart => permanent,
+            shutdown => brutal_kill,
+            type => worker,
+            modules => [?MODULE]
+        }
+    ],
+    {ok, {#{strategy => one_for_all, intensity => 5, period => 10}, ChildSpec}}.
 
 test_supervisor_order() ->
     {ok, SupPid} = supervisor:start_link(?MODULE, {test_supervisor_order, self()}),
@@ -317,13 +439,16 @@ test_which_children() ->
     [] = supervisor:which_children(SupPid),
 
     % Add a child and test
-    {ok, _ChildPid} = supervisor:start_child(SupPid, #{
+    {ok, ChildPid} = supervisor:start_child(SupPid, #{
         id => test_child,
         start => {ping_pong_server, start_link, [self()]},
         restart => permanent,
         shutdown => 5000,
         type => worker
     }),
+
+    % Receive message sent back so it won't be left for another test to receive erroneously.
+    ChildPid = get_and_test_server(),
 
     % Check which_children returns the child info
     [{test_child, ChildPid, worker, [ping_pong_server]}] = supervisor:which_children(SupPid),
@@ -340,3 +465,260 @@ test_which_children() ->
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok.
+
+test_one_for_all() ->
+    {ok, SupPid} = supervisor:start_link({local, allforone}, ?MODULE, {test_one_for_all, self()}),
+    % Collect startup message from permanent ping_pong_server
+    Server_1 = get_and_test_server(),
+    % Collect startup message from transient ping_pong_server
+    Server_2 = get_and_test_server(),
+    % Collect startup message from temporary notify_init_server
+    ready_0 =
+        receive
+            Msg1 -> Msg1
+        after 1000 -> error({timeout, {start, ready_0}})
+        end,
+
+    [{specs, 3}, {active, 3}, {supervisors, 0}, {workers, 3}] = supervisor:count_children(SupPid),
+
+    %% Monitor transient Server_2 to make sure it is stopped, and restarted when
+    %% permanent Server_1 is shutdown.
+    MonRef = monitor(process, Server_2),
+    ok = gen_server:call(Server_1, {stop, test_crash}),
+    %% Server_2 should exit before the first child is restarted, but exit messages from
+    %% monitored processes may take some time to be received so we may get the message
+    %% from the first restarted child first.
+    First =
+        receive
+            {'DOWN', MonRef, process, Server_2, killed} ->
+                down;
+            {ping_pong_server_ready, Restart1} when is_pid(Restart1) ->
+                ready
+        after 1000 ->
+            error({timeout, restart_after_crash})
+        end,
+    ok =
+        case First of
+            down ->
+                receive
+                    {ping_pong_server_ready, Restart_1} when is_pid(Restart_1) -> ok
+                after 1000 ->
+                    error({timeout, restart_after_crash})
+                end;
+            ready ->
+                receive
+                    {'DOWN', MonRef, process, Server_2, killed} -> ok
+                after 1000 ->
+                    error({timeout, restart_after_crash})
+                end
+        end,
+
+    demonitor(MonRef, [flush]),
+
+    % Collect startup message from restarted transient ping_pong_server child
+    _Restart_2 = get_and_test_server(),
+    % Make sure temporary notify_init_server is not restarted
+    no_start =
+        receive
+            ready_0 -> error({error, restarted_temporary})
+        after 1000 -> no_start
+        end,
+
+    % Ensure correct number of children
+    [{specs, 2}, {active, 2}, {supervisors, 0}, {workers, 2}] = supervisor:count_children(SupPid),
+
+    unlink(SupPid),
+    exit(SupPid, shutdown),
+    ok.
+
+test_crash_limits() ->
+    %% Trap exits so this test doesn't shutdown with the supervisor
+    process_flag(trap_exit, true),
+    Intensity = 2,
+    Period = 5,
+    {ok, SupPid} = supervisor:start_link(
+        {local, test_crash_limits}, ?MODULE, {test_crash_limits, Intensity, Period, self()}
+    ),
+    Pid1 = get_ping_pong_pid(),
+    gen_server:call(Pid1, {stop, test_crash1}),
+    Pid2 = get_ping_pong_pid(),
+    gen_server:cast(Pid2, {crash, test_crash2}),
+    Pid3 = get_ping_pong_pid(),
+    %% Wait until period expires so we can test that stale shutdowns are purged from the shutdown list
+    timer:sleep(6000),
+
+    gen_server:call(Pid3, {stop, test_crash3}),
+    Pid4 = get_ping_pong_pid(),
+    gen_server:cast(Pid4, {crash, test_crash4}),
+    Pid5 = get_ping_pong_pid(),
+
+    %% The next crash will reach the restart threshold and shutdown the supervisor
+    gen_server:call(Pid5, {stop, test_crash5}),
+
+    %% Test supervisor has exited
+    ok =
+        receive
+            {'EXIT', SupPid, shutdown} ->
+                ok
+        after 2000 ->
+            error({supervisor_not_stopped, reached_max_restart_intensity})
+        end,
+    process_flag(trap_exit, false),
+
+    %% Test child crashed and was not restarted
+    ok =
+        try gen_server:call(Pid5, ping) of
+            pong -> error(not_stopped, Pid5)
+        catch
+            exit:{noproc, _MFA} -> ok
+        end,
+    ok =
+        try get_ping_pong_pid() of
+            Pid6 when is_pid(Pid6) ->
+                error({child_restarted, reached_max_restart_intensity})
+        catch
+            throw:timeout ->
+                ok
+        end,
+
+    ok =
+        try erlang:process_info(SupPid, links) of
+            {links, Links} when is_list(Links) ->
+                error({not_stopped, reached_max_restart_intensity});
+            undefined ->
+                ok
+        catch
+            error:badarg ->
+                ok
+        end,
+    ok.
+
+get_ping_pong_pid() ->
+    receive
+        {ping_pong_server_ready, Pid} -> Pid
+    after 2000 -> throw(timeout)
+    end.
+
+try_again_restart() ->
+    process_flag(trap_exit, true),
+
+    %% Intensity is 5, use the arbitrator to prevent the child from restarting
+    %% 4 times. This should not exit the supervisor due to intensity.
+    Arbitrator1 = erlang:spawn(fun() -> arbitrator_start(4) end),
+    {ok, SupPid1} = supervisor:start_link(
+        {local, try_again_test1}, ?MODULE, {test_try_again, Arbitrator1, self()}
+    ),
+    ChildPid = wait_child_pid("ChildPid"),
+
+    ChildPid ! stop,
+    ChildPid1 = wait_child_pid("ChildPid1"),
+
+    ChildPid1 ! stop,
+    Arbitrator1 ! shutdown,
+    exit(SupPid1, normal),
+    ok =
+        receive
+            {'EXIT', SupPid1, normal} ->
+                ok
+        after 2000 ->
+            error({supervisor_not_stopped, normal})
+        end,
+
+    %% Prevent 5 restart attempts allow on the 6th, this should cause the supervisor
+    %% to shutdown on the 6th attempt, which happens before period expires and we are
+    %% already at max restart intensity.
+    Arbitrator2 = erlang:spawn(fun() -> arbitrator_start(5) end),
+    {ok, SupPid2} = supervisor:start_link(
+        {local, test_try_again2}, ?MODULE, {test_try_again, Arbitrator2, self()}
+    ),
+    ChildPid2 = wait_child_pid("ChildPid2"),
+
+    ChildPid2 ! stop,
+    ok =
+        receive
+            {'EXIT', SupPid2, shutdown} ->
+                ok
+        after 2000 ->
+            error({supervisor_not_stopped, restart_try_again_exceeded})
+        end,
+    Arbitrator2 ! shutdown,
+
+    %% Test one_for_all
+    %%  child 2 uses arbitrator to deny 4 restart attempts, succeeding on the 5th.
+    Arbitrator3 = erlang:spawn(fun() -> arbitrator_start(4) end),
+    {ok, SupPid3} = supervisor:start_link(
+        {local, try_again_test3}, ?MODULE, {test_retry_one_for_all, Arbitrator3, self()}
+    ),
+
+    {Ping1, _Crashy1} = wait_ping_server_and_child_pid(),
+
+    %% this will require 6 restarts (1 to restart ping + 4 denied attempts for
+    %% crashy and succeed on the 5th)
+    gen_server:call(Ping1, {stop, normal}),
+
+    %% Crashy will restart without error since the deny count was reached after
+    %% first time it was stopped
+    {Ping2, _Crashy2} = wait_ping_server_and_child_pid(),
+
+    %% this will surely exceed the limit
+    %crashy ! stop,
+    ok = gen_server:call(Ping2, {stop, normal}),
+
+    %% ping_pong_server has 2000ms timeout, we need to wait longer.
+    ok =
+        receive
+            {'EXIT', SupPid3, shutdown} ->
+                ok
+        after 5000 ->
+            error({supervisor_not_stopped, one_for_all_restarts_exceeded})
+        end,
+    Arbitrator3 ! shutdown,
+
+    process_flag(trap_exit, false),
+    ok.
+
+wait_child_pid(Name) ->
+    receive
+        Pid when is_pid(Pid) ->
+            Pid;
+        {'EXIT', _, shutdown} ->
+            error({unexpected, supervisor_shutdown});
+        {'EXIT', _, _} ->
+            wait_child_pid(Name)
+    after 1000 ->
+        error({timeout, no_child_pid, Name})
+    end.
+
+%% In the case where we have one_for_all, process all `ping_pong_server_ready`
+%% messages until we get the crashy `pid()` message which means the crashy
+%% process eventually started. Last `ping_pong_server_ready` will be received.
+wait_ping_server_and_child_pid() ->
+    wait_ping_server_and_child_pid0(undefined, undefined).
+
+wait_ping_server_and_child_pid0(PingPongPid, ChildPid) ->
+    Timeout =
+        if
+            is_pid(PingPongPid) andalso is_pid(ChildPid) -> 0;
+            true -> 2000
+        end,
+    receive
+        {ping_pong_server_ready, NewPingPongPid} ->
+            wait_ping_server_and_child_pid0(NewPingPongPid, ChildPid);
+        NewChildPid when is_pid(NewChildPid) ->
+            wait_ping_server_and_child_pid0(PingPongPid, NewChildPid);
+        {'EXIT', _, shutdown} ->
+            error({unexpected, supervisor_shutdown});
+        {'EXIT', _, _} ->
+            wait_ping_server_and_child_pid0(PingPongPid, ChildPid)
+    after Timeout ->
+        if
+            is_pid(PingPongPid) andalso is_pid(ChildPid) ->
+                {PingPongPid, ChildPid};
+            is_pid(PingPongPid) ->
+                error({timeout, no_child_pid, crashy});
+            is_pid(ChildPid) ->
+                error({timeout, no_child_pid, ping_pong_server});
+            true ->
+                error({timeout, no_child_pid, either})
+        end
+    end.

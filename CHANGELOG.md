@@ -92,6 +92,9 @@ instead `badarg`.
 - Fixed a bug where empty atom could not be created on some platforms, thus breaking receiving a message for a registered process from an OTP node.
 - Fix a memory leak in distribution when a BEAM node would monitor a process by name.
 - Fix `list_to_integer`, it was likely buggy with integers close to INT64_MAX
+- Added missing support for supervisor `one_for_all` strategy.
+- Supervisor now honors period and intensity options.
+- Fix supervisor crash if a `one_for_one` child fails to restart.
 
 ## [0.6.7] - Unreleased
 
