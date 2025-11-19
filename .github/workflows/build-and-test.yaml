@@ -52,7 +52,7 @@ jobs:
         cc: ["gcc-9", "gcc-11", "gcc-13", "clang-10", "clang-14", "clang-18"]
         cflags: ["-O3"]
         otp: ["25", "26", "27"]
-        gleam_version: ["1.8.0"]
+        gleam_version: ["1.11.1"]
 
         include:
         - cc: "gcc-7"

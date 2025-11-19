@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2025 Paul Guyot <pguyot@kallisys.net>
+# Copyright 2025 Mikael Karlsson <mikael.karlsson@creado.se>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(examples_gleam)
+project(supervise_actor)
 
-add_subdirectory(hello_atomvm)
-add_subdirectory(supervise_actor)
+include(BuildGleam)
+
+pack_gleam_runnable(supervise_actor supervise_actor estdlib)
