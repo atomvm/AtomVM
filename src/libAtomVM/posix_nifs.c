@@ -173,7 +173,7 @@ static void posix_fd_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct PosixFd *fd_obj = (struct PosixFd *) obj;
-    if (fd_obj->fd) {
+    if (fd_obj->fd != CLOSED_FD) {
         close(fd_obj->fd);
         fd_obj->fd = CLOSED_FD;
     }
