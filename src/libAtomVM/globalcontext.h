@@ -401,7 +401,8 @@ void globalcontext_maybe_unregister_process_id(GlobalContext *glb, int process_i
  *
  * @details Inserts an atom into the global atoms table and returns its id.
  * @param glb the global context.
- * @param atom_string the atom string that will be added to the global atoms table, it will not be copied so it must stay allocated and valid.
+ * @param atom_data the atom data
+ * @param atom_len the atom data length
  * @param copy if `true`, make a copy of the input atom_string if the atom is not already in the table.  The table
  * assumes "ownership" of the allocated memory.
  * @returns newly added atom id or term_invalid_term() in case of failure.
@@ -513,7 +514,7 @@ Module *globalcontext_get_module(GlobalContext *global, atom_index_t module_name
  * not check if the module is already loaded and allocates a new module
  * structure.
  * @param global the global context.
- * @param module_name_atom the module name.
+ * @param module_name the module name.
  * @returns a pointer to a Module struct or NULL if the module could not be
  * found.
  */
