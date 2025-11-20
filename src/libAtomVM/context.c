@@ -241,8 +241,7 @@ void context_destroy(Context *ctx)
             switch (monitor->monitor_type) {
                 case CONTEXT_MONITOR_RESOURCE: {
                     struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-                    struct RefcBinary *refc = refc_binary_from_data(resource_monitor->resource_obj);
-                    resource_type_fire_monitor(refc->resource_type, erl_nif_env_from_context(ctx), resource_monitor->resource_obj, ctx->process_id, resource_monitor->ref_ticks);
+                    resource_type_fire_monitor(resource_monitor->resource_type, erl_nif_env_from_context(ctx), ctx->process_id, resource_monitor->ref_ticks);
                     free(monitor);
                     break;
                 }
@@ -662,7 +661,10 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                     list = term_list_prepend(monitored_monitor->monitor_obj, list, heap);
                 } else if (monitor->monitor_type == CONTEXT_MONITOR_RESOURCE) {
                     struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-                    list = term_list_prepend(term_from_resource(resource_monitor->resource_obj, heap), list, heap);
+                    term resource = resource_monitor_to_resource(resource_monitor->resource_type, resource_monitor->ref_ticks, heap);
+                    if (LIKELY(!term_is_invalid_term(resource))) {
+                        list = term_list_prepend(resource, list, heap);
+                    }
                 }
             }
             term_put_tuple_element(ret, 1, list);
@@ -874,7 +876,8 @@ struct Monitor *monitor_resource_monitor_new(void *resource, uint64_t ref_ticks)
         return NULL;
     }
     monitor->monitor.monitor_type = CONTEXT_MONITOR_RESOURCE;
-    monitor->resource_obj = resource;
+    struct RefcBinary *refc = refc_binary_from_data(resource);
+    monitor->resource_type = refc->resource_type;
     monitor->ref_ticks = ref_ticks;
 
     return &monitor->monitor;
@@ -920,7 +923,7 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                 case CONTEXT_MONITOR_RESOURCE: {
                     struct ResourceContextMonitor *new_resource_monitor = CONTAINER_OF(new_monitor, struct ResourceContextMonitor, monitor);
                     struct ResourceContextMonitor *existing_resource_monitor = CONTAINER_OF(existing, struct ResourceContextMonitor, monitor);
-                    if (UNLIKELY(existing_resource_monitor->resource_obj == new_resource_monitor->resource_obj && existing_resource_monitor->ref_ticks == new_resource_monitor->ref_ticks)) {
+                    if (UNLIKELY(existing_resource_monitor->resource_type == new_resource_monitor->resource_type && existing_resource_monitor->ref_ticks == new_resource_monitor->ref_ticks)) {
                         free(new_monitor);
                         return false;
                     }
@@ -1263,7 +1266,7 @@ COLD_FUNC void context_dump(Context *ctx)
             }
             case CONTEXT_MONITOR_RESOURCE: {
                 struct ResourceContextMonitor *resource_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
-                fprintf(stderr, "monitored by resource %p ref=%lu", resource_monitor->resource_obj, (long unsigned) resource_monitor->ref_ticks);
+                fprintf(stderr, "monitored by resource type %s ref=%lu", resource_monitor->resource_type->name, (long unsigned) resource_monitor->ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }

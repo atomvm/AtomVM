@@ -158,18 +158,21 @@ term select_event_make_notification(void *rsrc_obj, uint64_t ref_ticks, bool is_
  * the resource still exists.
  * @param resource_type type holding the list of monitors
  * @param env environment for calling the down handler
- * @param resource resource that monitored the process
  * @param process_id id of the process monitored
  * @param ref_ticks reference of the monitor
  */
-void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks);
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, int32_t process_id, uint64_t ref_ticks);
 
 /**
- * @brief Remove monitor from list of monitors.
+ * @brief Get a resource from a resource monitor
+ * @details verifies using resource monitors that the resource still exists
+ * and increases the refcount by creating a term for it in the provided heap
  * @param resource_type type holding the list of monitors
  * @param ref_ticks reference of the monitor
+ * @param heap heap to create the resource term into
+ * @return a resource term or invalid if the resource is gone
  */
-void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ticks);
+term resource_monitor_to_resource(struct ResourceType *resource_type, uint64_t ref_ticks, Heap *heap);
 
 #ifdef __cplusplus
 }

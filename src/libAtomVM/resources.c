@@ -407,7 +407,7 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
     return 0;
 }
 
-void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, void *resource, int32_t process_id, uint64_t ref_ticks)
+void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *env, int32_t process_id, uint64_t ref_ticks)
 {
     struct RefcBinary *refc = NULL;
     struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
@@ -416,7 +416,7 @@ void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *e
         struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
         if (monitor->ref_ticks == ref_ticks) {
             // Resource still exists.
-            refc = refc_binary_from_data(resource);
+            refc = monitor->resource;
             refc_binary_increment_refcount(refc);
             list_remove(&monitor->resource_list_head);
             free(monitor);
@@ -430,25 +430,30 @@ void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *e
         ErlNifMonitor monitor;
         monitor.ref_ticks = ref_ticks;
         monitor.resource_type = resource_type;
-        resource_type->down(env, resource, &process_id, &monitor);
+        resource_type->down(env, refc->data, &process_id, &monitor);
         refc_binary_decrement_refcount(refc, env->global);
     }
 }
 
-void resource_type_demonitor(struct ResourceType *resource_type, uint64_t ref_ticks)
+term resource_monitor_to_resource(struct ResourceType *resource_type, uint64_t ref_ticks, Heap *heap)
 {
+    term result = term_invalid_term();
+
     struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
     struct ListHead *item;
     LIST_FOR_EACH (item, monitors) {
         struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
         if (monitor->ref_ticks == ref_ticks) {
-            list_remove(&monitor->resource_list_head);
-            free(monitor);
+            // Resource still exists.
+            struct RefcBinary *refc = monitor->resource;
+            result = term_from_resource(refc->data, heap);
             break;
         }
     }
 
     synclist_unlock(&resource_type->monitors);
+
+    return result;
 }
 
 int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
