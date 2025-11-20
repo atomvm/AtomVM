@@ -212,7 +212,7 @@ struct ResourceContextMonitor
 {
     struct Monitor monitor;
     uint64_t ref_ticks;
-    void *resource_obj;
+    struct ResourceType *resource_type;
 };
 
 struct LinkRemoteMonitor
