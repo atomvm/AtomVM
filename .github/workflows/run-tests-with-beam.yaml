@@ -115,7 +115,24 @@ jobs:
 
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
-      run: brew update && brew install gperf erlang@${{ matrix.otp }} mbedtls rebar3
+      run: brew update && brew install gperf erlang@${{ matrix.otp }} mbedtls@3 rebar3
+
+    - name: "macOS setup mbedtls@3 environment"
+      if: runner.os == 'macOS'
+      run: |
+        # Detect Homebrew prefix (Apple Silicon vs Intel)
+        if [ -d "/opt/homebrew/opt/mbedtls@3" ]; then
+          MBEDTLS_PREFIX="/opt/homebrew/opt/mbedtls@3"
+        elif [ -d "/usr/local/opt/mbedtls@3" ]; then
+          MBEDTLS_PREFIX="/usr/local/opt/mbedtls@3"
+        else
+          echo "Error: mbedtls@3 not found in expected locations"
+          exit 1
+        fi
+        echo "MBEDTLS_PREFIX=${MBEDTLS_PREFIX}" >> $GITHUB_ENV
+        echo "LDFLAGS=-L${MBEDTLS_PREFIX}/lib" >> $GITHUB_ENV
+        echo "CPPFLAGS=-I${MBEDTLS_PREFIX}/include" >> $GITHUB_ENV
+        echo "PKG_CONFIG_PATH=${MBEDTLS_PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
 
     # Build
     - name: "Build: create build dir"
@@ -131,7 +148,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
-        cmake -G Ninja ${{ matrix.cmake_opts }} ..
+        cmake -G Ninja ${MBEDTLS_PREFIX:+-DCMAKE_PREFIX_PATH="$MBEDTLS_PREFIX"} ${{ matrix.cmake_opts }} ..
 
     - name: "Touch files to benefit from cache"
       working-directory: build
