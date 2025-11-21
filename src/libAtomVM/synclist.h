@@ -27,16 +27,16 @@
 
 #ifndef AVM_NO_SMP
 
-#include "smp.h"
+#    include "smp.h"
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 extern "C" {
-#endif
+#    endif
 
-#ifndef TYPEDEF_RWLOCK
-#define TYPEDEF_RWLOCK
+#    ifndef TYPEDEF_RWLOCK
+#        define TYPEDEF_RWLOCK
 typedef struct RWLock RWLock;
-#endif
+#    endif
 
 struct SyncList
 {
@@ -115,24 +115,24 @@ static inline bool synclist_is_empty(struct SyncList *synclist)
     return result;
 }
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 }
-#endif
+#    endif
 
 #else
 
-#define SyncList ListHead
-#define synclist_init(list) list_init(list)
-#define synclist_rdlock(list) list
-#define synclist_tryrdlock(list) list
-#define synclist_wrlock(list) list
-#define synclist_nolock(list) list
-#define synclist_unlock(list) UNUSED(list)
-#define synclist_destroy(list) UNUSED(list)
-#define synclist_prepend(list, new_item) list_prepend(list, new_item)
-#define synclist_append(list, new_item) list_append(list, new_item)
-#define synclist_remove(list, new_item) list_remove(new_item)
-#define synclist_is_empty(list) list_is_empty(list)
+#    define SyncList ListHead
+#    define synclist_init(list) list_init(list)
+#    define synclist_rdlock(list) list
+#    define synclist_tryrdlock(list) list
+#    define synclist_wrlock(list) list
+#    define synclist_nolock(list) list
+#    define synclist_unlock(list) UNUSED(list)
+#    define synclist_destroy(list) UNUSED(list)
+#    define synclist_prepend(list, new_item) list_prepend(list, new_item)
+#    define synclist_append(list, new_item) list_append(list, new_item)
+#    define synclist_remove(list, new_item) list_remove(new_item)
+#    define synclist_is_empty(list) list_is_empty(list)
 
 #endif
 

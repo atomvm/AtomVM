@@ -40,13 +40,13 @@
 #include "utils.h"
 
 #ifndef MAX
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#    define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
 #ifdef ENABLE_REALLOC_GC
-#define MEMORY_SHRINK memory_shrink
+#    define MEMORY_SHRINK memory_shrink
 #else
-#define MEMORY_SHRINK memory_gc
+#    define MEMORY_SHRINK memory_gc
 #endif
 
 static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, bool move);

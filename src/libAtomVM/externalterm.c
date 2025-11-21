@@ -1157,7 +1157,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
 #elif TERM_BYTES == 8
             int size_in_terms = ((binary_size + 8 - 1) >> 3);
 #else
-#error
+#    error
 #endif
 
             if (copy && term_binary_size_is_heap_binary(binary_size)) {

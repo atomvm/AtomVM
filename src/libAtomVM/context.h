@@ -43,7 +43,7 @@ extern "C" {
 struct Module;
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
@@ -160,7 +160,7 @@ struct Context
 };
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 

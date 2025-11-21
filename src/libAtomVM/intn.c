@@ -177,13 +177,13 @@ static void mulmnu16(const uint16_t u[], size_t m, const uint16_t v[], size_t n,
 
 void intn_mulu(const uint32_t m[], size_t m_len, const uint32_t n[], size_t n_len, uint32_t out[])
 {
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     mulmnu16((const uint16_t *) m, m_len * 2, (const uint16_t *) n, n_len * 2, (uint16_t *) out);
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#error "Big endian not yet supported"
-#else
-#error "Unsupported endianness"
-#endif
+#    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#        error "Big endian not yet supported"
+#    else
+#        error "Unsupported endianness"
+#    endif
 }
 
 #endif
@@ -224,9 +224,9 @@ static inline uint32_t uint32_nlz(uint32_t x)
     ASSUME(x != 0);
 
 #ifdef __has_builtin
-#define HAS_BUILTIN(x) __has_builtin(x)
+#    define HAS_BUILTIN(x) __has_builtin(x)
 #else
-#define HAS_BUILTIN(x) 0
+#    define HAS_BUILTIN(x) 0
 #endif
 
 #if defined(__GNUC__) \
@@ -1053,7 +1053,7 @@ char *intn_to_string(
 // "If realloc() fails, the original block is left untouched; it is not freed or moved."
 #pragma GCC diagnostic push
 #if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 12
-#pragma GCC diagnostic ignored "-Wuse-after-free"
+#    pragma GCC diagnostic ignored "-Wuse-after-free"
 #endif
         free(outbuf);
 #pragma GCC diagnostic pop
@@ -1243,7 +1243,7 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
         out[i * 4 + 3] = (in[i] >> 24) & 0xFF;
     }
 #else
-#error "Unsupported endianess"
+#    error "Unsupported endianess"
 #endif
 
     intn_digit_t last_in = in[to_copy];

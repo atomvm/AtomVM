@@ -30,12 +30,12 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #if INTPTR_MAX == 2147483647 // INT32_MAX
-#define INTPTR_MAX_BASE_10_DIGITS 10
-#define INTPTR_MAX_BASE_16_DIGITS 8
+#    define INTPTR_MAX_BASE_10_DIGITS 10
+#    define INTPTR_MAX_BASE_16_DIGITS 8
 
 #elif INTPTR_MAX == 9223372036854775807 // INT64_MAX
-#define INTPTR_MAX_BASE_10_DIGITS 19
-#define INTPTR_MAX_BASE_16_DIGITS 16
+#    define INTPTR_MAX_BASE_10_DIGITS 19
+#    define INTPTR_MAX_BASE_16_DIGITS 16
 #endif
 
 #define INT64_MAX_BASE_10_DIGITS 19
@@ -316,7 +316,7 @@ static int buf10_to_int64(
 
     return pos;
 #else
-#error "INTPTR_MAX is not either a 32 or 64 bit signed integer"
+#    error "INTPTR_MAX is not either a 32 or 64 bit signed integer"
 #endif
 }
 
@@ -400,7 +400,7 @@ static int buf16_to_int64(
 
     return pos;
 #else
-#error "INTPTR_MAX is not either a 32 or 64 bit signed integer"
+#    error "INTPTR_MAX is not either a 32 or 64 bit signed integer"
 #endif
 }
 

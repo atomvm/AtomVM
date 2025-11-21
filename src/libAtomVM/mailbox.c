@@ -28,12 +28,12 @@
 #include "trace.h"
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
+#    include "platform_atomic.h"
 #else
-#if defined(HAVE_ATOMIC)
-#include <stdatomic.h>
-#define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
-#endif
+#    if defined(HAVE_ATOMIC)
+#        include <stdatomic.h>
+#        define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
+#    endif
 #endif
 
 #define ADDITIONAL_PROCESSING_MEMORY_SIZE 4

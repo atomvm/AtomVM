@@ -32,20 +32,20 @@
 #define ETS_ANY_PROCESS -1
 
 #ifndef AVM_NO_SMP
-#define SMP_RDLOCK(table) smp_rwlock_rdlock(table->lock)
-#define SMP_WRLOCK(table) smp_rwlock_wrlock(table->lock)
-#define SMP_UNLOCK(table) smp_rwlock_unlock(table->lock)
+#    define SMP_RDLOCK(table) smp_rwlock_rdlock(table->lock)
+#    define SMP_WRLOCK(table) smp_rwlock_wrlock(table->lock)
+#    define SMP_UNLOCK(table) smp_rwlock_unlock(table->lock)
 #else
-#define SMP_RDLOCK(table)
-#define SMP_WRLOCK(table)
-#define SMP_UNLOCK(table)
+#    define SMP_RDLOCK(table)
+#    define SMP_WRLOCK(table)
+#    define SMP_UNLOCK(table)
 #endif
 
 #ifndef AVM_NO_SMP
-#ifndef TYPEDEF_RWLOCK
-#define TYPEDEF_RWLOCK
+#    ifndef TYPEDEF_RWLOCK
+#        define TYPEDEF_RWLOCK
 typedef struct RWLock RWLock;
-#endif
+#    endif
 #endif
 
 struct EtsTable

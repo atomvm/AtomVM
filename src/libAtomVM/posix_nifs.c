@@ -24,33 +24,33 @@
  */
 
 #if HAVE_OPEN && HAVE_CLOSE
-#include <fcntl.h>
+#    include <fcntl.h>
 #endif
 #if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 #if HAVE_MKFIFO
-#include <sys/stat.h>
-#include <sys/types.h>
+#    include <sys/stat.h>
+#    include <sys/types.h>
 #endif
 
 #if HAVE_CLOCK_SETTIME
-#include <time.h>
+#    include <time.h>
 #elif HAVE_SETTIMEOFDAY
-#include <sys/time.h>
+#    include <sys/time.h>
 #endif
 
 #if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY) \
     || HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
-#include <errno.h>
+#    include <errno.h>
 #endif
 
 #if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
-#include <dirent.h>
+#    include <dirent.h>
 #endif
 
 #if HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT
-#include <spawn.h>
+#    include <spawn.h>
 #endif
 
 #include "defaultatoms.h"
@@ -159,7 +159,7 @@ static term errno_to_error_tuple_maybe_gc(Context *ctx)
 }
 
 #if HAVE_OPEN && HAVE_CLOSE
-#define CLOSED_FD (-1)
+#    define CLOSED_FD (-1)
 
 struct PosixFd
 {
@@ -209,25 +209,25 @@ const ErlNifResourceTypeInit posix_fd_resource_type_init = {
     .down = posix_fd_down,
 };
 
-#define O_EXEC_ATOM_STR ATOM_STR("\x6", "o_exec")
-#define O_RDONLY_ATOM_STR ATOM_STR("\x8", "o_rdonly")
-#define O_RDWR_ATOM_STR ATOM_STR("\x6", "o_rdwr")
-#define O_SEARCH_ATOM_STR ATOM_STR("\x8", "o_search")
-#define O_WRONLY_ATOM_STR ATOM_STR("\x8", "o_wronly")
+#    define O_EXEC_ATOM_STR ATOM_STR("\x6", "o_exec")
+#    define O_RDONLY_ATOM_STR ATOM_STR("\x8", "o_rdonly")
+#    define O_RDWR_ATOM_STR ATOM_STR("\x6", "o_rdwr")
+#    define O_SEARCH_ATOM_STR ATOM_STR("\x8", "o_search")
+#    define O_WRONLY_ATOM_STR ATOM_STR("\x8", "o_wronly")
 
-#define O_APPEND_ATOM_STR ATOM_STR("\x8", "o_append")
-#define O_CLOEXEC_ATOM_STR ATOM_STR("\x9", "o_cloexec")
-#define O_CREAT_ATOM_STR ATOM_STR("\x7", "o_creat")
-#define O_DIRECTORY_ATOM_STR ATOM_STR("\xB", "o_directory")
-#define O_DSYNC_ATOM_STR ATOM_STR("\x7", "o_dsync")
-#define O_EXCL_ATOM_STR ATOM_STR("\x6", "o_excl")
-#define O_NOCTTY_ATOM_STR ATOM_STR("\x8", "o_noctty")
-#define O_NOFOLLOW_ATOM_STR ATOM_STR("\xA", "o_nofollow")
+#    define O_APPEND_ATOM_STR ATOM_STR("\x8", "o_append")
+#    define O_CLOEXEC_ATOM_STR ATOM_STR("\x9", "o_cloexec")
+#    define O_CREAT_ATOM_STR ATOM_STR("\x7", "o_creat")
+#    define O_DIRECTORY_ATOM_STR ATOM_STR("\xB", "o_directory")
+#    define O_DSYNC_ATOM_STR ATOM_STR("\x7", "o_dsync")
+#    define O_EXCL_ATOM_STR ATOM_STR("\x6", "o_excl")
+#    define O_NOCTTY_ATOM_STR ATOM_STR("\x8", "o_noctty")
+#    define O_NOFOLLOW_ATOM_STR ATOM_STR("\xA", "o_nofollow")
 // #define O_NONBLOCK_ATOM_STR ATOM_STR("\xA", "o_nonblock")
-#define O_RSYNC_ATOM_STR ATOM_STR("\x8", "o_rsync")
-#define O_SYNC_ATOM_STR ATOM_STR("\x7", "o_sync")
-#define O_TRUNC_ATOM_STR ATOM_STR("\x8", "o_trunc")
-#define O_TTY_INIT_ATOM_STR ATOM_STR("\xA", "o_tty_init")
+#    define O_RSYNC_ATOM_STR ATOM_STR("\x8", "o_rsync")
+#    define O_SYNC_ATOM_STR ATOM_STR("\x7", "o_sync")
+#    define O_TRUNC_ATOM_STR ATOM_STR("\x8", "o_trunc")
+#    define O_TTY_INIT_ATOM_STR ATOM_STR("\xA", "o_tty_init")
 
 static term make_posix_fd_resource(Context *ctx, int fd)
 {
@@ -275,38 +275,38 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_TRUNC_ATOM_STR)) {
             posix_flags |= O_TRUNC;
             // SUSv4/2018 edition flags
-#if HAVE_O_EXEC
+#    if HAVE_O_EXEC
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_EXEC_ATOM_STR)) {
             posix_flags |= O_EXEC;
-#endif
-#if HAVE_O_SEARCH
+#    endif
+#    if HAVE_O_SEARCH
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_SEARCH_ATOM_STR)) {
             posix_flags |= O_SEARCH;
-#endif
-#if HAVE_O_CLOEXEC
+#    endif
+#    if HAVE_O_CLOEXEC
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_CLOEXEC_ATOM_STR)) {
             posix_flags |= O_CLOEXEC;
-#endif
-#if HAVE_O_DIRECTORY
+#    endif
+#    if HAVE_O_DIRECTORY
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_DIRECTORY_ATOM_STR)) {
             posix_flags |= O_DIRECTORY;
-#endif
-#if HAVE_O_DSYNC
+#    endif
+#    if HAVE_O_DSYNC
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_DSYNC_ATOM_STR)) {
             posix_flags |= O_DSYNC;
-#endif
-#if HAVE_O_NOFOLLOW
+#    endif
+#    if HAVE_O_NOFOLLOW
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_NOFOLLOW_ATOM_STR)) {
             posix_flags |= O_NOFOLLOW;
-#endif
-#if HAVE_O_RSYNC
+#    endif
+#    if HAVE_O_RSYNC
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_RSYNC_ATOM_STR)) {
             posix_flags |= O_RSYNC;
-#endif
-#if HAVE_O_TTY_INIT
+#    endif
+#    if HAVE_O_TTY_INIT
         } else if (globalcontext_is_term_equal_to_atom_string(glb, flag, O_TTY_INIT_ATOM_STR)) {
             posix_flags |= O_TTY_INIT;
-#endif
+#    endif
         } else {
             RAISE_ERROR(BADARG_ATOM);
         }
@@ -521,7 +521,7 @@ static term nif_atomvm_posix_select_stop(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 
-#if HAVE_EXECVE
+#    if HAVE_EXECVE
 static void free_string_list(char **list)
 {
     if (IS_NULL_PTR(list)) {
@@ -603,7 +603,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         return errno_to_error_tuple_maybe_gc(ctx);
     }
     pid_t pid;
-#if HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT
+#        if HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT
     do {
         posix_spawn_file_actions_t file_actions;
         posix_spawnattr_t spawn_attrs;
@@ -637,7 +637,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         close(pstdout[1]);
         return error_tuple_maybe_gc(r, ctx);
     }
-#else
+#        else
     r = fork();
     if (r < 0) {
         int err = errno;
@@ -653,19 +653,19 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
         close(0); // close stdin of the child
         close(pstdout[0]); // close read end of the pipe
         dup2(pstdout[1], 1); // make stdout the write-end of the pipe
-#if HAVE_CLOSEFROM
+#            if HAVE_CLOSEFROM
         closefrom(2);
-#else
+#            else
         int maxfd = sysconf(_SC_OPEN_MAX);
         for (int fd = 3; fd < maxfd; fd++) {
             close(fd);
         }
-#endif
+#            endif
         execve(path, args, envp);
         exit(1);
     }
     pid = r;
-#endif
+#        endif
     // parent
     close(pstdout[1]); // close write-end of the pipe
     free(path);
@@ -687,7 +687,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
 
     return result;
 }
-#endif
+#    endif
 #endif
 
 #if HAVE_MKFIFO
@@ -765,14 +765,14 @@ static term nif_atomvm_posix_clock_settime(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(nsecs, term_is_any_integer);
     avm_int64_t ns = term_maybe_unbox_int64(nsecs);
 
-#ifdef HAVE_CLOCK_SETTIME
+#    ifdef HAVE_CLOCK_SETTIME
     struct timespec tp = {
         .tv_sec = s,
         .tv_nsec = ns
     };
 
     int res = clock_settime(CLOCK_REALTIME, &tp);
-#else
+#    else
     // Use settimeofday as a fallback
     struct timeval tv = {
         .tv_sec = s,
@@ -780,7 +780,7 @@ static term nif_atomvm_posix_clock_settime(Context *ctx, int argc, term argv[])
     };
 
     int res = settimeofday(&tv, NULL);
-#endif
+#    endif
     if (res != 0) {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1014,12 +1014,12 @@ const struct Nif atomvm_posix_select_stop_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_select_stop
 };
-#if HAVE_EXECVE
+#    if HAVE_EXECVE
 const struct Nif atomvm_subprocess_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_subprocess
 };
-#endif
+#    endif
 #endif
 #if HAVE_MKFIFO
 const struct Nif atomvm_posix_mkfifo_nif = {

@@ -25,14 +25,14 @@
 #include <stdlib.h>
 
 #ifndef AVM_NO_SMP
-#include "smp.h"
-#define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
-#define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
-#define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
+#    include "smp.h"
+#    define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
+#    define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
+#    define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
 #else
-#define SMP_RDLOCK(htable) UNUSED(htable)
-#define SMP_WRLOCK(htable) UNUSED(htable)
-#define SMP_UNLOCK(htable) UNUSED(htable)
+#    define SMP_RDLOCK(htable) UNUSED(htable)
+#    define SMP_WRLOCK(htable) UNUSED(htable)
+#    define SMP_UNLOCK(htable) UNUSED(htable)
 #endif
 
 #define DEFAULT_SIZE 8

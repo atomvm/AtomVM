@@ -51,29 +51,29 @@ extern "C" {
 struct Context;
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 
 struct Module;
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 
 #ifndef TYPEDEF_MAILBOXMESSAGE
-#define TYPEDEF_MAILBOXMESSAGE
+#    define TYPEDEF_MAILBOXMESSAGE
 typedef struct MailboxMessage MailboxMessage;
 #endif
 
 #ifndef TYPEDEF_MESSAGE
-#define TYPEDEF_MESSAGE
+#    define TYPEDEF_MESSAGE
 typedef struct Message Message;
 #endif
 
@@ -144,9 +144,9 @@ struct GlobalContext
     unsigned long long ATOMIC ref_ticks;
 #else
     unsigned long long ref_ticks;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
     SpinLock ref_ticks_spinlock;
-#endif
+#    endif
 #endif
 
 #ifndef AVM_NO_SMP
@@ -537,14 +537,14 @@ run_result_t globalcontext_run(GlobalContext *global, Module *start_module, FILE
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
 {
-#if defined(AVM_NO_SMP) || ATOMIC_LLONG_LOCK_FREE == 2
+#    if defined(AVM_NO_SMP) || ATOMIC_LLONG_LOCK_FREE == 2
     return ++global->ref_ticks;
-#else
+#    else
     smp_spinlock_lock(&global->ref_ticks_spinlock);
     unsigned long long value = ++global->ref_ticks;
     smp_spinlock_unlock(&global->ref_ticks_spinlock);
     return value;
-#endif
+#    endif
 }
 #endif
 

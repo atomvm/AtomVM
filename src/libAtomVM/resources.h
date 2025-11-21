@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 

@@ -86,10 +86,10 @@ static term eai_errno_to_term(int err, GlobalContext *glb)
 #ifdef HAVE_EXTENDED_EAI_ERRNO
         case EAI_BADHINTS:
             return globalcontext_make_atom(glb, ATOM_STR("\xB", "eaibadhints"));
-#ifdef HAVE_EAI_OVERFLOW
+#    ifdef HAVE_EAI_OVERFLOW
         case EAI_OVERFLOW:
             return globalcontext_make_atom(glb, ATOM_STR("\xB", "eaioverflow"));
-#endif
+#    endif
         case EAI_PROTOCOL:
             return globalcontext_make_atom(glb, ATOM_STR("\xB", "eaiprotocol"));
         case EAI_SYSTEM:

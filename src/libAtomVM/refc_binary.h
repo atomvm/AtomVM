@@ -28,14 +28,14 @@
 #include "resources.h"
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
+#    include "platform_atomic.h"
 #endif
 
 #if defined(HAVE_ATOMIC) && !defined(__cplusplus)
-#include <stdatomic.h>
-#define ATOMIC _Atomic
+#    include <stdatomic.h>
+#    define ATOMIC _Atomic
 #else
-#define ATOMIC
+#    define ATOMIC
 #endif
 
 #ifdef __cplusplus
@@ -43,12 +43,12 @@ extern "C" {
 #endif
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 

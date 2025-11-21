@@ -23,24 +23,24 @@
 
 #ifndef AVM_NO_JIT
 
-#include "bif.h"
-#include "bitstring.h"
-#include "context.h"
-#include "debug.h"
-#include "defaultatoms.h"
-#include "dist_nifs.h"
-#include "module.h"
-#include "nifs.h"
-#include "scheduler.h"
-#include "stacktrace.h"
-#include "term.h"
-#include "utils.h"
+#    include "bif.h"
+#    include "bitstring.h"
+#    include "context.h"
+#    include "debug.h"
+#    include "defaultatoms.h"
+#    include "dist_nifs.h"
+#    include "module.h"
+#    include "nifs.h"
+#    include "scheduler.h"
+#    include "stacktrace.h"
+#    include "term.h"
+#    include "utils.h"
 
-#include <math.h>
-#include <stddef.h>
+#    include <math.h>
+#    include <stddef.h>
 
 // #define ENABLE_TRACE
-#include "trace.h"
+#    include "trace.h"
 
 // Verify matching atom index in default_atoms.hrl
 _Static_assert(OK_ATOM_INDEX == 2, "OK_ATOM_INDEX is 2 in libs/jit/src/default_atoms.hrl ");
@@ -61,7 +61,7 @@ _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16
 _Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 
 // Verify offsets in jit_x86_64.erl
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
+#    if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
 _Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64}.erl");
 _Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64}.erl");
 _Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64}.erl");
@@ -72,7 +72,7 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64}.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64}.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64}.erl");
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
+#    elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_armv6m.erl");
 _Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_armv6m.erl");
@@ -86,37 +86,37 @@ _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->rema
 
 _Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 
-#else
-#error Unknown jit target
-#endif
+#    else
+#        error Unknown jit target
+#    endif
 
-#ifdef AVM_USE_SINGLE_PRECISION
+#    ifdef AVM_USE_SINGLE_PRECISION
 _Static_assert(sizeof(avm_float_t) == 0x4, "sizeof(avm_float_t) is 0x4 for single precision");
-#else
+#    else
 _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for double precision");
-#endif
+#    endif
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \
-    if (term_is_invalid_term(return_value)) {                 \
-        if (UNLIKELY(!context_get_flags(ctx, Trap))) {        \
-            return jit_handle_error(ctx, jit_state, offset);  \
-        } else {                                              \
-            return jit_schedule_wait_cp(ctx, jit_state);      \
-        }                                                     \
-    }
+#    define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \
+        if (term_is_invalid_term(return_value)) {                 \
+            if (UNLIKELY(!context_get_flags(ctx, Trap))) {        \
+                return jit_handle_error(ctx, jit_state, offset);  \
+            } else {                                              \
+                return jit_schedule_wait_cp(ctx, jit_state);      \
+            }                                                     \
+        }
 
-#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset)              \
-    if (term_is_invalid_term(return_value)) {                                   \
-        if (UNLIKELY(!context_get_flags(ctx, Trap))) {                          \
-            return jit_handle_error(ctx, jit_state, offset);                    \
-        } else {                                                                \
-            return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
-        }                                                                       \
-    }
+#    define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset)              \
+        if (term_is_invalid_term(return_value)) {                                   \
+            if (UNLIKELY(!context_get_flags(ctx, Trap))) {                          \
+                return jit_handle_error(ctx, jit_state, offset);                    \
+            } else {                                                                \
+                return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
+            }                                                                       \
+        }
 
-#ifndef MIN
-#define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
-#endif
+#    ifndef MIN
+#        define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
+#    endif
 
 static void destroy_extended_registers(Context *ctx, unsigned int live)
 {
@@ -139,11 +139,11 @@ static void jit_trim_live_regs(Context *ctx, uint32_t live)
     }
 }
 
-#define TRIM_LIVE_REGS(live_regs_no)        \
-    jit_trim_live_regs(ctx, live_regs_no);  \
-    if (UNLIKELY(live_regs_no > MAX_REG)) { \
-        live_regs_no = MAX_REG;             \
-    }
+#    define TRIM_LIVE_REGS(live_regs_no)        \
+        jit_trim_live_regs(ctx, live_regs_no);  \
+        if (UNLIKELY(live_regs_no > MAX_REG)) { \
+            live_regs_no = MAX_REG;             \
+        }
 
 // Update jit_state->module and jit_state->continuation
 static Context *jit_return(Context *ctx, JITState *jit_state)
@@ -153,20 +153,20 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
     Module *mod = globalcontext_get_module_by_index(ctx->global, module_index);
 
     // Native case
-#ifndef AVM_NO_EMU
+#    ifndef AVM_NO_EMU
     if (mod->native_code == NULL) {
         // return to emulated
         const uint8_t *code = mod->code->code;
         const uint8_t *pc = code + ((ctx->cp & 0xFFFFFF) >> 2);
         jit_state->continuation = pc;
     } else {
-#endif
+#    endif
         // return to native using pointer arithmetics on function pointers
         const void *native_pc = ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2);
         jit_state->continuation = (ModuleNativeEntryPoint) native_pc;
-#ifndef AVM_NO_EMU
+#    ifndef AVM_NO_EMU
     }
-#endif
+#    endif
     jit_state->module = mod;
     return ctx;
 }
@@ -207,11 +207,11 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     }
 
     // Do not print crash dump if reason is normal or shutdown.
-#ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
+#    ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
     if (ctx->x[0] != LOWERCASE_EXIT_ATOM || (ctx->x[1] != NORMAL_ATOM && ctx->x[1] != SHUTDOWN_ATOM)) {
         context_dump(ctx);
     }
-#endif
+#    endif
 
     if (ctx->x[0] == LOWERCASE_EXIT_ATOM) {
         ctx->exit_reason = ctx->x[1];
@@ -322,10 +322,10 @@ enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t lab
     END_WITH_STACK_HEAP(heap, ctx->global);
     ctx->saved_module = mod;
     // We exceptionally store the label in this field, used by context_process_code_server_resume_signal
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpedantic"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wpedantic"
     ctx->saved_function_ptr = (void *) (uintptr_t) label;
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
     context_update_flags(ctx, ~NoFlags, Trap);
     return TRAP_AND_LOAD_OK;
 }
@@ -575,7 +575,7 @@ static term jit_module_load_literal(Context *ctx, JITState *jit_state, int index
 static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
     TRACE("jit_alloc_boxed_integer_fragment: value=%lld\n", (long long) value);
-#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+#    if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
@@ -587,7 +587,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
         return term_make_boxed_int64(value, &heap);
     }
-#endif
+#    endif
     Heap heap;
     if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
         ctx->x[0] = ERROR_ATOM;
@@ -601,7 +601,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
 static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 {
-#if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
+#    if BOXED_TERMS_REQUIRED_FOR_INT64 > 1
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
@@ -613,7 +613,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 
         return term_make_boxed_int64(value, &heap);
     } else
-#endif
+#    endif
         if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
@@ -1017,8 +1017,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
     return false;
 }
 
-#define MAXI(A, B) ((A > B) ? (A) : (B))
-#define MINI(A, B) ((A > B) ? (B) : (A))
+#    define MAXI(A, B) ((A > B) ? (A) : (B))
+#    define MINI(A, B) ((A > B) ? (B) : (A))
 
 static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term fun, unsigned int args_count)
 {
@@ -1113,80 +1113,80 @@ static void jit_term_conv_to_float(Context *ctx, term t, int freg)
 static bool jit_fadd(Context *ctx, int freg1, int freg2, int freg3)
 {
     TRACE("jit_fadd: freg1=%d [%f] freg2=%d [%f] freg3=%d\n", freg1, ctx->fr[freg1], freg2, ctx->fr[freg2], freg3);
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#        pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
-#endif
+#    endif
     ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     if (fetestexcept(FE_OVERFLOW)) {
         return false;
     }
-#else
+#    else
     if (!isfinite(ctx->fr[freg3])) {
         return false;
     }
-#endif
+#    endif
     return true;
 }
 
 static bool jit_fsub(Context *ctx, int freg1, int freg2, int freg3)
 {
     TRACE("jit_fsub: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#        pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
-#endif
+#    endif
     ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     if (fetestexcept(FE_OVERFLOW)) {
         return false;
     }
-#else
+#    else
     if (!isfinite(ctx->fr[freg3])) {
         return false;
     }
-#endif
+#    endif
     return true;
 }
 
 static bool jit_fmul(Context *ctx, int freg1, int freg2, int freg3)
 {
     TRACE("jit_fmul: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#        pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW);
-#endif
+#    endif
     ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     if (fetestexcept(FE_OVERFLOW)) {
         return false;
     }
-#else
+#    else
     if (!isfinite(ctx->fr[freg3])) {
         return false;
     }
-#endif
+#    endif
     return true;
 }
 
 static bool jit_fdiv(Context *ctx, int freg1, int freg2, int freg3)
 {
     TRACE("jit_fdiv: freg1=%d freg2=%d freg3=%d\n", freg1, freg2, freg3);
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-#pragma STDC FENV_ACCESS ON
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#        pragma STDC FENV_ACCESS ON
     feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
-#endif
+#    endif
     ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
-#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#    ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
     if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
         return false;
     }
-#else
+#    else
     if (!isfinite(ctx->fr[freg3])) {
         return false;
     }
-#endif
+#    endif
     return true;
 }
 
