@@ -99,6 +99,9 @@ start() ->
 
     ok = test_bs_skip_bits2_little(),
 
+    ok = test_bs_variable_size_bitstring(),
+    ok = test_bs_match_bitstring_modifier(),
+
     0.
 
 test_pack_small_ints({A, B, C}, Expect) ->
@@ -531,6 +534,55 @@ test_bs_match_string_select() ->
 % More recent versions of OTP use bs_match
 test_bs_skip_bits2_little() ->
     ok = check_x86_64_jt(id(<<16#e9, 0:32>>)).
+
+test_bs_variable_size_bitstring() ->
+    B1 = id(<<1, 2>>),
+    B2 = id(<<3, 4>>),
+    S1 = id(16),
+    S2 = id(8),
+    <<1, 2, 3, 4>> = <<B1:S1/bitstring, B2/binary>>,
+    <<1, 2, 3>> = <<B1:S1/bitstring, B2:S2/bitstring>>,
+    S3 = id(all),
+    % AtomVM emu flavor actually accepts a dynamic all because a literal term
+    % is evaluated like a variable one. BEAM and jit flavor don't.
+    SupportsVariableAll =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                no;
+            "ATOM" ->
+                case erlang:system_info(emu_flavor) of
+                    jit -> no;
+                    emu -> ok
+                end
+        end,
+    ok =
+        try
+            <<1, 2, 3, 4>> = <<B1:S1/bitstring, B2:S3/bitstring>>,
+            SupportsVariableAll
+        catch
+            error:badarg ->
+                ok
+        end,
+    ok.
+
+test_bs_match_bitstring_modifier() ->
+    ok =
+        try
+            bitstring_match(id(<<123, 234, 245>>), id(15)),
+            case erlang:system_info(machine) of
+                "BEAM" -> ok;
+                "ATOM" -> unexpected
+            end
+        catch
+            error:unsupported -> ok
+        end,
+
+    {<<123, 234>>, <<245>>} = bitstring_match(id(<<123, 234, 245>>), id(16)),
+    ok.
+
+bitstring_match(BS, Size) ->
+    <<Matched:Size/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
 
 check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
