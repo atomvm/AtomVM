@@ -30,6 +30,7 @@
 #include <term.h>
 #include <term_typedef.h>
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/cipher.h>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
@@ -37,7 +38,11 @@
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
+#endif
 #include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#endif
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -55,6 +60,7 @@ enum crypto_algorithm
     CryptoSha512
 };
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 static const AtomStringIntPair crypto_algorithm_table[] = {
     { ATOM_STR("\x3", "md5"), CryptoMd5 },
     { ATOM_STR("\x3", "sha"), CryptoSha1 },
@@ -64,6 +70,7 @@ static const AtomStringIntPair crypto_algorithm_table[] = {
     { ATOM_STR("\x6", "sha512"), CryptoSha512 },
     SELECT_INT_DEFAULT(CryptoInvalidAlgorithm)
 };
+#endif
 
 #define DEFINE_HASH_FOLD(ALGORITHM, SUFFIX)                                                                                          \
     static InteropFunctionResult ALGORITHM##_hash_fold_fun(term t, void *accum)                                                      \
@@ -179,6 +186,7 @@ static const AtomStringIntPair crypto_algorithm_table[] = {
         return true;                                                                                                   \
     }
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #if MBEDTLS_VERSION_NUMBER >= 0x03000000
 
 // 3.x API: functions return an int that represents errors
@@ -225,6 +233,52 @@ DEFINE_DO_HASH_NORET_IS_OTHER(sha512, , true)
 DEFINE_DO_HASH_NORET_IS_OTHER(sha512, , false)
 
 #endif
+#endif
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+static psa_algorithm_t atom_to_psa_hash_alg(term type, GlobalContext *global)
+{
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x3", "md5"))) {
+        return PSA_ALG_MD5;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x3", "sha"))) {
+        return PSA_ALG_SHA_1;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha224"))) {
+        return PSA_ALG_SHA_224;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha256"))) {
+        return PSA_ALG_SHA_256;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha384"))) {
+        return PSA_ALG_SHA_384;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha512"))) {
+        return PSA_ALG_SHA_512;
+    }
+    return PSA_ALG_NONE;
+}
+
+static InteropFunctionResult psa_hash_fold_fun(term t, void *accum)
+{
+    psa_hash_operation_t *operation = (psa_hash_operation_t *) accum;
+    if (term_is_integer(t)) {
+        avm_int64_t tmp = term_maybe_unbox_int64(t);
+        if (tmp < 0 || tmp > 255) {
+            return InteropBadArg;
+        }
+        uint8_t val = (uint8_t) tmp;
+        if (UNLIKELY(psa_hash_update(operation, &val, 1) != PSA_SUCCESS)) {
+            return InteropBadArg;
+        }
+    } else /* term_is_binary(t) */ {
+        if (UNLIKELY(psa_hash_update(operation, (uint8_t *) term_binary_data(t), term_binary_size(t)) != PSA_SUCCESS)) {
+            return InteropBadArg;
+        }
+    }
+    return InteropOk;
+}
+#endif
 
 static term nif_crypto_hash(Context *ctx, int argc, term argv[])
 {
@@ -236,6 +290,31 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     unsigned char digest[MAX_MD_SIZE];
     size_t digest_len = 0;
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_algorithm_t alg = atom_to_psa_hash_alg(type, ctx->global);
+    if (alg == PSA_ALG_NONE) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    digest_len = PSA_HASH_LENGTH(alg);
+
+    psa_hash_operation_t operation = PSA_HASH_OPERATION_INIT;
+    psa_status_t status = psa_hash_setup(&operation, alg);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    InteropFunctionResult result = interop_chardata_fold(data, psa_hash_fold_fun, NULL, (void *) &operation);
+    if (UNLIKELY(result != InteropOk)) {
+        psa_hash_abort(&operation);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    status = psa_hash_finish(&operation, digest, sizeof(digest), &digest_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_hash_abort(&operation);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+#else
     enum crypto_algorithm algo = interop_atom_term_select_int(crypto_algorithm_table, type, ctx->global);
     switch (algo) {
         case CryptoMd5: {
@@ -283,6 +362,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
         default:
             RAISE_ERROR(BADARG_ATOM);
     }
+#endif
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(digest_len)) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -290,6 +370,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     return term_from_literal_binary(digest, digest_len, &ctx->heap, ctx->global);
 }
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 static const AtomStringIntPair cipher_table[] = {
     { ATOM_STR("\xB", "aes_128_ecb"), MBEDTLS_CIPHER_AES_128_ECB },
     { ATOM_STR("\xB", "aes_192_ecb"), MBEDTLS_CIPHER_AES_192_ECB },
@@ -311,6 +392,7 @@ static const AtomStringIntPair padding_table[] = {
     { ATOM_STR("\xC", "pkcs_padding"), MBEDTLS_PADDING_PKCS7 },
     SELECT_INT_DEFAULT(-1)
 };
+#endif
 
 static term handle_iodata(term iodata, const void **data, size_t *len, void **allocated_ptr)
 {
@@ -353,6 +435,72 @@ static term handle_iodata(term iodata, const void **data, size_t *len, void **al
     }
 }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+static psa_algorithm_t atom_to_psa_cipher_alg(term type, GlobalContext *global, psa_key_type_t *key_type, size_t *key_bits)
+{
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_ecb"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 128;
+        return PSA_ALG_ECB_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_ecb"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 192;
+        return PSA_ALG_ECB_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_ecb"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 256;
+        return PSA_ALG_ECB_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_cbc"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 128;
+        return PSA_ALG_CBC_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_cbc"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 192;
+        return PSA_ALG_CBC_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_cbc"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 256;
+        return PSA_ALG_CBC_NO_PADDING;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_128_cfb128"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 128;
+        return PSA_ALG_CFB;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_192_cfb128"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 192;
+        return PSA_ALG_CFB;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_256_cfb128"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 256;
+        return PSA_ALG_CFB;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_ctr"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 128;
+        return PSA_ALG_CTR;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_ctr"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 192;
+        return PSA_ALG_CTR;
+    }
+    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_ctr"))) {
+        *key_type = PSA_KEY_TYPE_AES;
+        *key_bits = 256;
+        return PSA_ALG_CTR;
+    }
+    return PSA_ALG_NONE;
+}
+#else
 static bool bool_to_mbedtls_operation(term encrypt_flag, mbedtls_operation_t *operation)
 {
     switch (encrypt_flag) {
@@ -366,6 +514,7 @@ static bool bool_to_mbedtls_operation(term encrypt_flag, mbedtls_operation_t *op
             return false;
     }
 }
+#endif
 
 static term make_crypto_error(const char *file, int line, const char *message, Context *ctx)
 {
@@ -410,11 +559,21 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     }
 
     term cipher_term = argv[0];
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_key_type_t key_type;
+    size_t key_bits;
+    psa_algorithm_t alg = atom_to_psa_cipher_alg(cipher_term, ctx->global, &key_type, &key_bits);
+    if (UNLIKELY(alg == PSA_ALG_NONE)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
+    }
+#else
     mbedtls_cipher_type_t cipher
         = interop_atom_term_select_int(cipher_table, cipher_term, ctx->global);
     if (UNLIKELY(cipher == MBEDTLS_CIPHER_NONE)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
     }
+#endif
 
     // from this point onward use `goto raise_error` in order to raise and free all buffers
     term error_atom = UNDEFINED_ATOM;
@@ -449,6 +608,141 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
         goto raise_error;
     }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    bool encrypt = true;
+    bool padding_pkcs7 = false;
+
+    if (term_is_list(flag_or_options)) {
+        term encrypt_flag = interop_kv_get_value_default(
+            flag_or_options, ATOM_STR("\x7", "encrypt"), UNDEFINED_ATOM, ctx->global);
+        if (encrypt_flag == FALSE_ATOM) {
+            encrypt = false;
+        } else if (encrypt_flag != TRUE_ATOM && encrypt_flag != UNDEFINED_ATOM) {
+            error_atom = BADARG_ATOM;
+            goto raise_error;
+        }
+
+        term padding_term = interop_kv_get_value_default(
+            flag_or_options, ATOM_STR("\x7", "padding"), UNDEFINED_ATOM, ctx->global);
+
+        if (padding_term != UNDEFINED_ATOM) {
+            if (padding_term == globalcontext_make_atom(ctx->global, ATOM_STR("\xC", "pkcs_padding"))) {
+                padding_pkcs7 = true;
+            } else if (padding_term != globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "none"))) {
+                error_atom = BADARG_ATOM;
+                goto raise_error;
+            }
+        }
+
+    } else {
+        if (flag_or_options == FALSE_ATOM) {
+            encrypt = false;
+        } else if (flag_or_options != TRUE_ATOM) {
+            error_atom = BADARG_ATOM;
+            goto raise_error;
+        }
+    }
+
+    if (padding_pkcs7) {
+        if (alg == PSA_ALG_CBC_NO_PADDING) {
+            alg = PSA_ALG_CBC_PKCS7;
+        } else if (alg == PSA_ALG_ECB_NO_PADDING) {
+            // PSA does not support PKCS7 padding with ECB mode
+            error_atom = BADARG_ATOM;
+            goto raise_error;
+        }
+    }
+
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_usage_flags(&attributes, encrypt ? PSA_KEY_USAGE_ENCRYPT : PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attributes, alg);
+    psa_set_key_type(&attributes, key_type);
+    psa_set_key_bits(&attributes, key_bits);
+
+    psa_key_id_t key_id;
+    psa_status_t status = psa_import_key(&attributes, key_data, key_len, &key_id);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        error_atom = BADARG_ATOM;
+        goto raise_error;
+    }
+
+    size_t output_size = PSA_CIPHER_ENCRYPT_OUTPUT_SIZE(key_type, alg, data_size);
+    if (!encrypt) {
+        output_size = PSA_CIPHER_DECRYPT_OUTPUT_SIZE(key_type, alg, data_size);
+    }
+    void *temp_buf = malloc(output_size);
+    if (IS_NULL_PTR(temp_buf)) {
+        psa_destroy_key(key_id);
+        error_atom = OUT_OF_MEMORY_ATOM;
+        goto raise_error;
+    }
+
+    size_t output_len;
+    psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
+    if (encrypt) {
+        status = psa_cipher_encrypt_setup(&operation, key_id, alg);
+    } else {
+        status = psa_cipher_decrypt_setup(&operation, key_id, alg);
+    }
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_destroy_key(key_id);
+        free(temp_buf);
+        char err_msg[24];
+        snprintf(err_msg, sizeof(err_msg), "Error %d", (int) status);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+    }
+
+    if (iv_len > 0) {
+        status = psa_cipher_set_iv(&operation, iv_data, iv_len);
+        if (UNLIKELY(status != PSA_SUCCESS)) {
+            psa_cipher_abort(&operation);
+            psa_destroy_key(key_id);
+            free(temp_buf);
+            char err_msg[24];
+            snprintf(err_msg, sizeof(err_msg), "Error %d", (int) status);
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+        }
+    }
+
+    size_t update_len = 0;
+    status = psa_cipher_update(&operation, data_data, data_size, temp_buf, output_size, &update_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_cipher_abort(&operation);
+        psa_destroy_key(key_id);
+        free(temp_buf);
+        char err_msg[24];
+        snprintf(err_msg, sizeof(err_msg), "Error %d", (int) status);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+    }
+
+    size_t finish_len = 0;
+    status = psa_cipher_finish(&operation, (uint8_t *) temp_buf + update_len, output_size - update_len, &finish_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_cipher_abort(&operation);
+        psa_destroy_key(key_id);
+        free(temp_buf);
+        char err_msg[24];
+        snprintf(err_msg, sizeof(err_msg), "Error %d", (int) status);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+    }
+    output_len = update_len + finish_len;
+
+    psa_destroy_key(key_id);
+
+    free(allocated_key_data);
+    free(allocated_iv_data);
+    free(allocated_data_data);
+
+    int ensure_size = term_binary_heap_size(output_len);
+    if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
+        free(temp_buf);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term out = term_from_literal_binary(temp_buf, output_len, &ctx->heap, ctx->global);
+    free(temp_buf);
+    return out;
+#else
     mbedtls_operation_t operation;
     mbedtls_cipher_padding_t padding = MBEDTLS_PADDING_NONE;
     bool padding_has_been_set = false;
@@ -547,12 +841,6 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     return out;
 
-raise_error:
-    free(allocated_key_data);
-    free(allocated_iv_data);
-    free(allocated_data_data);
-    RAISE_ERROR(error_atom);
-
 mbed_error:
     free(temp_buf);
     free(allocated_key_data);
@@ -562,6 +850,13 @@ mbed_error:
     char err_msg[24];
     snprintf(err_msg, sizeof(err_msg), "Error %x", -result);
     RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
+#endif
+
+raise_error:
+    free(allocated_key_data);
+    free(allocated_iv_data);
+    free(allocated_data_data);
+    RAISE_ERROR(error_atom);
 }
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -581,6 +876,22 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed PSA init", ctx));
+    }
+
+    term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
+    unsigned char *out = (unsigned char *) term_binary_data(out_bin);
+
+    status = psa_generate_random(out, out_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed random", ctx));
+    }
+
+    return out_bin;
+#else
     mbedtls_ctr_drbg_context *rnd_ctx = sys_mbedtls_get_ctr_drbg_context_lock(ctx->global);
     if (IS_NULL_PTR(rnd_ctx)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Failed CTR_DRBG init", ctx));
@@ -596,6 +907,7 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     }
 
     return out_bin;
+#endif
 }
 
 static const struct Nif crypto_hash_nif = {

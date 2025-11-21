@@ -36,11 +36,7 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 
-#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-#include <mbedtls/build_info.h>
-#else
-#include <mbedtls/config.h>
-#endif
+#include <mbedtls/version.h>
 
 #include "sys_mbedtls.h"
 

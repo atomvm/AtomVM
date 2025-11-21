@@ -35,8 +35,11 @@
 
 #include <string.h>
 
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#endif
 #include <mbedtls/ssl.h>
 
 #if defined(MBEDTLS_PSA_CRYPTO_C)
@@ -75,12 +78,20 @@ static void mbedtls_debug_cb(void *ctx, int level, const char *filename, int lin
 
 struct EntropyContextResource
 {
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_context context;
+#else
+    char dummy;
+#endif
 };
 
 struct CtrDrbgResource
 {
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_ctr_drbg_context context;
+#else
+    char dummy;
+#endif
 };
 
 struct SSLContextResource
@@ -98,7 +109,11 @@ static void entropycontext_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct EntropyContextResource *rsrc_obj = (struct EntropyContextResource *) obj;
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_free(&rsrc_obj->context);
+#else
+    UNUSED(rsrc_obj);
+#endif
 }
 
 static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
@@ -107,6 +122,7 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct CtrDrbgResource *rsrc_obj = (struct CtrDrbgResource *) obj;
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_context *entropy_context = rsrc_obj->context.MBEDTLS_PRIVATE(p_entropy);
     // Release the drbg first
     mbedtls_ctr_drbg_free(&rsrc_obj->context);
@@ -116,6 +132,9 @@ static void ctrdrbg_dtor(ErlNifEnv *caller_env, void *obj)
         struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
         refc_binary_decrement_refcount(entropy_refc, caller_env->global);
     }
+#else
+    UNUSED(rsrc_obj);
+#endif
 }
 
 static void sslcontext_dtor(ErlNifEnv *caller_env, void *obj)
@@ -141,15 +160,19 @@ static void sslconfig_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct SSLConfigResource *rsrc_obj = (struct SSLConfigResource *) obj;
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     const mbedtls_ctr_drbg_context *ctr_drbg_context = rsrc_obj->config.MBEDTLS_PRIVATE(p_rng);
+#endif
     mbedtls_ssl_config_free(&rsrc_obj->config);
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     // Eventually release the ctrdrbg
     if (ctr_drbg_context) {
         struct CtrDrbgResource *rng_obj = CONTAINER_OF(ctr_drbg_context, struct CtrDrbgResource, context);
         struct RefcBinary *config_refc = refc_binary_from_data(rng_obj);
         refc_binary_decrement_refcount(config_refc, caller_env->global);
     }
+#endif
 }
 
 static const ErlNifResourceTypeInit EntropyContextResourceTypeInit = {
@@ -238,7 +261,9 @@ static term nif_ssl_entropy_init(Context *ctx, int argc, term argv[])
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
     enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_init(&rsrc_obj->context);
+#endif
 
     return obj;
 }
@@ -261,7 +286,9 @@ static term nif_ssl_ctr_drbg_init(Context *ctx, int argc, term argv[])
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
     enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_ctr_drbg_init(&rsrc_obj->context);
+#endif
 
     return obj;
 }
@@ -277,11 +304,14 @@ static term nif_ssl_ctr_drbg_seed(Context *ctx, int argc, term argv[])
     if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], ctrdrbg_resource_type, &rsrc_obj_ptr))) {
         RAISE_ERROR(BADARG_ATOM);
     }
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     struct CtrDrbgResource *ctrdrbg_obj = (struct CtrDrbgResource *) rsrc_obj_ptr;
+#endif
 
     if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[1], entropycontext_resource_type, &rsrc_obj_ptr))) {
         RAISE_ERROR(BADARG_ATOM);
     }
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     struct EntropyContextResource *entropy_obj = (struct EntropyContextResource *) rsrc_obj_ptr;
 
     int err = mbedtls_ctr_drbg_seed(&ctrdrbg_obj->context, mbedtls_entropy_func, &entropy_obj->context, (const unsigned char *) term_binary_data(argv[2]), term_binary_size(argv[2]));
@@ -291,6 +321,7 @@ static term nif_ssl_ctr_drbg_seed(Context *ctx, int argc, term argv[])
 
     struct RefcBinary *entropy_refc = refc_binary_from_data(entropy_obj);
     refc_binary_increment_refcount(entropy_refc);
+#endif
 
     return OK_ATOM;
 }
@@ -315,7 +346,7 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
 
     mbedtls_ssl_init(&rsrc_obj->context);
 
-#if defined(MBEDTLS_PSA_CRYPTO_C)
+#if defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
     psa_status_t status = psa_crypto_init();
     if (UNLIKELY(status != PSA_SUCCESS)) {
         AVM_LOGW(TAG, "Failed to initialize PSA %s:%i.\n", __FILE__, __LINE__);
@@ -484,10 +515,15 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
     }
     struct CtrDrbgResource *ctr_drbg_obj = (struct CtrDrbgResource *) rsrc_obj_ptr;
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     struct RefcBinary *ctr_drbg_refc = refc_binary_from_data(ctr_drbg_obj);
     refc_binary_increment_refcount(ctr_drbg_refc);
 
     mbedtls_ssl_conf_rng(&conf_obj->config, mbedtls_ctr_drbg_random, &ctr_drbg_obj->context);
+#else
+    UNUSED(conf_obj);
+    UNUSED(ctr_drbg_obj);
+#endif
 
     return OK_ATOM;
 }

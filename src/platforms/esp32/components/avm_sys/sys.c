@@ -55,11 +55,7 @@
 #include "soc/soc_caps.h"
 #endif
 
-#if defined(MBEDTLS_VERSION_NUMBER) && (MBEDTLS_VERSION_NUMBER >= 0x03000000)
-#include <mbedtls/build_info.h>
-#else
-#include <mbedtls/config.h>
-#endif
+#include <mbedtls/version.h>
 
 // Platform uses listeners
 #include "listeners.h"

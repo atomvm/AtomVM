@@ -40,7 +40,7 @@ jobs:
       matrix:
         os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
         otp: ["24", "25", "26", "27", "28"]
-        mbedtls: ["mbedtls@3"]
+        mbedtls: ["mbedtls@3","mbedtls@4"]
         cmake_opts_other: [""]
 
         include:
