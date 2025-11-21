@@ -1459,6 +1459,11 @@ static int jit_bitstring_copy_binary(Context *ctx, JITState *jit_state, term t, 
     size_t binary_size = term_binary_size(src);
     if (size != ALL_ATOM) {
         binary_size = (size_t) term_to_int(size);
+        if (binary_size % 8) {
+            set_error(ctx, jit_state, 0, UNSUPPORTED_ATOM);
+            return -1;
+        }
+        binary_size = binary_size / 8;
     }
     memcpy(dst, bin, binary_size);
     return binary_size * 8;
