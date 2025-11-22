@@ -160,13 +160,14 @@ test_autoconnect_fail(Platform) ->
 test_autoconnect_to_beam(Platform) ->
     {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
     Node = node(),
+    Parent = self(),
     erlang:set_cookie(Node, 'AtomVM'),
     {Pid, MonitorRef} = spawn_opt(
         fun() ->
-            [] = execute_command(
-                Platform,
+            Command =
                 "erl -sname otp -setcookie AtomVM -eval \""
                 "register(beam, self()),"
+                "io:put_chars(<<114,101,97,100,121,13,10>>),"
                 "F = fun(G) ->"
                 " receive"
                 "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
@@ -177,14 +178,19 @@ test_autoconnect_to_beam(Platform) ->
                     "   after 5000 -> exit(timeout)"
                     " end "
                     "end, "
-                    "F(F).\" -s init stop -noshell"
-            )
+                    "F(F).\" -s init stop -noshell",
+            Obj = subprocess(Platform, Command),
+            "ready\r\n" = subprocess_line(Platform, Obj),
+            Parent ! {self(), ready},
+            [] = subprocess_loop(Platform, Obj)
         end,
         [link, monitor]
     ),
-    % Wait sufficiently for beam to be up, without connecting to it since
-    % that's part of the test
-    timer:sleep(1000),
+    ok =
+        receive
+            {Pid, ready} -> ok
+        after 5000 -> timeout
+        end,
     [_, Host] = string:split(atom_to_list(Node), "@"),
     OTPNode = list_to_atom("otp@" ++ Host),
     {beam, OTPNode} ! {self(), ping},
@@ -469,23 +475,53 @@ test_is_alive(Platform) ->
     false = is_alive(),
     ok.
 
-execute_command("BEAM", Command) ->
-    os:cmd(Command);
-execute_command("ATOM", Command) ->
+subprocess("BEAM", Command) ->
+    open_port({spawn_executable, "/bin/sh"}, [{args, ["-c", Command]}, {line, 256}, eof, in]);
+subprocess("ATOM", Command) ->
     {ok, _, Fd} = atomvm:subprocess("/bin/sh", ["sh", "-c", Command], undefined, [stdout]),
-    Result = loop_read(Fd, []),
+    Fd.
+
+subprocess_line("BEAM", Port) ->
+    receive
+        {Port, {data, {eol, Line}}} -> lists:flatten([Line, "\r\n"])
+    after 5000 ->
+        exit(timeout)
+    end;
+subprocess_line("ATOM", Fd) ->
+    {ok, Line} = atomvm:posix_read(Fd, 10),
+    binary_to_list(Line).
+
+subprocess_loop("BEAM", Port) ->
+    Result = beam_loop_read(Port, []),
+    port_close(Port),
+    Result;
+subprocess_loop("ATOM", Fd) ->
+    Result = atomvm_loop_read(Fd, []),
     ok = atomvm:posix_close(Fd),
     Result.
 
-loop_read(Fd, Acc) ->
+execute_command(Machine, Command) ->
+    Obj = subprocess(Machine, Command),
+    subprocess_loop(Machine, Obj).
+
+atomvm_loop_read(Fd, Acc) ->
     case atomvm:posix_read(Fd, 10) of
         eof ->
             lists:flatten(lists:reverse(Acc));
         {error, eintr} ->
             % used with lldb ;-)
-            loop_read(Fd, Acc);
+            atomvm_loop_read(Fd, Acc);
         {ok, Line} ->
-            loop_read(Fd, [binary_to_list(Line) | Acc])
+            atomvm_loop_read(Fd, [binary_to_list(Line) | Acc])
+    end.
+
+beam_loop_read(Port, Acc) ->
+    receive
+        {Port, {data, {eol, Line}}} -> beam_loop_read(Port, ["\r\n", Line | Acc]);
+        {Port, {data, {noeol, Line}}} -> beam_loop_read(Port, [Line | Acc]);
+        {Port, eof} -> lists:flatten(lists:reverse(Acc))
+    after 5000 ->
+        exit(timeout)
     end.
 
 net_kernel_start("ATOM", Nodename) ->
