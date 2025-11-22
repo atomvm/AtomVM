@@ -35,3 +35,6 @@ target_link_libraries(${COMPONENT_LIB}
     INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
+
+include(../../GetBootAVM.cmake)
+partition_table_get_partition_info(boot_offset "--partition-name boot.avm" "offset")
