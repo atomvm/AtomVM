@@ -136,7 +136,7 @@ static int app_main()
     globalcontext_insert_module(glb, mod);
     mod->module_platform_data = NULL;
 
-    run_result_t result = globalcontext_run(glb, mod, stdout);
+    run_result_t result = globalcontext_run(glb, mod, stdout, 0, NULL);
 
     nif_collection_destroy_all(glb);
     globalcontext_destroy(glb);
