@@ -543,7 +543,8 @@ defmodule Supervisor do
   @doc false
   defmacro __using__(opts) do
     quote location: :keep, bind_quoted: [opts: opts] do
-      import Supervisor.Spec
+      # Supervisor.Spec not supported AtomVM
+      # import Supervisor.Spec
       @behaviour Supervisor
 
       unless Module.has_attribute?(__MODULE__, :doc) do
@@ -616,7 +617,7 @@ defmodule Supervisor do
   @typedoc "The supervisor reference."
   @type supervisor :: pid | name | {atom, node}
 
-  @typedoc "Options given to `start_link/2` and `c:init/1`."
+  @typedoc "Options given to `start_link/2` and `init/2`."
   @type init_option ::
           {:strategy, strategy}
           | {:max_restarts, non_neg_integer}
