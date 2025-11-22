@@ -61,7 +61,8 @@
     task_wdt_deinit/0,
     task_wdt_add_user/1,
     task_wdt_reset_user/1,
-    task_wdt_delete_user/1
+    task_wdt_delete_user/1,
+    timer_get_time/0
 ]).
 
 -deprecated([
@@ -676,4 +677,14 @@ task_wdt_reset_user(_UserHandle) ->
 %%-----------------------------------------------------------------------------
 -spec task_wdt_delete_user(UserHandle :: task_wdt_user_handle()) -> ok | {error, any()}.
 task_wdt_delete_user(_UserHandle) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns integer
+%% @doc     Get time in microseconds since boot or wakeup from deep sleep
+%%          Available with ESP-IDF 5.0 or higher.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec timer_get_time() -> integer().
+timer_get_time() ->
     erlang:nif_error(undefined).
