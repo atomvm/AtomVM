@@ -82,7 +82,7 @@ bool atom_table_is_atom_ref_ascii(struct AtomTable *table, atom_ref_t atom);
  * @details returned pointer is not null terminated
  *
  * @param   table atom table
- * @param   atom_index index of the atom to get the representation of
+ * @param   index index of the atom to get the representation of
  * @param   out_len on output, size of the character data
  */
 const uint8_t *atom_table_get_atom_string(struct AtomTable *table, atom_index_t index, size_t *out_len);
@@ -93,6 +93,7 @@ const uint8_t *atom_table_get_atom_string(struct AtomTable *table, atom_index_t 
  * @details Write module:function/arity to the supplied buffer.  This function will abort
  *          if the written module, function, and arity are longer than the supplied
  *          buffer size.
+ * @param   table atom table
  * @param   buf the buffer to write into
  * @param   buf_size the amount of room in the buffer
  * @param   module the module name
