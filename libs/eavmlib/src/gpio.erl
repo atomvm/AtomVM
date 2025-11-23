@@ -146,7 +146,12 @@ close(GPIO) ->
 %%-----------------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: atom()} | error.
 stop() ->
-    close(whereis(gpio)).
+    case whereis(gpio) of
+        undefined ->
+            ok;
+        Port when is_port(Port) ->
+            close(Port)
+    end.
 
 %%-----------------------------------------------------------------------------
 %% @param   GPIO pid that was returned from gpio:start/0
