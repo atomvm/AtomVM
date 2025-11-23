@@ -648,23 +648,6 @@ compile_erlang(test_is_integer_3)
 
 compile_erlang(test_inline_arith)
 
-if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
-    set(OTP23_OR_GREATER_TESTS
-        test_op_bs_start_match_asm.beam
-        bs_get_binary2_all_asm.beam
-    )
-else()
-    set(OTP23_OR_GREATER_TESTS)
-endif()
-
-if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
-    set(OTP25_OR_GREATER_TESTS
-        test_op_bs_create_bin_asm.beam
-        test_bs_create_bin_accum_asm.beam
-    )
-else()
-    set(OTP25_OR_GREATER_TESTS)
-endif()
 
 compile_erlang(test_crypto_pk)
 compile_erlang(test_crypto_mac)
@@ -1214,8 +1197,10 @@ set(erlang_test_beams
     test_multi_value_comprehension.beam
     test_is_integer_3.beam
 
-    ${OTP23_OR_GREATER_TESTS}
-    ${OTP25_OR_GREATER_TESTS}
+    test_op_bs_start_match_asm.beam
+    bs_get_binary2_all_asm.beam
+    test_op_bs_create_bin_asm.beam
+    test_bs_create_bin_accum_asm.beam
 
     test_crypto_pk.beam
     test_crypto_mac.beam

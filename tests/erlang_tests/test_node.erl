@@ -24,12 +24,7 @@
 
 start() ->
     ok = test_node_no_distribution(),
-    case has_setnode_creation() of
-        true ->
-            ok = test_node_distribution();
-        false ->
-            ok
-    end,
+    ok = test_node_distribution(),
     0.
 
 test_node_no_distribution() ->
@@ -65,15 +60,6 @@ test_node_distribution() ->
             nonode@nohost = node()
     end,
     ok.
-
-has_setnode_creation() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            true;
-        "BEAM" ->
-            OTPRelease = erlang:system_info(otp_release),
-            OTPRelease >= "23"
-    end.
 
 get_creation() ->
     case erlang:system_info(machine) of

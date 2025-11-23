@@ -50,7 +50,7 @@ global_replace() ->
 
 invalid_args() ->
     case vm_info() of
-        {beam, V} when V =< 26 ->
+        {beam, 26} ->
             <<"">> = binary:replace(<<"">>, <<"">>, <<"">>),
             <<"">> = binary:replace(<<"">>, <<"">>, <<"">>, [global]);
         _Otp27OrAtomVm ->

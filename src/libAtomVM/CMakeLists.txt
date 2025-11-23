@@ -199,10 +199,9 @@ if(AVM_SELECT_IN_TASK)
     target_compile_definitions(libAtomVM PUBLIC AVM_SELECT_IN_TASK)
 endif()
 
-# Start phasing out old OTP versions
-if(NOT AVM_ENABLE_OLD_OTP_VERSIONS)
-target_compile_definitions(libAtomVM PUBLIC MINIMUM_OTP_COMPILER_VERSION=26)
-target_compile_definitions(libAtomVM PUBLIC MAXIMUM_OTP_COMPILER_VERSION=29)
+if(AVM_MINIMAL_OPCODES)
+    target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_BS_MATCH=0)
+    target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE=0)
 endif()
 
 include(CheckIncludeFile)

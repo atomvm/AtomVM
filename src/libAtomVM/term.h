@@ -2789,30 +2789,6 @@ static inline void term_set_match_state_offset(term match_state, avm_int_t offse
     boxed_value[2] = offset;
 }
 
-static inline void term_match_state_save_offset(term match_state, int index)
-{
-    term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[4 + index] = boxed_value[2];
-}
-
-static inline void term_match_state_save_start_offset(term match_state)
-{
-    term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[3] = boxed_value[2];
-}
-
-static inline void term_match_state_restore_start_offset(term match_state)
-{
-    term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[2] = boxed_value[3];
-}
-
-static inline void term_match_state_restore_offset(term match_state, int index)
-{
-    term *boxed_value = term_to_term_ptr(match_state);
-    boxed_value[2] = boxed_value[4 + index];
-}
-
 static inline term term_alloc_bin_match_state(term binary_or_state, int slots, Heap *heap)
 {
     term *boxed_match_state = memory_heap_alloc(heap, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots);

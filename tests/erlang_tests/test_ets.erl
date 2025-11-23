@@ -64,7 +64,7 @@ test_ets_new() ->
     ets:new(heir_test, [{heir, none}]),
     ets:new(write_conc_test, [{write_concurrency, true}]),
     ets:new(read_conc_test, [{read_concurrency, true}]),
-    if_otp_version(23, fun() -> ets:new(decent_counters_test, [{decentralized_counters, true}]) end),
+    ets:new(decent_counters_test, [{decentralized_counters, true}]),
     ets:new(compressed_test, [compressed]),
     ok.
 
@@ -135,10 +135,7 @@ test_keys() ->
         #{another => "map"} => erlang:make_ref(),
         <<1, 2, 3, 4>> => <<-4, -3, -2, -1>>
     }),
-    case supports_v4_port_encoding() of
-        true -> ok = assert_stored_key(T, binary_to_term(DistributedPortBin));
-        false -> ok
-    end,
+    ok = assert_stored_key(T, binary_to_term(DistributedPortBin)),
     ok.
 
 test_keypos() ->
@@ -166,24 +163,20 @@ test_lookup_element() ->
             assert_badarg(fun() -> ets:lookup_element(Tab, key, PosZero) end),
             assert_badarg(fun() -> ets:lookup_element(Tab, key, PosPastBounds) end),
             assert_badarg(fun() -> ets:lookup_element(Tab, key, PosNegative) end),
-            % lookup_element/4 with Default since OTP 26.0
-            if_otp_version(26, fun() ->
-                assert_badarg(fun() -> ets:lookup_element(Tab, key, PosNegative, default) end)
-            end)
+            assert_badarg(fun() -> ets:lookup_element(Tab, key, PosNegative, default) end)
         end,
 
     % Set
     S = new_table([{key, value}]),
     key = ets:lookup_element(S, key, PosKey),
     value = ets:lookup_element(S, key, PosValue),
-    % lookup_element/4 with Default since OTP 26.0
-    if_otp_version(26, fun() -> default = ets:lookup_element(S, key_not_exist, PosKey, default) end),
+    default = ets:lookup_element(S, key_not_exist, PosKey, default),
 
     % Bag
     B = new_table(bag, [{key, value}, {key, value2}]),
     [key, key] = ets:lookup_element(B, key, PosKey),
     [value, value2] = ets:lookup_element(B, key, PosValue),
-    if_otp_version(26, fun() -> default = ets:lookup_element(B, key_not_exist, PosKey, default) end),
+    default = ets:lookup_element(B, key_not_exist, PosKey, default),
 
     true = ets:insert(B, {key, value3}),
     [key, key, key] = ets:lookup_element(B, key, PosKey),
@@ -193,7 +186,7 @@ test_lookup_element() ->
     DB = new_table(duplicate_bag, [{key, value}, {key, value}]),
     [key, key] = ets:lookup_element(DB, key, PosKey),
     [value, value] = ets:lookup_element(DB, key, PosValue),
-    if_otp_version(26, fun() -> default = ets:lookup_element(DB, key_not_exist, PosKey, default) end),
+    default = ets:lookup_element(DB, key_not_exist, PosKey, default),
 
     true = ets:insert(DB, {key, value2}),
     [key, key, key] = ets:lookup_element(DB, key, PosKey),
@@ -838,22 +831,6 @@ assert_badarg(Fun) ->
             ok;
         OtherClass:OtherError ->
             erlang:error({OtherClass, OtherError})
-    end.
-
-supports_v4_port_encoding() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            % small utf8 atom
-            true;
-        "BEAM" ->
-            OTP = get_otp_version(),
-            if
-                OTP < 24 -> false;
-                % v4 is supported but not the default
-                OTP < 26 -> true;
-                % small utf8 atom
-                true -> true
-            end
     end.
 
 get_otp_version() ->

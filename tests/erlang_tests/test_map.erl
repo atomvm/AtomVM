@@ -80,8 +80,6 @@ test_map_size_bif() ->
                 ok
         end.
 
-%% OTP 21 or later
--ifdef(OTP_RELEASE).
 test_is_map_key_bif() ->
     ok =
         case id(#{a => 1, b => 2}) of
@@ -142,11 +140,6 @@ test_map_get_bif() ->
             _:{badmap, _} ->
                 ok
         end.
--else.
-test_is_map_key_bif() -> ok.
-
-test_map_get_bif() -> ok.
--endif.
 
 test_literal_map() ->
     Map = #{a => 1, b => 2},

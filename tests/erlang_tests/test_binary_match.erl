@@ -31,7 +31,7 @@ start() ->
 
     % empty subject
     case get_otp_version() of
-        OTP when OTP =< 26 ->
+        26 ->
             nomatch = binary:match(?ID(<<"">>), ?ID(<<"">>)),
             nomatch = binary:match(?ID(<<"">>), ?ID(<<"a">>)),
             nomatch = binary:match(?ID(<<"">>), ?ID([])),

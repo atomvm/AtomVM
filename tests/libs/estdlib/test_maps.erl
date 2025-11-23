@@ -383,7 +383,6 @@ check_bad_key(F, _Key) ->
         F(),
         fail
     catch
-        %% TODO OTP23 compiler compiles to erlang:map_ equivalents
         error:{badkey, _} ->
             ok
     end.

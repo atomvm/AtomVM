@@ -49,45 +49,30 @@
 ]).
 
 start() ->
-    case at_least(24) of
-        true ->
-            ok = mbedtls_conditional_run(test_aes_128_gcm, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_128_gcm_custom_tag, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_192_gcm, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_256_gcm, 16#03000000),
-            ok = mbedtls_conditional_run(test_chacha20_poly1305, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_128_ccm, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_128_ccm_short_tag, 16#03000000),
-            ok = mbedtls_conditional_run(test_aes_256_ccm, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_empty_aad, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_empty_plaintext, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_single_byte, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_multi_block, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_iolist_input, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_wrong_tag, 16#03000000),
-            ok = mbedtls_conditional_run(test_gcm_wrong_aad, 16#03000000),
-            ok = mbedtls_conditional_run(test_ccm_wrong_tag, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_cipher, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_key_size, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_key, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_iv, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_text, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_aad, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_enc_flag, 16#03000000);
-        false ->
-            ok
-    end,
+    ok = mbedtls_conditional_run(test_aes_128_gcm, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_128_gcm_custom_tag, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_192_gcm, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_256_gcm, 16#03000000),
+    ok = mbedtls_conditional_run(test_chacha20_poly1305, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_128_ccm, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_128_ccm_short_tag, 16#03000000),
+    ok = mbedtls_conditional_run(test_aes_256_ccm, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_empty_aad, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_empty_plaintext, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_single_byte, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_multi_block, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_iolist_input, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_wrong_tag, 16#03000000),
+    ok = mbedtls_conditional_run(test_gcm_wrong_aad, 16#03000000),
+    ok = mbedtls_conditional_run(test_ccm_wrong_tag, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_cipher, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_key_size, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_key, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_iv, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_text, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_aad, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_enc_flag, 16#03000000),
     0.
-
-otp_version() ->
-    case erlang:system_info(machine) of
-        "ATOM" -> atomvm;
-        _ -> list_to_integer(erlang:system_info(otp_release))
-    end.
-
-at_least(Min) ->
-    V = otp_version(),
-    V =:= atomvm orelse V >= Min.
 
 mbedtls_conditional_run(F, RVer) ->
     Info = crypto:info_lib(),

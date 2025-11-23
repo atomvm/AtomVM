@@ -48,6 +48,12 @@ if (${IDF_TARGET} MATCHES "esp32s2|esp32c2|esp32c3|esp32c5|esp32c6|esp32c61|esp3
     set(HAVE_PLATFORM_ATOMIC_H ON)
 endif()
 
+# ESP32-C5 has limited flash space, use minimal opcodes to reduce VM size
+if (${IDF_TARGET} STREQUAL "esp32c5" AND NOT DEFINED AVM_MINIMAL_OPCODES)
+    message(STATUS "Enabling minimal opcodes for ${IDF_TARGET} to reduce binary size")
+    set(AVM_MINIMAL_OPCODES ON)
+endif()
+
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
@@ -96,13 +102,13 @@ if (-std=gnu99 IN_LIST c_compile_options )
 endif()
 
 # Options that make sense for this platform
-option(AVM_ENABLE_OLD_OTP_VERSIONS "Enable OTP version < 26" OFF)
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 option(AVM_USE_LIBSODIUM "Enable optional libsodium backend for Ed25519 curve" OFF)
+option(AVM_MINIMAL_OPCODES "Reduce VM size by excluding opcodes for optional compiler flags (no_bs_match, no_ssa_opt_bs_ensure)" OFF)
 
 add_subdirectory(tools)
 

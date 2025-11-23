@@ -23,17 +23,10 @@
 -export([start/0, fact/1, make_value/1, get_expected/1, get_list/1]).
 
 start() ->
-    test_maps_from_keys(get_otp_version()).
+    ok = test_maps_from_keys(),
+    0.
 
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
-        _ -> atomvm
-    end.
-
-test_maps_from_keys(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_maps_from_keys() ->
     M1 = #{1 => [], 5 => [], 6 => [], 8 => [], 9 => [], 24 => [], 43 => [], 100 => []},
     M1 = maps:from_keys(?MODULE:get_list(1), []),
 
@@ -52,10 +45,7 @@ test_maps_from_keys(OTPVersion) when
     0 = map_size(M5),
     M5 = ?MODULE:get_expected(5),
 
-    0;
-test_maps_from_keys(OTPVersion) ->
-    % test skipped: maps:from_keys not supported on OTP < 24
-    0.
+    ok.
 
 fact(0) ->
     1;
