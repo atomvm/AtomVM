@@ -120,6 +120,7 @@
     timestamp/0,
     universaltime/0,
     localtime/0,
+    localtime/1,
     setnode/2,
     setnode/3,
     is_alive/0,
@@ -1433,6 +1434,18 @@ universaltime() ->
 %%-----------------------------------------------------------------------------
 -spec localtime() -> calendar:datetime().
 localtime() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A tuple representing the current local time.
+%% @see universaltime/0
+%% @param TZ a timezone, as understood by C library, for example
+%% `"CET-1CEST,M3.5.0,M10.5.0/3"' for esp-idf for Paris
+%% @doc Return the current time and day for a given timezone.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec localtime(TZ :: string()) -> calendar:datetime().
+localtime(_TZ) ->
     erlang:nif_error(undefined).
 
 %% @hidden
