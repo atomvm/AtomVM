@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
-        otp: ["24", "25", "26", "27", "28"]
+        otp: ["26", "27", "28"]
         mbedtls: ["mbedtls@3"]
         cmake_opts_other: [""]
 
@@ -67,21 +67,7 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      if: matrix.otp != '24' && matrix.otp != '25'
       run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }} rebar3
-
-    - name: "Install deps"
-      if: matrix.otp == '24' || matrix.otp == '25'
-      run: |
-        brew update
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }}
-        wget https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3
-        chmod +x rebar3
-        for bin_dir in {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ; do
-            if [ -e ${bin_dir} ]; then
-                sudo cp rebar3 ${bin_dir}
-            fi
-        done
 
     - name: "Workaround for nxdomain random issues"
       run: |

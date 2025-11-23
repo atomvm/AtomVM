@@ -48,22 +48,16 @@ test() ->
     ok = test_split(),
     ok = test_filter(),
     ok = test_filter_replace(),
-    ok = test_filtermap(get_otp_version()),
-    ok = test_filtermap_replace(get_otp_version()),
-    ok = test_fold(get_otp_version()),
-    ok = test_any(get_otp_version()),
-    ok = test_all(get_otp_version()),
-    ok = test_delete(get_otp_version()),
-    ok = test_delete_with(get_otp_version()),
-    ok = test_delete_with_r(get_otp_version()),
+    ok = test_filtermap(),
+    ok = test_filtermap_replace(),
+    ok = test_fold(),
+    ok = test_any(),
+    ok = test_all(),
+    ok = test_delete(),
+    ok = test_delete_with(),
+    ok = test_delete_with_r(),
     ok = test_complete_flow(),
     ok.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
-        _ -> atomvm
-    end.
 
 test_from_to_list() ->
     L = [1, -1, 2, -3],
@@ -234,83 +228,51 @@ test_filter_replace() ->
     ?ASSERT_MATCH(queue:to_list(Q1), [1, 2, 2, 3, 3, 4, 4, 5, 5, 6]),
     ok.
 
-test_filtermap(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_filtermap() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     Q1 = queue:filtermap(fun(E) -> E > 2 end, Q),
     ?ASSERT_MATCH(queue:to_list(Q1), [3, 4, 5]),
-    ok;
-test_filtermap(_) ->
     ok.
 
-test_filtermap_replace(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_filtermap_replace() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     Q1 = queue:filtermap(fun(E) -> {true, E + 100} end, Q),
     ?ASSERT_MATCH(queue:to_list(Q1), [101, 102, 103, 104, 105]),
-    ok;
-test_filtermap_replace(_) ->
     ok.
 
-test_fold(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_fold() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     ?ASSERT_MATCH(queue:fold(fun(X, Sum) -> X + Sum end, 0, Q), 15),
-    ok;
-test_fold(_) ->
     ok.
 
-test_any(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_any() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     ?ASSERT_MATCH(queue:any(fun(E) -> E > 10 end, Q), false),
     ?ASSERT_MATCH(queue:any(fun(E) -> E > 3 end, Q), true),
-    ok;
-test_any(_) ->
     ok.
 
-test_all(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_all() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     ?ASSERT_MATCH(queue:all(fun(E) -> E > 3 end, Q), false),
     ?ASSERT_MATCH(queue:all(fun(E) -> E > 0 end, Q), true),
-    ok;
-test_all(_) ->
     ok.
 
-test_delete(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_delete() ->
     Q = queue:from_list([1, 2, 3, 4, 5]),
     Q1 = queue:delete(3, Q),
     ?ASSERT_MATCH(queue:member(3, Q1), false),
-    ok;
-test_delete(_) ->
     ok.
 
-test_delete_with(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_delete_with() ->
     Q = queue:from_list([100, 1, 2, 3, 4, 5]),
     Q1 = queue:delete_with(fun(E) -> E > 0 end, Q),
     ?ASSERT_MATCH(queue:to_list(Q1), [1, 2, 3, 4, 5]),
-    ok;
-test_delete_with(_) ->
     ok.
 
-test_delete_with_r(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-->
+test_delete_with_r() ->
     Q = queue:from_list([1, 2, 3, 4, 5, 100]),
     Q1 = queue:delete_with_r(fun(E) -> E > 10 end, Q),
     ?ASSERT_MATCH(queue:to_list(Q1), [1, 2, 3, 4, 5]),
-    ok;
-test_delete_with_r(_) ->
     ok.
 
 test_complete_flow() ->

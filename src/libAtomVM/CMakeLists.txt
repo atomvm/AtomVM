@@ -199,12 +199,6 @@ if(AVM_SELECT_IN_TASK)
     target_compile_definitions(libAtomVM PUBLIC AVM_SELECT_IN_TASK)
 endif()
 
-# Start phasing out old OTP versions
-if(NOT AVM_ENABLE_OLD_OTP_VERSIONS)
-target_compile_definitions(libAtomVM PUBLIC MINIMUM_OTP_COMPILER_VERSION=26)
-target_compile_definitions(libAtomVM PUBLIC MAXIMUM_OTP_COMPILER_VERSION=29)
-endif()
-
 include(CheckIncludeFile)
 CHECK_INCLUDE_FILE(stdatomic.h STDATOMIC_INCLUDE)
 include(CheckCSourceCompiles)

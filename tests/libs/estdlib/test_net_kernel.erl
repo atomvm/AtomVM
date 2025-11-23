@@ -30,42 +30,25 @@ start() ->
 
 test() ->
     Platform = erlang:system_info(machine),
-    case has_compatible_erl(Platform) andalso has_epmd(Platform) of
+    case has_command(Platform, "erl") andalso has_epmd(Platform) of
         true ->
             ok = ensure_epmd(Platform),
             ok = test_ping_from_beam(Platform),
             ok = test_fail_with_wrong_cookie(Platform),
             ok = test_rpc_from_beam(Platform),
             ok = test_rpc_loop_from_beam(Platform),
-            ok = test_autoconnect_fail(Platform),
+            ok = test_autoconnect_fail(),
             ok = test_autoconnect_to_beam(Platform),
             ok = test_groupleader(Platform),
             ok = test_link_remote_exit_remote(Platform),
             ok = test_link_remote_exit_local(Platform),
             ok = test_link_local_unlink_remote(Platform),
             ok = test_link_local_unlink_local(Platform),
-            ok = test_is_alive(Platform),
+            ok = test_is_alive(),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
             ok
-    end.
-
-%% Determine if we can connect with BEAM.
-%% This test currently supports AtomVM connecting with OTP 24+
-%% as well as any version of OTP connecting with OTP
-has_compatible_erl("BEAM" = Platform) ->
-    has_command(Platform, "erl");
-has_compatible_erl("ATOM") ->
-    case has_command("ATOM", "erl") of
-        true ->
-            Result = execute_command(
-                "ATOM",
-                "erl -eval \"io:put_chars(erlang:system_info(otp_release) ++ [13,10]).\" -s init stop -noshell"
-            ),
-            Result >= "24";
-        false ->
-            false
     end.
 
 has_epmd(Platform) ->
@@ -95,10 +78,9 @@ ensure_epmd("ATOM") ->
     ok.
 
 test_ping_from_beam(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    % erlang:set_cookie/1 is from OTP 24.1
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     Result = execute_command(
         Platform,
         "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = net_adm:ping('" ++
@@ -110,9 +92,9 @@ test_ping_from_beam(Platform) ->
     ok.
 
 test_fail_with_wrong_cookie(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     Result = execute_command(
         Platform,
         "erl -sname " ++ ?OTP_SNAME ++ " -setcookie Wrong -eval \"R = net_adm:ping('" ++
@@ -124,9 +106,9 @@ test_fail_with_wrong_cookie(Platform) ->
     ok.
 
 test_rpc_from_beam(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     Result = execute_command(
         Platform,
         "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = rpc:call('" ++
@@ -138,9 +120,9 @@ test_rpc_from_beam(Platform) ->
     ok.
 
 test_rpc_loop_from_beam(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     Result = execute_command(
         Platform,
         "erl -sname " ++ ?OTP_SNAME ++
@@ -152,10 +134,10 @@ test_rpc_loop_from_beam(Platform) ->
     net_kernel:stop(),
     ok.
 
-test_autoconnect_fail(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+test_autoconnect_fail() ->
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     [_, Host] = string:split(atom_to_list(Node), "@"),
     OTPNode = list_to_atom("otp@" ++ Host),
     {beam, OTPNode} ! {self(), ping},
@@ -164,10 +146,10 @@ test_autoconnect_fail(Platform) ->
 
 test_autoconnect_to_beam(Platform) ->
     OtpSname = ?OTP_SNAME,
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
     Parent = self(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     {Pid, MonitorRef} = spawn_opt(
         fun() ->
             Command =
@@ -241,9 +223,9 @@ test_autoconnect_to_beam(Platform) ->
     ok.
 
 start_apply_loop(Platform) ->
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     Node = node(),
-    erlang:set_cookie(Node, 'AtomVM'),
+    erlang:set_cookie('AtomVM'),
     register(atomvm, self()),
     Parent = self(),
     {Pid, MonitorRef} = spawn_opt(
@@ -475,9 +457,9 @@ test_link_local_unlink_local(Platform) ->
     ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
     ok.
 
-test_is_alive(Platform) ->
+test_is_alive() ->
     false = is_alive(),
-    {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{name_domain => shortnames}),
     true = is_alive(),
     net_kernel:stop(),
     false = is_alive(),
@@ -530,15 +512,4 @@ beam_loop_read(Port, Acc) ->
         {Port, eof} -> lists:flatten(lists:reverse(Acc))
     after 5000 ->
         exit(timeout)
-    end.
-
-net_kernel_start("ATOM", Nodename) ->
-    net_kernel:start(Nodename, #{name_domain => shortnames});
-net_kernel_start("BEAM", Nodename) ->
-    OTPRelease = erlang:system_info(otp_release),
-    if
-        OTPRelease >= "24" ->
-            net_kernel:start(Nodename, #{name_domain => shortnames});
-        true ->
-            net_kernel:start([Nodename, shortnames])
     end.

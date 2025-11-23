@@ -630,21 +630,13 @@ test_float() ->
     <<192, 0, 0, 0, 0, 0, 0, 0>> = <<IntNeg2/float>>,
     <<66, 0, 0, 0>> = <<Int32:32/float>>,
 
-    % 16-bit floats are supported in OTP 24+ and AtomVM
-    case has_16bit_floats() of
-        true ->
-            % Test that 16-bit floats work
-            Pi16 = id(3.14),
-            <<66, 72>> = <<Pi16:16/float>>,
-            <<66, 72>> = <<Pi16:16/float-big>>,
-            <<72, 66>> = <<Pi16:16/float-little>>,
-            <<Pi16B:16/float, 3, 14>> = <<66, 72, 3, 14>>,
-            <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
-            true = abs(Pi16B - Pi16) < 0.001,
-            ok;
-        false ->
-            ok
-    end,
+    Pi16 = id(3.14),
+    <<66, 72>> = <<Pi16:16/float>>,
+    <<66, 72>> = <<Pi16:16/float-big>>,
+    <<72, 66>> = <<Pi16:16/float-little>>,
+    <<Pi16B:16/float, 3, 14>> = <<66, 72, 3, 14>>,
+    <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
+    true = abs(Pi16B - Pi16) < 0.001,
 
     ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
@@ -687,15 +679,9 @@ test_integer_outside_float_limits() ->
             <<127, 128, 0, 0>> = create_float_binary(V, id(32)),
             <<255, 128, 0, 0>> = create_float_binary(-V, id(32)),
 
-            % 16-bit floats are supported in OTP 24+ and AtomVM
-            case has_16bit_floats() of
-                true ->
-                    <<124, 0>> = create_float_binary(V, id(16)),
-                    <<252, 0>> = create_float_binary(-V, id(16)),
-                    ok;
-                false ->
-                    ok
-            end
+            <<124, 0>> = create_float_binary(V, id(16)),
+            <<252, 0>> = create_float_binary(-V, id(16)),
+            ok
     end,
     ok.
 
@@ -712,11 +698,3 @@ ext_id(X) -> X.
 
 join(X, Y) ->
     <<X/binary, Y/binary>>.
-
-has_16bit_floats() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            erlang:system_info(otp_release) >= "24";
-        "ATOM" ->
-            true
-    end.

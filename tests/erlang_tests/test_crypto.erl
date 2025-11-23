@@ -23,14 +23,8 @@
 
 start() ->
     ok = test_hash(),
-    OTPVersion = get_otp_version(),
-    case OTPVersion =:= atomvm orelse OTPVersion >= 24 of
-        true ->
-            ok = test_crypto_one_time(),
-            ok = test_available_ciphers();
-        false ->
-            ok
-    end,
+    ok = test_crypto_one_time(),
+    ok = test_available_ciphers(),
     0.
 
 test_hash() ->
@@ -214,12 +208,4 @@ get_error(F) ->
         fail
     catch
         _:E -> E
-    end.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            list_to_integer(erlang:system_info(otp_release));
-        _ ->
-            atomvm
     end.

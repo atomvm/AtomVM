@@ -27,14 +27,13 @@ AtomVM will run BEAM files that have been compiled using the following Erlang an
 
 | Erlang Version | Elixir Version |
 |----------------|----------------|
-| ✅ OTP 21 | ✅ 1.7 |
-| ✅ OTP 22 | ✅ 1.8 |
-| ✅ OTP 23 | ✅ 1.11 |
-| ✅ OTP 24 | ✅ 1.14 |
-| ✅ OTP 25 | ✅ 1.14 |
-| ✅ OTP 26 | ✅ 1.15 |
+| ✅ OTP 26 | ✅ 1.17 |
+| ✅ OTP 26 | ✅ 1.18 |
+| ✅ OTP 26 | ✅ 1.19 |
 | ✅ OTP 27 | ✅ 1.17 |
-| ✅ OTP 28 | ✅ 1.17 |
+| ✅ OTP 27 | ✅ 1.18 |
+| ✅ OTP 27 | ✅ 1.19 |
+| ✅ OTP 28 | ✅ 1.19 |
 
 ```{note}
 Versions of Elixir that are compatible with a particular OTP version may work.  This table reflects the versions that are tested.
