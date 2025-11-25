@@ -85,6 +85,7 @@ jobs:
         idf.py set-target ${{matrix.esp-idf-target}}
         idf.py build
         idf.py size
+
     - name: Print component size info with idf.py
       shell: bash
       working-directory: ./src/platforms/esp32/
@@ -100,15 +101,23 @@ jobs:
         set -eu
         apt update
         DEBIAN_FRONTEND=noninteractive apt install -y -q \
-            doxygen erlang-base erlang-dev erlang-dialyzer erlang-eunit \
-            erlang-asn1 erlang-common-test erlang-crypto erlang-edoc \
-            erlang-parsetools erlang-reltool erlang-syntax-tools erlang-tools \
-            libglib2.0-0 libpixman-1-0 \
+            doxygen libglib2.0-0 libpixman-1-0 \
             gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
-        # ESP-IDF 5.0.7 comes with Ubuntu focal which has Erlang/OTP 22
-        wget --no-verbose https://github.com/erlang/rebar3/releases/download/3.18.0/rebar3
-        chmod +x rebar3
-        ./rebar3 local install
+
+    - name: "Set ImageOS for erlef/setup-beam"
+      run: |
+         sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> ${GITHUB_ENV}
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28"
+        elixir-version: "1.19"
+        rebar3-version: "3.25.1"
+        gleam-version: "1.11.1"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: Install qemu binary from espressif/qemu esp32
       if: runner.arch != 'ARM64' && runner.os == 'Linux' && matrix.esp-idf-target == 'esp32'
