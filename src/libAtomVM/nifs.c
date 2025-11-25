@@ -6344,9 +6344,6 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc)
 
-    term error = OK_ATOM;
-
-    Bytef *output_buf = NULL;
     char *input_buf = NULL;
     size_t input_size = 0;
     char *alloc_ptr = NULL;
@@ -6355,8 +6352,7 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
     if (LIKELY(term_is_list(input))) {
         term status = iolist_to_buffer(input, &input_buf, &input_size);
         if (UNLIKELY(status != OK_ATOM)) {
-            error = status;
-            goto cleanup;
+            RAISE_ERROR(status);
         }
 
         bool allocated = input_size > 0;
@@ -6370,8 +6366,7 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
         input_buf = (char *) term_binary_data(input);
         input_size = term_binary_size(input);
     } else {
-        error = BADARG_ATOM;
-        goto cleanup;
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     // to_allocate is an upper bound for compression size
@@ -6379,30 +6374,26 @@ static term nif_zlib_compress_1(Context *ctx, int argc, term argv[])
     uLong to_allocate = compressBound(input_size);
     // TODO: use `to_allocate` binary directly instead of allocating a buffer
     // Currently not possible, there's no way to shrink backing buffer for the binary
-    output_buf = malloc(to_allocate);
+    Bytef *output_buf = malloc(to_allocate);
     if (IS_NULL_PTR(output_buf)) {
-        error = OUT_OF_MEMORY_ATOM;
-        goto cleanup;
+        free(alloc_ptr);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     int z_ret = compress(output_buf, &to_allocate, (const Bytef *) input_buf, input_size);
+    free(alloc_ptr);
     if (UNLIKELY(z_ret != Z_OK)) {
-        error = OUT_OF_MEMORY_ATOM;
-        goto cleanup;
+        free(output_buf);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, term_binary_data_size_in_terms(to_allocate)) != MEMORY_GC_OK)) {
-        error = OUT_OF_MEMORY_ATOM;
-        goto cleanup;
+        free(output_buf);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term bin_res = term_from_literal_binary(output_buf, to_allocate, &ctx->heap, ctx->global);
 
-cleanup:
-    free(alloc_ptr);
     free(output_buf);
-    if (UNLIKELY(error != OK_ATOM)) {
-        RAISE_ERROR(error);
-    }
     return bin_res;
 }
 #endif
