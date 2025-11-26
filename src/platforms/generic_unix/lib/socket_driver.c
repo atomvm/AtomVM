@@ -498,7 +498,7 @@ void socket_driver_do_close(Context *ctx)
 {
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     if (close(socket_data->sockfd) == -1) {
-        TRACE("socket_driver|socket_driver_do_close: close failed");
+        TRACE("socket_driver|socket_driver_do_close: close failed\n");
     } else {
         TRACE("socket_driver|socket_driver_do_close: closed socket\n");
     }

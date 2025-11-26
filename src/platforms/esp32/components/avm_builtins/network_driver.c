@@ -619,7 +619,7 @@ static void set_dhcp_hostname(esp_netif_t *interface, const char *interface_name
 
 static void start_network(Context *ctx, term pid, term ref, term config)
 {
-    TRACE("start_network");
+    TRACE("start_network\n");
 
     // {Ref, ok | {error, atom() | integer()}}
     size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);

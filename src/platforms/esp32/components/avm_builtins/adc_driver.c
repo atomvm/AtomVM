@@ -753,25 +753,25 @@ void atomvm_adc_init(GlobalContext *global)
 
 const struct Nif *atomvm_adc_get_nif(const char *nifname)
 {
-    TRACE("Locating nif %s ...", nifname);
+    TRACE("Locating nif %s ...\n", nifname);
     if (strcmp("esp_adc:sample/3", nifname) == 0 || strcmp("Elixir.Esp.ADC:sample/3", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &adc_sample_nif;
     }
     if (strcmp("esp_adc:acquire/4", nifname) == 0 || strcmp("Elixir.Esp.ADC:acquire/4", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &adc_acquire_nif;
     }
     if (strcmp("esp_adc:release_channel/1", nifname) == 0 || strcmp("Elixir.Esp.ADC:release_channel/1", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &adc_release_channel_nif;
     }
     if (strcmp("esp_adc:init/0", nifname) == 0 || strcmp("Elixir.Esp.ADC:init/0", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &adc_init_nif;
     }
     if (strcmp("esp_adc:deinit/1", nifname) == 0 || strcmp("Elixir.Esp.ADC:deinit/1", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &adc_deinit_nif;
     }
     return NULL;

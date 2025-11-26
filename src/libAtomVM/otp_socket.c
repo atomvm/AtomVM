@@ -781,7 +781,7 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
         }
         rsrc_obj->fd = CLOSED_FD;
     } else {
-        TRACE("Double close on socket fd %i", rsrc_obj->fd);
+        TRACE("Double close on socket fd %i\n", rsrc_obj->fd);
     }
 #elif OTP_SOCKET_LWIP
     // If the socket is being selected by another process, send a closed notification.
@@ -795,7 +795,7 @@ static term nif_socket_close(Context *ctx, int argc, term argv[])
         }
     }
     if (rsrc_obj->socket_state == SocketStateClosed) {
-        TRACE("Double close on pcb");
+        TRACE("Double close on pcb\n");
     } else {
         if (rsrc_obj->socket_state & SocketStateTCP) {
             LWIP_BEGIN();
@@ -1370,14 +1370,14 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
 
                     // TODO support the atom `default` as a value to roll back to the default buffer size
                     if (UNLIKELY(!term_is_integer(value))) {
-                        TRACE("socket:setopt: otp rcvbuf value must be an integer");
+                        TRACE("socket:setopt: otp rcvbuf value must be an integer\n");
                         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
 
                     avm_int_t buf_size = term_to_int(value);
                     if (UNLIKELY(buf_size < 0)) {
-                        TRACE("socket:setopt: otp rcvbuf value may not be negative");
+                        TRACE("socket:setopt: otp rcvbuf value may not be negative\n");
                         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
@@ -1399,21 +1399,21 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     // socket:setopt(Socket, {ip, add_membership_atom}, Req :: ip_mreq())
 
                     if (UNLIKELY(!term_is_map(value))) {
-                        TRACE("socket:setopt: ip add_membership_atom value must be a map");
+                        TRACE("socket:setopt: ip add_membership_atom value must be a map\n");
                         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
 
                     term multiaddr = interop_kv_get_value(value, ATOM_STR("\x9", "multiaddr"), global);
                     if (UNLIKELY(!term_is_tuple(multiaddr) || term_get_tuple_arity(multiaddr) != 4)) {
-                        TRACE("socket:setopt: ip add_membership_atom multiaddr value must be an IP addr");
+                        TRACE("socket:setopt: ip add_membership_atom multiaddr value must be an IP addr\n");
                         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
 
                     term interface = interop_kv_get_value(value, ATOM_STR("\x9", "interface"), global);
                     if (UNLIKELY(!term_is_tuple(interface) || term_get_tuple_arity(interface) != 4)) {
-                        TRACE("socket:setopt: ip add_membership_atom interface value must be an IP addr");
+                        TRACE("socket:setopt: ip add_membership_atom interface value must be an IP addr\n");
                         SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                         return make_error_tuple(globalcontext_make_atom(global, invalid_value_atom), ctx);
                     }
@@ -1445,7 +1445,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                         return OK_ATOM;
                     }
 #else
-                    TRACE("socket:setopt: Unsupported ip option (LWIP_IGMP is not enabled)");
+                    TRACE("socket:setopt: Unsupported ip option (LWIP_IGMP is not enabled)\n");
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(BADARG_ATOM);
                     make_lwip_err_tuple
@@ -1464,7 +1464,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
             }
 
             default: {
-                TRACE("socket:setopt: Unsupported level");
+                TRACE("socket:setopt: Unsupported level\n");
                 SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                 RAISE_ERROR(BADARG_ATOM);
             }
@@ -2123,7 +2123,7 @@ static term nif_socket_recv_with_peek(Context *ctx, term resource_term, struct S
         if (errno == EAGAIN) {
             return make_error_tuple(TIMEOUT_ATOM, ctx);
         } else if (errno == ECONNRESET) {
-            TRACE("Peer closed connection.");
+            TRACE("Peer closed connection.\n");
             return make_error_tuple(CLOSED_ATOM, ctx);
         }
         AVM_LOGI(TAG, "Unable to receive data on fd %i.  errno=%i", rsrc_obj->fd, errno);
@@ -2206,12 +2206,12 @@ static term nif_socket_recv_without_peek(Context *ctx, term resource_term, struc
         if (res < 0) {
             int err = errno;
             if (err == ECONNRESET) {
-                TRACE("Peer closed connection.");
+                TRACE("Peer closed connection.\n");
                 return make_error_tuple(CLOSED_ATOM, ctx);
             } else if (err == EAGAIN) {
                 return make_error_tuple(TIMEOUT_ATOM, ctx);
             } else {
-                TRACE("Unable to read data on socket %i.  errno=%i", rsrc_obj->fd, errno);
+                TRACE("Unable to read data on socket %i.  errno=%i\n", rsrc_obj->fd, errno);
             }
 
             return make_errno_tuple(ctx);
@@ -2583,7 +2583,7 @@ static term nif_socket_send_internal(Context *ctx, int argc, term argv[], bool i
 
         return port_create_tuple2(ctx, OK_ATOM, data);
     } else {
-        TRACE("Unable to send data: res=%zi.", sent_data);
+        TRACE("Unable to send data: res=%zi.\n", sent_data);
         return make_error_tuple(CLOSED_ATOM, ctx);
     }
 }
