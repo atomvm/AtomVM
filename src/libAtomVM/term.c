@@ -1093,7 +1093,7 @@ term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb)
     }
     // Not a refc binary or it's a const refc binary - create a new one
     size_t src_size = term_binary_size(src);
-    term t = term_create_uninitialized_binary(size, heap, glb);
+    term t = term_create_empty_binary(size, heap, glb);
     // Copy the source data (up to the smaller of src_size and size)
     size_t copy_size = src_size < size ? src_size : size;
     memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), copy_size);
