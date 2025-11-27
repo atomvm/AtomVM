@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2023 Davide Bettio <davide@uninstall.it>
+% Copyright 2025 schnittchen <schnittchen@das-labor.org>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.

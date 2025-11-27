@@ -837,6 +837,7 @@ static term nif_esp_task_wdt_delete_user(Context *ctx, int argc, term argv[])
 
 static term nif_esp_timer_get_time(Context *ctx, int argc, term argv[])
 {
+    UNUSED(argv);
     UNUSED(argc);
 
     return term_make_maybe_boxed_int64(esp_timer_get_time(), &ctx->heap);
