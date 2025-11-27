@@ -43,12 +43,12 @@
 #include "valueshashtable.h"
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
+#    include "platform_atomic.h"
 #else
-#if defined(HAVE_ATOMIC)
-#include <stdatomic.h>
-#define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
-#endif
+#    if defined(HAVE_ATOMIC)
+#        include <stdatomic.h>
+#        define ATOMIC_COMPARE_EXCHANGE_WEAK_PTR atomic_compare_exchange_weak
+#    endif
 #endif
 
 struct RegisteredProcess
@@ -134,9 +134,9 @@ GlobalContext *globalcontext_new(void)
 #if HAVE_OPEN && HAVE_CLOSE
     glb->posix_fd_resource_type = enif_init_resource_type(&env, "posix_fd", &posix_fd_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(glb->posix_fd_resource_type)) {
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
-#endif
+#    endif
         free(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
@@ -149,9 +149,9 @@ GlobalContext *globalcontext_new(void)
     erl_nif_env_partial_init_from_globalcontext(&dir_env, glb);
     glb->posix_dir_resource_type = enif_init_resource_type(&env, "posix_dir", &posix_dir_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(glb->posix_dir_resource_type)) {
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
-#endif
+#    endif
         free(glb->modules_table);
         atom_table_destroy(glb->atom_table);
         free(glb);
@@ -164,9 +164,9 @@ GlobalContext *globalcontext_new(void)
 #ifndef AVM_NO_SMP
     glb->schedulers_mutex = smp_mutex_create();
     if (IS_NULL_PTR(glb->schedulers_mutex)) {
-#if HAVE_OPEN && HAVE_CLOSE
+#    if HAVE_OPEN && HAVE_CLOSE
         resource_type_destroy(glb->posix_fd_resource_type);
-#endif
+#    endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
         atom_table_destroy(glb->atom_table);
@@ -176,9 +176,9 @@ GlobalContext *globalcontext_new(void)
     glb->schedulers_cv = smp_condvar_create();
     if (IS_NULL_PTR(glb->schedulers_cv)) {
         smp_mutex_destroy(glb->schedulers_mutex);
-#if HAVE_OPEN && HAVE_CLOSE
+#    if HAVE_OPEN && HAVE_CLOSE
         resource_type_destroy(glb->posix_fd_resource_type);
-#endif
+#    endif
         smp_rwlock_destroy(glb->modules_lock);
         free(glb->modules_table);
         atom_table_destroy(glb->atom_table);
@@ -372,7 +372,7 @@ static inline enum SendMessageResult globalcontext_send_message_from_task_common
 {
     enum SendMessageResult result = SEND_MESSAGE_PROCESS_NOT_FOUND;
     bool postponed = false;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
     Context *p = NULL;
     if (globalcontext_get_process_trylock(glb, process_id, &p)) {
         if (p) {
@@ -394,10 +394,10 @@ static inline enum SendMessageResult globalcontext_send_message_from_task_common
     } else {
         postponed = true;
     }
-#else
+#    else
     // Without SMP, we have no lock, so we must always enqueue.
     postponed = true;
-#endif
+#    endif
     if (postponed) {
         if (message == NULL) {
             message = mailbox_message_create_from_term(type, t);

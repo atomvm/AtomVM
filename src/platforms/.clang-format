@@ -1,0 +1,7 @@
+# Copyright 2025 Davide Bettio <davide@uninstall.it>
+#
+# SPDX-License-Identifier: CC0-1.0
+
+---
+BasedOnStyle: InheritParentConfig
+IndentPPDirectives: None

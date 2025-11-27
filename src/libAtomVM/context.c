@@ -38,12 +38,12 @@
 #include "utils.h"
 
 #ifdef HAVE_PLATFORM_ATOMIC_H
-#include "platform_atomic.h"
+#    include "platform_atomic.h"
 #else
-#if defined(HAVE_ATOMIC)
-#include <stdatomic.h>
-#define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
-#endif
+#    if defined(HAVE_ATOMIC)
+#        include <stdatomic.h>
+#        define ATOMIC_COMPARE_EXCHANGE_WEAK_INT atomic_compare_exchange_weak
+#    endif
 #endif
 
 #define IMPL_EXECUTE_LOOP
@@ -466,15 +466,15 @@ void context_process_code_server_resume_signal(Context *ctx)
     // jit_trap_and_load stores the label in saved_function_ptr
     uint32_t label = (uint32_t) (uintptr_t) ctx->saved_function_ptr;
     Module *module = ctx->saved_module;
-#ifndef AVM_NO_EMU
+#    ifndef AVM_NO_EMU
     if (module->native_code) {
         ctx->saved_function_ptr = module_get_native_entry_point(module, label);
     } else {
         ctx->saved_ip = module->labels[label];
     }
-#else
+#    else
     ctx->saved_function_ptr = module_get_native_entry_point(module, label);
-#endif
+#    endif
     // Fix CP to OP_INT_CALL_END
     if (ctx->cp == module_address(module->module_index, 0)) {
         ctx->cp = module_address(module->module_index, module->end_instruction_ii);

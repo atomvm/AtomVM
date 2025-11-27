@@ -650,7 +650,7 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                     }
                                 }
 #else
-#error "Unsupported endianness"
+#    error "Unsupported endianness"
 #endif
                             }
                             CMP_POP_AND_CONTINUE();
@@ -1059,7 +1059,7 @@ term term_reuse_binary(term src, size_t size, Heap *heap, GlobalContext *glb)
                 // original pointer is still valid
 #pragma GCC diagnostic push
 #if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 12)
-#pragma GCC diagnostic ignored "-Wuse-after-free"
+#    pragma GCC diagnostic ignored "-Wuse-after-free"
 #endif
                 list_append(refc_binaries, &old_refc->head);
 #pragma GCC diagnostic pop

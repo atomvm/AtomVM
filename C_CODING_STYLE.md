@@ -107,6 +107,38 @@ void f(bool reverse) {
 }
 ```
 
+### Preprocessor Indentation
+
+Indent nested preprocessor directives after the hash mark [AVMCCS-F022]:
+- The hash `#` stays in column 1, directives are indented with 4 spaces after the hash
+- Each nesting level adds 4 spaces after the `#`
+- **Exception**: Include guards do not count for indentation. The guard directives themselves
+(`#ifndef`, `#define`, `#endif`) and all content between them remain at column 1
+
+Good:
+
+```c
+#ifdef USE_POSITIVE_NUMBERS
+#    define A 1
+#    define B 2
+#else
+#    define A -1
+#    define B -2
+#endif
+```
+
+Bad:
+
+```c
+#ifdef USE_POSITIVE_NUMBERS
+#define A 1
+#define B 2
+#else
+#define A -1
+#define B -2
+#endif
+```
+
 ## Formatting
 
 ### General Rules
@@ -2428,6 +2460,7 @@ This convention system creates self-documenting code where the naming pattern im
 |------|-------------|---------|
 | Braces | K&R variant (new line for functions/types) | `void f(void)\n{` |
 | Indentation | 4 spaces, no tabs | `    if (x) {` |
+| Preprocessor indent | After hash, except include guards | `#ifdef X\n#    define Y 1\n#endif` |
 | Pointer `*` | With variable name | `char *name` not `char* name` |
 | Line length | < 100 columns | Use intermediate variables |
 | Hex numbers | Uppercase letters | `0xDEADBEEF` not `0xdeadbeef` |
@@ -2739,7 +2772,9 @@ This style guide can be largely enforced using clang-format. Create a `.clang-fo
 
 BasedOnStyle: LLVM
 
-# Indentation (rules: AVMCCS-F003)
+# Indentation (rules: AVMCCS-F003, AVMCCS-F022)
+IndentPPDirectives: AfterHash
+PPIndentWidth: -1
 IndentWidth: 4
 TabWidth: 4
 UseTab: Never
@@ -3423,6 +3458,7 @@ This section provides a complete index of all rules defined in this style guide,
 | AVMCCS-F019 | Use uppercase letters for hexadecimal numbers | Spacing |
 | AVMCCS-F020 | Use spaces around binary operators | Spacing |
 | AVMCCS-F021 | Always place initializer braces on the same line as declaration | Spacing |
+| AVMCCS-F022 | Indent nested preprocessor directives after the hash mark | Style Rules |
 | **Naming** | | |
 | AVMCCS-N001 | Preserve word boundaries when converting between casing styles | Word Boundary Preservation |
 | AVMCCS-N002 | Keep acronyms capitalized in PascalCase; treat as single word when converting | Word Boundary Preservation |
@@ -3519,8 +3555,16 @@ This section provides a complete index of all rules defined in this style guide,
 | AVMCCS-S005 | Group includes by origin with alphabetical ordering | Include Ordering |
 | AVMCCS-S006 | Header files match module names using underscores | Header File Naming |
 
+## Changes
+
+### Version 1.1
+
+**Preprocessor Indentation** (AVMCCS-F022):
+- Nested preprocessor directives now indent after the hash mark (exception: include guards remain
+unindented for clarity)
+
 ---
 
-*Document Version*: 1.0
+*Document Version*: 1.1
 *Style Guide Name*: AtomVM C Coding Style Guide (AVMCCS Guide)
-*Last Updated*: July 2025
+*Last Updated*: November 2025

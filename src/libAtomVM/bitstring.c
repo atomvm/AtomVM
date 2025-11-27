@@ -26,7 +26,14 @@
 
 static inline uint64_t from_le64(uint64_t value)
 {
-    return ((((value) &0xFF) << 56) | (((value) &0xFF00) << 40) | (((value) &0xFF0000) << 24) | (((value) &0xFF000000) << 8) | (((value) &0xFF00000000) >> 8) | (((value) &0xFF0000000000) >> 24) | (((value) &0xFF000000000000) >> 40) | (((value) &0xFF00000000000000) >> 56));
+    return ((((value) & 0xFF) << 56)
+        | (((value) & 0xFF00) << 40)
+        | (((value) & 0xFF0000) << 24)
+        | (((value) & 0xFF000000) << 8)
+        | (((value) & 0xFF00000000) >> 8)
+        | (((value) & 0xFF0000000000) >> 24)
+        | (((value) & 0xFF000000000000) >> 40)
+        | (((value) & 0xFF00000000000000) >> 56));
 }
 
 bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t n,

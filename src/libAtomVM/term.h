@@ -130,13 +130,13 @@ extern "C" {
 #define TERM_BOXED_SUB_BINARY_SIZE 4
 #define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFC_BINARY_SIZE
 #if TERM_BYTES == 8
-#define REFC_BINARY_MIN 64
-#define SUB_BINARY_MIN 16
+#    define REFC_BINARY_MIN 64
+#    define SUB_BINARY_MIN 16
 #elif TERM_BYTES == 4
-#define REFC_BINARY_MIN 32
-#define SUB_BINARY_MIN 8
+#    define REFC_BINARY_MIN 32
+#    define SUB_BINARY_MIN 8
 #else
-#error
+#    error
 #endif
 
 #define TERM_MAX_LOCAL_PROCESS_ID ((1 << 28) - 1)
@@ -149,19 +149,19 @@ extern "C" {
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
 #if TERM_BYTES == 8
-#define EXTERNAL_PID_SIZE 3
+#    define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
-#define EXTERNAL_PID_SIZE 5
+#    define EXTERNAL_PID_SIZE 5
 #else
-#error
+#    error
 #endif
 #define EXTERNAL_PORT_SIZE EXTERNAL_PID_SIZE
 #if TERM_BYTES == 8
-#define EXTERNAL_REF_SIZE(words) (3 + (words / 2))
+#    define EXTERNAL_REF_SIZE(words) (3 + (words / 2))
 #elif TERM_BYTES == 4
-#define EXTERNAL_REF_SIZE(words) (3 + words)
+#    define EXTERNAL_REF_SIZE(words) (3 + words)
 #else
-#error
+#    error
 #endif
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
@@ -177,11 +177,11 @@ extern "C" {
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
 
 #if TERM_BYTES == 4
-#define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
-    (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 4 - 1) >> 2) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
+#    define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
+        (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 4 - 1) >> 2) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
 #elif TERM_BYTES == 8
-#define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
-    (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 8 - 1) >> 3) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
+#    define TERM_BINARY_DATA_SIZE_IN_TERMS(size) \
+        (TERM_BINARY_SIZE_IS_HEAP(size) ? (((size) + 8 - 1) >> 3) + 1 : TERM_BOXED_REFC_BINARY_SIZE)
 #endif
 
 #define TERM_BINARY_HEAP_SIZE(size) \
@@ -231,7 +231,7 @@ extern "C" {
 #define PORT_AS_CSTRING_LEN 37
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 
@@ -1059,7 +1059,7 @@ static inline term term_from_int32(int32_t value)
     return (value << 4) | TERM_INTEGER_TAG;
 
 #else
-#error "Wrong TERM_BITS define"
+#    error "Wrong TERM_BITS define"
 #endif
 }
 
@@ -1088,7 +1088,7 @@ static inline term term_from_int64(int64_t value)
     }
 
 #else
-#error "Wrong TERM_BITS define"
+#    error "Wrong TERM_BITS define"
 #endif
 }
 
@@ -1210,15 +1210,15 @@ static inline avm_int64_t term_unbox_int64(term boxed_long)
     return (avm_int64_t) boxed_value[1];
 
 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     return (avm_int64_t) ((avm_uint64_t) boxed_value[1] | ((avm_uint64_t) boxed_value[2] << 32));
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     return (avm_int64_t) ((avm_uint64_t) boxed_value[1] << 32) | (avm_uint64_t) boxed_value[2];
+#    else
+#        error "unsupported endianness."
+#    endif
 #else
-#error "unsupported endianness."
-#endif
-#else
-#error "unsupported configuration."
+#    error "unsupported configuration."
 #endif
 }
 
@@ -1267,17 +1267,17 @@ static inline term term_make_boxed_int64(avm_int64_t large_int64, Heap *heap)
 #if BOXED_TERMS_REQUIRED_FOR_INT64 == 1
     boxed_int[1] = large_int64;
 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 2
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#    if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     boxed_int[1] = large_int64;
     boxed_int[2] = large_int64 >> 32;
-#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#    elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
     boxed_int[2] = large_int64;
     boxed_int[1] = large_int64 >> 32;
+#    else
+#        error "unsupported endianness."
+#    endif
 #else
-#error "unsupported endianness."
-#endif
-#else
-#error "unsupported configuration."
+#    error "unsupported configuration."
 #endif
     return ((term) boxed_int) | TERM_PRIMARY_BOXED;
 }
@@ -1574,7 +1574,7 @@ static inline size_t term_binary_data_size_in_terms(size_t size)
 #elif TERM_BYTES == 8
         return ((size + 8 - 1) >> 3) + 1;
 #else
-#error
+#    error
 #endif
     } else {
         return TERM_BOXED_REFC_BINARY_SIZE;
@@ -1807,7 +1807,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
-    return (BinaryPosLen){ .pos = -1, .len = -1 };
+    return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
 
 /**
@@ -1871,7 +1871,7 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
     boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
 
 #else
-#error "terms must be either 32 or 64 bit wide"
+#    error "terms must be either 32 or 64 bit wide"
 #endif
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
@@ -1890,7 +1890,7 @@ static inline uint64_t term_to_ref_ticks(term rt)
     return (boxed_value[1] << 4) | boxed_value[2];
 
 #else
-#error "terms must be either 32 or 64 bit wide"
+#    error "terms must be either 32 or 64 bit wide"
 #endif
 }
 
@@ -2055,7 +2055,7 @@ static inline term term_make_external_reference(term node, uint16_t len, uint32_
     }
 
 #else
-#error "terms must be either 32 or 64 bit wide"
+#    error "terms must be either 32 or 64 bit wide"
 #endif
 
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
@@ -2081,7 +2081,7 @@ static inline uint32_t term_get_external_reference_len(term t)
     return (uint32_t) (boxed_value[0] >> 6) - 2;
 
 #else
-#error "terms must be either 32 or 64 bit wide"
+#    error "terms must be either 32 or 64 bit wide"
 #endif
 }
 
@@ -2105,7 +2105,7 @@ static inline const uint32_t *term_get_external_reference_words(term t)
     return external_thing_words + 2;
 
 #else
-#error "terms must be either 32 or 64 bit wide"
+#    error "terms must be either 32 or 64 bit wide"
 #endif
 }
 

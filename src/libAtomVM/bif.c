@@ -72,11 +72,11 @@
  * do not use `(avm_float_t) INT64_MIN` or `(avm_float_t) INT64_MAX`.
  */
 #ifdef AVM_USE_SINGLE_PRECISION
-#define INT64_MIN_AS_AVM_FLOAT -9223372586610590720.0 // 0xDF000000 = -2^63
-#define INT64_MAX_AS_AVM_FLOAT 9223371761976868863.0 // 0x5F000000 = 2^63
+#    define INT64_MIN_AS_AVM_FLOAT -9223372586610590720.0 // 0xDF000000 = -2^63
+#    define INT64_MAX_AS_AVM_FLOAT 9223371761976868863.0 // 0x5F000000 = 2^63
 #else
-#define INT64_MIN_AS_AVM_FLOAT -9223372036854776832.0 // 0xC3E0000000000000 = -2^63
-#define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
+#    define INT64_MIN_AS_AVM_FLOAT -9223372036854776832.0 // 0xC3E0000000000000 = -2^63
+#    define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
 #endif
 
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
@@ -645,7 +645,7 @@ static term add_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     return add_int64_to_bigint(ctx, fail_label, live, val1, val2);
 #else
-#error "Unsupported configuration."
+#    error "Unsupported configuration."
 #endif
                 }
 
@@ -784,7 +784,7 @@ static term sub_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     return sub_int64_to_bigint(ctx, fail_label, live, val1, val2);
 #else
-#error "Unsupported configuration."
+#    error "Unsupported configuration."
 #endif
                 }
 
@@ -927,7 +927,7 @@ static term mul_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
 #elif BOXED_TERMS_REQUIRED_FOR_INT64 == 1
                     return mul_int64_to_bigint(ctx, fail_label, live, val1, val2);
 #else
-#error "Unsupported configuration."
+#    error "Unsupported configuration."
 #endif
                 }
 
@@ -1177,7 +1177,7 @@ static term neg_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                         return int64_max_plus_one(ctx, fail_label, live);
 
 #else
-#error "Unsupported configuration."
+#    error "Unsupported configuration."
 #endif
 
                     default:
@@ -1279,7 +1279,7 @@ static term abs_boxed_helper(Context *ctx, uint32_t fail_label, uint32_t live, t
                     return int64_max_plus_one(ctx, fail_label, live);
 
 #else
-#error "Unsupported configuration."
+#    error "Unsupported configuration."
 #endif
 
                 } else {

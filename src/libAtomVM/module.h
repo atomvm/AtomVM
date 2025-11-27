@@ -45,19 +45,19 @@ extern "C" {
 
 #ifndef AVM_NO_SMP
 
-#ifndef TYPEDEF_MUTEX
-#define TYPEDEF_MUTEX
+#    ifndef TYPEDEF_MUTEX
+#        define TYPEDEF_MUTEX
 typedef struct Mutex Mutex;
-#endif
+#    endif
 
 #endif
 
 #ifndef AVM_NO_SMP
-#define SMP_MODULE_LOCK(mod) smp_mutex_lock(mod->mutex)
-#define SMP_MODULE_UNLOCK(mod) smp_mutex_unlock(mod->mutex)
+#    define SMP_MODULE_LOCK(mod) smp_mutex_lock(mod->mutex)
+#    define SMP_MODULE_UNLOCK(mod) smp_mutex_unlock(mod->mutex)
 #else
-#define SMP_MODULE_LOCK(mod)
-#define SMP_MODULE_UNLOCK(mod)
+#    define SMP_MODULE_LOCK(mod)
+#    define SMP_MODULE_UNLOCK(mod)
 #endif
 
 typedef struct
@@ -155,7 +155,7 @@ struct Module
 };
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 

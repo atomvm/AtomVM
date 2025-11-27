@@ -31,13 +31,13 @@
 #include "utils.h"
 
 #ifndef AVM_NO_SMP
-#define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
-#define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
-#define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
+#    define SMP_RDLOCK(htable) smp_rwlock_rdlock(htable->lock)
+#    define SMP_WRLOCK(htable) smp_rwlock_wrlock(htable->lock)
+#    define SMP_UNLOCK(htable) smp_rwlock_unlock(htable->lock)
 #else
-#define SMP_RDLOCK(htable) UNUSED(htable)
-#define SMP_WRLOCK(htable) UNUSED(htable)
-#define SMP_UNLOCK(htable) UNUSED(htable)
+#    define SMP_RDLOCK(htable) UNUSED(htable)
+#    define SMP_WRLOCK(htable) UNUSED(htable)
+#    define SMP_UNLOCK(htable) UNUSED(htable)
 #endif
 
 #define DEFAULT_SIZE 8
@@ -427,7 +427,7 @@ static inline int read_encoded_len(const uint8_t **len_bytes)
 }
 
 // -1 is not a valid atom index as we're limited to 2^20
-#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) -1)
+#define ATOM_TABLE_NOT_FOUND_MARKER ((atom_index_t) - 1)
 
 enum AtomTableEnsureAtomResult atom_table_ensure_atoms(struct AtomTable *table, const void *atoms, size_t count,
     atom_index_t *translate_table, enum EnsureAtomsOpt opt)

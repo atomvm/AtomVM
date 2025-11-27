@@ -26,7 +26,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #ifdef DEBUG_HEAP_ALLOC
-#include <stdio.h>
+#    include <stdio.h>
 #endif
 
 #include "erl_nif.h"
@@ -41,12 +41,12 @@ extern "C" {
 #define MIN_FREE_SPACE_SIZE 16
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 
 #ifndef TYPEDEF_GLOBALCONTEXT
-#define TYPEDEF_GLOBALCONTEXT
+#    define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
 
@@ -88,7 +88,7 @@ struct Heap
 };
 
 #ifndef TYPEDEF_HEAP
-#define TYPEDEF_HEAP
+#    define TYPEDEF_HEAP
 typedef struct Heap Heap;
 #endif
 

@@ -35,31 +35,31 @@ extern "C" {
 struct Context;
 
 #ifndef TYPEDEF_CONTEXT
-#define TYPEDEF_CONTEXT
+#    define TYPEDEF_CONTEXT
 typedef struct Context Context;
 #endif
 
 struct Module;
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
 #ifndef TYPEDEF_JITSTATE
-#define TYPEDEF_JITSTATE
+#    define TYPEDEF_JITSTATE
 typedef struct JITState JITState;
 #endif
 
 #ifndef TYPEDEF_MODULENATIVEINTERFACE
-#define TYPEDEF_MODULENATIVEINTERFACE
+#    define TYPEDEF_MODULENATIVEINTERFACE
 typedef struct ModuleNativeInterface ModuleNativeInterface;
 #endif
 
 struct Module;
 
 #ifndef TYPEDEF_MODULE
-#define TYPEDEF_MODULE
+#    define TYPEDEF_MODULE
 typedef struct Module Module;
 #endif
 
@@ -181,24 +181,24 @@ enum TrapAndLoadResult
 
 #ifndef AVM_NO_JIT
 
-#ifdef __x86_64__
-#define JIT_ARCH_TARGET JIT_ARCH_X86_64
-#define JIT_JUMPTABLE_ENTRY_SIZE 5
-#endif
+#    ifdef __x86_64__
+#        define JIT_ARCH_TARGET JIT_ARCH_X86_64
+#        define JIT_JUMPTABLE_ENTRY_SIZE 5
+#    endif
 
-#if defined(__arm64__) || defined(__aarch64__)
-#define JIT_ARCH_TARGET JIT_ARCH_AARCH64
-#define JIT_JUMPTABLE_ENTRY_SIZE 4
-#endif
+#    if defined(__arm64__) || defined(__aarch64__)
+#        define JIT_ARCH_TARGET JIT_ARCH_AARCH64
+#        define JIT_JUMPTABLE_ENTRY_SIZE 4
+#    endif
 
-#ifdef __arm__
-#define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
-#define JIT_JUMPTABLE_ENTRY_SIZE 12
-#endif
+#    ifdef __arm__
+#        define JIT_ARCH_TARGET JIT_ARCH_ARMV6M
+#        define JIT_JUMPTABLE_ENTRY_SIZE 12
+#    endif
 
-#ifndef JIT_ARCH_TARGET
-#error Unknown JIT target
-#endif
+#    ifndef JIT_ARCH_TARGET
+#        error Unknown JIT target
+#    endif
 #endif
 
 /**

@@ -43,22 +43,22 @@
 #include <errno.h>
 
 #if OTP_SOCKET_BSD
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#    include <fcntl.h>
+#    include <netinet/in.h>
+#    include <sys/socket.h>
+#    include <unistd.h>
 
-#if HAVE_SIGNAL
-#include <signal.h>
-#endif
+#    if HAVE_SIGNAL
+#        include <signal.h>
+#    endif
 #elif OTP_SOCKET_LWIP
-#include <lwip/tcp.h>
-#include <lwip/udp.h>
-#if LWIP_IGMP
-#include "lwip/igmp.h"
-#endif
+#    include <lwip/tcp.h>
+#    include <lwip/udp.h>
+#    if LWIP_IGMP
+#        include "lwip/igmp.h"
+#    endif
 #else
-#error OTP Socket requires BSD Socket or lwIP
+#    error OTP Socket requires BSD Socket or lwIP
 #endif
 
 // #define ENABLE_TRACE
@@ -68,9 +68,9 @@
 
 // Check some LWIP options
 #if OTP_SOCKET_LWIP
-#if !TCP_LISTEN_BACKLOG
-#error TCP_LISTEN_BACKLOG is undefined
-#endif
+#    if !TCP_LISTEN_BACKLOG
+#        error TCP_LISTEN_BACKLOG is undefined
+#    endif
 #endif
 
 // To factorize parsing of erlang term options, we define few constants for lwIP.
@@ -159,9 +159,9 @@ struct SocketResource
     int32_t selecting_process_id;
     ErlNifMonitor selecting_process_monitor;
     size_t buf_size;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
     RWLock *socket_lock;
-#endif
+#    endif
 };
 #elif OTP_SOCKET_LWIP
 struct SocketResource
@@ -181,9 +181,9 @@ struct SocketResource
     size_t pos;
     struct ListHead received_list;
     size_t buf_size;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
     RWLock *socket_lock;
-#endif
+#    endif
 };
 #endif
 
@@ -240,7 +240,7 @@ static const AtomStringIntPair otp_socket_setopt_level_table[] = {
 #define DEFAULT_BUFFER_SIZE 512
 
 #ifndef MIN
-#define MIN(A, B) (((A) < (B)) ? (A) : (B))
+#    define MIN(A, B) (((A) < (B)) ? (A) : (B))
 #endif
 
 static ErlNifResourceType *socket_resource_type;
@@ -848,14 +848,14 @@ static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newp
     conn_rsrc_obj->linger_on = false;
     conn_rsrc_obj->linger_sec = 0;
     conn_rsrc_obj->buf_size = DEFAULT_BUFFER_SIZE;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
     conn_rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
         // destroy resource without calling destructor
         free(conn_rsrc_obj);
         return NULL;
     }
-#endif
+#    endif
     list_init(&conn_rsrc_obj->received_list);
 
     tcp_arg(newpcb, conn_rsrc_obj);
@@ -1432,7 +1432,7 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                         return OK_ATOM;
                     }
 #elif OTP_SOCKET_LWIP
-#if LWIP_IGMP
+#    if LWIP_IGMP
                     ip_addr_t interface_addr;
                     ip_addr_set_ip4_u32(&interface_addr, htonl(inet_addr4_to_uint32(interface)));
                     ip_addr_t multicast_addr;
@@ -1444,12 +1444,12 @@ static term nif_socket_setopt(Context *ctx, int argc, term argv[])
                     } else {
                         return OK_ATOM;
                     }
-#else
+#    else
                     TRACE("socket:setopt: Unsupported ip option (LWIP_IGMP is not enabled)");
                     SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
                     RAISE_ERROR(BADARG_ATOM);
                     make_lwip_err_tuple
-#endif
+#    endif
 #else
                 TRACE("socket:setopt: Unsupported ip option");
                 SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
@@ -1886,13 +1886,13 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
         conn_rsrc_obj->fd = fd;
         conn_rsrc_obj->selecting_process_id = INVALID_PROCESS_ID;
         conn_rsrc_obj->buf_size = DEFAULT_BUFFER_SIZE;
-#ifndef AVM_NO_SMP
+#    ifndef AVM_NO_SMP
         conn_rsrc_obj->socket_lock = smp_rwlock_create();
         if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
             free(conn_rsrc_obj);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-#endif
+#    endif
         TRACE("nif_socket_accept: Created socket on accept fd=%i\n", rsrc_obj->fd);
 
         term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
