@@ -166,7 +166,7 @@ static term nif_net_getaddrinfo(Context *ctx, int argc, term argv[])
     term service = argv[1];
 
     if (host == UNDEFINED_ATOM && service == UNDEFINED_ATOM) {
-        TRACE("Host and Service params may not both be undefined");
+        TRACE("Host and Service params may not both be undefined\n");
         RAISE_ERROR(BADARG_ATOM);
     }
 

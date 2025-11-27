@@ -4224,7 +4224,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_utf8_size/3");
+                    TRACE("bs_utf8_size/3\n");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_INTEGER(src, "bs_utf8_size/3", 0);
@@ -4361,7 +4361,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
                 #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_utf16_size/3");
+                    TRACE("bs_utf16_size/3\n");
                 #endif
                 #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_INTEGER(src, "bs_utf16_size/3", 0);
@@ -5247,7 +5247,7 @@ wait_timeout_trap_handler:
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
                     if ((term_binary_size(src) * 8 - bs_offset) % unit != 0) {
-                        TRACE("bs_test_unit: Available bits in source not evenly divisible by unit");
+                        TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }
                 #endif
