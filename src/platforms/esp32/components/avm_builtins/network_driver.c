@@ -747,7 +747,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set up STA mode, if configured
     //
     if (!IS_NULL_PTR(sta_wifi_config)) {
-        if ((err = esp_wifi_set_config(ESP_IF_WIFI_STA, sta_wifi_config)) != ESP_OK) {
+        if ((err = esp_wifi_set_config(WIFI_IF_STA, sta_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting STA mode config %d", err);
             free(sta_wifi_config);
             if (!IS_NULL_PTR(ap_wifi_config)) {
@@ -766,7 +766,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Set up AP mode, if configured
     //
     if (!IS_NULL_PTR(ap_wifi_config)) {
-        if ((err = esp_wifi_set_config(ESP_IF_WIFI_AP, ap_wifi_config)) != ESP_OK) {
+        if ((err = esp_wifi_set_config(WIFI_IF_AP, ap_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting AP mode config %d", err);
             free(ap_wifi_config);
             term error = port_create_error_tuple(ctx, term_from_int(err));

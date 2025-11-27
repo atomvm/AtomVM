@@ -49,7 +49,7 @@ endif()
 
 # WHOLE_ARCHIVE option is supported only with esp-idf 5.x
 # A link option will be used with esp-idf 4.x
-if (IDF_VERSION_MAJOR EQUAL 5)
+if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
     set(OPTIONAL_WHOLE_ARCHIVE WHOLE_ARCHIVE)
 else()
     set(OPTIONAL_WHOLE_ARCHIVE "")
