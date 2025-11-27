@@ -145,10 +145,10 @@ uint32_t socket_tuple_to_addr(term addr_tuple)
 term socket_ctx_tuple_from_addr(Context *ctx, uint32_t addr)
 {
     term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
+    terms[0] = term_from_int11((addr >> 24) & 0xFF);
+    terms[1] = term_from_int11((addr >> 16) & 0xFF);
+    terms[2] = term_from_int11((addr >> 8) & 0xFF);
+    terms[3] = term_from_int11(addr & 0xFF);
 
     return port_create_tuple_n(ctx, 4, terms);
 }
@@ -156,10 +156,10 @@ term socket_ctx_tuple_from_addr(Context *ctx, uint32_t addr)
 term socket_heap_tuple_from_addr(Heap *heap, uint32_t addr)
 {
     term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
+    terms[0] = term_from_int11((addr >> 24) & 0xFF);
+    terms[1] = term_from_int11((addr >> 16) & 0xFF);
+    terms[2] = term_from_int11((addr >> 8) & 0xFF);
+    terms[3] = term_from_int11(addr & 0xFF);
 
     return port_heap_create_tuple_n(heap, 4, terms);
 }
@@ -688,7 +688,7 @@ term socket_driver_do_sendto(Context *ctx, term dest_address, term dest_port, te
         return port_create_sys_error_tuple(ctx, SENDTO_ATOM, errno);
     } else {
         TRACE("socket_driver_do_sendto: sent data with len: %li, to: %i, port: %i\n", len, ntohl(addr.sin_addr.s_addr), ntohs(addr.sin_port));
-        term sent_atom = term_from_int32(sent_data);
+        term sent_atom = term_from_int(sent_data);
         return port_create_ok_tuple(ctx, sent_atom);
     }
 }
@@ -894,7 +894,7 @@ static EventListener *active_recvfrom_callback(GlobalContext *glb, EventListener
         }
         term pid = socket_data->controlling_process;
         term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
-        term port = term_from_int32(htons(clientaddr.sin_port));
+        term port = term_from_int28(htons(clientaddr.sin_port));
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
         term socket_pid = term_port_from_local_process_id(ctx->process_id);
         term socket_wrapper = create_udp_socket_wrapper(socket_pid, &heap, glb);
@@ -963,7 +963,7 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
         term pid = listener->pid;
         term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
         term addr = socket_heap_tuple_from_addr(&heap, htonl(clientaddr.sin_addr.s_addr));
-        term port = term_from_int32(htons(clientaddr.sin_port));
+        term port = term_from_int28(htons(clientaddr.sin_port));
         term packet = socket_create_packet_term(buf, len, socket_data->binary, &heap, glb);
         term addr_port_packet = port_heap_create_tuple3(&heap, addr, port, packet);
         term payload = port_heap_create_ok_tuple(&heap, addr_port_packet);
