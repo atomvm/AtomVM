@@ -123,6 +123,10 @@ Context *context_new(GlobalContext *glb)
     ctx->bs = term_invalid_term();
     ctx->bs_offset = 0;
 
+    ctx->exception_class = term_nil();
+    ctx->exception_reason = term_nil();
+    ctx->exception_stacktrace = term_nil();
+
     ctx->exit_reason = NORMAL_ATOM;
 
     globalcontext_init_process(glb, ctx);
@@ -1162,7 +1166,7 @@ COLD_FUNC void context_dump(Context *ctx)
     fprintf(stderr, "\n");
 
     fprintf(stderr, "\nStacktrace:\n");
-    term_display(stderr, stacktrace_build(ctx, &ctx->x[2], 3), ctx);
+    term_display(stderr, stacktrace_build(ctx), ctx);
     fprintf(stderr, "\n\n");
 
     {
@@ -1174,12 +1178,12 @@ COLD_FUNC void context_dump(Context *ctx)
             cp_mod->module_index, label, offset);
     }
 
-    fprintf(stderr, "x[0]: ");
-    term_display(stderr, ctx->x[0], ctx);
-    fprintf(stderr, "\nx[1]: ");
-    term_display(stderr, ctx->x[1], ctx);
-    fprintf(stderr, "\nx[2]: ");
-    term_display(stderr, ctx->x[2], ctx);
+    fprintf(stderr, "Exception:\n- Class: ");
+    term_display(stderr, ctx->exception_class, ctx);
+    fprintf(stderr, "\n- Reason: ");
+    term_display(stderr, ctx->exception_reason, ctx);
+    fprintf(stderr, "\n- Stacktrace: ");
+    term_display(stderr, ctx->exception_stacktrace, ctx);
     fprintf(stderr, "\n\nStack \n-----\n\n");
 
     term *ct = ctx->e;
@@ -1275,7 +1279,7 @@ COLD_FUNC void context_dump(Context *ctx)
     synclist_unlock(&glb->processes_table);
 
     // If crash is caused by out_of_memory, print more data about memory usage
-    if (ctx->x[0] == ERROR_ATOM && ctx->x[1] == OUT_OF_MEMORY_ATOM) {
+    if (ctx->exception_class == ERROR_ATOM && ctx->exception_reason == OUT_OF_MEMORY_ATOM) {
         fprintf(stderr, "\n\nContext memory info\n-------------------\n");
         fprintf(stderr, "context_size = %zu\n", context_size(ctx));
         fprintf(stderr, "context_avail_free_memory = %zu\n", context_avail_free_memory(ctx));

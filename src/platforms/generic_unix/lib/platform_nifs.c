@@ -37,18 +37,6 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#define VALIDATE_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM;                  \
-        argv[1] = BADARG_ATOM;                 \
-        return term_invalid_term();            \
-    }
-
-#define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM;          \
-    ctx->x[1] = (error_type_atom);   \
-    return term_invalid_term();
-
 #if ATOMVM_HAS_MBEDTLS
 
 // declared in otp_crypt
