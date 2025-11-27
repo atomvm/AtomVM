@@ -63,6 +63,10 @@ start() ->
 
     <<1, 2, 3>> = test_bs_private_append(<<1, 2, 3>>),
 
+    % Large case sufficient to trigger a valgrind error if reused binary is not zero'd
+    Expected = make_binary_copy(32, 0, <<>>),
+    Expected = test_bs_private_append2(id(make_binary_copy(32, 240, <<>>)), <<>>),
+
     nope = test_match_clause(<<"">>),
     nope = test_match_clause(<<16#FF>>),
     nope = test_match_clause(<<$n:8>>),
@@ -378,6 +382,18 @@ test_bs_append(Bin1, Bin2) ->
 test_bs_private_append(Bin) ->
     <<<<Byte:8>> || <<Byte:8>> <= Bin>>.
 
+% This encodes with private_append and ensures we do this with buffers allocated on the heap
+test_bs_private_append2(<<C1:8, C2:8, C3:8, C4:8, Rest/binary>>, Acc) when byte_size(Acc) < 16 ->
+    test_bs_private_append2(
+        Rest,
+        <<Acc/binary, C1:4, C2:4, C3:4, C4:4, C1:4, C2:4, C3:4, C4:4, C1:4, C2:4, C3:4, C4:4, C1:4,
+            C2:4, C3:4, C4:4, C1:4, C2:4, C3:4, C4:4>>
+    );
+test_bs_private_append2(<<C1:8, C2:8, Rest/binary>>, Acc) ->
+    test_bs_private_append2(Rest, <<Acc/binary, C1:4, C2:4>>);
+test_bs_private_append2(<<>>, Acc) ->
+    Acc.
+
 test_match_clause(
     <<$n:8, FixedBinaryData:4/binary, Rest/binary>>
 ) ->
@@ -409,6 +425,11 @@ make_binary(0, Accum) ->
 make_binary(Size, Accum) ->
     Byte = Size rem 256,
     make_binary(Size - 1, <<Accum/binary, Byte:8>>).
+
+make_binary_copy(0, _Byte, Acc) ->
+    Acc;
+make_binary_copy(Count, Byte, Acc) ->
+    make_binary_copy(Count - 1, Byte, <<Byte, Acc/binary>>).
 
 test_put_match_string(Prefix, Suffix) ->
     Bin = <<$f:8, $o:8, $o:8, Suffix/binary>>,
