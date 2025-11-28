@@ -3,7 +3,8 @@
 -export([
     new_channel/2,
     oneshot_output_voltage/2,
-    oneshot_del_channel/1
+    oneshot_del_channel/1,
+    oneshot_new_channel_p/1
 ]).
 
 -type dac_rsrc() :: {'$dac', Resource :: binary(), Ref :: reference()}.
@@ -27,4 +28,8 @@ oneshot_output_voltage(_res, _level) ->
 
 -spec oneshot_del_channel(Channel :: dac_rsrc()) -> ok | {error, Reason :: term()}.
 oneshot_del_channel(_res) ->
+    erlang:nif_error(undefined).
+
+-spec oneshot_new_channel_p(0 | 1) -> {ok, Channel :: dac_rsrc()} | {error, Reason :: term()}.
+oneshot_new_channel_p(_chan) ->
     erlang:nif_error(undefined).
