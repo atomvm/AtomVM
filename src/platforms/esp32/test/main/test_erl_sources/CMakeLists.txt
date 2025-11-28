@@ -38,6 +38,7 @@ function(compile_erlang module_name)
 endfunction()
 
 compile_erlang(test_esp_partition)
+compile_erlang(test_esp_timer_get_time)
 compile_erlang(test_file)
 compile_erlang(test_wifi_example)
 compile_erlang(test_list_to_atom)
@@ -60,6 +61,7 @@ add_custom_command(
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         test_esp_partition.beam
+        test_esp_timer_get_time.beam
         test_file.beam
         test_wifi_example.beam
         test_list_to_atom.beam
@@ -79,6 +81,7 @@ add_custom_command(
     DEPENDS
         HostAtomVM
         "${CMAKE_CURRENT_BINARY_DIR}/test_esp_partition.beam"
+        "${CMAKE_CURRENT_BINARY_DIR}/test_esp_timer_get_time.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_wifi_example.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_file.beam"
         "${CMAKE_CURRENT_BINARY_DIR}/test_list_to_atom.beam"

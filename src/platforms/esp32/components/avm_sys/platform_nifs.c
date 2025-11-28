@@ -34,6 +34,7 @@
 
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_timer.h"
 #include <esp_partition.h>
 #include <esp_sleep.h>
 #include <esp_system.h>
@@ -834,6 +835,14 @@ static term nif_esp_task_wdt_delete_user(Context *ctx, int argc, term argv[])
 }
 #endif
 
+static term nif_esp_timer_get_time(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argv);
+    UNUSED(argc);
+
+    return term_make_maybe_boxed_int64(esp_timer_get_time(), &ctx->heap);
+}
+
 //
 // NIF structures and dispatch
 //
@@ -980,6 +989,12 @@ static const struct Nif esp_task_wdt_delete_user_nif =
 };
 #endif
 
+static const struct Nif esp_timer_get_time_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_timer_get_time
+};
+
 const struct Nif *platform_nifs_get_nif(const char *nifname)
 {
     if (strcmp("atomvm:random/0", nifname) == 0) {
@@ -1106,6 +1121,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
         return &esp_task_wdt_delete_user_nif;
     }
 #endif
+    if (strcmp("esp:timer_get_time/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_timer_get_time_nif;
+    }
     const struct Nif *nif = nif_collection_resolve_nif(nifname);
     if (nif) {
         return nif;
