@@ -78,40 +78,40 @@ pub fn main() -> Nil {
   assert pid1 != pid3
   assert pid2 == pid4
 
-  // Now add a new OneForAll supervisor
-  // Once PR 1958 is done
+  // Now add a new OneForAll supervisor since PR 1958 is done
 
-  // let actor_name1 = process.new_name("actor3")
-  // let actor_name2 = process.new_name("actor4")
-  // let subject1: Subject(RequestMessage) = process.named_subject(actor_name1)
-  // let subject2: Subject(RequestMessage) = process.named_subject(actor_name2)
-  // let my_subject: Subject(ReplyMessage) = process.new_subject()
+  io.println("Start a OneForAll supervisor with two permanent children.")
+  let actor_name1 = process.new_name("actor3")
+  let actor_name2 = process.new_name("actor4")
+  let subject1: Subject(RequestMessage) = process.named_subject(actor_name1)
+  let subject2: Subject(RequestMessage) = process.named_subject(actor_name2)
 
-  // let child_spec1 =
-  //   supervision.worker(fn() { init(my_subject, actor_name1) })
-  //   |> supervision.restart(supervision.Permanent)
+  let child_spec1 =
+    supervision.worker(fn() { init(my_subject, actor_name1) })
+    |> supervision.restart(supervision.Permanent)
 
-  // let child_spec2 =
-  //   supervision.worker(fn() { init(my_subject, actor_name2) })
-  //   |> supervision.restart(supervision.Permanent)
+  let child_spec2 =
+    supervision.worker(fn() { init(my_subject, actor_name2) })
+    |> supervision.restart(supervision.Permanent)
 
-  // let assert Ok(actor.Started(_pid, _supervisor)) =
-  //   supervisor.new(supervisor.OneForAll)
-  //   |> supervisor.add(child_spec1)
-  //   |> supervisor.add(child_spec2)
-  //   |> supervisor.start()
+  let assert Ok(actor.Started(_pid, _supervisor)) =
+    supervisor.new(supervisor.OneForAll)
+    |> supervisor.add(child_spec1)
+    |> supervisor.add(child_spec2)
+    |> supervisor.start()
 
-  // let #(pid1, pid2) = get_pids(subject1, subject2, my_subject)
-  // assert pid1 != pid2
+  io.println("Get child pids.")
+  let #(pid1, pid2) = echo get_pids(subject1, subject2, my_subject)
+  assert pid1 != pid2
 
-  // // Kill first actor, both actore shall be restarted with new pid
-  // process.send(subject1, Kill)
-  // let assert Ok(Aaarghhh) = process.receive(my_subject, 100)
-  // // Give the supervisor some time to restart actor 1,
-  // process.sleep(200)
-  // let #(pid3, pid4) = get_pids(subject1, subject2, my_subject)
-  // assert pid1 != pid3
-  // assert pid2 != pid4
+  io.println("Kill second actor, both shall be restarted with new pid.")
+  process.send(subject2, Kill)
+  let assert Ok(Aaarghhh) = process.receive(my_subject, 100)
+  // Give the supervisor some time to restart actor 2,
+  process.sleep(200)
+  let #(pid3, pid4) = echo get_pids(subject1, subject2, my_subject)
+  assert pid1 != pid3
+  assert pid2 != pid4
   Nil
 }
 
@@ -142,7 +142,6 @@ fn handle_message(state: State, message: RequestMessage) {
       actor.stop_abnormal("My manager killed me!")
     }
   }
-  // actor.continue(state)
 }
 
 fn get_pids(
