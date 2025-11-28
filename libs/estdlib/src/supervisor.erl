@@ -276,8 +276,8 @@ init_state([ChildSpec | T], State) ->
 init_state([], State) ->
     State#state{children = lists:reverse(State#state.children)}.
 
--spec start_children(ChildSpecs :: [child_spec()], State :: #state{}) ->
-    ChildSpecs :: [child_spec()].
+-spec start_children(ChildSpecs :: [#child{}], [#child{}]) ->
+    Childs :: [#child{}].
 start_children([Child | T], StartedC) ->
     case try_start(Child) of
         {ok, Pid, _Result} ->
@@ -403,7 +403,7 @@ handle_info({try_again_restart, Id}, State) ->
                     case try_start(Child) of
                         {ok, NewPid, _Result} ->
                             UpdatedChildren = lists:keyreplace(
-                                Id, Child#child.id, State1#state.children, Child#child{pid = NewPid}
+                                Id, #child.id, State1#state.children, Child#child{pid = NewPid}
                             ),
                             {noreply, State1#state{children = UpdatedChildren}};
                         {error, {_, _}} ->
