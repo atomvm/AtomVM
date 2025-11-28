@@ -415,8 +415,12 @@ test_timeout_tuple_return() ->
 
             {ok, Pid2} = gen_server:start(?MODULE, [], []),
             0 = gen_server:call(Pid2, get_num_timeouts),
-            ok = gen_server:cast(Pid2, {tuple_timeout, 10}),
-            timer:sleep(100),
+            ok = gen_server:cast(Pid2, {tuple_timeout, 10, self()}),
+            ok =
+                receive
+                    {Pid2, tuple_timeout_end} -> ok
+                after 5000 -> timeout
+                end,
             10 = gen_server:call(Pid2, get_num_timeouts),
 
             gen_server:stop(Pid2);
@@ -659,8 +663,8 @@ handle_cast(ping, #state{num_casts = NumCasts} = State) ->
     {noreply, State#state{num_casts = NumCasts + 1}};
 handle_cast({cast_timeout, Timeout}, State) ->
     {noreply, State, Timeout};
-handle_cast({tuple_timeout, Timeouts}, State) ->
-    {noreply, State, {timeout, 1, {do_tuple_timeouts, Timeouts}}};
+handle_cast({tuple_timeout, Timeouts, Caller}, State) ->
+    {noreply, State, {timeout, 1, {do_tuple_timeouts, Timeouts, Caller}}};
 handle_cast({set_info_timeout, Timeout}, State) ->
     {noreply, State#state{info_timeout = Timeout}};
 handle_cast({req_timeout_reply, Pid}, State) ->
@@ -705,11 +709,12 @@ handle_info({request_info_timeout, From}, State) ->
 handle_info({info_timeout_reply, From}, State) ->
     From ! {reply_from_timeout, info},
     {noreply, State};
-handle_info({do_tuple_timeouts, 0}, State) ->
+handle_info({do_tuple_timeouts, 0, Caller}, State) ->
+    Caller ! {self(), tuple_timeout_end},
     {noreply, State};
-handle_info({do_tuple_timeouts, Timeouts}, #state{num_timeouts = TimeoutCt} = State) ->
+handle_info({do_tuple_timeouts, Timeouts, Caller}, #state{num_timeouts = TimeoutCt} = State) ->
     {noreply, State#state{num_timeouts = TimeoutCt + 1},
-        {timeout, 1, {do_tuple_timeouts, Timeouts - 1}}};
+        {timeout, 1, {do_tuple_timeouts, Timeouts - 1, Caller}}};
 handle_info(_Info, #state{info_timeout = InfoTimeout} = State) ->
     case InfoTimeout of
         none ->
