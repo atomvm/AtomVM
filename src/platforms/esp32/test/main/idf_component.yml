@@ -1,0 +1,34 @@
+dependencies:
+  "espressif/dp83848":
+   version: "~1.0.0"
+   rules:
+    - if: "idf_version >=6.0"
+    - if: target in ["esp32", "esp32p4"]
+    - if: "$CONFIG{ETH_USE_OPENETH} == True"
+  # atomgl:
+  #   git: https://github.com/atomvm/atomgl
+  #   version: "main"
+  # atomvm_mqtt_client:
+  #   git: https://github.com/atomvm/atomvm_mqtt_client
+  #   version: "main"
+  # atomvm_esp32cam:
+  #   #NB requires certain sdkconfig options to be set, see the readme
+  #   git: https://github.com/atomvm/atomvm_esp32cam
+  #   version: "main"
+  # atomvm_gps:
+  #   git: https://github.com/atomvm/atomvm_gps
+  #   version: "main"
+  # atomvm_neopixel:
+  #   git: https://github.com/atomvm/atomvm_neopixel
+  #   version: "main"
+  # atomvm_m5:
+  #   git: https://github.com/pguyot/atomvm_m5
+  #   version: "main"
+  # my_nif:
+  #   # example for local development
+  #   # replace with your own nif in same top level directory as AtomVM
+  #   path: ../../../../../my_nif
+  # atomvm_mqtt_client:
+  #   # example for local development
+  #   # where a nif is git cloned in same top level directory as AtomVM
+  #   path: ../../../../../atomvm_mqtt_client
