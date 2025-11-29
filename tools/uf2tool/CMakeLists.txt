@@ -28,12 +28,10 @@ if(NOT UF2TOOL_PATH STREQUAL "")
     file(CREATE_LINK ${UF2TOOL_PATH} ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/uf2tool SYMBOLIC)
 endif()
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
-    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
-)
-
 add_custom_command(
     OUTPUT uf2tool
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config rebar.config
     COMMAND rebar3 escriptize && cp _build/default/bin/uf2tool .
     VERBATIM
 )
