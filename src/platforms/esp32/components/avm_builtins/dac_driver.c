@@ -1,9 +1,8 @@
 /*
  * This file is part of AtomVM.
  *
- * Copyright 2020-2023 dushin.net
- * Copyright 2024 Ricardo Lanziano <arpunk@fatelectron.net>
- * Copyright 2022-2024 Winford <winford@object.stream>
+ * Copyright (c) 2025 schnittchen <schnittchen@das-labor.org>
+ * All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
