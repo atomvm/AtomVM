@@ -23,6 +23,7 @@
 // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/dac.html
 
 #include <context.h>
+#ifdef CONFIG_AVM_ENABLE_DAC_NIF
 #include <defaultatoms.h>
 #include <erl_nif_priv.h>
 #include <esp32_sys.h>
@@ -259,3 +260,4 @@ const struct Nif *atomvm_dac_get_nif(const char *nifname)
 };
 
 REGISTER_NIF_COLLECTION(atomvm_dac, atomvm_dac_init, NULL, atomvm_dac_get_nif)
+#endif /* CONFIG_AVM_ENABLE_DAC_NIF */
