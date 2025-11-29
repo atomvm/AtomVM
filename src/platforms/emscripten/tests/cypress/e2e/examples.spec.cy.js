@@ -157,7 +157,7 @@ describe("emscripten HTML5 Events", () => {
   it("should work with click events with modifiers", () => {
     cy.visit("/html5_events.html");
     cy.get("#click-checkbox").click();
-    cy.get("body").click({ altKey: true });
+    cy.get("body").click({ altKey: true, scrollBehavior: "center" });
     cy.get("#event-1 td.event-type").should("contain", "click");
     cy.get("#event-1 td.event-map").should("contain", "alt_key => true");
     cy.get("#event-1 td.event-map").should("contain", "ctrl_key => false");
@@ -165,7 +165,7 @@ describe("emscripten HTML5 Events", () => {
     cy.get("#event-1 td.event-map").should("contain", "shift_key => false");
     cy.get("#event-1 td.event-user-data").should("contain", "document");
     cy.get("#event-2 td.event-type").should("contain", "click");
-    cy.get("body").click({ ctrlKey: true });
+    cy.get("body").click({ ctrlKey: true, scrollBehavior: "center" });
     cy.get("#event-3 td.event-type").should("contain", "click");
     cy.get("#event-3 td.event-map").should("contain", "alt_key => false");
     cy.get("#event-3 td.event-map").should("contain", "ctrl_key => true");
@@ -173,7 +173,7 @@ describe("emscripten HTML5 Events", () => {
     cy.get("#event-3 td.event-map").should("contain", "shift_key => false");
     cy.get("#event-3 td.event-user-data").should("contain", "document");
     cy.get("#event-4 td.event-type").should("contain", "click");
-    cy.get("body").click({ metaKey: true });
+    cy.get("body").click({ metaKey: true, scrollBehavior: "center" });
     cy.get("#event-5 td.event-type").should("contain", "click");
     cy.get("#event-5 td.event-map").should("contain", "alt_key => false");
     cy.get("#event-5 td.event-map").should("contain", "ctrl_key => false");
@@ -181,7 +181,7 @@ describe("emscripten HTML5 Events", () => {
     cy.get("#event-5 td.event-map").should("contain", "shift_key => false");
     cy.get("#event-5 td.event-user-data").should("contain", "document");
     cy.get("#event-6 td.event-type").should("contain", "click");
-    cy.get("body").click({ shiftKey: true });
+    cy.get("body").click({ shiftKey: true, scrollBehavior: "center" });
     cy.get("#event-7 td.event-type").should("contain", "click");
     cy.get("#event-7 td.event-map").should("contain", "alt_key => false");
     cy.get("#event-7 td.event-map").should("contain", "ctrl_key => false");
@@ -189,7 +189,7 @@ describe("emscripten HTML5 Events", () => {
     cy.get("#event-7 td.event-map").should("contain", "shift_key => true");
     cy.get("#event-7 td.event-user-data").should("contain", "document");
     cy.get("#event-8 td.event-type").should("contain", "click");
-    cy.get("#click-checkbox").click();
+    cy.get("#click-checkbox").click({scrollBehavior: "center"});
     cy.get("#event-9 td.event-type").should("contain", "click");
     cy.get("#event-9 td.event-user-data").should("contain", "document");
     cy.get("#event-10 td.event-type").should("contain", "click");
