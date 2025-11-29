@@ -25,7 +25,6 @@
 #include <context.h>
 #include <defaultatoms.h>
 #include <erl_nif_priv.h>
-// removing this gives a strange error...
 #include <esp32_sys.h>
 #include <globalcontext.h>
 #include <nifs.h>
