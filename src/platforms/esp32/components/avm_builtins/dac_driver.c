@@ -242,18 +242,18 @@ void atomvm_dac_init(GlobalContext *global)
 
 const struct Nif *atomvm_dac_get_nif(const char *nifname)
 {
-    TRACE("Locating nif %s ...", nifname);
+    TRACE("Locating nif %s ...\n", nifname);
     if (strcmp("esp_dac:oneshot_new_channel_p/1", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &oneshot_new_channel_p_nif;
     }
     if (strcmp("esp_dac:oneshot_output_voltage/2", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &oneshot_output_voltage_nif;
     }
 
     if (strcmp("esp_dac:oneshot_del_channel/1", nifname) == 0) {
-        TRACE("Resolved platform nif %s ...", nifname);
+        TRACE("Resolved platform nif %s ...\n", nifname);
         return &oneshot_del_channel_nif;
     }
     return NULL;
