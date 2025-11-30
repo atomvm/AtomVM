@@ -265,7 +265,7 @@ void test_basic_append_flush(void)
     term argv[3];
     argv[0] = term_from_int(10); // label count
     term stream = new_nif(ctx, 1, argv);
-    assert(term_is_binary(stream)); // Resource is a binary
+    assert(term_is_resource_reference(stream));
 
     // Append some data - root the stream during binary allocation
     uint8_t data[100];

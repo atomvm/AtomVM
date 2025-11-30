@@ -550,7 +550,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
                 if (monitor->monitor_type == CONTEXT_MONITOR_MONITORED_LOCAL) {
                     ret_size += CONS_SIZE;
                 } else if (monitor->monitor_type == CONTEXT_MONITOR_RESOURCE) {
-                    ret_size += CONS_SIZE + TERM_BOXED_RESOURCE_SIZE;
+                    ret_size += CONS_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
                 }
             }
             break;

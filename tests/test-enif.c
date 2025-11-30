@@ -112,8 +112,8 @@ void test_resource(void)
     *resource = 42;
 
     ERL_NIF_TERM resource_term = enif_make_resource(env, ptr);
-    assert(term_is_binary(resource_term));
-    assert(term_binary_size(resource_term) == 0);
+    assert(term_is_reference(resource_term));
+    assert(term_is_resource_reference(resource_term));
 
     void *gotten_ptr = NULL;
     int wrong_type = enif_get_resource(env, resource_term, NULL, &gotten_ptr);

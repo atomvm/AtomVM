@@ -349,7 +349,7 @@ static term nif_erlang_setnode_3(Context *ctx, int argc, term argv[])
     }
     synclist_unlock(&ctx->global->dist_connections);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term obj = term_from_resource(conn_obj, &ctx->heap);
@@ -705,7 +705,7 @@ static term dist_get_net_kernel_and_create_connection(struct DistConnection **co
 
 static void dist_net_kernel_send_connect(term net_kernel_proc, struct DistConnection *new_conn_obj, int node_atom_index, Context *ctx)
 {
-    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, heap)
+    BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_RESOURCE_SIZE, heap)
     term autoconnect_message = term_alloc_tuple(3, &heap);
     term_put_tuple_element(autoconnect_message, 0, CONNECT_ATOM);
     term_put_tuple_element(autoconnect_message, 1, term_from_atom_index(node_atom_index));

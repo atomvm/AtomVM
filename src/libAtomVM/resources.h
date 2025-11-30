@@ -54,6 +54,7 @@ struct ResourceType
     const char *name;
     GlobalContext *global;
     struct SyncList monitors;
+    struct SyncList serialized;
     ErlNifResourceDtor *dtor;
     ErlNifResourceStop *stop;
     ErlNifResourceDown *down;
@@ -68,6 +69,16 @@ struct ResourceMonitor
     struct RefcBinary *resource;
     uint64_t ref_ticks;
     int32_t process_id;
+};
+
+/**
+ * @brief A reference to a resource that was serialized
+ */
+struct ResourceSerializedMark
+{
+    struct ListHead resource_list_head;
+    uint64_t serialize_ref;
+    void *resource_obj;
 };
 
 /**
@@ -86,11 +97,11 @@ struct SelectEvent
     Message *message;
 };
 
-static inline void resource_type_destroy(struct ResourceType *resource_type)
-{
-    free((void *) resource_type->name);
-    free(resource_type);
-}
+/**
+ * @brief Destroy a resource type and free all associated structures
+ * @param resource_type the type to destroy
+ */
+void resource_type_destroy(struct ResourceType *resource_type);
 
 /**
  * @brief Send a notification that an event was selected
@@ -139,7 +150,7 @@ void select_event_count_and_destroy_closed(struct ListHead *select_events, size_
  */
 void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
 
-#define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
+#define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 
 /**
  * @brief Build a select event notification.
@@ -173,6 +184,31 @@ void resource_type_fire_monitor(struct ResourceType *resource_type, ErlNifEnv *e
  * @return a resource term or invalid if the resource is gone
  */
 term resource_monitor_to_resource(struct ResourceType *resource_type, uint64_t ref_ticks, Heap *heap);
+
+/**
+ * @brief Add a resource to the list of serialized resources
+ * @details we maintain a list of resources that were serialized
+ * to allow for safe unserialization
+ * @param resource resource to add to list of serialized resources
+ * @param resource_type resource type for this resource
+ * @return a unique reference to encode for unserialization
+ */
+uint64_t resource_serialize(void *rsrc_obj, struct ResourceType *resource_type);
+
+/**
+ * @brief Remove a resource from the list of serialized resources if it
+ * was there.
+ * @param resource resource to remove from the list of serialized resources
+ * @param resource_type resource type for this resource
+ */
+void resource_unmark_serialized(void *rsrc_obj, struct ResourceType *resource_type);
+
+/**
+ * @brief Unserialize a resource if it was serialized
+ * @param resource_type resource type for this resource
+ * @param serialize_ref reference to search in the list of serialized resources
+ */
+void *resource_unserialize(struct ResourceType *resource_type, uint64_t serialize_ref);
 
 #ifdef __cplusplus
 }

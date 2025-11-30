@@ -398,10 +398,16 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         ret += printed;
         return ret;
 
-    } else if (term_is_local_reference(t)) {
-        uint64_t ref_ticks = term_to_ref_ticks(t);
-
+    } else if (term_is_resource_reference(t)) {
         // Update also REF_AS_CSTRING_LEN when changing this format string
+        struct RefcBinary *refc_binary = term_resource_refc_binary_ptr(t);
+        uint64_t resource_type_ptr = (uintptr_t) refc_binary->resource_type;
+        uint64_t resource_ptr = (uintptr_t) refc_binary->data;
+        return fun->print(fun, "#Ref<0.%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", (uint32_t) (resource_type_ptr >> 32), (uint32_t) resource_type_ptr, (uint32_t) (resource_ptr >> 32), (uint32_t) resource_ptr);
+
+    } else if (term_is_local_reference(t)) {
+        // Update also REF_AS_CSTRING_LEN when changing this format string
+        uint64_t ref_ticks = term_to_ref_ticks(t);
         return fun->print(fun, "#Ref<0.%" PRIu32 ".%" PRIu32 ">", (uint32_t) (ref_ticks >> 32), (uint32_t) ref_ticks);
 
     } else if (term_is_external_reference(t)) {
@@ -667,13 +673,55 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
 
                     case TERM_TYPE_INDEX_REFERENCE: {
                         if (!term_is_external(t) && !term_is_external(other)) {
-                            int64_t t_ticks = term_to_ref_ticks(t);
-                            int64_t other_ticks = term_to_ref_ticks(other);
-                            if (t_ticks == other_ticks) {
+                            uint32_t len, other_len;
+                            if (term_is_resource_reference(t)) {
+                                len = 4;
+                            } else {
+                                len = 2;
+                            }
+                            if (term_is_resource_reference(other)) {
+                                other_len = 4;
+                            } else {
+                                other_len = 2;
+                            }
+                            if (len == other_len) {
+                                uint32_t data[len];
+                                uint32_t other_data[len];
+                                if (len == 2) {
+                                    int64_t t_ticks = term_to_ref_ticks(t);
+                                    data[0] = t_ticks >> 32;
+                                    data[1] = (uint32_t) t_ticks;
+                                    int64_t other_ticks = term_to_ref_ticks(other);
+                                    other_data[0] = other_ticks >> 32;
+                                    other_data[1] = (uint32_t) other_ticks;
+                                } else {
+                                    // len == 4
+                                    struct RefcBinary *refc = term_resource_refc_binary_ptr(t);
+                                    uint64_t resource_type = (uintptr_t) refc->resource_type;
+                                    uint64_t resource = (uintptr_t) refc->data;
+                                    data[0] = resource_type >> 32;
+                                    data[1] = (uint32_t) resource_type;
+                                    data[2] = resource >> 32;
+                                    data[3] = (uint32_t) resource;
+                                    refc = term_resource_refc_binary_ptr(other);
+                                    resource_type = (uintptr_t) refc->resource_type;
+                                    resource = (uintptr_t) refc->data;
+                                    other_data[0] = resource_type >> 32;
+                                    other_data[1] = (uint32_t) resource_type;
+                                    other_data[2] = resource >> 32;
+                                    other_data[3] = (uint32_t) resource;
+                                }
+                                // Comparison is done in reverse order
+                                for (int i = len - 1; i >= 0; i--) {
+                                    if (data[i] != other_data[i]) {
+                                        result = (data[i] > other_data[i]) ? TermGreaterThan : TermLessThan;
+                                        goto unequal;
+                                    }
+                                }
                                 CMP_POP_AND_CONTINUE();
                                 break;
                             } else {
-                                result = (t_ticks > other_ticks) ? TermGreaterThan : TermLessThan;
+                                result = (len > other_len) ? TermGreaterThan : TermLessThan;
                                 goto unequal;
                             }
                         } else {
@@ -683,27 +731,69 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                 uint32_t creation = term_is_external(t) ? term_get_external_node_creation(t) : 0;
                                 uint32_t other_creation = term_is_external(other) ? term_get_external_node_creation(other) : 0;
                                 if (creation == other_creation) {
-                                    uint32_t len = term_is_external(t) ? term_get_external_reference_len(t) : 2;
-                                    uint32_t other_len = term_is_external(other) ? term_get_external_reference_len(other) : 2;
+                                    uint32_t len, other_len;
+                                    if (term_is_external(t)) {
+                                        len = term_get_external_reference_len(t);
+                                    } else if (term_is_resource_reference(t)) {
+                                        len = 4;
+                                    } else {
+                                        len = 2;
+                                    }
+                                    if (term_is_external(other)) {
+                                        other_len = term_get_external_reference_len(other);
+                                    } else if (term_is_resource_reference(other)) {
+                                        other_len = 4;
+                                    } else {
+                                        other_len = 2;
+                                    }
                                     if (len == other_len) {
                                         const uint32_t *data;
                                         const uint32_t *other_data;
-                                        uint32_t local_data[2];
-                                        if (term_is_external(t)) {
-                                            data = term_get_external_reference_words(t);
+                                        if (len == 2) {
+                                            uint32_t local_data[2];
+                                            if (term_is_external(t)) {
+                                                data = term_get_external_reference_words(t);
+                                            } else {
+                                                int64_t ref_ticks = term_to_ref_ticks(t);
+                                                local_data[0] = ref_ticks >> 32;
+                                                local_data[1] = (uint32_t) ref_ticks;
+                                                data = local_data;
+                                            }
+                                            if (term_is_external(other)) {
+                                                other_data = term_get_external_reference_words(other);
+                                            } else {
+                                                int64_t ref_ticks = term_to_ref_ticks(other);
+                                                local_data[0] = ref_ticks >> 32;
+                                                local_data[1] = (uint32_t) ref_ticks;
+                                                other_data = local_data;
+                                            }
                                         } else {
-                                            uint64_t ref_ticks = term_to_ref_ticks(t);
-                                            local_data[0] = ref_ticks >> 32;
-                                            local_data[1] = (uint32_t) ref_ticks;
-                                            data = local_data;
-                                        }
-                                        if (term_is_external(other)) {
-                                            other_data = term_get_external_reference_words(other);
-                                        } else {
-                                            uint64_t ref_ticks = term_to_ref_ticks(other);
-                                            local_data[0] = ref_ticks >> 32;
-                                            local_data[1] = (uint32_t) ref_ticks;
-                                            other_data = local_data;
+                                            // len == 4 (one is a resource)
+                                            uint32_t local_data[4];
+                                            if (term_is_external(t)) {
+                                                data = term_get_external_reference_words(t);
+                                            } else {
+                                                struct RefcBinary *refc = term_resource_refc_binary_ptr(t);
+                                                uint64_t resource_type = (uintptr_t) refc->resource_type;
+                                                uint64_t resource = (uintptr_t) refc->data;
+                                                local_data[0] = resource_type >> 32;
+                                                local_data[1] = (uint32_t) resource_type;
+                                                local_data[2] = resource >> 32;
+                                                local_data[3] = (uint32_t) resource;
+                                                data = local_data;
+                                            }
+                                            if (term_is_external(other)) {
+                                                other_data = term_get_external_reference_words(other);
+                                            } else {
+                                                struct RefcBinary *refc = term_resource_refc_binary_ptr(other);
+                                                uint64_t resource_type = (uintptr_t) refc->resource_type;
+                                                uint64_t resource = (uintptr_t) refc->data;
+                                                local_data[0] = resource_type >> 32;
+                                                local_data[1] = (uint32_t) resource_type;
+                                                local_data[2] = resource >> 32;
+                                                local_data[3] = (uint32_t) resource;
+                                                other_data = local_data;
+                                            }
                                         }
                                         // Comparison is done in reverse order
                                         for (int i = len - 1; i >= 0; i--) {
@@ -711,9 +801,6 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                                 result = (data[i] > other_data[i]) ? TermGreaterThan : TermLessThan;
                                                 goto unequal;
                                             }
-                                        }
-                                        if (result != TermEquals) {
-                                            goto unequal;
                                         }
                                         CMP_POP_AND_CONTINUE();
                                         break;
@@ -1029,7 +1116,7 @@ term term_alloc_refc_binary(size_t size, bool is_const, Heap *heap, GlobalContex
         }
         boxed_value[3] = (term) refc;
         refc->ref_count = 1; // added to mso list, increment ref count
-        heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
+        heap->root->mso_list = term_list_init_prepend(boxed_value + REFC_BINARY_CONS_OFFSET, ret, heap->root->mso_list);
         synclist_append(&glb->refc_binaries, &refc->head);
     }
     return ret;
@@ -1167,4 +1254,35 @@ avm_float_t term_conv_to_float(term t)
     } else {
         UNREACHABLE();
     }
+}
+
+term term_from_resource_type_and_serialize_ref(uint64_t resource_type_ptr, uint64_t resource_serialize_key, Heap *heap, GlobalContext *glb)
+{
+#if UINTPTR_MAX == UINT32_MAX
+    if ((resource_type_ptr >> 32) == 0) {
+#endif
+        struct ResourceType *resource_type = NULL;
+        void *resource_ptr = NULL;
+        struct ListHead *item;
+        struct ListHead *resource_types = synclist_rdlock(&glb->resource_types);
+        LIST_FOR_EACH (item, resource_types) {
+            resource_type = GET_LIST_ENTRY(item, struct ResourceType, head);
+            if ((uint64_t) (uintptr_t) resource_type == resource_type_ptr) {
+                break;
+            }
+            resource_type = NULL;
+        }
+        synclist_unlock(&glb->resource_types);
+        if (resource_type) {
+            resource_ptr = resource_unserialize(resource_type, resource_serialize_key);
+            if (resource_ptr) {
+                return term_from_resource(resource_ptr, heap);
+            }
+        }
+#if UINTPTR_MAX == UINT32_MAX
+    }
+#endif
+    // Return a local ref as a stale resource
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(glb);
+    return term_from_ref_ticks(ref_ticks, heap);
 }

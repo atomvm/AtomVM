@@ -32,6 +32,7 @@
 #include "defaultatoms.h"
 #include "memory.h"
 #include "module.h"
+#include "resources.h"
 #include "term.h"
 #include "unicode.h"
 #include "utils.h"
@@ -488,7 +489,12 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             buf[0] = NEWER_REFERENCE_EXT;
         }
         size_t k = 1;
-        uint32_t len = 2;
+        uint32_t len;
+        if (term_is_resource_reference(t)) {
+            len = 4;
+        } else {
+            len = 2;
+        }
         if (!IS_NULL_PTR(buf)) {
             WRITE_16_UNALIGNED(buf + k, len);
         }
@@ -496,12 +502,25 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         term node_name = glb->node_name;
         uint32_t creation = node_name == NONODE_AT_NOHOST_ATOM ? 0 : glb->creation;
         k += serialize_term(IS_NULL_PTR(buf) ? NULL : buf + k, node_name, glb);
-        if (!IS_NULL_PTR(buf)) {
-            uint64_t ticks = term_to_ref_ticks(t);
-            WRITE_32_UNALIGNED(buf + k, creation);
-            WRITE_64_UNALIGNED(buf + k + 4, ticks);
+        if (term_is_resource_reference(t)) {
+            if (!IS_NULL_PTR(buf)) {
+                WRITE_32_UNALIGNED(buf + k, creation);
+                struct RefcBinary *refc_binary = term_resource_refc_binary_ptr(t);
+                struct ResourceType *resource_type = refc_binary->resource_type;
+                void *resource = refc_binary->data;
+                uint64_t serialize_ref = resource_serialize(resource, resource_type);
+                WRITE_64_UNALIGNED(buf + k + 4, ((uintptr_t) resource_type));
+                WRITE_64_UNALIGNED(buf + k + 12, ((uintptr_t) serialize_ref));
+            }
+            return k + 20;
+        } else {
+            if (!IS_NULL_PTR(buf)) {
+                uint64_t ticks = term_to_ref_ticks(t);
+                WRITE_32_UNALIGNED(buf + k, creation);
+                WRITE_64_UNALIGNED(buf + k + 4, ticks);
+            }
+            return k + 12;
         }
-        return k + 12;
     } else if (term_is_external_reference(t)) {
         if (!IS_NULL_PTR(buf)) {
             buf[0] = NEWER_REFERENCE_EXT;
@@ -882,6 +901,11 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 if (len == 2 && node == this_node && creation == this_creation) {
                     uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
                     return term_from_ref_ticks(ticks, heap);
+                } else if (len == 4 && node == this_node && creation == this_creation) {
+                    // This is a resource
+                    uint64_t resource_type_ptr = ((uint64_t) data[0]) << 32 | data[1];
+                    uint64_t resource_serialize_ref = ((uint64_t) data[2]) << 32 | data[3];
+                    return term_from_resource_type_and_serialize_ref(resource_type_ptr, resource_serialize_ref, heap, glb);
                 } else {
                     return term_make_external_reference(node, len, data, creation, heap);
                 }
@@ -1294,8 +1318,12 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
             }
             if (external_term_buf[3] == SMALL_ATOM_UTF8_EXT) {
                 // Check if it's non-distributed node, in which case it's always a local ref
-                if (len == 2 && external_term_buf[4] == strlen("nonode@nohost") && memcmp(external_term_buf + 5, "nonode@nohost", strlen("nonode@nohost")) == 0) {
-                    heap_size = REF_SIZE;
+                if (external_term_buf[4] == strlen("nonode@nohost") && memcmp(external_term_buf + 5, "nonode@nohost", strlen("nonode@nohost")) == 0) {
+                    if (len == 2) {
+                        heap_size = REF_SIZE;
+                    } else if (len == 4) {
+                        heap_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+                    }
                 }
                 // See above for pids
             } else if (UNLIKELY(external_term_buf[3] != ATOM_EXT)) {
