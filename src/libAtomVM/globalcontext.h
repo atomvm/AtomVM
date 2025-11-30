@@ -95,6 +95,7 @@ typedef enum run_result_t
     RUN_SUCCESS = 0,
     RUN_MEMORY_FAILURE = 1,
     RUN_RESULT_NOT_OK = 2,
+    RUN_NO_ENTRY_POINT = 3,
 } run_result_t;
 
 struct GlobalContext
@@ -530,9 +531,11 @@ Module *globalcontext_load_module_from_avm(GlobalContext *global, const char *mo
  * @param global the global context
  * @param start_module the start module
  * @param out_f file to print the result to, or NULL
+ * @param argc number of command-line arguments (0 for non-embedded mode)
+ * @param argv command-line arguments (NULL for non-embedded mode)
  * @returns RUN_SUCCESS or an error code
  */
-run_result_t globalcontext_run(GlobalContext *global, Module *start_module, FILE *out_f);
+run_result_t globalcontext_run(GlobalContext *global, Module *start_module, FILE *out_f, int argc, char **argv);
 
 #ifndef __cplusplus
 static inline uint64_t globalcontext_get_ref_ticks(GlobalContext *global)
