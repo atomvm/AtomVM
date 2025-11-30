@@ -1948,7 +1948,7 @@ static inline term term_make_external_port_number(term node, uint64_t number, ui
 /**
  * @brief Get the name of a node for a given external thing
  *
- * @param term external term
+ * @param t external term
  * @return the name of the node
  */
 static inline term term_get_external_node(term t)
@@ -1963,7 +1963,7 @@ static inline term term_get_external_node(term t)
 /**
  * @brief Get the creation for a given external thing
  *
- * @param term external term
+ * @param t external term
  * @return the serial of the external pid
  */
 static inline uint32_t term_get_external_node_creation(term t)
@@ -1978,7 +1978,7 @@ static inline uint32_t term_get_external_node_creation(term t)
 /**
  * @brief Get the process id of an external pid
  *
- * @param term external pid
+ * @param t external pid
  * @return the process id of the external pid
  */
 static inline uint32_t term_get_external_pid_process_id(term t)
@@ -1993,7 +1993,7 @@ static inline uint32_t term_get_external_pid_process_id(term t)
 /**
  * @brief Get the serial of an external pid
  *
- * @param term external term
+ * @param t external term
  * @return the serial of the external pid
  */
 static inline uint32_t term_get_external_pid_serial(term t)
@@ -2008,7 +2008,7 @@ static inline uint32_t term_get_external_pid_serial(term t)
 /**
  * @brief Get the port number of an external port
  *
- * @param term external port
+ * @param t external port
  * @return the port number of the external port
  */
 static inline uint64_t term_get_external_port_number(term t)
@@ -2064,7 +2064,7 @@ static inline term term_make_external_reference(term node, uint16_t len, uint32_
 /**
  * @brief Get the number of words of an external reference
  *
- * @param term external term
+ * @param t external term
  * @return the number of words of the external reference (from 1 to 5)
  */
 static inline uint32_t term_get_external_reference_len(term t)
@@ -2088,7 +2088,7 @@ static inline uint32_t term_get_external_reference_len(term t)
 /**
  * @brief Get the words of an external reference
  *
- * @param term external term
+ * @param t external term
  * @return a pointer to (len) words of the external reference
  */
 static inline const uint32_t *term_get_external_reference_words(term t)

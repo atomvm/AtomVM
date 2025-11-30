@@ -48,7 +48,7 @@ extern const struct Nif dist_ctrl_put_data_nif;
 struct DistConnection;
 
 /**
- * @doc Enqueue a message to be sent to a remote process.
+ * @brief Enqueue a message to be sent to a remote process.
  * This function may raise a badarg error following OTP if target is incorrect.
  * @param target external pid or a tuple {atom(), node()} to refer to a remote
  * registered process
@@ -60,8 +60,7 @@ struct DistConnection;
 term dist_send_message(term target, term payload, Context *ctx);
 
 /**
- * @doc Setup a monitor on a local process for a distributed process.
- * @end
+ * @brief Setup a monitor on a local process for a distributed process.
  * @param conn_obj object of the connection
  * @param from_pid remote pid setting up the monitor
  * @param target_proc atom (for registered process) or pid of the local
@@ -72,20 +71,19 @@ term dist_send_message(term target, term payload, Context *ctx);
 term dist_monitor(struct DistConnection *conn_obj, term from_pid, term target_proc, term monitor_ref, Context *ctx);
 
 /**
- * @doc Send a spawn reply signal to a node
- * @end
- * @param conn_obj object of the connection
+ * @brief Send a spawn reply signal to a node
  * @param req_id reference identifying the request
  * @param to_pid (remote) process id identifying the caller
  * @param link if a link was created
  * @param monitor if a monitor was created
  * @param result pid of the spawned process or atom for an error
- * @param ctx context for memory allocation
+ * @param connection object of the connection
+ * @param global context for memory allocation
  */
 void dist_spawn_reply(term req_id, term to_pid, bool link, bool monitor, term result, struct DistConnection *connection, GlobalContext *global);
 
 /**
- * @doc Send a link exit signal (PAYLOAD_EXIT)
+ * @brief Send a link exit signal (PAYLOAD_EXIT)
  * @param monitor structure with node, process_id, serial and creation
  * @param reason reason to send as the payload
  * @param ctx process that is exiting.
@@ -93,7 +91,7 @@ void dist_spawn_reply(term req_id, term to_pid, bool link, bool monitor, term re
 void dist_send_payload_exit(struct LinkRemoteMonitor *monitor, term reason, Context *ctx);
 
 /**
- * @doc Send a link signal (LINK)
+ * @brief Send a link signal (LINK)
  * @param from_pid the pid linking to
  * @param to_pid the (remote) pid to link to
  * @param ctx context for memory allocation
@@ -103,7 +101,7 @@ void dist_send_payload_exit(struct LinkRemoteMonitor *monitor, term reason, Cont
 term dist_send_link(term from_pid, term to_pid, Context *ctx);
 
 /**
- * @doc Send an unlink id signal (UNLINK_ID), silently do nothing if node is
+ * @brief Send an unlink id signal (UNLINK_ID), silently do nothing if node is
  * not connected
  * @param unlink_id unique id of the unlink operation
  * @param from_pid the pid linking to
@@ -113,7 +111,7 @@ term dist_send_link(term from_pid, term to_pid, Context *ctx);
 void dist_send_unlink_id(uint64_t unlink_id, term from_pid, term to_pid, Context *ctx);
 
 /**
- * @doc Send an unlink id ack signal (UNLINK_ID_ACK), silently do nothing if node is
+ * @brief Send an unlink id ack signal (UNLINK_ID_ACK), silently do nothing if node is
  * not connected
  * @param unlink_id unique id of the unlink operation
  * @param from_pid the pid linking to

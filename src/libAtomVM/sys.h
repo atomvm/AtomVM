@@ -244,7 +244,7 @@ uint64_t sys_monotonic_time_u64_to_ms(uint64_t t);
  * and returns a pointer to a Module struct. This function is called if loading
  * from avm packs failed and may return NULL if there is no support for files.
  * @param global the global context.
- * @param module_name the name of the BEAM file (e.g. "mymodule.beam").
+ * @param path to the named BEAM file (e.g. "mymodule.beam").
  */
 Module *sys_load_module_from_file(GlobalContext *global, const char *path);
 
