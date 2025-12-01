@@ -96,7 +96,7 @@ static int start(void)
         return EXIT_FAILURE;
     }
 
-    run_result_t ret_value = globalcontext_run(global, main_module, stdout);
+    run_result_t ret_value = globalcontext_run(global, main_module, stdout, 0, NULL);
 
     int status;
     if (ret_value == RUN_SUCCESS) {

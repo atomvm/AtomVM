@@ -39,7 +39,36 @@
 %% @doc Entry point.
 %% @end
 %%-----------------------------------------------------------------------------
--spec boot([binary() | atom()]) -> any().
+-spec boot([binary() | atom() | string()]) -> any().
+boot([<<"-s">>, escript, <<"--">>, _Filename | Args]) ->
+    % Escript mode: check for start beam and main/1 function before starting kernel
+    case atomvm:get_start_beam(escript) of
+        {ok, ModuleNameBinary} ->
+            % Remove .beam suffix if present (check last 5 bytes)
+            Size = byte_size(ModuleNameBinary),
+            ModuleName =
+                if
+                    Size > 5 ->
+                        case binary:part(ModuleNameBinary, Size - 5, 5) of
+                            <<".beam">> -> binary:part(ModuleNameBinary, 0, Size - 5);
+                            _ -> ModuleNameBinary
+                        end;
+                    true ->
+                        ModuleNameBinary
+                end,
+            Module = binary_to_atom(ModuleName, utf8),
+            case erlang:function_exported(Module, main, 1) of
+                true ->
+                    {ok, _KernelPid} = kernel:start(boot, []),
+                    Module:main(Args);
+                false ->
+                    io:format("Function ~s:main/1 is not exported~n", [Module]),
+                    error
+            end;
+        _ ->
+            io:format("start_beam not found~n"),
+            error
+    end;
 boot([<<"-s">>, StartupModule]) when is_atom(StartupModule) ->
     % Until we have boot scripts, we just start kernel application.
     {ok, _KernelPid} = kernel:start(boot, []),

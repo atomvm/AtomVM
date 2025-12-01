@@ -71,6 +71,34 @@ Return value: ok
 
 For instructions about how to install AtomVM on the `generic_unix` platform, see the [Getting Started Guide](./getting-started-guide.md#getting-started-on-the-generic-unix-platform)
 
+#### Building standalone binaries (macOS and Linux)
+
+Using [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin), it is possible to generate a standalone binary where your application is bundled with AtomVM virtual machine. The binary can be copied to another host and would work without any specific installation. Please note that AtomVM on generic unix currently depends on zlib and mbedtls as shared libraries.
+
+To proceed, you need to define the main module that should export a `main/1` function. This function is called with parameters like regular Erlang `escript` applications. This is done by adding these two lines to your `rebar.config` file:
+
+```
+{plugins, [atomvm_rebar3_plugin]}.
+{atomvm_rebar3_plugin, [{packbeam, [{start, main_module}]}]}.
+```
+
+where `main_module` is the name of the module that exports `main/1`. Alternatively, `main_module` can be defined with `escript_name` or `escript_main_app` options.
+
+Then you can run:
+```shell
+$ rebar3 atomvm escriptize
+...
+===> Created packed AVM: ... main_module_packed.avm with start module main_module
+===> Created standalone executable: ... main_module/_build/default/bin/main_module
+```
+
+It is possible to build this standalone binary with a specific build of AtomVM, for example including a particular `nif`.
+
+```{seealso}
+See the [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) page for more detailed instructions
+about how to use the `escriptize` target.
+```
+
 ### Flashing your application with `rebar3`
 
 The [`atomvm_rebar3_plugin`](https://atomvm.github.io/atomvm_rebar3_plugin) supports flash targets for various device types.  These targets are described in more detail below.
