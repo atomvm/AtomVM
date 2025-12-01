@@ -97,19 +97,14 @@ ensure_epmd("ATOM") ->
 
 ensure_epmd_connect_loop(0) ->
     io:format("Coult not connect to epmd\n"),
-    exit(timeout);
+    {error, timeout};
 ensure_epmd_connect_loop(N) ->
-    {ok, Socket} = socket:open(inet, stream, tcp),
-    Result = socket:connect(Socket, #{addr => {127, 0, 0, 1}, port => ?EPMD_PORT, family => inet}),
-    socket:close(Socket),
-    case Result of
-        ok ->
+    case erl_epmd:names("127.0.0.1") of
+        {ok, _} ->
             ok;
-        {error, econnrefused} ->
-            timer:sleep(100),
-            ensure_epmd_connect_loop(N - 1);
-        {error, closed} ->
-            timer:sleep(100),
+        {error, Reason} ->
+            io:format("Could not connect to epmd -- error = ~p, retrying (N = ~p)\n", [Reason, N]),
+            timer:sleep(500),
             ensure_epmd_connect_loop(N - 1)
     end.
 
@@ -153,12 +148,22 @@ start_epmd() ->
     Platform = erlang:system_info(machine),
     case has_epmd(Platform) of
         true ->
-            ok = ensure_epmd(Platform),
-            % on CI, epmd may be slow to accept connections
-            ensure_epmd_connect_loop(50),
-            ok;
+            start_epmd(Platform, 5);
         false ->
             {error, not_found}
+    end.
+
+start_epmd(_Platform, 0) ->
+    exit(timeout);
+start_epmd(Platform, N) ->
+    ok = ensure_epmd(Platform),
+    % on CI, epmd may be slow to accept connections
+    case ensure_epmd_connect_loop(5) of
+        ok ->
+            ok;
+        {error, timeout} ->
+            stop_epmd(Platform),
+            start_epmd(Platform, N - 1)
     end.
 
 stop_epmd() ->
