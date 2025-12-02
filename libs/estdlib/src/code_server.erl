@@ -201,13 +201,14 @@ load(Module) ->
     end.
 
 %% @doc Estimate the required native code for a given bytecode size.
-%% Currently, the only live stream backend is mmap which needs this estimate
-%% and should not be passed a value too large to not slow down valgrind too
-%% much during tests. A factor of 20 is more than enough, the ratio is closer
-%% to 9 on x86-64.
-%% This will need some rework once we start using flash on MCUs.
+%% Currently, the only live stream backend that needs estimate is mmap
+%% and it should not be passed a value too large to not slow down valgrind too
+%% much during tests. A factor of 32 is more than enough, the largest observed
+%% ration is 21 for aarch64 and Elixir code. Also apply a minimum of 128 kb
+%% which shouldn't affect valgrind too much.
+%% jit_stream_flash and jit_stream_binary ignore the size parameter.
 %% @return size in bytes
 %% @param Size bytecode size
 -spec jit_mmap_size(pos_integer()) -> pos_integer().
 jit_mmap_size(Size) ->
-    Size * 20.
+    max(Size * 32, 128 * 1024).
