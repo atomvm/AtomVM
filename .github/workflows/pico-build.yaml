@@ -41,11 +41,29 @@ jobs:
     strategy:
       matrix:
         board: ["pico", "pico_w", "pico2"]
-        language: ["cpp"]
+        platform: [""]
+        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
+        include:
+          - board: "pico2"
+            platform: "-DPICO_PLATFORM=rp2350-riscv"
+            jit: ""
+
+          - board: "pico2"
+            platform: "-DPICO_PLATFORM=rp2350-riscv"
+            jit: "-DAVM_DISABLE_JIT=OFF"
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28.1"
+        rebar3-version: "3.24.0"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "apt update"
       run: sudo apt update
@@ -54,8 +72,17 @@ jobs:
       run: |
         sudo apt install -y \
             cmake doxygen gperf ninja-build gcc-arm-none-eabi \
-            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib \
-            erlang-base erlang-dev erlang-dialyzer erlang-eunit rebar3
+            libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib
+
+    - name: Install riscv32 toolchain
+      if: matrix.platform == '-DPICO_PLATFORM=rp2350-riscv'
+      run: |
+        sudo mkdir -p /opt/riscv32-toolchain
+        cd /opt/riscv32-toolchain
+        sudo wget -q https://github.com/raspberrypi/pico-sdk-tools/releases/download/v2.2.0-3/riscv-toolchain-15-x86_64-lin.tar.gz
+        sudo tar xzf riscv-toolchain-15-x86_64-lin.tar.gz
+        sudo rm riscv-toolchain-15-x86_64-lin.tar.gz
+        echo "/opt/riscv32-toolchain/bin" >> $GITHUB_PATH
 
     - name: "Git config safe.directory for codeql"
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
@@ -63,7 +90,7 @@ jobs:
     - name: "Initialize CodeQL"
       uses: github/codeql-action/init@v3
       with:
-        languages: ${{matrix.language}}
+        languages: "cpp"
         build-mode: manual
         queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
 
@@ -74,7 +101,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }}
+        cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }} ${{ matrix.platform }} ${{ matrix.jit }}
         ninja
 
     - name: "Perform CodeQL Analysis"
@@ -97,7 +124,7 @@ jobs:
         mkdir build.nosmp
         cd build.nosmp
         # TODO: fix all warnings and enable -DAVM_WARNINGS_ARE_ERRORS=ON
-        cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }} -DAVM_DISABLE_SMP=1
+        cmake .. -G Ninja -DPICO_BOARD=${{ matrix.board }} ${{ matrix.jit }} -DAVM_DISABLE_SMP=1
         cmake --build . --target=rp2_tests
 
     - name: Run tests with rp2040js
@@ -112,7 +139,7 @@ jobs:
         npx tsx run-tests.ts ../build.nosmp/tests/rp2_tests.uf2 ../build.nosmp/tests/test_erl_sources/rp2_test_modules.uf2
 
     - name: Build atomvmlib.uf2
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w'
+      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
         set -euo pipefail
@@ -122,7 +149,7 @@ jobs:
         make atomvmlib-${{ matrix.board }}.uf2
 
     - name: Rename AtomVM and write sha256sum
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
         pushd src/platforms/rp2/build
@@ -137,7 +164,7 @@ jobs:
         popd
 
     - name: Rename atomvmlib and write sha256sum
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w'
+      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
         pushd build/libs
@@ -148,7 +175,7 @@ jobs:
 
     - name: Release (Pico & Pico2)
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w'
+      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true
         fail_on_unmatched_files: true
@@ -160,7 +187,7 @@ jobs:
 
     - name: Release (PicoW)
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board == 'pico_w'
+      if: startsWith(github.ref, 'refs/tags/') && matrix.board == 'pico_w' && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true
         fail_on_unmatched_files: true

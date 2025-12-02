@@ -31,7 +31,12 @@ if (HAVE_PLATFORM_ATOMIC_H)
     target_include_directories(libAtomVM PUBLIC ../avm_sys/)
 endif()
 
-target_link_libraries(${COMPONENT_LIB}
-    INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
+if (AVM_DISABLE_JIT)
+    target_link_libraries(${COMPONENT_LIB}
+        INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init")
+else()
+    target_link_libraries(${COMPONENT_LIB}
+        INTERFACE libAtomVM "-u platform_nifs_get_nif" "-u platform_defaultatoms_init" "-u jit_stream_entry_point" "-u sys_map_native_code")
+endif()
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
