@@ -25,7 +25,8 @@
 -export([
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
-    sta_rssi/0
+    sta_rssi/0,
+    scan/0
 ]).
 -export([start/1, start_link/1, stop/0]).
 -export([
@@ -158,7 +159,8 @@
     port :: port(),
     ref :: reference(),
     sta_ip_info :: ip_info(),
-    mdns :: pid() | undefined
+    mdns :: pid() | undefined,
+    scan_from :: {pid(), term()} | undefined
 }).
 
 %%-----------------------------------------------------------------------------
@@ -322,7 +324,7 @@ sta_rssi() ->
 init(Config) ->
     Port = get_port(),
     Ref = make_ref(),
-    {ok, #state{config = Config, port = Port, ref = Ref}, {continue, start_port}}.
+    {ok, #state{config = Config, port = Port, ref = Ref, scan_from = undefined}, {continue, start_port}}.
 
 handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = State) ->
     Port ! {self(), Ref, {start, Config}},
@@ -334,6 +336,21 @@ handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = St
     end.
 
 %% @hidden
+handle_call(scan, From, #state{port = Port, ref = Ref} = State) ->
+    io:format("DEBUG: handle_call scan, From=~p~n", [From]),
+    Port ! {self(), Ref, scan},
+    receive
+        {Ref, ok} ->
+            io:format("DEBUG: Got ok from port, storing caller~n"),
+            %% Scan started successfully, store the caller and wait for results in handle_info
+            {noreply, State#state{scan_from = From}};
+        {Ref, Error} ->
+            io:format("network:scan received initial error: ~p~n", [Error]),
+            {reply, Error, State}
+    after 5000 ->
+        io:format("ERROR: Timeout waiting for scan start~n"),
+        {reply, {error, timeout}, State}
+    end;
 handle_call(_Msg, _From, State) ->
     {reply, {error, unknown_message}, State}.
 
@@ -373,6 +390,33 @@ handle_info(
 handle_info({Ref, {sntp_sync, TimeVal}} = _Msg, #state{ref = Ref, config = Config} = State) ->
     maybe_sntp_sync_callback(Config, TimeVal),
     {noreply, State};
+handle_info({Ref, {scan_results, Results}} = _Msg, #state{ref = Ref, scan_from = From} = State) ->
+    io:format("DEBUG: Received scan_results message. From=~p, Results type=~p~n", [From, is_list(Results)]),
+    try
+        case From of
+            undefined ->
+                io:format("Received scan_results but no caller waiting~n"),
+                {noreply, State};
+            _ ->
+                io:format("network:scan replying to caller with ~p results~n", [length(Results)]),
+                Reply = {ok, Results},
+                io:format("DEBUG: About to call gen_server:reply with From=~p, Reply type=tuple~n", [From]),
+                gen_server:reply(From, Reply),
+                io:format("DEBUG: gen_server:reply completed successfully~n"),
+                {noreply, State#state{scan_from = undefined}}
+        end
+    catch
+        Class:Error:Stacktrace ->
+            io:format("ERROR in handle_info scan_results: ~p:~p~nStacktrace: ~p~n", [Class, Error, Stacktrace]),
+            case From of
+                undefined -> ok;
+                _ -> 
+                    try gen_server:reply(From, {error, internal_error})
+                    catch _:_ -> io:format("Failed to send error reply~n")
+                    end
+            end,
+            {noreply, State#state{scan_from = undefined}}
+    end;
 handle_info(Msg, State) ->
     io:format("Received spurious message ~p~n", [Msg]),
     {noreply, State}.
@@ -397,6 +441,10 @@ wait_for_port_close(PortMonitor, Port) ->
     after 1000 ->
         {error, timeout}
     end.
+
+-spec scan() -> {ok, list()} | {error, Reason :: term()}.
+scan() ->
+    gen_server:call(?SERVER, scan, infinity).
 
 %%
 %% Internal operations
