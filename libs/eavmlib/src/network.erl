@@ -337,11 +337,9 @@ handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = St
 
 %% @hidden
 handle_call(scan, From, #state{port = Port, ref = Ref} = State) ->
-    io:format("DEBUG: handle_call scan, From=~p~n", [From]),
     Port ! {self(), Ref, scan},
     receive
         {Ref, ok} ->
-            io:format("DEBUG: Got ok from port, storing caller~n"),
             %% Scan started successfully, store the caller and wait for results in handle_info
             {noreply, State#state{scan_from = From}};
         {Ref, Error} ->
@@ -391,18 +389,14 @@ handle_info({Ref, {sntp_sync, TimeVal}} = _Msg, #state{ref = Ref, config = Confi
     maybe_sntp_sync_callback(Config, TimeVal),
     {noreply, State};
 handle_info({Ref, {scan_results, Results}} = _Msg, #state{ref = Ref, scan_from = From} = State) ->
-    io:format("DEBUG: Received scan_results message. From=~p, Results type=~p~n", [From, is_list(Results)]),
     try
         case From of
             undefined ->
                 io:format("Received scan_results but no caller waiting~n"),
                 {noreply, State};
             _ ->
-                io:format("network:scan replying to caller with ~p results~n", [length(Results)]),
                 Reply = {ok, Results},
-                io:format("DEBUG: About to call gen_server:reply with From=~p, Reply type=tuple~n", [From]),
                 gen_server:reply(From, Reply),
-                io:format("DEBUG: gen_server:reply completed successfully~n"),
                 {noreply, State#state{scan_from = undefined}}
         end
     catch
