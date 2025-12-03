@@ -167,6 +167,7 @@ struct GlobalContext
 
     term ATOMIC node_name;
     uint32_t ATOMIC creation;
+    ErlNifResourceType *resource_binary_resource_type;
     ErlNifResourceType *dist_connection_resource_type;
     struct SyncList dist_connections;
 
