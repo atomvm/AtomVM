@@ -204,7 +204,7 @@ load(Module) ->
 %% Currently, the only live stream backend that needs estimate is mmap
 %% and it should not be passed a value too large to not slow down valgrind too
 %% much during tests. A factor of 32 is more than enough, the largest observed
-%% ration is 21 for aarch64 and Elixir code. Also apply a minimum of 128 kb
+%% ratio is 21 for aarch64 and Elixir code. Also apply a minimum of 128 kb
 %% which shouldn't affect valgrind too much.
 %% jit_stream_flash and jit_stream_binary ignore the size parameter.
 %% @return size in bytes
