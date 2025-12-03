@@ -24,6 +24,7 @@ include(BuildElixir)
 
 pack_runnable(Blink Blink estdlib eavmlib exavmlib)
 pack_runnable(Ledc_x4 Ledc_x4 estdlib eavmlib exavmlib)
+pack_runnable(WifiScan WifiScan estdlib eavmlib exavmlib)
 if(NOT (AVM_DISABLE_FP))
     pack_runnable(SHT31 SHT31 estdlib eavmlib exavmlib)
 endif()

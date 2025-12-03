@@ -80,6 +80,7 @@ static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_
 static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
 static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
 static const char *const network_down_atom = ATOM_STR("\x0C", "network_down");
+static const char *const scan_results_atom = ATOM_STR("\xC", "scan_results");
 
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
@@ -95,13 +96,15 @@ enum network_cmd
     // TODO add support for scan, ifconfig
     NetworkStartCmd,
     NetworkRssiCmd,
-    NetworkStopCmd
+    NetworkStopCmd,
+    NetworkScanCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
     { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
     { ATOM_STR("\x4", "stop"), NetworkStopCmd },
+    { ATOM_STR("\x4", "scan"), NetworkScanCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -257,6 +260,87 @@ static void send_sntp_sync(struct ClientData *data, struct timeval *tv)
     END_WITH_STACK_HEAP(heap, data->global);
 }
 
+static void send_scan_results(struct ClientData *data)
+{
+    uint16_t ap_count = 0;
+    esp_wifi_scan_get_ap_num(&ap_count);
+    ESP_LOGI(TAG, "Scan found %d APs", ap_count);
+
+    if (ap_count == 0) {
+        // Send empty list
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2), heap);
+        {
+            term reply_tuple = term_alloc_tuple(2, &heap);
+            term_put_tuple_element(reply_tuple, 0, make_atom(data->global, scan_results_atom));
+            term_put_tuple_element(reply_tuple, 1, term_nil());
+            send_term(&heap, data, reply_tuple);
+        }
+        END_WITH_STACK_HEAP(heap, data->global);
+        return;
+    }
+
+    wifi_ap_record_t *ap_list = (wifi_ap_record_t *)malloc(sizeof(wifi_ap_record_t) * ap_count);
+    if (IS_NULL_PTR(ap_list)) {
+        ESP_LOGE(TAG, "Failed to allocate memory for scan results");
+        return;
+    }
+    
+    // Get the actual records. ap_count might be updated if fewer records are returned.
+    ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&ap_count, ap_list));
+    ESP_LOGI(TAG, "Processing %d AP records", ap_count);
+
+    size_t heap_size = PORT_REPLY_SIZE + TUPLE_SIZE(2);
+    for (int i = 0; i < ap_count; i++) {
+        heap_size += CONS_SIZE;
+        heap_size += TUPLE_SIZE(5);
+        // Ensure we don't read past 32 bytes for SSID
+        size_t ssid_len = strnlen((char *)ap_list[i].ssid, 32);
+        heap_size += TERM_BINARY_HEAP_SIZE(ssid_len);
+        heap_size += TERM_BINARY_HEAP_SIZE(6);
+    }
+
+    ESP_LOGI(TAG, "Allocating heap size: %d", heap_size);
+
+    // Add some padding to be safe
+    heap_size += 64;
+
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate heap space for scan results");
+        free(ap_list);
+        return;
+    }
+
+    term list = term_nil();
+    for (int i = ap_count - 1; i >= 0; i--) {
+        size_t ssid_len = strnlen((char *)ap_list[i].ssid, 32);
+        term ssid_term = term_from_literal_binary(ap_list[i].ssid, ssid_len, &heap, data->global);
+        term rssi_term = term_from_int(ap_list[i].rssi);
+        term channel_term = term_from_int(ap_list[i].primary);
+        term authmode_term = term_from_int(ap_list[i].authmode);
+        term bssid_term = term_from_literal_binary(ap_list[i].bssid, 6, &heap, data->global);
+
+        term tuple = term_alloc_tuple(5, &heap);
+        term_put_tuple_element(tuple, 0, ssid_term);
+        term_put_tuple_element(tuple, 1, rssi_term);
+        term_put_tuple_element(tuple, 2, channel_term);
+        term_put_tuple_element(tuple, 3, authmode_term);
+        term_put_tuple_element(tuple, 4, bssid_term);
+
+        list = term_list_prepend(tuple, list, &heap);
+    }
+    free(ap_list);
+
+    term reply_tuple = term_alloc_tuple(2, &heap);
+    term_put_tuple_element(reply_tuple, 0, make_atom(data->global, scan_results_atom));
+    term_put_tuple_element(reply_tuple, 1, list);
+
+    send_term(&heap, data, reply_tuple);
+    ESP_LOGI(TAG, "Scan results sent");
+
+    memory_destroy_heap(&heap, data->global);
+}
+
 #define UNLIKELY_NOT_ESP_OK(E) UNLIKELY((E) != ESP_OK)
 
 //
@@ -321,6 +405,12 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             case WIFI_EVENT_STA_BEACON_TIMEOUT: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_BEACON_TIMEOUT received. Maybe poor signal, or network congestion?");
                 send_sta_beacon_timeout(data);
+                break;
+            }
+
+            case WIFI_EVENT_SCAN_DONE: {
+                ESP_LOGI(TAG, "WIFI_EVENT_SCAN_DONE received.");
+                send_scan_results(data);
                 break;
             }
 
@@ -879,6 +969,37 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     port_send_reply(ctx, pid, ref, reply);
 }
 
+static void scan_network(Context *ctx, term pid, term ref)
+{
+    wifi_mode_t mode;
+    esp_err_t err = esp_wifi_get_mode(&mode);
+    if (err != ESP_OK) {
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true
+    };
+    err = esp_wifi_scan_start(&scan_config, false);
+    if (err != ESP_OK) {
+        term error = port_create_error_tuple(ctx, term_from_int(err));
+        port_send_reply(ctx, pid, ref, error);
+        return;
+    }
+
+    size_t heap_size = PORT_REPLY_SIZE;
+    if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
+        ESP_LOGE(TAG, "Unable to allocate heap space for scan_network reply");
+        return;
+    }
+    port_send_reply(ctx, pid, ref, OK_ATOM);
+}
+
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     bool cmd_terminate = false;
@@ -913,6 +1034,9 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
                 break;
             case NetworkRssiCmd:
                 get_sta_rssi(ctx, pid, ref);
+                break;
+            case NetworkScanCmd:
+                scan_network(ctx, pid, ref);
                 break;
             case NetworkStopCmd:
                 cmd_terminate = true;
