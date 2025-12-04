@@ -292,6 +292,42 @@ $
 
 This will again give you 20 seconds to establish a serial monitor connection.  For information about changing this timeout, or locking down the device so that software resets no longer work (requiring that the device be power cycled and the `BOOTSEL` button help when powering on to flash) consult the [rp2040 section](./build-instructions.md#building-for-raspberry-pi-rp2) of the [Build Instructions](./build-instructions.md).
 
+```{hint}
+When upgrading to OTP-28 you may encounter an error that begins like the following:
+
+    ===> An error occurred in the packbeam task.  Class=error Error=data_error Stacktrace=[{zlib,
+                                                                                            inflate_nif,
+    ...
+
+This is due to using cached compiled beams from a previous release, which are incompatible with a
+chang in the beam file format that the OTP team made in OTP-28 to accommodate AtomVM. ;-) We need
+uncompressed literals in our beam files, so they can run on microcontrollers without the need for
+heavy deflation libraries and extra cpu cycles.
+
+This could potentially happen with any OTP major version update, if the OTP team makes changes to
+the beam file format. The beam file format has no formal documentation and should be expected to
+change again in the future.
+
+You have two choices about how to work around this error. The simplest, especially if you plan on
+migrating all of your work to OTP-28 is to simply delete the rebar3 cache:
+
+    $ rm -rf ~/.cache/rebar3
+
+The second option, which may be preferable if you use asdf or mise to switch between OTP releases,
+is to use the `REBAR_CACHE_DIR` environment variable to use a different cache directory:
+
+    $ mkdir ~/.cache/rebar3_otp-28
+    $ REBAR_CACHE_DIR="~/.cache/rebar3_otp-28" rebar3 compile
+
+It may be convenient to export this variable for a session so it doesn't need to be typed for each use of rebar3:
+
+    export REBAR_CACHE_DIR="~/.cache/rebar3_otp-28"
+
+... or create an alias for the duration of your terminal session:
+
+    $ alias rebar3="REBAR_CACHE_DIR="~/.cache/rebar3_otp-28" rebar3"
+```
+
 ## `ExAtomVM`
 
 The [`ExAtomVM`](https://github.com/atomvm/ExAtomVM) tool is a [mix](https://elixir-lang.org/getting-started/mix-otp/introduction-to-mix.html) plugin that can be used to create and flash [Elixir](https://elixir-lang.org) applications that run over AtomVM.  Using this plugin greatly simplifies the process of building Elixir applications that run over AtomVM, and is strongly encouraged for new users.
