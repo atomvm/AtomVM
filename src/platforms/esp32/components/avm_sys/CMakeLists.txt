@@ -33,9 +33,11 @@ set(AVM_SYS_COMPONENT_SRCS
     "../../../../libAtomVM/portnifloader.c"
 )
 
-if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
-    set(ADDITIONAL_COMPONENTS "esp_partition")
-    # available starting from v4.4
+if (IDF_VERSION_MAJOR GREATER_EQUAL 6)
+    set(ADDITIONAL_COMPONENTS "esp_partition" "esp_driver_ledc" "esp_driver_uart")
+    set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support")
+elseif (IDF_VERSION_MAJOR GREATER_EQUAL 5 AND IDF_VERSION_MAJOR LESS 6)
+    set(ADDITIONAL_COMPONENTS "newlib" "esp_partition")
     set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support")
 else()
     set(ADDITIONAL_COMPONENTS "")
@@ -45,7 +47,7 @@ endif()
 idf_component_register(
     SRCS ${AVM_SYS_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
-    REQUIRES "spi_flash" "soc" "newlib" "pthread" "vfs" "mbedtls" ${ADDITIONAL_COMPONENTS}
+    REQUIRES "spi_flash" "soc" "pthread" "vfs" "mbedtls" ${ADDITIONAL_COMPONENTS}
     PRIV_REQUIRES "libatomvm" "esp_timer" ${ADDITIONAL_PRIV_REQUIRES}
 )
 
@@ -54,8 +56,15 @@ target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
 idf_component_get_property(soc_dir soc COMPONENT_DIR)
 idf_component_get_property(soc_include_dirs soc INCLUDE_DIRS)
 idf_build_get_property(idf_target IDF_TARGET)
+
+if (IDF_VERSION_MAJOR LESS 6)
 idf_component_get_property(newlib_dir newlib COMPONENT_DIR)
 idf_component_get_property(newlib_include_dirs newlib INCLUDE_DIRS)
+else()
+idf_component_get_property(newlib_dir esp_libc COMPONENT_DIR)
+idf_component_get_property(newlib_include_dirs esp_libc INCLUDE_DIRS)
+endif()
+
 idf_component_get_property(pthread_dir pthread COMPONENT_DIR)
 idf_component_get_property(pthread_include_dirs pthread INCLUDE_DIRS)
 idf_component_get_property(pthread_srcs pthread SRCS)
