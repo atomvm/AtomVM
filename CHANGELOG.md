@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `proc_lib`
 - Added gen_server support for timeout tuples in callback return actions introduced in OTP-28.
 - Added `sys`
+- Added support for resource managed binaries (`enif_make_resource_binary`)
 
 ### Changed
 
@@ -81,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `binary_to_integer/1` no longer accepts binaries such as `<<"0xFF">>` or `<<"  123">>`
 - `binary_to_integer` and `list_to_integer` do not raise anymore `overflow` error, they raise
 instead `badarg`.
+- Resources are now references instead of empty binaries.
 
 ### Fixed
 
@@ -95,6 +97,7 @@ instead `badarg`.
 - Added missing support for supervisor `one_for_all` strategy.
 - Supervisor now honors period and intensity options.
 - Fix supervisor crash if a `one_for_one` child fails to restart.
+- Fix collision in references created with `make_ref/0` on 32 bits platforms.
 
 ## [0.6.7] - Unreleased
 
