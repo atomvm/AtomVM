@@ -12,4 +12,5 @@ nvs,      data, nvs,       0x9000,     0x6000,
 phy_init, data, phy,       0xf000,     0x1000,
 factory,  app,  factory,  0x10000,   0x2C0000,
 lib.avm,  data, phy,     0x2D0000,    0x40000,
-main.avm, data, phy,     0x310000,    0x40000
+main.avm, data, phy,     0x310000,    0x40000,
+data,     data, phy,     0x350000,    0x10000
