@@ -172,6 +172,13 @@ enum ContextMonitorType
     CONTEXT_MONITOR_RESOURCE,
     CONTEXT_MONITOR_LINK_REMOTE,
     CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME,
+    CONTEXT_MONITOR_ALIAS,
+};
+
+enum ContextMonitorAliasType
+{
+    CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS,
+    CONTEXT_MONITOR_ALIAS_DEMONITOR,
 };
 
 #define UNLINK_ID_LINK_ACTIVE 0x0
@@ -205,6 +212,13 @@ struct MonitorLocalRegisteredNameMonitor
     uint64_t ref_ticks;
     int32_t monitor_process_id;
     term monitor_name;
+};
+
+struct MonitorAlias
+{
+    struct Monitor monitor;
+    uint64_t ref_ticks;
+    enum ContextMonitorAliasType alias_type;
 };
 
 // The other half is called ResourceMonitor and is a linked list of resources
@@ -512,6 +526,8 @@ struct Monitor *monitor_link_new(term link_pid);
  */
 struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring);
 
+struct Monitor *monitor_alias_new(uint64_t ref_ticks, enum ContextMonitorAliasType alias_type);
+
 /**
  * @brief Create a monitor on a process by registered name.
  *
@@ -576,6 +592,9 @@ void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id);
  * @param ref_ticks reference of the monitor to remove
  */
 void context_demonitor(Context *ctx, uint64_t ref_ticks);
+
+struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks);
+bool context_unalias(Context *ctx, uint64_t ref_ticks, bool from_demonitor);
 
 /**
  * @brief Get target of a monitor.

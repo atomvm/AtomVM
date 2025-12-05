@@ -34,6 +34,10 @@ start() ->
     ok = test_monitor_demonitor_from_other(),
     ok = test_monitor_registered(),
     ok = test_monitor_registered_noproc(),
+    ok = test_alias(),
+    ok = test_monitor_alias(),
+    ok = test_monitor_alias_explicit_unalias(),
+    ok = test_monitor_down_alias(),
     0.
 
 test_monitor_normal() ->
@@ -229,7 +233,68 @@ test_monitor_demonitor_from_other() ->
         end,
     ok.
 
+test_alias() ->
+    P = spawn_opt(fun() -> echo_loop() end, []),
+    Alias = erlang:alias(),
+    P ! {m1, Alias},
+    m1 = recv_one(),
+    erlang:unalias(Alias),
+    P ! {m2, Alias},
+    P ! {m3, self()},
+    m3 = recv_one(),
+    ok.
+
+test_monitor_alias() ->
+    P = spawn_opt(fun() -> echo_loop() end, []),
+    Mon = erlang:monitor(process, P, [{alias, demonitor}]),
+    P ! {m1, Mon},
+    m1 = recv_one(),
+    erlang:demonitor(Mon),
+    P ! {m2, Mon},
+    P ! {m3, self()},
+    m3 = recv_one(),
+    ok.
+
+test_monitor_alias_explicit_unalias() ->
+    P = spawn_opt(fun() -> echo_loop() end, []),
+    Mon = erlang:monitor(process, P, [{alias, explicit_unalias}]),
+    P ! {m1, Mon},
+    m1 = recv_one(),
+    erlang:demonitor(Mon),
+    P ! {m2, Mon},
+    m2 = recv_one(),
+    erlang:unalias(Mon),
+    P ! {m3, Mon},
+    P ! {m4, self()},
+    m4 = recv_one(),
+    ok.
+
+test_monitor_down_alias() ->
+    P = spawn_opt(fun() -> echo_loop() end, []),
+    Mon = erlang:monitor(process, P, [{alias, demonitor}]),
+    erlang:unalias(Mon),
+    P ! {m1, Mon},
+    P ! {m2, self()},
+    m2 = recv_one(),
+    P ! quit,
+    {'DOWN', Mon, process, _PID, normal} = recv_one(),
+    ok.
+
 normal_loop() ->
     receive
         {Caller, quit} -> Caller ! {self(), finished}
+    end.
+
+echo_loop() ->
+    receive
+        quit ->
+            ok;
+        {Msg, ReplyTo} ->
+            ReplyTo ! Msg,
+            echo_loop()
+    end.
+
+recv_one() ->
+    receive
+        Msg -> Msg
     end.

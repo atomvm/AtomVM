@@ -99,6 +99,7 @@
     make_ref/0,
     send/2,
     monitor/2,
+    monitor/3,
     demonitor/1,
     demonitor/2,
     exit/1,
@@ -133,7 +134,9 @@
     dist_ctrl_put_data/2,
     unique_integer/0,
     unique_integer/1,
-    raise/3
+    raise/3,
+    alias/0,
+    unalias/1
 ]).
 
 -export_type([
@@ -1167,6 +1170,9 @@ send(_Target, _Message) ->
 monitor(_Type, _PidOrPort) ->
     erlang:nif_error(undefined).
 
+monitor(_Type, _PidOrPort, _Options) ->
+    erlang:nif_error(undefined).
+
 %%-----------------------------------------------------------------------------
 %% @param   Monitor reference of monitor to remove
 %% @returns `true'
@@ -1577,4 +1583,10 @@ nif_error(_Reason) ->
 -spec raise(error | exit | throw, Reason :: term(), Stacktrace :: raise_stacktrace()) ->
     no_return().
 raise(_Class, _Reason, _Stacktrace) ->
+    erlang:nif_error(undefined).
+
+alias() ->
+    erlang:nif_error(undefined).
+
+unalias(_Alias) ->
     erlang:nif_error(undefined).
