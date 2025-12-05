@@ -27,11 +27,22 @@
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
+#include "list.h"
 #include "refc_binary.h"
 #include "resources.h"
 #include "synclist.h"
 #include "sys.h"
 #include "utils.h"
+
+void resource_type_destroy(struct ResourceType *resource_type)
+{
+    free((void *) resource_type->name);
+    // Assume we have no monitor left.
+    synclist_destroy(&resource_type->monitors);
+    // Assume we have no serialized resource left.
+    synclist_destroy(&resource_type->serialized);
+    free(resource_type);
+}
 
 ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, const ErlNifResourceTypeInit *init, ErlNifResourceFlags flags, ErlNifResourceFlags *tried)
 {
@@ -46,6 +57,7 @@ ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, co
     result->global = env->global;
     list_init(&result->head);
     synclist_init(&result->monitors);
+    synclist_init(&result->serialized);
     result->dtor = NULL;
     result->stop = NULL;
     result->down = NULL;
@@ -82,14 +94,11 @@ int enif_get_resource(ErlNifEnv *env, ERL_NIF_TERM t, ErlNifResourceType *type, 
 {
     UNUSED(env);
 
-    if (UNLIKELY(!term_is_refc_binary(t))) {
-        return false;
-    }
-    if (UNLIKELY(term_refc_binary_is_const(t))) {
+    if (UNLIKELY(!term_is_reference_resource(t))) {
         return false;
     }
     const term *boxed_value = term_to_const_term_ptr(t);
-    struct RefcBinary *refc = (struct RefcBinary *) boxed_value[3];
+    struct RefcBinary *refc = (struct RefcBinary *) boxed_value[1];
     if (UNLIKELY(refc->resource_type != type)) {
         return false;
     }
@@ -113,7 +122,7 @@ int enif_release_resource(void *resource)
 
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
 {
-    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
     return term_from_resource(obj, &env->heap);
@@ -525,4 +534,81 @@ int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *mo
         return 1;
     }
     return 0;
+}
+
+void resource_mark_serialized(void *rsrc_obj, struct ResourceType *resource_type)
+{
+    struct ListHead *serialized_resources = synclist_wrlock(&resource_type->serialized);
+    struct ListHead *item = NULL;
+    bool found = false;
+    LIST_FOR_EACH (item, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->resource_obj == rsrc_obj) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        struct ResourceSerializedMark *resource_mark = malloc(sizeof(struct ResourceSerializedMark));
+        list_append(serialized_resources, &resource_mark->resource_list_head);
+        resource_mark->resource_obj = rsrc_obj;
+    }
+    synclist_unlock(&resource_type->serialized);
+}
+
+void resource_unmark_serialized(void *rsrc_obj, struct ResourceType *resource_type)
+{
+    struct ListHead *serialized_resources = synclist_wrlock(&resource_type->serialized);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->resource_obj == rsrc_obj) {
+            list_remove(&mark->resource_list_head);
+            free(mark);
+            break;
+        }
+    }
+    synclist_unlock(&resource_type->serialized);
+}
+
+bool resource_was_serialized(void *rsrc_obj, struct ResourceType *resource_type)
+{
+    bool result = false;
+    struct ListHead *serialized_resources = synclist_rdlock(&resource_type->serialized);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->resource_obj == rsrc_obj) {
+            result = true;
+            break;
+        }
+    }
+    synclist_unlock(&resource_type->serialized);
+    return result;
+}
+
+static void resource_binary_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    struct ResourceBinary *resource_binary = (struct ResourceBinary *) obj;
+    refc_binary_decrement_refcount(resource_binary->managing_resource, caller_env->global);
+}
+
+const ErlNifResourceTypeInit resource_binary_resource_type_init = {
+    .members = 1,
+    .dtor = resource_binary_dtor,
+};
+
+ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size)
+{
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        AVM_ABORT();
+    }
+    struct ResourceBinary *resource_binary = enif_alloc_resource(env->global->resource_binary_resource_type, sizeof(struct ResourceBinary));
+    resource_binary->managing_resource = refc_binary_from_data(obj);
+    resource_binary->data = data;
+
+    term result = term_from_resource_binary_pointer(resource_binary, size, &env->heap);
+    refc_binary_decrement_refcount(refc_binary_from_data(resource_binary), env->global);
+    return result;
 }

@@ -226,7 +226,7 @@ static term nif_ssl_entropy_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -249,7 +249,7 @@ static term nif_ssl_ctr_drbg_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -301,7 +301,7 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
@@ -354,7 +354,7 @@ static term nif_ssl_config_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }

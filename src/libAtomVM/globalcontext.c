@@ -130,6 +130,7 @@ GlobalContext *globalcontext_new(void)
 
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    glb->resource_binary_resource_type = enif_init_resource_type(&env, "resource_binary", &resource_binary_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     glb->dist_connection_resource_type = enif_init_resource_type(&env, "dist_connection", &dist_connection_resource_type_init, ERL_NIF_RT_CREATE, NULL);
 
 #if HAVE_OPEN && HAVE_CLOSE
