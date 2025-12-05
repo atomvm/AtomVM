@@ -27,6 +27,15 @@ start() ->
         {<<"phy_init">>, 1, 1, 16#f000, 16#1000, []},
         {<<"factory">>, 0, 0, 16#10000, 16#2C0000, []},
         {<<"lib.avm">>, 1, 1, 16#2D0000, 16#40000, []},
-        {<<"main.avm">>, 1, 1, 16#310000, 16#40000, []}
+        {<<"main.avm">>, 1, 1, 16#310000, 16#40000, []},
+        {<<"data">>, 1, 1, 16#350000, 16#10000, []}
     ] = esp:partition_list(),
+    ok = esp:partition_erase_range(<<"data">>, 0),
+    ok = esp:partition_write(<<"data">>, 0, <<"hello">>),
+    {ok, <<"hello">>} = esp:partition_read(<<"data">>, 0, 5),
+    {ok, <<"hello">>} = esp:partition_mmap(<<"data">>, 0, 5),
+    ok = esp:partition_erase_range(<<"data">>, 0, 4096),
+    ok = esp:partition_write(<<"data">>, 0, <<"world">>),
+    {ok, <<"world">>} = esp:partition_read(<<"data">>, 0, 5),
+    {ok, <<"world">>} = esp:partition_mmap(<<"data">>, 0, 5),
     0.
