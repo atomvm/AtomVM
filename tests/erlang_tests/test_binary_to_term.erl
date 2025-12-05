@@ -179,6 +179,7 @@ start() ->
     ok = test_encode_reference(),
     ok = test_encode_port(),
     ok = test_atom_encoding(),
+    ok = test_encode_resource(),
     0.
 
 test_reverse(T, Interop) ->
@@ -1060,6 +1061,80 @@ test_encode_reference() ->
         false ->
             ok
     end,
+    ok.
+
+test_encode_resource() ->
+    OTPVersion = get_otp_version(),
+    test_encode_resource(OTPVersion).
+
+test_encode_resource(21) ->
+    ok;
+test_encode_resource(OTPVersion) ->
+    R = socket:open(inet, stream, tcp),
+    case OTPVersion of
+        atomvm ->
+            {ok, {Resource, _Ref}} = R;
+        22 ->
+            {ok, {socket, Resource}} = R;
+        _ ->
+            {ok, {'$socket', Resource}} = R
+    end,
+    true = is_reference(Resource),
+    "#Ref<0." ++ _Tail = ref_to_list(Resource),
+    ResourceBin = term_to_binary(Resource),
+    Resource2 = binary_to_term(ResourceBin),
+    true = Resource2 =:= Resource,
+    % Alter the binary a little bit so that it is a different resoruce.
+    if
+        OTPVersion =:= atomvm ->
+            <<131, 90, 0, 4, 119, 13, "nonode@nohost", 0:32, A:32, B:32, C:32, D:32>> = ResourceBin,
+            AlteredResourceBin1 =
+                <<131, 90, 0, 4, 119, 13, "nonode@nohost", 0:32, A:32, B:32, C:32, (D + 4):32>>,
+            AlteredResourceBin2 =
+                <<131, 90, 0, 4, 119, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 4):32, D:32>>,
+            AlteredResourceBin3 =
+                <<131, 90, 0, 4, 119, 13, "nonode@nohost", 0:32, A:32, (B + 4):32, C:32, D:32>>,
+            AlteredResourceBin4 =
+                <<131, 90, 0, 4, 119, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32, D:32>>;
+        OTPVersion >= 26 ->
+            <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, A:32, B:32, C:32>> = ResourceBin,
+            AlteredResourceBin1 =
+                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 1):32>>,
+            AlteredResourceBin2 =
+                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 4):32>>,
+            AlteredResourceBin3 =
+                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, A:32, (B + 4):32, C:32>>,
+            AlteredResourceBin4 =
+                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32>>;
+        OTPVersion >= 23 ->
+            <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, C:32>> = ResourceBin,
+            AlteredResourceBin1 =
+                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 1):32>>,
+            AlteredResourceBin2 =
+                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 4):32>>,
+            AlteredResourceBin3 =
+                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, (B + 4):32, C:32>>,
+            AlteredResourceBin4 =
+                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32>>;
+        OTPVersion =:= 22 ->
+            <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, C:32>> = ResourceBin,
+            AlteredResourceBin1 =
+                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, (C + 1):32>>,
+            AlteredResourceBin2 =
+                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, (C + 4):32>>,
+            AlteredResourceBin3 =
+                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, (B + 4):32, C:32>>,
+            AlteredResourceBin4 =
+                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, (A + 4):32, B:32, C:32>>
+    end,
+    AlteredResource1 = binary_to_term(AlteredResourceBin1),
+    false = AlteredResource1 =:= Resource,
+    AlteredResource2 = binary_to_term(AlteredResourceBin2),
+    false = AlteredResource2 =:= Resource,
+    AlteredResource3 = binary_to_term(AlteredResourceBin3),
+    false = AlteredResource3 =:= Resource,
+    AlteredResource4 = binary_to_term(AlteredResourceBin4),
+    false = AlteredResource4 =:= Resource,
     ok.
 
 % Some binaries are re-encoded differently on earlier BEAM. Verify

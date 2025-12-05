@@ -66,19 +66,24 @@ void refc_binary_increment_refcount(struct RefcBinary *refc)
 bool refc_binary_decrement_refcount(struct RefcBinary *refc, struct GlobalContext *global)
 {
     if (--refc->ref_count == 0) {
-        if (refc->resource_type && refc->resource_type->down) {
-            // There may be monitors associated with this resource.
-            destroy_resource_monitors(refc, global);
-            // After this point, the resource can no longer be found by
-            // resource_type_fire_monitor
-            // However, resource_type_fire_monitor may have incremented ref_count
-            // to call the monitor handler.
-            // So we check ref_count again. We're not affected by the ABA problem
-            // here as the resource cannot (should not) be monitoring while it is
-            // being destroyed, i.e. no resource monitor will be created now
-            if (UNLIKELY(refc->ref_count != 0)) {
-                return false;
+        if (refc->resource_type) {
+            if (refc->resource_type->down) {
+                // There may be monitors associated with this resource.
+                destroy_resource_monitors(refc, global);
+                // After this point, the resource can no longer be found by
+                // resource_type_fire_monitor
+                // However, resource_type_fire_monitor may have incremented ref_count
+                // to call the monitor handler.
+                // So we check ref_count again. We're not affected by the ABA problem
+                // here as the resource cannot (should not) be monitoring while it is
+                // being destroyed, i.e. no resource monitor will be created now
+                if (UNLIKELY(refc->ref_count != 0)) {
+                    return false;
+                }
             }
+            // Remove the resource from the list of serialized resources
+            // so it no longer can be unserialized.
+            resource_unmark_serialized(refc->data, refc->resource_type);
         }
         synclist_remove(&global->refc_binaries, &refc->head);
         refc_binary_destroy(refc, global);
