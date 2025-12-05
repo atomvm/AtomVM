@@ -6480,10 +6480,16 @@ static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f
     return term_from_float(z, &ctx->heap);
 }
 
+#ifdef AVM_USE_SINGLE_PRECISION
+#define MATH_OP_FUNCTION_NAME(moniker) moniker##f
+#else
+#define MATH_OP_FUNCTION_NAME(moniker) moniker
+#endif
+
 #define DEFINE_UNARY_MATH_OP(moniker)                                   \
     static avm_float_t math_##moniker(avm_float_t x)                    \
     {                                                                   \
-        return moniker(x);                                              \
+        return MATH_OP_FUNCTION_NAME(moniker)(x);                       \
     }                                                                   \
                                                                         \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
@@ -6501,7 +6507,7 @@ static term math_binary_op(Context *ctx, term x_term, term y_term, binary_math_f
 #define DEFINE_BINARY_MATH_OP(moniker)                                  \
     static avm_float_t math_##moniker(avm_float_t x, avm_float_t y)     \
     {                                                                   \
-        return moniker(x, y);                                           \
+        return MATH_OP_FUNCTION_NAME(moniker)(x, y);                    \
     }                                                                   \
                                                                         \
     static term nif_math_##moniker(Context *ctx, int argc, term argv[]) \
