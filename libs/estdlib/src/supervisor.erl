@@ -18,8 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(supervisor).
-
 %%-----------------------------------------------------------------------------
 %% @doc An implementation of the Erlang/OTP supervisor interface.
 %%
@@ -39,6 +37,7 @@
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
+-module(supervisor).
 
 -behavior(gen_server).
 

@@ -518,7 +518,6 @@ struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monito
  * @param monitor_process_id monitored process id
  * @param monitor_name name of the monitor (atom)
  * @param ref_ticks reference of the monitor
- * @param is_monitoring if ctx is the monitoring process
  * @return the allocated monitor or NULL if allocation failed
  */
 struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, uint64_t ref_ticks);

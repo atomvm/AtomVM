@@ -54,7 +54,6 @@ enum ExternalTermResult
  * WARNING: This function may call the GC, which may render the input binary
  * invalid. See `externalterm_from_binary_with_roots'
  * @param ctx the context that owns the memory that will be allocated.
- * @param dst a pointer to a term that will contain the binary encoded term.
  * @param binary the binary.
  * @param bytes_read the number of bytes read from the input binary.
  * @returns the term deserialized from the input term, or an invalid term, if
