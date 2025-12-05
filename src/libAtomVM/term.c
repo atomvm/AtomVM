@@ -405,6 +405,12 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         uint64_t resource_ptr = (uintptr_t) refc_binary->data;
         return fun->print(fun, "#Ref<0.%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", (uint32_t) (resource_type_ptr >> 32), (uint32_t) resource_type_ptr, (uint32_t) (resource_ptr >> 32), (uint32_t) resource_ptr);
 
+    } else if (term_is_process_reference(t)) {
+        int32_t process_id = term_process_ref_to_process_id(t);
+        uint64_t ref_ticks = term_to_ref_ticks(t);
+
+        // Update also REF_AS_CSTRING_LEN when changing this format string
+        return fun->print(fun, "#Ref<%" PRId32 ".%" PRIu32 ".%" PRIu32 ">", process_id, (uint32_t) (ref_ticks >> 32), (uint32_t) ref_ticks);
     } else if (term_is_local_reference(t)) {
         // Update also REF_AS_CSTRING_LEN when changing this format string
         uint64_t ref_ticks = term_to_ref_ticks(t);
