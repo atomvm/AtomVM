@@ -152,6 +152,8 @@ extern "C" {
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#define TERM_BOXED_PROCESS_REF_SIZE (REF_SIZE + 1)
+#define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
@@ -210,6 +212,9 @@ extern "C" {
 // Local ref is at most 30 bytes:
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<0." "." ">\0" (10 chars)
+// Process ref is at most 39 bytes:
+// 2^32-1 = 4294967295 (10 chars)
+// "#Ref<" "." "." ">\0" (9 chars)
 // Resource ref is at most 52 bytes:
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<0." "." "." "." ">\0" (12 chars)
@@ -870,6 +875,25 @@ static inline bool term_is_local_reference(term t)
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is a process reference
+ *
+ * @details See \c term_make_process_reference().
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_process_reference(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if (boxed_value[0] == TERM_BOXED_PROCESS_REF_HEADER) {
             return true;
         }
     }
@@ -2185,6 +2209,50 @@ static inline uint64_t term_to_ref_ticks(term rt)
 #elif TERM_BYTES == 4
     return ((uint64_t) boxed_value[1] << 32) | (uint64_t) boxed_value[2];
 
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
+}
+
+/**
+ * @brief Creates a process reference
+ * @details Process reference contains ref_ticks and process_id of a process.
+ * They are used by process aliases and monitors.
+ *
+ * @param process_id process_id of a process that the reference will identify.
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param heap the heap to allocate memory in
+ * @return a ref term created using given ref ticks.
+ */
+static inline term term_make_process_reference(int32_t process_id, uint64_t ref_ticks, Heap *heap)
+{
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_PROCESS_REF_SIZE);
+    boxed_value[0] = TERM_BOXED_PROCESS_REF_HEADER;
+
+#if TERM_BYTES == 4
+    boxed_value[1] = (ref_ticks >> 4);
+    boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+    boxed_value[3] = process_id;
+
+#elif TERM_BYTES == 8
+    boxed_value[1] = (term) ref_ticks;
+    boxed_value[2] = process_id;
+
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
+
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
+}
+
+static inline uint32_t term_process_ref_to_process_id(term rt)
+{
+    TERM_DEBUG_ASSERT(term_is_process_reference(rt));
+    const term *boxed_value = term_to_const_term_ptr(rt);
+#if TERM_BYTES == 4
+    return (uint32_t) boxed_value[3];
+#elif TERM_BYTES == 8
+    return (uint32_t) boxed_value[2];
 #else
 #error "terms must be either 32 or 64 bit wide"
 #endif

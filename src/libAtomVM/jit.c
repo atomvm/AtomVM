@@ -701,15 +701,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
             return false;
         }
         ctx->x[0] = return_value;
-    } else {
-        if (term_is_atom(recipient_term)) {
-            recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-            if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
-                set_error(ctx, jit_state, 0, BADARG_ATOM);
-                return false;
-            }
-        }
-
+    } else if (term_is_local_pid_or_port(recipient_term)) {
         int local_process_id;
         if (term_is_local_pid_or_port(recipient_term)) {
             local_process_id = term_to_local_process_id(recipient_term);
@@ -719,7 +711,41 @@ static bool jit_send(Context *ctx, JITState *jit_state)
         }
         globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
         ctx->x[0] = ctx->x[1];
+    } else if (term_is_atom(recipient_term)) {
+        recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+        if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
+            set_error(ctx, jit_state, 0, BADARG_ATOM);
+            return false;
+        }
+        int local_process_id;
+        if (term_is_local_pid_or_port(recipient_term)) {
+            local_process_id = term_to_local_process_id(recipient_term);
+        } else {
+            set_error(ctx, jit_state, 0, BADARG_ATOM);
+            return false;
+        }
+        globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
+        ctx->x[0] = ctx->x[1];
+    } else if (term_is_process_reference(recipient_term)) {
+        int32_t process_id = term_process_ref_to_process_id(recipient_term);
+        int64_t ref_ticks = term_to_ref_ticks(recipient_term);
+        Context *p = globalcontext_get_process_lock(ctx->global, process_id);
+        if (p) {
+            struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
+            if (!IS_NULL_PTR(alias)) {
+                if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
+                    context_unalias(alias);
+                }
+                mailbox_send(p, ctx->x[1]);
+            }
+            globalcontext_get_process_unlock(ctx->global, p);
+        }
+        ctx->x[0] = ctx->x[1];
+    } else if (!term_is_reference(recipient_term)) {
+        set_error(ctx, jit_state, 0, BADARG_ATOM);
+        return false;
     }
+
     return true;
 }
 
