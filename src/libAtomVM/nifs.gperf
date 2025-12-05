@@ -87,6 +87,7 @@ erlang:make_ref/0, &make_ref_nif
 erlang:make_tuple/2, &make_tuple_nif
 erlang:memory/1, &memory_nif
 erlang:monitor/2, &monitor_nif
+erlang:monitor/3, &monitor_nif
 erlang:demonitor/1, &demonitor_nif
 erlang:demonitor/2, &demonitor_nif
 erlang:is_process_alive/1, &is_process_alive_nif
@@ -141,6 +142,8 @@ erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
 erlang:module_loaded/1,&module_loaded_nif
 erlang:nif_error/1,&nif_error_nif
 erlang:list_to_bitstring/1, &list_to_bitstring_nif
+erlang:alias/0, &erlang_alias_nif
+erlang:unalias/1, &erlang_unalias_nif
 erts_debug:flat_size/1, &flat_size_nif
 ets:new/2, &ets_new_nif
 ets:insert/2, &ets_insert_nif

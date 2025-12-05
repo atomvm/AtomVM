@@ -223,6 +223,8 @@ static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
+static term nif_erlang_alias(Context *ctx, int argc, term argv[]);
+static term nif_erlang_unalias(Context *ctx, int argc, term argv[]);
 static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
@@ -849,6 +851,14 @@ static const struct Nif list_to_bitstring_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_bitstring_1
 };
+static const struct Nif erlang_alias_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_alias
+};
+static const struct Nif erlang_unalias_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_unalias
+};
 static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_zlib_compress_1
@@ -1224,6 +1234,42 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     return result;
 }
 
+static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, enum ContextMonitorAliasType *alias_type)
+{
+    *is_alias = false;
+    while (term_is_nonempty_list(monitor_opts)) {
+        term option = term_get_list_head(monitor_opts);
+        if (term_is_tuple(option) && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
+            *is_alias = true;
+            switch (term_get_tuple_element(option, 1)) {
+                case EXPLICIT_UNALIAS_ATOM:
+                    *alias_type = ContextMonitorAliasExplicitUnalias;
+                    break;
+                case DEMONITOR_ATOM:
+                    *alias_type = ContextMonitorAliasDemonitor;
+                    break;
+                case REPLY_DEMONITOR_ATOM:
+                    *alias_type = ContextMonitorAliasReplyDemonitor;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+        } else if (term_is_tuple(option) && term_get_tuple_element(option, 0) == TAG_ATOM) {
+            RAISE_ERROR(UNSUPPORTED_ATOM);
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        monitor_opts = term_get_list_tail(monitor_opts);
+    }
+
+    if (UNLIKELY(!term_is_nil(monitor_opts))) {
+        return RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return OK_ATOM;
+}
+
 // Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
 // opts_term is [] for spawn/1,3
 static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_freeze, term opts_term)
@@ -1231,7 +1277,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
-    term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
+    term monitor_term = interop_proplist_get_value_default(opts_term, MONITOR_ATOM, term_invalid_term());
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
     term request_term = interop_proplist_get_value_default(opts_term, REQUEST_ATOM, UNDEFINED_ATOM);
     term group_leader;
@@ -1321,6 +1367,16 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         context_add_monitor(ctx, self_link);
     }
     if (monitor_term == TRUE_ATOM) {
+        monitor_term = term_nil();
+    }
+    if (term_is_list(monitor_term)) {
+        bool is_alias;
+        enum ContextMonitorAliasType alias_type;
+
+        if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, monitor_term, &is_alias, &alias_type)))) {
+            context_destroy(new_ctx);
+            return term_invalid_term();
+        }
         // We can call context_add_monitor directly on new process because it's not started yet
         ref_ticks = globalcontext_get_ref_ticks(ctx->global);
         struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
@@ -1334,12 +1390,25 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        struct Monitor *alias_monitor = NULL;
+        if (is_alias) {
+            alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+            if (IS_NULL_PTR(alias_monitor)) {
+                free(new_monitor);
+                free(self_monitor);
+                context_destroy(new_ctx);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
         context_add_monitor(new_ctx, new_monitor);
         context_add_monitor(ctx, self_monitor);
+        if (is_alias) {
+            context_add_monitor(ctx, alias_monitor);
+        }
     }
 
     if (ref_ticks) {
-        int res_size = REF_SIZE + TUPLE_SIZE(2);
+        int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1347,13 +1416,13 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 
         scheduler_init_ready(new_ctx);
 
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
 
-        term pid_ref_tuple = term_alloc_tuple(2, &ctx->heap);
-        term_put_tuple_element(pid_ref_tuple, 0, new_pid);
-        term_put_tuple_element(pid_ref_tuple, 1, ref);
+        term process_ref_tuple = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(process_ref_tuple, 0, new_pid);
+        term_put_tuple_element(process_ref_tuple, 1, ref);
 
-        return pid_ref_tuple;
+        return process_ref_tuple;
     } else if (UNLIKELY(valid_request)) {
         // Handling of spawn_request
         // spawn_request requires that the reply is enqueued before
@@ -1534,6 +1603,20 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message(glb, local_process_id, argv[1]);
 
+    } else if (term_is_process_reference(target)) {
+        int32_t process_id = term_process_ref_to_process_id(target);
+        int64_t ref_ticks = term_to_ref_ticks(target);
+        Context *p = globalcontext_get_process_lock(glb, process_id);
+        if (p) {
+            struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
+            if (alias != NULL) {
+                if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
+                    context_unalias(alias);
+                }
+                mailbox_send(p, argv[1]);
+            }
+            globalcontext_get_process_unlock(glb, p);
+        }
     } else if (term_is_atom(target)) {
         // We need to hold a lock on the processes_table until the message is sent to avoid a race condition,
         // otherwise the receiving process could be killed at any point between checking it is registered,
@@ -1558,7 +1641,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message_nolock(glb, local_process_id, argv[1]);
         synclist_unlock(&glb->processes_table);
-    } else {
+    } else if (!term_is_reference(target)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -4216,17 +4299,22 @@ static term nif_erlang_memory(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
 
     term object_type = argv[0];
     term target_proc = argv[1];
+    term options = argc == 3 ? argv[2] : term_nil();
     term target_pid;
     size_t target_proc_size = 0;
+    bool is_alias;
+    enum ContextMonitorAliasType alias_type;
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, options, &is_alias, &alias_type)))) {
+        return term_invalid_term();
+    }
     if (term_is_atom(target_proc)) {
         target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
         target_proc_size = TUPLE_SIZE(2);
@@ -4259,12 +4347,12 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     if (IS_NULL_PTR(target)) {
-        int res_size = REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
+        int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
@@ -4303,16 +4391,29 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    struct Monitor *alias_monitor = NULL;
+    if (is_alias) {
+        alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+        if (IS_NULL_PTR(alias_monitor)) {
+            free(self_monitor);
+            free(other_monitor);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+    }
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
 
     context_add_monitor(ctx, self_monitor);
+    if (is_alias) {
+        context_add_monitor(ctx, alias_monitor);
+    }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_from_ref_ticks(ref_ticks, &ctx->heap);
+    return term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
 }
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
@@ -6339,6 +6440,42 @@ static term nif_erlang_list_to_bitstring_1(Context *ctx, int argc, term argv[])
 {
     //  TODO: implement proper list_to_bitstring function when the bitstrings are supported
     return nif_erlang_list_to_binary_1(ctx, argc, argv);
+}
+
+static term nif_erlang_alias(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+    term process_ref = term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
+    struct Monitor *monitor = monitor_alias_new(ref_ticks, ContextMonitorAliasExplicitUnalias);
+    if (IS_NULL_PTR(monitor)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    context_add_monitor(ctx, monitor);
+    return process_ref;
+}
+
+static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term process_ref = argv[0];
+
+    VALIDATE_VALUE(process_ref, term_is_local_reference);
+    uint64_t ref_ticks = term_to_ref_ticks(process_ref);
+    struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+    if (IS_NULL_PTR(alias)) {
+        return FALSE_ATOM;
+    } else {
+        context_unalias(alias);
+        return TRUE_ATOM;
+    }
 }
 
 #ifdef WITH_ZLIB
