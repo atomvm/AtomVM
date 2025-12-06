@@ -119,10 +119,17 @@ test_start_name() ->
     ok = gen_server:stop(Pid1),
     undefined = whereis(?MODULE),
 
+    PreviousTrapExit = erlang:process_flag(trap_exit, true),
     {ok, Pid2} = gen_server:start_link({local, ?MODULE}, ?MODULE, [], []),
     Pid2 = whereis(?MODULE),
     ok = gen_server:stop(Pid2),
+    normal =
+        receive
+            {'EXIT', Pid2, Reason} -> Reason
+        after 5000 -> timeout
+        end,
     undefined = whereis(?MODULE),
+    true = erlang:process_flag(trap_exit, PreviousTrapExit),
 
     case get_otp_version() of
         %% Test on AtomVM and OTP 23 and later
@@ -330,31 +337,20 @@ test_timeout_cast() ->
 test_timeout_info() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     0 = gen_server:call(Pid, get_num_timeouts),
-    ok = gen_server:cast(Pid, {set_info_timeout, 10}),
-    timer:sleep(11),
-    0 = gen_server:call(Pid, get_num_timeouts),
+    Ref = make_ref(),
+    ok = gen_server:cast(Pid, {set_info_timeout, 10, self(), Ref}),
     Pid ! ping,
-    timer:sleep(11),
-    N = gen_server:call(Pid, get_num_timeouts),
-    true = N > 0,
-    ok = test_timeout_info_repeats(Pid, 30),
+    ok =
+        receive
+            {Ref, 1} -> ok
+        after 5000 -> timeout
+        end,
+    ok =
+        receive
+            {Ref, 2} -> ok
+        after 5000 -> timeout
+        end,
     gen_server:stop(Pid).
-
-% timeout message itself is repeated as it is a handle_info message.
-% This test is flappy as there is no guarantee that Pid would be
-% scheduled if the system is very busy.
-test_timeout_info_repeats(_Pid, Sleep) when Sleep > 5000 -> fail;
-test_timeout_info_repeats(Pid, Sleep) ->
-    N = gen_server:call(Pid, get_num_timeouts),
-    Pid ! ping,
-    timer:sleep(Sleep),
-    M = gen_server:call(Pid, get_num_timeouts),
-    if
-        M > N + 1 ->
-            ok;
-        true ->
-            test_timeout_info_repeats(Pid, 2 * Sleep)
-    end.
 
 test_timeout_tuple_return() ->
     case get_otp_version() of
@@ -665,8 +661,8 @@ handle_cast({cast_timeout, Timeout}, State) ->
     {noreply, State, Timeout};
 handle_cast({tuple_timeout, Timeouts, Caller}, State) ->
     {noreply, State, {timeout, 1, {do_tuple_timeouts, Timeouts, Caller}}};
-handle_cast({set_info_timeout, Timeout}, State) ->
-    {noreply, State#state{info_timeout = Timeout}};
+handle_cast({set_info_timeout, Timeout, Client, Ref}, State) ->
+    {noreply, State#state{info_timeout = {Timeout, Client, Ref, 0}}};
 handle_cast({req_timeout_reply, Pid}, State) ->
     {noreply, State, {timeout, 1, {timeout_reply, Pid, cast}}};
 handle_cast({request_info_timeout, Pid}, State) ->
@@ -690,16 +686,18 @@ handle_info(ping, #state{num_infos = NumInfos, info_timeout = InfoTimeout} = Sta
     case InfoTimeout of
         none ->
             {noreply, NewState};
-        Other ->
-            {noreply, NewState, Other}
+        {Timeout, _Client, _Ref, _Count} ->
+            {noreply, NewState, Timeout}
     end;
 handle_info(timeout, #state{num_timeouts = NumTimeouts, info_timeout = InfoTimeout} = State) ->
     NewState = State#state{num_timeouts = NumTimeouts + 1},
     case InfoTimeout of
         none ->
             {noreply, NewState};
-        Other ->
-            {noreply, NewState, Other}
+        {Timeout, Client, Ref, Count} ->
+            NewCount = Count + 1,
+            Client ! {Ref, NewCount},
+            {noreply, NewState#state{info_timeout = {Timeout, Client, Ref, NewCount}}, Timeout}
     end;
 handle_info({timeout_reply, From, Tag} = _Info, State) ->
     From ! {reply_from_timeout, Tag},
