@@ -1700,13 +1700,13 @@ static term build_datetime_from_tm(Context *ctx, struct tm *broken_down_time)
     term time_tuple = term_alloc_tuple(3, &ctx->heap);
     term date_time_tuple = term_alloc_tuple(2, &ctx->heap);
 
-    term_put_tuple_element(date_tuple, 0, term_from_int32(1900 + broken_down_time->tm_year));
-    term_put_tuple_element(date_tuple, 1, term_from_int32(broken_down_time->tm_mon + 1));
-    term_put_tuple_element(date_tuple, 2, term_from_int32(broken_down_time->tm_mday));
+    term_put_tuple_element(date_tuple, 0, term_from_int11(1900 + broken_down_time->tm_year));
+    term_put_tuple_element(date_tuple, 1, term_from_int11(broken_down_time->tm_mon + 1));
+    term_put_tuple_element(date_tuple, 2, term_from_int11(broken_down_time->tm_mday));
 
-    term_put_tuple_element(time_tuple, 0, term_from_int32(broken_down_time->tm_hour));
-    term_put_tuple_element(time_tuple, 1, term_from_int32(broken_down_time->tm_min));
-    term_put_tuple_element(time_tuple, 2, term_from_int32(broken_down_time->tm_sec));
+    term_put_tuple_element(time_tuple, 0, term_from_int11(broken_down_time->tm_hour));
+    term_put_tuple_element(time_tuple, 1, term_from_int11(broken_down_time->tm_min));
+    term_put_tuple_element(time_tuple, 2, term_from_int11(broken_down_time->tm_sec));
 
     term_put_tuple_element(date_time_tuple, 0, date_tuple);
     term_put_tuple_element(date_time_tuple, 1, time_tuple);
@@ -1785,9 +1785,9 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
     struct timespec ts;
     sys_time(&ts);
 
-    term_put_tuple_element(timestamp_tuple, 0, term_from_int32(ts.tv_sec / 1000000));
-    term_put_tuple_element(timestamp_tuple, 1, term_from_int32(ts.tv_sec % 1000000));
-    term_put_tuple_element(timestamp_tuple, 2, term_from_int32(ts.tv_nsec / 1000));
+    term_put_tuple_element(timestamp_tuple, 0, term_from_int28(ts.tv_sec / 1000000));
+    term_put_tuple_element(timestamp_tuple, 1, term_from_int28(ts.tv_sec % 1000000));
+    term_put_tuple_element(timestamp_tuple, 2, term_from_int28(ts.tv_nsec / 1000));
 
     return timestamp_tuple;
 }
@@ -2960,16 +2960,16 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     }
 
     if (key == PROCESS_COUNT_ATOM) {
-        return term_from_int32(nif_num_processes(ctx->global));
+        return term_from_int28(nif_num_processes(ctx->global));
     }
     if (key == PORT_COUNT_ATOM) {
-        return term_from_int32(nif_num_ports(ctx->global));
+        return term_from_int28(nif_num_ports(ctx->global));
     }
     if (key == ATOM_COUNT_ATOM) {
-        return term_from_int32(atom_table_count(ctx->global->atom_table));
+        return term_from_int28(atom_table_count(ctx->global->atom_table));
     }
     if (key == WORDSIZE_ATOM) {
-        return term_from_int32(TERM_BYTES);
+        return term_from_int28(TERM_BYTES);
     }
     if (key == MACHINE_ATOM) {
         if (memory_ensure_free_opt(ctx, (sizeof("ATOM") - 1) * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
@@ -2978,7 +2978,7 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_string((const uint8_t *) "ATOM", sizeof("ATOM") - 1, &ctx->heap);
     }
     if (key == AVM_FLOATSIZE_ATOM) {
-        return term_from_int32(sizeof(avm_float_t));
+        return term_from_int11(sizeof(avm_float_t));
     }
     if (key == SYSTEM_ARCHITECTURE_ATOM) {
         char buf[128];
@@ -3025,16 +3025,16 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
     }
     if (key == SCHEDULERS_ATOM) {
 #ifndef AVM_NO_SMP
-        return term_from_int32(smp_get_online_processors());
+        return term_from_int11(smp_get_online_processors());
 #else
-        return term_from_int32(1);
+        return term_from_int11(1);
 #endif
     }
     if (key == SCHEDULERS_ONLINE_ATOM) {
 #ifndef AVM_NO_SMP
-        return term_from_int32(ctx->global->online_schedulers);
+        return term_from_int11(ctx->global->online_schedulers);
 #else
-        return term_from_int32(1);
+        return term_from_int11(1);
 #endif
     }
     if (key == EMU_FLAVOR_ATOM) {
@@ -3072,7 +3072,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         }
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
         };
-        return term_from_int32(old_value);
+        return term_from_int11(old_value);
     }
 #else
     UNUSED(value);
@@ -3819,7 +3819,7 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
 
     terms_count = memory_estimate_usage(argv[0]);
 
-    return term_from_int32(terms_count);
+    return term_from_int28(terms_count);
 }
 
 static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx)
