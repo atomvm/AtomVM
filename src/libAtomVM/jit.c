@@ -1321,6 +1321,9 @@ static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offs
     avm_float_t value;
     bool status;
     switch (n) {
+        case 16:
+            status = bitstring_extract_f16(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            break;
         case 32:
             status = bitstring_extract_f32(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
             break;
@@ -1435,6 +1438,18 @@ static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, si
 {
     avm_uint64_t int_value = term_maybe_unbox_int64(value);
     return bitstring_insert_integer(bin, offset, int_value, n, flags);
+}
+
+static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
+{
+    avm_float_t float_value = term_conv_to_float(value);
+    if (n == 16) {
+        return bitstring_insert_f16(bin, offset, float_value, flags);
+    } else if (n == 32) {
+        return bitstring_insert_f32(bin, offset, float_value, flags);
+    } else {
+        return bitstring_insert_f64(bin, offset, float_value, flags);
+    }
 }
 
 static void jit_bitstring_copy_module_str(Context *ctx, JITState *jit_state, term bin, size_t offset, int str_id, size_t len)
@@ -1824,7 +1839,8 @@ const ModuleNativeInterface module_native_interface = {
     term_copy_map,
     jit_stacktrace_build,
     jit_term_reuse_binary,
-    jit_alloc_big_integer_fragment
+    jit_alloc_big_integer_fragment,
+    jit_bitstring_insert_float
 };
 
 #endif

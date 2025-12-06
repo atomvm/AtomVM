@@ -104,6 +104,7 @@ start() ->
     ok = test_bs_skip_bits2_little(),
 
     ok = test_bs_variable_size_bitstring(),
+    ok = test_float(),
 
     0.
 
@@ -584,6 +585,72 @@ test_bs_variable_size_bitstring() ->
                 ok
         end,
     ok.
+
+test_float() ->
+    Pi = id(3.14),
+    <<64, 9, 30, 184, 81, 235, 133, 31, 3, 14>> = <<Pi/float, 3, 14>>,
+    <<64, 9, 30, 184, 81, 235, 133, 31, 3, 14>> = <<Pi/float-big, 3, 14>>,
+    <<31, 133, 235, 81, 184, 30, 9, 64, 3, 14>> = <<Pi/float-little, 3, 14>>,
+    <<_:64, 3, 14>> = <<Pi/float-native, 3, 14>>,
+    <<64, 72, 245, 195, 3, 14>> = <<Pi:32/float, 3, 14>>,
+    <<195, 245, 72, 64, 3, 14>> = <<Pi:32/float-little, 3, 14>>,
+
+    <<Pi/float, 3, 14>> = id(<<64, 9, 30, 184, 81, 235, 133, 31, 3, 14>>),
+    <<Pi/float-little, 3, 14>> = id(<<31, 133, 235, 81, 184, 30, 9, 64, 3, 14>>),
+    <<PiS:32/float, 3, 14>> = id(<<64, 72, 245, 195, 3, 14>>),
+    <<PiS:32/float-little, 3, 14>> = id(<<195, 245, 72, 64, 3, 14>>),
+    true = abs(PiS - Pi) < 0.0001,
+
+    % Test integer to float conversion
+    Int2 = id(2),
+    IntNeg2 = id(-2),
+    Int32 = id(32),
+    <<64, 0, 0, 0, 0, 0, 0, 0>> = <<Int2/float>>,
+    <<192, 0, 0, 0, 0, 0, 0, 0>> = <<IntNeg2/float>>,
+    <<66, 0, 0, 0>> = <<Int32:32/float>>,
+
+    % 16-bit floats are supported in OTP 24+ and AtomVM
+    Has16BitFloats =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                erlang:system_info(otp_release) >= "24";
+            "ATOM" ->
+                true
+        end,
+    if
+        Has16BitFloats ->
+            % Test that 16-bit floats work
+            Pi16 = id(3.14),
+            <<66, 72>> = <<Pi16:16/float>>,
+            <<66, 72>> = <<Pi16:16/float-big>>,
+            <<72, 66>> = <<Pi16:16/float-little>>,
+            <<Pi16B:16/float, 3, 14>> = <<66, 72, 3, 14>>,
+            <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
+            true = abs(Pi16B - Pi16) < 0.001,
+            ok;
+        true ->
+            ok
+    end,
+
+    ok = test_create_with_invalid_float_value(),
+    ok = test_create_with_invalid_float_size(),
+    ok.
+
+test_create_with_invalid_float_value() ->
+    ok = expect_error(fun() -> create_float_binary(foo, id(64)) end, badarg),
+    ok = expect_error(fun() -> create_float_binary([1, 2, 3], id(32)) end, badarg),
+    ok = expect_error(fun() -> create_float_binary(<<"binary">>, id(64)) end, badarg),
+    ok.
+
+test_create_with_invalid_float_size() ->
+    % These sizes are invalid in both BEAM and AtomVM
+    ok = expect_error(fun() -> create_float_binary(3.14, id(8)) end, badarg),
+    ok = expect_error(fun() -> create_float_binary(3.14, id(128)) end, badarg),
+    ok = expect_error(fun() -> create_float_binary(3.14, id(foo)) end, badarg),
+    ok.
+
+create_float_binary(Value, Size) ->
+    <<Value:Size/float>>.
 
 check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
