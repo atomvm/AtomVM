@@ -23,12 +23,34 @@
 -export([start/0]).
 
 start() ->
-    true = test_reverse(3.14159265, <<131, 70, 64, 9, 33, 251, 83, 200, 212, 241>>),
+    true = test_reverse(3.14159265, {
+        <<131, 70, 64, 9, 33, 251, 83, 200, 212, 241>>, <<131, 70, 64, 9, 33, 251, 96, 0, 0, 0>>
+    }),
+    true = test_reverse(3.1415927410125732, <<131, 70, 64, 9, 33, 251, 96, 0, 0, 0>>),
     true = test_reverse(0.0, <<131, 70, 0, 0, 0, 0, 0, 0, 0, 0>>),
     true = test_reverse(negate(0.0), <<131, 70, 128, 0, 0, 0, 0, 0, 0, 0>>),
-    true = test_reverse(negate(3.14159265), <<131, 70, 192, 9, 33, 251, 83, 200, 212, 241>>),
+    true = test_reverse(negate(3.14159265), {
+        <<131, 70, 192, 9, 33, 251, 83, 200, 212, 241>>, <<131, 70, 192, 9, 33, 251, 96, 0, 0, 0>>
+    }),
+    true = test_reverse(negate(3.1415927410125732), <<131, 70, 192, 9, 33, 251, 96, 0, 0, 0>>),
     0.
 
+test_reverse(T, {DoublePrecision, SinglePrecision}) ->
+    Bin = erlang:term_to_binary(T),
+    Interop =
+        case erlang:system_info(machine) of
+            "BEAM" ->
+                DoublePrecision;
+            "ATOM" ->
+                case erlang:system_info(avm_floatsize) of
+                    4 -> SinglePrecision;
+                    8 -> DoublePrecision
+                end
+        end,
+    Bin = Interop,
+    {X, Used} = erlang:binary_to_term(Bin, [used]),
+    Used = erlang:byte_size(Bin),
+    X =:= T;
 test_reverse(T, Interop) ->
     Bin = erlang:term_to_binary(T),
     Bin = Interop,

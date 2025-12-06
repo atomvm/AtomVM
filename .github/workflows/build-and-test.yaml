@@ -276,6 +276,15 @@ jobs:
           rebar3_version: "3.24.0"
           compiler_pkgs: "clang-18"
 
+        # Additional build with 32 bits floats
+        - os: "ubuntu-24.04"
+          cc: "cc"
+          cxx: "c++"
+          otp: "27"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_USE_32BIT_FLOAT=ON"
+
         # Additional 32 bits build
         - container: "ubuntu:20.04"
           cc: "gcc-10"
@@ -593,7 +602,7 @@ jobs:
       id: cache
       with:
         path: 'build/tests/**/*.beam'
-        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.{erl,hrl,ex}') }}-${{ matrix.jit_target_arch }}
+        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch }}
 
     - name: "Build: run cmake"
       working-directory: build
