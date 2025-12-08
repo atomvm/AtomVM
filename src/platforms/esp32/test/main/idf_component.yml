@@ -1,0 +1,7 @@
+dependencies:
+  "espressif/dp83848":
+   version: "~1.0.0"
+   rules:
+    - if: "idf_version >=6.0"
+    - if: target in ["esp32", "esp32p4"]
+    - if: "$CONFIG{ETH_USE_OPENETH} == True"
