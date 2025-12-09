@@ -41,6 +41,7 @@
 #include "intn.h"
 #include "memory.h"
 #include "refc_binary.h"
+#include "resources.h"
 #include "utils.h"
 
 #include "term_typedef.h"
@@ -128,7 +129,10 @@ extern "C" {
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
-#define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFC_BINARY_SIZE
+#define TERM_BOXED_REFERENCE_RESOURCE_SIZE 4
+#define TERM_BOXED_REFERENCE_RESOURCE_HEADER (((TERM_BOXED_REFERENCE_RESOURCE_SIZE - 1) << 6) | TERM_BOXED_REF)
+#define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFERENCE_RESOURCE_SIZE
+
 #if TERM_BYTES == 8
 #define REFC_BINARY_MIN 64
 #define SUB_BINARY_MIN 16
@@ -166,6 +170,7 @@ extern "C" {
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
+#define REFERENCE_RESOURCE_CONS_OFFSET 2
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
 #define TERM_STRING_SIZE(length) (2 * (length))
 #define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
@@ -205,6 +210,9 @@ extern "C" {
 // Local ref is at most 30 bytes:
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<0." "." ">\0" (10 chars)
+// Resource ref is at most 52 bytes:
+// 2^32-1 = 4294967295 (10 chars)
+// "#Ref<0." "." "." "." ">\0" (12 chars)
 // External ref is at most 70 bytes:
 // 2^26-1 = 67108863 (8 chars) (node, atom index)
 // 2^32-1 = 4294967295 (10 chars)
@@ -253,7 +261,8 @@ typedef struct BinaryPosLen
 enum RefcBinaryFlags
 {
     RefcNoFlags = 0,
-    RefcBinaryIsConst
+    RefcBinaryIsConst = 1,
+    RefcBinaryIsResourceManaged = 2
 };
 
 typedef enum
@@ -505,6 +514,25 @@ static inline bool term_is_refc_binary(term t)
 }
 
 /**
+ * @brief Checks if a term is a reference resource
+ *
+ * @details Returns \c true if a term is a ref-counted reference resource,
+ * otherwise \c false.
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_reference_resource(term t)
+{
+    /* boxed: 10 */
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        return boxed_value[0] == TERM_BOXED_REFERENCE_RESOURCE_HEADER;
+    }
+
+    return false;
+}
+
+/**
  * @brief Checks if a term is a heap binary
  *
  * @details Returns \c true if a term is a binary stored on the heap, otherwise \c false.
@@ -527,6 +555,12 @@ static inline bool term_refc_binary_is_const(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return (boxed_value[2] & RefcBinaryIsConst) != 0;
+}
+
+static inline bool term_refc_binary_is_resource_managed(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (boxed_value[2] & RefcBinaryIsResourceManaged) != 0;
 }
 
 /**
@@ -1623,6 +1657,20 @@ static inline struct RefcBinary *term_refc_binary_ptr(term refc_binary)
 }
 
 /**
+ * @brief Get the pointer off heap refc binary for a resource.
+ *
+ * @details Returns address
+ * @return offset (in words).
+ */
+static inline struct RefcBinary *term_resource_refc_binary_ptr(term resource)
+{
+    TERM_DEBUG_ASSERT(term_is_reference_resource(resource));
+
+    term *boxed_value = term_to_term_ptr(resource);
+    return (struct RefcBinary *) boxed_value[1];
+}
+
+/**
  * @brief Gets binary data
  *
  * @details Returns a pointer to stored binary data.
@@ -1637,6 +1685,9 @@ static inline const char *term_binary_data(term t)
     if (term_is_refc_binary(t)) {
         if (term_refc_binary_is_const(t)) {
             return (const char *) boxed_value[3];
+        } else if (term_refc_binary_is_resource_managed(t)) {
+            const struct ResourceBinary *resource_binary = (const struct ResourceBinary *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
+            return (const char *) resource_binary->data;
         } else {
             return (const char *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
         }
@@ -1867,8 +1918,8 @@ static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
     boxed_value[1] = (term) ref_ticks;
 
 #elif TERM_BYTES == 4
-    boxed_value[1] = (ref_ticks >> 4);
-    boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+    boxed_value[1] = (uint32_t) (ref_ticks >> 32);
+    boxed_value[2] = (uint32_t) ref_ticks;
 
 #else
 #error "terms must be either 32 or 64 bit wide"
@@ -1887,7 +1938,7 @@ static inline uint64_t term_to_ref_ticks(term rt)
     return boxed_value[1];
 
 #elif TERM_BYTES == 4
-    return (boxed_value[1] << 4) | boxed_value[2];
+    return ((uint64_t) boxed_value[1] << 32) | (uint64_t) boxed_value[2];
 
 #else
 #error "terms must be either 32 or 64 bit wide"
@@ -2661,7 +2712,7 @@ static inline term term_get_sub_binary_ref(term t)
 /**
  * @brief Create a resource on the heap.
  * @details This function creates a resource (obtained from `enif_alloc_resource`)
- * on the heap which must have `TERM_BOXED_RESOURCE_SIZE` free terms.
+ * on the heap which must have `TERM_BOXED_REFERENCE_RESOURCE_SIZE` free terms.
  *
  * This function does increment the reference counter as the resource is
  * added to the heap's mso list.
@@ -2672,20 +2723,40 @@ static inline term term_get_sub_binary_ref(term t)
  */
 static inline term term_from_resource(void *resource, Heap *heap)
 {
-    // Resources are currently refc binaries with a size of 0 but may be
-    // references in the future.
+    // Resources are references
     struct RefcBinary *refc = refc_binary_from_data(resource);
-    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
-    boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
-    boxed_value[1] = (term) 0; // binary size, this is pre ERTS 9.0 (OTP-20.0) behavior
-    boxed_value[2] = (term) RefcNoFlags;
-    term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
-    boxed_value[3] = (term) refc;
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+    boxed_value[0] = TERM_BOXED_REFERENCE_RESOURCE_HEADER;
+    boxed_value[1] = (term) refc;
     // Add the resource to the mso list
     refc->ref_count++;
-    heap->root->mso_list = term_list_init_prepend(boxed_value + 4, ret, heap->root->mso_list);
+    term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
+    heap->root->mso_list = term_list_init_prepend(boxed_value + REFERENCE_RESOURCE_CONS_OFFSET, ret, heap->root->mso_list);
     return ret;
 }
+
+/**
+ * @brief Get a ref term from ref ticks
+ *
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param heap the heap to allocate memory in
+ * @return a ref term created using given ref ticks.
+ */
+term term_from_resource_type_and_data(uint64_t resource_type_ptr, uint64_t resource_data_ptr, Heap *heap, GlobalContext *glb);
+
+/**
+ * @brief Create a resource managed binary.
+ * @details Increment reference count of resource and create a refc binary for
+ * the pointer and size.
+ *
+ * @param resource the resource managing the binary
+ * @param data the pointer to the data
+ * @param size the size of the binary
+ * @param heap the heap to allocate memory in
+ * @param glb the global context
+ * @return a refc binary
+ */
+term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t size, Heap *heap);
 
 #ifdef __cplusplus
 }
