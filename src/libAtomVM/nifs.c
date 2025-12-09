@@ -1234,6 +1234,41 @@ static NativeHandlerResult process_console_mailbox(Context *ctx)
     return result;
 }
 
+static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, enum ContextMonitorAliasType *alias_type)
+{
+    *is_alias = false;
+    while (!term_is_nil(monitor_opts)) {
+        if (UNLIKELY(!term_is_list(monitor_opts))) {
+            return RAISE_ERROR(BADARG_ATOM);
+        }
+        term option = term_get_list_head(monitor_opts);
+        if (term_is_tuple(option) && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
+            *is_alias = true;
+            switch (term_get_tuple_element(option, 1)) {
+                case DEMONITOR_ATOM:
+                    *alias_type = CONTEXT_MONITOR_ALIAS_DEMONITOR;
+                    break;
+                case EXPLICIT_UNALIAS_ATOM:
+                    *alias_type = CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS;
+                    break;
+                case REPLY_DEMONITOR_ATOM:
+                    // FIXME support reply_demonitor
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+        } else if (term_is_tuple(option) && term_get_tuple_element(option, 0) == TAG_ATOM) {
+            RAISE_ERROR(UNSUPPORTED_ATOM);
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+
+        monitor_opts = term_get_list_tail(monitor_opts);
+    }
+
+    return OK_ATOM;
+}
+
 // Common handling of spawn/1, spawn/3, spawn_opt/2, spawn_opt/4
 // opts_term is [] for spawn/1,3
 static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_freeze, term opts_term)
@@ -1241,7 +1276,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
-    term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
+    term monitor_term = interop_proplist_get_value_default(opts_term, MONITOR_ATOM, term_invalid_term());
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
     term request_term = interop_proplist_get_value_default(opts_term, REQUEST_ATOM, UNDEFINED_ATOM);
     term group_leader;
@@ -1312,6 +1347,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             RAISE_ERROR(BADARG_ATOM);
     }
     uint64_t ref_ticks = 0;
+    bool create_pid_ref = false;
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
@@ -1331,6 +1367,16 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         context_add_monitor(ctx, self_link);
     }
     if (monitor_term == TRUE_ATOM) {
+        monitor_term = term_nil();
+    }
+    if (term_is_list(monitor_term)) {
+        bool is_alias;
+        enum ContextMonitorAliasType alias_type;
+
+        if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, monitor_term, &is_alias, &alias_type)))) {
+            context_destroy(new_ctx);
+            return term_invalid_term();
+        }
         // We can call context_add_monitor directly on new process because it's not started yet
         ref_ticks = globalcontext_get_ref_ticks(ctx->global);
         struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
@@ -1344,12 +1390,26 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
+        struct Monitor *alias_monitor = NULL;
+        if (is_alias) {
+            alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+            if (IS_NULL_PTR(alias_monitor)) {
+                free(new_monitor);
+                free(self_monitor);
+                context_destroy(new_ctx);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
         context_add_monitor(new_ctx, new_monitor);
         context_add_monitor(ctx, self_monitor);
+        if (is_alias) {
+            create_pid_ref = true;
+            context_add_monitor(ctx, alias_monitor);
+        }
     }
 
     if (ref_ticks) {
-        int res_size = REF_SIZE + TUPLE_SIZE(2);
+        int res_size = TERM_BOXED_PID_REF_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1357,7 +1417,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 
         scheduler_init_ready(new_ctx);
 
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = create_pid_ref ? term_make_pid_ref(ctx->process_id, ref_ticks, &ctx->heap) : term_from_ref_ticks(ref_ticks, &ctx->heap);
 
         term pid_ref_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(pid_ref_tuple, 0, new_pid);
@@ -4242,43 +4302,16 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     term options = argc == 3 ? argv[2] : term_nil();
     term target_pid;
     size_t target_proc_size = 0;
-    bool is_alias = false;
+    bool is_alias;
     enum ContextMonitorAliasType alias_type;
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ < 14
-    alias_type = CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS;
-#endif
 
     if (object_type != PROCESS_ATOM && object_type != PORT_ATOM) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    while (!term_is_nil(options)) {
-        VALIDATE_VALUE(options, term_is_list);
-        term option = term_get_list_head(options);
-        if (term_is_tuple(option) && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
-            is_alias = true;
-            switch (term_get_tuple_element(option, 1)) {
-                case DEMONITOR_ATOM:
-                    alias_type = CONTEXT_MONITOR_ALIAS_DEMONITOR;
-                    break;
-                case EXPLICIT_UNALIAS_ATOM:
-                    alias_type = CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS;
-                    break;
-                case REPLY_DEMONITOR_ATOM:
-                    // FIXME support reply_demonitor
-                    RAISE_ERROR(UNSUPPORTED_ATOM);
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
-            }
-        } else if (term_is_tuple(option) && term_get_tuple_element(option, 0) == TAG_ATOM) {
-            RAISE_ERROR(UNSUPPORTED_ATOM);
-        } else {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-
-        options = term_get_list_tail(options);
+    if (UNLIKELY(term_is_invalid_term(parse_monitor_opts(ctx, options, &is_alias, &alias_type)))) {
+        return term_invalid_term();
     }
-
     if (term_is_atom(target_proc)) {
         target_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(target_proc));
         target_proc_size = TUPLE_SIZE(2);
@@ -4345,25 +4378,25 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     } else {
         self_monitor = monitor_new(target_pid, ref_ticks, true);
     }
-    struct Monitor *alias_monitor = NULL;
-    if (is_alias) {
-        alias_monitor = monitor_alias_new(ref_ticks, alias_type);
-        if (IS_NULL_PTR(alias_monitor)) {
-            globalcontext_get_process_unlock(ctx->global, target);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-    }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
-        free(alias_monitor);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_ticks, false);
     if (IS_NULL_PTR(other_monitor)) {
-        free(alias_monitor);
         free(self_monitor);
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    struct Monitor *alias_monitor = NULL;
+    if (is_alias) {
+        alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+        if (IS_NULL_PTR(alias_monitor)) {
+            free(self_monitor);
+            free(other_monitor);
+            globalcontext_get_process_unlock(ctx->global, target);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
     }
     mailbox_send_monitor_signal(target, MonitorSignal, other_monitor);
     globalcontext_get_process_unlock(ctx->global, target);
