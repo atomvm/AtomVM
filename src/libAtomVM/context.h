@@ -157,6 +157,10 @@ struct Context
     term group_leader;
 
     term exit_reason;
+
+    term exception_class;
+    term exception_reason;
+    term exception_stacktrace;
 };
 
 #ifndef TYPEDEF_CONTEXT

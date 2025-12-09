@@ -33,11 +33,9 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     return exception_class;
 }
 
-term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
+term stacktrace_build(Context *ctx)
 {
     UNUSED(ctx);
-    UNUSED(stack_info);
-    UNUSED(live);
     return UNDEFINED_ATOM;
 }
 
@@ -168,8 +166,8 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
     size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
-    // We need to preserve x0 and x1 that contain information on the current exception
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 2, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    // TODO: we need to know which registers contain function call arguments and save them
+    if (UNLIKELY(memory_ensure_free_opt(ctx, requested_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
     }
@@ -257,38 +255,41 @@ static term find_path_created(const void *key, struct ModulePathPair *module_pat
     return term_invalid_term();
 }
 
-term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
+term stacktrace_build(Context *ctx)
 {
     GlobalContext *glb = ctx->global;
 
-    if (*stack_info == OUT_OF_MEMORY_ATOM) {
-        return *stack_info;
+    term stack_info = ctx->exception_stacktrace;
+
+    if (stack_info == OUT_OF_MEMORY_ATOM) {
+        return stack_info;
     }
-    if (!term_is_tuple(*stack_info)) {
+    if (!term_is_tuple(stack_info)) {
         return UNDEFINED_ATOM;
     }
 
-    int num_frames = term_to_int(term_get_tuple_element(*stack_info, 0));
-    int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 1));
-    int filename_lens = term_to_int(term_get_tuple_element(*stack_info, 2));
-    int num_mods = term_to_int(term_get_tuple_element(*stack_info, 3));
+    int num_frames = term_to_int(term_get_tuple_element(stack_info, 0));
+    int num_aux_terms = term_to_int(term_get_tuple_element(stack_info, 1));
+    int filename_lens = term_to_int(term_get_tuple_element(stack_info, 2));
+    int num_mods = term_to_int(term_get_tuple_element(stack_info, 3));
 
     struct ModulePathPair *module_paths = malloc(num_mods * sizeof(struct ModulePathPair));
     if (IS_NULL_PTR(module_paths)) {
         fprintf(stderr, "Unable to allocate space for module paths.  Returning raw stacktrace.\n");
-        return *stack_info;
+        return stack_info;
     }
 
     //
     // [{module, function, arity, [{file, string()}, {line, int}]}, ...]
     //
     size_t requested_size = (TUPLE_SIZE(4) + 2) * num_frames + num_aux_terms * (4 + 2 * TUPLE_SIZE(2)) + 2 * filename_lens;
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, requested_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         free(module_paths);
         return OUT_OF_MEMORY_ATOM;
     }
+    stack_info = ctx->exception_stacktrace;
 
-    term raw_stacktrace = term_get_tuple_element(*stack_info, 4);
+    term raw_stacktrace = term_get_tuple_element(stack_info, 4);
 
     term stacktrace = term_nil();
     term el = raw_stacktrace;
