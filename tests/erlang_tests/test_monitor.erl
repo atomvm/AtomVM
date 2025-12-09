@@ -35,10 +35,12 @@ start() ->
     ok = test_monitor_registered(),
     ok = test_monitor_registered_noproc(),
     ok = test_alias(),
-    ok = test_monitor_alias(fun spawn_monitor/2),
-    ok = test_monitor_alias(fun spawn_and_monitor/2),
+    ok = test_monitor_alias_demonitor(fun spawn_monitor/2),
+    ok = test_monitor_alias_demonitor(fun spawn_and_monitor/2),
     ok = test_monitor_alias_explicit_unalias(fun spawn_monitor/2),
     ok = test_monitor_alias_explicit_unalias(fun spawn_and_monitor/2),
+    ok = test_monitor_alias_reply_demonitor(fun spawn_monitor/2),
+    ok = test_monitor_alias_reply_demonitor(fun spawn_and_monitor/2),
     ok = test_monitor_down_alias(fun spawn_monitor/2),
     ok = test_monitor_down_alias(fun spawn_and_monitor/2),
     0.
@@ -247,7 +249,7 @@ test_alias() ->
     m3 = recv_one(),
     ok.
 
-test_monitor_alias(SpawnFun) ->
+test_monitor_alias_demonitor(SpawnFun) ->
     {P, Mon} = SpawnFun(fun echo_loop/0, [{alias, demonitor}]),
     P ! {m1, Mon},
     m1 = recv_one(),
@@ -268,6 +270,15 @@ test_monitor_alias_explicit_unalias(SpawnFun) ->
     P ! {m3, Mon},
     P ! {m4, self()},
     m4 = recv_one(),
+    ok.
+
+test_monitor_alias_reply_demonitor(SpawnFun) ->
+    {P, Mon} = SpawnFun(fun echo_loop/0, [{alias, reply_demonitor}]),
+    P ! {m1, Mon},
+    m1 = recv_one(),
+    P ! {m2, Mon},
+    P ! {m3, self()},
+    m3 = recv_one(),
     ok.
 
 test_monitor_down_alias(SpawnFun) ->

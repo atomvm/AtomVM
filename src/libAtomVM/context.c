@@ -1080,7 +1080,10 @@ void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id)
 
 void context_demonitor(Context *ctx, uint64_t ref_ticks)
 {
-    context_unalias(ctx, ref_ticks, true);
+    struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+    if (!IS_NULL_PTR(alias) && alias->alias_type != CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS) {
+        context_unalias(alias);
+    }
 
     struct ListHead *item;
     LIST_FOR_EACH (item, &ctx->monitors_head) {
@@ -1137,22 +1140,12 @@ struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks)
     return NULL;
 }
 
-bool context_unalias(Context *ctx, uint64_t ref_ticks, bool from_demonitor)
+void context_unalias(struct MonitorAlias *alias)
 {
-    struct MonitorAlias *alias_monitor = context_find_alias(ctx, ref_ticks);
-    if (IS_NULL_PTR(alias_monitor)) {
-        return false;
-    }
-
-    if (alias_monitor->alias_type == CONTEXT_MONITOR_ALIAS_DEMONITOR
-        || (alias_monitor->alias_type == CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS && !from_demonitor)) {
-        struct Monitor *monitor = &alias_monitor->monitor;
-        list_remove(&monitor->monitor_list_head);
-        free(monitor);
-        return true;
-    } else {
-        return false;
-    }
+    TERM_DEBUG_ASSERT(!IS_NULL_PTR(alias));
+    struct Monitor *monitor = &alias->monitor;
+    list_remove(&monitor->monitor_list_head);
+    free(monitor);
 }
 
 term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitoring)

@@ -2783,12 +2783,16 @@ loop:
                             int64_t ref_ticks = term_to_ref_ticks(recipient_term);
                             Context *p = globalcontext_get_process_lock(glb, local_process_id);
                             if (p) {
-                                if (!IS_NULL_PTR(context_find_alias(p, ref_ticks))) {
+                                struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
+                                if (!IS_NULL_PTR(alias)) {
+                                    if (alias->alias_type == CONTEXT_MONITOR_ALIAS_REPLY_DEMONITOR) {
+                                        context_unalias(alias);
+                                    }
                                     mailbox_send(p, x_regs[1]);
                                 }
                                 globalcontext_get_process_unlock(glb, p);
                             }
-                        } else {
+                        } else if (!term_is_reference(recipient_term)) {
                             RAISE_ERROR(BADARG_ATOM);
                         }
                         x_regs[0] = x_regs[1];

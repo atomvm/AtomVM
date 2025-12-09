@@ -1245,15 +1245,15 @@ static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, 
         if (term_is_tuple(option) && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
             *is_alias = true;
             switch (term_get_tuple_element(option, 1)) {
-                case DEMONITOR_ATOM:
-                    *alias_type = CONTEXT_MONITOR_ALIAS_DEMONITOR;
-                    break;
                 case EXPLICIT_UNALIAS_ATOM:
                     *alias_type = CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS;
                     break;
+                case DEMONITOR_ATOM:
+                    *alias_type = CONTEXT_MONITOR_ALIAS_DEMONITOR;
+                    break;
                 case REPLY_DEMONITOR_ATOM:
-                    // FIXME support reply_demonitor
-                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                    *alias_type = CONTEXT_MONITOR_ALIAS_REPLY_DEMONITOR;
+                    break;
                 default:
                     RAISE_ERROR(BADARG_ATOM);
             }
@@ -1609,7 +1609,11 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
         int64_t ref_ticks = term_to_ref_ticks(target);
         Context *p = globalcontext_get_process_lock(glb, process_id);
         if (p) {
-            if (!IS_NULL_PTR(context_find_alias(p, ref_ticks))) {
+            struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
+            if (!IS_NULL_PTR(alias)) {
+                if (alias->alias_type == CONTEXT_MONITOR_ALIAS_REPLY_DEMONITOR) {
+                    context_unalias(alias);
+                }
                 mailbox_send(p, argv[1]);
             }
             globalcontext_get_process_unlock(glb, p);
@@ -1638,7 +1642,7 @@ static term nif_erlang_send_2(Context *ctx, int argc, term argv[])
 
         globalcontext_send_message_nolock(glb, local_process_id, argv[1]);
         synclist_unlock(&glb->processes_table);
-    } else {
+    } else if (!term_is_reference(target)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -6470,7 +6474,13 @@ static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(pid_ref, term_is_local_reference);
     uint64_t ref_ticks = term_to_ref_ticks(pid_ref);
-    return context_unalias(ctx, ref_ticks, false) ? TRUE_ATOM : FALSE_ATOM;
+    struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
+    if (IS_NULL_PTR(alias)) {
+        return false;
+    } else {
+        context_unalias(alias);
+        return true;
+    }
 }
 
 #ifdef WITH_ZLIB
