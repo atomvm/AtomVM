@@ -811,3 +811,28 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     UNUSED(global);
 #endif
 }
+
+#ifndef AVM_NO_JIT
+#include <soc/soc.h>
+
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+{
+    UNUSED(size);
+    uintptr_t addr = (uintptr_t) (native_code + offset);
+
+#if defined(CONFIG_IDF_TARGET_ARCH_RISCV)
+    // On RISC-V ESP32 targets, native code in flash needs to be accessed
+    // through the instruction cache (IROM) not data cache (DROM)
+#if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C2)
+    // ESP32-C3 and C2 have separate DROM and IROM regions
+    if (addr >= SOC_DROM_LOW && addr < SOC_DROM_HIGH) {
+        // Convert from data cache address to instruction cache address
+        addr = addr - SOC_DROM_LOW + SOC_IROM_LOW;
+    }
+#endif
+    // ESP32-C6, H2, and P4 have unified DROM/IROM, no conversion needed
+#endif
+
+    return (ModuleNativeEntryPoint) addr;
+}
+#endif

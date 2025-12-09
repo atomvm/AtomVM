@@ -93,6 +93,7 @@ compile(Target, Dir, Path) ->
                 "x86_64" -> ?JIT_ARCH_X86_64;
                 "aarch64" -> ?JIT_ARCH_AARCH64;
                 "armv6m" -> ?JIT_ARCH_ARMV6M;
+                "riscv32" -> ?JIT_ARCH_RISCV32;
                 _ -> error({unsupported_target, Target})
             end,
 

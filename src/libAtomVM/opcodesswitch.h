@@ -7738,7 +7738,7 @@ handle_error:
         }
 
 terminate_context:
-        TRACE("-- Code execution finished for %i--\n", ctx->process_id);
+        TRACE("-- Code execution finished for %i--\n", (int) ctx->process_id);
         GlobalContext *global = ctx->global;
         if (ctx->leader) {
             scheduler_stop_all(global);
