@@ -503,12 +503,21 @@ static inline void bitstring_copy_bits(uint8_t *dst, size_t bits_offset, const u
     }
 }
 
+bool bitstring_extract_f16(
+    term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
 bool bitstring_extract_f32(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
 bool bitstring_extract_f64(
     term src_bin, size_t offset, avm_int_t n, enum BitstringFlags bs_flags, avm_float_t *dst);
 
 intn_from_integer_options_t bitstring_flags_to_intn_opts(enum BitstringFlags bf);
+
+bool bitstring_insert_f16(
+    term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
+bool bitstring_insert_f32(
+    term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
+bool bitstring_insert_f64(
+    term dst_bin, size_t offset, avm_float_t value, enum BitstringFlags bs_flags);
 
 #ifdef __cplusplus
 }
