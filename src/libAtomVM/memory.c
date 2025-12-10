@@ -616,6 +616,11 @@ static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, co
 
                     case TERM_BOXED_REF:
                         TRACE("- Found ref.\n");
+                        term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
+                        if (term_is_resource_reference(ref)) {
+                            *mso_list = term_list_init_prepend(ptr + REFERENCE_RESOURCE_CONS_OFFSET, ref, *mso_list);
+                            refc_binary_increment_refcount((struct RefcBinary *) term_resource_refc_binary_ptr(ref));
+                        }
                         break;
 
                     case TERM_BOXED_EXTERNAL_PID:
@@ -951,6 +956,18 @@ void memory_sweep_mso_list(term mso_list, GlobalContext *global, bool from_task)
             } else {
 #endif
                 refc_binary_decrement_refcount(term_refc_binary_ptr(h), global);
+#ifdef AVM_TASK_DRIVER_ENABLED
+            }
+#endif
+        }
+        if (term_is_resource_reference(h)) {
+            // unreferenced binary; decrement reference count
+#ifdef AVM_TASK_DRIVER_ENABLED
+            if (from_task) {
+                globalcontext_refc_decrement_refcount_from_task(global, term_resource_refc_binary_ptr(h));
+            } else {
+#endif
+                refc_binary_decrement_refcount(term_resource_refc_binary_ptr(h), global);
 #ifdef AVM_TASK_DRIVER_ENABLED
             }
 #endif

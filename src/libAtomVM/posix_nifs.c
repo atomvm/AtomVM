@@ -348,7 +348,7 @@ static term nif_atomvm_posix_open(Context *ctx, int argc, term argv[])
         term_put_tuple_element(result, 0, ERROR_ATOM);
         term_put_tuple_element(result, 1, posix_errno_to_term(errno, glb));
     } else {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term obj = make_posix_fd_resource(ctx, fd);
@@ -672,7 +672,7 @@ static term nif_atomvm_subprocess(Context *ctx, int argc, term argv[])
     free_string_list(args);
     free_string_list(envp_array);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_RESOURCE_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -846,7 +846,7 @@ static term nif_atomvm_posix_opendir(Context *ctx, int argc, term argv[])
         }
         dir_obj->dir = dir;
         if (UNLIKELY(memory_ensure_free_opt(
-                         ctx, TUPLE_SIZE(2) + TERM_BOXED_RESOURCE_SIZE, MEMORY_CAN_SHRINK)
+                         ctx, TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_RESOURCE_SIZE, MEMORY_CAN_SHRINK)
                 != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }

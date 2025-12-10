@@ -27,11 +27,22 @@
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
 #include "globalcontext.h"
+#include "list.h"
 #include "refc_binary.h"
 #include "resources.h"
 #include "synclist.h"
 #include "sys.h"
 #include "utils.h"
+
+void resource_type_destroy(struct ResourceType *resource_type)
+{
+    free((void *) resource_type->name);
+    // Assume we have no monitor left.
+    synclist_destroy(&resource_type->monitors);
+    // Assume we have no serialized resource left.
+    synclist_destroy(&resource_type->serialized);
+    free(resource_type);
+}
 
 ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, const ErlNifResourceTypeInit *init, ErlNifResourceFlags flags, ErlNifResourceFlags *tried)
 {
@@ -46,6 +57,7 @@ ErlNifResourceType *enif_init_resource_type(ErlNifEnv *env, const char *name, co
     result->global = env->global;
     list_init(&result->head);
     synclist_init(&result->monitors);
+    synclist_init(&result->serialized);
     result->dtor = NULL;
     result->stop = NULL;
     result->down = NULL;
@@ -82,14 +94,11 @@ int enif_get_resource(ErlNifEnv *env, ERL_NIF_TERM t, ErlNifResourceType *type, 
 {
     UNUSED(env);
 
-    if (UNLIKELY(!term_is_refc_binary(t))) {
-        return false;
-    }
-    if (UNLIKELY(term_refc_binary_is_const(t))) {
+    if (UNLIKELY(!term_is_resource_reference(t))) {
         return false;
     }
     const term *boxed_value = term_to_const_term_ptr(t);
-    struct RefcBinary *refc = (struct RefcBinary *) boxed_value[3];
+    struct RefcBinary *refc = (struct RefcBinary *) boxed_value[1];
     if (UNLIKELY(refc->resource_type != type)) {
         return false;
     }
@@ -113,7 +122,7 @@ int enif_release_resource(void *resource)
 
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
 {
-    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
     return term_from_resource(obj, &env->heap);
@@ -525,4 +534,64 @@ int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *mo
         return 1;
     }
     return 0;
+}
+
+uint64_t resource_serialize(void *rsrc_obj, struct ResourceType *resource_type)
+{
+    struct ListHead *serialized_resources = synclist_wrlock(&resource_type->serialized);
+    struct ListHead *item = NULL;
+    uint64_t serialize_ref = 0;
+    LIST_FOR_EACH (item, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->resource_obj == rsrc_obj) {
+            serialize_ref = mark->serialize_ref;
+            break;
+        }
+    }
+    if (serialize_ref == 0) {
+        struct ResourceSerializedMark *resource_mark = malloc(sizeof(struct ResourceSerializedMark));
+        if (IS_NULL_PTR(resource_mark)) {
+            // Not much we can do except skipping marking the resource as serialized
+            synclist_unlock(&resource_type->serialized);
+            return 0;
+        }
+        list_append(serialized_resources, &resource_mark->resource_list_head);
+        resource_mark->resource_obj = rsrc_obj;
+        serialize_ref = globalcontext_get_ref_ticks(resource_type->global);
+        resource_mark->serialize_ref = serialize_ref;
+    }
+    synclist_unlock(&resource_type->serialized);
+    return serialize_ref;
+}
+
+void resource_unmark_serialized(void *rsrc_obj, struct ResourceType *resource_type)
+{
+    struct ListHead *serialized_resources = synclist_wrlock(&resource_type->serialized);
+    struct ListHead *item;
+    struct ListHead *tmp;
+    MUTABLE_LIST_FOR_EACH (item, tmp, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->resource_obj == rsrc_obj) {
+            list_remove(&mark->resource_list_head);
+            free(mark);
+            break;
+        }
+    }
+    synclist_unlock(&resource_type->serialized);
+}
+
+void *resource_unserialize(struct ResourceType *resource_type, uint64_t serialize_ref)
+{
+    void *result = NULL;
+    struct ListHead *serialized_resources = synclist_rdlock(&resource_type->serialized);
+    struct ListHead *item;
+    LIST_FOR_EACH (item, serialized_resources) {
+        struct ResourceSerializedMark *mark = GET_LIST_ENTRY(item, struct ResourceSerializedMark, resource_list_head);
+        if (mark->serialize_ref == serialize_ref) {
+            result = mark->resource_obj;
+            break;
+        }
+    }
+    synclist_unlock(&resource_type->serialized);
+    return result;
 }

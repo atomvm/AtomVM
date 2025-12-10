@@ -245,7 +245,7 @@ static const AtomStringIntPair otp_socket_setopt_level_table[] = {
 
 static ErlNifResourceType *socket_resource_type;
 
-#define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TUPLE_SIZE(2) + REF_SIZE + TERM_BOXED_RESOURCE_SIZE)
+#define SOCKET_MAKE_SELECT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + REF_SIZE + TUPLE_SIZE(2) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 static term socket_make_select_notification(struct SocketResource *rsrc_obj, Heap *heap);
 
 //
@@ -632,7 +632,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 #endif
         rsrc_obj->buf_size = DEFAULT_BUFFER_SIZE;
 
-        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -675,7 +675,7 @@ bool term_is_otp_socket(term socket_term)
 {
     bool ret = term_is_tuple(socket_term)
         && term_get_tuple_arity(socket_term) == 2
-        && term_is_binary(term_get_tuple_element(socket_term, 0))
+        && term_is_resource_reference(term_get_tuple_element(socket_term, 0))
         && term_is_local_reference(term_get_tuple_element(socket_term, 1));
 
     TRACE("term is a socket: %i\n", ret);
@@ -1929,7 +1929,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
             SMP_RWLOCK_UNLOCK(rsrc_obj->socket_lock);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        size_t requested_size = TERM_BOXED_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
+        size_t requested_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             LWIP_END();
