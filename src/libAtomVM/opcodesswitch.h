@@ -2776,8 +2776,8 @@ loop:
                             TRACE("send/0 target_pid=%i\n", local_process_id);
                             TRACE_SEND(ctx, x_regs[0], x_regs[1]);
                             globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
-                        } else if (term_is_pid_reference(recipient_term)) {
-                            int32_t local_process_id = term_pid_ref_to_process_id(recipient_term);
+                        } else if (term_is_process_reference(recipient_term)) {
+                            int32_t local_process_id = term_process_ref_to_process_id(recipient_term);
                             TRACE("send/0 target_pid=%i\n", local_process_id);
                             TRACE_SEND(ctx, x_regs[0], x_regs[1]);
                             int64_t ref_ticks = term_to_ref_ticks(recipient_term);
@@ -2785,7 +2785,7 @@ loop:
                             if (p) {
                                 struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
                                 if (!IS_NULL_PTR(alias)) {
-                                    if (alias->alias_type == CONTEXT_MONITOR_ALIAS_REPLY_DEMONITOR) {
+                                    if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
                                         context_unalias(alias);
                                     }
                                     mailbox_send(p, x_regs[1]);

@@ -34,15 +34,27 @@ start() ->
     ok = test_monitor_demonitor_from_other(),
     ok = test_monitor_registered(),
     ok = test_monitor_registered_noproc(),
-    ok = test_alias(),
-    ok = test_monitor_alias_demonitor(fun spawn_monitor/2),
-    ok = test_monitor_alias_demonitor(fun spawn_and_monitor/2),
-    ok = test_monitor_alias_explicit_unalias(fun spawn_monitor/2),
-    ok = test_monitor_alias_explicit_unalias(fun spawn_and_monitor/2),
-    ok = test_monitor_alias_reply_demonitor(fun spawn_monitor/2),
-    ok = test_monitor_alias_reply_demonitor(fun spawn_and_monitor/2),
-    ok = test_monitor_down_alias(fun spawn_monitor/2),
-    ok = test_monitor_down_alias(fun spawn_and_monitor/2),
+
+    AliasesAvailable =
+        case erlang:system_info(machine) of
+            "ATOM" -> true;
+            "BEAM" -> erlang:system_info(otp_release) >= "23"
+        end,
+    if
+        AliasesAvailable ->
+            ok = test_alias(),
+            ok = test_monitor_alias_demonitor(fun spawn_monitor/2),
+            ok = test_monitor_alias_demonitor(fun spawn_and_monitor/2),
+            ok = test_monitor_alias_explicit_unalias(fun spawn_monitor/2),
+            ok = test_monitor_alias_explicit_unalias(fun spawn_and_monitor/2),
+            ok = test_monitor_alias_reply_demonitor(fun spawn_monitor/2),
+            ok = test_monitor_alias_reply_demonitor(fun spawn_and_monitor/2),
+            ok = test_monitor_down_alias(fun spawn_monitor/2),
+            ok = test_monitor_down_alias(fun spawn_and_monitor/2),
+            ok;
+        true ->
+            ok
+    end,
     0.
 
 test_monitor_normal() ->

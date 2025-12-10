@@ -484,7 +484,7 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
             WRITE_32_UNALIGNED(buf + k + 8, term_get_external_node_creation(t));
         }
         return k + 12;
-    } else if (term_is_pid_reference(t)) {
+    } else if (term_is_process_reference(t)) {
         // FIXME: implement pid reference serialization
         fprintf(stderr, "Error: serialize pid reference");
         AVM_ABORT();

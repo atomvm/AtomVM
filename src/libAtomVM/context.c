@@ -1081,7 +1081,7 @@ void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id)
 void context_demonitor(Context *ctx, uint64_t ref_ticks)
 {
     struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
-    if (!IS_NULL_PTR(alias) && alias->alias_type != CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS) {
+    if (!IS_NULL_PTR(alias) && alias->alias_type != ContextMonitorAliasExplicitUnalias) {
         context_unalias(alias);
     }
 

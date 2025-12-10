@@ -177,9 +177,9 @@ enum ContextMonitorType
 
 enum ContextMonitorAliasType
 {
-    CONTEXT_MONITOR_ALIAS_EXPLICIT_UNALIAS,
-    CONTEXT_MONITOR_ALIAS_DEMONITOR,
-    CONTEXT_MONITOR_ALIAS_REPLY_DEMONITOR,
+    ContextMonitorAliasExplicitUnalias,
+    ContextMonitorAliasDemonitor,
+    ContextMonitorAliasReplyDemonitor,
 };
 
 #define UNLINK_ID_LINK_ACTIVE 0x0
