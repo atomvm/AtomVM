@@ -319,13 +319,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         return NULL;
     }
 
-#ifdef ENABLE_ADVANCED_TRACE
-    mod->import_table = beam_file + offsets[IMPT];
-#endif
     if (offsets[CODE]) {
         mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     }
     mod->export_table = beam_file + offsets[EXPT];
+    mod->import_table = beam_file + offsets[IMPT];
     mod->local_table = beam_file + offsets[LOCT];
     mod->atom_table = beam_file + offsets[AT8U];
     mod->fun_table = beam_file + offsets[FUNT];
