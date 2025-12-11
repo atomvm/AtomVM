@@ -1348,7 +1348,6 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             RAISE_ERROR(BADARG_ATOM);
     }
     uint64_t ref_ticks = 0;
-    bool create_process_ref = false;
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
@@ -1404,7 +1403,6 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         context_add_monitor(new_ctx, new_monitor);
         context_add_monitor(ctx, self_monitor);
         if (is_alias) {
-            create_process_ref = true;
             context_add_monitor(ctx, alias_monitor);
         }
     }
@@ -1418,7 +1416,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 
         scheduler_init_ready(new_ctx);
 
-        term ref = create_process_ref ? term_make_process_ref(ctx->process_id, ref_ticks, &ctx->heap) : term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = term_make_process_ref(ctx->process_id, ref_ticks, &ctx->heap);
 
         term process_ref_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(process_ref_tuple, 0, new_pid);
@@ -4349,12 +4347,12 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     if (IS_NULL_PTR(target)) {
-        int res_size = REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
+        int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        term ref = term_from_ref_ticks(ref_ticks, &ctx->heap);
+        term ref = term_make_process_ref(ctx->process_id, ref_ticks, &ctx->heap);
         term down_message_tuple = term_alloc_tuple(5, &ctx->heap);
         term_put_tuple_element(down_message_tuple, 0, DOWN_ATOM);
         term_put_tuple_element(down_message_tuple, 1, ref);
@@ -4415,11 +4413,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (is_alias) {
-        return term_make_process_ref(ctx->process_id, ref_ticks, &ctx->heap);
-    } else {
-        return term_from_ref_ticks(ref_ticks, &ctx->heap);
-    }
+    return term_make_process_ref(ctx->process_id, ref_ticks, &ctx->heap);
 }
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
@@ -6477,10 +6471,10 @@ static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
     uint64_t ref_ticks = term_to_ref_ticks(process_ref);
     struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
     if (IS_NULL_PTR(alias)) {
-        return false;
+        return FALSE_ATOM;
     } else {
         context_unalias(alias);
-        return true;
+        return TRUE_ATOM;
     }
 }
 
