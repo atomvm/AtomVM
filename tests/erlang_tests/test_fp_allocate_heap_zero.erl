@@ -23,8 +23,7 @@
 
 start() ->
     R = e(0.1, 10000, 0.0),
-    true = R > 2183.832274,
-    true = R < 2183.832276,
+    ok = assert_float_range(R, 2183.7, 2183.9),
     0.
 
 e(_Step, 0, Acc) ->
@@ -35,3 +34,6 @@ e(Step, N, Acc) when is_float(Step) andalso is_integer(N) andalso is_float(Acc) 
 
 f(T) when is_float(T) ->
     0.3 + 3.2 * math:sin(T) + 0.7 * math:sin(2 * T) + 0.2 * math:sin(4 * T) + 1.2 * math:sin(8 * T).
+
+assert_float_range(R, Min, Max) when R < Max andalso R > Min -> ok;
+assert_float_range(R, _Min, _Max) -> {out_of_range, R}.

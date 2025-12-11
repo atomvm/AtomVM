@@ -1256,52 +1256,87 @@ conv_to_from_float() ->
     Num1 = ?MODULE:mul(?MODULE:id(Int1), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
     Num2 = ?MODULE:mul(?MODULE:id(Int2), ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"1.0">>)))),
     Num3 = ?MODULE:id(Int1) * ?MODULE:id(erlang:binary_to_float(?MODULE:id(<<"2.0">>))),
-    true =
-        erlang:binary_to_integer(?MODULE:id(<<"CAFECAFE1234">>), 16) =:=
-            ?MODULE:divtrunc(?MODULE:id(Num1), Int0),
-    true =
-        erlang:binary_to_integer(?MODULE:id(<<"-CAFECAFE1234">>), 16) =:=
-            ?MODULE:divtrunc(?MODULE:id(Num2), Int0),
-    true =
-        erlang:binary_to_integer(?MODULE:id(<<"195FD95FC2468">>), 16) =:=
-            ?MODULE:divtrunc(?MODULE:id(Num3), Int0),
+    true = fp_equal(
+        erlang:binary_to_integer(?MODULE:id(<<"CAFECAFE1234">>), 16),
+        ?MODULE:divtrunc(?MODULE:id(Num1), Int0)
+    ),
+    true = fp_equal(
+        erlang:binary_to_integer(?MODULE:id(<<"-CAFECAFE1234">>), 16),
+        ?MODULE:divtrunc(?MODULE:id(Num2), Int0)
+    ),
+    true = fp_equal(
+        erlang:binary_to_integer(?MODULE:id(<<"195FD95FC2468">>), 16),
+        ?MODULE:divtrunc(?MODULE:id(Num3), Int0)
+    ),
 
     % from float
 
-    Int1 = ?MODULE:id(trunc(?MODULE:id(Num1))),
-    Int2 = ?MODULE:id(round(?MODULE:id(Num2))),
-    Int3 = ?MODULE:id(floor(?MODULE:id(Num3))),
-    Int3 = ?MODULE:id(ceil(?MODULE:id(Num3))),
+    true = fp_equal(Int1, ?MODULE:id(trunc(?MODULE:id(Num1)))),
+    true = fp_equal(Int2, ?MODULE:id(round(?MODULE:id(Num2)))),
+    true = fp_equal(Int3, ?MODULE:id(floor(?MODULE:id(Num3)))),
+    true = fp_equal(Int3, ?MODULE:id(ceil(?MODULE:id(Num3)))),
+
+    FloatSize =
+        case erlang:system_info(machine) of
+            "BEAM" -> 8;
+            "ATOM" -> erlang:system_info(avm_floatsize)
+        end,
 
     Int64Max = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"7FFFFFFFFFFFFFFF">>), 16)),
-    true = (Int64Max >= ?MODULE:id(trunc(?MODULE:id(9223372036854775295.0)))),
-    true = (Int64Max < ?MODULE:id(trunc(?MODULE:id(9223372036854775296.0)))),
+    FInt64MaxInf = ?MODULE:id(trunc(?MODULE:id(9223372036854775295.0))),
+    FInt64MaxSup = ?MODULE:id(trunc(?MODULE:id(9223372036854775296.0))),
+    if
+        FInt64MaxSup > FInt64MaxInf ->
+            true = Int64Max >= FInt64MaxInf,
+            true = Int64Max < FInt64MaxSup;
+        true ->
+            4 = FloatSize,
+            true = (Int64Max >= ?MODULE:id(trunc(?MODULE:id(9223371487098962000.0)))),
+            true = (Int64Max < ?MODULE:id(trunc(?MODULE:id(9223372036854776000.0))))
+    end,
 
     Int64Min = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"-8000000000000000">>), 16)),
-    true = (Int64Min =< ?MODULE:id(trunc(?MODULE:id(-9223372036854776832.0)))),
-    true = (Int64Min > ?MODULE:id(trunc(?MODULE:id(-9223372036854776833.0)))),
+    FInt64MinSup = ?MODULE:id(trunc(?MODULE:id(-9223372036854776832.0))),
+    FInt64MinInf = ?MODULE:id(trunc(?MODULE:id(-9223372036854776833.0))),
+    if
+        FInt64MinSup > FInt64MinInf ->
+            true = Int64Min =< FInt64MinSup,
+            true = Int64Min > FInt64MinInf;
+        true ->
+            4 = FloatSize,
+            true = (Int64Min >= ?MODULE:id(trunc(?MODULE:id(-9223372036854776000.0)))),
+            true = (Int64Min < ?MODULE:id(trunc(?MODULE:id(-9223371487098962000.0))))
+    end,
 
     % test limits and comparisons
-    MaxInt = erlang:binary_to_integer(
-        ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
-    ),
-    MaxIntAsFloat = erlang:float(?MODULE:id(MaxInt)),
-    true = (?MODULE:id(1.111111111111111e77) < MaxIntAsFloat),
-    true = (MaxIntAsFloat < ?MODULE:id(1.888888888888888e77)),
+    case FloatSize of
+        8 ->
+            MaxInt = erlang:binary_to_integer(
+                ?MODULE:id(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            ),
+            MaxIntAsFloat = erlang:float(?MODULE:id(MaxInt)),
+            true = (?MODULE:id(1.111111111111111e77) < MaxIntAsFloat),
+            true = (MaxIntAsFloat < ?MODULE:id(1.888888888888888e77)),
 
-    MinInt = erlang:binary_to_integer(
-        ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>), 16
-    ),
-    MinIntAsFloat = erlang:float(?MODULE:id(MinInt)),
-    true = (?MODULE:id(-1.111111111111111e77) > MinIntAsFloat),
-    true = (MinIntAsFloat > ?MODULE:id(-1.888888888888888e77)),
+            MinInt = erlang:binary_to_integer(
+                ?MODULE:id(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+                16
+            ),
+            MinIntAsFloat = erlang:float(?MODULE:id(MinInt)),
+            true = (?MODULE:id(-1.111111111111111e77) > MinIntAsFloat),
+            true = (MinIntAsFloat > ?MODULE:id(-1.888888888888888e77)),
 
-    % test overflows
-    ok = expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
-    ok = expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end),
+            % test overflows
+            ok = expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
+            ok = expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end),
 
-    true = (trunc(?MODULE:id(1.157920892373160e77)) > ?MODULE:pow(2, 255)),
-    true = (trunc(?MODULE:id(-1.157920892373160e77)) < ?MODULE:pow(-2, 255)),
+            true = (trunc(?MODULE:id(1.157920892373160e77)) > ?MODULE:pow(2, 255)),
+            true = (trunc(?MODULE:id(-1.157920892373160e77)) < ?MODULE:pow(-2, 255));
+        4 ->
+            ok = expect_overflow(fun() -> trunc(?MODULE:id(1.157920892373163e77)) end),
+            ok = expect_overflow(fun() -> trunc(?MODULE:id(-1.157920892373163e77)) end)
+    end,
 
     0.
 
@@ -2712,3 +2747,11 @@ get_machine_atom() ->
         "BEAM" -> beam;
         _ -> atomvm
     end.
+
+fp_equal(Int1, Int2) ->
+    Size =
+        case erlang:system_info(machine) of
+            "BEAM" -> 64;
+            "ATOM" -> erlang:system_info(avm_floatsize) * 8
+        end,
+    <<Int1:Size/float>> =:= <<Int2:Size/float>>.
