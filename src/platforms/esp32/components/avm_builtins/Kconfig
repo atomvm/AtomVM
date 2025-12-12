@@ -20,6 +20,12 @@
 
 menu "AtomVM Built-In Components"
 
+config AVM_ENABLE_DAC_NIF
+    bool "Enable DAC NIF"
+    default "y" if IDF_TARGET_ESP32
+    default "y" if IDF_TARGET_ESP32S2
+    default n
+
 config AVM_ENABLE_ADC_NIFS
     bool "Enable ADC NIFs"
     default y
