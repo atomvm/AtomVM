@@ -1141,7 +1141,7 @@ test_encode_process_ref() ->
     AliasesAvailable = is_atomvm_or_otp_version_at_least("23"),
     if
         AliasesAvailable ->
-            ProcessRef = alias(),
+            ProcessRef = erlang:alias(),
             ProcessRef = binary_to_term(term_to_binary(ProcessRef)),
             ok;
         true ->

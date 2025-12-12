@@ -46,6 +46,7 @@ start() ->
             ok = test_multiple_aliases(),
             ok = test_multiple_unaliases(),
             ok = test_unalias_from_wrong_process(),
+            ok = test_monitor_alias_dead_process(),
             ok = test_monitor_multiple_aliases_monitors(fun spawn_monitor/2),
             ok = test_monitor_multiple_aliases_monitors(fun spawn_and_monitor/2),
             ok = test_monitor_alias_demonitor(fun spawn_monitor/2),
@@ -56,8 +57,6 @@ start() ->
             ok = test_monitor_alias_reply_demonitor(fun spawn_and_monitor/2),
             ok = test_monitor_down_alias(fun spawn_monitor/2),
             ok = test_monitor_down_alias(fun spawn_and_monitor/2),
-            ok = test_monitor_alias_dead_process(fun spawn_monitor/2),
-            ok = test_monitor_alias_dead_process(fun spawn_and_monitor/2),
             ok;
         true ->
             ok
@@ -347,14 +346,15 @@ test_monitor_multiple_aliases_monitors(SpawnFun) ->
     {'DOWN', Mon4, process, P, normal} = recv_one(),
     ok.
 
-test_monitor_alias_dead_process(SpawnFun) ->
-    Noop = fun() -> ok end,
-    {P1, Mon1} = SpawnFun(Noop, [{alias, demonitor}]),
-    {'DOWN', Mon1, process, P1, normal} = recv_one(),
-    {P2, Mon2} = SpawnFun(Noop, [{alias, reply_demonitor}]),
-    {'DOWN', Mon2, process, P2, normal} = recv_one(),
-    {P3, Mon3} = SpawnFun(Noop, [{alias, explicit_unalias}]),
-    {'DOWN', Mon3, process, P3, normal} = recv_one(),
+test_monitor_alias_dead_process() ->
+    {P, Mon0} = spawn_opt(fun() -> ok end, [monitor]),
+    {'DOWN', Mon0, process, P, normal} = recv_one(),
+    Mon1 = erlang:monitor(process, P, [{alias, demonitor}]),
+    {'DOWN', Mon1, process, P, noproc} = recv_one(),
+    Mon2 = erlang:monitor(process, P, [{alias, reply_demonitor}]),
+    {'DOWN', Mon2, process, P, noproc} = recv_one(),
+    Mon3 = erlang:monitor(process, P, [{alias, explicit_unalias}]),
+    {'DOWN', Mon3, process, P, noproc} = recv_one(),
     ok.
 
 spawn_monitor(LoopFun, Opts) ->

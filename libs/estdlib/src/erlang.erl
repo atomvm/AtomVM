@@ -1179,11 +1179,11 @@ monitor(_Type, _PidOrPort) ->
 %% @param   Options     monitor options
 %% @returns a monitor reference
 %% @doc     Creates a monitor and allows passing additional options.
-%%          Currently, only the `{alias, AliasMode}` option is supported. Passing it
-%%          makes the monitor also an alias on the calling process (see `alias/0`).
-%%          `AliasMode` defines the behaviour of the alias:
-%%          - explicit_unalias - the alias can be only removed with `unalias/1`,
-%%          - demonitor - the alias is also removed when `demonitor/1` is called
+%%          Currently, only the `{alias, AliasMode}' option is supported. Passing it
+%%          makes the monitor also an alias on the calling process (see `alias/0').
+%%          `AliasMode' defines the behaviour of the alias:
+%%          - explicit_unalias - the alias can be only removed with `unalias/1',
+%%          - demonitor - the alias is also removed when `demonitor/1' is called
 %%                        on the monitor,
 %%          - reply_demonitor - the alias is also removed after a first message
 %%                              is sent via it.
@@ -1611,8 +1611,8 @@ raise(_Class, _Reason, _Stacktrace) ->
 %% @returns A reference aliasing the calling process.
 %% @doc     Creates an alias for the callling process. The alias can be used
 %%          to send messages to the process like the PID. The alias can also be
-%%          created along with a monitor - see `monitor/3`. The alias can be
-%%          removed by calling `unalias/1`.
+%%          created along with a monitor - see `monitor/3'. The alias can be
+%%          removed by calling `unalias/1'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec alias() -> Alias when Alias :: reference().
@@ -1621,8 +1621,8 @@ alias() ->
 
 %%-----------------------------------------------------------------------------
 %% @param   Alias the alias to be removed.
-%% @returns `true` if alias was removed, `false` if it was not found
-%% @doc     Removes process alias. See `alias/0` for more information.
+%% @returns `true' if alias was removed, `false' if it was not found
+%% @doc     Removes process alias. See `alias/0' for more information.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec unalias(Alias) -> boolean() when Alias :: reference().
