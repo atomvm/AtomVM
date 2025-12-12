@@ -915,7 +915,7 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 } else if (len == 3 && node == this_node && creation == this_creation) {
                     uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
                     uint32_t process_id = data[2];
-                    return term_make_process_ref(process_id, ticks, heap);
+                    return term_make_process_reference(process_id, ticks, heap);
                 } else if (len == 4 && node == this_node && creation == this_creation) {
                     // This is a resource
                     uint64_t resource_type_ptr = ((uint64_t) data[0]) << 32 | data[1];

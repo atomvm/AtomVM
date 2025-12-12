@@ -594,7 +594,22 @@ void context_unlink_ack(Context *ctx, term link_pid, uint64_t unlink_id);
  */
 void context_demonitor(Context *ctx, uint64_t ref_ticks);
 
+/**
+ * @brief Find a process alias
+ * @details Called within the process only
+ *
+ * @param ctx the context being executed
+ * @param ref_ticks reference of the alias to remove
+ * @return found alias or NULL
+ */
 struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks);
+
+/**
+ * @brief Remove an alias of a process
+ * @details Called within the process only
+ *
+ * @param alias The alias to remove, can be obtained using context_find_alias
+ */
 void context_unalias(struct MonitorAlias *alias);
 
 /**

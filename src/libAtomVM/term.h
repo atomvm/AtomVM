@@ -820,6 +820,13 @@ static inline bool term_is_local_reference(term t)
     return false;
 }
 
+/**
+ * @brief Checks if a term is a process reference
+ *
+ * @details See \c term_make_process_reference().
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
 static inline bool term_is_process_reference(term t)
 {
     if (term_is_boxed(t)) {
@@ -1951,7 +1958,17 @@ static inline uint64_t term_to_ref_ticks(term rt)
 #endif
 }
 
-static inline term term_make_process_ref(int32_t process_id, uint64_t ref_ticks, Heap *heap)
+/**
+ * @brief Creates a process reference
+ * @details Process reference contains ref_ticks and process_id of a process.
+ * They are used by process aliases and monitors.
+ *
+ * @param process_id process_id of a process that the reference will identify.
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param heap the heap to allocate memory in
+ * @return a ref term created using given ref ticks.
+ */
+static inline term term_make_process_reference(int32_t process_id, uint64_t ref_ticks, Heap *heap)
 {
     term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_PROCESS_REF_SIZE);
     boxed_value[0] = TERM_BOXED_PROCESS_REF_HEADER;

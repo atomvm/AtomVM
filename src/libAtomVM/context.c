@@ -783,7 +783,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                     AVM_ABORT();
                 }
                 // Prepare the message on ctx's heap which will be freed afterwards.
-                term ref = term_make_process_ref(target->process_id, monitored_monitor->ref_ticks, &ctx->heap);
+                term ref = term_make_process_reference(target->process_id, monitored_monitor->ref_ticks, &ctx->heap);
 
                 term port_or_process = term_pid_or_port_from_context(ctx);
                 term port_or_process_atom
