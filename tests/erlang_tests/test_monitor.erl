@@ -259,38 +259,38 @@ test_monitor_demonitor_from_other() ->
 
 test_alias() ->
     P = spawn_opt(fun echo_loop/0, []),
-    Alias = alias(),
+    Alias = erlang:alias(),
     do_test_alias(P, Alias),
     ok.
 
 test_multiple_aliases() ->
     P = spawn_opt(fun echo_loop/0, []),
-    A1 = alias(),
-    A2 = alias(),
-    A3 = alias(),
+    A1 = erlang:alias(),
+    A2 = erlang:alias(),
+    A3 = erlang:alias(),
     do_test_alias(P, A1),
     do_test_alias(P, A3),
     do_test_alias(P, A2),
     ok.
 
 test_multiple_unaliases() ->
-    A = alias(),
-    true = unalias(A),
-    false = unalias(A),
-    false = unalias(A),
+    A = erlang:alias(),
+    true = erlang:unalias(A),
+    false = erlang:unalias(A),
+    false = erlang:unalias(A),
     ok.
 
 test_unalias_from_wrong_process() ->
-    A = alias(),
+    A = erlang:alias(),
     TestProcess = self(),
-    spawn_opt(fun() -> TestProcess ! unalias(A) end, [link]),
+    spawn_opt(fun() -> TestProcess ! erlang:unalias(A) end, [link]),
     false = recv_one(),
     P = spawn_opt(fun echo_loop/0, []),
     do_test_alias(P, A),
     ok.
 
 do_test_alias(P, Alias) ->
-    do_test_alias(P, Alias, fun unalias/1).
+    do_test_alias(P, Alias, fun erlang:unalias/1).
 
 do_test_alias(P, Alias, UnaliasFun) ->
     Ref = make_ref(),
@@ -322,7 +322,7 @@ test_monitor_alias_reply_demonitor(SpawnFun) ->
 
 test_monitor_down_alias(SpawnFun) ->
     {P, Mon} = SpawnFun(fun echo_loop/0, [{alias, demonitor}]),
-    unalias(Mon),
+    erlang:unalias(Mon),
     P ! {m1, Mon},
     P ! {m2, self()},
     m2 = recv_one(),
@@ -335,8 +335,8 @@ test_monitor_multiple_aliases_monitors(SpawnFun) ->
     Mon2 = monitor(process, P, [{alias, reply_demonitor}]),
     Mon3 = monitor(process, P, [{alias, explicit_unalias}]),
     Mon4 = monitor(process, P),
-    A1 = alias(),
-    A2 = alias(),
+    A1 = erlang:alias(),
+    A2 = erlang:alias(),
     do_test_alias(P, A2),
     do_test_alias(P, Mon3),
     do_test_alias(P, A1),
@@ -382,6 +382,5 @@ echo_loop() ->
 recv_one() ->
     receive
         Msg -> Msg
-    after
-        500 -> timeout
+    after 500 -> timeout
     end.

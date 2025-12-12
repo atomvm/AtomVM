@@ -368,9 +368,6 @@ static uint32_t hash_term_incr(term t, int32_t h, GlobalContext *global)
         return hash_local_port(t, h, global);
     } else if (term_is_external_port(t)) {
         return hash_external_port(t, h, global);
-    } else if (term_is_process_reference(t)) {
-        fprintf(stderr, "error: hash pid reference\n");
-        AVM_ABORT();
     } else if (term_is_local_reference(t)) {
         return hash_local_reference(t, h, global);
     } else if (term_is_external_reference(t)) {
