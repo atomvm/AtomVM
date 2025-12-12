@@ -77,8 +77,7 @@ jobs:
             "esp32s3",
             "esp32c3",
             "esp32c6",
-            "esp32h2",
-            "esp32p4",
+            "esp32h2"
           ]
         idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.6", "v5.2.6", "v5.3.4", "v5.4.3", "v5.5.1"]')) || fromJSON('["v5.5.1"]') }}
         exclude:
@@ -90,6 +89,10 @@ jobs:
             idf-version: "v5.1.6"
           - esp-idf-target: "esp32h2"
             idf-version: "v5.2.6"
+        # CI now uses chip revision 3 that is currently only available in release-v5.5 branch
+        include:
+          - esp-idf-target: "esp32p4"
+            idf-version: "release-v5.5"
 
     steps:
       - name: Checkout repo
