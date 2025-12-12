@@ -331,9 +331,9 @@ test_monitor_down_alias(SpawnFun) ->
 
 test_monitor_multiple_aliases_monitors(SpawnFun) ->
     {P, Mon1} = SpawnFun(fun echo_loop/0, [{alias, demonitor}]),
-    Mon2 = monitor(process, P, [{alias, reply_demonitor}]),
-    Mon3 = monitor(process, P, [{alias, explicit_unalias}]),
-    Mon4 = monitor(process, P),
+    Mon2 = erlang:monitor(process, P, [{alias, reply_demonitor}]),
+    Mon3 = erlang:monitor(process, P, [{alias, explicit_unalias}]),
+    Mon4 = erlang:monitor(process, P),
     A1 = erlang:alias(),
     A2 = erlang:alias(),
     do_test_alias(P, A2),
@@ -362,7 +362,7 @@ spawn_monitor(LoopFun, Opts) ->
 
 spawn_and_monitor(LoopFun, Opts) ->
     P = spawn_opt(LoopFun, []),
-    Mon = monitor(process, P, Opts),
+    Mon = erlang:monitor(process, P, Opts),
     {P, Mon}.
 
 normal_loop() ->
