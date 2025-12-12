@@ -38,7 +38,7 @@ start() ->
     AliasesAvailable =
         case erlang:system_info(machine) of
             "ATOM" -> true;
-            "BEAM" -> erlang:system_info(otp_release) >= "23"
+            "BEAM" -> erlang:system_info(otp_release) >= "24"
         end,
     if
         AliasesAvailable ->

@@ -1138,7 +1138,7 @@ test_encode_resource(OTPVersion) ->
     false = AlteredResource4 =:= Resource,
     ok.
 test_encode_process_ref() ->
-    AliasesAvailable = is_atomvm_or_otp_version_at_least("23"),
+    AliasesAvailable = is_atomvm_or_otp_version_at_least("24"),
     if
         AliasesAvailable ->
             ProcessRef = erlang:alias(),
