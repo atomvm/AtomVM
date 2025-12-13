@@ -98,6 +98,20 @@ struct SelectEvent
 };
 
 /**
+ * @brief A resource-managed binary
+ */
+struct ResourceBinary
+{
+    struct RefcBinary *managing_resource;
+    const void *data;
+};
+
+/**
+ * Resource type for resource binaries.
+ */
+extern const ErlNifResourceTypeInit resource_binary_resource_type_init;
+
+/**
  * @brief Destroy a resource type and free all associated structures
  * @param resource_type the type to destroy
  */

@@ -22,8 +22,11 @@
 #include <stdlib.h>
 
 #include "context.h"
+#include "defaultatoms.h"
+#include "dictionary.h"
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
+#include "externalterm.h"
 #include "globalcontext.h"
 #include "scheduler.h"
 #include "utils.h"
@@ -452,6 +455,133 @@ void test_resource_monitor_two_resources_two_processes(void)
     globalcontext_destroy(glb);
 }
 
+void test_resource_binary(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx = context_new(glb);
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+
+    ErlNifResourceTypeInit init;
+    init.members = 1;
+    init.dtor = resource_dtor;
+    ErlNifResourceFlags flags;
+    cb_read_resource = 0;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(env, "test_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+    assert(flags == ERL_NIF_RT_CREATE);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    ERL_NIF_TERM binary = enif_make_resource_binary(env, ptr, "hello", 5);
+    assert(term_is_binary(binary));
+    assert(term_is_refc_binary(binary));
+    assert(term_binary_size(binary) == 5);
+    assert(memcmp(term_binary_data(binary), "hello", 5) == 0);
+
+    // When serialized, a resource-managed binary appears becomes a regular binary
+    // There is no externalterm_to_binary_with_roots, so we use the process dictionary
+    term old;
+    DictionaryFunctionResult result = dictionary_put(&ctx->dictionary, BINARY_ATOM, binary, &old, ctx->global);
+    assert(result == DictionaryOk);
+
+    term binary_ext = externalterm_to_binary(ctx, binary);
+
+    result = dictionary_get(&ctx->dictionary, BINARY_ATOM, &binary, ctx->global);
+    assert(result == DictionaryOk);
+
+    // Unserialize and then check the result
+    size_t bytes_read;
+    term roots[2];
+    roots[0] = binary_ext;
+    roots[1] = binary;
+    term binary_unserialized = externalterm_from_binary_with_roots(ctx, 0, 0, &bytes_read, 2, roots);
+    binary_ext = roots[0];
+    binary = roots[1];
+
+    assert(term_is_binary(binary_unserialized));
+    assert(!term_is_refc_binary(binary_unserialized));
+    assert(term_binary_size(binary_unserialized) == 5);
+    assert(memcmp(term_binary_data(binary_unserialized), "hello", 5) == 0);
+
+    // A resource-managed binary is equal to a binary with the same content
+    assert(term_compare(binary, binary_unserialized, TermCompareExact, glb) == TermEquals);
+
+    // We no longer need the resource now that we have a binary
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
+
+    assert(cb_read_resource == 0);
+
+    // garbage collect the binary
+    scheduler_terminate(ctx);
+
+    assert(cb_read_resource == 42);
+
+    cb_read_resource = 0;
+    globalcontext_destroy(glb);
+
+    assert(cb_read_resource == 0);
+}
+
+void test_resource_binaries(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    Context *ctx1 = context_new(glb);
+    ErlNifEnv *env1 = erl_nif_env_from_context(ctx1);
+    Context *ctx2 = context_new(glb);
+    ErlNifEnv *env2 = erl_nif_env_from_context(ctx2);
+
+    ErlNifResourceTypeInit init;
+    init.members = 1;
+    init.dtor = resource_dtor;
+    ErlNifResourceFlags flags;
+    cb_read_resource = 0;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(env1, "test_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+    assert(flags == ERL_NIF_RT_CREATE);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    ERL_NIF_TERM binary1 = enif_make_resource_binary(env1, ptr, "hello", 5);
+    assert(term_is_binary(binary1));
+    assert(term_is_refc_binary(binary1));
+    assert(term_binary_size(binary1) == 5);
+    assert(memcmp(term_binary_data(binary1), "hello", 5) == 0);
+
+    assert(cb_read_resource == 0);
+
+    ERL_NIF_TERM binary2 = enif_make_resource_binary(env2, ptr, "world", 5);
+    assert(term_is_binary(binary2));
+    assert(term_is_refc_binary(binary2));
+    assert(term_binary_size(binary2) == 5);
+    assert(memcmp(term_binary_data(binary2), "world", 5) == 0);
+
+    // We no longer need the resource
+    int release_result = enif_release_resource(ptr);
+    assert(release_result);
+
+    // garbage collect the first binary
+    scheduler_terminate(ctx1);
+
+    assert(cb_read_resource == 0);
+
+    // garbage collect the second binary
+    scheduler_terminate(ctx2);
+
+    assert(cb_read_resource == 42);
+
+    cb_read_resource = 0;
+    globalcontext_destroy(glb);
+
+    assert(cb_read_resource == 0);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -463,6 +593,8 @@ int main(int argc, char **argv)
     test_resource_monitor();
     test_resource_monitor_handler_can_lock();
     test_resource_monitor_two_resources_two_processes();
+    test_resource_binary();
+    test_resource_binaries();
 
     return EXIT_SUCCESS;
 }
