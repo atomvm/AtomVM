@@ -644,7 +644,7 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
             }
             term type_tuple = term_alloc_tuple(2, &ctx->heap);
             term_put_tuple_element(type_tuple, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\xE", "t_bs_matchable")));
-            term_put_tuple_element(type_tuple, 1, term_from_int32(unit));
+            term_put_tuple_element(type_tuple, 1, term_from_int11(unit));
             return type_tuple;
 
         case BEAM_TYPE_CONS:
