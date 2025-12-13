@@ -307,30 +307,50 @@ wait_for(P) ->
 test_timeout_call() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     0 = gen_server:call(Pid, get_num_timeouts),
-    ok = gen_server:call(Pid, {call_reply_timeout, 10}),
-    timer:sleep(11),
-    1 = gen_server:call(Pid, get_num_timeouts),
-    ok = gen_server:call(Pid, {call_reply_timeout, infinity}),
-    timer:sleep(11),
-    1 = gen_server:call(Pid, get_num_timeouts),
-    try
-        gen_server:call(Pid, {call_noreply_timeout, 10}, 100)
-    catch
-        _:_ -> ok
-    end,
-    2 = gen_server:call(Pid, get_num_timeouts),
+    Ref = make_ref(),
+    ok = gen_server:call(Pid, {call_reply_timeout, 10, self(), Ref}),
+    ok =
+        receive
+            {Ref, 1} -> ok
+        after 5000 -> timeout
+        end,
+    ok = gen_server:call(Pid, {call_reply_timeout, infinity, self(), Ref}),
+    ok =
+        receive
+            {Ref, _} -> unexpected
+        after 500 -> ok
+        end,
+    ok =
+        try
+            gen_server:call(Pid, {call_noreply_timeout, 10, self(), Ref}, 100),
+            unexpected
+        catch
+            _:_ -> ok
+        end,
+    ok =
+        receive
+            {Ref, 1} -> ok
+        after 5000 -> timeout
+        end,
     gen_server:stop(Pid),
     ok.
 
 test_timeout_cast() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     0 = gen_server:call(Pid, get_num_timeouts),
-    ok = gen_server:cast(Pid, {cast_timeout, 10}),
-    timer:sleep(11),
-    1 = gen_server:call(Pid, get_num_timeouts),
-    ok = gen_server:cast(Pid, {cast_timeout, infinity}),
-    timer:sleep(11),
-    1 = gen_server:call(Pid, get_num_timeouts),
+    Ref = make_ref(),
+    ok = gen_server:cast(Pid, {cast_timeout, 10, self(), Ref}),
+    ok =
+        receive
+            {Ref, 1} -> ok
+        after 5000 -> timeout
+        end,
+    ok = gen_server:cast(Pid, {cast_timeout, infinity, self(), Ref}),
+    ok =
+        receive
+            {Ref, _} -> unexpected
+        after 500 -> ok
+        end,
     gen_server:stop(Pid),
     ok.
 
@@ -633,10 +653,10 @@ handle_call(get_num_infos, From, #state{num_infos = NumInfos} = State) ->
     {noreply, State#state{num_infos = 0}};
 handle_call(get_num_timeouts, _From, State) ->
     {reply, State#state.num_timeouts, State};
-handle_call({call_reply_timeout, Timeout}, _From, State) ->
-    {reply, ok, State, Timeout};
-handle_call({call_noreply_timeout, Timeout}, _From, State) ->
-    {noreply, State, Timeout};
+handle_call({call_reply_timeout, Timeout, Client, Ref}, _From, State) ->
+    {reply, ok, State#state{info_timeout = {infinity, Client, Ref, 0}}, Timeout};
+handle_call({call_noreply_timeout, Timeout, Client, Ref}, _From, State) ->
+    {noreply, State#state{info_timeout = {infinity, Client, Ref, 0}}, Timeout};
 handle_call(normal_exit, _From, State) ->
     {stop, normal, State};
 handle_call(abnormal_exit, _From, State) ->
@@ -657,8 +677,8 @@ handle_cast(crash, _State) ->
     throw(test_crash);
 handle_cast(ping, #state{num_casts = NumCasts} = State) ->
     {noreply, State#state{num_casts = NumCasts + 1}};
-handle_cast({cast_timeout, Timeout}, State) ->
-    {noreply, State, Timeout};
+handle_cast({cast_timeout, Timeout, Client, Ref}, State) ->
+    {noreply, State#state{info_timeout = {infinity, Client, Ref, 0}}, Timeout};
 handle_cast({tuple_timeout, Timeouts, Caller}, State) ->
     {noreply, State, {timeout, 1, {do_tuple_timeouts, Timeouts, Caller}}};
 handle_cast({set_info_timeout, Timeout, Client, Ref}, State) ->
