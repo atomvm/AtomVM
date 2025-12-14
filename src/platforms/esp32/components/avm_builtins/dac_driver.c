@@ -76,7 +76,7 @@ static term error_return_tuple(Context *ctx, term term)
 
 static term get_channel_resource(Context *ctx, term t, ErlNifResourceType *res_type, struct AnyChannelResource **res)
 {
-    bool likely_valid = (term_is_tuple(t) && term_get_tuple_arity(t) == 3 && globalcontext_is_term_equal_to_atom_string(ctx->global, term_get_tuple_element(t, 0), ATOM_STR("\x4", "$dac")) && term_is_binary(term_get_tuple_element(t, 1)) && term_is_reference(term_get_tuple_element(t, 2)));
+    bool likely_valid = (term_is_tuple(t) && term_get_tuple_arity(t) == 3 && globalcontext_is_term_equal_to_atom_string(ctx->global, term_get_tuple_element(t, 0), ATOM_STR("\x4", "$dac")) && term_is_resource_reference(term_get_tuple_element(t, 1)) && term_is_reference(term_get_tuple_element(t, 2)));
 
     if (likely_valid) {
         if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), term_get_tuple_element(t, 1), res_type, (void **) res))) {
