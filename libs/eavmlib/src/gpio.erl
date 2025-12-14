@@ -58,7 +58,7 @@
 ]).
 
 -type gpio() :: port().
-%% This is the pid returned by `gpio:start/0'.
+%% This is the port returned by `gpio:start/0'.
 -type pin() :: non_neg_integer() | pin_tuple().
 %% The pin definition for ESP32 and PR2040 is a non-negative integer. A tuple is used on the STM32 platform and for the extra "WL" pins on the Pico-W.
 -type pin_tuple() :: {gpio_bank(), 0..15}.
@@ -82,13 +82,13 @@
 %% Event type that will trigger a `gpio_interrupt'. STM32 only supports `rising', `falling', or `both'.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Port | error | {error, Reason}
 %% @doc     Start the GPIO driver port
 %%
-%%          Returns the pid of the active GPIO port driver, otherwise the GPIO
+%%          Returns the port of the active GPIO port driver, otherwise the GPIO
 %%          port driver will be stared and registered as `gpio'. The use of
 %%          `gpio:open/0' or `gpio:start/0' is required before using any functions
-%%          that require a GPIO pid as a parameter.
+%%          that require a GPIO port as a parameter.
 %%
 %%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
@@ -103,14 +103,14 @@ start() ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Port | error | {error, Reason}
 %% @doc     Start the GPIO driver port
 %%
 %%          The GPIO port driver will be stared and registered as `gpio'. If the
 %%          port has already been started through the `gpio:open/0' or
 %%          `gpio:start/0' the command will fail. The use of `gpio:open/0' or
 %%          `gpio:start/0' is required before using any functions that require a
-%%          GPIO pid as a parameter.
+%%          GPIO port as a parameter.
 %%
 %%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
@@ -120,7 +120,7 @@ open() ->
     open_port({spawn, "gpio"}, []).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from gpio:start/0
+%% @param   GPIO port that was returned from gpio:start/0
 %% @returns ok | error | {error, Reason}
 %% @doc     Stop the GPIO interrupt port
 %%
@@ -154,7 +154,7 @@ stop() ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from gpio:start/0
+%% @param   GPIO port that was returned from gpio:start/0
 %% @param   Pin number of the pin to read
 %% @returns high | low | error | {error, Reason}
 %% @doc     Read the digital state of a GPIO pin
@@ -171,7 +171,7 @@ read(GPIO, Pin) ->
     port:call(GPIO, {read, Pin}).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   GPIO port that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to configure
 %% @param   Direction is `input', `output', or `output_od'
 %% @returns ok | error | {error, Reason}
@@ -201,7 +201,7 @@ set_direction(GPIO, Pin, Direction) ->
     port:call(GPIO, {set_direction, Pin, Direction}).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   GPIO port that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to write
 %% @param   Level the desired output level to set
 %% @returns ok | error | {error, Reason}
@@ -235,7 +235,7 @@ set_level(GPIO, Pin, Level) ->
     port:call(GPIO, {set_level, Pin, Level}).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   GPIO port that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to set the interrupt on
 %% @param   Trigger is the state that will trigger an interrupt
 %% @returns ok | error | {error, Reason}
@@ -258,7 +258,7 @@ set_int(GPIO, Pin, Trigger) ->
     port:call(GPIO, {set_int, Pin, Trigger}).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   GPIO port that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to set the interrupt on
 %% @param   Trigger is the state that will trigger an interrupt
 %% @param   Pid is the process that will receive the interrupt message
@@ -283,7 +283,7 @@ set_int(GPIO, Pin, Trigger, Pid) ->
     port:call(GPIO, {set_int, Pin, Trigger, Pid}).
 
 %%-----------------------------------------------------------------------------
-%% @param   GPIO pid that was returned from `gpio:start/0'
+%% @param   GPIO port that was returned from `gpio:start/0'
 %% @param   Pin number of the pin to remove the interrupt
 %% @returns ok | error | {error, Reason}
 %% @doc     Remove a GPIO interrupt
