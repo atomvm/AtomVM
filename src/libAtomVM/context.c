@@ -578,7 +578,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case HEAP_SIZE_ATOM: {
             term_put_tuple_element(ret, 0, HEAP_SIZE_ATOM);
             unsigned long value = memory_heap_youngest_size(&ctx->heap);
-            term_put_tuple_element(ret, 1, term_from_int32(value));
+            term_put_tuple_element(ret, 1, term_from_int(value));
             break;
         }
 
@@ -598,7 +598,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case TOTAL_HEAP_SIZE_ATOM: {
             term_put_tuple_element(ret, 0, TOTAL_HEAP_SIZE_ATOM);
             unsigned long value = memory_heap_memory_size(&ctx->heap);
-            term_put_tuple_element(ret, 1, term_from_int32(value));
+            term_put_tuple_element(ret, 1, term_from_int(value));
             break;
         }
 
@@ -606,7 +606,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case STACK_SIZE_ATOM: {
             term_put_tuple_element(ret, 0, STACK_SIZE_ATOM);
             unsigned long value = context_stack_size(ctx);
-            term_put_tuple_element(ret, 1, term_from_int32(value));
+            term_put_tuple_element(ret, 1, term_from_int(value));
             break;
         }
 
@@ -614,7 +614,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case MESSAGE_QUEUE_LEN_ATOM: {
             term_put_tuple_element(ret, 0, MESSAGE_QUEUE_LEN_ATOM);
             unsigned long value = context_message_queue_len(ctx);
-            term_put_tuple_element(ret, 1, term_from_int32(value));
+            term_put_tuple_element(ret, 1, term_from_int(value));
             break;
         }
 
@@ -622,7 +622,7 @@ bool context_get_process_info(Context *ctx, term *out, size_t *term_size, term a
         case MEMORY_ATOM: {
             term_put_tuple_element(ret, 0, MEMORY_ATOM);
             unsigned long value = context_size(ctx);
-            term_put_tuple_element(ret, 1, term_from_int32(value));
+            term_put_tuple_element(ret, 1, term_from_int(value));
             break;
         }
 

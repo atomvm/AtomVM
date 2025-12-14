@@ -114,7 +114,7 @@ term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term ar
         len = term_binary_size(arg1);
     }
 
-    return term_from_int32(len);
+    return term_from_int(len);
 }
 
 term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
@@ -132,7 +132,7 @@ term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg
         len = term_binary_size(arg1) * 8;
     }
 
-    return term_from_int32(len);
+    return term_from_int(len);
 }
 
 term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3)
@@ -390,7 +390,8 @@ term bif_erlang_tuple_size_1(Context *ctx, uint32_t fail_label, term arg1)
 {
     VALIDATE_VALUE_BIF(fail_label, arg1, term_is_tuple);
 
-    return term_from_int32(term_get_tuple_arity(arg1));
+    // tuple size is (term) header >> 6, so we know it fits a term as an int
+    return term_from_int(term_get_tuple_arity(arg1));
 }
 
 term bif_erlang_map_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
@@ -412,7 +413,8 @@ term bif_erlang_map_size_1(Context *ctx, uint32_t fail_label, int live, term arg
         RAISE_ERROR(err);
     }
 
-    return term_from_int32(term_get_map_size(arg1));
+    // map size is (term) header >> 6, so we know it fits a term as an int
+    return term_from_int(term_get_map_size(arg1));
 }
 
 term bif_erlang_map_get_2(Context *ctx, uint32_t fail_label, term arg1, term arg2)
