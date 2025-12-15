@@ -20,7 +20,7 @@
 
 -module(test_bs).
 
--export([start/0, id/1, join/2]).
+-export([start/0, ext_id/1, join/2]).
 
 start() ->
     test_pack_small_ints({2, 61, 20}, <<23, 180>>),
@@ -653,6 +653,7 @@ test_float() ->
             ok
     end,
 
+    ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
     ok = test_create_with_invalid_float_size(),
     ok.
@@ -670,6 +671,23 @@ test_create_with_invalid_float_size() ->
     ok = expect_error(fun() -> create_float_binary(3.14, id(foo)) end, badarg),
     ok.
 
+test_integer_outside_float_limits() ->
+    V = id(16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+
+    FloatSize =
+        case erlang:system_info(machine) of
+            "BEAM" -> 8;
+            "ATOM" -> erlang:system_info(avm_floatsize)
+        end,
+
+    TestFun = fun() -> create_float_binary(V, id(64)) end,
+
+    case FloatSize of
+        4 -> expect_error(TestFun, badarg);
+        8 -> <<79, 240, 0, 0, 0, 0, 0, 0>> = TestFun()
+    end,
+    ok.
+
 create_float_binary(Value, Size) ->
     <<Value:Size/float>>.
 
@@ -677,7 +695,9 @@ check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
 check_x86_64_jt(Bin) -> {unexpected, Bin}.
 
-id(X) -> X.
+id(X) -> ?MODULE:ext_id(X).
+
+ext_id(X) -> X.
 
 join(X, Y) ->
     <<X/binary, Y/binary>>.
