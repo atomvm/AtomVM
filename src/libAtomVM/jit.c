@@ -1457,6 +1457,9 @@ static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, si
 static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
 {
     avm_float_t float_value = term_conv_to_float(value);
+    if (UNLIKELY(!isfinite(float_value))) {
+        return false;
+    }
     if (n == 16) {
         return bitstring_insert_f16(bin, offset, float_value, flags);
     } else if (n == 32) {
