@@ -33,7 +33,7 @@ For most applications, you should only need to install the VM once (or at least 
 Deployment of AtomVM on the ESP32 platform requires the following components:
 
 * A computer running MacOS or Linux (Windows support is not currently supported);
-* An ESP32 (including ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C3, ESP32-C6, ESP32-H2) module with a USB/UART connector (typically part of an ESP32 development board);
+* An ESP32 (including ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C3, ESP32-C5, ESP32-C6, ESP32-C61, ESP32-H2) module with a USB/UART connector (typically part of an ESP32 development board);
 * A USB cable capable of connecting the ESP32 module or board to your development machine (laptop or PC);
 * The [`esptool`](https://github.com/espressif/esptool) program, for flashing the AtomVM image and AtomVM programs;
 * An [Erlang/OTP](https://erlang.org);
@@ -171,7 +171,9 @@ The chart below lists the bootloader offset for the various ESP32 family of chip
 | ESP32-S3 | `0x0` |
 | ESP32-C2 | `0x0` |
 | ESP32-C3 | `0x0` |
+| ESP32-C5 | `0x2000` |
 | ESP32-C6 | `0x0` |
+| ESP32-C61 | `0x0` |
 | ESP32-H2 | `0x0` |
 | ESP32-P4 | `0x2000` |
 

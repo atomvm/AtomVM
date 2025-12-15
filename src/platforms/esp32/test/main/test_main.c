@@ -320,7 +320,7 @@ TEST_CASE("test_md5", "[test_run]")
 }
 
 // Full crypto suite not yet supported on ESP32-P4 simulator.
-#if !CONFIG_IDF_TARGET_ESP32P4
+#if !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_IDF_TARGET_ESP32C5
 TEST_CASE("test_crypto", "[test_run]")
 {
     term ret_value = avm_test_case("test_crypto.beam");
@@ -604,7 +604,7 @@ TEST_CASE("test_rtc_slow", "[test_run]")
 }
 
 // Only test wifi on simulator, not on QEMU
-#if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4
+#if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_IDF_TARGET_ESP32C5
 TEST_CASE("test_wifi_example", "[test_run]")
 {
     term ret_value = avm_test_case("test_wifi_example.beam");

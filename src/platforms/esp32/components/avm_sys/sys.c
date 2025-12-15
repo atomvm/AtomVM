@@ -92,6 +92,10 @@ static const char *const esp32_h2_atom = "\x8" "esp32_h2";
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0)
 static const char *const esp32_p4_atom = "\x8" "esp32_p4";
 #endif
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+static const char *const esp32_c5_atom = "\x8" "esp32_c5";
+static const char *const esp32_c61_atom = "\x8" "esp32_c61";
+#endif
 #endif
 static const char *const emb_flash_atom = "\x9" "emb_flash";
 static const char *const bgn_atom = "\x3" "bgn";
@@ -461,6 +465,12 @@ static term get_model(Context *ctx, esp_chip_model_t model)
 #endif
         case CHIP_ESP32C3:
             return globalcontext_make_atom(ctx->global, esp32_c3_atom);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
+        case CHIP_ESP32C5:
+            return globalcontext_make_atom(ctx->global, esp32_c5_atom);
+        case CHIP_ESP32C61:
+            return globalcontext_make_atom(ctx->global, esp32_c61_atom);
+#endif
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
         case CHIP_ESP32C6:
             return globalcontext_make_atom(ctx->global, esp32_c6_atom);
