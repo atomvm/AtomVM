@@ -90,7 +90,7 @@ static bool is_i2c_resource(GlobalContext *global, term t)
     bool ret = term_is_tuple(t)
         && term_get_tuple_arity(t) == 3
         && globalcontext_is_term_equal_to_atom_string(global, term_get_tuple_element(t, 0), I2C_ATOMSTR)
-        && term_is_binary(term_get_tuple_element(t, 1))
+        && term_is_resource_reference(term_get_tuple_element(t, 1))
         && term_is_reference(term_get_tuple_element(t, 2));
 
     return ret;
