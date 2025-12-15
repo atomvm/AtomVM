@@ -1080,7 +1080,7 @@ static inline term term_from_int28(int32_t value)
  * @param value the value that will be converted to a term.
  * @return a term that encapsulates the integer value.
  */
-static inline term term_from_int32(int32_t value) __attribute__ ((deprecated ("term_from_int32 is unsafe and will be removed")));
+static inline term term_from_int32(int32_t value) __attribute__((deprecated("term_from_int32 is unsafe and will be removed")));
 static inline term term_from_int32(int32_t value)
 {
 #if TERM_BITS == 32
@@ -1102,7 +1102,7 @@ static inline term term_from_int32(int32_t value)
 #endif
 }
 
-static inline term term_from_int64(int64_t value) __attribute__ ((deprecated ("term_from_int64 is unsafe and will be removed")));
+static inline term term_from_int64(int64_t value) __attribute__((deprecated("term_from_int64 is unsafe and will be removed")));
 static inline term term_from_int64(int64_t value)
 {
 #if TERM_BITS == 32
