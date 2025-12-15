@@ -214,6 +214,26 @@ int enif_release_resource(void *resource);
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
 
 /**
+ * @brief create a binary term memory managed by a resource.
+ * @details the resource `obj` should have been allocated by
+ * `enif_alloc_resource`.
+ *
+ * The binary data should be readable and unchanged until the resource
+ * is destroyed and its destructor is called.
+ *
+ * Several binaries can be created with a shared `obj`
+ * resource. The resource destructor will only be called when all binaries
+ * are garbage collected.
+ *
+ * @param env current environment
+ * @param obj resource
+ * @param data binary data to encapsulate
+ * @param size size of the data
+ * @return a new binary term
+ */
+ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size);
+
+/**
  * @brief Run a POSIX-like select on a given object (event) and send a message
  * when the object is readable or writable.
  *

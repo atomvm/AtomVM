@@ -41,6 +41,7 @@
 #include "intn.h"
 #include "memory.h"
 #include "refc_binary.h"
+#include "resources.h"
 #include "utils.h"
 
 #include "term_typedef.h"
@@ -260,7 +261,8 @@ typedef struct BinaryPosLen
 enum RefcBinaryFlags
 {
     RefcNoFlags = 0,
-    RefcBinaryIsConst
+    RefcBinaryIsConst = 1,
+    RefcBinaryIsResourceManaged = 2
 };
 
 typedef enum
@@ -553,6 +555,12 @@ static inline bool term_refc_binary_is_const(term t)
 {
     const term *boxed_value = term_to_const_term_ptr(t);
     return (boxed_value[2] & RefcBinaryIsConst) != 0;
+}
+
+static inline bool term_refc_binary_is_resource_managed(term t)
+{
+    const term *boxed_value = term_to_const_term_ptr(t);
+    return (boxed_value[2] & RefcBinaryIsResourceManaged) != 0;
 }
 
 /**
@@ -1691,6 +1699,9 @@ static inline const char *term_binary_data(term t)
     if (term_is_refc_binary(t)) {
         if (term_refc_binary_is_const(t)) {
             return (const char *) boxed_value[3];
+        } else if (term_refc_binary_is_resource_managed(t)) {
+            const struct ResourceBinary *resource_binary = (const struct ResourceBinary *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
+            return (const char *) resource_binary->data;
         } else {
             return (const char *) refc_binary_get_data((struct RefcBinary *) boxed_value[3]);
         }
@@ -2749,6 +2760,20 @@ static inline term term_from_resource(void *resource, Heap *heap)
  * @return a resource term for this resource or a stale reference if the resource cannot be found
  */
 term term_from_resource_type_and_serialize_ref(uint64_t resource_type_ptr, uint64_t resource_serialize_ref, Heap *heap, GlobalContext *glb);
+
+/**
+ * @brief Create a resource managed binary.
+ * @details Increment reference count of resource and create a refc binary for
+ * the pointer and size.
+ *
+ * @param resource the resource managing the binary
+ * @param data the pointer to the data
+ * @param size the size of the binary
+ * @param heap the heap to allocate memory in
+ * @param glb the global context
+ * @return a refc binary
+ */
+term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t size, Heap *heap);
 
 #ifdef __cplusplus
 }
