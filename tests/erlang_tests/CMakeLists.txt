@@ -620,22 +620,6 @@ compile_erlang(test_lists_member)
 compile_erlang(test_lists_keymember)
 compile_erlang(test_lists_keyfind)
 
-if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
-    set(OTP23_OR_GREATER_TESTS
-        test_op_bs_start_match_asm.beam
-    )
-else()
-    set(OTP23_OR_GREATER_TESTS)
-endif()
-
-if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
-    set(OTP25_OR_GREATER_TESTS
-        test_op_bs_create_bin_asm.beam
-    )
-else()
-    set(OTP25_OR_GREATER_TESTS)
-endif()
-
 set(erlang_test_beams
     add.beam
     fact.beam
@@ -1150,8 +1134,8 @@ set(erlang_test_beams
     bigint.beam
     bigint_stress.beam
 
-    ${OTP23_OR_GREATER_TESTS}
-    ${OTP25_OR_GREATER_TESTS}
+    test_op_bs_start_match_asm.beam
+    test_op_bs_create_bin_asm.beam
 )
 
 if(NOT AVM_DISABLE_JIT)

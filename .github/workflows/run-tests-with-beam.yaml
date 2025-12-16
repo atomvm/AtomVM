@@ -42,34 +42,6 @@ jobs:
         include:
         - os: "ubuntu-24.04"
           test_erlang_opts: "-s prime_smp"
-          container: erlang:21
-          otp: "21"
-          archive: "true"
-
-        - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp"
-          container: erlang:22
-          otp: "22"
-          archive: "true"
-
-        - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp"
-          container: erlang:23
-          otp: "23"
-          archive: "true"
-
-        - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp"
-          otp: "24"
-          container: erlang:24
-
-        - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp"
-          otp: "25"
-          container: erlang:25
-
-        - os: "ubuntu-24.04"
-          test_erlang_opts: "-s prime_smp"
           otp: "26"
           container: erlang:26
 
@@ -101,11 +73,6 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
-
-    - name: "Switch to archive.debian.org"
-      if: matrix.archive == 'true'
-      run: |
-        sed -i 's|deb\.debian\.org|archive.debian.org/debian-archive|g' /etc/apt/sources.list
 
     - name: "Install deps (container)"
       if: runner.os == 'Linux'
