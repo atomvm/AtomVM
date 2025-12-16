@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `esp:timer_get_time/0`
 - Added `esp_dac` module, exposing DAC oneshot mode on ESPs that support it
 - Added support for resource managed binaries (`enif_make_resource_binary`)
+- Added initial support for ESP32C5 and ESP32C61
 
 ### Changed
 

@@ -60,11 +60,13 @@ AtomVM currently supports the following [Espressif ESP SoCs](https://www.espress
 | [ESP32](https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf) | ✅ |
 | [ESP32c2](https://www.espressif.com/sites/default/files/documentation/esp32-c2_datasheet_en.pdf) | ✅ |
 | [ESP32c3](https://www.espressif.com/sites/default/files/documentation/esp32-c3_datasheet_en.pdf) | ✅ |
+| [ESP32c5](https://www.espressif.com/sites/default/files/documentation/esp32-c5_datasheet_en.pdf) | ✅ |
 | [ESP32c6](https://www.espressif.com/sites/default/files/documentation/esp32-c6_datasheet_en.pdf) | ✅ |
+| [ESP32c61](https://www.espressif.com/sites/default/files/documentation/esp32-c61_datasheet_en.pdf) | ✅ |
 | [ESP32h2](https://www.espressif.com/sites/default/files/documentation/esp32-h2_datasheet_en.pdf) | ✅ |
 | [ESP32s2](https://www.espressif.com/sites/default/files/documentation/esp32-s2_datasheet_en.pdf) | ✅ |
 | [ESP32s3](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf) | ✅ |
-| [ESP32p4](https://www.espressif.com/sites/default/files/documentation/esp32-p4_datasheet_en.pdf) Datasheet Pending | ✅ |
+| [ESP32p4](https://www.espressif.com/sites/default/files/documentation/esp32-p4_datasheet_en.pdf) | ✅ |
 
 AtomVM currently supports the following versions of ESP-IDF:
 
@@ -75,6 +77,7 @@ AtomVM currently supports the following versions of ESP-IDF:
 | ESP-IDF [v5.2](https://docs.espressif.com/projects/esp-idf/en/v5.2.3/esp32/get-started/index.html) | ✅ |
 | ESP-IDF [v5.3](https://docs.espressif.com/projects/esp-idf/en/v5.3.2/esp32/get-started/index.html) | ✅ |
 | ESP-IDF [v5.4](https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32/get-started/index.html) | ✅ |
+| ESP-IDF [v5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/get-started/index.html) | ✅ |
 
 Building the AtomVM virtual machine for ESP32 is optional.  In most cases, you can simply download a release image from the AtomVM [release](https://github.com/atomvm/AtomVM/releases) repository.  If you wish to work on development of the VM or use one on the additional drivers that are available in the [AtomVM repositories](https://github.com/atomvm) you will to build AtomVM from source.  See the [Build Instructions](build-instructions.md) for information about how to build AtomVM from source code.  We recommend you to use the latest subminor (patch) versions for source builds. You can check the current version used for testing in the [esp32-build.yaml](https://github.com/atomvm/AtomVM/actions/workflows/esp32-build.yaml) workflow.
 

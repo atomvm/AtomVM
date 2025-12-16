@@ -48,7 +48,7 @@ set(HAVE_SOCKET ON)
 set(HAVE_SOCKET 1 CACHE INTERNAL "Have symbol socket" FORCE)
 
 # Disable SMP with esp32 socs that have only one core
-if (${IDF_TARGET} MATCHES "esp32s2|esp32c2|esp32c3|esp32c6|esp32h2")
+if (${IDF_TARGET} MATCHES "esp32s2|esp32c2|esp32c3|esp32c5|esp32c6|esp32c61|esp32h2")
     message("Disabling SMP as selected target only has one core")
     set(AVM_DISABLE_SMP YES FORCE)
     set(HAVE_PLATFORM_ATOMIC_H ON)
@@ -57,10 +57,10 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
-# JIT is only supported on RISC-V targets (ESP32-C2, ESP32-C3, ESP32-C6, ESP32-H2, ESP32-P4)
+# JIT is only supported on RISC-V targets (ESP32-C2, ESP32-C3, ESP32-C5, ESP32-C6, ESP32-C61, ESP32-H2, ESP32-P4)
 # Configuration comes from idf.py menuconfig (KConfig), not CMake options
 if(CONFIG_JIT_ENABLED)
-    if (${IDF_TARGET} MATCHES "esp32c2|esp32c3|esp32c6|esp32h2|esp32p4")
+    if (${IDF_TARGET} MATCHES "esp32c2|esp32c3|esp32c5|esp32c6|esp32c61|esp32h2|esp32p4")
         set(AVM_DISABLE_JIT OFF)
         set(AVM_JIT_TARGET_ARCH riscv32)
         message(STATUS "JIT compilation enabled for ${IDF_TARGET} (RISC-V32)")

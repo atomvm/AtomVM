@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: AtomVM Contributors
+#
+# ESP32-C5 built with tests takes up too much flash space, so below is for fitting within partitions.
+#
+CONFIG_MBEDTLS_ECP_FIXED_POINT_OPTIM=n
