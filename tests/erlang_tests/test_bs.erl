@@ -631,15 +631,8 @@ test_float() ->
     <<66, 0, 0, 0>> = <<Int32:32/float>>,
 
     % 16-bit floats are supported in OTP 24+ and AtomVM
-    Has16BitFloats =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "24";
-            "ATOM" ->
-                true
-        end,
-    if
-        Has16BitFloats ->
+    case has_16bit_floats() of
+        true ->
             % Test that 16-bit floats work
             Pi16 = id(3.14),
             <<66, 72>> = <<Pi16:16/float>>,
@@ -649,7 +642,7 @@ test_float() ->
             <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
             true = abs(Pi16B - Pi16) < 0.001,
             ok;
-        true ->
+        false ->
             ok
     end,
 
@@ -683,8 +676,26 @@ test_integer_outside_float_limits() ->
     TestFun = fun() -> create_float_binary(V, id(64)) end,
 
     case FloatSize of
-        4 -> expect_error(TestFun, badarg);
-        8 -> <<79, 240, 0, 0, 0, 0, 0, 0>> = TestFun()
+        4 ->
+            expect_error(TestFun, badarg);
+        8 ->
+            <<79, 240, 0, 0, 0, 0, 0, 0>> = TestFun(),
+            % Following tests cannot work with 32-bit floats, since we are not able to build
+            % an intermediate 32-bit float term.
+
+            % Result is inf, so it cannot be deserialized back
+            <<127, 128, 0, 0>> = create_float_binary(V, id(32)),
+            <<255, 128, 0, 0>> = create_float_binary(-V, id(32)),
+
+            % 16-bit floats are supported in OTP 24+ and AtomVM
+            case has_16bit_floats() of
+                true ->
+                    <<124, 0>> = create_float_binary(V, id(16)),
+                    <<252, 0>> = create_float_binary(-V, id(16)),
+                    ok;
+                false ->
+                    ok
+            end
     end,
     ok.
 
@@ -701,3 +712,11 @@ ext_id(X) -> X.
 
 join(X, Y) ->
     <<X/binary, Y/binary>>.
+
+has_16bit_floats() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            erlang:system_info(otp_release) >= "24";
+        "ATOM" ->
+            true
+    end.
