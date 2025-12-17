@@ -2627,16 +2627,31 @@ static inline term term_from_float(avm_float_t f, Heap *heap)
     term *boxed_value = memory_heap_alloc(heap, FLOAT_SIZE);
     boxed_value[0] = ((FLOAT_SIZE - 1) << 6) | TERM_BOXED_FLOAT;
 
+// `alignof(avm_float_t)` is different than `alignof(term)` on some archs (e.g. wasm32).
+// `memory_heap_alloc` returns memory aligned to term size.
+//
+// Xtensa unaligned memcpy has bad codegen and this arch doesn't suffer from the alignment problem.
+// See: https://gcc.gnu.org/pipermail/gcc-bugs/2023-October/839353.html
+#if defined(__XTENSA__)
     float_term_t *boxed_float = (float_term_t *) (boxed_value + 1);
     boxed_float->f = f;
-
+#else
+    memcpy(boxed_value + 1, &f, sizeof(avm_float_t));
+#endif
     return ((term) boxed_value) | TERM_PRIMARY_BOXED;
 }
 
 static inline avm_float_t term_to_float(term t)
 {
+    // see `term_from_float`
+#if defined(__XTENSA__)
     const float_term_t *boxed_float = (float_term_t *) (term_to_const_term_ptr(t) + 1);
     return boxed_float->f;
+#else
+    avm_float_t result;
+    memcpy(&result, term_to_const_term_ptr(t) + 1, sizeof(avm_float_t));
+    return result;
+#endif
 }
 
 static inline bool term_is_number(term t)
