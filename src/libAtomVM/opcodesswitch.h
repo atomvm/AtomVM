@@ -4857,12 +4857,17 @@ wait_timeout_trap_handler:
                 #endif
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    avm_float_t float_value;
+                    avm_float_t float_value = 0;
+                    bool is_number = false;
                     if (term_is_float(src)) {
                         float_value = term_to_float(src);
+                        is_number = true;
                     } else if (term_is_any_integer(src)) {
-                        float_value = (avm_float_t) term_maybe_unbox_int64(src);
-                    } else {
+                        float_value = term_conv_to_float(src);
+                        is_number = isfinite(float_value);
+                    }
+
+                    if (UNLIKELY(!is_number)) {
                         if (fail == 0) {
                             RAISE_ERROR(BADARG_ATOM);
                         } else {
@@ -7183,18 +7188,24 @@ wait_timeout_trap_handler:
                                 break;
                             }
                             case FLOAT_ATOM: {
-                                avm_float_t float_value;
+                                avm_float_t float_value = 0;
+                                bool is_number = false;
                                 if (term_is_float(src)) {
                                     float_value = term_to_float(src);
+                                    is_number = true;
                                 } else if (term_is_any_integer(src)) {
-                                    float_value = (avm_float_t) term_maybe_unbox_int64(src);
-                                } else {
+                                    float_value = term_conv_to_float(src);
+                                    is_number = isfinite(float_value);
+                                }
+
+                                if (UNLIKELY(!is_number)) {
                                     if (fail == 0) {
                                         RAISE_ERROR(BADARG_ATOM);
                                     } else {
                                         JUMP_TO_LABEL(mod, fail);
                                     }
                                 }
+
                                 bool result;
                                 if (size_value == 16) {
                                     result = bitstring_insert_f16(t, offset, float_value, flags_value);

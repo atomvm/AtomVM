@@ -20,7 +20,7 @@
 
 -module(test_bs).
 
--export([start/0, id/1, join/2]).
+-export([start/0, ext_id/1, join/2]).
 
 start() ->
     test_pack_small_ints({2, 61, 20}, <<23, 180>>),
@@ -631,15 +631,8 @@ test_float() ->
     <<66, 0, 0, 0>> = <<Int32:32/float>>,
 
     % 16-bit floats are supported in OTP 24+ and AtomVM
-    Has16BitFloats =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "24";
-            "ATOM" ->
-                true
-        end,
-    if
-        Has16BitFloats ->
+    case has_16bit_floats() of
+        true ->
             % Test that 16-bit floats work
             Pi16 = id(3.14),
             <<66, 72>> = <<Pi16:16/float>>,
@@ -649,10 +642,11 @@ test_float() ->
             <<Pi16B:16/float-little, 3, 14>> = <<72, 66, 3, 14>>,
             true = abs(Pi16B - Pi16) < 0.001,
             ok;
-        true ->
+        false ->
             ok
     end,
 
+    ok = test_integer_outside_float_limits(),
     ok = test_create_with_invalid_float_value(),
     ok = test_create_with_invalid_float_size(),
     ok.
@@ -670,6 +664,41 @@ test_create_with_invalid_float_size() ->
     ok = expect_error(fun() -> create_float_binary(3.14, id(foo)) end, badarg),
     ok.
 
+test_integer_outside_float_limits() ->
+    V = id(16#FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF),
+
+    FloatSize =
+        case erlang:system_info(machine) of
+            "BEAM" -> 8;
+            "ATOM" -> erlang:system_info(avm_floatsize)
+        end,
+
+    TestFun = fun() -> create_float_binary(V, id(64)) end,
+
+    case FloatSize of
+        4 ->
+            expect_error(TestFun, badarg);
+        8 ->
+            <<79, 240, 0, 0, 0, 0, 0, 0>> = TestFun(),
+            % Following tests cannot work with 32-bit floats, since we are not able to build
+            % an intermediate 32-bit float term.
+
+            % Result is inf, so it cannot be deserialized back
+            <<127, 128, 0, 0>> = create_float_binary(V, id(32)),
+            <<255, 128, 0, 0>> = create_float_binary(-V, id(32)),
+
+            % 16-bit floats are supported in OTP 24+ and AtomVM
+            case has_16bit_floats() of
+                true ->
+                    <<124, 0>> = create_float_binary(V, id(16)),
+                    <<252, 0>> = create_float_binary(-V, id(16)),
+                    ok;
+                false ->
+                    ok
+            end
+    end,
+    ok.
+
 create_float_binary(Value, Size) ->
     <<Value:Size/float>>.
 
@@ -677,7 +706,17 @@ check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
 check_x86_64_jt(Bin) -> {unexpected, Bin}.
 
-id(X) -> X.
+id(X) -> ?MODULE:ext_id(X).
+
+ext_id(X) -> X.
 
 join(X, Y) ->
     <<X/binary, Y/binary>>.
+
+has_16bit_floats() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            erlang:system_info(otp_release) >= "24";
+        "ATOM" ->
+            true
+    end.
