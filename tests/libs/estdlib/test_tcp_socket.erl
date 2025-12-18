@@ -197,6 +197,8 @@ start_echo_server(_Port) ->
     receive
         ready ->
             ok
+    after 10000 ->
+        error({timeout, ?MODULE, ?LINE})
     end,
 
     {ListenSocket, ActualPort}.
@@ -568,6 +570,8 @@ test_abandon_select() ->
     receive
         done ->
             ok
+    after 10000 ->
+        error({timeout, ?MODULE, ?LINE})
     end,
 
     erlang:garbage_collect(),
