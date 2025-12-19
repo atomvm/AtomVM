@@ -264,6 +264,7 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
                     fd_index++;
                 }
             }
+            platform->listeners_poll_count = listeners_new_count;
             synclist_unlock(&glb->listeners);
         } else {
             // Else we can reuse the previous list
@@ -281,12 +282,11 @@ static inline void sys_poll_events_with_poll(GlobalContext *glb, int timeout_ms)
                 fd_index++;
             }
         }
+        platform->select_events_poll_count = select_events_new_count;
         synclist_unlock(&glb->select_events);
 
         listeners_poll_count = listeners_new_count;
         select_events_poll_count = select_events_new_count;
-        platform->listeners_poll_count = listeners_new_count;
-        platform->select_events_poll_count = select_events_new_count;
     }
 
     poll_count += listeners_poll_count + select_events_poll_count;
