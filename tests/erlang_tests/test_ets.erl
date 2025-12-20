@@ -277,16 +277,26 @@ assert_stored_key(T, Key) ->
 isolated(Fun) ->
     Ref = make_ref(),
     Self = self(),
-    spawn_opt(
+    {Pid, MRef} = spawn_opt(
         fun() ->
             Ret = Fun(),
             Self ! {ok, Ref, Ret}
         end,
-        []
+        [monitor]
     ),
     receive
-        {ok, Ref, Ret} -> Ret
-    after 500 -> {error, timeout}
+        {ok, Ref, Ret} ->
+            normal =
+                receive
+                    {'DOWN', MRef, process, Pid, Reason} -> Reason
+                end,
+            Ret;
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {error, {process_died, Reason}}
+    after 500 ->
+        demonitor(MRef, [flush]),
+        exit(Pid, kill),
+        {error, timeout}
     end.
 
 assert_badarg(Fun) ->
