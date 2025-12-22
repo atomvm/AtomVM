@@ -67,6 +67,7 @@ typedef struct PassiveRecvListener
     size_t length;
     size_t buffer;
     term controlling_process;
+    // FIXME change to ref data
     uint64_t ref_ticks;
 } PassiveRecvListener;
 

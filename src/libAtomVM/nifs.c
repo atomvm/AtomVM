@@ -1142,7 +1142,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
     // msg is not in the port's heap
     NativeHandlerResult result = NativeContinue;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, 12, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, 13, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
         AVM_ABORT();
     }
@@ -1160,7 +1160,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         term pid = term_get_tuple_element(msg, 1);
         term ref = term_get_tuple_element(msg, 2);
         term req = term_get_tuple_element(msg, 3);
-        uint64_t ref_ticks = term_to_ref_ticks(ref);
+        RefData ref_data = term_to_ref_data(ref);
 
         if (is_tagged_tuple(req, PUT_CHARS_ATOM, 3)) {
             term chars = term_get_tuple_element(req, 2);
@@ -1170,7 +1170,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
                 printf("%s", str);
                 free(str);
 
-                term refcopy = term_from_ref_ticks(ref_ticks, &ctx->heap);
+                term refcopy = term_from_ref_data(ref_data, &ctx->heap);
 
                 term reply = term_alloc_tuple(3, &ctx->heap);
                 term_put_tuple_element(reply, 0, IO_REPLY_ATOM);
