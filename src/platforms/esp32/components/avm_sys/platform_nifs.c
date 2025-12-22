@@ -25,6 +25,8 @@
 #include "atom.h"
 #include "defaultatoms.h"
 #include "esp32_sys.h"
+#include "erl_nif.h"
+#include "erl_nif_priv.h"
 #include "interop.h"
 #include "memory.h"
 #include "nifs.h"
@@ -270,7 +272,7 @@ static term nif_esp_partition_read(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_data_size_in_terms(size) + BINARY_HEADER_SIZE + TUPLE_SIZE(2), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -285,6 +287,52 @@ static term nif_esp_partition_read(Context *ctx, int argc, term argv[])
     term result = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(result, 0, OK_ATOM);
     term_put_tuple_element(result, 1, binary_term);
+
+    return result;
+}
+
+static term nif_esp_partition_mmap(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    bool valid_partition_string;
+    const esp_partition_t *partition = get_partition(argv[0], &valid_partition_string);
+    if (UNLIKELY(!valid_partition_string)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(partition)) {
+        return ERROR_ATOM;
+    }
+
+    VALIDATE_VALUE(argv[1], term_is_integer);
+    avm_int_t offset = term_to_int(argv[1]);
+
+    VALIDATE_VALUE(argv[2], term_is_integer);
+    avm_int_t size = term_to_int(argv[2]);
+    if (UNLIKELY(size < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct ESP32PlatformData *platform = ctx->global->platform_data;
+    esp_partition_mmap_handle_t *handle = enif_alloc_resource(platform->partition_mmap_resource_type, sizeof(esp_partition_mmap_handle_t));
+    const void *mmap_ptr;
+    esp_err_t res = esp_partition_mmap(partition, offset, size, ESP_PARTITION_MMAP_DATA, &mmap_ptr, handle);
+    if (UNLIKELY(res != ESP_OK)) {
+        enif_release_resource(handle);
+        return ERROR_ATOM;
+    }
+
+    ErlNifEnv *env = erl_nif_env_from_context(ctx);
+    ERL_NIF_TERM binary = enif_make_resource_binary(env, handle, mmap_ptr, size);
+    enif_release_resource(handle);
+
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &binary, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, binary);
 
     return result;
 }
@@ -881,6 +929,10 @@ static const struct Nif esp_partition_read_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_partition_read
 };
+static const struct Nif esp_partition_mmap_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_partition_mmap
+};
 static const struct Nif esp_partition_write_nif =
 {
     .base.type = NIFFunctionType,
@@ -1028,6 +1080,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:partition_read/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_partition_read_nif;
+    }
+    if (strcmp("esp:partition_mmap/3", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_partition_mmap_nif;
     }
     if (strcmp("esp:partition_write/3", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);

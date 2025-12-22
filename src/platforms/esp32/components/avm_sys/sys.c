@@ -23,6 +23,8 @@
 
 #include "avmpack.h"
 #include "defaultatoms.h"
+#include "erl_nif.h"
+#include "erl_nif_priv.h"
 #include "globalcontext.h"
 #include "otp_socket.h"
 #include "scheduler.h"
@@ -206,6 +208,18 @@ uint64_t sys_monotonic_time_u64_to_ms(uint64_t t)
     return t / 1000;
 }
 
+static void partition_mmap_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+    esp_partition_mmap_handle_t *handle = (esp_partition_mmap_handle_t *) obj;
+    esp_partition_munmap(*handle);
+}
+
+const ErlNifResourceTypeInit partition_mmap_resource_type_init = {
+    .members = 1,
+    .dtor = partition_mmap_dtor,
+};
+
 void sys_init_platform(GlobalContext *glb)
 {
     struct ESP32PlatformData *platform = malloc(sizeof(struct ESP32PlatformData));
@@ -270,6 +284,17 @@ void sys_init_platform(GlobalContext *glb)
 
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+
+    ErlNifResourceFlags flags;
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+    platform->partition_mmap_resource_type = enif_init_resource_type(&env, "partition_mmap", &partition_mmap_resource_type_init, ERL_NIF_RT_CREATE, &flags);
+    if (UNLIKELY(flags != ERL_NIF_RT_CREATE)) {
+        AVM_ABORT();
+    }
+    if (IS_NULL_PTR(platform->partition_mmap_resource_type)) {
+        AVM_ABORT();
+    }
 }
 
 void sys_free_platform(GlobalContext *glb)
@@ -360,6 +385,13 @@ enum OpenAVMResult sys_open_avm_from_file(GlobalContext *global, const char *pat
         spi_flash_mmap_handle_t part_handle;
         int size;
         const char *part_name = path + parts_by_name_len;
+        const esp_partition_t *partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_ANY, part_name);
+        if (!partition) {
+            ESP_LOGW(TAG, "AVM partition not found for %s", part_name);
+            return AVM_OPEN_CANNOT_OPEN;
+        }
+        size = partition->size;
+
         const void *part_data = esp32_sys_mmap_partition(part_name, &part_handle, &size);
         if (IS_NULL_PTR(part_data)) {
             return AVM_OPEN_CANNOT_OPEN;
