@@ -49,7 +49,7 @@
 #include <lwip/ip_addr.h>
 #pragma GCC diagnostic pop
 
-//#define ENABLE_TRACE 1
+// #define ENABLE_TRACE 1
 #include "trace.h"
 
 #define TAG "socket_driver"
@@ -69,13 +69,19 @@ static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
 static NativeHandlerResult socket_consume_mailbox(Context *ctx);
 
-static const char *const tcp_error_atom = "\x9" "tcp_error";
+static const char *const tcp_error_atom = "\x9"
+                                          "tcp_error";
 
 static const char *const netconn_event_internal = ATOM_STR("\x14", "$atomvm_netconn_event_internal");
 static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
 static const char *native_tcp_module_atom = ATOM_STR("\xC", "gen_tcp_inet");
 static const char *gen_udp_moniker_atom = ATOM_STR("\xC", "$avm_gen_udp");
 static const char *native_udp_module_atom = ATOM_STR("\xC", "gen_udp_inet");
+
+static const RefData no_ref_data = {
+    .process_id = 0,
+    .ref_ticks = 0,
+};
 
 static inline term create_socket_wrapper(term pid, const char *moniker_atom, const char *module_atom, Heap *heap, GlobalContext *global)
 {
@@ -146,7 +152,7 @@ static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
             break;
         }
         case IPADDR_TYPE_V6:
-            //TODO: implement IPv6
+            // TODO: implement IPv6
             addr_tuple = term_invalid_term();
             break;
 
@@ -178,7 +184,7 @@ struct SocketData
     int32_t controlling_process_pid;
 
     int32_t passive_receiver_process_pid;
-    uint64_t passive_ref_ticks;
+    RefData passive_ref_data;
 
     int avail_bytes;
 
@@ -207,7 +213,7 @@ struct TCPServerAccepter
 {
     struct ListHead accepter_head;
     int32_t accepting_process_pid;
-    uint64_t ref_ticks;
+    RefData ref_data;
 };
 
 struct UDPSocketData
@@ -223,7 +229,6 @@ struct NetconnEvent
     struct netconn *netconn;
     u16_t len;
 };
-
 
 struct ReadyConnection
 {
@@ -306,7 +311,7 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
             } else {
                 // Add it to ready_connections
                 TRACE("Got event for unknown conn: %p, len = %d adding to ready connections list\n", (void *) event.netconn, event.len);
-                struct ReadyConnection *ready = (struct ReadyConnection *) malloc(sizeof (struct ReadyConnection));
+                struct ReadyConnection *ready = (struct ReadyConnection *) malloc(sizeof(struct ReadyConnection));
                 ready->netconn = event.netconn;
                 ready->len = event.len;
                 list_append(&platform->ready_connections, &ready->ready_connection_head);
@@ -392,7 +397,7 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
 
     list_append(sockets, &data->sockets_head);
     data->passive_receiver_process_pid = 0;
-    data->passive_ref_ticks = 0;
+    data->passive_ref_data = no_ref_data;
 
     ctx->platform_data = data;
 }
@@ -438,12 +443,12 @@ static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *c
 }
 
 // When this method is called, ensure free was called with REPLY_SIZE
-#define REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
-static void do_send_reply(Context *ctx, term reply, uint64_t ref_ticks, int32_t pid)
+#define REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE)
+static void do_send_reply(Context *ctx, term reply, RefData ref_data, int32_t pid)
 {
     GlobalContext *glb = ctx->global;
     term reply_tuple = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(reply_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
+    term_put_tuple_element(reply_tuple, 0, term_from_ref_data(ref_data, &ctx->heap));
     term_put_tuple_element(reply_tuple, 1, reply);
     globalcontext_send_message(glb, pid, reply_tuple);
 }
@@ -478,7 +483,7 @@ static term lwip_error_atom(GlobalContext *glb, err_t status)
     }
 }
 
-static void do_send_error_reply(Context *ctx, err_t status, uint64_t ref_ticks, int32_t pid)
+static void do_send_error_reply(Context *ctx, err_t status, RefData ref_data, int32_t pid)
 {
     GlobalContext *glb = ctx->global;
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
@@ -488,10 +493,10 @@ static void do_send_error_reply(Context *ctx, err_t status, uint64_t ref_ticks, 
     term error_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
     term_put_tuple_element(error_tuple, 1, reason_atom);
-    do_send_reply(ctx, error_tuple, ref_ticks, pid);
+    do_send_reply(ctx, error_tuple, ref_data, pid);
 }
 
-static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint64_t ref_ticks, int32_t pid)
+static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, RefData ref_data, int32_t pid)
 {
     TRACE("Going to accept a TCP connection\n");
     GlobalContext *glb = ctx->global;
@@ -506,7 +511,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     err_t status = netconn_accept(tcp_data->socket_data.conn, &accepted_conn);
     if (UNLIKELY(status != ERR_OK)) {
         socket_data_postinit(platform);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -557,8 +562,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
         globalcontext_send_message(glb, new_ctx->process_id, message);
     }
 
-    do_send_reply(ctx, result_tuple, ref_ticks, pid);
-
+    do_send_reply(ctx, result_tuple, ref_data, pid);
 }
 
 static void do_accept(Context *ctx, const GenMessage *gen_message)
@@ -566,26 +570,26 @@ static void do_accept(Context *ctx, const GenMessage *gen_message)
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (tcp_data->ready_connections) {
         TRACE("accepting existing connections.\n");
 
-        accept_conn(ctx, tcp_data, ref_ticks, pid);
+        accept_conn(ctx, tcp_data, ref_data, pid);
         tcp_data->ready_connections--;
     } else {
         struct TCPServerAccepter *accepter = malloc(sizeof(struct TCPServerAccepter));
         accepter->accepting_process_pid = pid;
-        accepter->ref_ticks = ref_ticks;
+        accepter->ref_data = ref_data;
         list_append(&tcp_data->accepters_list_head, &accepter->accepter_head);
     }
 }
 
 static void do_send_passive_reply(Context *ctx, struct SocketData *socket_data, term reply)
 {
-    do_send_reply(ctx, reply, socket_data->passive_ref_ticks, socket_data->passive_receiver_process_pid);
+    do_send_reply(ctx, reply, socket_data->passive_ref_data, socket_data->passive_receiver_process_pid);
     socket_data->passive_receiver_process_pid = 0;
-    socket_data->passive_ref_ticks = 0;
+    socket_data->passive_ref_data = no_ref_data;
 }
 
 static void do_send_socket_error(Context *ctx, err_t status)
@@ -609,9 +613,9 @@ static void do_send_socket_error(Context *ctx, err_t status)
             globalcontext_send_message(glb, socket_data->controlling_process_pid, result_tuple);
         }
     } else {
-        do_send_error_reply(ctx, status, socket_data->passive_ref_ticks, socket_data->passive_receiver_process_pid);
+        do_send_error_reply(ctx, status, socket_data->passive_ref_data, socket_data->passive_receiver_process_pid);
         socket_data->passive_receiver_process_pid = 0;
-        socket_data->passive_ref_ticks = 0;
+        socket_data->passive_ref_data = no_ref_data;
     }
 }
 
@@ -655,7 +659,7 @@ static void do_tcp_server_netconn_event(Context *ctx)
     }
 
     if (accepter) {
-        accept_conn(ctx, tcp_data, accepter->ref_ticks, accepter->accepting_process_pid);
+        accept_conn(ctx, tcp_data, accepter->ref_data, accepter->accepting_process_pid);
         free(accepter);
     } else {
         tcp_data->ready_connections++;
@@ -763,15 +767,11 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
     netbuf_delete(buf);
 
-
     if (socket_data->active) {
         term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
         term socket_pid = term_port_from_local_process_id(ctx->process_id);
-        term socket_wrapper =
-            socket_data->type == UDPSocket ?
-                create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) :
-                create_tcp_socket_wrapper(socket_pid, &ctx->heap, ctx->global);
+        term socket_wrapper = socket_data->type == UDPSocket ? create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) : create_tcp_socket_wrapper(socket_pid, &ctx->heap, ctx->global);
         term_put_tuple_element(active_tuple, 1, socket_wrapper);
         if (socket_data->type == TCPClientSocket) {
             term_put_tuple_element(active_tuple, 2, recv_term);
@@ -782,9 +782,9 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         }
         globalcontext_send_message(ctx->global, socket_data->controlling_process_pid, active_tuple);
         TRACE("sent received to active process (pid=%d): ", (int) socket_data->controlling_process_pid);
-        #ifdef ENABLE_TRACE
-            term_display(stdout, active_tuple, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, active_tuple, ctx);
+#endif
         TRACE("\n");
     } else {
         term ok_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -792,9 +792,9 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         term_put_tuple_element(ok_tuple, 1, recv_term);
         do_send_passive_reply(ctx, socket_data, ok_tuple);
         TRACE("sent received to passive caller (pid=%d): ", (int) socket_data->passive_receiver_process_pid);
-        #ifdef ENABLE_TRACE
-            term_display(stdout, ok_tuple, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, ok_tuple, ctx);
+#endif
         TRACE("\n");
     }
 
@@ -862,7 +862,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     struct ESP32PlatformData *platform = glb->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
         ESP_LOGW(TAG, "Received invalid message.");
         return;
@@ -877,25 +877,25 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     int32_t controlling_process_pid = term_to_local_process_id(controlling_process_term);
     int ok_int;
     char *address_string = interop_term_to_string(address_term, &ok_int);
     if (UNLIKELY(!ok_int)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     avm_int_t port = term_to_int(port_term);
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
 
@@ -906,12 +906,12 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     TRACE("tcp: connecting to: %s\n", address_string);
 
     ip_addr_t remote_ip;
-    //TODO: use dns_gethostbyname instead
+    // TODO: use dns_gethostbyname instead
     err_t status = netconn_gethostbyname(address_string, &remote_ip);
     if (UNLIKELY(status != ERR_OK)) {
         free(address_string);
         TRACE("tcp: host resolution failed.\n");
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -929,7 +929,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     status = netconn_connect(conn, &remote_ip, port);
     if (UNLIKELY(status != ERR_OK)) {
         TRACE("tcp: failed connect: %i\n", status);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -943,7 +943,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
 
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    do_send_reply(ctx, OK_ATOM, ref_data, pid);
 }
 
 static void do_listen(Context *ctx, const GenMessage *gen_message)
@@ -952,7 +952,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     struct ESP32PlatformData *platform = glb->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
         ESP_LOGW(TAG, "Received invalid message.");
         return;
@@ -970,12 +970,12 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     bool ok;
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
 
@@ -987,7 +987,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
 
     err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
     if (UNLIKELY(status != ERR_OK)) {
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -995,13 +995,13 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     u16_t nport;
     status = netconn_getaddr(conn, &naddr, &nport, 1);
     if (UNLIKELY(status != ERR_OK)) {
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
     status = netconn_listen_with_backlog(conn, backlog);
     if (UNLIKELY(status != ERR_OK)) {
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -1018,7 +1018,7 @@ static void do_listen(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    do_send_reply(ctx, OK_ATOM, ref_data, pid);
 }
 
 void do_udp_open(Context *ctx, const GenMessage *gen_message)
@@ -1027,7 +1027,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     struct ESP32PlatformData *platform = glb->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
         ESP_LOGW(TAG, "Received invalid message.");
         return;
@@ -1041,19 +1041,19 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
 
     bool ok = term_is_local_pid(controlling_process_term);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     int32_t controlling_process_pid = term_to_local_process_id(controlling_process_term);
     avm_int_t port = term_to_int(port_term);
     bool active = bool_term_to_bool(active_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
     bool binary = bool_term_to_bool(binary_term, &ok);
     if (UNLIKELY(!ok)) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
         return;
     }
 
@@ -1076,7 +1076,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     if (port != 0) {
         err_t status = netconn_bind(conn, IP_ADDR_ANY, port);
         if (UNLIKELY(status != ERR_OK)) {
-            do_send_error_reply(ctx, status, ref_ticks, pid);
+            do_send_error_reply(ctx, status, ref_data, pid);
             return;
         }
     }
@@ -1085,7 +1085,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     u16_t nport;
     err_t status = netconn_getaddr(conn, &naddr, &nport, 1);
     if (UNLIKELY(status != ERR_OK)) {
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
     udp_data->socket_data.port = nport;
@@ -1093,7 +1093,7 @@ void do_udp_open(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    do_send_reply(ctx, OK_ATOM, ref_data, pid);
 }
 
 // Required for compatibility with existing erlang libraries
@@ -1125,7 +1125,7 @@ static void do_send(Context *ctx, const GenMessage *gen_message)
     struct TCPServerSocketData *tcp_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
         ESP_LOGW(TAG, "Received invalid message.");
@@ -1167,7 +1167,7 @@ static void do_send(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    do_send_reply(ctx, OK_ATOM, ref_data, pid);
 }
 
 static void do_sendto(Context *ctx, const GenMessage *gen_message)
@@ -1175,7 +1175,7 @@ static void do_sendto(Context *ctx, const GenMessage *gen_message)
     struct UDPSocketData *udp_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 4)) {
         ESP_LOGW(TAG, "Received invalid message.");
@@ -1191,10 +1191,10 @@ static void do_sendto(Context *ctx, const GenMessage *gen_message)
         case InteropOk:
             break;
         case InteropMemoryAllocFail:
-            do_send_error_reply(ctx, ERR_MEM, ref_ticks, pid);
+            do_send_error_reply(ctx, ERR_MEM, ref_data, pid);
             return;
         case InteropBadArg:
-            do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+            do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
             return;
     }
     void *buffer = malloc(buffer_size);
@@ -1203,11 +1203,11 @@ static void do_sendto(Context *ctx, const GenMessage *gen_message)
             break;
         case InteropMemoryAllocFail:
             free(buffer);
-            do_send_error_reply(ctx, ERR_MEM, ref_ticks, pid);
+            do_send_error_reply(ctx, ERR_MEM, ref_data, pid);
             return;
         case InteropBadArg:
             free(buffer);
-            do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+            do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
             return;
     }
 
@@ -1221,7 +1221,7 @@ static void do_sendto(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(status != ERR_OK)) {
         netbuf_delete(sendbuf);
         free(buffer);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
@@ -1230,14 +1230,14 @@ static void do_sendto(Context *ctx, const GenMessage *gen_message)
     free(buffer);
 
     if (UNLIKELY(status != ERR_OK)) {
-        do_send_error_reply(ctx, status, ref_ticks, pid);
+        do_send_error_reply(ctx, status, ref_data, pid);
         return;
     }
 
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    do_send_reply(ctx, OK_ATOM, ref_data, pid);
 }
 
 static void do_close(Context *ctx, const GenMessage *gen_message)
@@ -1245,7 +1245,7 @@ static void do_close(Context *ctx, const GenMessage *gen_message)
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
@@ -1263,11 +1263,11 @@ static void do_close(Context *ctx, const GenMessage *gen_message)
     synclist_remove(&platform->sockets, &socket_data->sockets_head);
 
     if (UNLIKELY(close_disconnect_res != ERR_OK)) {
-        do_send_error_reply(ctx, close_disconnect_res, ref_ticks, pid);
+        do_send_error_reply(ctx, close_disconnect_res, ref_data, pid);
     } else if (UNLIKELY(delete_res != ERR_OK)) {
-        do_send_error_reply(ctx, delete_res, ref_ticks, pid);
+        do_send_error_reply(ctx, delete_res, ref_data, pid);
     } else {
-        do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+        do_send_reply(ctx, OK_ATOM, ref_data, pid);
     }
 }
 
@@ -1276,16 +1276,16 @@ static NativeHandlerResult do_recvfrom(Context *ctx, const GenMessage *gen_messa
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     // We cannot stack blocked queries
     if (socket_data->passive_receiver_process_pid != 0) {
-        do_send_error_reply(ctx, ERR_ALREADY, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ALREADY, ref_data, pid);
         return NativeContinue;
     }
 
     socket_data->passive_receiver_process_pid = pid;
-    socket_data->passive_ref_ticks = ref_ticks;
+    socket_data->passive_ref_data = ref_data;
 
     // There may be nothing to read.
     if (socket_data->avail_bytes <= 0 && !socket_data->read_condition) {
@@ -1300,10 +1300,10 @@ static void do_get_port(Context *ctx, const GenMessage *gen_message)
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (socket_data->port == 0) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
@@ -1311,7 +1311,7 @@ static void do_get_port(Context *ctx, const GenMessage *gen_message)
         term ok_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(ok_tuple, 0, OK_ATOM);
         term_put_tuple_element(ok_tuple, 1, term_from_int(socket_data->port));
-        do_send_reply(ctx, ok_tuple, ref_ticks, pid);
+        do_send_reply(ctx, ok_tuple, ref_data, pid);
     }
 }
 
@@ -1320,14 +1320,14 @@ static void do_sockname(Context *ctx, const GenMessage *gen_message)
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     ip_addr_t addr;
     u16_t port;
     err_t result = netconn_addr(socket_data->conn, &addr, &port);
     term return_msg;
     if (result != ERR_OK) {
-        do_send_error_reply(ctx, result, ref_ticks, pid);
+        do_send_error_reply(ctx, result, ref_data, pid);
     } else {
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + SOCKET_INET_ADDR + REPLY_SIZE) != MEMORY_GC_OK)) {
             AVM_ABORT();
@@ -1340,7 +1340,7 @@ static void do_sockname(Context *ctx, const GenMessage *gen_message)
         term_put_tuple_element(address_port_term, 1, port_term);
         term_put_tuple_element(return_msg, 0, OK_ATOM);
         term_put_tuple_element(return_msg, 1, address_port_term);
-        do_send_reply(ctx, return_msg, ref_ticks, pid);
+        do_send_reply(ctx, return_msg, ref_data, pid);
     }
 }
 
@@ -1349,14 +1349,14 @@ static void do_peername(Context *ctx, const GenMessage *gen_message)
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     ip_addr_t addr;
     u16_t port;
     err_t result = netconn_peer(socket_data->conn, &addr, &port);
     term return_msg;
     if (result != ERR_OK) {
-        do_send_error_reply(ctx, result, ref_ticks, pid);
+        do_send_error_reply(ctx, result, ref_data, pid);
     } else {
         // {ok, {{A,B,C,D}, Port}}
         if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + SOCKET_INET_ADDR + REPLY_SIZE) != MEMORY_GC_OK)) {
@@ -1370,7 +1370,7 @@ static void do_peername(Context *ctx, const GenMessage *gen_message)
         term_put_tuple_element(address_port_term, 1, port_term);
         term_put_tuple_element(return_msg, 0, OK_ATOM);
         term_put_tuple_element(return_msg, 1, address_port_term);
-        do_send_reply(ctx, return_msg, ref_ticks, pid);
+        do_send_reply(ctx, return_msg, ref_data, pid);
     }
 }
 
@@ -1379,7 +1379,7 @@ static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
     struct SocketData *socket_data = ctx->platform_data;
 
     int32_t pid = term_to_local_process_id(gen_message->pid);
-    uint64_t ref_ticks = term_to_ref_ticks(gen_message->ref);
+    RefData ref_data = term_to_ref_data(gen_message->ref);
 
     if (UNLIKELY(term_get_tuple_arity(gen_message->req) != 2)) {
         ESP_LOGW(TAG, "Received invalid message.");
@@ -1387,7 +1387,7 @@ static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
     }
     term new_pid_term = term_get_tuple_element(gen_message->req, 1);
     if (UNLIKELY(!term_is_local_pid(new_pid_term))) {
-        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        do_send_error_reply(ctx, ERR_ARG, ref_data, pid);
     } else {
         term return_msg;
 
@@ -1404,7 +1404,7 @@ static void do_controlling_process(Context *ctx, const GenMessage *gen_message)
             socket_data->controlling_process_pid = new_pid;
             return_msg = OK_ATOM;
         }
-        do_send_reply(ctx, return_msg, ref_ticks, pid);
+        do_send_reply(ctx, return_msg, ref_data, pid);
     }
 }
 
@@ -1418,9 +1418,9 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         term msg = message->message;
 
         TRACE("message: ");
-        #ifdef ENABLE_TRACE
-            term_display(stdout, msg, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, msg, ctx);
+#endif
         TRACE("\n");
 
         if (term_is_tuple(msg) && term_get_tuple_element(msg, 0) == globalcontext_make_atom(glb, netconn_event_internal)) {
@@ -1445,7 +1445,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         term cmd_name = term_get_tuple_element(gen_message.req, 0);
 
         switch (cmd_name) {
-            //TODO: remove this
+            // TODO: remove this
             case INIT_ATOM:
                 TRACE("init\n");
                 do_init(ctx, &gen_message);

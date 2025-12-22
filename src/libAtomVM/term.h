@@ -152,7 +152,10 @@ extern "C" {
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-#define TERM_BOXED_PROCESS_REF_SIZE (REF_SIZE + 1)
+// FIXME: The required size is REF_SIZE + 1, but then it's equal to
+// TERM_BOXED_REFERENCE_RESOURCE_SIZE on 32bit arch, and therefore
+// the process ref is indistinguishable from resource ref there
+#define TERM_BOXED_PROCESS_REF_SIZE 5
 #define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
@@ -247,6 +250,14 @@ extern "C" {
 #define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
+
+typedef struct RefData RefData;
+
+struct RefData
+{
+    uint64_t ref_ticks;
+    int32_t process_id;
+};
 
 typedef struct PrinterFun PrinterFun;
 
@@ -2230,7 +2241,7 @@ static inline term term_make_process_reference(int32_t process_id, uint64_t ref_
     boxed_value[0] = TERM_BOXED_PROCESS_REF_HEADER;
 
 #if TERM_BYTES == 4
-    boxed_value[1] = (ref_ticks >> 4);
+    boxed_value[1] = (ref_ticks >> 32);
     boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
     boxed_value[3] = process_id;
 
@@ -2256,6 +2267,23 @@ static inline uint32_t term_process_ref_to_process_id(term rt)
 #else
 #error "terms must be either 32 or 64 bit wide"
 #endif
+}
+
+static inline RefData term_to_ref_data(term t)
+{
+    RefData ref_data;
+    ref_data.ref_ticks = term_to_ref_ticks(t);
+    ref_data.process_id = term_is_process_reference(t) ? term_process_ref_to_process_id(t) : 0;
+    return ref_data;
+}
+
+static inline term term_from_ref_data(RefData ref_data, Heap *heap)
+{
+    if (ref_data.process_id) {
+        return term_make_process_reference(ref_data.process_id, ref_data.ref_ticks, heap);
+    } else {
+        return term_from_ref_ticks(ref_data.ref_ticks, heap);
+    }
 }
 
 /**
