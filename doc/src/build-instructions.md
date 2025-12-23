@@ -679,6 +679,8 @@ directory:
 ### Build AtomVM with cmake toolchain file
 
 ```shell
+$ cd <atomvm-source-tree-root>
+$ cd src/platforms/stm32
 $ mkdir build
 $ cd build
 $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake ..
