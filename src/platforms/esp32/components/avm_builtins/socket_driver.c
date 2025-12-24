@@ -1117,40 +1117,61 @@ static void do_send(Context *ctx, const GenMessage *gen_message)
     term data = term_get_tuple_element(gen_message->req, 1);
 
     size_t buffer_size;
-    switch (interop_iolist_size(data, &buffer_size)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            fprintf(stderr, "error: failed alloc.\n");
-            return;
-        case InteropBadArg:
-            fprintf(stderr, "error: invalid iolist.\n");
-            return;
-    }
-    void *buffer = malloc(buffer_size);
-    switch (interop_write_iolist(data, buffer)) {
-        case InteropOk:
-            break;
-        case InteropMemoryAllocFail:
-            free(buffer);
-            fprintf(stderr, "error: failed alloc.\n");
-            return;
-        case InteropBadArg:
-            free(buffer);
-            fprintf(stderr, "error: invalid iolist.\n");
-            return;
+    const void *buffer;
+    void *buffer_copy = NULL;
+    if (term_is_binary(data)) {
+        // No need to copy.
+        buffer_size = term_binary_size(data);
+        buffer = term_binary_data(data);
+    } else {
+        switch (interop_iolist_size(data, &buffer_size)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+                    AVM_ABORT();
+                }
+                do_send_reply(ctx, OUT_OF_MEMORY_ATOM, ref_ticks, pid);
+                return;
+            case InteropBadArg:
+                if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+                    AVM_ABORT();
+                }
+                do_send_reply(ctx, BADARG_ATOM, ref_ticks, pid);
+                return;
+        }
+        buffer_copy = malloc(buffer_size);
+        switch (interop_write_iolist(data, buffer_copy)) {
+            case InteropOk:
+                break;
+            case InteropMemoryAllocFail:
+                free(buffer_copy);
+                if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+                    AVM_ABORT();
+                }
+                do_send_reply(ctx, OUT_OF_MEMORY_ATOM, ref_ticks, pid);
+                return;
+            case InteropBadArg:
+                free(buffer_copy);
+                if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+                    AVM_ABORT();
+                }
+                do_send_reply(ctx, BADARG_ATOM, ref_ticks, pid);
+                return;
+        }
+        buffer = buffer_copy;
     }
     err_t status = netconn_write(tcp_data->socket_data.conn, buffer, buffer_size, NETCONN_COPY);
-    free(buffer);
-    if (UNLIKELY(status != ERR_OK)) {
-        fprintf(stderr, "write error: %i\n", status);
-        return;
-    }
+    free(buffer_copy);
 
     if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    if (UNLIKELY(status != ERR_OK)) {
+        do_send_reply(ctx, ERROR_ATOM, ref_ticks, pid);
+    } else {
+        do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+    }
 }
 
 static void do_sendto(Context *ctx, const GenMessage *gen_message)
