@@ -405,23 +405,17 @@ jump_table0(
     jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
-%% @doc Rewrite stream to update all branches for labels.
+%% @doc Patch a single branch in the stream
 %% @end
-%% @param State current backend state
-%% @return Updated backend state
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param Offset offset of the branch to patch
+%% @param Type type of the branch
+%% @param LabelOffset target label offset
+%% @return Updated stream
 %%-----------------------------------------------------------------------------
--spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
-    State;
-update_branches(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = [{Label, Offset, Type} | BranchesT],
-        labels = Labels
-    } = State
-) ->
-    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
+-spec patch_branch(module(), stream(), non_neg_integer(), any(), non_neg_integer()) -> stream().
+patch_branch(StreamModule, Stream, Offset, Type, LabelOffset) ->
     Rel = LabelOffset - Offset,
     NewInstr =
         case Type of
@@ -497,7 +491,62 @@ update_branches(
                         end
                 end
         end,
-    Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
+    StreamModule:replace(Stream, Offset, NewInstr).
+
+%%-----------------------------------------------------------------------------
+%% @doc Patch all branches targeting a specific label and return remaining branches
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param TargetLabel label to patch branches for
+%% @param LabelOffset offset of the target label
+%% @param Branches list of pending branches
+%% @return {UpdatedStream, RemainingBranches}
+%%-----------------------------------------------------------------------------
+-spec patch_branches_for_label(
+    module(),
+    stream(),
+    integer(),
+    non_neg_integer(),
+    [{integer(), non_neg_integer(), any()}]
+) -> {stream(), [{integer(), non_neg_integer(), any()}]}.
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
+
+patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
+    {Stream, lists:reverse(Acc)};
+patch_branches_for_label(
+    StreamModule,
+    Stream0,
+    TargetLabel,
+    LabelOffset,
+    [{Label, Offset, Type} | Rest],
+    Acc
+) when Label =:= TargetLabel ->
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
+    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @doc Rewrite stream to update all branches for labels.
+%% @end
+%% @param State current backend state
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec update_branches(state()) -> state().
+update_branches(#state{branches = []} = State) ->
+    State;
+update_branches(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = [{Label, Offset, Type} | BranchesT],
+        labels = Labels
+    } = State
+) ->
+    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
 
 %%-----------------------------------------------------------------------------
@@ -3282,6 +3331,7 @@ add_label(
         stream_module = StreamModule,
         stream = Stream0,
         jump_table_start = JumpTableStart,
+        branches = Branches,
         labels = Labels
     } = State,
     Label,
@@ -3305,6 +3355,18 @@ add_label(
     DataBytes = <<RelativeOffset:32/little>>,
 
     Stream1 = StreamModule:replace(Stream0, DataOffset, DataBytes),
-    State#state{stream = Stream1, labels = [{Label, LabelOffset} | Labels]};
+
+    % Eagerly patch any branches targeting this label
+    {Stream2, RemainingBranches} = patch_branches_for_label(
+        StreamModule,
+        Stream1,
+        Label,
+        LabelOffset,
+        Branches
+    ),
+
+    State#state{
+        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+    };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
