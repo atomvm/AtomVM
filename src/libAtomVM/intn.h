@@ -923,6 +923,20 @@ static inline void intn_from_int64(int64_t i64, intn_digit_t out[], intn_integer
 }
 
 /**
+ * @brief Check if a multi-precision integer can be safely converted to \c uint64_t
+ *
+ * Tests whether a multi-precision integer represents an integer value that fits within
+ * the \c uint64_t range ([UINT64_MIN, UINT64_MAX]) without overflow or truncation.
+ *
+ * @param num Integer array
+ * @param len Array length
+ */
+static inline bool intn_is_uint64(const intn_digit_t num[], size_t len)
+{
+    return intn_count_digits(num, len) == 2;
+}
+
+/**
  * @brief Convert 2-digit multi-precision integer to \c uint64_t
  *
  * Extracts unsigned 64-bit value from 2-digit representation.
