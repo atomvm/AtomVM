@@ -60,27 +60,6 @@
 #define TAG "network_driver"
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
-static const char *const ap_atom = ATOM_STR("\x2", "ap");
-static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
-static const char *const ap_sta_connected_atom = ATOM_STR("\x10", "ap_sta_connected");
-static const char *const ap_sta_disconnected_atom = ATOM_STR("\x13", "ap_sta_disconnected");
-static const char *const ap_sta_ip_assigned_atom = ATOM_STR("\x12", "ap_sta_ip_assigned");
-static const char *const ap_started_atom = ATOM_STR("\xA", "ap_started");
-static const char *const dhcp_hostname_atom = ATOM_STR("\xD", "dhcp_hostname");
-static const char *const host_atom = ATOM_STR("\x4", "host");
-static const char *const max_connections_atom = ATOM_STR("\xF", "max_connections");
-static const char *const psk_atom = ATOM_STR("\x3", "psk");
-static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
-static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
-static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
-static const char *const ssid_hidden_atom = ATOM_STR("\xB", "ssid_hidden");
-static const char *const sta_atom = ATOM_STR("\x3", "sta");
-static const char *const sta_connected_atom = ATOM_STR("\xD", "sta_connected");
-static const char *const sta_beacon_timeout_atom = ATOM_STR("\x12", "sta_beacon_timeout");
-static const char *const sta_disconnected_atom = ATOM_STR("\x10", "sta_disconnected");
-static const char *const sta_got_ip_atom = ATOM_STR("\xA", "sta_got_ip");
-static const char *const network_down_atom = ATOM_STR("\x0C", "network_down");
-
 ESP_EVENT_DECLARE_BASE(sntp_event_base);
 ESP_EVENT_DEFINE_BASE(sntp_event_base);
 
@@ -112,11 +91,6 @@ struct ClientData
     uint32_t owner_process_id;
     uint64_t ref_ticks;
 };
-
-static inline term make_atom(GlobalContext *global, AtomString atom_str)
-{
-    return globalcontext_make_atom(global, atom_str);
-}
 
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
@@ -152,10 +126,46 @@ static void send_got_ip(struct ClientData *data, esp_netif_ip_info_t *info)
         term gw = tuple_from_addr(&heap, ntohl(info->gw.addr));
 
         term ip_info = port_heap_create_tuple3(&heap, ip, netmask, gw);
-        term reply = port_heap_create_tuple2(&heap, make_atom(data->global, sta_got_ip_atom), ip_info);
+        term reply = port_heap_create_tuple2(&heap, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\xA", "sta_got_ip")), ip_info);
         send_term(&heap, data, reply);
     }
     END_WITH_STACK_HEAP(heap, data->global);
+}
+
+// Used to initialize atoms use in STA mode callbacks when sta mode is configured
+// callbacks should get the existing atom term from from the atom string.
+#define NUM_STA_ATOMS 5
+bool init_sta_atoms(GlobalContext *glb)
+{
+    AtomString sta_cb_atom[NUM_STA_ATOMS] = { ATOM_STR("\xD", "sta_connected"), ATOM_STR("\x12", "sta_beacon_timeout"),
+        ATOM_STR("\x10", "sta_disconnected"), ATOM_STR("\xA", "sta_got_ip"), ATOM_STR("\x0C", "network_down")};
+
+    for (int atom = 0; atom < NUM_STA_ATOMS; atom++) {
+        int index = globalcontext_insert_atom(glb, sta_cb_atom[atom]);
+        if (UNLIKELY(index < 0)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// Used to initialize atoms use in AP mode callbacks when ap mode is configured
+// callbacks should get the existing atom term from from the atom string.
+#define NUM_AP_ATOMS 4
+bool init_ap_cb_atoms(GlobalContext *glb)
+{
+    AtomString ap_cb_atoms[NUM_AP_ATOMS] = { ATOM_STR("\x10", "ap_sta_connected"), ATOM_STR("\x13", "ap_sta_disconnected"),
+        ATOM_STR("\x12", "ap_sta_ip_assigned"), ATOM_STR("\xA", "ap_started") };
+
+    for (int atom = 0; atom < NUM_AP_ATOMS; atom++) {
+        int index = globalcontext_insert_atom(glb, ap_cb_atoms[atom]);
+        if (UNLIKELY(index < 0)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 static void send_sta_connected(struct ClientData *data)
@@ -165,7 +175,7 @@ static void send_sta_connected(struct ClientData *data)
     // {Ref, sta_connected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, data, make_atom(data->global, sta_connected_atom));
+        send_term(&heap, data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\xD", "sta_connected")));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -177,7 +187,7 @@ static void send_sta_beacon_timeout(struct ClientData *data)
     // {Ref, sta_beacon_timeout}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, data, make_atom(data->global, sta_beacon_timeout_atom));
+        send_term(&heap, data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x12", "sta_beacon_timeout")));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -189,7 +199,7 @@ static void send_sta_disconnected(struct ClientData *data)
     // {Ref, sta_disconnected}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, data, make_atom(data->global, sta_disconnected_atom));
+        send_term(&heap, data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x10", "sta_disconnected")));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -201,7 +211,7 @@ static void send_ap_started(struct ClientData *data)
     // {Ref, ap_started}
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE, heap);
     {
-        send_term(&heap, data, make_atom(data->global, ap_started_atom));
+        send_term(&heap, data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\xA", "ap_started")));
     }
     END_WITH_STACK_HEAP(heap, data->global);
 }
@@ -221,13 +231,13 @@ static void send_atom_mac(struct ClientData *data, term atom, uint8_t *mac)
 static void send_ap_sta_connected(struct ClientData *data, uint8_t *mac)
 {
     TRACE("Sending ap_sta_connected back to AtomVM\n");
-    send_atom_mac(data, make_atom(data->global, ap_sta_connected_atom), mac);
+    send_atom_mac(data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x10", "ap_sta_connected")), mac);
 }
 
 static void send_ap_sta_disconnected(struct ClientData *data, uint8_t *mac)
 {
     TRACE("Sending ap_sta_disconnected back to AtomVM\n");
-    send_atom_mac(data, make_atom(data->global, ap_sta_disconnected_atom), mac);
+    send_atom_mac(data, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x13", "ap_sta_disconnected")), mac);
 }
 
 static void send_ap_sta_ip_assigned(struct ClientData *data, esp_ip4_addr_t *ip)
@@ -237,7 +247,7 @@ static void send_ap_sta_ip_assigned(struct ClientData *data, esp_ip4_addr_t *ip)
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(4), heap);
     {
         term ip_term = tuple_from_addr(&heap, ntohl(ip->addr));
-        term reply = port_heap_create_tuple2(&heap, make_atom(data->global, ap_sta_ip_assigned_atom), ip_term);
+        term reply = port_heap_create_tuple2(&heap, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x12", "ap_sta_ip_assigned")), ip_term);
         send_term(&heap, data, reply);
     }
     END_WITH_STACK_HEAP(heap, data->global);
@@ -251,7 +261,7 @@ static void send_sntp_sync(struct ClientData *data, struct timeval *tv)
     BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) * 2 + BOXED_INT64_SIZE * 2, heap);
     {
         term tv_tuple = port_heap_create_tuple2(&heap, term_make_maybe_boxed_int64(tv->tv_sec, &heap), term_make_maybe_boxed_int64(tv->tv_usec, &heap));
-        term reply = port_heap_create_tuple2(&heap, make_atom(data->global, sntp_sync_atom), tv_tuple);
+        term reply = port_heap_create_tuple2(&heap, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x9", "sntp_sync")), tv_tuple);
         send_term(&heap, data, reply);
     }
     END_WITH_STACK_HEAP(heap, data->global);
@@ -381,8 +391,8 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
         TRACE("No STA config\n");
         return NULL;
     }
-    term ssid_term = interop_kv_get_value(sta_config, ssid_atom, global);
-    term pass_term = interop_kv_get_value(sta_config, psk_atom, global);
+    term ssid_term = interop_kv_get_value(sta_config, ATOM_STR("\x4", "ssid"), global);
+    term pass_term = interop_kv_get_value(sta_config, ATOM_STR("\x3", "psk"), global);
 
     //
     // Check parameters
@@ -470,9 +480,9 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
         TRACE("No AP config\n");
         return NULL;
     }
-    term ssid_term = interop_kv_get_value(ap_config, ssid_atom, global);
-    term pass_term = interop_kv_get_value(ap_config, psk_atom, global);
-    term channel_term = interop_kv_get_value(ap_config, ap_channel_atom, global);
+    term ssid_term = interop_kv_get_value(ap_config, ATOM_STR("\x4", "ssid"), global);
+    term pass_term = interop_kv_get_value(ap_config, ATOM_STR("\x3", "psk"), global);
+    term channel_term = interop_kv_get_value(ap_config, ATOM_STR("\xA", "ap_channel"), global);
 
     //
     // Check parameters
@@ -546,9 +556,9 @@ static wifi_config_t *get_ap_wifi_config(term ap_config, GlobalContext *global)
     }
 
     wifi_config->ap.authmode = IS_NULL_PTR(psk) ? WIFI_AUTH_OPEN : WIFI_AUTH_WPA_WPA2_PSK;
-    term ssid_hidden_term = interop_kv_get_value(ap_config, ssid_hidden_atom, global);
+    term ssid_hidden_term = interop_kv_get_value(ap_config, ATOM_STR("\xB", "ssid_hidden"), global);
     wifi_config->ap.ssid_hidden = term_is_invalid_term(ssid_hidden_term) ? 0 : ssid_hidden_term == TRUE_ATOM;
-    term max_connections_term = interop_kv_get_value(ap_config, max_connections_atom, global);
+    term max_connections_term = interop_kv_get_value(ap_config, ATOM_STR("\xF", "max_connections"), global);
     wifi_config->ap.max_connection = term_is_invalid_term(max_connections_term) ? 4 : term_to_int(max_connections_term);
 
     ESP_LOGI(TAG, "AP ssid: %s", wifi_config->ap.ssid);
@@ -571,16 +581,21 @@ static void time_sync_notification_cb(struct timeval *tv)
 
 static void maybe_set_sntp(term sntp_config, GlobalContext *global)
 {
-    if (!term_is_invalid_term(sntp_config) && !term_is_invalid_term(interop_kv_get_value(sntp_config, host_atom, global))) {
+    if (!term_is_invalid_term(sntp_config) && !term_is_invalid_term(interop_kv_get_value(sntp_config, ATOM_STR("\x4", "host"), global))) {
         int ok;
-        char *host = interop_term_to_string(interop_kv_get_value(sntp_config, host_atom, global), &ok);
+        char *host = interop_term_to_string(interop_kv_get_value(sntp_config, ATOM_STR("\x4", "host"), global), &ok);
         if (LIKELY(ok)) {
             // do not free(sntp)
             esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
             esp_sntp_setservername(0, host);
             sntp_set_time_sync_notification_cb(time_sync_notification_cb);
             esp_sntp_init();
-            ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
+            int sntp_sync_index = globalcontext_insert_atom(global, ATOM_STR("\x9", "sntp_sync"));
+            if (UNLIKELY(sntp_sync_index < 0)) {
+                ESP_LOGE(TAG, "Failed to create 'sntp_sync' atom! sntp_sync callbacks will fail.");
+            } else {
+                ESP_LOGI(TAG, "SNTP initialized with host set to %s", host);
+            }
         } else {
             ESP_LOGE(TAG, "Unable to locate sntp host in configuration");
         }
@@ -628,8 +643,8 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     //
     // Get the STA and AP config, if set
     //
-    term sta_config = interop_kv_get_value_default(config, sta_atom, term_invalid_term(), ctx->global);
-    term ap_config = interop_kv_get_value_default(config, ap_atom, term_invalid_term(), ctx->global);
+    term sta_config = interop_kv_get_value_default(config, ATOM_STR("\x3", "sta"), term_invalid_term(), ctx->global);
+    term ap_config = interop_kv_get_value_default(config, ATOM_STR("\x2", "ap"), term_invalid_term(), ctx->global);
     if (UNLIKELY(term_is_invalid_term(sta_config) && term_is_invalid_term(ap_config))) {
         ESP_LOGE(TAG, "Expected STA or AP configuration but got neither");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
@@ -726,10 +741,39 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     wifi_mode_t wifi_mode = WIFI_MODE_NULL;
     if (!IS_NULL_PTR(sta_wifi_config) && !IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_APSTA;
-    } else if (!IS_NULL_PTR(sta_wifi_config)) {
-        wifi_mode = WIFI_MODE_STA;
-    } else {
+        bool sta_atoms_ok = init_sta_atoms(ctx->global);
+        bool ap_atoms_ok = init_ap_cb_atoms(ctx->global);
+        if (UNLIKELY(!sta_atoms_ok || !ap_atoms_ok)) {
+            ESP_LOGE(TAG, "Unable to insert callback atoms");
+            free(ap_wifi_config);
+            free(sta_wifi_config);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            term error = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
+    } else if (!IS_NULL_PTR(ap_wifi_config)) {
         wifi_mode = WIFI_MODE_AP;
+        bool ap_atoms_ok = init_ap_cb_atoms(ctx->global);
+        if (UNLIKELY(!ap_atoms_ok)) {
+            ESP_LOGE(TAG, "Unable to insert callback atoms");
+            free(ap_wifi_config);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            term error = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
+    } else {
+        wifi_mode = WIFI_MODE_STA;
+        bool sta_atoms_ok = init_sta_atoms(ctx->global);
+        if (UNLIKELY(!sta_atoms_ok)) {
+            ESP_LOGE(TAG, "Unable to insert callback atoms");
+            free(sta_wifi_config);
+            port_ensure_available(ctx, TUPLE_SIZE(2));
+            term error = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+            port_send_reply(ctx, pid, ref, error);
+            return;
+        }
     }
     if ((err = esp_wifi_set_mode(wifi_mode)) != ESP_OK) {
         ESP_LOGE(TAG, "Error setting wifi mode %d", err);
@@ -790,16 +834,16 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     //
     // Set up simple NTP, if configured
     //
-    maybe_set_sntp(interop_kv_get_value(config, sntp_atom, ctx->global), ctx->global);
+    maybe_set_sntp(interop_kv_get_value(config, ATOM_STR("\x4", "sntp"), ctx->global), ctx->global);
 
     //
     // Set the DHCP hostname, if STA mode is enabled
     //
     if (!IS_NULL_PTR(sta_wifi_config)) {
-        set_dhcp_hostname(sta_wifi_interface, "STA", interop_kv_get_value(sta_config, dhcp_hostname_atom, ctx->global));
+        set_dhcp_hostname(sta_wifi_interface, "STA", interop_kv_get_value(sta_config, ATOM_STR("\xD", "dhcp_hostname"), ctx->global));
     }
     if (!IS_NULL_PTR(ap_wifi_config)) {
-        set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, dhcp_hostname_atom, ctx->global));
+        set_dhcp_hostname(ap_wifi_interface, "AP", interop_kv_get_value(ap_config, ATOM_STR("\xD", "dhcp_hostname"), ctx->global));
     }
 
     //
@@ -865,14 +909,15 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
         ESP_LOGE(TAG, "Device is not connected to any AP.");
         // Reply: {Ref, {error, network_down}}
         port_ensure_available(ctx, tuple_reply_size);
-        term error = port_create_error_tuple(ctx, make_atom(ctx->global, network_down_atom));
+        term error = port_create_error_tuple(ctx, globalcontext_existing_term_from_atom_string(ctx->global, ATOM_STR("\x0C", "network_down")));
         port_send_reply(ctx, pid, ref, error);
         return;
     }
     term rssi = term_from_int(sta_rssi);
+    int rssi_atom = globalcontext_existing_term_from_atom_string(ctx->global, ATOM_STR("\x4", "rssi"));
     // {Ref, {rssi, -25}}
     port_ensure_available(ctx, tuple_reply_size);
-    term reply = port_create_tuple2(ctx, make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);
+    term reply = port_create_tuple2(ctx, rssi_atom, rssi);
     port_send_reply(ctx, pid, ref, reply);
 }
 
