@@ -64,4 +64,24 @@ defmodule Integer do
   def to_string(integer, base \\ 10) do
     :erlang.integer_to_binary(integer, base)
   end
+
+  @doc since: "1.12.0"
+  @spec extended_gcd(integer, integer) :: {non_neg_integer, integer, integer}
+  def extended_gcd(0, 0), do: {0, 0, 0}
+  def extended_gcd(0, b), do: {b, 0, 1}
+  def extended_gcd(a, 0), do: {a, 1, 0}
+
+  def extended_gcd(integer1, integer2) when is_integer(integer1) and is_integer(integer2) do
+    extended_gcd(integer2, integer1, 0, 1, 1, 0)
+  end
+
+  defp extended_gcd(r1, r0, s1, s0, t1, t0) do
+    div = div(r0, r1)
+
+    case r0 - div * r1 do
+      0 when r1 > 0 -> {r1, s1, t1}
+      0 when r1 < 0 -> {-r1, -s1, -t1}
+      r2 -> extended_gcd(r2, r1, s0 - div * s1, s1, t0 - div * t1, t1)
+    end
+  end
 end
