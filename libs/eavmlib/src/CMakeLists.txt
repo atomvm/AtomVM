@@ -40,7 +40,6 @@ set(ERLANG_MODULES
     logger_manager
     mdns
     network
-    network_fsm
     pico
     port
     spi
