@@ -64,10 +64,12 @@ defmodule Range do
   not materialize the whole list of integers.
   """
 
-  defstruct first: nil, last: nil
+  defstruct first: nil, last: nil, step: nil
 
-  @type t :: %__MODULE__{first: integer, last: integer}
-  @type t(first, last) :: %__MODULE__{first: first, last: last}
+  @type limit :: integer
+  @type step :: pos_integer | neg_integer
+  @type t :: %__MODULE__{first: limit, last: limit, step: step}
+  @type t(first, last) :: %__MODULE__{first: first, last: last, step: step}
 
   @doc """
   Creates a new range.
@@ -80,13 +82,41 @@ defmodule Range do
   """
   @spec new(integer, integer) :: t
   def new(first, last) when is_integer(first) and is_integer(last) do
-    %Range{first: first, last: last}
+    step =
+      if first <= last do
+        1
+      else
+        -1
+      end
+    %Range{first: first, last: last, step: step}
   end
 
   def new(first, last) do
     raise ArgumentError,
           "ranges (first..last) expect both sides to be integers, " <>
             "got: #{inspect(first)}..#{inspect(last)}"
+  end
+
+  @doc """
+  Creates a new range with `step`.
+
+  ## Examples
+
+      iex> Range.new(-100, 100, 2)
+      -100..100//2
+
+  """
+  @doc since: "1.12.0"
+  @spec new(limit, limit, step) :: t
+  def new(first, last, step)
+      when is_integer(first) and is_integer(last) and is_integer(step) and step != 0 do
+    %Range{first: first, last: last, step: step}
+  end
+
+  def new(first, last, step) do
+    raise ArgumentError,
+          "ranges (first..last//step) expect both sides to be integers and the step to be a " <>
+            "non-zero integer, got: #{inspect(first)}..#{inspect(last)}//#{inspect(step)}"
   end
 
   if Version.match?(System.version(), "~> 1.12") do
@@ -129,23 +159,82 @@ defmodule Range do
 
       iex> Range.disjoint?(1..5, 6..9)
       true
-      iex> Range.disjoint?(5..1, 6..9)
+      iex> Range.disjoint?(5..1//-1, 6..9)
       true
       iex> Range.disjoint?(1..5, 5..9)
       false
       iex> Range.disjoint?(1..5, 2..7)
       false
 
+  Steps are also considered when computing the ranges to be disjoint:
+
+      iex> Range.disjoint?(1..10//2, 2..10//2)
+      true
+
+      # First element in common is 29
+      iex> Range.disjoint?(1..100//14, 8..100//21)
+      false
+      iex> Range.disjoint?(57..-1//-14, 8..100//21)
+      false
+      iex> Range.disjoint?(1..100//14, 50..8//-21)
+      false
+      iex> Range.disjoint?(1..28//14, 8..28//21)
+      true
+
+      # First element in common is 14
+      iex> Range.disjoint?(2..28//3, 9..28//5)
+      false
+      iex> Range.disjoint?(26..2//-3, 29..9//-5)
+      false
+
+      # Starting from the back without alignment
+      iex> Range.disjoint?(27..11//-3, 30..0//-7)
+      true
+
   """
   @doc since: "1.8.0"
   @spec disjoint?(t, t) :: boolean
-  def disjoint?(first1..last1 = _range1, first2..last2 = _range2) do
-    {first1, last1} = normalize(first1, last1)
-    {first2, last2} = normalize(first2, last2)
-    last2 < first1 or last1 < first2
+  def disjoint?(first1..last1//step1 = range1, first2..last2//step2 = range2) do
+    if size(range1) == 0 or size(range2) == 0 do
+      true
+    else
+      {first1, last1, step1} = normalize(first1, last1, step1)
+      {first2, last2, step2} = normalize(first2, last2, step2)
+
+      cond do
+        last2 < first1 or last1 < first2 ->
+          true
+
+        abs(step1) == 1 and abs(step2) == 1 ->
+          false
+
+        true ->
+          # We need to find the first intersection of two arithmetic
+          # progressions and see if they belong within the ranges
+          # https://math.stackexchange.com/questions/1656120/formula-to-find-the-first-intersection-of-two-arithmetic-progressions
+          {gcd, u, v} = Integer.extended_gcd(-step1, step2)
+
+          if rem(first2 - first1, gcd) == 0 do
+            c = first1 - first2 + step2 - step1
+            t1 = -c / step2 * u
+            t2 = -c / step1 * v
+            t = max(floor(t1) + 1, floor(t2) + 1)
+            x = div(c * u + t * step2, gcd) - 1
+            y = div(c * v + t * step1, gcd) - 1
+
+            x < 0 or first1 + x * step1 > last1 or
+              y < 0 or first2 + y * step2 > last2
+          else
+            true
+          end
+      end
+    end
   end
 
-  @compile inline: [normalize: 2]
-  defp normalize(first, last) when first > last, do: {last, first}
-  defp normalize(first, last), do: {first, last}
+  @compile inline: [normalize: 3]
+  defp normalize(first, last, step) when first > last,
+    do: {first - abs(div(first - last, step) * step), first, -step}
+
+  defp normalize(first, last, step), do: {first, last, step}
+
 end
