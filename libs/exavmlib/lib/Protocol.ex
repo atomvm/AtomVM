@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2012 Plataformatec
 
 defmodule Protocol do
+  @compile {:autoload, false}
   @moduledoc ~S"""
   Reference and functions for working with protocols.
 
@@ -689,11 +690,18 @@ defmodule Protocol do
   end
 
   # Finally compile the module and emit its bytecode.
-  defp compile(definitions, signatures, {module_map, specs, docs_chunk}) do
+  if Version.match?(System.version(), "~> 1.19") do
+    defp compile(definitions, checker, {module_map, specs, docs_chunk}) do
+      module_map = %{module_map | definitions: definitions}
+      {:ok, :elixir_erl.consolidate(module_map, checker, specs, docs_chunk)}
+    end
+  else
     # Protocols in precompiled archives may not have signatures, so we default to an empty map.
     # TODO: Remove this on Elixir v1.23.
-    module_map = %{module_map | definitions: definitions} |> Map.put(:signatures, signatures)
-    {:ok, :elixir_erl.consolidate(module_map, specs, docs_chunk)}
+    defp compile(definitions, signatures, {module_map, specs, docs_chunk}) do
+      module_map = %{module_map | definitions: definitions} |> Map.put(:signatures, signatures)
+      {:ok, :elixir_erl.consolidate(module_map, specs, docs_chunk)}
+    end
   end
 
   ## Definition callbacks
@@ -760,11 +768,14 @@ defmodule Protocol do
     do: :maps.get(fa, metas, [])[:line]
 
   defp warn(message, env, nil) do
-    IO.warn(message, env)
+    IO.inspect(message)
+    IO.inspect(env)
   end
 
   defp warn(message, env, line) when is_integer(line) do
-    IO.warn(message, %{env | line: line})
+    IO.inspect(message)
+    IO.inspect(env)
+    IO.inspect(line)
   end
 
   def __before_compile__(env) do
@@ -1075,17 +1086,16 @@ defmodule Protocol do
           "implement protocols after compilation or during tests, check the " <>
           "\"Consolidation\" section in the Protocol module documentation"
 
-      IO.warn(message, env)
+      IO.inspect(message)
     end
 
     # TODO: Make this an error on Elixir v2.0
     if for != Any and not Keyword.has_key?(built_in(), for) and for != env.module and
          for not in env.context_modules and Code.ensure_compiled(for) != {:module, for} do
-      IO.warn(
+      IO.inspect(
         "you are implementing a protocol for #{inspect(for)} but said module is not available. " <>
           "Make sure the module name is correct. If #{inspect(for)} is an optional dependency, " <>
-          "please wrap the protocol implementation in a Code.ensure_loaded?(#{inspect(for)}) check",
-        env
+          "please wrap the protocol implementation in a Code.ensure_loaded?(#{inspect(for)}) check"
       )
     end
 
