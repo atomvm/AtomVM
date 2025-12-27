@@ -88,6 +88,7 @@ defmodule Range do
       else
         -1
       end
+
     %Range{first: first, last: last, step: step}
   end
 
@@ -150,6 +151,12 @@ defmodule Range do
     def size(first..last//step) when step > 0 and first > last, do: 0
     def size(first..last//step) when step < 0 and first < last, do: 0
     def size(first..last//step), do: abs(div(last - first, step)) + 1
+  else
+    @spec size(t) :: non_neg_integer
+    def size(range)
+    def size(%Range{first: first, last: last, step: step}) when step > 0 and first > last, do: 0
+    def size(%Range{first: first, last: last, step: step}) when step < 0 and first < last, do: 0
+    def size(%Range{first: first, last: last, step: step}), do: abs(div(last - first, step)) + 1
   end
 
   @doc """
@@ -194,7 +201,13 @@ defmodule Range do
   """
   @doc since: "1.8.0"
   @spec disjoint?(t, t) :: boolean
-  def disjoint?(first1..last1//step1 = range1, first2..last2//step2 = range2) do
+  def disjoint?(
+        %Range{first: first1, last: last1, step: step1} = range1,
+        %Range{first: first2, last: last2, step: step2} = range2
+      ) do
+    # TODO: change function head back to this, as soon as we update Elixir
+    # def disjoint?(first1..last1//step1 = range1, first2..last2//step2 = range2) do
+
     if size(range1) == 0 or size(range2) == 0 do
       true
     else
@@ -236,5 +249,4 @@ defmodule Range do
     do: {first - abs(div(first - last, step) * step), first, -step}
 
   defp normalize(first, last, step), do: {first, last, step}
-
 end
