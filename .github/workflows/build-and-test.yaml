@@ -201,7 +201,7 @@ jobs:
           cxx: "c++"
           cflags: ""
           otp: "21"
-          elixir_version: "1.7"
+          elixir_version: "1.8"
           rebar3_version: "3.15.2"
           compiler_pkgs: "g++"
 
