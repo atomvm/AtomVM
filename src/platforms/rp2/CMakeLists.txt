@@ -67,6 +67,7 @@ option(AVM_WAIT_BOOTSEL_ON_EXIT "Wait in BOOTSEL rather than shutdown on exit" O
 option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
+option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
     # We only have armv6m for now, which all cortex-m should support
     if (NOT AVM_DISABLE_JIT)

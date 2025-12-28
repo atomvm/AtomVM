@@ -36,6 +36,7 @@ option(AVM_ENABLE_LOG_LINES "Include source and line info for all enbled levels"
 option(AVM_CONFIG_REBOOT_ON_NOT_OK "Reboot when application exits with non 'ok' return" OFF)
 option(AVM_DISABLE_GPIO_NIFS "Disable GPIO nifs (input and output)" OFF)
 option(AVM_DISABLE_GPIO_PORT_DRIVER "Disable GPIO 'port' driver (input, output, and interrupts)" OFF)
+option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 
 set(AVM_DISABLE_SMP ON FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
