@@ -19,7 +19,7 @@
  */
 
 import * as fs from "fs";
-import { RP2040, ConsoleLogger, LogLevel } from "rp2040js";
+import { Simulator, ConsoleLogger, LogLevel } from "rp2040js";
 
 import { decodeBlock } from "uf2";
 import fetch from "sync-fetch";
@@ -61,7 +61,9 @@ function loadAvm(filename: string, rp2040: RP2040) {
   fs.closeSync(file);
 }
 
-const mcu = new RP2040();
+
+const simulator = new Simulator();
+const mcu = simulator.rp2040;
 loadBootrom(mcu);
 
 for (let arg of process.argv.slice(2)) {
@@ -96,5 +98,5 @@ mcu.uart[0].onByte = (value) => {
   }
 };
 
-mcu.core.PC = 0x10000000;
-mcu.execute();
+simulator.rp2040.core.PC = 0x10000000;
+simulator.execute();
