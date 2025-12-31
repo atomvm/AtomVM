@@ -42,7 +42,7 @@ jobs:
 
     strategy:
       matrix:
-        idf-version: ["5.5.1"]
+        idf-version: ["5.5.2"]
         cc: ["clang-14"]
         cxx: ["clang++-14"]
         cflags: ["-O3"]
