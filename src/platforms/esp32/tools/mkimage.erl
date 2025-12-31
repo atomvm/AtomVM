@@ -46,7 +46,6 @@ do_main(Argv) ->
                         BootFile = BuildDir ++ "/libs/esp32boot/esp32boot.avm",
                         mkimage(
                             RootDir,
-                            BuildDir,
                             maps:get(boot, Opts, BootFile),
                             maps:get(out, Opts, "atomvm.img"),
                             maps:get(segments, Config)
@@ -130,7 +129,7 @@ get_build_dir(Opts, RootDir) ->
     end.
 
 %% @private
-mkimage(RootDir, BuildDir, BootFile, OutputFile, Segments) ->
+mkimage(RootDir, BootFile, OutputFile, Segments) ->
     io:format("Writing output to ~s~n", [OutputFile]),
     io:format("boot file is ~s~n", [BootFile]),
     io:format("=============================================~n"),
@@ -164,11 +163,7 @@ mkimage(RootDir, BuildDir, BootFile, OutputFile, Segments) ->
                     end,
                     SegmentPaths = [
                         replace(
-                            "BUILD_DIR",
-                            BuildDir,
-                            replace(
-                                "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
-                            )
+                            "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
                         )
                      || SegmentPath <- maps:get(path, Segment)
                     ],
@@ -213,5 +208,5 @@ from_hex([$0, $x | Bits]) ->
 
 %% @private
 replace(VariableName, Value, String) ->
-    string:replace(String, io_lib:format("${~s}", [VariableName]), Value),
-    string:replace(String, io_lib:format("$[~s]", [VariableName]), Value).
+    String0 = string:replace(String, io_lib:format("${~s}", [VariableName]), Value),
+    string:replace(String0, io_lib:format("$[~s]", [VariableName]), Value).

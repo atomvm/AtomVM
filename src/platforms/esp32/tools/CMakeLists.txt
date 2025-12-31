@@ -47,7 +47,7 @@ elseif(${CONFIG_IDF_TARGET} STREQUAL "esp32p4")
     set(BOOTLOADER_OFFSET "0x2000")
 endif()
 
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.config.in ${CMAKE_BINARY_DIR}/mkimage.config @ONLY)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/dev/flash.sh ${CMAKE_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/flash.sh COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/mkimage.erl ${CMAKE_BINARY_DIR}/mkimage.erl COPYONLY)
