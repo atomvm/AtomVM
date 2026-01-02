@@ -19,14 +19,27 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-escript "@CMAKE_BINARY_DIR@/mkimage.erl" \
-    --root_dir "@CMAKE_BINARY_DIR@/../../../.." \
-    --config "@CMAKE_BINARY_DIR@/mkimage.config" \
-    --out "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img" \
-    "$@"
+build_dir=$(CDPATH=; cd -- "$(dirname -- "$0")" && pwd -P)
 
-echo "============================================="
+report_success()
+{
+    echo "============================================="
+    echo ""
+    echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image written to:"
+    echo "${build_dir}/atomvm-@CONFIG_IDF_TARGET@.img"
+    exit 0
+}
 
-echo ""
-echo "AtomVM @CONFIG_IDF_TARGET@ version @ATOMVM_VERSION@ image written to:"
-echo "@CMAKE_BINARY_DIR@/atomvm-@CONFIG_IDF_TARGET@.img"
+fail()
+{
+    echo ""
+    echo "Failed to build image."
+    exit 1
+}
+
+escript "${build_dir}/mkimage.erl" \
+    --root_dir "${build_dir}/../../../../" \
+    --config "${build_dir}/mkimage.config" \
+    --out "${build_dir}/atomvm-@CONFIG_IDF_TARGET@.img" \
+    "$@" && report_success || fail
+
