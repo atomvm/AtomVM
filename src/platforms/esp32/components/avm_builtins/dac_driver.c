@@ -80,7 +80,7 @@ static term get_channel_resource(Context *ctx, term t, ErlNifResourceType *res_t
 
     if (likely_valid) {
         if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), term_get_tuple_element(t, 1), res_type, (void **) res))) {
-            ESP_LOGE(TAG, "resource is not a valid adc channel resource");
+            ESP_LOGE(TAG, "resource is not a valid dac channel resource");
 
             return error_return_tuple(ctx, BADARG_ATOM);
         }
