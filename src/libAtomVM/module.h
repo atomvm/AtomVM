@@ -109,12 +109,9 @@ struct Module
 {
     int module_index;
 
-#ifdef ENABLE_ADVANCED_TRACE
-    void *import_table;
-#endif
-
     CodeChunk *code;
     void *export_table;
+    void *import_table;
     void *local_table;
     void *atom_table;
     void *fun_table;
