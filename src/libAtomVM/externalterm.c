@@ -492,6 +492,8 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
         uint32_t len;
         if (term_is_resource_reference(t)) {
             len = 4;
+        } else if (term_is_process_reference(t)) {
+            len = 3;
         } else {
             len = 2;
         }
@@ -513,6 +515,15 @@ static int serialize_term(uint8_t *buf, term t, GlobalContext *glb)
                 WRITE_64_UNALIGNED(buf + k + 12, ((uintptr_t) serialize_ref));
             }
             return k + 20;
+        } else if (term_is_process_reference(t)) {
+            if (!IS_NULL_PTR(buf)) {
+                uint64_t ticks = term_to_ref_ticks(t);
+                uint32_t process_id = term_process_ref_to_process_id(t);
+                WRITE_32_UNALIGNED(buf + k, creation);
+                WRITE_64_UNALIGNED(buf + k + 4, ticks);
+                WRITE_32_UNALIGNED(buf + k + 12, process_id);
+            }
+            return k + 16;
         } else {
             if (!IS_NULL_PTR(buf)) {
                 uint64_t ticks = term_to_ref_ticks(t);
@@ -901,6 +912,10 @@ static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm
                 if (len == 2 && node == this_node && creation == this_creation) {
                     uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
                     return term_from_ref_ticks(ticks, heap);
+                } else if (len == 3 && node == this_node && creation == this_creation) {
+                    uint64_t ticks = ((uint64_t) data[0]) << 32 | data[1];
+                    uint32_t process_id = data[2];
+                    return term_make_process_reference(process_id, ticks, heap);
                 } else if (len == 4 && node == this_node && creation == this_creation) {
                     // This is a resource
                     uint64_t resource_type_ptr = ((uint64_t) data[0]) << 32 | data[1];
