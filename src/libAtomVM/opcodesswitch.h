@@ -1713,15 +1713,15 @@ static bool maybe_call_native(Context *ctx, AtomString module_name, AtomString f
             const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(exported_bif);
             switch (arity) {
                 case 1: {
-                    *return_value = gcbif->gcbif1_ptr(ctx, 0, 0, ctx->x[0]);
+                    *return_value = gcbif->gcbif1_ptr(ctx, 0, 1, ctx->x[0]);
                     return true;
                 }
                 case 2: {
-                    *return_value = gcbif->gcbif2_ptr(ctx, 0, 0, ctx->x[0], ctx->x[1]);
+                    *return_value = gcbif->gcbif2_ptr(ctx, 0, 2, ctx->x[0], ctx->x[1]);
                     return true;
                 }
                 case 3: {
-                    *return_value = gcbif->gcbif3_ptr(ctx, 0, 0, ctx->x[0], ctx->x[1], ctx->x[2]);
+                    *return_value = gcbif->gcbif3_ptr(ctx, 0, 3, ctx->x[0], ctx->x[1], ctx->x[2]);
                     return true;
                 }
             }
