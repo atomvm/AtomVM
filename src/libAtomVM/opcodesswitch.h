@@ -49,8 +49,12 @@
 
 // These constants can be used to reduce the size of the VM for a specific
 // range of compiler versions
+#ifndef MINIMUM_OTP_COMPILER_VERSION
 #define MINIMUM_OTP_COMPILER_VERSION 21
-#define MAXIMUM_OTP_COMPILER_VERSION 26
+#endif
+#ifndef MAXIMUM_OTP_COMPILER_VERSION
+#define MAXIMUM_OTP_COMPILER_VERSION 29
+#endif
 
 #ifdef __cplusplus
 extern "C" {

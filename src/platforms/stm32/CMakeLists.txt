@@ -25,6 +25,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../../CMakeModules
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Options that make sense for this platform
+option(AVM_ENABLE_OLD_OTP_VERSIONS "Enable OTP version < 26" OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." ON)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
