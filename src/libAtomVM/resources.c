@@ -397,14 +397,17 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
         return -1;
     }
 
+    struct ListHead *monitors_head = synclist_wrlock(&resource_type->monitors);
     Context *target = globalcontext_get_process_lock(env->global, *target_pid);
     if (IS_NULL_PTR(target)) {
+        synclist_unlock(&resource_type->monitors);
         free(resource_monitor);
         free(monitor);
         return 1;
     }
 
-    synclist_append(&resource_type->monitors, &resource_monitor->resource_list_head);
+    list_append(monitors_head, &resource_monitor->resource_list_head);
+    synclist_unlock(&resource_type->monitors);
     mailbox_send_monitor_signal(target, MonitorSignal, monitor);
     globalcontext_get_process_unlock(env->global, target);
 
