@@ -65,6 +65,11 @@ jobs:
       run: |
         pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3
 
+    - name: "Add hostname to /etc/hosts for distribution tests"
+      shell: freebsd {0}
+      run: |
+        echo "127.0.0.1 $(hostname)" >> /etc/hosts
+
     - name: "System info"
       shell: freebsd {0}
       run: |
