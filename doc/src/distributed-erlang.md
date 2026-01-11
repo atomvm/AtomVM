@@ -17,7 +17,7 @@ Distribution is currently available on all platforms with TCP/IP communication, 
 Two examples are provided:
 
 - disterl in `examples/erlang/disterl.erl`: distribution on Unix systems
-- epmd\_disterl in `examples/esp32/epmd_disterl.erl`: distribution on ESP32 devices
+- epmd\_disterl in `examples/erlang/esp32/epmd_disterl.erl`: distribution on ESP32 devices
 
 ## Starting and stopping distribution
 
