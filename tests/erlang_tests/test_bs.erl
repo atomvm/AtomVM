@@ -105,6 +105,7 @@ start() ->
 
     ok = test_bs_variable_size_bitstring(),
     ok = test_float(),
+    ok = test_bs_match_bitstring_modifier(),
 
     0.
 
@@ -701,6 +702,24 @@ test_integer_outside_float_limits() ->
 
 create_float_binary(Value, Size) ->
     <<Value:Size/float>>.
+test_bs_match_bitstring_modifier() ->
+    ok =
+        try
+            bitstring_match(id(<<123, 234, 245>>), id(15)),
+            case erlang:system_info(machine) of
+                "BEAM" -> ok;
+                "ATOM" -> unexpected
+            end
+        catch
+            error:unsupported -> ok
+        end,
+
+    {<<123, 234>>, <<245>>} = bitstring_match(id(<<123, 234, 245>>), id(16)),
+    ok.
+
+bitstring_match(BS, Size) ->
+    <<Matched:Size/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
 
 check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
