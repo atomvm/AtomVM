@@ -29,7 +29,7 @@ if (NOT CMAKE_TOOLCHAIN_FILE)
 endif ()
 
 # Options that make sense for this platform
-option(AVM_ENABLE_OLD_OTP_VERSIONS "Enable OTP version < 26" ON)
+option(AVM_ENABLE_OLD_OTP_VERSIONS "Enable OTP version < 26" OFF)
 option(AVM_DISABLE_SMP "Disable SMP." OFF)
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
