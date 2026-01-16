@@ -39,7 +39,12 @@
 #include <mbedtls/sha512.h>
 #include <mbedtls/version.h>
 
+#ifdef MBEDTLS_PSA_CRYPTO_C
+#include <psa/crypto.h>
+#endif
+
 // #define ENABLE_TRACE
+#include "term.h"
 #include "trace.h"
 
 #define MAX_MD_SIZE 64
@@ -564,6 +569,349 @@ mbed_error:
     RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
 }
 
+#ifdef MBEDTLS_PSA_CRYPTO_C
+
+enum pk_type_t
+{
+    InvalidPkType = 0,
+    Eddh,
+    Eddsa,
+    Ecdh
+};
+
+// not working with latest mbedtls (yet): PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS))
+// Also tried Eddsa and failed with bits=255
+static const AtomStringIntPair pk_type_table[] = {
+    { ATOM_STR("\x4", "eddh"), Eddh },
+    { ATOM_STR("\x5", "eddsa"), Eddsa },
+    { ATOM_STR("\x4", "ecdh"), Ecdh },
+    SELECT_INT_DEFAULT(InvalidPkType)
+};
+
+enum pk_param_t
+{
+    InvalidPkParam = 0,
+    X25519,
+    X448,
+    Ed25519,
+    Ed448,
+    Secp256r1,
+    // prime256v1
+    Secp384r1,
+    Secp521r1,
+    Secp256k1,
+    BrainpoolP256r1,
+    BrainpoolP384r1,
+    BrainpoolP512r1
+};
+
+static const AtomStringIntPair pk_param_table[] = {
+    { ATOM_STR("\x6", "x25519"), X25519 },
+    { ATOM_STR("\x4", "x448"), X448 },
+    { ATOM_STR("\x7", "ed25519"), Ed25519 },
+    { ATOM_STR("\x5", "ed448"), Ed448 },
+
+    { ATOM_STR("\x9", "secp256r1"), Secp256r1 },
+    // prime256v1
+    { ATOM_STR("\x9", "secp384r1"), Secp384r1 },
+    { ATOM_STR("\x9", "secp521r1"), Secp521r1 },
+    { ATOM_STR("\x9", "secp256k1"), Secp256k1 },
+    { ATOM_STR("\xF", "brainpoolP256r1"), BrainpoolP256r1 },
+    { ATOM_STR("\xF", "brainpoolP384r1"), BrainpoolP384r1 },
+    { ATOM_STR("\xF", "brainpoolP512r1"), BrainpoolP512r1 },
+
+    SELECT_INT_DEFAULT(InvalidPkType)
+};
+
+static void do_psa_init(void)
+{
+    if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
+        abort();
+    }
+}
+
+static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    enum pk_type_t key_type = interop_atom_term_select_int(pk_type_table, argv[0], glb);
+    enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, argv[1], glb);
+
+    psa_key_type_t psa_key_type;
+    size_t psa_key_bits;
+    switch (key_type) {
+        case Eddh:
+            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
+            switch (pk_param) {
+                case X25519:
+                    psa_key_bits = 255;
+                    break;
+                case X448:
+                    psa_key_bits = 448;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            break;
+        case Eddsa:
+            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS);
+            switch (pk_param) {
+                case Ed25519:
+                    psa_key_bits = 255;
+                    break;
+                case Ed448:
+                    psa_key_bits = 448;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            break;
+        case Ecdh:
+            switch (pk_param) {
+                case X25519:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
+                    psa_key_bits = 255;
+                    break;
+                case X448:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
+                    psa_key_bits = 448;
+                    break;
+                case Secp256k1:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_K1);
+                    psa_key_bits = 256;
+                    break;
+                case Secp256r1:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
+                    psa_key_bits = 256;
+                    break;
+                case Secp384r1:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
+                    psa_key_bits = 384;
+                    break;
+                case Secp521r1:
+                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
+                    psa_key_bits = 521;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            break;
+
+        default:
+            RAISE_ERROR(BADARG_ATOM);
+    }
+
+    psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_EXPORT);
+    psa_set_key_type(&attributes, psa_key_type);
+    psa_set_key_bits(&attributes, psa_key_bits);
+
+    psa_key_id_t key_id = 0;
+    psa_status_t status = psa_generate_key(&attributes, &key_id);
+    psa_reset_key_attributes(&attributes);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            RAISE_ERROR(
+                make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+        default:
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+    }
+
+    bool successful = false;
+    term result = ERROR_ATOM;
+
+    size_t exported_priv_size = PSA_KEY_EXPORT_ECC_KEY_PAIR_MAX_SIZE(psa_key_bits);
+    uint8_t *exported_priv = NULL;
+    size_t exported_pub_size = PSA_KEY_EXPORT_ECC_PUBLIC_KEY_MAX_SIZE(psa_key_bits);
+    uint8_t *exported_pub = NULL;
+    exported_priv = malloc(exported_priv_size);
+    exported_pub = malloc(exported_pub_size);
+    if (UNLIKELY(exported_priv == NULL || exported_pub == NULL)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    size_t exported_priv_length = 0;
+    status = psa_export_key(key_id, exported_priv, exported_priv_size, &exported_priv_length);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Failed private key export", ctx);
+        goto cleanup;
+    }
+
+    size_t exported_pub_length = 0;
+    status = psa_export_public_key(key_id, exported_pub, exported_pub_size, &exported_pub_length);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Failed public key export", ctx);
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx,
+                     TERM_BINARY_HEAP_SIZE(exported_priv_length)
+                         + TERM_BINARY_HEAP_SIZE(exported_pub_length) + TUPLE_SIZE(2))
+            != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    term priv_term = term_from_literal_binary(exported_priv, exported_priv_length, &ctx->heap, glb);
+    term pub_term = term_from_literal_binary(exported_pub, exported_pub_length, &ctx->heap, glb);
+    successful = true;
+    result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, pub_term);
+    term_put_tuple_element(result, 1, priv_term);
+
+cleanup:
+    psa_destroy_key(key_id);
+    if (exported_priv) {
+        memset(exported_priv, 0, exported_priv_size);
+    }
+    free(exported_priv);
+    if (exported_pub) {
+        memset(exported_pub, 0, exported_pub_size);
+    }
+    free(exported_pub);
+
+    if (UNLIKELY(!successful)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    enum pk_type_t key_type = interop_atom_term_select_int(pk_type_table, argv[0], glb);
+    enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, argv[3], glb);
+
+    psa_algorithm_t psa_algo;
+    psa_key_type_t psa_key_type;
+    size_t psa_key_bits;
+
+    switch (key_type) {
+        case Eddh:
+            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            psa_algo = PSA_ALG_ECDH;
+            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
+            switch (pk_param) {
+                case X25519:
+                    psa_key_bits = 255;
+                    break;
+                case X448:
+                    psa_key_bits = 448;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            break;
+        case Ecdh:
+            psa_algo = PSA_ALG_ECDH;
+            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
+            switch (pk_param) {
+                case X25519:
+                    psa_key_bits = 255;
+                    break;
+                case X448:
+                    psa_key_bits = 448;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
+            }
+            break;
+
+        default:
+            RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term pub_key_term = argv[1];
+    VALIDATE_VALUE(pub_key_term, term_is_binary);
+    const void *pub_key = term_binary_data(pub_key_term);
+    size_t pub_key_size = term_binary_size(pub_key_term);
+
+    term priv_key_term = argv[2];
+    VALIDATE_VALUE(priv_key_term, term_is_binary);
+    const void *priv_key = term_binary_data(priv_key_term);
+    size_t priv_key_size = term_binary_size(priv_key_term);
+
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, psa_key_type);
+    psa_set_key_bits(&attr, psa_key_bits);
+    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_DERIVE);
+    psa_set_key_algorithm(&attr, psa_algo);
+
+    psa_key_id_t key_id = 0;
+    psa_status_t status = psa_import_key(&attr, priv_key, priv_key_size, &key_id);
+    psa_reset_key_attributes(&attr);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            RAISE_ERROR(
+                make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+        default:
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+    }
+
+    bool success = false;
+    term result = ERROR_ATOM;
+
+    size_t shared_out_size = PSA_RAW_KEY_AGREEMENT_OUTPUT_SIZE(psa_key_type, psa_key_bits);
+    uint8_t *shared_out = malloc(shared_out_size);
+    if (IS_NULL_PTR(shared_out)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+    size_t shared_len = 0;
+    status = psa_raw_key_agreement(
+        psa_algo, key_id, pub_key, pub_key_size, shared_out, shared_out_size, &shared_len);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            result
+                = make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx);
+            goto cleanup;
+        default:
+            result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+            goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(shared_len)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_literal_binary(shared_out, shared_len, &ctx->heap, glb);
+
+cleanup:
+    psa_destroy_key(key_id);
+    if (shared_out) {
+        memset(shared_out, 0, shared_out_size);
+    }
+    free(shared_out);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+#endif
+
 // not static since we are using it elsewhere to provide backward compatibility
 term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
 {
@@ -598,6 +946,39 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     return out_bin;
 }
 
+term nif_crypto_info_lib(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    const char *mbedtls_str = "mbedtls";
+    size_t mbedtls_len = strlen("mbedtls");
+
+    // 18 bytes including null byte according to mbedtls doc
+    char version_string[18];
+    mbedtls_version_get_string_full(version_string);
+    size_t version_string_len = strlen(version_string);
+
+    if (UNLIKELY(memory_ensure_free(ctx,
+                     LIST_SIZE(1, TUPLE_SIZE(3)) + TERM_BINARY_HEAP_SIZE(mbedtls_len)
+                         + TERM_BINARY_HEAP_SIZE(version_string_len) + BOXED_INT64_SIZE)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term mbedtls_term = term_from_literal_binary(mbedtls_str, mbedtls_len, &ctx->heap, ctx->global);
+    term version_term = term_make_maybe_boxed_int64(MBEDTLS_VERSION_NUMBER, &ctx->heap);
+    term version_string_term
+        = term_from_literal_binary(version_string, version_string_len, &ctx->heap, ctx->global);
+
+    term mbedtls_tuple = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(mbedtls_tuple, 0, mbedtls_term);
+    term_put_tuple_element(mbedtls_tuple, 1, version_term);
+    term_put_tuple_element(mbedtls_tuple, 2, version_string_term);
+
+    return term_list_prepend(mbedtls_tuple, term_nil(), &ctx->heap);
+}
+
 static const struct Nif crypto_hash_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_hash
@@ -606,9 +987,23 @@ static const struct Nif crypto_crypto_one_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_crypto_one_time
 };
+#ifdef MBEDTLS_PSA_CRYPTO_C
+static const struct Nif crypto_generate_key_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_generate_key
+};
+static const struct Nif crypto_compute_key_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_compute_key
+};
+#endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_strong_rand_bytes
+};
+static const struct Nif crypto_info_lib = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_info_lib
 };
 
 //
@@ -631,9 +1026,23 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_crypto_one_time_nif;
         }
+#ifdef MBEDTLS_PSA_CRYPTO_C
+        if (strcmp("generate_key/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_generate_key_nif;
+        }
+        if (strcmp("compute_key/4", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_compute_key_nif;
+        }
+#endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_strong_rand_bytes_nif;
+        }
+        if (strcmp("info_lib/0", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_info_lib;
         }
     }
     return NULL;

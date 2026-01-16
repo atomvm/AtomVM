@@ -636,6 +636,8 @@ else()
     set(OTP25_OR_GREATER_TESTS)
 endif()
 
+compile_erlang(test_crypto_pk)
+
 set(erlang_test_beams
     add.beam
     fact.beam
@@ -1152,6 +1154,8 @@ set(erlang_test_beams
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
+
+    test_crypto_pk.beam
 )
 
 if(NOT AVM_DISABLE_JIT)
