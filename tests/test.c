@@ -627,6 +627,8 @@ struct Test tests[] = {
 
     TEST_CASE(test_inline_arith),
 
+    TEST_CASE(test_crypto_pk),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }

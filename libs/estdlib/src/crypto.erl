@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2023 Fred Dushin <fred@dushin.net>
+% Copyright 2026 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License")
 % you may not use this file except in compliance with the License.
@@ -23,7 +24,10 @@
     hash/2,
     crypto_one_time/4,
     crypto_one_time/5,
-    strong_rand_bytes/1
+    generate_key/2,
+    compute_key/4,
+    strong_rand_bytes/1,
+    info_lib/0
 ]).
 
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
@@ -49,6 +53,23 @@
 
 -type crypto_opt() :: {encrypt, boolean()} | {padding, padding()}.
 -type crypto_opts() :: [crypto_opt()].
+
+-type pk_type() :: eddh | eddsa | ecdh.
+
+%% Curves/params accepted by the current AtomVM implementation.
+%% Note: not all combinations are supported by every function (see docs below).
+-type pk_param() ::
+    x25519
+    | x448
+    | ed25519
+    | ed448
+    | secp256r1
+    | secp384r1
+    | secp521r1
+    | secp256k1
+    | brainpoolP256r1
+    | brainpoolP384r1
+    | brainpoolP512r1.
 
 %%-----------------------------------------------------------------------------
 %% @param   Type the hash algorithm
@@ -103,6 +124,52 @@ crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Type the key algorithm family
+%% @param   Param curve/parameter selection
+%% @returns Returns a tuple `{PublicKey, PrivateKey}'.
+%% @doc     Generate a public/private key pair.
+%%
+%%          Supported forms:
+%%          * `eddh' with `x25519 | x448'
+%%          * `ecdh' with `x25519 | x448 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
+%%          * `eddsa' with `ed25519 | ed448' (availability depends on the underlying mbedTLS build)
+%%
+%%          Keys are returned as **raw exported key material**, not PEM, DER, or `public_key'
+%%          records.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_key(Type :: pk_type(), Param :: pk_param()) -> {binary(), binary()}.
+generate_key(_Type, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type the key agreement type
+%% @param   OtherPublicKey peer public key (binary)
+%% @param   MyPrivateKey local private key (binary)
+%% @param   Param curve/parameter selection
+%% @returns Returns the shared secret as a binary.
+%% @doc     Compute a shared secret.
+%%
+%%          Supported forms:
+%%          * `eddh' with `x25519 | x448'
+%%          * `ecdh' with `x25519 | x448 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
+%%
+%%          The public/private key binaries must be in the same format as returned by
+%%          `generate_key/2'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec compute_key(
+    Type :: pk_type(),
+    OtherPublicKey :: binary(),
+    MyPrivateKey :: binary(),
+    Param :: pk_param()
+) -> binary().
+compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   N desired length of cryptographically secure random data
 %% @returns Returns Cryptographically secure random data of length `N'
 %% @doc     Generate N cryptographically secure random octets
@@ -111,4 +178,21 @@ crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
 %%-----------------------------------------------------------------------------
 -spec strong_rand_bytes(N :: non_neg_integer()) -> binary().
 strong_rand_bytes(_N) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns Returns a list of tuples describing the crypto library name, version number,
+%%          and version string.
+%% @doc     Get the name and version of the libraries used by crypto.
+%%
+%%          Returns a list containing a single tuple `{Name, VerNum, VerStr}' where:
+%%          * `Name' is the library name as a binary (e.g., `<<"mbedtls">>')
+%%          * `VerNum' is the numeric version according to the library's versioning scheme
+%%          * `VerStr' is the version string as a binary
+%%
+%%          Example: `[{<<"mbedtls">>, 50790144, <<"Mbed TLS 3.6.1">>}]'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec info_lib() -> [{binary(), integer(), binary()}].
+info_lib() ->
     erlang:nif_error(undefined).
