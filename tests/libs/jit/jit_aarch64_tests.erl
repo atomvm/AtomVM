@@ -829,6 +829,82 @@ if_block_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', RegA},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004d 	b.le	0x14\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', {free, RegA}},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004d 	b.le	0x14\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {RegA, '<', 100},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {{free, RegA}, '<', 100},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+                        "   4:	f9401c08 	ldr	x8, [x0, #56]\n"
+                        "   8:	f10190ff 	cmp	x7, #0x64\n"
+                        "   c:	5400004a 	b.ge	0x14  // b.tcont\n"
+                        "  10:	91000908 	add	x8, x8, #0x2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end)
             ]
         end}.
@@ -907,6 +983,38 @@ call_only_or_schedule_next_and_label_relocation_test() ->
     State2 = ?BACKEND:add_label(State1, 1),
     State3 = ?BACKEND:call_only_or_schedule_next(State2, 2),
     State4 = ?BACKEND:add_label(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
+    Dump =
+        <<
+            "   0:	1400000d 	b	0x34\n"
+            "   4:	14000002 	b	0xc\n"
+            "   8:	14000009 	b	0x2c\n"
+            "   c:	b9401027 	ldr	w7, [x1, #16]\n"
+            "  10:	f10004e7 	subs	x7, x7, #0x1\n"
+            "  14:	b9001027 	str	w7, [x1, #16]\n"
+            "  18:	540000a1 	b.ne	0x2c  // b.any\n"
+            "  1c:	10000087 	adr	x7, 0x2c\n"
+            "  20:	f9000427 	str	x7, [x1, #8]\n"
+            "  24:	f9400847 	ldr	x7, [x2, #16]\n"
+            "  28:	d61f00e0 	br	x7\n"
+            "  2c:	f9400047 	ldr	x7, [x2]\n"
+            "  30:	d61f00e0 	br	x7\n"
+            "  34:	f9400447 	ldr	x7, [x2, #8]\n"
+            "  38:	d61f00e0 	br	x7"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+call_only_or_schedule_next_known_label_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:add_label(State2, 2, 16#2c),
+    State4 = ?BACKEND:call_only_or_schedule_next(State3, 2),
     State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
     % OP_INT_CALL_END
     State6 = ?BACKEND:add_label(State5, 0),
@@ -1223,16 +1331,45 @@ wait_test() ->
     Label = 2,
     State3 = ?BACKEND:set_continuation_to_label(State2, Label),
     State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
 
-    Stream = ?BACKEND:stream(State4),
+    Stream = ?BACKEND:stream(State6),
     Dump = <<
         "   0:	14000000 	b	0x0\n"
         "   4:	14000005 	b	0x18\n"
-        "   8:	14000000 	b	0x8\n"
+        "   8:	1400003e 	b	0x100\n"
         "   c:	14000000 	b	0xc\n"
         "  10:	14000000 	b	0x10\n"
         "  14:	14000000 	b	0x14\n"
-        "  18:	10000007 	adr	x7, 0x18\n"
+        "  18:	10000747 	adr	x7, 0x100\n"
+        "  1c:	f9000427 	str	x7, [x1, #8]\n"
+        "  20:	f9407447 	ldr	x7, [x2, #232]\n"
+        "  24:	d61f00e0 	br	x7"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test set_continuation_to_label with known label
+wait_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:add_label(State2, Label, 16#100),
+    State4 = ?BACKEND:set_continuation_to_label(State3, Label),
+    State5 = ?BACKEND:call_primitive_last(State4, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State6 = ?BACKEND:update_branches(State5),
+
+    Stream = ?BACKEND:stream(State6),
+    Dump = <<
+        "   0:	14000000 	b	0x0\n"
+        "   4:	14000005 	b	0x18\n"
+        "   8:	1400003e 	b	0x100\n"
+        "   c:	14000000 	b	0xc\n"
+        "  10:	14000000 	b	0x10\n"
+        "  14:	14000000 	b	0x14\n"
+        "  18:	10000747 	adr	x7, 0x100\n"
         "  1c:	f9000427 	str	x7, [x1, #8]\n"
         "  20:	f9407447 	ldr	x7, [x2, #232]\n"
         "  24:	d61f00e0 	br	x7"
