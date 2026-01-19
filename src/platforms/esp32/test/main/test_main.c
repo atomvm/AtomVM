@@ -515,6 +515,12 @@ TEST_CASE("test_tz", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
+TEST_CASE("test_deep_sleep_hold", "[test_run]")
+{
+    term ret_value = avm_test_case("test_deep_sleep_hold.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 #ifndef AVM_NO_SMP
 TEST_CASE("atomvm_smp_0", "[smp]")
 {
@@ -613,7 +619,7 @@ TEST_CASE("test_wifi_example", "[test_run]")
 #endif
 
 // Works C3 on local runs, but fails GH actions
-#if (ESP_IDF_VERSION_MAJOR >= 5 && !CONFIG_IDF_TARGET_ESP32C3) || (ESP_IDF_VERSION_MAJOR >= 5 && !CONFIG_ETH_USE_OPENETH)
+#if (ESP_IDF_VERSION_MAJOR >= 5 && !CONFIG_IDF_TARGET_ESP32C3 && !CONFIG_IDF_TARGET_ESP32P4) || (ESP_IDF_VERSION_MAJOR >= 5 && !CONFIG_IDF_TARGET_ESP32P4 && !CONFIG_ETH_USE_OPENETH)
 TEST_CASE("test_twdt", "[test_run]")
 {
     term ret_value = avm_test_case("test_twdt.beam");

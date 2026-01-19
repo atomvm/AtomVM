@@ -723,7 +723,7 @@ static term nif_gpio_hold_dis(Context *ctx, int argc, term argv[])
     return hold_dis(argv[0]);
 }
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 2) && SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP) || (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 2) && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP)
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 static term nif_gpio_deep_sleep_hold_en(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
@@ -785,7 +785,7 @@ static const struct Nif gpio_hold_dis_nif =
     .nif_ptr = nif_gpio_hold_dis
 };
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 2) && SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP) || (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 2) && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP)
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
 static const struct Nif gpio_deep_sleep_hold_en_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_deep_sleep_hold_en
@@ -844,7 +844,7 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
         return &gpio_hold_dis_nif;
     }
 
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 2) && SOC_GPIO_SUPPORT_HOLD_IO_IN_DSLP && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP) || (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 2) && !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP)
+#if !SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP
     if (strcmp("gpio:deep_sleep_hold_en/0", nifname) == 0 || strcmp("Elixir.GPIO:deep_sleep_hold_en/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_deep_sleep_hold_en_nif;

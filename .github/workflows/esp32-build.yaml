@@ -45,8 +45,7 @@ jobs:
       fail-fast: false
 
       matrix:
-        esp-idf-target: ["esp32", "esp32c3", "esp32p4"]
-        language: ['cpp']
+        esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
          - 'v5.1.6'
          - 'v5.2.6'
@@ -57,10 +56,11 @@ jobs:
         exclude:
         - esp-idf-target: "esp32c3"
           idf-version: 'v5.1.6'
+        include:
         - esp-idf-target: "esp32p4"
-          idf-version: 'v5.1.6'
+          idf-version: 'release-v5.4'
         - esp-idf-target: "esp32p4"
-          idf-version: 'v5.2.6'
+          idf-version: 'v5.5.2'
 
     steps:
     - name: Checkout repo
@@ -70,9 +70,9 @@ jobs:
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
 
     - name: "Initialize CodeQL"
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
-        languages: ${{matrix.language}}
+        languages: "cpp"
         build-mode: manual
         queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
 
@@ -94,7 +94,7 @@ jobs:
         idf.py size-components
 
     - name: "Perform CodeQL Analysis"
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
 
     - name: Install dependencies to build host AtomVM and run qemu
       run: |
