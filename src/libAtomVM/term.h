@@ -2598,7 +2598,7 @@ static inline term term_list_prepend(term head, term tail, Heap *heap)
  * @details Counts the number of list items
  * @return number of list items
  */
-static inline int term_list_length(term t, int *proper)
+static inline int term_list_length(term t, bool *proper)
 {
     int len = 0;
 
