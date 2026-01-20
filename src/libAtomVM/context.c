@@ -428,7 +428,7 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         if (monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL) {
             struct MonitorLocalMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-            if (monitoring_monitor->monitor_obj == monitor_obj && monitoring_monitor->ref_ticks == ref_ticks) {
+            if (monitoring_monitor->monitor_obj == monitor_obj && monitoring_monitor->ref_data.ref_ticks == ref_ticks) {
                 // Remove link
                 list_remove(&monitor->monitor_list_head);
                 free(monitor);
@@ -439,7 +439,7 @@ void context_process_monitor_down_signal(Context *ctx, struct TermSignal *signal
         } else if (monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME) {
             int32_t monitor_process_id = term_to_local_process_id(monitor_obj);
             struct MonitorLocalRegisteredNameMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
-            if (monitoring_monitor->monitor_process_id == monitor_process_id && monitoring_monitor->ref_ticks == ref_ticks) {
+            if (monitoring_monitor->monitor_process_id == monitor_process_id && monitoring_monitor->ref_data.ref_ticks == ref_ticks) {
                 // Remove link
                 list_remove(&monitor->monitor_list_head);
 
@@ -715,7 +715,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 Context *target = globalcontext_get_process_nolock(glb, local_process_id);
                 if (LIKELY(target != NULL)) {
                     // target can be null if we didn't process a MonitorDownSignal
-                    mailbox_send_ref_signal(target, DemonitorSignal, monitoring_monitor->ref_ticks);
+                    mailbox_send_ref_signal(target, DemonitorSignal, monitoring_monitor->ref_data.ref_ticks);
                 }
                 free(monitor);
                 break;
@@ -727,7 +727,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 Context *target = globalcontext_get_process_nolock(glb, local_process_id);
                 if (LIKELY(target != NULL)) {
                     // target can be null if we didn't process a MonitorDownSignal
-                    mailbox_send_ref_signal(target, DemonitorSignal, monitoring_monitor->ref_ticks);
+                    mailbox_send_ref_signal(target, DemonitorSignal, monitoring_monitor->ref_data.ref_ticks);
                 }
                 free(monitor);
                 break;
@@ -783,7 +783,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                     AVM_ABORT();
                 }
                 // Prepare the message on ctx's heap which will be freed afterwards.
-                term ref = term_make_process_reference(target->process_id, monitored_monitor->ref_ticks, &ctx->heap);
+                term ref = term_from_ref_data(monitored_monitor->ref_data, &ctx->heap);
 
                 term port_or_process = term_pid_or_port_from_context(ctx);
                 term port_or_process_atom
@@ -842,7 +842,7 @@ struct Monitor *monitor_link_new(term link_pid)
     }
 }
 
-struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring)
+struct Monitor *monitor_new(term monitor_pid, RefData ref_data, bool is_monitoring)
 {
     struct MonitorLocalMonitor *monitor = malloc(sizeof(struct MonitorLocalMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -854,12 +854,12 @@ struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monito
         monitor->monitor.monitor_type = CONTEXT_MONITOR_MONITORED_LOCAL;
     }
     monitor->monitor_obj = monitor_pid;
-    monitor->ref_ticks = ref_ticks;
+    monitor->ref_data = ref_data;
 
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, uint64_t ref_ticks)
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData ref_data)
 {
     struct MonitorLocalRegisteredNameMonitor *monitor = malloc(sizeof(struct MonitorLocalRegisteredNameMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -868,19 +868,19 @@ struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, t
     monitor->monitor.monitor_type = CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME;
     monitor->monitor_process_id = monitor_process_id;
     monitor->monitor_name = monitor_name;
-    monitor->ref_ticks = ref_ticks;
+    monitor->ref_data = ref_data;
 
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_alias_new(uint64_t ref_ticks, enum ContextMonitorAliasType alias_type)
+struct Monitor *monitor_alias_new(RefData ref_data, enum ContextMonitorAliasType alias_type)
 {
     struct MonitorAlias *monitor = malloc(sizeof(struct MonitorAlias));
     if (IS_NULL_PTR(monitor)) {
         return NULL;
     }
     monitor->monitor.monitor_type = CONTEXT_MONITOR_ALIAS;
-    monitor->ref_ticks = ref_ticks;
+    monitor->ref_data = ref_data;
     monitor->alias_type = alias_type;
 
     return &monitor->monitor;
@@ -920,7 +920,7 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                 case CONTEXT_MONITOR_MONITORED_LOCAL: {
                     struct MonitorLocalMonitor *new_local_monitor = CONTAINER_OF(new_monitor, struct MonitorLocalMonitor, monitor);
                     struct MonitorLocalMonitor *existing_local_monitor = CONTAINER_OF(existing, struct MonitorLocalMonitor, monitor);
-                    if (UNLIKELY(existing_local_monitor->monitor_obj == new_local_monitor->monitor_obj && existing_local_monitor->ref_ticks == new_local_monitor->ref_ticks)) {
+                    if (UNLIKELY(existing_local_monitor->monitor_obj == new_local_monitor->monitor_obj && existing_local_monitor->ref_data.ref_ticks == new_local_monitor->ref_data.ref_ticks)) {
                         free(new_monitor);
                         return false;
                     }
@@ -931,7 +931,7 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     struct MonitorLocalRegisteredNameMonitor *existing_local_registeredname_monitor = CONTAINER_OF(existing, struct MonitorLocalRegisteredNameMonitor, monitor);
                     if (UNLIKELY(existing_local_registeredname_monitor->monitor_process_id == new_local_registeredname_monitor->monitor_process_id
                             && existing_local_registeredname_monitor->monitor_name == new_local_registeredname_monitor->monitor_name
-                            && existing_local_registeredname_monitor->ref_ticks == new_local_registeredname_monitor->ref_ticks)) {
+                            && existing_local_registeredname_monitor->ref_data.ref_ticks == new_local_registeredname_monitor->ref_data.ref_ticks)) {
                         free(new_monitor);
                         return false;
                     }
@@ -941,7 +941,7 @@ bool context_add_monitor(Context *ctx, struct Monitor *new_monitor)
                     struct MonitorAlias *new_alias_monitor = CONTAINER_OF(new_monitor, struct MonitorAlias, monitor);
                     struct MonitorAlias *existing_alias_monitor = CONTAINER_OF(existing, struct MonitorAlias, monitor);
 
-                    if (UNLIKELY(existing_alias_monitor->alias_type == new_alias_monitor->alias_type && existing_alias_monitor->ref_ticks == new_alias_monitor->ref_ticks)) {
+                    if (UNLIKELY(existing_alias_monitor->alias_type == new_alias_monitor->alias_type && existing_alias_monitor->ref_data.ref_ticks == new_alias_monitor->ref_data.ref_ticks)) {
                         free(new_monitor);
                         return false;
                     }
@@ -1092,7 +1092,7 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
             case CONTEXT_MONITOR_MONITORING_LOCAL:
             case CONTEXT_MONITOR_MONITORED_LOCAL: {
                 struct MonitorLocalMonitor *local_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                if (local_monitor->ref_ticks == ref_ticks) {
+                if (local_monitor->ref_data.ref_ticks == ref_ticks) {
                     list_remove(&monitor->monitor_list_head);
                     free(monitor);
                     return;
@@ -1101,7 +1101,7 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks)
             }
             case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
                 struct MonitorLocalRegisteredNameMonitor *local_registeredname_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
-                if (local_registeredname_monitor->ref_ticks == ref_ticks) {
+                if (local_registeredname_monitor->ref_data.ref_ticks == ref_ticks) {
                     list_remove(&monitor->monitor_list_head);
                     free(monitor);
                     return;
@@ -1131,7 +1131,7 @@ struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks)
         struct Monitor *monitor = GET_LIST_ENTRY(item, struct Monitor, monitor_list_head);
         if (monitor->monitor_type == CONTEXT_MONITOR_ALIAS) {
             struct MonitorAlias *alias_monitor = CONTAINER_OF(monitor, struct MonitorAlias, monitor);
-            if (alias_monitor->ref_ticks == ref_ticks) {
+            if (alias_monitor->ref_data.ref_ticks == ref_ticks) {
                 return alias_monitor;
             }
         }
@@ -1157,7 +1157,7 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
             case CONTEXT_MONITOR_MONITORING_LOCAL:
             case CONTEXT_MONITOR_MONITORED_LOCAL: {
                 struct MonitorLocalMonitor *local_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                if (local_monitor->ref_ticks == ref_ticks) {
+                if (local_monitor->ref_data.ref_ticks == ref_ticks) {
                     *is_monitoring = monitor->monitor_type == CONTEXT_MONITOR_MONITORING_LOCAL;
                     return local_monitor->monitor_obj;
                 }
@@ -1165,7 +1165,7 @@ term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitori
             }
             case CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME: {
                 struct MonitorLocalRegisteredNameMonitor *local_registeredname_monitor = CONTAINER_OF(monitor, struct MonitorLocalRegisteredNameMonitor, monitor);
-                if (local_registeredname_monitor->ref_ticks == ref_ticks) {
+                if (local_registeredname_monitor->ref_data.ref_ticks == ref_ticks) {
                     *is_monitoring = true;
                     return term_from_local_process_id(local_registeredname_monitor->monitor_process_id);
                 }
@@ -1300,13 +1300,13 @@ COLD_FUNC void context_dump(Context *ctx)
                 struct MonitorLocalMonitor *monitoring_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
                 fprintf(stderr, "monitor to ");
                 term_display(stderr, monitoring_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_ticks);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitoring_monitor->ref_data.ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }
             case CONTEXT_MONITOR_ALIAS: {
                 struct MonitorLocalMonitor *monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "has alias ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
+                fprintf(stderr, "has alias ref=%lu", (long unsigned) monitored_monitor->ref_data.ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }
@@ -1314,7 +1314,7 @@ COLD_FUNC void context_dump(Context *ctx)
                 struct MonitorLocalMonitor *monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
                 fprintf(stderr, "monitored by ");
                 term_display(stderr, monitored_monitor->monitor_obj, ctx);
-                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_ticks);
+                fprintf(stderr, " ref=%lu", (long unsigned) monitored_monitor->ref_data.ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }
@@ -1324,7 +1324,7 @@ COLD_FUNC void context_dump(Context *ctx)
                 term_display(stderr, local_registeredname_monitor->monitor_name, ctx);
                 fprintf(stderr, " (");
                 term_display(stderr, term_from_local_process_id(local_registeredname_monitor->monitor_process_id), ctx);
-                fprintf(stderr, ") ref=%lu", (long unsigned) local_registeredname_monitor->ref_ticks);
+                fprintf(stderr, ") ref=%lu", (long unsigned) local_registeredname_monitor->ref_data.ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }

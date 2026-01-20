@@ -203,14 +203,14 @@ struct LinkLocalMonitor
 struct MonitorLocalMonitor
 {
     struct Monitor monitor;
-    uint64_t ref_ticks;
+    RefData ref_data;
     term monitor_obj;
 };
 
 struct MonitorLocalRegisteredNameMonitor
 {
     struct Monitor monitor;
-    uint64_t ref_ticks;
+    RefData ref_data;
     int32_t monitor_process_id;
     term monitor_name;
 };
@@ -218,7 +218,7 @@ struct MonitorLocalRegisteredNameMonitor
 struct MonitorAlias
 {
     struct Monitor monitor;
-    uint64_t ref_ticks;
+    RefData ref_data;
     enum ContextMonitorAliasType alias_type;
 };
 
@@ -521,23 +521,23 @@ struct Monitor *monitor_link_new(term link_pid);
  * @brief Create a monitor on a process.
  *
  * @param monitor_pid monitored process
- * @param ref_ticks reference of the monitor
+ * @param ref_data reference of the monitor
  * @param is_monitoring if ctx is the monitoring process
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_new(term monitor_pid, uint64_t ref_ticks, bool is_monitoring);
+struct Monitor *monitor_new(term monitor_pid, RefData ref_data, bool is_monitoring);
 
-struct Monitor *monitor_alias_new(uint64_t ref_ticks, enum ContextMonitorAliasType alias_type);
+struct Monitor *monitor_alias_new(RefData ref_data, enum ContextMonitorAliasType alias_type);
 
 /**
  * @brief Create a monitor on a process by registered name.
  *
  * @param monitor_process_id monitored process id
  * @param monitor_name name of the monitor (atom)
- * @param ref_ticks reference of the monitor
+ * @param ref_data reference of the monitor
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, uint64_t ref_ticks);
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData ref_data);
 
 /**
  * @brief Create a resource monitor.
