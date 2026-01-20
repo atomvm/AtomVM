@@ -1408,7 +1408,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
     }
-    uint64_t ref_ticks = 0;
+    RefData ref_data = { .ref_ticks = 0, .process_id = ctx->process_id };
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
@@ -1439,13 +1439,14 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             return term_invalid_term();
         }
         // We can call context_add_monitor directly on new process because it's not started yet
-        ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_ticks, false);
+        ref_data.ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+
+        struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_data, false);
         if (IS_NULL_PTR(new_monitor)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        struct Monitor *self_monitor = monitor_new(new_pid, ref_ticks, true);
+        struct Monitor *self_monitor = monitor_new(new_pid, ref_data, true);
         if (IS_NULL_PTR(self_monitor)) {
             free(new_monitor);
             context_destroy(new_ctx);
@@ -1453,7 +1454,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         }
         struct Monitor *alias_monitor = NULL;
         if (is_alias) {
-            alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+            alias_monitor = monitor_alias_new(ref_data, alias_type);
             if (IS_NULL_PTR(alias_monitor)) {
                 free(new_monitor);
                 free(self_monitor);
@@ -1468,7 +1469,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         }
     }
 
-    if (ref_ticks) {
+    if (ref_data.ref_ticks) {
         int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             context_destroy(new_ctx);
@@ -1477,7 +1478,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 
         scheduler_init_ready(new_ctx);
 
-        term ref = term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
+        term ref = term_from_ref_data(ref_data, &ctx->heap);
 
         term process_ref_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(process_ref_tuple, 0, new_pid);
@@ -4471,19 +4472,19 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
+    RefData ref_data = { .process_id = ctx->process_id, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
     term monitoring_pid = term_from_local_process_id(ctx->process_id);
     struct Monitor *self_monitor;
     if (term_is_atom(target_proc)) {
-        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_ticks);
+        self_monitor = monitor_registeredname_monitor_new(local_process_id, target_proc, ref_data);
     } else {
-        self_monitor = monitor_new(target_pid, ref_ticks, true);
+        self_monitor = monitor_new(target_pid, ref_data, true);
     }
     if (IS_NULL_PTR(self_monitor)) {
         globalcontext_get_process_unlock(ctx->global, target);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_ticks, false);
+    struct Monitor *other_monitor = monitor_new(monitoring_pid, ref_data, false);
     if (IS_NULL_PTR(other_monitor)) {
         free(self_monitor);
         globalcontext_get_process_unlock(ctx->global, target);
@@ -4491,7 +4492,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     struct Monitor *alias_monitor = NULL;
     if (is_alias) {
-        alias_monitor = monitor_alias_new(ref_ticks, alias_type);
+        alias_monitor = monitor_alias_new(ref_data, alias_type);
         if (IS_NULL_PTR(alias_monitor)) {
             free(self_monitor);
             free(other_monitor);
@@ -4511,7 +4512,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
+    return term_from_ref_data(ref_data, &ctx->heap);
 }
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
@@ -6678,9 +6679,9 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
-    term process_ref = term_make_process_reference(ctx->process_id, ref_ticks, &ctx->heap);
-    struct Monitor *monitor = monitor_alias_new(ref_ticks, ContextMonitorAliasExplicitUnalias);
+    RefData ref_data = { .process_id = ctx->process_id, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
+    term process_ref = term_from_ref_data(ref_data, &ctx->heap);
+    struct Monitor *monitor = monitor_alias_new(ref_data, ContextMonitorAliasExplicitUnalias);
     if (IS_NULL_PTR(monitor)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
