@@ -1347,7 +1347,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
     }
-    RefData ref_data = { .ref_ticks = 0, .process_id = ctx->process_id };
+    RefData ref_data = { .ref_ticks = 0, .process_id = 0 };
     term new_pid = term_from_local_process_id(new_ctx->process_id);
 
     if (link_term == TRUE_ATOM) {
@@ -1393,6 +1393,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         }
         struct Monitor *alias_monitor = NULL;
         if (is_alias) {
+            ref_data.process_id = ctx->process_id;
             alias_monitor = monitor_alias_new(ref_data, alias_type);
             if (IS_NULL_PTR(alias_monitor)) {
                 free(new_monitor);
@@ -4374,7 +4375,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     if ((object_type == PROCESS_ATOM && target->native_handler != NULL) || (object_type == PORT_ATOM && target->native_handler == NULL)) {
         RAISE_ERROR(BADARG_ATOM);
     }
-    RefData ref_data = { .process_id = ctx->process_id, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
+    RefData ref_data = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = 0 };
     term monitoring_pid = term_from_local_process_id(ctx->process_id);
     struct Monitor *self_monitor;
     if (term_is_atom(target_proc)) {
@@ -4394,6 +4395,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
     struct Monitor *alias_monitor = NULL;
     if (is_alias) {
+        ref_data.process_id = ctx->process_id;
         alias_monitor = monitor_alias_new(ref_data, alias_type);
         if (IS_NULL_PTR(alias_monitor)) {
             free(self_monitor);
