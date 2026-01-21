@@ -129,7 +129,14 @@ extern "C" {
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
+#if TERM_BYTES == 8
 #define TERM_BOXED_REFERENCE_RESOURCE_SIZE 4
+#else
+// Enough size would be 4, but reference types
+// are distinguished by size and 4 conflicts with
+// TERM_BOXED_PROCESS_REF_SIZE on 32bit arch.
+#define TERM_BOXED_REFERENCE_RESOURCE_SIZE 5
+#endif
 #define TERM_BOXED_REFERENCE_RESOURCE_HEADER (((TERM_BOXED_REFERENCE_RESOURCE_SIZE - 1) << 6) | TERM_BOXED_REF)
 #define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFERENCE_RESOURCE_SIZE
 
@@ -151,11 +158,11 @@ extern "C" {
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
+// Reference types are distinguished by their size.
+// If you change a reference size, make sure it doesn't
+// conflict with other reference sizes on all architectures.
 #define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-// FIXME: The required size is REF_SIZE + 1, but then it's equal to
-// TERM_BOXED_REFERENCE_RESOURCE_SIZE on 32bit arch, and therefore
-// the process ref is indistinguishable from resource ref there
-#define TERM_BOXED_PROCESS_REF_SIZE 5
+#define TERM_BOXED_PROCESS_REF_SIZE REF_SIZE + 1
 #define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
@@ -2138,7 +2145,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
-    return (BinaryPosLen){ .pos = -1, .len = -1 };
+    return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
 
 /**
