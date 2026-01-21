@@ -161,8 +161,8 @@ extern "C" {
 // Reference types are distinguished by their size.
 // If you change a reference size, make sure it doesn't
 // conflict with other reference sizes on all architectures.
-#define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-#define TERM_BOXED_PROCESS_REF_SIZE REF_SIZE + 1
+#define SHORT_REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#define TERM_BOXED_PROCESS_REF_SIZE SHORT_REF_SIZE + 1
 #define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
@@ -2198,8 +2198,8 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
  */
 static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(heap, REF_SIZE);
-    boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
+    term *boxed_value = memory_heap_alloc(heap, SHORT_REF_SIZE);
+    boxed_value[0] = ((SHORT_REF_SIZE - 1) << 6) | TERM_BOXED_REF;
 
 #if TERM_BYTES == 8
     boxed_value[1] = (term) ref_ticks;

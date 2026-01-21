@@ -1722,7 +1722,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // a ref is 64 bits, hence 8 bytes
-    if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, SHORT_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -4337,7 +4337,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         local_process_id = term_to_local_process_id(target_pid);
         // Monitoring self is possible but no monitor is actually created
         if (UNLIKELY(local_process_id == ctx->process_id)) {
-            if (UNLIKELY(memory_ensure_free_opt(ctx, REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, SHORT_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
             uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);

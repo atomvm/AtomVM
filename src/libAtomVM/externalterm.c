@@ -1335,7 +1335,7 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 // Check if it's non-distributed node, in which case it's always a local ref
                 if (external_term_buf[4] == strlen("nonode@nohost") && memcmp(external_term_buf + 5, "nonode@nohost", strlen("nonode@nohost")) == 0) {
                     if (len == 2) {
-                        heap_size = REF_SIZE;
+                        heap_size = SHORT_REF_SIZE;
                     } else if (len == 4) {
                         heap_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE;
                     }
