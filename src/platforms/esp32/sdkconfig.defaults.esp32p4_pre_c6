@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: AtomVM Contributors
+#
+# ESP32-P4 Flash and PSRAM
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_SPIRAM=y
+
+# esp-wifi-external config for ESP32-C6 esp_wifi_hosted via SDIO
+# (default options for esp32-p4-function-ev-board)
+CONFIG_LWIP_PPP_VJ_HEADER_COMPRESSION=n
+CONFIG_SLAVE_IDF_TARGET_ESP32C6=y
+CONFIG_LWIP_IPV6=y
+CONFIG_WIFI_RMT_EXTRA_IRAM_OPT=n
+CONFIG_WIFI_RMT_SLP_IRAM_OPT=n
+
+# Support esp32p4 pre-release
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
