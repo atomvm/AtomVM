@@ -50,7 +50,7 @@ jobs:
         elixir_version: ["1.17"]
         rebar3_version: ["3.24.0"]
         compiler_pkgs: ["clang-14"]
-        soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c5", "esp32c6", "esp32c61", "esp32h2", "esp32p4"]
+        soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c5", "esp32c6", "esp32c61", "esp32h2", "esp32p4", "esp32p4_pre", "esp32p4_c6", "esp32p4_pre_c6"]
         flavor: ["", "-elixir"]
 
     env:
@@ -120,12 +120,29 @@ jobs:
       run: |
         make
 
+    - name: "Set SOC target"
+      run: echo "SOC_TARGET=${{ startsWith(matrix.soc, 'esp32p4') && 'esp32p4' || matrix.soc }}" >> $GITHUB_ENV
+
     - name: "Use release defaults"
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
         cp sdkconfig.release-defaults sdkconfig.defaults
+
+    - name: "Handle esp32p4 variants sdkconfig"
+      if: startsWith(matrix.soc, 'esp32p4') && matrix.soc != 'esp32p4'
+      shell: bash
+      working-directory: ./src/platforms/esp32/
+      run: |
+        cp sdkconfig.defaults.${{ matrix.soc }} sdkconfig.defaults.esp32p4
+
+    - name: "Handle esp32p4 c6 variants - add wifi_remote component"
+      if: matrix.soc == 'esp32p4_c6' || matrix.soc == 'esp32p4_pre_c6'
+      shell: bash
+      working-directory: ./src/platforms/esp32/components/avm_builtins
+      run: |
+        cp idf_component.yml.esp32p4_wifi_remote idf_component.yml
 
     - name: "Build ${{ matrix.soc }}${{ matrix.flavor }} with idf.py"
       shell: bash
@@ -137,7 +154,7 @@ jobs:
         then
           mv partitions${{ matrix.flavor }}.csv partitions.csv
         fi
-        idf.py set-target ${{ matrix.soc }}
+        idf.py set-target ${{ env.SOC_TARGET }}
         idf.py reconfigure
         idf.py build
 
@@ -147,11 +164,14 @@ jobs:
         if [ -z "${{ matrix.flavor }}" ]
         then
           ./mkimage.sh
+          if [ "${{ matrix.soc }}" != "${{ env.SOC_TARGET }}" ]; then
+            mv atomvm-${{ env.SOC_TARGET }}.img atomvm-${{ matrix.soc }}.img
+          fi
         else
           FLAVOR_SUFFIX=$(echo "${{ matrix.flavor }}" | sed 's/-//g')
           BOOT_FILE="../../../../build/libs/esp32boot/${FLAVOR_SUFFIX}_esp32boot.avm"
           ./mkimage.sh --boot "$BOOT_FILE"
-          mv atomvm-${{ matrix.soc }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
+          mv atomvm-${{ env.SOC_TARGET }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
         fi
         ls -l *.img
 

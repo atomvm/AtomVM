@@ -7,4 +7,7 @@ CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_SPIRAM=y
 
-# no external chip/wifi
+# no esp-wifi-external
+
+# Support esp32p4 pre-release
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
