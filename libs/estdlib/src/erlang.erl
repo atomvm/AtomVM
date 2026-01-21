@@ -207,7 +207,7 @@
 -type raise_stacktrace() ::
     [{module(), atom(), arity() | [term()]} | {function(), arity() | [term()]}] | stacktrace().
 
--type monitor_option() :: {'alias', 'explicit_unalias' | 'demonitor' | 'reply_demonitor'}.
+-type monitor_option() :: {alias, explicit_unalias | demonitor | reply_demonitor}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
