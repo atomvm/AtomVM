@@ -132,12 +132,6 @@ jobs:
               pytest-embedded-qemu==1.12.1 \
               pytest-embedded-wokwi==1.12.1
 
-      - name: Remove esp_wifi_remote for esp32p4 - as it's not relevant for sim tests
-        if: matrix.esp-idf-target == 'esp32p4'
-        working-directory: ./src/platforms/esp32/components/avm_builtins/
-        run: |
-          rm idf_component.yml
-
       - name: Set SDKCONFIG_DEFAULTS and Build ESP32-sim tests using idf.py
         working-directory: ./src/platforms/esp32/test/
         run: |

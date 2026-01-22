@@ -8,3 +8,6 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_SPIRAM=y
 
 # no external chip/wifi
+
+# Support esp32p4 release
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=n
