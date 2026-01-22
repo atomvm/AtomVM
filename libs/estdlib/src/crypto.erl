@@ -26,6 +26,7 @@
     crypto_one_time/5,
     generate_key/2,
     compute_key/4,
+    mac/4,
     strong_rand_bytes/1,
     info_lib/0
 ]).
@@ -70,6 +71,18 @@
     | brainpoolP256r1
     | brainpoolP384r1
     | brainpoolP512r1.
+
+-type mac_type() :: cmac | hmac.
+
+-type cmac_subtype() ::
+    aes_128_cbc
+    | aes_128_ecb
+    | aes_192_cbc
+    | aes_192_ecb
+    | aes_256_cbc
+    | aes_256_ecb.
+
+-type mac_subtype() :: cmac_subtype() | hash_algorithm() | ripemd160.
 
 %%-----------------------------------------------------------------------------
 %% @param   Type the hash algorithm
@@ -167,6 +180,31 @@ generate_key(_Type, _Param) ->
     Param :: pk_param()
 ) -> binary().
 compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type MAC algorithm family (`cmac' or `hmac')
+%% @param   SubType MAC subtype (cipher for CMAC, digest for HMAC)
+%% @param   Key MAC key bytes
+%% @param   Data message bytes (iodata)
+%% @returns Returns the computed MAC as a binary.
+%% @doc     Compute a MAC.
+%%
+%%          Supported forms:
+%%          * `mac(cmac, Cipher, Key, Data)' where `Cipher' selects AES key size:
+%%            `aes_128_(cbc|ecb) | aes_192_(cbc|ecb) | aes_256_(cbc|ecb)'
+%%            (key length must match the selected size)
+%%          * `mac(hmac, Digest, Key, Data)' where `Digest' is a supported hash atom
+%%            (AtomVM accepts `ripemd160' in addition to the `hash/2' digests)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mac(
+    Type :: mac_type(),
+    SubType :: mac_subtype(),
+    Key :: binary(),
+    Data :: iodata()
+) -> binary().
+mac(_Type, _SubType, _Key, _Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

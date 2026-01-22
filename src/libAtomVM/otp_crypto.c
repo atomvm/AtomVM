@@ -955,6 +955,171 @@ cleanup:
     return result;
 }
 
+static const AtomStringIntPair hmac_algorithm_table[] = {
+    { ATOM_STR("\x3", "sha"), PSA_ALG_SHA_1 },
+    { ATOM_STR("\x6", "sha224"), PSA_ALG_SHA_224 },
+    { ATOM_STR("\x6", "sha256"), PSA_ALG_SHA_256 },
+    { ATOM_STR("\x6", "sha384"), PSA_ALG_SHA_384 },
+    { ATOM_STR("\x6", "sha512"), PSA_ALG_SHA_512 },
+    { ATOM_STR("\x8", "sha3_224"), PSA_ALG_SHA3_224 },
+    { ATOM_STR("\x8", "sha3_256"), PSA_ALG_SHA3_256 },
+    { ATOM_STR("\x8", "sha3_384"), PSA_ALG_SHA3_384 },
+    { ATOM_STR("\x8", "sha3_512"), PSA_ALG_SHA3_512 },
+    { ATOM_STR("\x3", "md5"), PSA_ALG_MD5 },
+    { ATOM_STR("\x9", "ripemd160"), PSA_ALG_RIPEMD160 },
+
+    SELECT_INT_DEFAULT(PSA_ALG_NONE)
+};
+
+static const AtomStringIntPair cmac_algorithm_bits_table[] = {
+    { ATOM_STR("\xB", "aes_128_cbc"), 128 },
+    { ATOM_STR("\xB", "aes_128_ecb"), 128 },
+    { ATOM_STR("\xB", "aes_192_cbc"), 192 },
+    { ATOM_STR("\xB", "aes_192_ecb"), 192 },
+    { ATOM_STR("\xB", "aes_256_cbc"), 256 },
+    { ATOM_STR("\xB", "aes_256_ecb"), 256 },
+
+    SELECT_INT_DEFAULT(0)
+};
+
+static const AtomStringIntPair mac_key_table[] = {
+    { ATOM_STR("\x4", "cmac"), PSA_KEY_TYPE_AES },
+    { ATOM_STR("\x4", "hmac"), PSA_KEY_TYPE_HMAC },
+
+    SELECT_INT_DEFAULT(PSA_KEY_TYPE_NONE)
+};
+
+static term nif_crypto_mac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    term mac_type_term = argv[0];
+    term sub_type_term = argv[1];
+
+    // argv[2] is key, will handle here bellow
+    // argv[3] is data, will handle it later
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    psa_key_id_t key_id = 0;
+    void *maybe_allocated_key = NULL;
+    void *maybe_allocated_data = NULL;
+    size_t mac_out_size = 0;
+    void *mac_out = NULL;
+
+    term key_term = argv[2];
+    const void *key;
+    size_t key_len;
+    term iodata_handle_result = handle_iodata(key_term, &key, &key_len, &maybe_allocated_key);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+    }
+
+    psa_key_type_t psa_key_type = interop_atom_term_select_int(mac_key_table, mac_type_term, glb);
+    psa_algorithm_t psa_key_algo;
+    psa_key_bits_t key_bit_size;
+    switch (psa_key_type) {
+        case PSA_KEY_TYPE_AES:
+            psa_key_algo = PSA_ALG_CMAC;
+            key_bit_size
+                = interop_atom_term_select_int(cmac_algorithm_bits_table, sub_type_term, glb);
+            if (UNLIKELY(key_bit_size == 0)) {
+                result = make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx);
+                goto cleanup;
+            }
+
+            if (UNLIKELY(key_bit_size != key_len * 8)) {
+                result = make_crypto_error(__FILE__, __LINE__, "Bad key size", ctx);
+                goto cleanup;
+            }
+            break;
+        case PSA_KEY_TYPE_HMAC: {
+            psa_algorithm_t sub_type_algo
+                = interop_atom_term_select_int(hmac_algorithm_table, sub_type_term, glb);
+            if (UNLIKELY(sub_type_algo == PSA_ALG_NONE)) {
+                result
+                    = make_crypto_error(__FILE__, __LINE__, "Bad digest algorithm for HMAC", ctx);
+                goto cleanup;
+            }
+            psa_key_algo = PSA_ALG_HMAC(sub_type_algo);
+            key_bit_size = key_len * 8;
+        } break;
+        default:
+            result = make_crypto_error(__FILE__, __LINE__, "Unknown mac algorithm", ctx);
+            goto cleanup;
+    }
+
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, psa_key_type);
+    psa_set_key_bits(&attr, key_bit_size);
+    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_SIGN_MESSAGE);
+    psa_set_key_algorithm(&attr, psa_key_algo);
+
+    psa_status_t status = psa_import_key(&attr, key, key_len, &key_id);
+    psa_reset_key_attributes(&attr);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx));
+        default:
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+    }
+
+    term data_term = argv[3];
+    const void *data;
+    size_t data_len;
+    iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
+    }
+
+    mac_out_size = PSA_MAC_LENGTH(psa_key_type, key_bit_size, psa_key_algo);
+    mac_out = malloc(mac_out_size);
+    if (IS_NULL_PTR(mac_out)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    size_t mac_len = 0;
+    status = psa_mac_compute(key_id, psa_key_algo, data, data_len, mac_out, mac_out_size, &mac_len);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            result = make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx);
+            goto cleanup;
+        default:
+            result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+            goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(mac_len)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_literal_binary(mac_out, mac_len, &ctx->heap, glb);
+
+cleanup:
+    psa_destroy_key(key_id);
+    secure_free(mac_out, mac_out_size);
+    secure_free(maybe_allocated_key, key_len);
+    free(maybe_allocated_data);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
 #endif
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -1067,6 +1232,10 @@ static const struct Nif crypto_compute_key_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_compute_key
 };
+static const struct Nif crypto_mac_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_mac
+};
 #endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
@@ -1105,6 +1274,10 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("compute_key/4", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_compute_key_nif;
+        }
+        if (strcmp("mac/4", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_mac_nif;
         }
 #endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {
