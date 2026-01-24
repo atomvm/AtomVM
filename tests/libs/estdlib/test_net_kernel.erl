@@ -22,6 +22,9 @@
 
 -export([test/0, start/0]).
 
+%% Generate unique node name for each test using line number
+-define(OTP_SNAME, "otp_" ++ integer_to_list(?LINE)).
+
 start() ->
     test().
 
@@ -98,7 +101,7 @@ test_ping_from_beam(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname otp -setcookie AtomVM -eval \"R = net_adm:ping('" ++
+        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = net_adm:ping('" ++
             atom_to_list(Node) ++
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -112,7 +115,7 @@ test_fail_with_wrong_cookie(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname otp -setcookie Wrong -eval \"R = net_adm:ping('" ++
+        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie Wrong -eval \"R = net_adm:ping('" ++
             atom_to_list(Node) ++
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -126,7 +129,8 @@ test_rpc_from_beam(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname otp -setcookie AtomVM -eval \"R = rpc:call('" ++ atom_to_list(Node) ++
+        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = rpc:call('" ++
+            atom_to_list(Node) ++
             "', erlang, system_info, [machine]), erlang:display(R).\" -s init stop -noshell"
     ),
     true = Result =:= lists:flatten(io_lib:format("~p\r\n", [Platform])),
@@ -139,7 +143,8 @@ test_rpc_loop_from_beam(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname otp -setcookie AtomVM -eval \"R = lists:foldl(fun(X, Acc) -> R = rpc:call('" ++
+        "erl -sname " ++ ?OTP_SNAME ++
+            " -setcookie AtomVM -eval \"R = lists:foldl(fun(X, Acc) -> R = rpc:call('" ++
             atom_to_list(Node) ++
             "', erlang, system_info, [machine]), if Acc =:= R -> Acc; Acc =:= undefined -> R end end, undefined, lists:seq(1, 10)), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -158,6 +163,7 @@ test_autoconnect_fail(Platform) ->
     ok.
 
 test_autoconnect_to_beam(Platform) ->
+    OtpSname = ?OTP_SNAME,
     {ok, _NetKernelPid} = net_kernel_start(Platform, atomvm),
     Node = node(),
     Parent = self(),
@@ -165,13 +171,14 @@ test_autoconnect_to_beam(Platform) ->
     {Pid, MonitorRef} = spawn_opt(
         fun() ->
             Command =
-                "erl -sname otp -setcookie AtomVM -eval \""
-                "register(beam, self()),"
-                "io:put_chars(<<114,101,97,100,121,13,10>>),"
-                "F = fun(G) ->"
-                " receive"
-                "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
-                "   {Caller, net_adm_ping} -> Caller ! {self(), net_adm:ping('" ++
+                "erl -sname " ++ OtpSname ++
+                    " -setcookie AtomVM -eval \""
+                    "register(beam, self()),"
+                    "io:put_chars(<<114,101,97,100,121,13,10>>),"
+                    "F = fun(G) ->"
+                    " receive"
+                    "   {Caller, ping} -> Caller ! {self(), pong}, G(G);"
+                    "   {Caller, net_adm_ping} -> Caller ! {self(), net_adm:ping('" ++
                     atom_to_list(Node) ++
                     "')}, G(G);"
                     "   {Caller, quit} -> Caller ! {self(), quit}"
@@ -192,7 +199,7 @@ test_autoconnect_to_beam(Platform) ->
         after 5000 -> timeout
         end,
     [_, Host] = string:split(atom_to_list(Node), "@"),
-    OTPNode = list_to_atom("otp@" ++ Host),
+    OTPNode = list_to_atom(OtpSname ++ "@" ++ Host),
     {beam, OTPNode} ! {self(), ping},
     {ok, OTPPid} =
         receive
@@ -243,8 +250,9 @@ start_apply_loop(Platform) ->
         fun() ->
             Result = execute_command(
                 Platform,
-                "erl -sname otp -setcookie AtomVM -eval \""
-                "{atomvm, '" ++ atom_to_list(Node) ++
+                "erl -sname " ++ ?OTP_SNAME ++
+                    " -setcookie AtomVM -eval \""
+                    "{atomvm, '" ++ atom_to_list(Node) ++
                     "'} ! {beam, self()}, "
                     "F = fun(G) ->"
                     " receive"
