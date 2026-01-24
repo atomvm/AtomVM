@@ -68,8 +68,15 @@ accept(Pid, ListenSocket, SpawnControllingProcess) ->
                 false ->
                     echo(Pid, Socket);
                 true ->
-                    NewPid = spawn(fun() -> echo(Pid, Socket) end),
-                    ok = gen_tcp:controlling_process(Socket, NewPid)
+                    Self = self(),
+                    NewPid = spawn_link(fun() ->
+                        receive
+                            {Self, controlling_process_done} -> ok
+                        end,
+                        echo(Pid, Socket)
+                    end),
+                    ok = gen_tcp:controlling_process(Socket, NewPid),
+                    NewPid ! {Self, controlling_process_done}
             end;
         {error, closed} ->
             ok
@@ -84,7 +91,8 @@ echo(Pid, Socket) ->
             ok = gen_tcp:send(Socket, Packet),
             echo(Pid, Socket);
         SomethingElse ->
-            erlang:display({echo, unexpected_message, SomethingElse})
+            erlang:display({echo, unexpected_message, SomethingElse}),
+            Pid ! server_closed
     after 5000 -> throw({timeout, echo, ?LINE})
     end.
 
