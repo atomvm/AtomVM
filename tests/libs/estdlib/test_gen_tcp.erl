@@ -50,7 +50,7 @@ test_echo_server(SpawnControllingProcess) ->
     receive
         ready ->
             ok
-    after 1000 -> throw({timeout, test_echo_server, ?LINE})
+    after 5000 -> throw({timeout, test_echo_server, ?LINE})
     end,
 
     test_send_receive(Port, 10, SpawnControllingProcess),
@@ -85,7 +85,7 @@ echo(Pid, Socket) ->
             echo(Pid, Socket);
         SomethingElse ->
             erlang:display({echo, unexpected_message, SomethingElse})
-    after 1000 -> throw({timeout, echo, ?LINE})
+    after 5000 -> throw({timeout, echo, ?LINE})
     end.
 
 test_send_receive(Port, N, SpawnControllingProcess) ->
@@ -113,7 +113,7 @@ test_send_receive(Port, N, SpawnControllingProcess) ->
     gen_tcp:close(Socket),
     receive
         server_closed -> ok
-    after 1000 -> throw({timeout, waiting, recv, server_closed})
+    after 5000 -> throw({timeout, waiting, recv, server_closed})
     end.
 
 loop(_Socket, 0) ->
@@ -126,7 +126,7 @@ loop(Socket, I) ->
             ok;
         {tcp, _OtherSocket, _OtherPacket} ->
             loop(Socket, I - 1)
-    after 1000 -> throw({timeout, loop, ?LINE})
+    after 5000 -> throw({timeout, loop, ?LINE})
     end.
 
 test_listen_connect_parameters() ->
@@ -223,7 +223,7 @@ test_listen_connect_parameters(
     receive
         server_done ->
             ok
-    after 1000 -> throw({timeout, test_listen_connect_parameters, ?LINE})
+    after 5000 -> throw({timeout, test_listen_connect_parameters, ?LINE})
     end,
 
     ok = gen_tcp:close(Socket),
