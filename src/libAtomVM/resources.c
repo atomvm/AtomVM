@@ -473,6 +473,10 @@ int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
         return -1;
     }
 
+    int32_t target_process_id = INVALID_PROCESS_ID;
+    uint64_t ref_ticks = 0;
+
+    // Phase 1: Find and remove from monitors list while holding monitors lock
     struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
     struct ListHead *item;
     LIST_FOR_EACH (item, monitors) {
@@ -480,47 +484,66 @@ int enif_demonitor_process(ErlNifEnv *env, void *obj, const ErlNifMonitor *mon)
         if (monitor->ref_ticks == mon->ref_ticks) {
             struct RefcBinary *resource = refc_binary_from_data(obj);
             if (resource->resource_type != mon->resource_type) {
+                synclist_unlock(&resource_type->monitors);
                 return -1;
             }
 
-            Context *target = globalcontext_get_process_lock(global, monitor->process_id);
-            if (target) {
-                mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
-                globalcontext_get_process_unlock(global, target);
-            }
-
+            target_process_id = monitor->process_id;
+            ref_ticks = monitor->ref_ticks;
             list_remove(&monitor->resource_list_head);
             free(monitor);
-            synclist_unlock(&resource_type->monitors);
-            return 0;
+            break;
         }
     }
-
     synclist_unlock(&resource_type->monitors);
 
-    return -1;
+    if (target_process_id == INVALID_PROCESS_ID) {
+        return -1;
+    }
+
+    // Phase 2: Send demonitor signal without holding monitors lock
+    // This avoids lock order inversion with processes_table
+    Context *target = globalcontext_get_process_lock(global, target_process_id);
+    if (target) {
+        mailbox_send_ref_signal(target, DemonitorSignal, ref_ticks);
+        globalcontext_get_process_unlock(global, target);
+    }
+
+    return 0;
 }
 
 void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global)
 {
     struct ResourceType *resource_type = resource->resource_type;
+
+    // Phase 1: Collect monitors to destroy while holding monitors lock
+    struct ListHead to_signal;
+    list_init(&to_signal);
+
     struct ListHead *monitors = synclist_wrlock(&resource_type->monitors);
     struct ListHead *item;
     struct ListHead *tmp;
     MUTABLE_LIST_FOR_EACH (item, tmp, monitors) {
         struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
         if (monitor->resource == resource) {
-            Context *target = globalcontext_get_process_lock(global, monitor->process_id);
-            if (target) {
-                mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
-                globalcontext_get_process_unlock(global, target);
-            }
             list_remove(&monitor->resource_list_head);
-            free(monitor);
+            list_append(&to_signal, &monitor->resource_list_head);
         }
     }
-
     synclist_unlock(&resource_type->monitors);
+
+    // Phase 2: Send demonitor signals without holding monitors lock
+    // This avoids lock order inversion with processes_table
+    MUTABLE_LIST_FOR_EACH (item, tmp, &to_signal) {
+        struct ResourceMonitor *monitor = GET_LIST_ENTRY(item, struct ResourceMonitor, resource_list_head);
+        Context *target = globalcontext_get_process_lock(global, monitor->process_id);
+        if (target) {
+            mailbox_send_ref_signal(target, DemonitorSignal, monitor->ref_ticks);
+            globalcontext_get_process_unlock(global, target);
+        }
+        list_remove(&monitor->resource_list_head);
+        free(monitor);
+    }
 }
 
 int enif_compare_monitors(const ErlNifMonitor *monitor1, const ErlNifMonitor *monitor2)
