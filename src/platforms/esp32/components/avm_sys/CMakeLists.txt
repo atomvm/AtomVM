@@ -45,7 +45,7 @@ idf_component_register(
     SRCS ${AVM_SYS_COMPONENT_SRCS}
     INCLUDE_DIRS "include"
     REQUIRES "spi_flash" "soc" "newlib" "pthread" "vfs" "mbedtls" ${ADDITIONAL_COMPONENTS}
-    PRIV_REQUIRES "libatomvm" "esp_timer" ${ADDITIONAL_PRIV_REQUIRES}
+    PRIV_REQUIRES "libatomvm" "driver" "esp_timer" ${ADDITIONAL_PRIV_REQUIRES}
 )
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)

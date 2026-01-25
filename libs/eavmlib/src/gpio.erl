@@ -54,7 +54,8 @@
     digital_write/2,
     digital_read/1,
     attach_interrupt/2,
-    detach_interrupt/1
+    detach_interrupt/1,
+    wakeup_enable/2
 ]).
 
 -type gpio() :: pid().
@@ -530,3 +531,14 @@ attach_interrupt(Pin, Trigger) ->
 -spec detach_interrupt(Pin :: pin()) -> ok | {error, Reason :: atom()} | error.
 detach_interrupt(Pin) ->
     remove_int(whereis(gpio), Pin).
+
+%%-----------------------------------------------------------------------------
+%% @doc Configure given GPIO as light sleep wakeup pin
+%% @param   GPIONum the GPIO number
+%% @param   logic level, either low or high that triggers the wakeup condition
+%% @returns `ok | error'
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wakeup_enable(GPIONum :: non_neg_integer(), Level :: low | high) -> ok | error.
+wakeup_enable(_GPIONum, _Level) ->
+    erlang:nif_error(undefined).
