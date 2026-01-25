@@ -40,6 +40,7 @@ jobs:
       matrix:
         os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
         otp: ["24", "25", "26"]
+        mbedtls: ["mbedtls@3"]
 
     steps:
     # Setup
@@ -49,7 +50,46 @@ jobs:
         submodules: 'recursive'
 
     - name: "Install deps"
-      run: HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} ninja mbedtls
+      if: matrix.otp != '24' && matrix.otp != '25'
+      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }} rebar3
+
+    - name: "Install deps"
+      if: matrix.otp == '24' || matrix.otp == '25'
+      run: |
+        brew update
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }}
+        wget https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3
+        chmod +x rebar3
+        for bin_dir in {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ; do
+            if [ -e ${bin_dir} ]; then
+                sudo cp rebar3 ${bin_dir}
+            fi
+        done
+
+    - name: "Workaround for nxdomain random issues"
+      run: |
+        # https://github.com/actions/runner-images/issues/8649#issuecomment-2231240347
+        for host in "$(hostname)" "$(hostname -f)"; do
+          echo -e "$(ipconfig getifaddr en0) $(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
+          dscacheutil -q host -a name $(hostname -f)
+        done
+
+    - name: "Setup mbedtls@3 environment"
+      if: matrix.mbedtls == 'mbedtls@3'
+      run: |
+        # Detect Homebrew prefix (Apple Silicon vs Intel)
+        if [ -d "/opt/homebrew/opt/mbedtls@3" ]; then
+          MBEDTLS_PREFIX="/opt/homebrew/opt/mbedtls@3"
+        elif [ -d "/usr/local/opt/mbedtls@3" ]; then
+          MBEDTLS_PREFIX="/usr/local/opt/mbedtls@3"
+        else
+          echo "Error: mbedtls@3 not found in expected locations"
+          exit 1
+        fi
+        echo "MBEDTLS_PREFIX=${MBEDTLS_PREFIX}" >> $GITHUB_ENV
+        echo "LDFLAGS=-L${MBEDTLS_PREFIX}/lib" >> $GITHUB_ENV
+        echo "CPPFLAGS=-I${MBEDTLS_PREFIX}/include" >> $GITHUB_ENV
+        echo "PKG_CONFIG_PATH=${MBEDTLS_PREFIX}/lib/pkgconfig" >> $GITHUB_ENV
 
     # Builder info
     - name: "System info"
@@ -70,7 +110,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        cmake -DAVM_WARNINGS_ARE_ERRORS=ON -G Ninja ..
+        cmake -DAVM_WARNINGS_ARE_ERRORS=ON ${MBEDTLS_PREFIX:+-DCMAKE_PREFIX_PATH="$MBEDTLS_PREFIX"} ${{ matrix.cmake_opts_other }} -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
