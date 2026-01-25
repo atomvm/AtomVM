@@ -351,7 +351,7 @@ static void scheduler_make_ready(Context *ctx)
 {
     GlobalContext *global = ctx->global;
     SMP_SPINLOCK_LOCK(&global->processes_spinlock);
-    if (context_get_flags(ctx, Killed)) {
+    if (context_get_flags(ctx, Killed | Spawning)) {
         SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
         return;
     }
@@ -406,9 +406,10 @@ static void scheduler_make_ready_from_task(Context *ctx)
 }
 #endif
 
-void scheduler_init_ready(Context *c)
+void scheduler_init_ready(Context *ctx)
 {
-    scheduler_make_ready(c);
+    context_update_flags(ctx, ~Spawning, NoFlags);
+    scheduler_make_ready(ctx);
 }
 
 void scheduler_signal_message(Context *c)
