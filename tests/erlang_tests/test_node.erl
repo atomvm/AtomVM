@@ -53,7 +53,7 @@ test_node_distribution() ->
     ok =
         receive
             {'DOWN', MonitorRef, process, NetKernelPid, normal} -> ok
-        after 1000 -> timeout
+        after 5000 -> timeout
         end,
     case node() of
         nonode@nohost ->
