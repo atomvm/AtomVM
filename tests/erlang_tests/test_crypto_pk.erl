@@ -19,10 +19,11 @@
 %
 
 -module(test_crypto_pk).
--export([start/0, test_generate_and_compute_key/0]).
+-export([start/0, test_generate_and_compute_key/0, test_sign_and_verify/0]).
 
 start() ->
     ok = mbedtls_conditional_run(test_generate_and_compute_key, 16#03000000),
+    ok = mbedtls_conditional_run(test_sign_and_verify, 16#03060100),
     0.
 
 mbedtls_conditional_run(F, RVer) ->
@@ -64,5 +65,17 @@ test_generate_and_compute_key() ->
     ComputedKey2 = crypto:compute_key(eddh, Pub2, Priv2, x25519),
     true = is_binary(ComputedKey2),
     32 = byte_size(ComputedKey2),
+
+    ok.
+
+test_sign_and_verify() ->
+    Data = <<"Hello">>,
+
+    {SECPPub, SECPPriv} = crypto:generate_key(ecdh, secp256r1),
+    Sig = crypto:sign(ecdsa, sha256, Data, [SECPPriv, secp256r1]),
+
+    false = crypto:verify(ecdsa, sha256, <<"Invalid">>, Sig, [SECPPub, secp256r1]),
+    false = crypto:verify(ecdsa, sha256, Data, <<"InvalidSig">>, [SECPPub, secp256r1]),
+    true = crypto:verify(ecdsa, sha256, Data, Sig, [SECPPub, secp256r1]),
 
     ok.
