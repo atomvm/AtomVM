@@ -26,6 +26,8 @@
     crypto_one_time/5,
     generate_key/2,
     compute_key/4,
+    sign/4,
+    verify/5,
     mac/4,
     strong_rand_bytes/1,
     info_lib/0
@@ -71,6 +73,19 @@
     | brainpoolP256r1
     | brainpoolP384r1
     | brainpoolP512r1.
+
+%% ECDSA is currently supported only on short Weierstrass secp* and brainpool curves.
+-type ecdsa_curve() ::
+    secp256k1
+    | secp256r1
+    | secp384r1
+    | secp521r1
+    | brainpoolP256r1
+    | brainpoolP384r1
+    | brainpoolP512r1.
+
+-type ecdsa_private_key() :: [binary() | ecdsa_curve()].
+-type ecdsa_public_key() :: [binary() | ecdsa_curve()].
 
 -type mac_type() :: cmac | hmac.
 
@@ -180,6 +195,60 @@ generate_key(_Type, _Param) ->
     Param :: pk_param()
 ) -> binary().
 compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Algorithm signing algorithm (AtomVM supports `ecdsa')
+%% @param   DigestType hash algorithm identifier
+%% @param   Data message bytes (iodata)
+%% @param   Key signing key material
+%% @returns Returns a DER-encoded signature as a binary.
+%% @doc     Create a digital signature.
+%%
+%%          AtomVM currently supports:
+%%          * `Algorithm = ecdsa'
+%%          * `Key = [PrivateKeyBin, Curve]' where `Curve' is one of
+%%            `secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
+%%
+%%          The signature is returned in **DER** form.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sign(
+    Algorithm :: ecdsa,
+    DigestType :: hash_algorithm(),
+    Data :: iodata(),
+    Key :: ecdsa_private_key()
+) -> binary().
+sign(_Algorithm, _DigestType, _Data, _Key) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Algorithm verification algorithm (AtomVM supports `ecdsa')
+%% @param   DigestType hash algorithm identifier
+%% @param   Data message bytes (iodata)
+%% @param   Signature DER-encoded signature
+%% @param   Key verification key material
+%% @returns Returns `true' if the signature is valid, otherwise `false'.
+%% @doc     Verify a digital signature.
+%%
+%%          AtomVM currently supports:
+%%          * `Algorithm = ecdsa'
+%%          * `Key = [PublicKeyBin, Curve]' where `Curve' is one of
+%%            `secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
+%%
+%%          Invalid DER signatures yield `false' (not an exception).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec verify(
+    Algorithm :: ecdsa,
+    DigestType :: hash_algorithm(),
+    Data :: iodata(),
+    Signature :: binary(),
+    Key :: ecdsa_public_key()
+) -> boolean().
+verify(_Algorithm, _DigestType, _Data, _Signature, _Key) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
