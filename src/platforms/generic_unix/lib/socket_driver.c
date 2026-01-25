@@ -729,9 +729,12 @@ static EventListener *active_recv_callback(GlobalContext *glb, EventListener *ba
         term msgs[2] = { TCP_CLOSED_ATOM, socket_wrapper };
         term msg = port_heap_create_tuple_n(&heap, 2, msgs);
         port_send_message_nolock(glb, pid, msg);
-        socket_data->active_listener = NULL;
         mailbox_send(ctx, globalcontext_make_atom(glb, close_internal));
-        free(listener);
+        // See socket_consume_mailbox close path below
+        if (socket_data->active_listener) {
+            socket_data->active_listener = NULL;
+            free(listener);
+        }
         result = NULL;
         END_WITH_STACK_HEAP(heap, glb);
     } else {
@@ -832,13 +835,14 @@ static EventListener *passive_recv_callback(GlobalContext *glb, EventListener *b
         port_send_message_nolock(glb, pid, reply);
         memory_destroy_heap(&heap, glb);
     }
-    socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    free(listener);
+    // See socket_consume_mailbox close path below
+    if (socket_data->passive_listener) {
+        socket_data->passive_listener = NULL;
+        free(listener);
+    }
     free(buf);
+    // remove the EventListener from the global list
     return NULL;
 }
 
@@ -971,13 +975,14 @@ static EventListener *passive_recvfrom_callback(GlobalContext *glb, EventListene
         port_send_message_nolock(glb, pid, reply);
         memory_destroy_heap(&heap, glb);
     }
-    socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    free(listener);
+    // See socket_consume_mailbox close path below
+    if (socket_data->passive_listener) {
+        socket_data->passive_listener = NULL;
+        free(listener);
+    }
     free(buf);
+    // remove the EventListener from the global list and clean up
     return NULL;
 }
 
@@ -1065,7 +1070,6 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         Context *new_ctx = create_accepting_socket(glb, new_socket_data);
         ctx = globalcontext_get_process_lock(glb, listener->process_id);
         if (UNLIKELY(ctx == NULL)) {
-            socket_data->passive_listener = NULL;
             free(listener);
             return NULL;
         }
@@ -1082,12 +1086,13 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         port_send_message_nolock(glb, pid, reply);
         END_WITH_STACK_HEAP(heap, glb);
     }
-    socket_data->passive_listener = NULL;
     globalcontext_get_process_unlock(glb, ctx);
-    //
-    // remove the EventListener from the global list and clean up
-    //
-    free(listener);
+    // See socket_consume_mailbox close path below
+    if (socket_data->passive_listener) {
+        socket_data->passive_listener = NULL;
+        free(listener);
+    }
+    // remove the EventListener from the global list and replace it if needed
     return result;
 }
 
@@ -1189,13 +1194,30 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         TRACE("close\n");
         port_send_reply(ctx, pid, ref, OK_ATOM);
         SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-        if (socket_data->active_listener) {
-            sys_unregister_listener(glb, &socket_data->active_listener->base);
-            free(socket_data->active_listener);
+        // Callbacks (active_recv_callback, passive_recv_callback) are called
+        // while glb->listeners lock is held. They may want to free the
+        // listener, causing a potential double free here.
+        // We acquire the lock on listeners here and set the listeners
+        // to NULL in the socket_data structure to prevent them from freeing
+        // the listeners.
+        synclist_wrlock(&glb->listeners);
+        ActiveRecvListener *active_listener = socket_data->active_listener;
+        PassiveRecvListener *passive_listener = socket_data->passive_listener;
+        socket_data->active_listener = NULL;
+        socket_data->passive_listener = NULL;
+        synclist_unlock(&glb->listeners);
+        if (active_listener) {
+            // Then we unregister, which also acquires the lock. The callbacks
+            // may have returned NULL which means the listener would no longer
+            // be registered, but this will work.
+            sys_unregister_listener(glb, &active_listener->base);
+            // After the listener is unregistered, the callbacks can no longer
+            // be called, so we can eventually free the listener
+            free(active_listener);
         }
-        if (socket_data->passive_listener) {
-            sys_unregister_listener(glb, &socket_data->passive_listener->base);
-            free(socket_data->passive_listener);
+        if (passive_listener) {
+            sys_unregister_listener(glb, &passive_listener->base);
+            free(passive_listener);
         }
         socket_driver_do_close(ctx);
         // We don't need to remove message.
