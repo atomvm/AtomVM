@@ -67,6 +67,7 @@ enum ContextFlags
     Killed = 16,
     Trap = 32,
     Distribution = 64,
+    Spawning = 128,
 };
 
 enum HeapGrowthStrategy

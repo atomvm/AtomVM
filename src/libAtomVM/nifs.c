@@ -1398,6 +1398,7 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
+    context_update_flags(new_ctx, ~Spawning, Spawning);
 
     const term *boxed_value = term_to_const_term_ptr(fun_term);
 
@@ -1457,6 +1458,7 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(opts_term, term_is_list);
 
     Context *new_ctx = context_new(ctx->global);
+    context_update_flags(new_ctx, ~Spawning, Spawning);
 
     Module *found_module = globalcontext_get_module(ctx->global, term_to_atom_index(module_term));
     if (UNLIKELY(!found_module)) {
