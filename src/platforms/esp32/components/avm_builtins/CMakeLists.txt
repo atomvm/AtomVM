@@ -40,22 +40,8 @@ set(AVM_BUILTIN_COMPONENT_SRCS
 if (IDF_VERSION_MAJOR GREATER_EQUAL 5)
     set(ADDITIONAL_PRIV_REQUIRES "esp_hw_support" "efuse" "esp_adc")
     set(AVM_BUILTIN_COMPONENT_SRCS "adc_driver.c" ${AVM_BUILTIN_COMPONENT_SRCS})
-
-    if(CONFIG_AVM_ENABLE_DAC_NIF)
-        if ((IDF_VERSION_MINOR GREATER_EQUAL 1) OR (IDF_VERSION_MAJOR GREATER_EQUAL 6))
-            if ((IDF_VERSION_MINOR GREATER_EQUAL 3) OR (IDF_VERSION_MAJOR GREATER_EQUAL 6))
-                set(ADDITIONAL_PRIV_REQUIRES "esp_driver_dac" ${ADDITIONAL_PRIV_REQUIRES})
-            else()
-                set(ADDITIONAL_PRIV_REQUIRES "driver" ${ADDITIONAL_PRIV_REQUIRES})
-            endif()
-        endif()
-    endif()
 else()
     set(ADDITIONAL_PRIV_REQUIRES "")
-endif()
-
-if(CONFIG_AVM_ENABLE_OTP_SSL_NIFS OR CONFIG_AVM_ENABLE_OTP_CRYPTO_NIFS)
-   set(ADDITIONAL_PRIV_REQUIRES ${ADDITIONAL_PRIV_REQUIRES} "mbedtls")
 endif()
 
 # WHOLE_ARCHIVE option is supported only with esp-idf 5.x
@@ -72,6 +58,14 @@ idf_component_register(
     PRIV_REQUIRES "libatomvm" "avm_sys" "nvs_flash" "driver" "esp_event" "esp_wifi" "fatfs" ${ADDITIONAL_PRIV_REQUIRES}
     ${OPTIONAL_WHOLE_ARCHIVE}
 )
+
+# Add esp_driver_dac conditionally, older versions access it through the "driver" component
+# CONFIG_* is only available after the idf_component_register call
+if(CONFIG_AVM_ENABLE_DAC_NIF)
+    if(IDF_VERSION_MAJOR GREATER_EQUAL 6 OR (IDF_VERSION_MAJOR EQUAL 5 AND IDF_VERSION_MINOR GREATER_EQUAL 3))
+        target_link_libraries(${COMPONENT_LIB} PRIVATE idf::esp_driver_dac)
+    endif()
+endif()
 
 if (IDF_VERSION_MAJOR EQUAL 4)
     idf_build_set_property(
