@@ -25,6 +25,8 @@ set_target_properties(AtomVM PROPERTIES RUNTIME_OUTPUT_DIRECTORY ../../ ENABLE_E
 target_compile_features(AtomVM PUBLIC c_std_11)
 if(CMAKE_COMPILER_IS_GNUCC)
     target_compile_options(AtomVM PUBLIC -Wall -pedantic -Wextra -ggdb)
+elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    target_compile_options(AtomVM PUBLIC -Wall -pedantic -Wextra -g)
 endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
