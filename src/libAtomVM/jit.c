@@ -702,13 +702,7 @@ static bool jit_send(Context *ctx, JITState *jit_state)
         }
         ctx->x[0] = return_value;
     } else if (term_is_local_pid_or_port(recipient_term)) {
-        int local_process_id;
-        if (term_is_local_pid_or_port(recipient_term)) {
-            local_process_id = term_to_local_process_id(recipient_term);
-        } else {
-            set_error(ctx, jit_state, 0, BADARG_ATOM);
-            return false;
-        }
+        int local_process_id = term_to_local_process_id(recipient_term);
         globalcontext_send_message(ctx->global, local_process_id, ctx->x[1]);
         ctx->x[0] = ctx->x[1];
     } else if (term_is_atom(recipient_term)) {

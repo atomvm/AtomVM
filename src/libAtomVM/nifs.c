@@ -1142,7 +1142,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
     // msg is not in the port's heap
     NativeHandlerResult result = NativeContinue;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, 13, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
         AVM_ABORT();
     }
@@ -1239,7 +1239,7 @@ static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, 
     *is_alias = false;
     while (term_is_nonempty_list(monitor_opts)) {
         term option = term_get_list_head(monitor_opts);
-        if (term_is_tuple(option) && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
+        if (term_is_tuple(option) && term_get_tuple_arity(option) == 2 && term_get_tuple_element(option, 0) == ALIAS_ATOM) {
             *is_alias = true;
             switch (term_get_tuple_element(option, 1)) {
                 case EXPLICIT_UNALIAS_ATOM:
@@ -1254,7 +1254,7 @@ static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, 
                 default:
                     RAISE_ERROR(BADARG_ATOM);
             }
-        } else if (term_is_tuple(option) && term_get_tuple_element(option, 0) == TAG_ATOM) {
+        } else if (term_is_tuple(option) && term_get_tuple_arity(option) == 2 && term_get_tuple_element(option, 0) == TAG_ATOM) {
             RAISE_ERROR(UNSUPPORTED_ATOM);
         } else {
             RAISE_ERROR(BADARG_ATOM);

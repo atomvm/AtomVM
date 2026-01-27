@@ -802,6 +802,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
             }
             case CONTEXT_MONITOR_ALIAS: {
                 free(monitor);
+                break;
             }
         }
     }
@@ -1305,8 +1306,8 @@ COLD_FUNC void context_dump(Context *ctx)
                 break;
             }
             case CONTEXT_MONITOR_ALIAS: {
-                struct MonitorLocalMonitor *monitored_monitor = CONTAINER_OF(monitor, struct MonitorLocalMonitor, monitor);
-                fprintf(stderr, "has alias ref=%lu", (long unsigned) monitored_monitor->ref_data.ref_ticks);
+                struct MonitorAlias *monitor_alias = CONTAINER_OF(monitor, struct MonitorAlias, monitor);
+                fprintf(stderr, "has alias ref=%lu", (long unsigned) monitor_alias->ref_data.ref_ticks);
                 fprintf(stderr, "\n");
                 break;
             }

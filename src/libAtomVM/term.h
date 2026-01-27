@@ -162,8 +162,10 @@ extern "C" {
 // If you change a reference size, make sure it doesn't
 // conflict with other reference sizes on all architectures.
 #define SHORT_REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-#define TERM_BOXED_PROCESS_REF_SIZE SHORT_REF_SIZE + 1
+#define TERM_BOXED_PROCESS_REF_SIZE (SHORT_REF_SIZE + 1)
 #define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
+_Static_assert(SHORT_REF_SIZE < TERM_BOXED_PROCESS_REF_SIZE);
+_Static_assert(TERM_BOXED_PROCESS_REF_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE);
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
@@ -183,6 +185,14 @@ extern "C" {
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
 #define REFERENCE_RESOURCE_CONS_OFFSET 2
+
+#if TERM_BYTES == 4
+#define REFERENCE_PROCESS_PID_OFFSET 2
+
+#elif TERM_BYTES == 8
+#define REFERENCE_PROCESS_PID_OFFSET 2
+#endif
+
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
 #define TERM_STRING_SIZE(length) (2 * (length))
 #define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
