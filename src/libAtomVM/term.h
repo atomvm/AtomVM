@@ -134,7 +134,7 @@ extern "C" {
 #else
 // Enough size would be 4, but reference types
 // are distinguished by size and 4 conflicts with
-// TERM_BOXED_PROCESS_REF_SIZE on 32bit arch.
+// TERM_BOXED_REFERENCE_PROCESS_SIZE on 32bit arch.
 #define TERM_BOXED_REFERENCE_RESOURCE_SIZE 5
 #endif
 #define TERM_BOXED_REFERENCE_RESOURCE_HEADER (((TERM_BOXED_REFERENCE_RESOURCE_SIZE - 1) << 6) | TERM_BOXED_REF)
@@ -161,11 +161,10 @@ extern "C" {
 // Reference types are distinguished by their size.
 // If you change a reference size, make sure it doesn't
 // conflict with other reference sizes on all architectures.
-#define SHORT_REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
-#define TERM_BOXED_PROCESS_REF_SIZE (SHORT_REF_SIZE + 1)
-#define TERM_BOXED_PROCESS_REF_HEADER (((TERM_BOXED_PROCESS_REF_SIZE - 1) << 6) | TERM_BOXED_REF)
-_Static_assert(SHORT_REF_SIZE < TERM_BOXED_PROCESS_REF_SIZE);
-_Static_assert(TERM_BOXED_PROCESS_REF_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE);
+#define TERM_BOXED_REFERENCE_SHORT_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#define REF_SIZE _Pragma("REF_SIZE is deprecated, use TERM_BOXED_REFERENCE_SHORT_SIZE instead") TERM_BOXED_REFERENCE_SHORT_SIZE
+#define TERM_BOXED_REFERENCE_PROCESS_SIZE (TERM_BOXED_REFERENCE_SHORT_SIZE + 1)
+#define TERM_BOXED_REFERENCE_PROCESS_HEADER (((TERM_BOXED_REFERENCE_PROCESS_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
@@ -181,6 +180,11 @@ _Static_assert(TERM_BOXED_PROCESS_REF_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 #else
 #error
 #endif
+#define EXTERNAL_REF_MAX_WORDS 5
+#define TERM_BOXED_REFERENCE_MAX_SIZE EXTERNAL_REF_SIZE(EXTERNAL_REF_MAX_WORDS)
+_Static_assert(TERM_BOXED_REFERENCE_SHORT_SIZE < TERM_BOXED_REFERENCE_PROCESS_SIZE, "Short ref size must be smaller than process ref size");
+_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE, "Process ref size must be smaller than reference resource size");
+_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZE, "Max ref size can't be smaller than all other ref sizes");
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
@@ -948,7 +952,7 @@ static inline bool term_is_process_reference(term t)
 {
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
-        if (boxed_value[0] == TERM_BOXED_PROCESS_REF_HEADER) {
+        if (boxed_value[0] == TERM_BOXED_REFERENCE_PROCESS_HEADER) {
             return true;
         }
     }
@@ -2235,8 +2239,8 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
  */
 static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(heap, SHORT_REF_SIZE);
-    boxed_value[0] = ((SHORT_REF_SIZE - 1) << 6) | TERM_BOXED_REF;
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFERENCE_SHORT_SIZE);
+    boxed_value[0] = ((TERM_BOXED_REFERENCE_SHORT_SIZE - 1) << 6) | TERM_BOXED_REF;
 
 #if TERM_BYTES == 8
     boxed_value[1] = (term) ref_ticks;
@@ -2281,8 +2285,8 @@ static inline uint64_t term_to_ref_ticks(term rt)
  */
 static inline term term_make_process_reference(int32_t process_id, uint64_t ref_ticks, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_PROCESS_REF_SIZE);
-    boxed_value[0] = TERM_BOXED_PROCESS_REF_HEADER;
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFERENCE_PROCESS_SIZE);
+    boxed_value[0] = TERM_BOXED_REFERENCE_PROCESS_HEADER;
 
 #if TERM_BYTES == 4
     boxed_value[1] = (ref_ticks >> 32);

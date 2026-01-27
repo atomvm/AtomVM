@@ -164,7 +164,7 @@ void select_event_count_and_destroy_closed(struct ListHead *select_events, size_
  */
 void destroy_resource_monitors(struct RefcBinary *resource, GlobalContext *global);
 
-#define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + SHORT_REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
+#define SELECT_EVENT_NOTIFICATION_SIZE (TUPLE_SIZE(4) + TERM_BOXED_REFERENCE_SHORT_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE)
 
 /**
  * @brief Build a select event notification.

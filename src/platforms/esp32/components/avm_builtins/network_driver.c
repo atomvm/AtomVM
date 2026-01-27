@@ -58,7 +58,7 @@
 #define TCPIP_HOSTNAME_MAX_SIZE 255
 
 #define TAG "network_driver"
-#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE)
+#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
@@ -922,7 +922,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             default: {
                 ESP_LOGE(TAG, "Unrecognized command: %x", cmd);
                 // {Ref, {error, badarg}}
-                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
+                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
                 if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
                     return NativeContinue;
@@ -932,7 +932,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         }
     } else {
         // {Ref, {error, badarg}}
-        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
+        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
             return NativeContinue;

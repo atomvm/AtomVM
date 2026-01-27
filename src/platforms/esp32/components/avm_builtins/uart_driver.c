@@ -132,7 +132,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     int bin_size = term_binary_heap_size(event.size);
 
                     Heap heap;
-                    if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
                         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
                         AVM_ABORT();
                     }
@@ -515,7 +515,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
         int local_pid = term_to_local_process_id(gen_message.pid);
 
         if (is_closed) {
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + TERM_BOXED_PROCESS_REF_SIZE) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + TERM_BOXED_REFERENCE_PROCESS_SIZE) != MEMORY_GC_OK)) {
                 ESP_LOGE(TAG, "[uart_driver_consume_mailbox] Failed to allocate space for error tuple");
                 globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             }

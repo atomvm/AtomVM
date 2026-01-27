@@ -1142,7 +1142,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
 {
     // msg is not in the port's heap
     NativeHandlerResult result = NativeContinue;
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "Unable to allocate sufficient memory for console driver.\n");
         AVM_ABORT();
     }
@@ -1418,7 +1418,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
     }
 
     if (is_spawn_monitor) {
-        int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
+        int res_size = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             context_destroy(new_ctx);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -1730,7 +1730,7 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     UNUSED(argv);
 
     // a ref is 64 bits, hence 8 bytes
-    if (UNLIKELY(memory_ensure_free_opt(ctx, SHORT_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -4345,7 +4345,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         local_process_id = term_to_local_process_id(target_pid);
         // Monitoring self is possible but no monitor is actually created
         if (UNLIKELY(local_process_id == ctx->process_id)) {
-            if (UNLIKELY(memory_ensure_free_opt(ctx, SHORT_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
             uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
@@ -4357,7 +4357,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     }
 
     if (IS_NULL_PTR(target)) {
-        int res_size = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(5) + target_proc_size;
+        int res_size = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(5) + target_proc_size;
         if (UNLIKELY(memory_ensure_free_opt(ctx, res_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
@@ -4426,7 +4426,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         context_add_monitor(ctx, alias_monitor);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
@@ -6464,7 +6464,7 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_PROCESS_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_PROCESS_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 

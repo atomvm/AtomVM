@@ -775,7 +775,7 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 Context *target = globalcontext_get_process_nolock(glb, local_process_id);
                 // Target cannot be NULL as we processed Demonitor signals
                 assert(target != NULL);
-                int required_terms = TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(5);
+                int required_terms = TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(5);
                 if (UNLIKELY(memory_ensure_free(ctx, required_terms) != MEMORY_GC_OK)) {
                     // TODO: handle out of memory here
                     fprintf(stderr, "Cannot handle out of memory.\n");
