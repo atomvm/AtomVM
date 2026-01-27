@@ -79,7 +79,7 @@ static const char *gen_udp_moniker_atom = ATOM_STR("\xC", "$avm_gen_udp");
 static const char *native_udp_module_atom = ATOM_STR("\xC", "gen_udp_inet");
 
 static const RefData no_ref_data = {
-    .process_id = 0,
+    .type = RefTypeShort,
     .ref_ticks = 0,
 };
 

@@ -258,12 +258,39 @@ extern "C" {
 typedef struct GlobalContext GlobalContext;
 #endif
 
-typedef struct RefData RefData;
+enum RefType
+{
+    RefTypeShort,
+    RefTypeProcess,
+    RefTypeResource,
+    RefTypeExternal
+};
 
-struct RefData
+struct ProcessRefData
 {
     uint64_t ref_ticks;
     int32_t process_id;
+};
+
+struct ExternalRefData
+{
+    term node;
+    uint32_t creation;
+    uint16_t len;
+    const uint32_t *words;
+};
+
+typedef struct RefData RefData;
+struct RefData
+{
+    enum RefType type;
+    union
+    {
+        uint64_t ref_ticks;
+        struct ProcessRefData process;
+        void *resource;
+        struct ExternalRefData external;
+    };
 };
 
 typedef struct PrinterFun PrinterFun;
@@ -2145,7 +2172,7 @@ static inline bool term_is_nomatch_binary_pos_len(BinaryPosLen pos_len)
 
 static inline BinaryPosLen term_nomatch_binary_pos_len(void)
 {
-    return (BinaryPosLen){ .pos = -1, .len = -1 };
+    return (BinaryPosLen) { .pos = -1, .len = -1 };
 }
 
 /**
@@ -2274,23 +2301,6 @@ static inline uint32_t term_process_ref_to_process_id(term rt)
 #else
 #error "terms must be either 32 or 64 bit wide"
 #endif
-}
-
-static inline RefData term_to_ref_data(term t)
-{
-    RefData ref_data;
-    ref_data.ref_ticks = term_to_ref_ticks(t);
-    ref_data.process_id = term_is_process_reference(t) ? term_process_ref_to_process_id(t) : 0;
-    return ref_data;
-}
-
-static inline term term_from_ref_data(RefData ref_data, Heap *heap)
-{
-    if (ref_data.process_id) {
-        return term_make_process_reference(ref_data.process_id, ref_data.ref_ticks, heap);
-    } else {
-        return term_from_ref_ticks(ref_data.ref_ticks, heap);
-    }
 }
 
 /**
@@ -2429,7 +2439,7 @@ static inline uint64_t term_get_external_port_number(term t)
  * @param heap the heap to allocate memory in
  * @return an external heap term created using given parameters.
  */
-static inline term term_make_external_reference(term node, uint16_t len, uint32_t *data, uint32_t creation, Heap *heap)
+static inline term term_make_external_reference(term node, uint16_t len, const uint32_t *data, uint32_t creation, Heap *heap)
 {
     TERM_DEBUG_ASSERT(term_is_atom(node));
 
@@ -3081,6 +3091,58 @@ static inline term term_from_resource(void *resource, Heap *heap)
     term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     heap->root->mso_list = term_list_init_prepend(boxed_value + REFERENCE_RESOURCE_CONS_OFFSET, ret, heap->root->mso_list);
     return ret;
+}
+
+static inline RefData term_to_ref_data(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_reference(t));
+
+    RefData ref_data;
+    if (term_is_external_reference(t)) {
+        ref_data.type = RefTypeExternal;
+        ref_data.external.node = term_get_external_node(t);
+        ref_data.external.creation = term_get_external_node_creation(t);
+        ref_data.external.len = term_get_external_reference_len(t);
+        ref_data.external.words = term_get_external_reference_words(t);
+    } else if (term_is_process_reference(t)) {
+        ref_data.type = RefTypeProcess;
+        ref_data.process.ref_ticks = term_to_ref_ticks(t);
+        ref_data.process.process_id = term_process_ref_to_process_id(t);
+    } else if (term_is_resource_reference(t)) {
+        ref_data.type = RefTypeResource;
+        ref_data.resource = &term_resource_refc_binary_ptr(t)->data;
+    } else {
+        ref_data.type = RefTypeShort;
+        ref_data.ref_ticks = term_to_ref_ticks(t);
+    }
+
+    return ref_data;
+}
+
+static inline term term_from_ref_data(RefData ref_data, Heap *heap)
+{
+    switch (ref_data.type) {
+        case RefTypeShort: {
+            return term_from_ref_ticks(ref_data.ref_ticks, heap);
+        }
+        case RefTypeProcess: {
+            return term_make_process_reference(ref_data.process.process_id, ref_data.ref_ticks, heap);
+        }
+        case RefTypeResource: {
+            return term_from_resource(ref_data.resource, heap);
+        }
+        case RefTypeExternal: {
+            return term_make_external_reference(
+                ref_data.external.node,
+                ref_data.external.len,
+                ref_data.external.words,
+                ref_data.external.creation,
+                heap);
+        }
+        default: {
+            UNREACHABLE();
+        }
+    }
 }
 
 /**
