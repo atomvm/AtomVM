@@ -134,7 +134,7 @@ target_compile_features(libAtomVM PUBLIC c_std_11)
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} ${MAYBE_WERROR_FLAG} -Wextra -ggdb -Werror=incompatible-pointer-types)
 elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
-    target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} -Wno-gnu-zero-variadic-macro-arguments --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG})
+    target_compile_options(libAtomVM PUBLIC -Wall ${MAYBE_PEDANTIC_FLAG} -Wno-gnu-zero-variadic-macro-arguments --extra-warnings -Werror=incompatible-pointer-types ${MAYBE_WERROR_FLAG} -g)
 endif()
 
 if (ENABLE_REALLOC_GC)
