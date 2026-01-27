@@ -95,7 +95,7 @@ static void websocket_down(ErlNifEnv *caller_env, void *obj, ErlNifPid *pid, Erl
     }
 }
 
-#define TERM_WEBSOCKET_RESOURCE_SIZE (TERM_BOXED_RESOURCE_SIZE + SHORT_REF_SIZE + TUPLE_SIZE(3))
+#define TERM_WEBSOCKET_RESOURCE_SIZE (TERM_BOXED_RESOURCE_SIZE + TERM_BOXED_REFERENCE_SHORT_SIZE + TUPLE_SIZE(3))
 
 static term term_make_websocket_resource(struct WebsocketResource *rsrc, Heap *heap)
 {

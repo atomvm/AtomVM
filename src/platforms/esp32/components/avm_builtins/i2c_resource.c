@@ -230,7 +230,7 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     //
 
     // {'$i2c', Resource :: resource(), Ref :: reference()} :: i2c()
-    size_t requested_size = TUPLE_SIZE(3) + SHORT_REF_SIZE;
+    size_t requested_size = TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         i2c_driver_delete(i2c_num);
         ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);

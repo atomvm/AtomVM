@@ -41,7 +41,7 @@
 
 #pragma GCC diagnostic pop
 
-#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE)
+#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE)
 #define DEFAULT_HOSTNAME_FMT "atomvm-%02x%02x%02x%02x%02x%02x"
 #define DEFAULT_HOSTNAME_SIZE (strlen("atomvm-") + 12 + 1)
 
@@ -759,7 +759,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
 
             default: {
                 // {Ref, {error, badarg}}
-                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
+                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
                 if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     return NativeContinue;
                 }
@@ -768,7 +768,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         }
     } else {
         // {Ref, {error, badarg}}
-        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_PROCESS_REF_SIZE + TUPLE_SIZE(2);
+        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
             return NativeContinue;
         }

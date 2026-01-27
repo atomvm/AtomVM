@@ -178,7 +178,7 @@ EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType ta
     if (is_named) {
         *ret = name;
     } else {
-        if (UNLIKELY(memory_ensure_free_opt(ctx, SHORT_REF_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        if (UNLIKELY(memory_ensure_free_opt(ctx, TERM_BOXED_REFERENCE_SHORT_SIZE, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
             ets_hashtable_destroy(hashtable, ctx->global);
             free(ets_table);
             return EtsAllocationFailure;
