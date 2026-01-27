@@ -69,9 +69,9 @@
 
 #define FLOAT_BUF_SIZE 64
 
-#define RAISE(a, b)  \
-    ctx->x[0] = (a); \
-    ctx->x[1] = (b); \
+#define RAISE(a, b)              \
+    ctx->exception_class = (a);  \
+    ctx->exception_reason = (b); \
     return term_invalid_term();
 
 #ifndef MAX
@@ -3068,9 +3068,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         int new_value = term_to_int(value);
         int nb_processors = smp_get_online_processors();
         if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
-            argv[0] = ERROR_ATOM;
-            argv[1] = BADARG_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(BADARG_ATOM);
         }
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
         };
@@ -3615,11 +3613,7 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term t = argv[0];
-
-    ctx->x[0] = THROW_ATOM;
-    ctx->x[1] = t;
-    return term_invalid_term();
+    RAISE(THROW_ATOM, argv[0]);
 }
 
 static term nif_erlang_raise(Context *ctx, int argc, term argv[])
@@ -3630,10 +3624,8 @@ static term nif_erlang_raise(Context *ctx, int argc, term argv[])
     if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
         return BADARG_ATOM;
     }
-    ctx->x[0] = ex_class;
-    ctx->x[1] = argv[1];
-    ctx->x[2] = term_nil();
-    return term_invalid_term();
+    ctx->exception_stacktrace = term_nil();
+    RAISE(ex_class, argv[1]);
 }
 
 static term nif_ets_new(Context *ctx, int argc, term argv[])

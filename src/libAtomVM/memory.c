@@ -298,6 +298,13 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
     TRACE("- Running copy GC on exit reason\n");
     ctx->exit_reason = memory_shallow_copy_term(old_root_fragment, ctx->exit_reason, &ctx->heap.heap_ptr, true);
 
+    TRACE("- Running copy GC on exception data\n");
+    // ctx->exception_class is always an atom
+    ctx->exception_reason = memory_shallow_copy_term(
+        old_root_fragment, ctx->exception_reason, &ctx->heap.heap_ptr, true);
+    ctx->exception_stacktrace = memory_shallow_copy_term(
+        old_root_fragment, ctx->exception_stacktrace, &ctx->heap.heap_ptr, true);
+
     TRACE("- Running copy GC on group leader\n");
     ctx->group_leader = memory_shallow_copy_term(old_root_fragment, ctx->group_leader, &ctx->heap.heap_ptr, true);
 
