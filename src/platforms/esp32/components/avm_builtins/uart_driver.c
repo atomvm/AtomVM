@@ -64,7 +64,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx);
 #endif
 
 static const RefData no_ref_data = {
-    .process_id = 0,
+    .type = RefTypeShort,
     .ref_ticks = 0,
 };
 
