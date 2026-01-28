@@ -177,8 +177,10 @@ format(IODevice, Format, Data) ->
 %%          formatting capabilities.
 %% @end
 %%-----------------------------------------------------------------------------
--spec fwrite(IODevice :: device(), Format :: string(), Args :: list()) -> string().
-fwrite(IODevice, Format, Args) when is_list(Format) andalso is_list(Args) ->
+-spec fwrite(IODevice :: device(), Format :: format(), Args :: list()) -> ok.
+fwrite(IODevice, Format, Args) when
+    (is_list(Format) orelse is_binary(Format)) andalso is_list(Args)
+->
     Msg =
         try
             io_lib:format(Format, Args)
