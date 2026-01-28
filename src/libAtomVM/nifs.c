@@ -1453,7 +1453,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
         } else {
-            ref_data = (RefData) { .type = RefTypeShort, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
+            ref_data = (RefData){ .type = RefTypeShort, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
         }
 
         struct Monitor *new_monitor = monitor_new(term_from_local_process_id(ctx->process_id), ref_data, false);
@@ -4495,7 +4495,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
     } else {
-        ref_data = (RefData) { .type = RefTypeShort, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
+        ref_data = (RefData){ .type = RefTypeShort, .ref_ticks = globalcontext_get_ref_ticks(ctx->global) };
     }
     struct Monitor *self_monitor;
     if (term_is_atom(target_proc)) {
