@@ -50,6 +50,7 @@
     partition_erase_range/2, partition_erase_range/3,
     partition_list/0,
     partition_read/3,
+    partition_mmap/3,
     partition_write/3,
     rtc_slow_get_binary/0,
     rtc_slow_set_binary/1,
@@ -522,7 +523,7 @@ partition_list() ->
 
 %%-----------------------------------------------------------------------------
 %% @param   partition_id The id of the partition to read from eg. "main.avm"
-%% @param   offset Starting offset in bytes where to begin reading
+%% @param   offset Starting offset in the partition where to begin reading
 %% @param   read_size Number of bytes to read
 %% @returns {ok, data} on success, error on failure
 %% @doc     Read binary data from a specific partition at the given offset.
@@ -536,8 +537,25 @@ partition_read(_Partition_id, _Offset, _Read_size) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   partition_id The id of the partition to read from eg. "main.avm"
+%% @param   offset Starting offset in the partition where to begin reading
+%% @param   read_size Number of bytes to read
+%% @returns {ok, data} on success, error on failure
+%% @doc     Read binary data from a specific partition at the given offset,
+%%          mapping it in RAM. The partition is unmapped when all references
+%%          are garbage collected.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec partition_mmap(
+    Partition_id :: binary(), Offset :: non_neg_integer(), Read_size :: non_neg_integer()
+) -> {ok, binary()} | error.
+partition_mmap(_Partition_id, _Offset, _Read_size) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   partition_id The id of the partition to write to eg. "main.avm"
-%% @param   offset Starting offset in bytes where to begin writing
+%% @param   offset Starting offset in the partition where to begin writing
 %% @param   data Binary data to write to the partition
 %% @returns ok on success, error on failure
 %% @doc     Writes binary data to a specific partition at the given offset.
