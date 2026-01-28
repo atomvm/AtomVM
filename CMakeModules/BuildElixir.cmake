@@ -29,7 +29,7 @@ macro(pack_archive avm_name)
             COMMAND sh -c "mv ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.${module_name}/Elixir.*.beam ${CMAKE_CURRENT_BINARY_DIR}/beams/"
             COMMAND rmdir ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.${module_name}
             DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.ex
-            COMMENT "Compiling ${module_name}.ex (core)"
+            COMMENT "Compiling ${module_name}.ex"
             VERBATIM
         )
         set(BEAMS ${BEAMS} ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam)
