@@ -477,7 +477,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     } else {
         if (UNLIKELY(!bool_to_mbedtls_operation(flag_or_options, &operation))) {
-            error_atom = BADARG_ATOM;
+            error_atom = make_crypto_error(__FILE__, __LINE__, "Options are not a boolean or a proper list", ctx);
             goto raise_error;
         }
     }
