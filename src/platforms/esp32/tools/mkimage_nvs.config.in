@@ -2,6 +2,7 @@
 % This file is part of AtomVM.
 %
 % Copyright 2020-2021 Fred Dushin <fred@dushin.net>
+% Copyright 2025 Winford (UncleGrumpy) <winford@object.stream>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -29,6 +30,11 @@
             name => "partition-table",
             offset => "0x8000",
             path => ["@CMAKE_BINARY_DIR@/partition_table/partition-table.bin"]
+        },
+        #{
+            name => "nvs",
+            offset => "0x9000",
+            path => ["@CMAKE_BINARY_DIR@/nvs.bin"]
         },
         #{
             name => "AtomVM Virtual Machine",

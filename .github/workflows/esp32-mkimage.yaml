@@ -128,7 +128,7 @@ jobs:
       shell: bash
       working-directory: ./src/platforms/esp32/
       run: |
-        cp sdkconfig.release-defaults sdkconfig.defaults
+        cp sdkconfig.release-defaults.in sdkconfig.defaults.in
 
     - name: "Handle esp32p4 variants sdkconfig"
       if: startsWith(matrix.soc, 'esp32p4') && matrix.soc != 'esp32p4'
@@ -150,28 +150,21 @@ jobs:
       run: |
         rm -rf build
         . $IDF_PATH/export.sh
-        if [ ! -z "${{ matrix.flavor }}" ]
+        if [ "${{ matrix.flavor }}" = "-elixir" ]
         then
-          mv partitions${{ matrix.flavor }}.csv partitions.csv
+          idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target ${{ env.SOC_TARGET }}
+        else
+          idf.py -DATOMVM_ELIXIR_SUPPORT=off set-target ${{ env.SOC_TARGET }}
         fi
-        idf.py set-target ${{ env.SOC_TARGET }}
         idf.py reconfigure
         idf.py build
 
     - name: "Create a ${{ matrix.soc }}${{ matrix.flavor }} image"
       working-directory: ./src/platforms/esp32/build
       run: |
-        if [ -z "${{ matrix.flavor }}" ]
-        then
-          ./mkimage.sh
-          if [ "${{ matrix.soc }}" != "${{ env.SOC_TARGET }}" ]; then
-            mv atomvm-${{ env.SOC_TARGET }}.img atomvm-${{ matrix.soc }}.img
-          fi
-        else
-          FLAVOR_SUFFIX=$(echo "${{ matrix.flavor }}" | sed 's/-//g')
-          BOOT_FILE="../../../../build/libs/esp32boot/${FLAVOR_SUFFIX}_esp32boot.avm"
-          ./mkimage.sh --boot "$BOOT_FILE"
-          mv atomvm-${{ env.SOC_TARGET }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
+        ./mkimage.sh
+        if [ "${{ matrix.soc }}" != "${{ env.SOC_TARGET }}" ]; then
+          mv atomvm-${{ env.SOC_TARGET }}${{ matrix.flavor }}.img atomvm-${{ matrix.soc }}${{ matrix.flavor }}.img
         fi
         ls -l *.img
 
