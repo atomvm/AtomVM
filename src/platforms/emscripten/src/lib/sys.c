@@ -176,6 +176,13 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_ABORT();
+    }
+#endif
+
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
