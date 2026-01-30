@@ -87,7 +87,7 @@ if (MbedTLS_FOUND)
         set(CMAKE_REQUIRED_INCLUDES "${MBEDTLS_ROOT_DIR}/include")
     endif()
     include(CheckCSourceCompiles)
-    set(CMAKE_REQUIRED_LIBRARIES MbedTLS::mbedcrypto)
+    set(CMAKE_REQUIRED_LIBRARIES MbedTLS::mbedtls)
     check_c_source_compiles("
         #include <mbedtls/version.h>
         #ifndef MBEDTLS_PSA_CRYPTO_C
