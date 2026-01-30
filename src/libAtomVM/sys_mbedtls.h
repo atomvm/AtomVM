@@ -21,8 +21,15 @@
 #ifndef _SYS_MBEDTLS_H_
 #define _SYS_MBEDTLS_H_
 
+// Include version.h to get MBEDTLS_VERSION_NUMBER (available in all versions)
+#include <mbedtls/version.h>
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#else
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +43,7 @@ extern "C" {
 // On non-SMP builds, we don't need any lock because all calls we make to
 // mbedtls_ctr_drbg* functions are done from the scheduler thread itself.
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 /**
  * @brief get and acquire lock on mbedtls_entropy_context.
  * @details this function must be called from a scheduler thread (nif,
@@ -60,7 +68,9 @@ void sys_mbedtls_entropy_context_unlock(GlobalContext *global);
  * the entropy mutex to call `mbedtls_entropy_func`.
  */
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size);
+#endif
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 /**
  * @brief get and acquire lock on mbedtls_ctr_drbg_context.
  * @details this function must be called from a scheduler thread (nif,
@@ -78,6 +88,7 @@ mbedtls_ctr_drbg_context *sys_mbedtls_get_ctr_drbg_context_lock(GlobalContext *g
  * @param global the global context
  */
 void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global);
+#endif
 
 #ifdef __cplusplus
 }
