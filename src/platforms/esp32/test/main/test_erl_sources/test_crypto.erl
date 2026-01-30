@@ -169,7 +169,7 @@ test_crypto_one_time() ->
     true = is_list(Message2),
 
     % Invalid opts
-    badarg = get_error(fun() ->
+    {badarg, {File3, Line3}, Message3} = get_error(fun() ->
         crypto:crypto_one_time(
             aes_128_ctr,
             <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
@@ -178,6 +178,9 @@ test_crypto_one_time() ->
             {bad}
         )
     end),
+    true = is_list(File3),
+    true = is_integer(Line3),
+    true = is_list(Message3),
 
     ok.
 
