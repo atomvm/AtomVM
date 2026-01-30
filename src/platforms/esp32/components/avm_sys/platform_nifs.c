@@ -42,11 +42,17 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/cipher.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
+#endif
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#endif
+
 #include <soc/soc.h>
 
 #include <stdlib.h>

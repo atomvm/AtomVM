@@ -19,6 +19,8 @@ jobs:
     runs-on: "ubuntu-24.04"
     strategy:
       fail-fast: false
+      matrix:
+        mbedtls: ["default", "mbedtls@4"]
 
     steps:
     - name: "Checkout repo"
@@ -42,9 +44,25 @@ jobs:
 
     - name: "Install deps"
       run: |
-        sudo apt install -y build-essential cmake gperf zlib1g-dev libmbedtls-dev
+        sudo apt install -y build-essential cmake gperf zlib1g-dev
+        if [[ "${{ matrix.mbedtls }}" == "default" ]]; then
+            sudo apt install -y libmbedtls-dev
+        fi
         # Get a more recent valgrind
         sudo snap install valgrind --classic
+
+    - name: "Install specific MbedTLS version"
+      if: matrix.mbedtls == 'mbedtls@4'
+      run: |
+        git clone --depth 1 --branch mbedtls-4.0.0 --recurse-submodules https://github.com/Mbed-TLS/mbedtls
+        cd mbedtls
+        mkdir build
+        cd build
+        cmake -DENABLE_TESTING=OFF -DUSE_SHARED_MBEDTLS_LIBRARY=On -DCMAKE_INSTALL_PREFIX=/usr/local ..
+        make -j$(nproc)
+        sudo make install
+        sudo ldconfig
+        echo "MBEDTLS_ROOT_DIR=/usr/local" >> $GITHUB_ENV
 
     # Builder info
     - name: "System info"
@@ -70,7 +88,7 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+        cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ${MBEDTLS_ROOT_DIR:+-DMBEDTLS_ROOT_DIR=$MBEDTLS_ROOT_DIR} ..
 
     - name: "Build: run make"
       working-directory: build
@@ -130,7 +148,7 @@ jobs:
 
     - name: Release
       uses: softprops/action-gh-release@v3.0.0
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls == 'default'
       with:
         draft: true
         fail_on_unmatched_files: true

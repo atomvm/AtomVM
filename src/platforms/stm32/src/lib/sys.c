@@ -27,6 +27,9 @@
 #include <defaultatoms.h>
 #include <scheduler.h>
 #include <sys.h>
+#if ATOMVM_HAS_MBEDTLS
+#include <sys_mbedtls.h>
+#endif
 
 #ifdef ATOMVM_HAS_MBEDTLS
 #include <mbedtls/platform_time.h>
@@ -223,6 +226,14 @@ void sys_init_platform(GlobalContext *glb)
         AVM_LOGE(TAG, "Out of memory!");
         AVM_ABORT();
     }
+#if ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (status != PSA_SUCCESS) {
+        AVM_ABORT();
+    }
+#endif
+#endif
     glb->platform_data = platform;
     list_init(&platform->locked_pins);
 #ifdef ATOMVM_HAS_MBEDTLS
