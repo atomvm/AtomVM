@@ -41,10 +41,12 @@ extern "C" {
         return term_invalid_term();            \
     }
 
-#define RAISE_ERROR(error_type_atom) \
-    ctx->x[0] = ERROR_ATOM;          \
-    ctx->x[1] = (error_type_atom);   \
-    return term_invalid_term();
+#define RAISE_ERROR(error_type_atom)   \
+    do {                               \
+        ctx->x[0] = ERROR_ATOM;        \
+        ctx->x[1] = (error_type_atom); \
+        return term_invalid_term();    \
+    } while (0);
 
 const struct Nif *nifs_get(const char *mfa);
 
