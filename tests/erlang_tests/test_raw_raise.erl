@@ -51,7 +51,7 @@ do_raise() ->
 
 do_catch2() ->
     try ?MODULE:do_raise_not_error() of
-        X -> 0
+        _ -> 0
     catch
         _:_ -> 1
     end.
