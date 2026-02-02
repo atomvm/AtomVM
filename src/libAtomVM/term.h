@@ -3111,7 +3111,7 @@ static inline RefData term_to_ref_data(term t)
 {
     TERM_DEBUG_ASSERT(term_is_reference(t));
 
-    RefData ref_data;
+    RefData ref_data = { 0 }; // Needed for GCC 10
     if (term_is_external_reference(t)) {
         ref_data.type = RefTypeExternal;
         ref_data.external.node = term_get_external_node(t);

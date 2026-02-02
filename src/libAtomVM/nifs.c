@@ -1382,7 +1382,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
         ref_data.ref_ticks = globalcontext_get_ref_ticks(ctx->global);
         struct Monitor *alias_monitor = NULL;
         if (is_alias) {
-            ref_data = (RefData) {
+            ref_data = (RefData){
                 .type = RefTypeProcess,
                 .process = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id }
             };
@@ -4387,7 +4387,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
     RefData ref_data;
     struct Monitor *alias_monitor = NULL;
     if (is_alias) {
-        ref_data = (RefData) {
+        ref_data = (RefData){
             .type = RefTypeProcess,
             .process = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id }
         };
