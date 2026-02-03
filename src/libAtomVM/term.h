@@ -194,7 +194,7 @@ _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZ
 #define REFERENCE_PROCESS_PID_OFFSET 2
 
 #elif TERM_BYTES == 8
-#define REFERENCE_PROCESS_PID_OFFSET 2
+#define REFERENCE_PROCESS_PID_OFFSET 1
 #endif
 
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
