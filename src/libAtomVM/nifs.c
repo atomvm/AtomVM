@@ -1264,7 +1264,7 @@ static term parse_monitor_opts(Context *ctx, term monitor_opts, bool *is_alias, 
     }
 
     if (UNLIKELY(!term_is_nil(monitor_opts))) {
-        return RAISE_ERROR(BADARG_ATOM);
+        RAISE_ERROR(BADARG_ATOM);
     }
 
     return OK_ATOM;
