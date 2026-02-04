@@ -18,17 +18,26 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#ifndef AVM_NO_JIT
+#ifndef _JIT_STREAM_FLASH_PLATFORM_H_
+#define _JIT_STREAM_FLASH_PLATFORM_H_
 
-#include "context.h"
-#include "jit.h"
-#include "term.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
-{
-    UNUSED(ctx);
-    UNUSED(jit_stream);
-    return NULL;
-}
-
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+// ESP32 flash constants
+#define FLASH_SECTOR_SIZE 4096
+#define FLASH_PAGE_SIZE 256
+
+// JIT code is stored in main.avm partition
+#define JIT_PARTITION_NAME "main.avm"
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // _JIT_STREAM_FLASH_PLATFORM_H_

@@ -164,6 +164,7 @@
     stream :: stream(),
     offset :: non_neg_integer(),
     branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    jump_table_start :: non_neg_integer(),
     available_regs :: [riscv32_register()],
     used_regs :: [riscv32_register()],
     labels :: [{integer() | reference(), integer()}],
@@ -183,6 +184,7 @@
 -type condition() ::
     {riscv32_register(), '<', integer()}
     | {maybe_free_riscv32_register(), '<', riscv32_register()}
+    | {integer(), '<', maybe_free_riscv32_register()}
     | {maybe_free_riscv32_register(), '==', integer()}
     | {maybe_free_riscv32_register(), '!=', riscv32_register() | integer()}
     | {'(int)', maybe_free_riscv32_register(), '==', integer()}
@@ -271,6 +273,7 @@ new(Variant, StreamModule, Stream) ->
         stream_module = StreamModule,
         stream = Stream,
         branches = [],
+        jump_table_start = 0,
         offset = StreamModule:offset(Stream),
         available_regs = ?AVAILABLE_REGS,
         used_regs = [],
@@ -404,46 +407,35 @@ assert_all_native_free(#state{
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec jump_table(state(), pos_integer()) -> state().
-jump_table(State, LabelsCount) ->
-    jump_table0(State, 0, LabelsCount).
+jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, LabelsCount) ->
+    JumpTableStart = StreamModule:offset(Stream0),
+    jump_table0(State#state{jump_table_start = JumpTableStart}, 0, LabelsCount).
 
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
-    #state{stream_module = StreamModule, stream = Stream0, branches = Branches} = State,
+    #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
     % Create jump table entry: AUIPC + JALR (8 bytes total)
-    % This will be patched later in update_branches/2
-    Offset = StreamModule:offset(Stream0),
+    % This will be patched in add_label when the label offset is known
     JumpEntry = <<16#FFFFFFFF:32, 16#FFFFFFFF:32>>,
     Stream1 = StreamModule:append(Stream0, JumpEntry),
-
-    % Record both AUIPC and JALR offsets for patching
-    Reloc = {N, Offset, jump_table_auipc_jalr},
-    UpdatedState = State#state{stream = Stream1, branches = [Reloc | Branches]},
-
-    jump_table0(UpdatedState, N + 1, LabelsCount).
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount).
 
 %%-----------------------------------------------------------------------------
-%% @doc Rewrite stream to update all branches for labels.
+%% @doc Patch a single branch in the stream
 %% @end
-%% @param State current backend state
-%% @return Updated backend state
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param Offset offset of the branch to patch
+%% @param Type type of the branch
+%% @param LabelOffset target label offset
+%% @return Updated stream
 %%-----------------------------------------------------------------------------
--spec update_branches(state()) -> state().
-update_branches(#state{branches = []} = State) ->
-    State;
-update_branches(
-    #state{
-        stream_module = StreamModule,
-        stream = Stream0,
-        branches = [{Label, Offset, Type} | BranchesT],
-        labels = Labels
-    } = State
-) ->
-    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
+-spec patch_branch(module(), stream(), non_neg_integer(), any(), non_neg_integer()) -> stream().
+patch_branch(StreamModule, Stream, Offset, Type, LabelOffset) ->
     Rel = LabelOffset - Offset,
     NewInstr =
         case Type of
@@ -490,37 +482,64 @@ update_branches(
                             6 -> <<Entry/binary, (jit_riscv32_asm:c_nop())/binary>>;
                             8 -> Entry
                         end
-                end;
-            jump_table_auipc_jalr ->
-                % Calculate PC-relative offset from AUIPC instruction to target
-                % AUIPC is at Offset, JALR is at Offset+4
-                % Target is at LabelOffset
-                % Offset from AUIPC PC to target
-                PCRelOffset = LabelOffset - Offset,
-
-                % Split into upper 20 bits and lower 12 bits
-                % RISC-V encodes: target = PC + (upper20 << 12) + sign_ext(lower12)
-                % If lower12 >= 0x800, it's negative when sign-extended, so add 1 to upper
-                Upper20 = (PCRelOffset + 16#800) bsr 12,
-                Lower12 = PCRelOffset band 16#FFF,
-                % Sign-extend lower 12 bits for JALR immediate
-                Lower12Signed =
-                    if
-                        Lower12 >= 16#800 -> Lower12 - 16#1000;
-                        true -> Lower12
-                    end,
-
-                % Encode AUIPC and JALR with computed offsets
-                I1 = jit_riscv32_asm:auipc(a3, Upper20),
-                I2 = jit_riscv32_asm:jalr(zero, a3, Lower12Signed),
-                % Map to 8 bytes
-                JumpTableEntry = <<I1/binary, I2/binary>>,
-                case byte_size(JumpTableEntry) of
-                    6 -> <<JumpTableEntry/binary, (jit_riscv32_asm:c_nop())/binary>>;
-                    8 -> JumpTableEntry
                 end
         end,
-    Stream1 = StreamModule:replace(Stream0, Offset, NewInstr),
+    StreamModule:replace(Stream, Offset, NewInstr).
+
+%%-----------------------------------------------------------------------------
+%% @doc Patch all branches targeting a specific label and return remaining branches
+%% @end
+%% @param StreamModule stream module
+%% @param Stream stream state
+%% @param TargetLabel label to patch branches for
+%% @param LabelOffset offset of the target label
+%% @param Branches list of pending branches
+%% @return {UpdatedStream, RemainingBranches}
+%%-----------------------------------------------------------------------------
+-spec patch_branches_for_label(
+    module(),
+    stream(),
+    integer(),
+    non_neg_integer(),
+    [{integer(), non_neg_integer(), any()}]
+) -> {stream(), [{integer(), non_neg_integer(), any()}]}.
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Branches, []).
+
+patch_branches_for_label(_StreamModule, Stream, _TargetLabel, _LabelOffset, [], Acc) ->
+    {Stream, lists:reverse(Acc)};
+patch_branches_for_label(
+    StreamModule,
+    Stream0,
+    TargetLabel,
+    LabelOffset,
+    [{Label, Offset, Type} | Rest],
+    Acc
+) when Label =:= TargetLabel ->
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
+    patch_branches_for_label(StreamModule, Stream1, TargetLabel, LabelOffset, Rest, Acc);
+patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, [Branch | Rest], Acc) ->
+    patch_branches_for_label(StreamModule, Stream, TargetLabel, LabelOffset, Rest, [Branch | Acc]).
+
+%%-----------------------------------------------------------------------------
+%% @doc Rewrite stream to update all branches for labels.
+%% @end
+%% @param State current backend state
+%% @return Updated backend state
+%%-----------------------------------------------------------------------------
+-spec update_branches(state()) -> state().
+update_branches(#state{branches = []} = State) ->
+    State;
+update_branches(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        branches = [{Label, Offset, Type} | BranchesT],
+        labels = Labels
+    } = State
+) ->
+    {Label, LabelOffset} = lists:keyfind(Label, 1, Labels),
+    Stream1 = patch_branch(StreamModule, Stream0, Offset, Type, LabelOffset),
     update_branches(State#state{stream = Stream1, branches = BranchesT}).
 
 %%-----------------------------------------------------------------------------
@@ -937,16 +956,29 @@ if_else_block(
         {beq | bne | blt | bge, atom(), atom() | integer()},
         non_neg_integer()
     }.
-if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '<', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     %% RISC-V: bge Reg, zero, offset (branch if Reg >= 0, i.e., NOT negative/NOT less than 0)
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
-    State1 = State0#state{stream = Stream1},
-    {State1, {bge, Reg, zero}, 0};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {bge, Reg, zero}, 0};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val), Val >= 0, Val =< 255 ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     % RISC-V: bge Reg, Val, offset (branch if Reg >= Val, i.e., NOT less than)
     % Load immediate into a temp register for comparison
     [Temp | _] = State0#state.available_regs,
@@ -956,12 +988,18 @@ if_block_cond(
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
-    State2 = State1#state{stream = Stream2},
-    {State2, {bge, Reg, Temp}, BranchDelta};
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Reg, Temp}, BranchDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val) ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     % RISC-V: bge Reg, Temp, offset (branch if Reg >= Temp, i.e., NOT less than)
     OffsetBefore = StreamModule:offset(Stream0),
     State1 = mov_immediate(State0, Temp, Val),
@@ -969,8 +1007,47 @@ if_block_cond(
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
-    State2 = State1#state{stream = Stream2},
-    {State2, {bge, Reg, Temp}, BranchDelta};
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Reg, Temp}, BranchDelta};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % RISC-V: bge Temp, Reg, offset (branch if Val >= Reg, i.e., NOT Val < Reg)
+    OffsetBefore = StreamModule:offset(Stream0),
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream2 = StreamModule:append(Stream1, BranchInstr),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Temp, Reg}, BranchDelta};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % RISC-V: bge Temp, Reg, offset (branch if Val >= Reg, i.e., NOT Val < Reg)
+    OffsetBefore = StreamModule:offset(Stream0),
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream2 = StreamModule:append(Stream1, BranchInstr),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Temp, Reg}, BranchDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -2355,23 +2432,32 @@ set_continuation_to_label(
         stream_module = StreamModule,
         stream = Stream0,
         available_regs = [Temp | _],
-        branches = Branches
+        branches = Branches,
+        labels = Labels
     } = State,
     Label
 ) ->
-    % Similar to AArch64: use pc_relative_address with a relocation that will be
-    % resolved to point directly to the label's actual address (not the jump table entry)
     Offset = StreamModule:offset(Stream0),
-    % Emit placeholder for pc_relative_address (auipc + addi)
-    % Reserve 8 bytes (2 x 32-bit instructions) with all-1s placeholder for flash programming
-    % The relocation will replace these with the correct offset
-    I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
-    Reloc = {Label, Offset, {adr, Temp}},
-    % Store continuation (jit_state is in a1)
-    I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
-    Code = <<I1/binary, I2/binary>>,
-    Stream1 = StreamModule:append(Stream0, Code),
-    State#state{stream = Stream1, branches = [Reloc | Branches]}.
+    case lists:keyfind(Label, 1, Labels) of
+        {Label, LabelOffset} ->
+            % Label is already known, emit direct pc-relative address without relocation
+            Rel = LabelOffset - Offset,
+            I1 = pc_relative_address(Temp, Rel),
+            I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1};
+        false ->
+            % Label not yet known, emit placeholder and add relocation
+            % Reserve 8 bytes (2 x 32-bit instructions) with all-1s placeholder for flash programming
+            % The relocation will replace these with the correct offset
+            I1 = <<16#FFFFFFFF:32/little, 16#FFFFFFFF:32/little>>,
+            Reloc = {Label, Offset, {adr, Temp}},
+            I2 = jit_riscv32_asm:sw(?JITSTATE_REG, Temp, ?JITSTATE_CONTINUATION_OFFSET),
+            Code = <<I1/binary, I2/binary>>,
+            Stream1 = StreamModule:append(Stream0, Code),
+            State#state{stream = Stream1, branches = [Reloc | Branches]}
+    end.
 
 %% @doc Set the contination to a given offset
 %% Return a reference so the offset will be updated with update_branches
@@ -3062,5 +3148,60 @@ add_label(#state{stream_module = StreamModule, stream = Stream0} = State0, Label
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
 -spec add_label(state(), integer() | reference(), integer()) -> state().
+add_label(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        jump_table_start = JumpTableStart,
+        branches = Branches,
+        labels = Labels
+    } = State,
+    Label,
+    LabelOffset
+) when is_integer(Label) ->
+    % Patch the jump table entry immediately
+    % Each jump table entry is AUIPC + JALR (8 bytes)
+    JumpTableEntryOffset = JumpTableStart + Label * 8,
+
+    % Calculate PC-relative offset from AUIPC instruction to target
+    PCRelOffset = LabelOffset - JumpTableEntryOffset,
+
+    % Split into upper 20 bits and lower 12 bits
+    % RISC-V encodes: target = PC + (upper20 << 12) + sign_ext(lower12)
+    % If lower12 >= 0x800, it's negative when sign-extended, so add 1 to upper
+    Upper20 = (PCRelOffset + 16#800) bsr 12,
+    Lower12 = PCRelOffset band 16#FFF,
+    % Sign-extend lower 12 bits for JALR immediate
+    Lower12Signed =
+        if
+            Lower12 >= 16#800 -> Lower12 - 16#1000;
+            true -> Lower12
+        end,
+
+    % Encode AUIPC and JALR with computed offsets
+    I1 = jit_riscv32_asm:auipc(a3, Upper20),
+    I2 = jit_riscv32_asm:jalr(zero, a3, Lower12Signed),
+    % Create 8-byte jump table entry
+    JumpTableEntry = <<I1/binary, I2/binary>>,
+    PaddedEntry =
+        case byte_size(JumpTableEntry) of
+            6 -> <<JumpTableEntry/binary, (jit_riscv32_asm:c_nop())/binary>>;
+            8 -> JumpTableEntry
+        end,
+
+    Stream1 = StreamModule:replace(Stream0, JumpTableEntryOffset, PaddedEntry),
+
+    % Eagerly patch any branches targeting this label
+    {Stream2, RemainingBranches} = patch_branches_for_label(
+        StreamModule,
+        Stream1,
+        Label,
+        LabelOffset,
+        Branches
+    ),
+
+    State#state{
+        stream = Stream2, branches = RemainingBranches, labels = [{Label, LabelOffset} | Labels]
+    };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
