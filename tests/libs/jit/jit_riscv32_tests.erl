@@ -1188,6 +1188,42 @@ call_only_or_schedule_next_and_label_relocation_test() ->
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
+call_only_or_schedule_next_known_label_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
+    State2 = ?BACKEND:add_label(State1, 1),
+    State3 = ?BACKEND:add_label(State2, 2, 16#36),
+    State4 = ?BACKEND:call_only_or_schedule_next(State3, 2),
+    State5 = ?BACKEND:call_primitive_last(State4, 0, [ctx, jit_state]),
+    % OP_INT_CALL_END
+    State6 = ?BACKEND:add_label(State5, 0),
+    State7 = ?BACKEND:call_primitive_last(State6, 1, [ctx, jit_state]),
+    State8 = ?BACKEND:update_branches(State7),
+    Stream = ?BACKEND:stream(State8),
+    Dump =
+        <<
+            "   0:  00000697            auipc   a3,0x0\n"
+            "   4:  03c68067            jr  60(a3) # 0x3c\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  01068067            jr  16(a3) # 0x18\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  02668067            jr  38(a3) # 0x36\n"
+            "  18:  0085af83            lw  t6,8(a1)\n"
+            "  1c:  1ffd                    addi    t6,t6,-1\n"
+            "  1e:  01f5a423            sw  t6,8(a1)\n"
+            "  22:  000f9a63            bnez    t6,0x36\n"
+            "  26:  00000f97            auipc   t6,0x0\n"
+            "  2a:  0fc1                    addi    t6,t6,16 # 0x36\n"
+            "  2c:  01f5a223            sw  t6,4(a1)\n"
+            "  30:  00862f83            lw  t6,8(a2)\n"
+            "  34:  8f82                    jr  t6\n"
+            "  36:  00062f83            lw  t6,0(a2)\n"
+            "  3a:  8f82                    jr  t6\n"
+            "  3c:  00462f83            lw  t6,4(a2)\n"
+            "  40:  8f82                    jr  t6"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
 %% Test with large gap (256+ bytes) to force mov_immediate path
 call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1333,11 +1369,12 @@ get_list_test() ->
 
 is_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
     Arg1 = {x_reg, 0},
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
-    State2 = ?BACKEND:if_block(
-        State1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(MSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, Arg1),
+    State3 = ?BACKEND:if_block(
+        State2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(MSt0) ->
             MSt1 = ?BACKEND:if_block(
                 MSt0, {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, fun(BSt0) ->
                     ?BACKEND:jump_to_label(BSt0, Label)
@@ -1354,36 +1391,42 @@ is_integer_test() ->
             )
         end
     ),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:  01852f83            lw  t6,24(a0)\n"
-            "   4:  ffffcf13            not t5,t6\n"
-            "   8:  0f72                    slli    t5,t5,0x1c\n"
-            "   a:  020f0f63            beqz    t5,0x48\n"
-            "   e:  8f7e                    mv  t5,t6\n"
-            "  10:  4e8d                    li  t4,3\n"
-            "  12:  01df7f33            and t5,t5,t4\n"
-            "  16:  4e89                    li  t4,2\n"
-            "  18:  01df0663            beq t5,t4,0x24\n"
-            "  1c:  a0d5                    j   0x100\n"
-            "  1e:  0001                    nop\n"
-            "  20:  00000013            nop\n"
-            "  24:  4f0d                    li  t5,3\n"
-            "  26:  ffff4f13            not t5,t5\n"
-            "  2a:  01efffb3            and t6,t6,t5\n"
-            "  2e:  000faf83            lw  t6,0(t6)\n"
-            "  32:  03f00f13            li  t5,63\n"
-            "  36:  01efffb3            and t6,t6,t5\n"
-            "  3a:  4f21                    li  t5,8\n"
-            "  3c:  01ef8663            beq t6,t5,0x48\n"
-            "  40:  a0c1                    j   0x100\n"
-            "  42:  0001                    nop\n"
-            "  44:  00000013            nop"
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  0f868067            jr  248(a3) # 0x100\n"
+            "  10:  01852f83            lw  t6,24(a0)\n"
+            "  14:  ffffcf13            not t5,t6\n"
+            "  18:  0f72                slli    t5,t5,0x1c\n"
+            "  1a:  020f0f63            beqz    t5,0x58\n"
+            "  1e:  8f7e                mv  t5,t6\n"
+            "  20:  4e8d                li  t4,3\n"
+            "  22:  01df7f33            and t5,t5,t4\n"
+            "  26:  4e89                li  t4,2\n"
+            "  28:  01df0663            beq t5,t4,0x34\n"
+            "  2c:  a8d1                j   0x100\n"
+            "  2e:  0001                nop\n"
+            "  30:  00000013            nop\n"
+            "  34:  4f0d                li  t5,3\n"
+            "  36:  ffff4f13            not t5,t5\n"
+            "  3a:  01efffb3            and t6,t6,t5\n"
+            "  3e:  000faf83            lw  t6,0(t6)\n"
+            "  42:  03f00f13            li  t5,63\n"
+            "  46:  01efffb3            and t6,t6,t5\n"
+            "  4a:  4f21                li  t5,8\n"
+            "  4c:  01ef8663            beq t6,t5,0x58\n"
+            "  50:  a845                j   0x100\n"
+            "  52:  0001                nop\n"
+            "  54:  00000013            nop"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1395,11 +1438,12 @@ cond_jump_to_label(Cond, Label, MMod, MSt0) ->
 %% Keep the unoptimized version to test the and case.
 is_number_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
     Arg1 = {x_reg, 0},
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, Arg1),
-    State2 = ?BACKEND:if_block(
-        State1, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, Arg1),
+    State3 = ?BACKEND:if_block(
+        State2, {Reg, '&', ?TERM_IMMED_TAG_MASK, '!=', ?TERM_INTEGER_TAG}, fun(BSt0) ->
             BSt1 = cond_jump_to_label(
                 {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, Label, ?BACKEND, BSt0
             ),
@@ -1416,100 +1460,54 @@ is_number_test() ->
             )
         end
     ),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:  01852f83            lw  t6,24(a0)\n"
-            "   4:  ffffcf13            not t5,t6\n"
-            "   8:  0f72                    slli    t5,t5,0x1c\n"
-            "   a:  040f0763            beqz    t5,0x58\n"
-            "   e:  8f7e                    mv  t5,t6\n"
-            "  10:  4e8d                    li  t4,3\n"
-            "  12:  01df7f33            and t5,t5,t4\n"
-            "  16:  4e89                    li  t4,2\n"
-            "  18:  01df0663            beq t5,t4,0x24\n"
-            "  1c:  a0d5                    j   0x100\n"
-            "  1e:  0001                    nop\n"
-            "  20:  00000013            nop\n"
-            "  24:  4f0d                    li  t5,3\n"
-            "  26:  ffff4f13            not t5,t5\n"
-            "  2a:  01efffb3            and t6,t6,t5\n"
-            "  2e:  000faf83            lw  t6,0(t6)\n"
-            "  32:  8f7e                    mv  t5,t6\n"
-            "  34:  03f00e93            li  t4,63\n"
-            "  38:  01df7f33            and t5,t5,t4\n"
-            "  3c:  4ea1                    li  t4,8\n"
-            "  3e:  01df0d63            beq t5,t4,0x58\n"
-            "  42:  03f00f13            li  t5,63\n"
-            "  46:  01efffb3            and t6,t6,t5\n"
-            "  4a:  4f61                    li  t5,24\n"
-            "  4c:  01ef8663            beq t6,t5,0x58\n"
-            "  50:  a845                    j   0x100\n"
-            "  52:  0001                    nop\n"
-            "  54:  00000013            nop"
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  0f868067            jr  248(a3) # 0x100\n"
+            "  10:  01852f83            lw  t6,24(a0)\n"
+            "  14:  ffffcf13            not t5,t6\n"
+            "  18:  0f72                slli    t5,t5,0x1c\n"
+            "  1a:  040f0763            beqz    t5,0x68\n"
+            "  1e:  8f7e                mv  t5,t6\n"
+            "  20:  4e8d                li  t4,3\n"
+            "  22:  01df7f33            and t5,t5,t4\n"
+            "  26:  4e89                li  t4,2\n"
+            "  28:  01df0663            beq t5,t4,0x34\n"
+            "  2c:  a8d1                j   0x100\n"
+            "  2e:  0001                nop\n"
+            "  30:  00000013            nop\n"
+            "  34:  4f0d                li  t5,3\n"
+            "  36:  ffff4f13            not t5,t5\n"
+            "  3a:  01efffb3            and t6,t6,t5\n"
+            "  3e:  000faf83            lw  t6,0(t6)\n"
+            "  42:  8f7e                mv  t5,t6\n"
+            "  44:  03f00e93            li  t4,63\n"
+            "  48:  01df7f33            and t5,t5,t4\n"
+            "  4c:  4ea1                li  t4,8\n"
+            "  4e:  01df0d63            beq t5,t4,0x68\n"
+            "  52:  03f00f13            li  t5,63\n"
+            "  56:  01efffb3            and t6,t6,t5\n"
+            "  5a:  4f61                li  t5,24\n"
+            "  5c:  01ef8663            beq t6,t5,0x68\n"
+            "  60:  a045                j   0x100\n"
+            "  62:  0001                nop\n"
+            "  64:  00000013            nop"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 is_boolean_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
     Label = 1,
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
-        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
-            ?BACKEND:jump_to_label(BSt1, Label)
-        end)
-    end),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#100),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
-    Dump = <<
-        "   0:  01852f83            lw  t6,24(a0)\n"
-        "   4:  04b00f13            li  t5,75\n"
-        "   8:  01ef8963            beq t6,t5,0x1a\n"
-        "   c:  4f2d                    li  t5,11\n"
-        "   e:  01ef8663            beq t6,t5,0x1a\n"
-        "  12:  a0fd                    j   0x100\n"
-        "  14:  0001                    nop\n"
-        "  16:  00000013            nop"
-    >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
-
-is_boolean_far_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    Label = 1,
-    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-    State2 = ?BACKEND:if_block(State1, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
-        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
-            ?BACKEND:jump_to_label(BSt1, Label)
-        end)
-    end),
-    State3 = ?BACKEND:free_native_registers(State2, [Reg]),
-    ?BACKEND:assert_all_native_free(State3),
-    State4 = ?BACKEND:add_label(State3, Label, 16#1000),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
-    Dump =
-        <<
-            "   0:  01852f83            lw  t6,24(a0)\n"
-            "   4:  04b00f13            li  t5,75\n"
-            "   8:  01ef8963            beq t6,t5,0x1a\n"
-            "   c:  4f2d                    li  t5,11\n"
-            "   e:  01ef8663            beq t6,t5,0x1a\n"
-            "  12:  7ef0006f            j   0x1000\n"
-            "  16:  00000013            nop"
-        >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
-
-is_boolean_far_known_test() ->
-    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
-    Label = 1,
-    State1 = ?BACKEND:add_label(State0, Label, 16#1000),
     {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
     State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
         ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
@@ -1518,17 +1516,90 @@ is_boolean_far_known_test() ->
     end),
     State4 = ?BACKEND:free_native_registers(State3, [Reg]),
     ?BACKEND:assert_all_native_free(State4),
-    State5 = ?BACKEND:update_branches(State4),
-    Stream = ?BACKEND:stream(State5),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
+    Dump = <<
+        "   0:  ffff                .insn   2, 0xffff\n"
+        "   2:  ffff                .insn   2, 0xffff\n"
+        "   4:  ffff                .insn   2, 0xffff\n"
+        "   6:  ffff                .insn   2, 0xffff\n"
+        "   8:  00000697            auipc   a3,0x0\n"
+        "   c:  0f868067            jr  248(a3) # 0x100\n"
+        "  10:  01852f83            lw  t6,24(a0)\n"
+        "  14:  04b00f13            li  t5,75\n"
+        "  18:  01ef8963            beq t6,t5,0x2a\n"
+        "  1c:  4f2d                li  t5,11\n"
+        "  1e:  01ef8663            beq t6,t5,0x2a\n"
+        "  22:  a8f9                j   0x100\n"
+        "  24:  0001                nop\n"
+        "  26:  00000013            nop"
+    >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    Label = 1,
+    State1 = ?BACKEND:jump_table(State0, 1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:if_block(State2, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State4 = ?BACKEND:free_native_registers(State3, [Reg]),
+    ?BACKEND:assert_all_native_free(State4),
+    State5 = ?BACKEND:add_label(State4, Label, 16#1000),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:  01852f83            lw  t6,24(a0)\n"
-            "   4:  04b00f13            li  t5,75\n"
-            "   8:  01ef8963            beq t6,t5,0x1a\n"
-            "   c:  4f2d                    li  t5,11\n"
-            "   e:  01ef8663            beq t6,t5,0x1a\n"
-            "  12:  00001f17            auipc   t5,0x1\n"
-            "  16:  feef0067            jr  -18(t5) # 0x1000"
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00001697            auipc   a3,0x1\n"
+            "   c:  ff868067            jr  -8(a3) # 0x1000\n"
+            "  10:  01852f83            lw  t6,24(a0)\n"
+            "  14:  04b00f13            li  t5,75\n"
+            "  18:  01ef8963            beq t6,t5,0x2a\n"
+            "  1c:  4f2d                li  t5,11\n"
+            "  1e:  01ef8663            beq t6,t5,0x2a\n"
+            "  22:  7df0006f            j   0x1000\n"
+            "  26:  00000013            nop"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+is_boolean_far_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 1),
+    Label = 1,
+    State2 = ?BACKEND:add_label(State1, Label, 16#1000),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State4 = ?BACKEND:if_block(State3, {Reg, '!=', ?TRUE_ATOM}, fun(BSt0) ->
+        ?BACKEND:if_block(BSt0, {Reg, '!=', ?FALSE_ATOM}, fun(BSt1) ->
+            ?BACKEND:jump_to_label(BSt1, Label)
+        end)
+    end),
+    State5 = ?BACKEND:free_native_registers(State4, [Reg]),
+    ?BACKEND:assert_all_native_free(State5),
+    State6 = ?BACKEND:update_branches(State5),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00001697            auipc   a3,0x1\n"
+            "   c:  ff868067            jr  -8(a3) # 0x1000\n"
+            "  10:  01852f83            lw  t6,24(a0)\n"
+            "  14:  04b00f13            li  t5,75\n"
+            "  18:  01ef8963            beq t6,t5,0x2a\n"
+            "  1c:  4f2d                li  t5,11\n"
+            "  1e:  01ef8663            beq t6,t5,0x2a\n"
+            "  22:  00001f17            auipc   t5,0x1\n"
+            "  26:  fdef0067            jr  -34(t5) # 0x1000"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1618,70 +1689,130 @@ wait_test() ->
     Label = 2,
     State3 = ?BACKEND:set_continuation_to_label(State2, Label),
     State4 = ?BACKEND:call_primitive_last(State3, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State5 = ?BACKEND:add_label(State4, Label, 16#100),
+    State6 = ?BACKEND:update_branches(State5),
 
-    Stream = ?BACKEND:stream(State4),
+    Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:  ffffffff            .insn   4, 0xffffffff\n"
-            "   4:  ffffffff            .insn   4, 0xffffffff\n"
-            "   6:  ffffffff            .insn   4, 0xffffffff\n"
-            "   a:  ffffffff            .insn   4, 0xffffffff\n"
-            "   c:  ffffffff            .insn   4, 0xffffffff\n"
-            "  10:  ffffffff            .insn   4, 0xffffffff\n"
-            "  12:  ffffffff            .insn   4, 0xffffffff\n"
-            "  16:  ffffffff            .insn   4, 0xffffffff\n"
-            "  18:  ffffffff            .insn   4, 0xffffffff\n"
-            "  1c:  ffffffff            .insn   4, 0xffffffff\n"
-            "  1e:  ffffffff            .insn   4, 0xffffffff\n"
-            "  22:  ffffffff            .insn   4, 0xffffffff\n"
-            "  24:  ffffffff            .insn   4, 0xffffffff\n"
-            "  28:  ffffffff            .insn   4, 0xffffffff\n"
-            "  2c:  01f5a223            sw  t6,4(a1)\n"
-            "  30:  07462f83            lw  t6,116(a2)\n"
-            "  34:  8f82                    jr  t6"
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  02868067            jr  40(a3) # 0x30\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  0f068067            jr  240(a3) # 0x100\n"
+            "  18:  ffff                .insn   2, 0xffff\n"
+            "  1a:  ffff                .insn   2, 0xffff\n"
+            "  1c:  ffff                .insn   2, 0xffff\n"
+            "  1e:  ffff                .insn   2, 0xffff\n"
+            "  20:  ffff                .insn   2, 0xffff\n"
+            "  22:  ffff                .insn   2, 0xffff\n"
+            "  24:  ffff                .insn   2, 0xffff\n"
+            "  26:  ffff                .insn   2, 0xffff\n"
+            "  28:  ffff                .insn   2, 0xffff\n"
+            "  2a:  ffff                .insn   2, 0xffff\n"
+            "  2c:  ffff                .insn   2, 0xffff\n"
+            "  2e:  ffff                .insn   2, 0xffff\n"
+            "  30:  00000f97            auipc   t6,0x0\n"
+            "  34:  0d0f8f93            addi    t6,t6,208 # 0x100\n"
+            "  38:  01f5a223            sw  t6,4(a1)\n"
+            "  3c:  07462f83            lw  t6,116(a2)\n"
+            "  40:  8f82                jr  t6"
+        >>,
+    ?assertEqual(dump_to_bin(Dump), Stream).
+
+%% Test set_continuation_to_label with known label
+wait_known_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+
+    State1 = ?BACKEND:jump_table(State0, 5),
+    State2 = ?BACKEND:add_label(State1, 1),
+    Label = 2,
+    State3 = ?BACKEND:add_label(State2, Label, 16#100),
+    State4 = ?BACKEND:set_continuation_to_label(State3, Label),
+    State5 = ?BACKEND:call_primitive_last(State4, ?PRIM_SCHEDULE_WAIT_CP, [ctx, jit_state]),
+    State6 = ?BACKEND:update_branches(State5),
+
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  02868067            jr  40(a3) # 0x30\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  0f068067            jr  240(a3) # 0x100\n"
+            "  18:  ffff                .insn   2, 0xffff\n"
+            "  1a:  ffff                .insn   2, 0xffff\n"
+            "  1c:  ffff                .insn   2, 0xffff\n"
+            "  1e:  ffff                .insn   2, 0xffff\n"
+            "  20:  ffff                .insn   2, 0xffff\n"
+            "  22:  ffff                .insn   2, 0xffff\n"
+            "  24:  ffff                .insn   2, 0xffff\n"
+            "  26:  ffff                .insn   2, 0xffff\n"
+            "  28:  ffff                .insn   2, 0xffff\n"
+            "  2a:  ffff                .insn   2, 0xffff\n"
+            "  2c:  ffff                .insn   2, 0xffff\n"
+            "  2e:  ffff                .insn   2, 0xffff\n"
+            "  30:  00000f97            auipc   t6,0x0\n"
+            "  34:  0d0f8f93            addi    t6,t6,208 # 0x100\n"
+            "  38:  01f5a223            sw  t6,4(a1)\n"
+            "  3c:  07462f83            lw  t6,116(a2)\n"
+            "  40:  8f82                jr  t6"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
 %% Test return_labels_and_lines/2 function
 return_labels_and_lines_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:jump_table(State0, 2),
 
     % Test return_labels_and_lines with some sample labels and lines
-    State1 = ?BACKEND:add_label(State0, 2, 32),
-    State2 = ?BACKEND:add_label(State1, 1, 16),
+    State2 = ?BACKEND:add_label(State1, 2, 32),
+    State3 = ?BACKEND:add_label(State2, 1, 16),
 
     % {Line, Offset} pairs
     SortedLines = [{10, 16}, {20, 32}],
 
-    State3 = ?BACKEND:return_labels_and_lines(State2, SortedLines),
-    Stream = ?BACKEND:stream(State3),
+    State4 = ?BACKEND:return_labels_and_lines(State3, SortedLines),
+    Stream = ?BACKEND:stream(State4),
 
-    % Should have generated auipc + addi + ret + labels table + lines table
-    % auipc = 4 bytes, addi = 2 bytes (compressed), ret = 2 bytes, labels table = 3*2*2 = 12 bytes, lines table = 3*2*2 = 12 bytes
-    % Total: 4 + 2 + 2 + 12 + 12 = 32 bytes
+    % Should have jump table + generated code with label/line tables
     ?assert(byte_size(Stream) >= 32),
 
-    % Expected: auipc a0, 0 + addi a0, a0, 10 + ret + padding + labels table + lines table
-    % The data tables start at offset 0xa (10) because of alignment padding
+    % Expected: jump table (3 entries, 24 bytes) + auipc + addi + ret + padding + labels table + lines table
     Dump =
         <<
-            "   0:  00000517            auipc   a0,0x0\n"
-            "   4:  0529                    addi    a0,a0,10 # 0xa\n"
-            "   6:  8082                    ret\n"
-            "   8:  0200ffff            .insn   4, 0x0200ffff\n"
-            "   c:  0100                    addi    s0,sp,128\n"
-            "   e:  0000                    unimp\n"
-            "  10:  1000                    addi    s0,sp,32\n"
-            "  12:  0200                    addi    s0,sp,256\n"
-            "  14:  0000                    unimp\n"
-            "  16:  2000                    fld fs0,0(s0)\n"
-            "  18:  0200                    addi    s0,sp,256\n"
-            "  1a:  0a00                    addi    s0,sp,272\n"
-            "  1c:  0000                    unimp\n"
-            "  1e:  1000                    addi    s0,sp,32\n"
-            "  20:  1400                    addi    s0,sp,544\n"
-            "  22:  0000                    unimp\n"
-            "  24:  2000                    fld fs0,0(s0)"
+            "   0:  ffff                .insn   2, 0xffff\n"
+            "   2:  ffff                .insn   2, 0xffff\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  00000697            auipc   a3,0x0\n"
+            "   c:  00868067            jr  8(a3) # 0x10\n"
+            "  10:  00000697            auipc   a3,0x0\n"
+            "  14:  01068067            jr  16(a3) # 0x20\n"
+            "  18:  00000517            auipc   a0,0x0\n"
+            "  1c:  0529                addi    a0,a0,10 # 0x22\n"
+            "  1e:  8082                ret\n"
+            "  20:  ffff                .insn   2, 0xffff\n"
+            "  22:  0200                addi    s0,sp,256\n"
+            "  24:  0100                addi    s0,sp,128\n"
+            "  26:  0000                unimp\n"
+            "  28:  1000                addi    s0,sp,32\n"
+            "  2a:  0200                addi    s0,sp,256\n"
+            "  2c:  0000                unimp\n"
+            "  2e:  2000                fld fs0,0(s0)\n"
+            "  30:  0200                addi    s0,sp,256\n"
+            "  32:  0a00                addi    s0,sp,272\n"
+            "  34:  0000                unimp\n"
+            "  36:  1000                addi    s0,sp,32\n"
+            "  38:  1400                addi    s0,sp,544\n"
+            "  3a:  0000                unimp\n"
+            "  3c:  2000                fld fs0,0(s0)"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -2335,8 +2466,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [a3, t3]),
-                    State2 = setelement(7, State1, [a3, t3]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [a3, t3]),
+                    State2 = setelement(8, State1, [a3, t3]),
                     [a3, t3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, a3, t3, 1),
                     Stream = ?BACKEND:stream(State3),
@@ -2351,8 +2482,8 @@ move_to_array_element_test_() ->
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
-                    State1 = setelement(6, State0, ?BACKEND:available_regs(State0) -- [a3, t3]),
-                    State2 = setelement(7, State1, [a3, t3]),
+                    State1 = setelement(7, State0, ?BACKEND:available_regs(State0) -- [a3, t3]),
+                    State2 = setelement(8, State1, [a3, t3]),
                     [a3, t3] = ?BACKEND:used_regs(State2),
                     State3 = ?BACKEND:move_to_array_element(State2, 42, a3, t3, 1),
                     Stream = ?BACKEND:stream(State3),
