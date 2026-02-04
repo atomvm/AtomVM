@@ -29,7 +29,9 @@ start() ->
     D = get_ref(3, [], fun make_alias_ref/0),
     E = get_ref(4, [], fun make_ref/0),
     Sorted = sort([E, C, D, A, B]),
-    check(Sorted, [A, B, C, D, E]) +
+    erlang:display([A, C, E, B, D]),
+    erlang:display(Sorted),
+    check(Sorted, [A, C, E, B, D]) +
         bool_to_n(Sorted < [make_alias_ref()]) * 2 +
         bool_to_n(Sorted > {make_ref()}) * 4.
 
@@ -74,9 +76,8 @@ make_alias_ref() ->
             "BEAM" -> erlang:system_info(otp_release) >= "24"
         end,
     if
-        AliasesAvailable,
-        true ->
+        AliasesAvailable ->
             erlang:alias();
-        false ->
-            make_ref()
+        true ->
+            {mock_alias_ref, make_ref()}
     end.
