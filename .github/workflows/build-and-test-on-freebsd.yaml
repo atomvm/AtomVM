@@ -63,7 +63,7 @@ jobs:
     - name: "Install deps"
       shell: freebsd {0}
       run: |
-        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3
+        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3 ninja
 
     - name: "Add hostname to /etc/hosts for distribution tests"
       shell: freebsd {0}
@@ -108,19 +108,19 @@ jobs:
         cd build
         cmake .. -DMBEDTLS_ROOT_DIR=/usr/local -DAVM_WARNINGS_ARE_ERRORS=ON
 
-    - name: "Build: run make"
+    - name: "Build: compile"
       shell: freebsd {0}
       run: |
         cd $GITHUB_WORKSPACE;
         cd build
-        make -j `sysctl -n hw.ncpu`
+        cmake --build .
 
     - name: "Build: run dialyzer"
       shell: freebsd {0}
       run: |
         cd $GITHUB_WORKSPACE;
         cd build
-        make -j `sysctl -n hw.ncpu`
+        cmake --build . -t dialyzer
 
     - name: "Test: test-erlang"
       shell: freebsd {0}
@@ -197,7 +197,7 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE;
         cd build
-        make install
+        cmake --build . -t install
         atomvm examples/erlang/hello_world.avm
         atomvm -v
         atomvm -h
