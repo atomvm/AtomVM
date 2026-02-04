@@ -1946,31 +1946,28 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
 #define TZ_BUFFER_SIZE 64
 
 static char tz_buffer[TZ_BUFFER_SIZE] = "TZ=";
-static char tz_value_buffer[TZ_BUFFER_SIZE - 3];
 static bool tz_buffer_installed = false;
-static bool tz_buffer_in_place = false;
+static char *tz_env_value = NULL;
 
 static void set_tz_value(const char *tz)
 {
-    if (!tz_buffer_installed) {
-        putenv(tz_buffer);
-        tz_buffer_installed = true;
-        char *env_tz = getenv("TZ");
-        tz_buffer_in_place = (env_tz == tz_buffer + 3);
-    }
     size_t tz_len = strlen(tz);
     if (tz_len > TZ_BUFFER_SIZE - 4) {
         tz_len = TZ_BUFFER_SIZE - 4;
     }
-    if (tz_buffer_in_place) {
-        memcpy(tz_buffer + 3, tz, tz_len);
-        tz_buffer[3 + tz_len] = '\0';
-    } else {
-        memcpy(tz_value_buffer, tz, tz_len);
-        memset(tz_value_buffer + tz_len, ' ', (TZ_BUFFER_SIZE - 4) - tz_len);
-        tz_value_buffer[TZ_BUFFER_SIZE - 4] = '\0';
-        setenv("TZ", tz_value_buffer, 1);
+    if (!tz_buffer_installed) {
+        memset(tz_buffer + 3, ' ', TZ_BUFFER_SIZE - 4);
+        tz_buffer[TZ_BUFFER_SIZE - 1] = '\0';
+        putenv(tz_buffer);
+        tz_buffer_installed = true;
+        tz_env_value = getenv("TZ");
+        if (tz_env_value == NULL) {
+            tz_env_value = tz_buffer + 3;
+        }
     }
+    memcpy(tz_env_value, tz, tz_len);
+    memset(tz_env_value + tz_len, ' ', (TZ_BUFFER_SIZE - 4) - tz_len);
+    tz_env_value[TZ_BUFFER_SIZE - 4] = '\0';
 }
 
 term nif_erlang_localtime(Context *ctx, int argc, term argv[])
