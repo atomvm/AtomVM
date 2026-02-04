@@ -58,7 +58,7 @@
 #define TCPIP_HOSTNAME_MAX_SIZE 255
 
 #define TAG "network_driver"
-#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE)
+#define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
 
 static const char *const ap_atom = ATOM_STR("\x2", "ap");
 static const char *const ap_channel_atom = ATOM_STR("\xA", "ap_channel");
@@ -116,7 +116,10 @@ struct ClientData
     uint32_t port_process_id;
     uint32_t owner_process_id;
     uint64_t ref_ticks;
+<<<<<<< HEAD
     bool managed;
+=======
+>>>>>>> f036397d (Revert ref_data back to ref_ticks in drivers)
 };
 
 static inline term make_atom(GlobalContext *global, AtomString atom_str)
@@ -137,7 +140,7 @@ static term tuple_from_addr(Heap *heap, uint32_t addr)
 
 static void send_term(Heap *heap, struct ClientData *data, term t)
 {
-    term ref = term_from_ref_data(data->ref_data, heap);
+    term ref = term_from_ref_ticks(data->ref_ticks, heap);
     term msg = term_alloc_tuple(2, heap);
     term_put_tuple_element(msg, 0, ref);
     term_put_tuple_element(msg, 1, t);
@@ -1044,7 +1047,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         return NativeContinue;
     }
 
-    // TODO: port this code to standard port (and gen_message)
+    //TODO: port this code to standard port (and gen_message)
     term pid = term_get_tuple_element(msg, 0);
     term ref = term_get_tuple_element(msg, 1);
     term cmd = term_get_tuple_element(msg, 2);
@@ -1086,7 +1089,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             default: {
                 ESP_LOGE(TAG, "Unrecognized command: %x", cmd);
                 // {Ref, {error, badarg}}
-                size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
+                size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
                 if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
                     ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
                     return NativeContinue;
@@ -1096,7 +1099,7 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
         }
     } else {
         // {Ref, {error, badarg}}
-        size_t heap_size = TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2);
+        size_t heap_size = TUPLE_SIZE(2) + REF_SIZE + TUPLE_SIZE(2);
         if (UNLIKELY(memory_ensure_free(ctx, heap_size) != MEMORY_GC_OK)) {
             ESP_LOGE(TAG, "Unable to allocate heap space for error; no message sent");
             return NativeContinue;

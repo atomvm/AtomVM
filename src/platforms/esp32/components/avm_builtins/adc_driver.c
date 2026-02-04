@@ -352,7 +352,7 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
     enif_release_resource(unit_rsrc); // decrement refcount after enif_alloc_resource
 
     // {ok, {'$adc', Unit :: resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &unit_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "failed to allocate tuple memory size %u: %s:%i.", requested_size, __FILE__, __LINE__);
@@ -504,7 +504,7 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
     enif_release_resource(chan_rsrc); // decrement refcount after enif_alloc_resource
 
     // {ok, {'$adc', resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &chan_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         ESP_LOGE(TAG, "failed to allocate tuple memory size %u: %s:%i.", requested_size, __FILE__, __LINE__);
