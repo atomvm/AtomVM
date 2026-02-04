@@ -45,14 +45,14 @@
 
 #define TAG "i2c_resource"
 
-#define CHECK_ERROR(ctx, err, msg)                                              \
-    if (UNLIKELY(err != ESP_OK)) {                                              \
-        ESP_LOGE(TAG, msg ": err: %i.", err);                                   \
-        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) { \
-            return OUT_OF_MEMORY_ATOM;                                          \
-        }                                                                       \
-        return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));      \
-    }
+#define CHECK_ERROR(ctx, err, msg)                                                      \
+if (UNLIKELY(err != ESP_OK)) {                                                          \
+    ESP_LOGE(TAG, msg ": err: %i.", err);                                               \
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {             \
+        return OUT_OF_MEMORY_ATOM;                                                      \
+    }                                                                                   \
+    return create_error_tuple(ctx, esp_err_to_term(ctx->global, err));                  \
+}
 
 #define ACK_ENABLE true
 #define MS_TO_TICKS(MS) (MS / portTICK_PERIOD_MS)
@@ -230,7 +230,7 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     //
 
     // {'$i2c', Resource :: resource(), Ref :: reference()} :: i2c()
-    size_t requested_size = TUPLE_SIZE(3) + TERM_BOXED_REFERENCE_SHORT_SIZE;
+    size_t requested_size = TUPLE_SIZE(3) + REF_SIZE;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         i2c_driver_delete(i2c_num);
         ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
@@ -308,7 +308,8 @@ static term nif_i2c_write_bytes(Context *ctx, int argc, term argv[])
         term reason = create_pair(
             ctx,
             globalcontext_make_atom(global, EINPROGRESS_ATOMSTR),
-            rsrc_obj->transmitting_pid);
+            rsrc_obj->transmitting_pid
+        );
         return create_error_tuple(ctx, reason);
     }
 
@@ -413,7 +414,8 @@ static term nif_i2c_read_bytes(Context *ctx, int argc, term argv[])
         term reason = create_pair(
             ctx,
             globalcontext_make_atom(global, EINPROGRESS_ATOMSTR),
-            rsrc_obj->transmitting_pid);
+            rsrc_obj->transmitting_pid
+        );
         return create_error_tuple(ctx, reason);
     }
 
@@ -519,7 +521,8 @@ static term nif_i2c_begin_transmission(Context *ctx, int argc, term argv[])
         term reason = create_pair(
             ctx,
             globalcontext_make_atom(global, EINPROGRESS_ATOMSTR),
-            rsrc_obj->transmitting_pid);
+            rsrc_obj->transmitting_pid
+        );
         return create_error_tuple(ctx, reason);
     }
 
@@ -584,7 +587,8 @@ static term nif_i2c_enqueue_write_bytes(Context *ctx, int argc, term argv[])
         term reason = create_pair(
             ctx,
             globalcontext_make_atom(global, EINPROGRESS_ATOMSTR),
-            rsrc_obj->transmitting_pid);
+            rsrc_obj->transmitting_pid
+        );
         return create_error_tuple(ctx, reason);
     }
 
@@ -636,7 +640,8 @@ static term nif_i2c_end_transmission(Context *ctx, int argc, term argv[])
         term reason = create_pair(
             ctx,
             globalcontext_make_atom(global, EINPROGRESS_ATOMSTR),
-            rsrc_obj->transmitting_pid);
+            rsrc_obj->transmitting_pid
+        );
         return create_error_tuple(ctx, reason);
     }
 
@@ -677,31 +682,38 @@ static const ErlNifResourceTypeInit I2CResourceTypeInit = {
     .dtor = i2c_resource_dtor,
 };
 
-static const struct Nif i2c_open_nif = {
+static const struct Nif i2c_open_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_open
 };
-static const struct Nif i2c_close_nif = {
+static const struct Nif i2c_close_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_close
 };
-static const struct Nif i2c_read_bytes_nif = {
+static const struct Nif i2c_read_bytes_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_read_bytes
 };
-static const struct Nif i2c_write_bytes_nif = {
+static const struct Nif i2c_write_bytes_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_write_bytes
 };
-static const struct Nif i2c_begin_transmission_nif = {
+static const struct Nif i2c_begin_transmission_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_begin_transmission
 };
-static const struct Nif i2c_enqueue_write_bytes_nif = {
+static const struct Nif i2c_enqueue_write_bytes_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_enqueue_write_bytes
 };
-static const struct Nif i2c_end_transmission_nif = {
+static const struct Nif i2c_end_transmission_nif =
+{
     .base.type = NIFFunctionType,
     .nif_ptr = nif_i2c_end_transmission
 };

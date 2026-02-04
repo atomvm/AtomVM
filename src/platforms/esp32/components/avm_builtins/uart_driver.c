@@ -56,6 +56,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx);
 
 #define TAG "uart_driver"
 #define UART_BUF_SIZE 256
+#define NO_REF 0
 #define NO_READER term_invalid_term()
 #define PIN_ERROR -2
 
@@ -63,17 +64,12 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx);
 #define GPIO_NUM_MAX SOC_GPIO_PIN_COUNT
 #endif
 
-static const RefData no_ref_data = {
-    .type = RefTypeShort,
-    .ref_ticks = 0,
-};
-
 struct UARTData
 {
     QueueHandle_t rxqueue;
     EventListener listener;
     term reader_process_pid;
-    RefData reader_ref_data;
+    uint64_t reader_ref_ticks;
     uint8_t uart_num;
 #ifndef AVM_NO_SMP
     Mutex *reader_lock;
@@ -111,11 +107,11 @@ static const AtomStringIntPair cmd_table[] = {
     SELECT_INT_DEFAULT(UARTInvalidCmd)
 };
 
-static void safe_update_reader_data(struct UARTData *uart_data, term pid, RefData ref_data)
+static void safe_update_reader_data(struct UARTData *uart_data, term pid, uint64_t ref_ticks)
 {
     SMP_MUTEX_LOCK(uart_data->reader_lock);
     uart_data->reader_process_pid = pid;
-    uart_data->reader_ref_data = ref_data;
+    uart_data->reader_ref_ticks = ref_ticks;
     SMP_MUTEX_UNLOCK(uart_data->reader_lock);
 }
 
@@ -132,7 +128,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     int bin_size = term_binary_heap_size(event.size);
 
                     Heap heap;
-                    if (UNLIKELY(memory_init_heap(&heap, bin_size + TERM_BOXED_REFERENCE_PROCESS_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_init_heap(&heap, bin_size + REF_SIZE + TUPLE_SIZE(2) * 2) != MEMORY_GC_OK)) {
                         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
                         AVM_ABORT();
                     }
@@ -145,7 +141,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     term_put_tuple_element(ok_tuple, 0, OK_ATOM);
                     term_put_tuple_element(ok_tuple, 1, bin);
 
-                    term ref = term_from_ref_data(uart_data->reader_ref_data, &heap);
+                    term ref = term_from_ref_ticks(uart_data->reader_ref_ticks, &heap);
 
                     term result_tuple = term_alloc_tuple(2, &heap);
                     term_put_tuple_element(result_tuple, 0, ref);
@@ -155,7 +151,7 @@ EventListener *uart_interrupt_callback(GlobalContext *glb, EventListener *listen
                     globalcontext_send_message(glb, local_pid, result_tuple);
 
                     memory_destroy_heap(&heap, glb);
-                    safe_update_reader_data(uart_data, NO_READER, no_ref_data);
+                    safe_update_reader_data(uart_data, NO_READER, NO_REF);
                 }
                 break;
             case UART_FIFO_OVF:
@@ -327,7 +323,7 @@ Context *uart_driver_create_port(GlobalContext *global, term opts)
     uart_data->listener.handler = uart_interrupt_callback;
     sys_register_listener(global, &uart_data->listener);
     uart_data->reader_process_pid = term_invalid_term();
-    uart_data->reader_ref_data = no_ref_data;
+    uart_data->reader_ref_ticks = 0;
     uart_data->uart_num = uart_num;
     ctx->native_handler = uart_driver_consume_mailbox;
     ctx->platform_data = uart_data;
@@ -357,7 +353,7 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
     struct UARTData *uart_data = ctx->platform_data;
     term pid = gen_message.pid;
     term ref = gen_message.ref;
-    RefData ref_data = term_to_ref_data(ref);
+    uint64_t ref_ticks = term_to_ref_ticks(ref);
 
     int local_pid = term_to_local_process_id(pid);
 
@@ -395,7 +391,7 @@ static void uart_driver_do_read(Context *ctx, GenMessage gen_message)
         port_send_reply(ctx, pid, ref, ok_tuple);
 
     } else {
-        safe_update_reader_data(uart_data, pid, ref_data);
+        safe_update_reader_data(uart_data, pid, ref_ticks);
     }
 }
 
@@ -403,7 +399,7 @@ static void uart_driver_do_cancel_read(Context *ctx, GenMessage gen_message)
 {
     struct UARTData *uart_data = ctx->platform_data;
 
-    safe_update_reader_data(uart_data, NO_READER, no_ref_data);
+    safe_update_reader_data(uart_data, NO_READER, NO_REF);
 
     term pid = gen_message.pid;
     term ref = gen_message.ref;
@@ -510,12 +506,12 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
             return NativeContinue;
         }
 
-        RefData ref_data = term_to_ref_data(gen_message.ref);
+        uint64_t ref_ticks = term_to_ref_ticks(gen_message.ref);
 
         int local_pid = term_to_local_process_id(gen_message.pid);
 
         if (is_closed) {
-            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + TERM_BOXED_REFERENCE_PROCESS_SIZE) != MEMORY_GC_OK)) {
+            if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) * 2 + REF_SIZE) != MEMORY_GC_OK)) {
                 ESP_LOGE(TAG, "[uart_driver_consume_mailbox] Failed to allocate space for error tuple");
                 globalcontext_send_message(glb, local_pid, OUT_OF_MEMORY_ATOM);
             }
@@ -525,7 +521,7 @@ static NativeHandlerResult uart_driver_consume_mailbox(Context *ctx)
             term_put_tuple_element(error_tuple, 1, NOPROC_ATOM);
 
             term result_tuple = term_alloc_tuple(2, &ctx->heap);
-            term_put_tuple_element(result_tuple, 0, term_from_ref_data(ref_data, &ctx->heap));
+            term_put_tuple_element(result_tuple, 0, term_from_ref_ticks(ref_ticks, &ctx->heap));
             term_put_tuple_element(result_tuple, 1, error_tuple);
 
             globalcontext_send_message(glb, local_pid, result_tuple);
