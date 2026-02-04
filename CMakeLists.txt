@@ -40,6 +40,7 @@ option(AVM_RELEASE "Build an AtomVM release" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_BUILD_RUNTIME_ONLY "Only build the AtomVM runtime" OFF)
 option(COVERAGE "Build for code coverage" OFF)
+option(AVM_USE_WASM_MJS "Use ES modules for Emscripten platform" OFF)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
 
 # JIT & execution of precompiled code
