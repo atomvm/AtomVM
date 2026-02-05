@@ -1024,6 +1024,11 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             break;
                         }
                     }
+                    case TERM_TYPE_INDEX_NIL:
+                        // This cannot happen, since this branch is executed only when
+                        // `type_t == type_other`,
+                        // but we do `t == other` as the first thing, making this case unreachable.
+                    case TERM_TYPE_INDEX_INVALID:
                     default:
                         UNREACHABLE();
                 }
