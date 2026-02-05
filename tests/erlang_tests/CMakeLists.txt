@@ -421,6 +421,7 @@ compile_erlang(test_types_ordering)
 compile_erlang(test_bigintegers_ordering)
 compile_erlang(test_refs_ordering)
 compile_erlang(test_atom_ordering)
+compile_erlang(test_function_ordering)
 compile_erlang(test_pids_ordering)
 compile_erlang(test_list_match)
 compile_erlang(test_match)
@@ -949,6 +950,7 @@ set(erlang_test_beams
     test_bigintegers_ordering.beam
     test_refs_ordering.beam
     test_atom_ordering.beam
+    test_function_ordering.beam
     test_pids_ordering.beam
     test_list_match.beam
     test_match.beam
