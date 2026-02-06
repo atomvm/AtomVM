@@ -31,6 +31,8 @@
 #include "esp32_sys.h"
 
 #include <driver/ledc.h>
+#include <soc/soc_caps.h>
+
 #include <stdlib.h>
 
 //#define ENABLE_TRACE
@@ -223,6 +225,89 @@ static term nif_ledc_fade_start(Context *ctx, int argc, term argv[])
     }
 }
 
+#if SOC_LEDC_SUPPORT_FADE_STOP
+static term nif_ledc_fade_stop(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term speed_mode = argv[0];
+    VALIDATE_VALUE(speed_mode, term_is_integer);
+    term channel = argv[1];
+    VALIDATE_VALUE(channel, term_is_integer);
+
+    esp_err_t err = ledc_fade_stop(
+        term_to_int(speed_mode),
+        term_to_int(channel));
+    if (UNLIKELY(err != ESP_OK)) {
+        fprintf(stderr, "Unable to ledc_fade_stop. err=%i\n", err);
+        RAISE_ERROR(term_from_int(err));
+    } else {
+        TRACE("ledc_fade_stop\n");
+        return OK_ATOM;
+    }
+}
+#endif
+
+static term nif_ledc_set_fade_time_and_start(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term speed_mode = argv[0];
+    VALIDATE_VALUE(speed_mode, term_is_integer);
+    term channel = argv[1];
+    VALIDATE_VALUE(channel, term_is_integer);
+    term duty = argv[2];
+    VALIDATE_VALUE(duty, term_is_integer);
+    term fade_time = argv[3];
+    VALIDATE_VALUE(fade_time, term_is_integer);
+    term fade_mode = argv[4];
+    VALIDATE_VALUE(fade_mode, term_is_integer);
+
+    esp_err_t err = ledc_set_fade_time_and_start(
+        term_to_int(speed_mode),
+        term_to_int(channel),
+        term_to_int(duty),
+        term_to_int(fade_time),
+        term_to_int(fade_mode));
+    if (UNLIKELY(err != ESP_OK)) {
+        fprintf(stderr, "Unable to ledc_set_fade_time_and_start. err=%i\n", err);
+        RAISE_ERROR(term_from_int(err));
+    } else {
+        TRACE("ledc_set_fade_time_and_start\n");
+        return OK_ATOM;
+    }
+}
+
+static term nif_ledc_set_fade_step_and_start(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term speed_mode = argv[0];
+    VALIDATE_VALUE(speed_mode, term_is_integer);
+    term channel = argv[1];
+    VALIDATE_VALUE(channel, term_is_integer);
+    term duty = argv[2];
+    VALIDATE_VALUE(duty, term_is_integer);
+    term scale = argv[3];
+    VALIDATE_VALUE(scale, term_is_integer);
+    term cycle_num = argv[4];
+    VALIDATE_VALUE(cycle_num, term_is_integer);
+    term fade_mode = argv[5];
+    VALIDATE_VALUE(fade_mode, term_is_integer);
+
+    esp_err_t err = ledc_set_fade_step_and_start(
+        term_to_int(speed_mode),
+        term_to_int(channel),
+        term_to_int(duty),
+        term_to_int(scale),
+        term_to_int(cycle_num),
+        term_to_int(fade_mode));
+    if (UNLIKELY(err != ESP_OK)) {
+        fprintf(stderr, "Unable to ledc_set_fade_step_and_start. err=%i\n", err);
+        RAISE_ERROR(term_from_int(err));
+    } else {
+        TRACE("ledc_set_fade_step_and_start\n");
+        return OK_ATOM;
+    }
+}
+
 static term nif_ledc_get_duty(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -282,6 +367,32 @@ static term nif_ledc_update_duty(Context *ctx, int argc, term argv[])
         RAISE_ERROR(term_from_int(err));
     } else {
         TRACE("ledc_update_duty\n");
+        return OK_ATOM;
+    }
+}
+
+static term nif_ledc_set_duty_and_update(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term speed_mode = argv[0];
+    VALIDATE_VALUE(speed_mode, term_is_integer);
+    term channel = argv[1];
+    VALIDATE_VALUE(channel, term_is_integer);
+    term duty = argv[2];
+    VALIDATE_VALUE(duty, term_is_integer);
+    term hpoint = argv[3];
+    VALIDATE_VALUE(hpoint, term_is_integer);
+
+    esp_err_t err = ledc_set_duty_and_update(
+        term_to_int(speed_mode),
+        term_to_int(channel),
+        term_to_int(duty),
+        term_to_int(hpoint));
+    if (UNLIKELY(err != ESP_OK)) {
+        fprintf(stderr, "Unable to ledc_set_duty_and_update. err=%i\n", err);
+        RAISE_ERROR(term_from_int(err));
+    } else {
+        TRACE("ledc_set_duty_and_update\n");
         return OK_ATOM;
     }
 }
@@ -387,6 +498,20 @@ static const struct Nif ledc_fade_start_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ledc_fade_start
 };
+#if SOC_LEDC_SUPPORT_FADE_STOP
+static const struct Nif ledc_fade_stop_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ledc_fade_stop
+};
+#endif
+static const struct Nif ledc_set_fade_time_and_start_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ledc_set_fade_time_and_start
+};
+static const struct Nif ledc_set_fade_step_and_start_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ledc_set_fade_step_and_start
+};
 static const struct Nif ledc_get_duty_nif =
 {
     .base.type = NIFFunctionType,
@@ -401,6 +526,10 @@ static const struct Nif ledc_update_duty_nif =
 {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ledc_update_duty
+};
+static const struct Nif ledc_set_duty_and_update_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ledc_set_duty_and_update
 };
 static const struct Nif ledc_get_freq_nif =
 {
@@ -448,6 +577,20 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_fade_start_nif;
     }
+#if SOC_LEDC_SUPPORT_FADE_STOP
+    if (strcmp("ledc:fade_stop/2", nifname) == 0 || strcmp("Elixir.LEDC:fade_stop/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &ledc_fade_stop_nif;
+    }
+#endif
+    if (strcmp("ledc:set_fade_time_and_start/5", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_time_and_start/5", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &ledc_set_fade_time_and_start_nif;
+    }
+    if (strcmp("ledc:set_fade_step_and_start/6", nifname) == 0 || strcmp("Elixir.LEDC:set_fade_step_and_start/6", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &ledc_set_fade_step_and_start_nif;
+    }
     if (strcmp("ledc:get_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:get_duty/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_get_duty_nif;
@@ -459,6 +602,10 @@ const struct Nif *ledc_nif_get_nif(const char *nifname)
     if (strcmp("ledc:update_duty/2", nifname) == 0 || strcmp("Elixir.LEDC:update_duty/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &ledc_update_duty_nif;
+    }
+    if (strcmp("ledc:set_duty_and_update/4", nifname) == 0 || strcmp("Elixir.LEDC:set_duty_and_update/4", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &ledc_set_duty_and_update_nif;
     }
     if (strcmp("ledc:get_freq/2", nifname) == 0 || strcmp("Elixir.LEDC:get_freq/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
