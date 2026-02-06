@@ -438,7 +438,7 @@ static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *c
 }
 
 // When this method is called, ensure free was called with REPLY_SIZE
-#define REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
+#define REPLY_SIZE (TUPLE_SIZE(2) + TERM_BOXED_REFERENCE_SHORT_SIZE)
 static void do_send_reply(Context *ctx, term reply, uint64_t ref_ticks, int32_t pid)
 {
     GlobalContext *glb = ctx->global;

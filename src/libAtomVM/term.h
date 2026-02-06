@@ -129,7 +129,14 @@ extern "C" {
 #define TERM_BOXED_REFC_BINARY_SIZE 6
 #define TERM_BOXED_BIN_MATCH_STATE_SIZE 4
 #define TERM_BOXED_SUB_BINARY_SIZE 4
+#if TERM_BYTES == 8
 #define TERM_BOXED_REFERENCE_RESOURCE_SIZE 4
+#else
+// Enough size would be 4, but reference types
+// are distinguished by size and 4 conflicts with
+// TERM_BOXED_REFERENCE_PROCESS_SIZE on 32bit arch.
+#define TERM_BOXED_REFERENCE_RESOURCE_SIZE 5
+#endif
 #define TERM_BOXED_REFERENCE_RESOURCE_HEADER (((TERM_BOXED_REFERENCE_RESOURCE_SIZE - 1) << 6) | TERM_BOXED_REF)
 #define TERM_BOXED_RESOURCE_SIZE TERM_BOXED_REFERENCE_RESOURCE_SIZE
 
@@ -151,7 +158,13 @@ extern "C" {
 #define BOXED_INT64_SIZE (BOXED_TERMS_REQUIRED_FOR_INT64 + 1)
 #define BOXED_FUN_SIZE 3
 #define FLOAT_SIZE (sizeof(float_term_t) / sizeof(term) + 1)
-#define REF_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+// Reference types are distinguished by their size.
+// If you change a reference size, make sure it doesn't
+// conflict with other reference sizes on all architectures.
+#define TERM_BOXED_REFERENCE_SHORT_SIZE ((int) ((sizeof(uint64_t) / sizeof(term)) + 1))
+#define REF_SIZE _Pragma("REF_SIZE is deprecated, use TERM_BOXED_REFERENCE_SHORT_SIZE instead") TERM_BOXED_REFERENCE_SHORT_SIZE
+#define TERM_BOXED_REFERENCE_PROCESS_SIZE (TERM_BOXED_REFERENCE_SHORT_SIZE + 1)
+#define TERM_BOXED_REFERENCE_PROCESS_HEADER (((TERM_BOXED_REFERENCE_PROCESS_SIZE - 1) << 6) | TERM_BOXED_REF)
 #if TERM_BYTES == 8
 #define EXTERNAL_PID_SIZE 3
 #elif TERM_BYTES == 4
@@ -167,10 +180,23 @@ extern "C" {
 #else
 #error
 #endif
+#define EXTERNAL_REF_MAX_WORDS 5
+#define TERM_BOXED_REFERENCE_MAX_SIZE EXTERNAL_REF_SIZE(EXTERNAL_REF_MAX_WORDS)
+_Static_assert(TERM_BOXED_REFERENCE_SHORT_SIZE < TERM_BOXED_REFERENCE_PROCESS_SIZE, "Short ref size must be smaller than process ref size");
+_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE < TERM_BOXED_REFERENCE_RESOURCE_SIZE, "Process ref size must be smaller than reference resource size");
+_Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZE, "Max ref size can't be smaller than all other ref sizes");
 #define TUPLE_SIZE(elems) ((int) (elems + 1))
 #define CONS_SIZE 2
 #define REFC_BINARY_CONS_OFFSET 4
 #define REFERENCE_RESOURCE_CONS_OFFSET 2
+
+#if TERM_BYTES == 4
+#define REFERENCE_PROCESS_PID_OFFSET 2
+
+#elif TERM_BYTES == 8
+#define REFERENCE_PROCESS_PID_OFFSET 1
+#endif
+
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
 #define TERM_STRING_SIZE(length) (2 * (length))
 #define TERM_MAP_SIZE(num_elements) (3 + 2 * (num_elements))
@@ -210,6 +236,9 @@ extern "C" {
 // Local ref is at most 30 bytes:
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<0." "." ">\0" (10 chars)
+// Process ref is at most 39 bytes:
+// 2^32-1 = 4294967295 (10 chars)
+// "#Ref<" "." "." ">\0" (9 chars)
 // Resource ref is at most 52 bytes:
 // 2^32-1 = 4294967295 (10 chars)
 // "#Ref<0." "." "." "." ">\0" (12 chars)
@@ -242,6 +271,41 @@ extern "C" {
 #define TYPEDEF_GLOBALCONTEXT
 typedef struct GlobalContext GlobalContext;
 #endif
+
+enum RefType
+{
+    RefTypeShort,
+    RefTypeProcess,
+    RefTypeResource,
+    RefTypeExternal
+};
+
+struct ProcessRefData
+{
+    uint64_t ref_ticks;
+    int32_t process_id;
+};
+
+struct ExternalRefData
+{
+    term node;
+    uint32_t creation;
+    uint16_t len;
+    const uint32_t *words;
+};
+
+typedef struct RefData RefData;
+struct RefData
+{
+    enum RefType type;
+    union
+    {
+        uint64_t ref_ticks;
+        struct ProcessRefData process;
+        void *resource;
+        struct ExternalRefData external;
+    };
+};
 
 typedef struct PrinterFun PrinterFun;
 
@@ -870,6 +934,25 @@ static inline bool term_is_local_reference(term t)
     if (term_is_boxed(t)) {
         const term *boxed_value = term_to_const_term_ptr(t);
         if ((boxed_value[0] & 0x3F) == TERM_BOXED_REF) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * @brief Checks if a term is a process reference
+ *
+ * @details See \c term_make_process_reference().
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool term_is_process_reference(term t)
+{
+    if (term_is_boxed(t)) {
+        const term *boxed_value = term_to_const_term_ptr(t);
+        if (boxed_value[0] == TERM_BOXED_REFERENCE_PROCESS_HEADER) {
             return true;
         }
     }
@@ -2156,8 +2239,8 @@ static inline int term_bs_insert_binary(term t, int offset, term src, int n)
  */
 static inline term term_from_ref_ticks(uint64_t ref_ticks, Heap *heap)
 {
-    term *boxed_value = memory_heap_alloc(heap, REF_SIZE);
-    boxed_value[0] = ((REF_SIZE - 1) << 6) | TERM_BOXED_REF;
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFERENCE_SHORT_SIZE);
+    boxed_value[0] = ((TERM_BOXED_REFERENCE_SHORT_SIZE - 1) << 6) | TERM_BOXED_REF;
 
 #if TERM_BYTES == 8
     boxed_value[1] = (term) ref_ticks;
@@ -2185,6 +2268,50 @@ static inline uint64_t term_to_ref_ticks(term rt)
 #elif TERM_BYTES == 4
     return ((uint64_t) boxed_value[1] << 32) | (uint64_t) boxed_value[2];
 
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
+}
+
+/**
+ * @brief Creates a process reference
+ * @details Process reference contains ref_ticks and process_id of a process.
+ * They are used by process aliases and monitors.
+ *
+ * @param process_id process_id of a process that the reference will identify.
+ * @param ref_ticks an unique uint64 value that will be used to create ref term.
+ * @param heap the heap to allocate memory in
+ * @return a ref term created using given ref ticks.
+ */
+static inline term term_make_process_reference(int32_t process_id, uint64_t ref_ticks, Heap *heap)
+{
+    term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFERENCE_PROCESS_SIZE);
+    boxed_value[0] = TERM_BOXED_REFERENCE_PROCESS_HEADER;
+
+#if TERM_BYTES == 4
+    boxed_value[1] = (ref_ticks >> 32);
+    boxed_value[2] = (ref_ticks & 0xFFFFFFFF);
+    boxed_value[3] = process_id;
+
+#elif TERM_BYTES == 8
+    boxed_value[1] = (term) ref_ticks;
+    boxed_value[2] = process_id;
+
+#else
+#error "terms must be either 32 or 64 bit wide"
+#endif
+
+    return ((term) boxed_value) | TERM_PRIMARY_BOXED;
+}
+
+static inline uint32_t term_process_ref_to_process_id(term rt)
+{
+    TERM_DEBUG_ASSERT(term_is_process_reference(rt));
+    const term *boxed_value = term_to_const_term_ptr(rt);
+#if TERM_BYTES == 4
+    return (uint32_t) boxed_value[3];
+#elif TERM_BYTES == 8
+    return (uint32_t) boxed_value[2];
 #else
 #error "terms must be either 32 or 64 bit wide"
 #endif
@@ -2326,7 +2453,7 @@ static inline uint64_t term_get_external_port_number(term t)
  * @param heap the heap to allocate memory in
  * @return an external heap term created using given parameters.
  */
-static inline term term_make_external_reference(term node, uint16_t len, uint32_t *data, uint32_t creation, Heap *heap)
+static inline term term_make_external_reference(term node, uint16_t len, const uint32_t *data, uint32_t creation, Heap *heap)
 {
     TERM_DEBUG_ASSERT(term_is_atom(node));
 
@@ -2993,6 +3120,32 @@ static inline term term_from_resource(void *resource, Heap *heap)
     term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     heap->root->mso_list = term_list_init_prepend(boxed_value + REFERENCE_RESOURCE_CONS_OFFSET, ret, heap->root->mso_list);
     return ret;
+}
+
+static inline term term_from_ref_data(RefData *ref_data, Heap *heap)
+{
+    switch (ref_data->type) {
+        case RefTypeShort: {
+            return term_from_ref_ticks(ref_data->ref_ticks, heap);
+        }
+        case RefTypeProcess: {
+            return term_make_process_reference(ref_data->process.process_id, ref_data->ref_ticks, heap);
+        }
+        case RefTypeResource: {
+            return term_from_resource(ref_data->resource, heap);
+        }
+        case RefTypeExternal: {
+            return term_make_external_reference(
+                ref_data->external.node,
+                ref_data->external.len,
+                ref_data->external.words,
+                ref_data->external.creation,
+                heap);
+        }
+        default: {
+            UNREACHABLE();
+        }
+    }
 }
 
 /**

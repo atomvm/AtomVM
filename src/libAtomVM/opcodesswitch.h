@@ -2777,12 +2777,28 @@ loop:
                         int local_process_id;
                         if (term_is_local_pid_or_port(recipient_term)) {
                             local_process_id = term_to_local_process_id(recipient_term);
-                        } else {
+                            TRACE("send/0 target_pid=%i\n", local_process_id);
+                            TRACE_SEND(ctx, x_regs[0], x_regs[1]);
+                            globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
+                        } else if (term_is_process_reference(recipient_term)) {
+                            int32_t local_process_id = term_process_ref_to_process_id(recipient_term);
+                            TRACE("send/0 target_pid=%i\n", local_process_id);
+                            TRACE_SEND(ctx, x_regs[0], x_regs[1]);
+                            int64_t ref_ticks = term_to_ref_ticks(recipient_term);
+                            Context *p = globalcontext_get_process_lock(glb, local_process_id);
+                            if (p) {
+                                struct MonitorAlias *alias = context_find_alias(p, ref_ticks);
+                                if (alias != NULL) {
+                                    if (alias->alias_type == ContextMonitorAliasReplyDemonitor) {
+                                        context_unalias(alias);
+                                    }
+                                    mailbox_send(p, x_regs[1]);
+                                }
+                                globalcontext_get_process_unlock(glb, p);
+                            }
+                        } else if (!term_is_reference(recipient_term)) {
                             RAISE_ERROR(BADARG_ATOM);
                         }
-                        TRACE("send/0 target_pid=%i\n", local_process_id);
-                        TRACE_SEND(ctx, x_regs[0], x_regs[1]);
-                        globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
                         x_regs[0] = x_regs[1];
                     }
                 #endif

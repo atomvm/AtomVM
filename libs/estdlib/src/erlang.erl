@@ -99,6 +99,7 @@
     make_ref/0,
     send/2,
     monitor/2,
+    monitor/3,
     demonitor/1,
     demonitor/2,
     exit/1,
@@ -133,7 +134,9 @@
     dist_ctrl_put_data/2,
     unique_integer/0,
     unique_integer/1,
-    raise/3
+    raise/3,
+    alias/0,
+    unalias/1
 ]).
 
 -export_type([
@@ -177,7 +180,8 @@
     | {max_heap_size, pos_integer()}
     | {atomvm_heap_growth, atomvm_heap_growth_strategy()}
     | link
-    | monitor.
+    | monitor
+    | {monitor, [monitor_option()]}.
 
 -type send_destination() ::
     pid()
@@ -202,6 +206,8 @@
 %% Extended `stacktrace()' that can be passed to `raise/3'
 -type raise_stacktrace() ::
     [{module(), atom(), arity() | [term()]} | {function(), arity() | [term()]}] | stacktrace().
+
+-type monitor_option() :: {alias, explicit_unalias | demonitor | reply_demonitor}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Time time in milliseconds after which to send the timeout message.
@@ -1168,6 +1174,28 @@ monitor(_Type, _PidOrPort) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Type        type of monitor to create
+%% @param   PidOrPort   pid or port of the object to monitor
+%% @param   Options     monitor options
+%% @returns a monitor reference
+%% @doc     Creates a monitor and allows passing additional options.
+%%          Currently, only the `{alias, AliasMode}' option is supported. Passing it
+%%          makes the monitor also an alias on the calling process (see `alias/0').
+%%          `AliasMode' defines the behaviour of the alias:
+%%          - explicit_unalias - the alias can be only removed with `unalias/1',
+%%          - demonitor - the alias is also removed when `demonitor/1' is called
+%%                        on the monitor,
+%%          - reply_demonitor - the alias is also removed after a first message
+%%                              is sent via it.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec monitor
+    (Type :: process, Pid :: pid() | atom(), [monitor_option()]) -> reference();
+    (Type :: port, Port :: port() | atom(), [monitor_option()]) -> reference().
+monitor(_Type, _PidOrPort, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Monitor reference of monitor to remove
 %% @returns `true'
 %% @doc     Remove a monitor
@@ -1577,4 +1605,26 @@ nif_error(_Reason) ->
 -spec raise(error | exit | throw, Reason :: term(), Stacktrace :: raise_stacktrace()) ->
     no_return().
 raise(_Class, _Reason, _Stacktrace) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns A reference aliasing the calling process.
+%% @doc     Creates an alias for the callling process. The alias can be used
+%%          to send messages to the process like the PID. The alias can also be
+%%          created along with a monitor - see `monitor/3'. The alias can be
+%%          removed by calling `unalias/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec alias() -> Alias when Alias :: reference().
+alias() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Alias the alias to be removed.
+%% @returns `true' if alias was removed, `false' if it was not found
+%% @doc     Removes process alias. See `alias/0' for more information.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec unalias(Alias) -> boolean() when Alias :: reference().
+unalias(_Alias) ->
     erlang:nif_error(undefined).

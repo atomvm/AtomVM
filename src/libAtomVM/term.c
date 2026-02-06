@@ -405,6 +405,12 @@ int term_funprint(PrinterFun *fun, term t, const GlobalContext *global)
         uint64_t resource_ptr = (uintptr_t) refc_binary->data;
         return fun->print(fun, "#Ref<0.%" PRIu32 ".%" PRIu32 ".%" PRIu32 ".%" PRIu32 ">", (uint32_t) (resource_type_ptr >> 32), (uint32_t) resource_type_ptr, (uint32_t) (resource_ptr >> 32), (uint32_t) resource_ptr);
 
+    } else if (term_is_process_reference(t)) {
+        int32_t process_id = term_process_ref_to_process_id(t);
+        uint64_t ref_ticks = term_to_ref_ticks(t);
+
+        // Update also REF_AS_CSTRING_LEN when changing this format string
+        return fun->print(fun, "#Ref<%" PRId32 ".%" PRIu32 ".%" PRIu32 ">", process_id, (uint32_t) (ref_ticks >> 32), (uint32_t) ref_ticks);
     } else if (term_is_local_reference(t)) {
         // Update also REF_AS_CSTRING_LEN when changing this format string
         uint64_t ref_ticks = term_to_ref_ticks(t);
@@ -676,11 +682,15 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             uint32_t len, other_len;
                             if (term_is_resource_reference(t)) {
                                 len = 4;
+                            } else if (term_is_process_reference(t)) {
+                                len = 3;
                             } else {
                                 len = 2;
                             }
                             if (term_is_resource_reference(other)) {
                                 other_len = 4;
+                            } else if (term_is_process_reference(other)) {
+                                other_len = 3;
                             } else {
                                 other_len = 2;
                             }
@@ -694,6 +704,15 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                                     int64_t other_ticks = term_to_ref_ticks(other);
                                     other_data[0] = other_ticks >> 32;
                                     other_data[1] = (uint32_t) other_ticks;
+                                } else if (len == 3) {
+                                    data[0] = term_process_ref_to_process_id(t);
+                                    int64_t t_ticks = term_to_ref_ticks(t);
+                                    data[1] = t_ticks >> 32;
+                                    data[2] = (uint32_t) t_ticks;
+                                    other_data[0] = term_process_ref_to_process_id(other);
+                                    int64_t other_ticks = term_to_ref_ticks(other);
+                                    other_data[1] = other_ticks >> 32;
+                                    other_data[2] = (uint32_t) other_ticks;
                                 } else {
                                     // len == 4
                                     struct RefcBinary *refc = term_resource_refc_binary_ptr(t);
