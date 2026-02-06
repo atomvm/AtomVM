@@ -819,6 +819,92 @@ TermCompareResult term_compare(term t, term other, TermCompareOpts opts, GlobalC
                             }
                         }
                     }
+                    case TERM_TYPE_INDEX_FUNCTION: {
+                        if (term_is_external_fun(t) && term_is_external_fun(other)) {
+                            const term *boxed_value = term_to_const_term_ptr(t);
+                            term module_atom = boxed_value[1];
+                            term function_atom = boxed_value[2];
+                            term arity = boxed_value[3];
+
+                            const term *other_boxed_value = term_to_const_term_ptr(other);
+                            term other_module_atom = other_boxed_value[1];
+                            term other_function_atom = other_boxed_value[2];
+                            term other_arity = other_boxed_value[3];
+
+                            if (temp_stack_push(&temp_stack, arity) != TempStackOk
+                                || temp_stack_push(&temp_stack, other_arity) != TempStackOk
+                                || temp_stack_push(&temp_stack, function_atom) != TempStackOk
+                                || temp_stack_push(&temp_stack, other_function_atom) != TempStackOk) {
+                                return TermCompareMemoryAllocFail;
+                            }
+
+                            t = module_atom;
+                            other = other_module_atom;
+                        } else if (!term_is_external_fun(t) && !term_is_external_fun(other)) {
+                            const term *boxed_value = term_to_const_term_ptr(t);
+                            Module *fun_module = (Module *) boxed_value[1];
+                            term module_name_atom = module_get_name(fun_module);
+                            atom_index_t module_atom_index = term_to_atom_index(module_name_atom);
+
+                            const term *other_boxed_value = term_to_const_term_ptr(other);
+                            Module *other_fun_module = (Module *) other_boxed_value[1];
+                            term other_module_name_atom = module_get_name(other_fun_module);
+                            atom_index_t other_module_atom_index = term_to_atom_index(other_module_name_atom);
+
+                            int module_cmp_result = atom_table_cmp_using_atom_index(
+                                global->atom_table, module_atom_index, other_module_atom_index);
+
+                            if (module_cmp_result != 0) {
+                                result = (module_cmp_result > 0) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
+
+                            uint32_t fun_index = term_to_int32(boxed_value[2]);
+                            uint32_t other_fun_index = term_to_int32(other_boxed_value[2]);
+
+                            if (fun_index != other_fun_index) {
+                                result = (fun_index > other_fun_index) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
+
+                            uint32_t arity, old_index, old_uniq;
+                            module_get_fun_arity_old_index_uniq(fun_module, fun_index, &arity, &old_index, &old_uniq);
+                            uint32_t other_arity, other_old_index, other_old_uniq;
+                            module_get_fun_arity_old_index_uniq(other_fun_module, other_fun_index, &other_arity, &other_old_index, &other_old_uniq);
+
+                            if (old_uniq != other_old_uniq) {
+                                result = (old_uniq > other_old_uniq) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            }
+
+                            uint32_t num_freeze = module_get_fun_freeze(fun_module, fun_index);
+                            uint32_t other_num_freeze = module_get_fun_freeze(other_fun_module, other_fun_index);
+
+                            if (num_freeze != other_num_freeze) {
+                                result = (num_freeze > other_num_freeze) ? TermGreaterThan : TermLessThan;
+                                goto unequal;
+                            } else if (num_freeze == 0) {
+                                CMP_POP_AND_CONTINUE();
+                            } else {
+                                uint32_t freeze_base = 3;
+                                for (uint32_t i = num_freeze - 1; i >= 1; i--) {
+                                    if (temp_stack_push(&temp_stack, boxed_value[i + freeze_base]) != TempStackOk
+                                        || temp_stack_push(&temp_stack, other_boxed_value[i + freeze_base]) != TempStackOk) {
+                                        return TermCompareMemoryAllocFail;
+                                    }
+                                }
+
+                                t = boxed_value[freeze_base];
+                                other = other_boxed_value[freeze_base];
+                            }
+
+                        } else {
+                            result = term_is_external_fun(t) ? TermGreaterThan : TermLessThan;
+                            goto unequal;
+                        }
+
+                        break;
+                    }
                     case TERM_TYPE_INDEX_NON_EMPTY_LIST: {
                         term t_tail = term_get_list_tail(t);
                         term other_tail = term_get_list_tail(other);
