@@ -1160,7 +1160,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
         term pid = term_get_tuple_element(msg, 1);
         term ref = term_get_tuple_element(msg, 2);
         term req = term_get_tuple_element(msg, 3);
-        RefData ref_data = term_to_ref_data(ref);
+        uint64_t ref_ticks = term_to_ref_ticks(ref);
 
         if (is_tagged_tuple(req, PUT_CHARS_ATOM, 3)) {
             term chars = term_get_tuple_element(req, 2);
@@ -1170,7 +1170,7 @@ static NativeHandlerResult process_console_message(Context *ctx, term msg)
                 printf("%s", str);
                 free(str);
 
-                term refcopy = term_from_ref_data(ref_data, &ctx->heap);
+                term refcopy = term_from_ref_ticks(ref_ticks, &ctx->heap);
 
                 term reply = term_alloc_tuple(3, &ctx->heap);
                 term_put_tuple_element(reply, 0, IO_REPLY_ATOM);
@@ -1426,7 +1426,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 
         scheduler_init_ready(new_ctx);
 
-        term ref = term_from_ref_data(ref_data, &ctx->heap);
+        term ref = term_from_ref_data(&ref_data, &ctx->heap);
 
         term process_ref_tuple = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(process_ref_tuple, 0, new_pid);
@@ -4430,7 +4430,7 @@ static term nif_erlang_monitor(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    return term_from_ref_data(ref_data, &ctx->heap);
+    return term_from_ref_data(&ref_data, &ctx->heap);
 }
 
 static term nif_erlang_demonitor(Context *ctx, int argc, term argv[])
@@ -6470,9 +6470,11 @@ static term nif_erlang_alias(Context *ctx, int argc, term argv[])
 
     RefData ref_data = {
         .type = RefTypeProcess,
-        .process = { .ref_ticks = globalcontext_get_ref_ticks(ctx->global), .process_id = ctx->process_id }
+        .process = {
+            .ref_ticks = globalcontext_get_ref_ticks(ctx->global),
+            .process_id = ctx->process_id }
     };
-    term process_ref = term_from_ref_data(ref_data, &ctx->heap);
+    term process_ref = term_from_ref_data(&ref_data, &ctx->heap);
     struct Monitor *monitor = monitor_alias_new(ref_data, ContextMonitorAliasExplicitUnalias);
     if (IS_NULL_PTR(monitor)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -6486,9 +6488,9 @@ static term nif_erlang_unalias(Context *ctx, int argc, term argv[])
     UNUSED(argc);
 
     term process_ref = argv[0];
-
     VALIDATE_VALUE(process_ref, term_is_local_reference);
     uint64_t ref_ticks = term_to_ref_ticks(process_ref);
+
     struct MonitorAlias *alias = context_find_alias(ctx, ref_ticks);
     if (IS_NULL_PTR(alias)) {
         return FALSE_ATOM;

@@ -3107,50 +3107,24 @@ static inline term term_from_resource(void *resource, Heap *heap)
     return ret;
 }
 
-static inline RefData term_to_ref_data(term t)
+static inline term term_from_ref_data(RefData *ref_data, Heap *heap)
 {
-    TERM_DEBUG_ASSERT(term_is_reference(t));
-
-    RefData ref_data = { 0 }; // Needed for GCC 10
-    if (term_is_external_reference(t)) {
-        ref_data.type = RefTypeExternal;
-        ref_data.external.node = term_get_external_node(t);
-        ref_data.external.creation = term_get_external_node_creation(t);
-        ref_data.external.len = term_get_external_reference_len(t);
-        ref_data.external.words = term_get_external_reference_words(t);
-    } else if (term_is_process_reference(t)) {
-        ref_data.type = RefTypeProcess;
-        ref_data.process.ref_ticks = term_to_ref_ticks(t);
-        ref_data.process.process_id = term_process_ref_to_process_id(t);
-    } else if (term_is_resource_reference(t)) {
-        ref_data.type = RefTypeResource;
-        ref_data.resource = &term_resource_refc_binary_ptr(t)->data;
-    } else {
-        ref_data.type = RefTypeShort;
-        ref_data.ref_ticks = term_to_ref_ticks(t);
-    }
-
-    return ref_data;
-}
-
-static inline term term_from_ref_data(RefData ref_data, Heap *heap)
-{
-    switch (ref_data.type) {
+    switch (ref_data->type) {
         case RefTypeShort: {
-            return term_from_ref_ticks(ref_data.ref_ticks, heap);
+            return term_from_ref_ticks(ref_data->ref_ticks, heap);
         }
         case RefTypeProcess: {
-            return term_make_process_reference(ref_data.process.process_id, ref_data.ref_ticks, heap);
+            return term_make_process_reference(ref_data->process.process_id, ref_data->ref_ticks, heap);
         }
         case RefTypeResource: {
-            return term_from_resource(ref_data.resource, heap);
+            return term_from_resource(ref_data->resource, heap);
         }
         case RefTypeExternal: {
             return term_make_external_reference(
-                ref_data.external.node,
-                ref_data.external.len,
-                ref_data.external.words,
-                ref_data.external.creation,
+                ref_data->external.node,
+                ref_data->external.len,
+                ref_data->external.words,
+                ref_data->external.creation,
                 heap);
         }
         default: {

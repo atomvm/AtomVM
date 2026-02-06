@@ -29,8 +29,6 @@ start() ->
     D = get_ref(3, [], fun make_alias_ref/0),
     E = get_ref(4, [], fun make_ref/0),
     Sorted = sort([E, C, D, A, B]),
-    erlang:display([A, C, E, B, D]),
-    erlang:display(Sorted),
     check(Sorted, [A, C, E, B, D]) +
         bool_to_n(Sorted < [make_alias_ref()]) * 2 +
         bool_to_n(Sorted > {make_ref()}) * 4.
