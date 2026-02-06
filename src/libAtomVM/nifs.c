@@ -1728,6 +1728,40 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
 }
 
+// Workaround for newlib setenv memory leak: use putenv with a fixed-size
+// static buffer. The buffer is installed once and then modified in place.
+// See: https://github.com/espressif/esp-idf/issues/3046
+
+#define TZ_BUFFER_SIZE 64
+
+static char tz_buffer[TZ_BUFFER_SIZE] = "TZ=";
+static char tz_value_buffer[TZ_BUFFER_SIZE - 3];
+static bool tz_buffer_installed = false;
+static bool tz_buffer_in_place = false;
+
+static void set_tz_value(const char *tz)
+{
+    if (!tz_buffer_installed) {
+        putenv(tz_buffer);
+        tz_buffer_installed = true;
+        char *env_tz = getenv("TZ");
+        tz_buffer_in_place = (env_tz == tz_buffer + 3);
+    }
+    size_t tz_len = strlen(tz);
+    if (tz_len > TZ_BUFFER_SIZE - 4) {
+        tz_len = TZ_BUFFER_SIZE - 4;
+    }
+    if (tz_buffer_in_place) {
+        memcpy(tz_buffer + 3, tz, tz_len);
+        tz_buffer[3 + tz_len] = '\0';
+    } else {
+        memcpy(tz_value_buffer, tz, tz_len);
+        memset(tz_value_buffer + tz_len, ' ', (TZ_BUFFER_SIZE - 4) - tz_len);
+        tz_value_buffer[TZ_BUFFER_SIZE - 4] = '\0';
+        setenv("TZ", tz_value_buffer, 1);
+    }
+}
+
 term nif_erlang_localtime(Context *ctx, int argc, term argv[])
 {
     char *tz;
@@ -1751,17 +1785,22 @@ term nif_erlang_localtime(Context *ctx, int argc, term argv[])
     smp_spinlock_lock(&ctx->global->env_spinlock);
 #endif
     if (tz) {
-        char *oldtz = getenv("TZ");
-        setenv("TZ", tz, 1);
+        char *oldtz = NULL;
+        char *oldtz_env = getenv("TZ");
+        if (oldtz_env) {
+            oldtz = strdup(oldtz_env);
+        }
+        set_tz_value(tz);
         tzset();
         localtime = localtime_r(&ts.tv_sec, &storage);
         if (oldtz) {
-            setenv("TZ", oldtz, 1);
+            set_tz_value(oldtz);
+            free(oldtz);
         } else {
-            unsetenv("TZ");
+            set_tz_value("");
         }
+        tzset();
     } else {
-        // Call tzset to handle DST changes
         tzset();
         localtime = localtime_r(&ts.tv_sec, &storage);
     }
