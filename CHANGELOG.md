@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 instead `badarg`.
 - Resources are now references instead of empty binaries.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
+- Removed support for OTP versions < 26
 
 ### Fixed
 

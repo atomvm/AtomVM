@@ -31,10 +31,10 @@ test() ->
     ok = test_recv_nowait(),
     ok = test_accept_nowait(),
     ok = test_setopt_getopt(),
-    case get_otp_version() of
-        atomvm ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
             ok = test_abandon_select();
-        _ ->
+        "BEAM" ->
             ok
     end,
     ok.
@@ -234,7 +234,7 @@ echo(Pid, Socket) ->
         {error, closed} ->
             Pid ! recv_terminated,
             ok;
-        %% OTP-24
+        %% OTP returns this in some (random) cases
         {error, econnreset} ->
             Pid ! recv_terminated,
             ok;
@@ -466,18 +466,11 @@ test_recv_nowait(ReceiveFun) ->
     ok = close_listen_socket(ListenSocket).
 
 test_accept_nowait() ->
-    OTPVersion = get_otp_version(),
-    ok = test_accept_nowait(nowait, OTPVersion),
-    ok = test_accept_nowait(make_ref(), OTPVersion),
+    ok = test_accept_nowait(nowait),
+    ok = test_accept_nowait(make_ref()),
     ok.
 
-% actually since 22.1, but let's simplify here.
-test_accept_nowait(_NoWaitRef, Version) when Version =/= atomvm andalso Version < 23 -> ok;
-test_accept_nowait(Ref, Version) when
-    is_reference(Ref) andalso Version =/= atomvm andalso Version < 24
-->
-    ok;
-test_accept_nowait(NoWaitRef, _Version) ->
+test_accept_nowait(NoWaitRef) ->
     etest:flush_msg_queue(),
 
     {ok, Socket} = socket:open(inet, stream, tcp),
@@ -576,14 +569,6 @@ test_abandon_select() ->
 
     erlang:garbage_collect(),
     ok.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            list_to_integer(erlang:system_info(otp_release));
-        _ ->
-            atomvm
-    end.
 
 id(X) ->
     X.

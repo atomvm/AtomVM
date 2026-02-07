@@ -28,12 +28,7 @@ test() ->
     ok = test_start_monitor_badarg(),
     ok = test_start_link_sync(),
     ok = test_start_link_opt_sync(),
-    case get_otp_version() of
-        Version when Version >= 23 ->
-            ok = test_start_monitor_sync();
-        _ ->
-            ok
-    end,
+    ok = test_start_monitor_sync(),
     ok = test_start_timeout(),
     ok = test_start_crash(),
     ok = test_initial_call_and_ancestors(),
@@ -268,11 +263,3 @@ init_crash({Class, Reason, Stacktrace}) ->
 
 init_initial_call_ancestors(Parent) ->
     proc_lib:init_ack(Parent, {ok, get('$initial_call'), get('$ancestors')}).
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            list_to_integer(erlang:system_info(otp_release));
-        _ ->
-            atomvm
-    end.
