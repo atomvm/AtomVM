@@ -36,10 +36,14 @@
     fade_func_uninstall/0,
     set_fade_with_time/4,
     set_fade_with_step/5,
+    set_fade_time_and_start/5,
+    set_fade_step_and_start/6,
     fade_start/3,
+    fade_stop/2,
     get_duty/2,
     set_duty/3,
     update_duty/2,
+    set_duty_and_update/4,
     get_freq/2,
     set_freq/3,
     stop/3
@@ -173,6 +177,59 @@ set_fade_with_step(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   SpeedMode       Select the LEDC channel group with specified speed mode.
+%%                          Note that not all targets support high speed mode.
+%% @param   Channel         LEDC channel index (0-7).
+%% @param   TargetDuty      Target duty of fading. (0..(2^duty_resolution)-1)
+%% @param   MaxFadeTimeMs   The maximum time of the fading (ms).
+%% @param   FadeMode        Whether to block until fading done.
+%% @returns ok | {error, ledc_error_code()}
+%% @doc     Set LEDC fade function with a limited time and start fading.
+%%
+%%          Thread-safe version that atomically configures and starts the fade.
+%%          This can safely be called from different processes for different channels.
+%%          Note. Call ledc:fade_func_install/1 once before calling this function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_fade_time_and_start(
+    SpeedMode :: speed_mode(),
+    Channel :: channel(),
+    TargetDuty :: non_neg_integer(),
+    MaxFadeTimeMs :: non_neg_integer(),
+    FadeMode :: fade_mode()
+) ->
+    ok | {error, ledc_error_code()}.
+set_fade_time_and_start(_SpeedMode, _Channel, _TargetDuty, _MaxFadeTimeMs, _FadeMode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
+%%                      Note that not all targets support high speed mode.
+%% @param   Channel     LEDC channel index (0-7).
+%% @param   TargetDuty  Target duty of fading. (0..(2^duty_resolution)-1)
+%% @param   Scale       Controls the increase or decrease step scale.
+%% @param   CycleNum    increase or decrease the duty every cycle_num cycles
+%% @param   FadeMode    Whether to block until fading done.
+%% @returns ok | {error, ledc_error_code()}
+%% @doc     Set LEDC fade function with step and start fading.
+%%
+%%          Thread-safe version that atomically configures and starts the fade.
+%%          This can safely be called from different processes for different channels.
+%%          Note. Call ledc:fade_func_install/1 once before calling this function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_fade_step_and_start(
+    SpeedMode :: speed_mode(),
+    Channel :: channel(),
+    TargetDuty :: non_neg_integer(),
+    Scale :: non_neg_integer(),
+    CycleNum :: non_neg_integer(),
+    FadeMode :: fade_mode()
+) -> ok | {error, ledc_error_code()}.
+set_fade_step_and_start(_SpeedMode, _Channel, _TargetDuty, _Scale, _CycleNum, _FadeMode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
 %%                      Note that not all targets support high speed mode.
 %% @param   Channel     LEDC channel index (0-7).
@@ -265,4 +322,45 @@ set_freq(_SpeedMode, _TimerNum, _FreqHz) ->
 -spec stop(SpeedMode :: speed_mode(), Channel :: channel(), IdleLevel :: non_neg_integer()) ->
     ok | {error, ledc_error_code()}.
 stop(_SpeedMode, _Channel, _IdleLevel) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
+%%                      Note that not all targets support high speed mode.
+%% @param   Channel     LEDC channel index (0-7).
+%% @returns ok | {error, ledc_error_code()}
+%% @doc     Stop LEDC fading.
+%%
+%%          Note. Call ledc:fade_func_install/1 once before calling this function.
+%%          This function is only available on platforms with
+%%          SOC_LEDC_SUPPORT_FADE_STOP (including esp32s2, esp32c3 but not esp32).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec fade_stop(SpeedMode :: speed_mode(), Channel :: channel()) ->
+    ok | {error, ledc_error_code()}.
+fade_stop(_SpeedMode, _Channel) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   SpeedMode   Select the LEDC channel group with specified speed mode.
+%%                      Note that not all targets support high speed mode.
+%% @param   Channel     LEDC channel index (0-7).
+%% @param   Duty        Set the LEDC duty, the range of setting is [0, (2^duty_resolution)-1].
+%% @param   HPoint      Set the LEDC hpoint value.
+%% @returns ok | {error, ledc_error_code()}
+%% @doc     Set LEDC duty and update immediately (thread-safe).
+%%
+%%          Thread-safe version that atomically sets duty and triggers an update.
+%%          This can safely be called from different processes for different channels.
+%%          Note. Call ledc:fade_func_install/1 once before calling this function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_duty_and_update(
+    SpeedMode :: speed_mode(),
+    Channel :: channel(),
+    Duty :: non_neg_integer(),
+    HPoint :: non_neg_integer()
+) ->
+    ok | {error, ledc_error_code()}.
+set_duty_and_update(_SpeedMode, _Channel, _Duty, _HPoint) ->
     erlang:nif_error(undefined).
