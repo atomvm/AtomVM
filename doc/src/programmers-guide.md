@@ -48,7 +48,7 @@ In addition, several features are supported specifically for integration with mi
   * [LEDC](#led-control) (PWM)
   * [non-volatile storage](#non-volatile-storage) (NVS)
   * [RTC](#rtc-memory) storage
-  * [deep sleep](#restart-and-deep-sleep)
+  * [restart and sleep](#restart-and-sleep)
 
 ### Limitations
 
@@ -1270,7 +1270,7 @@ These functions allow you to work with external storage devices or partitions on
 Remember to properly unmount any mounted filesystems before powering off or resetting the device to prevent data corruption.
 ```
 
-### Restart and Deep Sleep
+### Restart and Sleep
 
 You can use the [`esp:restart/0`](./apidocs/erlang/eavmlib/esp.md#restart0) function to immediately restart the ESP32 device.  This function does not return a value.
 
@@ -1291,6 +1291,21 @@ Use the [`esp:reset_reason/0`](./apidocs/erlang/eavmlib/esp.md#reset_reason0) fu
 * `esp_rst_deepsleep`
 * `esp_rst_brownout`
 * `esp_rst_sdio`
+
+#### Sleep Mode - Deep Sleep and Light Sleep
+
+For low power applications, you should use the deep sleep functionality of the ESP32.
+
+This will put the ESP32 into a very low power state, and it will consume very little power.
+You can wake the ESP32 from deep sleep using a timer, or an interrupt etc.
+
+Make sure your board is suitable for low power deep sleep, some boards have voltage regulators and/or LEDs constantly draining power, also make sure sensors are powered down or in low power mode when the ESP32 is in deep sleep.
+
+For persisting small amounts of data during deep sleep, you can use the RTC memory of the ESP32, which is preserved during deep sleep.
+
+Light sleep is supported as well and can be enabled on ESP32 using the related functions. When using light sleep memory is retained, and execution is resumed as soon as wakeup is triggered from a wakeup source.
+
+#### Deep Sleep
 
 Use the [`esp:deep_sleep/1`](./apidocs/erlang/eavmlib/esp.md#deep_sleep1) function to put the ESP device into deep sleep for a specified number of milliseconds.  Be sure to safely stop any critical processes running before this function is called, as it will cause an immediate shutdown of the device.
 
@@ -1314,7 +1329,7 @@ Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_g
 * `undefined` (no sleep wakeup)
 * `error` (unknown other reason)
 
-The values matches the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
+The values match the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
 
 ```erlang
 case esp:sleep_get_wakeup_cause() of
@@ -1365,6 +1380,17 @@ Calling [`esp:rtc_slow_get_binary/0`](./apidocs/erlang/eavmlib/esp.md#rtc_slow_g
 ```
 
 By default, RTC slow memory in AtomVM is limited to 4098 (4k) bytes.  This value can be modified at build time using an IDF SDK `KConfig` setting.  For  instructions about how to build AtomVM, see the AtomVM [Build Instructions](./build-instructions.md#building-for-esp32).
+
+#### Light Sleep
+
+Use the [`light_sleep/0`](./apidocs/erlang/eavmlib/esp.md#light_sleep0) function to put the ESP device into light sleep. In order to wake up, it is required to configure a wake-up source first, using either [`sleep_enable_gpio_wakeup/0`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_gpio_wakeup0) or [`sleep_enable_timer_wakeup/1`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_timer_wakeup1).
+`sleep_enable_gpio_wakeup/0` also requires configuring each individual GPIO pin that will be used as a wake-up trigger using [`wakeup_enable/2`](./apidocs/erlang/eavmlib/gpio.md#wakeup_enable/2).
+
+```erlang
+    gpio:wakeup_enable(GPIONum, high),
+    esp:sleep_enable_gpio_wakeup(),
+    esp:light_sleep().
+```
 
 ### Miscellaneous ESP32 APIs
 

@@ -370,21 +370,6 @@ You may have to increase "Flash SPI speed" (see above) before you can increase P
 
 The higher the speed, the faster the PSRAM will be, at the cost of higher power usage, but not all PSRAM chips support higher speeds.
 
-#### Sleep mode - Deep sleep
-
-For low power applications, you should use the [deep sleep functionality](./programmers-guide.md#restart-and-deep-sleep) of the ESP32.
-
-This will put the ESP32 into a very low power state, and it will consume very little power.
-You can wake the ESP32 from deep sleep using a timer, or an interrupt etc.
-
-Make sure your board is suitable for low power deep sleep, some boards have voltage regulators and/or LEDs constantly draining power, also make sure sensors are powered down or in low power mode when the ESP32 is in deep sleep.
-
-For persisting small amounts of data during deep sleep, you can use the [RTC memory](./programmers-guide.md#rtc-memory) of the ESP32, which is preserved during deep sleep.
-
-#### Sleep mode - Light sleep
-
-Usage of light sleep is untested, and no support for controlling light sleep is currently implemented. Reach out if you do any experiments and measurements.
-
 #### Other Build settings
 
 Various other build settings can be changed in `idf.py menuconfig` in `src/platforms/esp32`, that affect the performance and power usage of the ESP32.
