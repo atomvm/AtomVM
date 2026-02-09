@@ -611,6 +611,9 @@ struct Test tests[] = {
     TEST_CASE(test_lists_keymember),
     TEST_CASE(test_lists_keyfind),
 
+    TEST_CASE(test_crypto_pk),
+    TEST_CASE(test_crypto_mac),
+
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
     { NULL, 0, false, false }
