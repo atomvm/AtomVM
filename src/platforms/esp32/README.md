@@ -6,7 +6,7 @@
 
 This document provides internal implementation details about the build system for AtomVM on the ESP32.  You should read this document if you are doing maintenance or adding features (such as support for peripherals or protocols) to the ESP32 port of AtomVM.
 
-The ESP32 build currently makes use of the IDF SDK [CMake-based Build System](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-guides/build-system.html) to build the IDF SDK libraries (i.e., components) and AtomVM virtual machine.
+The ESP32 build currently makes use of the IDF SDK [CMake-based Build System](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-guides/build-system.html) to build the IDF SDK libraries (i.e., components) and AtomVM virtual machine.
 
 As such, the AtomVM build includes a set of main entrypoints for the ESP application (defined in the `main` directory), as well as system-specific code that is used by the application.
 

@@ -1329,7 +1329,7 @@ Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_g
 * `undefined` (no sleep wakeup)
 * `error` (unknown other reason)
 
-The values match the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
+The values match the semantics of [`esp_sleep_get_wakeup_cause`](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/system/sleep_modes.html#_CPPv426esp_sleep_get_wakeup_causev).
 
 ```erlang
 case esp:sleep_get_wakeup_cause() of
@@ -1344,7 +1344,7 @@ case esp:sleep_get_wakeup_cause() of
 end.
 ```
 
-Use the [`esp:sleep_enable_ext0_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext0_wakeup2) and [`esp:sleep_enable_ext1_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext1_wakeup2) functions to configure ext0 and ext1 wakeup mechanisms. They follow the semantics of [`esp_sleep_enable_ext0_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext0_wakeup10gpio_num_ti) and [`esp_sleep_enable_ext1_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext1_wakeup8uint64_t28esp_sleep_ext1_wakeup_mode_t).
+Use the [`esp:sleep_enable_ext0_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext0_wakeup2) and [`esp:sleep_enable_ext1_wakeup/2`](./apidocs/erlang/eavmlib/esp.md#sleep_enable_ext1_wakeup2) functions to configure ext0 and ext1 wakeup mechanisms. They follow the semantics of [`esp_sleep_enable_ext0_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext0_wakeup10gpio_num_ti) and [`esp_sleep_enable_ext1_wakeup`](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/system/sleep_modes.html#_CPPv428esp_sleep_enable_ext1_wakeup8uint64_t28esp_sleep_ext1_wakeup_mode_t).
 
 ```erlang
 -spec shutdown() -> no_return().
@@ -1593,14 +1593,14 @@ The option `db_11` has been superseded by `db_12`. The option `db_11` and will b
 ```
 
 ```{note}
-For a higher degree of accuracy increase the number of sample taken, the default is 64. If highly stable and accurate ADC measurements are required for an application you may need to connect a bypass capacitor (e.g., a 100 nF ceramic capacitor) to the ADC input pad in use, to minimize noise. This chart from the [Espressif ADC Calibration Driver documentation](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_calibration.html) shows the difference between the use of a capacitor and without, as well as with a capacitor and multisampling of 64 samples.
+For a higher degree of accuracy increase the number of sample taken, the default is 64. If highly stable and accurate ADC measurements are required for an application you may need to connect a bypass capacitor (e.g., a 100 nF ceramic capacitor) to the ADC input pad in use, to minimize noise. This chart from the [Espressif ADC Calibration Driver documentation](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/peripherals/adc_calibration.html) shows the difference between the use of a capacitor and without, as well as with a capacitor and multisampling of 64 samples.
 
-![ADC Noise Comparison](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/_images/adc-noise-graph.jpg)
+![ADC Noise Comparison](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/_images/adc-noise-graph.jpg)
 
 You can clearly see the noisy results without a capacitor. This is mitigated by the use of multisampling but without a decoupling capacitor results will likely still contain some noise.
 ```
 
-When an ADC channel is configured by the use of `esp_adc:acquire/2,4` or `esp_adc:start/1,2` the driver will select the optimal calibration mechanism supported by the device and channel configuration. If neither the line fitting or curve fitting mechanisms are supported by the device using the provided configuration options an estimated result will be used to provide `voltage` values, based on the [formula suggested by Espressif](https://docs.espressif.com/projects/esp-idf/en/v5.3/esp32/api-reference/peripherals/adc_oneshot.html#read-conversion-result). For chips using the line fitting calibration scheme that do not have the default vref efuse set, a default vref of 1100 mV is used, this is not currently settable.
+When an ADC channel is configured by the use of `esp_adc:acquire/2,4` or `esp_adc:start/1,2` the driver will select the optimal calibration mechanism supported by the device and channel configuration. If neither the line fitting or curve fitting mechanisms are supported by the device using the provided configuration options an estimated result will be used to provide `voltage` values, based on the [formula suggested by Espressif](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/peripherals/adc_oneshot.html#read-conversion-result). For chips using the line fitting calibration scheme that do not have the default vref efuse set, a default vref of 1100 mV is used, this is not currently settable.
 
 #### ESP32 ADC read options
 

@@ -217,7 +217,7 @@ The following software is required in order to build AtomVM for the ESP32 platfo
 * [Espressif IDF SDK](https://www.espressif.com/en/products/sdks/esp-idf) (consult [Release Notes](./release-notes.md) for currently supported versions)
 * `cmake`
 
-Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v4.4/get-started/index.html) guide for more information.
+Instructions for downloading and installing the Espressif IDF SDK and tool chains are outside of the scope of this document.  Please consult the [IDF SDKGetting Started](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/get-started/index.html) guide for more information.
 
 ### ESP32 Build Instructions
 
@@ -629,7 +629,7 @@ AtomVM supports extensions to the VM via the implementation of custom native fun
 
 ```{seealso}
 For more information about building components for the IDF SDK, consult the
-[IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/v5.1.3/esp32/api-guides/build-system.html)
+[IDF SDK Build System](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-guides/build-system.html)
 documentation.
 ```
 
