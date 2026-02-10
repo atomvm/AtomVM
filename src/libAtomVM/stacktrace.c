@@ -88,6 +88,12 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
 
 term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
 {
+    if (term_is_nonempty_list(ctx->exception_stacktrace)) {
+        // there is already a built stacktrace, nothing to do here
+        // (this happens when re-raising with raise/3
+        return ctx->exception_stacktrace;
+    }
+
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
     size_t filename_lens = 0;
@@ -260,6 +266,12 @@ static term find_path_created(const void *key, struct ModulePathPair *module_pat
 term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     GlobalContext *glb = ctx->global;
+
+    if (term_is_nonempty_list(*stack_info)) {
+        // stacktrace has been already built. Nothing to do here
+        // This may happen when re-raising with raise/3
+        return *stack_info;
+    }
 
     if (*stack_info == OUT_OF_MEMORY_ATOM) {
         return *stack_info;

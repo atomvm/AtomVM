@@ -631,6 +631,10 @@ compile_erlang(test_lists_member)
 compile_erlang(test_lists_keymember)
 compile_erlang(test_lists_keyfind)
 
+compile_erlang(test_reraise)
+compile_erlang(reraise_reraiser)
+compile_erlang(reraise_raiser)
+
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
         test_op_bs_start_match_asm.beam
@@ -1170,6 +1174,10 @@ set(erlang_test_beams
 
     bigint.beam
     bigint_stress.beam
+
+    test_reraise.beam
+    reraise_reraiser.beam
+    reraise_raiser.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}

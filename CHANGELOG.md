@@ -106,6 +106,7 @@ instead `badarg`.
 - Fix supervisor crash if a `one_for_one` child fails to restart.
 - Fix collision in references created with `make_ref/0` on 32 bits platforms.
 - Fixed a bug in `OP_BS_CREATE_BIN`
+- Fix re-raise behavior by implementing `erlang:raise/3` 3rd argument support
 
 ## [0.6.7] - Unreleased
 
