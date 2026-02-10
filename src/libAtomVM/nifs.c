@@ -69,24 +69,24 @@
 
 #define FLOAT_BUF_SIZE 64
 
-#define RAISE(a, b)                 \
-    do {                            \
-        term _tmp_a = (a);          \
-        term _tmp_b = (b);          \
-        ctx->x[0] = _tmp_a;         \
-        ctx->x[1] = _tmp_b;         \
-        return term_invalid_term(); \
+#define RAISE(a, b)                     \
+    do {                                \
+        term _tmp_a = (a);              \
+        term _tmp_b = (b);              \
+        ctx->exception_class = _tmp_a;  \
+        ctx->exception_reason = _tmp_b; \
+        return term_invalid_term();     \
     } while (0)
 
-#define RAISE_WITH_STACKTRACE(a, b, c) \
-    do {                               \
-        term _tmp_a = (a);             \
-        term _tmp_b = (b);             \
-        term _tmp_c = (c);             \
-        ctx->x[0] = _tmp_a;            \
-        ctx->x[1] = _tmp_b;            \
-        ctx->x[2] = _tmp_c;            \
-        return term_invalid_term();    \
+#define RAISE_WITH_STACKTRACE(a, b, c)      \
+    do {                                    \
+        term _tmp_a = (a);                  \
+        term _tmp_b = (b);                  \
+        term _tmp_c = (c);                  \
+        ctx->exception_class = _tmp_a;      \
+        ctx->exception_reason = _tmp_b;     \
+        ctx->exception_stacktrace = _tmp_c; \
+        return term_invalid_term();         \
     } while (0)
 
 #ifndef MAX

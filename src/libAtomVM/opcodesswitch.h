@@ -63,23 +63,24 @@ extern "C" {
 #ifdef IMPL_EXECUTE_LOOP
 
 #if AVM_NO_JIT
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)           \
+    ctx->exception_class = ERROR_ATOM;       \
+    ctx->exception_reason = error_type_atom; \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
 #elif AVM_NO_EMU
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)           \
+    ctx->exception_class = ERROR_ATOM;       \
+    ctx->exception_reason = error_type_atom; \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
 #else
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    if (mod->native_code) {                                             \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM); \
-    } else {                                                            \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
+#define SET_ERROR(error_type_atom)                                                          \
+    ctx->exception_class = ERROR_ATOM;                                                      \
+    ctx->exception_reason = error_type_atom;                                                \
+    if (mod->native_code) {                                                                 \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod,                         \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);  \
+    } else {                                                                                \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
     }
 #endif
 
@@ -1316,7 +1317,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #endif
 
 #define HANDLE_ERROR()                                                  \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ctx->exception_class);  \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name, label)           \
@@ -4024,9 +4025,9 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
-                    x_regs[0] = stacktrace_exception_class(stacktrace);
-                    x_regs[1] = exc_value;
-                    x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    ctx->exception_class = stacktrace_exception_class(stacktrace);
+                    ctx->exception_reason = exc_value;
+                    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, saved_pc - code, ctx->exception_class);
                     goto handle_error;
                 #endif
 
@@ -6666,6 +6667,9 @@ wait_timeout_trap_handler:
                                 ex_class != THROW_ATOM)) {
                         x_regs[0] = BADARG_ATOM;
                     } else {
+                        ctx->exception_class = x_regs[0];
+                        ctx->exception_reason = x_regs[1];
+                        ctx->exception_stacktrace = x_regs[2];
                         goto handle_error;
                     }
                 #endif
@@ -7698,6 +7702,13 @@ do_abort:
 
 handle_error:
         {
+            x_regs[0] = ctx->exception_class;
+            x_regs[1] = ctx->exception_reason;
+            x_regs[2] = ctx->exception_stacktrace;
+            ctx->exception_class = term_nil();
+            ctx->exception_reason = term_nil();
+            ctx->exception_stacktrace = term_nil();
+
             int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
 #if AVM_NO_JIT

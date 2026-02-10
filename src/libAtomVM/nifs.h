@@ -36,16 +36,16 @@ extern "C" {
 
 #define VALIDATE_VALUE(value, verify_function) \
     if (UNLIKELY(!verify_function((value)))) { \
-        argv[0] = ERROR_ATOM;                  \
-        argv[1] = BADARG_ATOM;                 \
+        ctx->exception_class = ERROR_ATOM;     \
+        ctx->exception_reason = BADARG_ATOM;   \
         return term_invalid_term();            \
     }
 
-#define RAISE_ERROR(error_type_atom)   \
-    do {                               \
-        ctx->x[0] = ERROR_ATOM;        \
-        ctx->x[1] = (error_type_atom); \
-        return term_invalid_term();    \
+#define RAISE_ERROR(error_type_atom)               \
+    do {                                           \
+        ctx->exception_class = ERROR_ATOM;         \
+        ctx->exception_reason = (error_type_atom); \
+        return term_invalid_term();                \
     } while (0);
 
 const struct Nif *nifs_get(const char *mfa);

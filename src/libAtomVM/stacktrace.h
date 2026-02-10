@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class);
+
 /**
  * @brief Build a stack trace
  * @param ctx           context
