@@ -3633,13 +3633,15 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_raise(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term ex_class = argv[0];
     if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
         return BADARG_ATOM;
     }
-    RAISE_WITH_STACKTRACE(ex_class, argv[1], term_nil());
+    if (argc == 2) {
+        RAISE(ex_class, argv[1]);
+    } else {
+        RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
+    }
 }
 
 static term nif_ets_new(Context *ctx, int argc, term argv[])
