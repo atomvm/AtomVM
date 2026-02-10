@@ -200,10 +200,20 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
-    TRACE("jit_terminate_context: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    if (offset || term_is_invalid_term(ctx->x[2])) {
-        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
+    TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
+    if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
+        ctx->exception_stacktrace
+            = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->exception_class);
     }
+
+    // Copy exception fields to x registers and clear them
+    ctx->x[0] = ctx->exception_class;
+    ctx->x[1] = ctx->exception_reason;
+    ctx->x[2] = ctx->exception_stacktrace;
+    ctx->exception_class = term_nil();
+    ctx->exception_reason = term_nil();
+    ctx->exception_stacktrace = term_nil();
+
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {
         if (jit_state->module->native_code) {
@@ -258,12 +268,13 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 
 static void set_error(Context *ctx, JITState *jit_state, int offset, term error_term)
 {
-    ctx->x[0] = ERROR_ATOM;
-    ctx->x[1] = error_term;
+    ctx->exception_class = ERROR_ATOM;
+    ctx->exception_reason = error_term;
     if (offset) {
-        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ERROR_ATOM);
+        ctx->exception_stacktrace
+            = stacktrace_create_raw(ctx, jit_state->module, offset, ERROR_ATOM);
     } else {
-        ctx->x[2] = term_invalid_term();
+        ctx->exception_stacktrace = term_invalid_term();
     }
 }
 
@@ -294,9 +305,19 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
 static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
     TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    ctx->x[0] = stacktrace_exception_class(stacktrace);
-    ctx->x[1] = exc_value;
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
+    ctx->exception_class = stacktrace_exception_class(stacktrace);
+    ctx->exception_reason = exc_value;
+    ctx->exception_stacktrace
+        = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->exception_class);
+    return jit_handle_error(ctx, jit_state, 0);
+}
+
+static Context *jit_raw_raise(Context *ctx, JITState *jit_state)
+{
+    TRACE("jit_raw_raise: ctx->process_id = %" PRId32 "\n", ctx->process_id);
+    ctx->exception_class = ctx->x[0];
+    ctx->exception_reason = ctx->x[1];
+    ctx->exception_stacktrace = ctx->x[2];
     return jit_handle_error(ctx, jit_state, 0);
 }
 
@@ -593,9 +614,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -604,9 +623,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 #endif
     Heap heap;
     if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-        ctx->x[0] = ERROR_ATOM;
-        ctx->x[1] = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -619,9 +636,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -631,9 +646,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
         if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -655,9 +668,7 @@ static term jit_alloc_big_integer_fragment(
     term_bigint_size_requirements(digits_len, &intn_data_size, &rounded_res_len);
 
     if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
-        ctx->x[0] = ERROR_ATOM;
-        ctx->x[1] = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term bigint_term
@@ -1866,7 +1877,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_stacktrace_build,
     jit_term_reuse_binary,
     jit_alloc_big_integer_fragment,
-    jit_bitstring_insert_float
+    jit_bitstring_insert_float,
+    jit_raw_raise
 };
 
 #endif
