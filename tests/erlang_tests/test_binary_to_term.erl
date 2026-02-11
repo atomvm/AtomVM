@@ -180,6 +180,7 @@ start() ->
     ok = test_encode_port(),
     ok = test_atom_encoding(),
     ok = test_encode_resource(),
+    ok = test_encode_process_ref(),
     0.
 
 test_reverse(T, Interop) ->
@@ -1136,22 +1137,33 @@ test_encode_resource(OTPVersion) ->
     AlteredResource4 = binary_to_term(AlteredResourceBin4),
     false = AlteredResource4 =:= Resource,
     ok.
+test_encode_process_ref() ->
+    AliasesAvailable = is_atomvm_or_otp_version_at_least("24"),
+    if
+        AliasesAvailable ->
+            ProcessRef = erlang:alias(),
+            ProcessRef = binary_to_term(term_to_binary(ProcessRef)),
+            ok;
+        true ->
+            ok
+    end.
 
 % Some binaries are re-encoded differently on earlier BEAM. Verify
 % term_to_binary(binary_to_term(Bin)) is idempotent on AtomVM and recent OTPs.
 binary_to_term_idempotent(Binary, OTPVersion) ->
     Term = binary_to_term(Binary),
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            Binary = term_to_binary(Term);
-        "BEAM" ->
-            OTPRelease = erlang:system_info(otp_release),
-            if
-                OTPRelease >= OTPVersion -> Binary = term_to_binary(Term);
-                true -> ok
-            end
+    CanCheck = is_atomvm_or_otp_version_at_least(OTPVersion),
+    if
+        CanCheck -> Binary = term_to_binary(Term);
+        true -> ok
     end,
     Term.
+
+is_atomvm_or_otp_version_at_least(OTPVersion) ->
+    case erlang:system_info(machine) of
+        "ATOM" -> true;
+        "BEAM" -> erlang:system_info(otp_release) >= OTPVersion
+    end.
 
 test_atom_encoding() ->
     true = compare_pair_encoding(latin1_as_utf8_1),
