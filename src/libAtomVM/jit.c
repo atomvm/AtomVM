@@ -285,6 +285,20 @@ static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, t
     return jit_handle_error(ctx, jit_state, 0);
 }
 
+static Context *jit_raise_error_mfa(Context *ctx, JITState *jit_state, int offset,
+    int module_atom_index, int function_atom_index, int arity)
+{
+    TRACE("jit_raise_error_mfa: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id,
+        offset);
+    term module_atom = module_get_atom_term_by_id(jit_state->module, module_atom_index);
+    term function_atom = module_get_atom_term_by_id(jit_state->module, function_atom_index);
+    ctx->exception_class = ERROR_ATOM;
+    ctx->exception_reason = FUNCTION_CLAUSE_ATOM;
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(
+        ctx, jit_state->module, offset, ERROR_ATOM, module_atom, function_atom, arity);
+    return jit_handle_error(ctx, jit_state, 0);
+}
+
 static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int offset, term error_atom, term arg1)
 {
     TRACE("jit_raise_error_tuple: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
@@ -1878,7 +1892,8 @@ const ModuleNativeInterface module_native_interface = {
     jit_term_reuse_binary,
     jit_alloc_big_integer_fragment,
     jit_bitstring_insert_float,
-    jit_raw_raise
+    jit_raw_raise,
+    jit_raise_error_mfa
 };
 
 #endif

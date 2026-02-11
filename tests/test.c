@@ -618,6 +618,7 @@ struct Test tests[] = {
     TEST_CASE(test_lists_keyfind),
 
     TEST_CASE_COND(test_reraise, 0, SKIP_STACKTRACES),
+    TEST_CASE_COND(stacktrace_function_args, 0, SKIP_STACKTRACES),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 

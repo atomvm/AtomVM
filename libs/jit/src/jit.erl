@@ -173,30 +173,18 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest1, MMod, MSt1, State0);
 % 2
-first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
+first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
-    {_ModuleAtom, Rest1} = decode_atom(Rest0),
-    {_FunctionName, Rest2} = decode_atom(Rest1),
-    {_Arity, Rest3} = decode_literal(Rest2),
-    ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [_ModuleAtom, _FunctionName, _Arity]),
-    % Implement function clause at the previous label.
+    {ModuleAtomIndex, Rest1} = decode_atom(Rest0),
+    {FunctionAtomIndex, Rest2} = decode_atom(Rest1),
+    {Arity, Rest3} = decode_literal(Rest2),
+    ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [ModuleAtomIndex, FunctionAtomIndex, Arity]),
     Offset = MMod:offset(MSt0),
-    {MSt1, OffsetReg} = MMod:move_to_native_register(MSt0, Offset),
-    TailCacheKey = {call_primitive_last, ?PRIM_RAISE_ERROR, [OffsetReg, ?FUNCTION_CLAUSE_ATOM]},
-    State1 =
-        case lists:keyfind(TailCacheKey, 1, TC) of
-            false ->
-                MSt3 = MMod:call_primitive_last(MSt1, ?PRIM_RAISE_ERROR, [
-                    ctx, jit_state, {free, OffsetReg}, ?FUNCTION_CLAUSE_ATOM
-                ]),
-                State0#state{tail_cache = [{TailCacheKey, Offset} | TC]};
-            {TailCacheKey, CacheOffset} ->
-                MSt2 = MMod:jump_to_offset(MSt1, CacheOffset),
-                MSt3 = MMod:free_native_registers(MSt2, [OffsetReg]),
-                State0
-        end,
-    ?ASSERT_ALL_NATIVE_FREE(MSt3),
-    first_pass(Rest3, MMod, MSt3, State1);
+    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR_MFA, [
+        ctx, jit_state, Offset, ModuleAtomIndex, FunctionAtomIndex, Arity
+    ]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt1),
+    first_pass(Rest3, MMod, MSt1, State0);
 % 3
 first_pass(
     <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State

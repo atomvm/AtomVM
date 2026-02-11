@@ -84,6 +84,28 @@ extern "C" {
     }
 #endif
 
+#if AVM_NO_JIT
+#define SET_ERROR_MFA(error_type_atom, m, f, a) \
+    ctx->exception_class = ERROR_ATOM;          \
+    ctx->exception_reason = error_type_atom;    \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, ERROR_ATOM, m, f, a);
+#elif AVM_NO_EMU
+#define SET_ERROR_MFA(error_type_atom, m, f, a) \
+    ctx->exception_class = ERROR_ATOM;          \
+    ctx->exception_reason = error_type_atom;    \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM, m, f, a);
+#else
+#define SET_ERROR_MFA(error_type_atom, m, f, a)                                                          \
+    ctx->exception_class = ERROR_ATOM;                                                                   \
+    ctx->exception_reason = error_type_atom;                                                             \
+    if (mod->native_code) {                                                                              \
+        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod,                                  \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM, m, f, a);      \
+    } else {                                                                                             \
+        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, ERROR_ATOM, m, f, a); \
+    }
+#endif
+
 // Override nifs.h RAISE_ERROR macro
 #ifdef RAISE_ERROR
 #undef RAISE_ERROR
@@ -91,6 +113,10 @@ extern "C" {
 #define RAISE_ERROR(error_type_atom) \
     SET_ERROR(error_type_atom)       \
     goto handle_error;
+
+#define RAISE_ERROR_MFA(error_type_atom, m, f, a) \
+    SET_ERROR_MFA(error_type_atom, m, f, a)     \
+        goto handle_error;
 
 #define VM_ABORT() \
     goto do_abort;
@@ -2093,9 +2119,9 @@ loop:
             }
 
             case OP_FUNC_INFO: {
-                int module_atom;
+                term module_atom;
                 DECODE_ATOM(module_atom, pc)
-                int function_name_atom;
+                term function_name_atom;
                 DECODE_ATOM(function_name_atom, pc)
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
@@ -2106,7 +2132,7 @@ loop:
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
+                    RAISE_ERROR_MFA(FUNCTION_CLAUSE_ATOM, module_atom, function_name_atom, arity);
                 #endif
                 break;
             }

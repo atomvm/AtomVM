@@ -162,6 +162,8 @@ struct ModuleNativeInterface
     term (*alloc_big_integer_fragment)(Context *ctx, size_t digits_len, term_integer_sign_t sign);
     bool (*bitstring_insert_float)(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags);
     Context *(*raw_raise)(Context *ctx, JITState *jit_state);
+    Context *(*raise_error_mfa)(Context *ctx, JITState *jit_state, int offset,
+        int module_atom_index, int function_atom_index, int arity);
 };
 
 extern const ModuleNativeInterface module_native_interface;
