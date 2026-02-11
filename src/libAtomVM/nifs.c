@@ -4123,9 +4123,14 @@ static term nif_erlang_fun_info_2(Context *ctx, int argc, term argv[])
             RAISE_ERROR(BADARG_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 2, (term[]){ key, value }, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    term roots[2] = { key, value };
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 2, roots, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+    key = roots[0];
+    value = roots[1];
+
     term fun_info_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(fun_info_tuple, 0, key);
     term_put_tuple_element(fun_info_tuple, 1, value);
