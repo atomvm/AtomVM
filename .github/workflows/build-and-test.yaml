@@ -307,7 +307,7 @@ jobs:
           otp: "28"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          cmake_opts_other: ""
           jit_target_arch: "x86_64"
 
         # arm64 builds
@@ -327,7 +327,7 @@ jobs:
           otp: "28"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          cmake_opts_other: ""
           jit_target_arch: "aarch64"
 
         # armhf builds
@@ -354,7 +354,7 @@ jobs:
           otp: "28"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=armv6m -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          cmake_opts_other: "-DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
           compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
           arch: "armhf"
           library-arch: arm-linux-gnueabihf
@@ -396,7 +396,7 @@ jobs:
           otp: "28"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=riscv32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
+          cmake_opts_other: "-DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
           compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
           arch: "riscv32"
           library-arch: riscv32-linux-gnu-ilp32
