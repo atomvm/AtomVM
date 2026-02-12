@@ -244,6 +244,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
 term stacktrace_exception_class(term stack_info)
 {
+    assert(term_is_tuple(stack_info) && term_get_tuple_arity(stack_info) >= 6);
     return term_get_tuple_element(stack_info, 5);
 }
 
