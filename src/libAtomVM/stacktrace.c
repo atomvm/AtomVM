@@ -115,6 +115,15 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
         return ctx->exception_stacktrace;
     }
 
+    // Check if EXCEPTION_USE_LIVE_REGS_FLAG is set
+    // If the flag is not set, x registers may contain invalid values
+    bool use_live_regs = context_exception_class_has_live_regs_flag(ctx);
+    if (UNLIKELY(arity > MAX_REG)) {
+        // Very unlikely case
+        // We are not handling extended_x_regs, and we switch off use_live_regs
+        use_live_regs = false;
+    }
+
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
     size_t filename_lens = 0;
@@ -195,17 +204,29 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
 
     // there is an additional x register available as a temporary storage, we'll use it
     // we'll backup the exception_reason in it
-    int live_x_regs = MINI(arity, MAX_REG) + 1;
-    ctx->x[live_x_regs - 1] = ctx->exception_reason;
+    int live_x_regs;
 
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2)) + LIST_SIZE(1, arity) + TUPLE_SIZE(5);
+    size_t requested_size;
+
+    if (use_live_regs) {
+        live_x_regs = arity + 1;
+        // We are storing in raw stacktrace function arguments, since we know that live x regs are
+        // safely usable.
+        requested_size = TUPLE_SIZE(6) + LIST_SIZE(num_frames - 1, TUPLE_SIZE(2))
+            + CONS_SIZE + TUPLE_SIZE(5) + LIST_SIZE(arity, 0);
+    } else {
+        live_x_regs = 1;
+        // When not using live regs, we store arity as integer instead of args list
+        requested_size = TUPLE_SIZE(6) + LIST_SIZE(num_frames, TUPLE_SIZE(2)) + TUPLE_SIZE(5);
+    }
+
+    ctx->x[live_x_regs - 1] = ctx->exception_reason;
     // NOLINT(term-use-after-gc) exception_class is always an atom
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live_x_regs, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
     }
-
     ctx->exception_reason = ctx->x[live_x_regs - 1];
 
     term raw_stacktrace = term_nil();
@@ -227,9 +248,17 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
         // same applies to function_atom and arity. This allows having NIFs and BIFs on the
         // stacktrace
 
-        term args_list = term_nil();
-        for (int arg_i = arity - 1; arg_i >= 0; arg_i--) {
-            args_list = term_list_prepend(ctx->x[arg_i], args_list, &ctx->heap);
+        // When flag is set, use args list from x registers
+        // When flag is not set, use arity integer (x registers may contain invalid values)
+        term args_or_arity;
+        if (use_live_regs) {
+            term args_list = term_nil();
+            for (int arg_i = arity - 1; arg_i >= 0; arg_i--) {
+                args_list = term_list_prepend(ctx->x[arg_i], args_list, &ctx->heap);
+            }
+            args_or_arity = args_list;
+        } else {
+            args_or_arity = term_from_int(arity);
         }
 
         frame_info = term_alloc_tuple(5, &ctx->heap);
@@ -237,7 +266,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
         term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
         term_put_tuple_element(frame_info, 2, module_atom);
         term_put_tuple_element(frame_info, 3, function_atom);
-        term_put_tuple_element(frame_info, 4, args_list);
+        term_put_tuple_element(frame_info, 4, args_or_arity);
     }
     raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
 

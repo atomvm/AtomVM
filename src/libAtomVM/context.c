@@ -123,7 +123,7 @@ Context *context_new(GlobalContext *glb)
     ctx->bs = term_invalid_term();
     ctx->bs_offset = 0;
 
-    ctx->exception_class = term_nil();
+    context_set_exception_class(ctx, term_nil());
     ctx->exception_reason = term_nil();
     ctx->exception_stacktrace = term_nil();
 

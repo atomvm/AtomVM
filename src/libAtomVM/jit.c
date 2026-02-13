@@ -60,6 +60,12 @@ _Static_assert(ALL_ATOM_INDEX == 15, "ALL_ATOM_INDEX is 15 in libs/jit/src/defau
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 
+// Verify n_words constants in primitives.hrl
+_Static_assert(
+    CALL_EXT_NO_DEALLOC == -1, "CALL_EXT_NO_DEALLOC is -1 in libs/jit/src/primitives.hrl");
+_Static_assert(
+    CALL_EXT_NO_DEALLOC_MFA == -2, "CALL_EXT_NO_DEALLOC_MFA is -2 in libs/jit/src/primitives.hrl");
+
 // Verify offsets in jit_x86_64.erl
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
 _Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64}.erl");
@@ -126,6 +132,21 @@ _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for doubl
         } else {                                                                \
             return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
         }                                                                       \
+    }
+
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST_MFA(return_value, offset, m, i, a)           \
+    if (term_is_invalid_term(return_value)) {                                             \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {                                    \
+            term module_atom;                                                             \
+            term function_atom;                                                           \
+            module_get_imported_function_module_and_name_atoms(                           \
+                (m), (i), &module_atom, &function_atom);                                  \
+            ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, jit_state->module, \
+                (offset), context_exception_class(ctx), module_atom, function_atom, (a)); \
+            return jit_handle_error(ctx, jit_state, 0);                                   \
+        } else {                                                                          \
+            return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state);           \
+        }                                                                                 \
     }
 
 #ifndef MIN
@@ -203,14 +224,14 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
         ctx->exception_stacktrace
-            = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->exception_class);
+            = stacktrace_create_raw(ctx, jit_state->module, offset, context_exception_class(ctx));
     }
 
     // Copy exception fields to x registers and clear them
-    ctx->x[0] = ctx->exception_class;
+    ctx->x[0] = context_exception_class(ctx);
     ctx->x[1] = ctx->exception_reason;
     ctx->x[2] = ctx->exception_stacktrace;
-    ctx->exception_class = term_nil();
+    context_set_exception_class(ctx, term_nil());
     ctx->exception_reason = term_nil();
     ctx->exception_stacktrace = term_nil();
 
@@ -268,7 +289,7 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 
 static void set_error(Context *ctx, JITState *jit_state, int offset, term error_term)
 {
-    ctx->exception_class = ERROR_ATOM;
+    context_set_exception_class(ctx, ERROR_ATOM);
     ctx->exception_reason = error_term;
     if (offset) {
         ctx->exception_stacktrace
@@ -292,7 +313,7 @@ static Context *jit_raise_error_mfa(Context *ctx, JITState *jit_state, int offse
         offset);
     term module_atom = module_get_atom_term_by_id(jit_state->module, module_atom_index);
     term function_atom = module_get_atom_term_by_id(jit_state->module, function_atom_index);
-    ctx->exception_class = ERROR_ATOM;
+    context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);
     ctx->exception_reason = FUNCTION_CLAUSE_ATOM;
     ctx->exception_stacktrace = stacktrace_create_raw_mfa(
         ctx, jit_state->module, offset, ERROR_ATOM, module_atom, function_atom, arity);
@@ -319,17 +340,17 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
 static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
 {
     TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    ctx->exception_class = stacktrace_exception_class(stacktrace);
+    context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
     ctx->exception_reason = exc_value;
     ctx->exception_stacktrace
-        = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->exception_class);
+        = stacktrace_create_raw(ctx, jit_state->module, offset, context_exception_class(ctx));
     return jit_handle_error(ctx, jit_state, 0);
 }
 
 static Context *jit_raw_raise(Context *ctx, JITState *jit_state)
 {
     TRACE("jit_raw_raise: ctx->process_id = %" PRId32 "\n", ctx->process_id);
-    ctx->exception_class = ctx->x[0];
+    context_set_exception_class(ctx, ctx->x[0]);
     ctx->exception_reason = ctx->x[1];
     ctx->exception_stacktrace = ctx->x[2];
     return jit_handle_error(ctx, jit_state, 0);
@@ -391,7 +412,19 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
         case NIFFunctionType: {
             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
+            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                if (n_words == CALL_EXT_NO_DEALLOC_MFA) {
+                    // CALL_EXT_NO_DEALLOC_MFA uses MFA enriched error handling
+                    // like the emulator's
+                    // PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY.
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST_MFA(
+                        return_value, offset, jit_state->module, index, arity);
+                } else {
+                    // CALL_EXT_NO_DEALLOC (CALL_EXT_ONLY) or n_words >= 0
+                    // (CALL_EXT_LAST) use the regular error path.
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
+                }
+            }
             ctx->x[0] = return_value;
 
             // We deallocate after (instead of before) as a

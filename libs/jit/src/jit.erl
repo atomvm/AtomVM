@@ -264,7 +264,7 @@ first_pass(<<?OP_CALL_EXT, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("OP_CALL_EXT ~p, ~p\n", [Arity, Index]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
     MSt2 = MMod:call_primitive_with_cp(MSt1, ?PRIM_CALL_EXT, [
-        ctx, jit_state, offset, Arity, Index, -1
+        ctx, jit_state, offset, Arity, Index, ?CALL_EXT_NO_DEALLOC_MFA
     ]),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
@@ -1022,7 +1022,9 @@ first_pass(<<?OP_CALL_EXT_ONLY, Rest0/binary>>, MMod, MSt0, State0) ->
     {Index, Rest2} = decode_literal(Rest1),
     ?TRACE("OP_CALL_EXT_ONLY ~p, ~p\n", [Arity, Index]),
     MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
-    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [ctx, jit_state, offset, Arity, Index, -1]),
+    MSt2 = MMod:call_primitive_last(MSt1, ?PRIM_CALL_EXT, [
+        ctx, jit_state, offset, Arity, Index, ?CALL_EXT_NO_DEALLOC
+    ]),
     ?ASSERT_ALL_NATIVE_FREE(MSt2),
     first_pass(Rest2, MMod, MSt2, State0);
 % 96

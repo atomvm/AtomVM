@@ -174,6 +174,11 @@ enum TrapAndLoadResult
     TRAP_AND_LOAD_CODE_SERVER_NOT_FOUND
 };
 
+// n_words parameter values for call_ext
+// n_words >= 0 means CALL_EXT_LAST (deallocate n_words from stack)
+#define CALL_EXT_NO_DEALLOC -1
+#define CALL_EXT_NO_DEALLOC_MFA -2
+
 #define JIT_FORMAT_VERSION 1
 
 #define JIT_ARCH_X86_64 1

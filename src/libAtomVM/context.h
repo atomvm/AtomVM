@@ -159,7 +159,7 @@ struct Context
 
     term exit_reason;
 
-    term exception_class;
+    uintptr_t exception_class;
     term exception_reason;
     term exception_stacktrace;
 };
@@ -623,6 +623,32 @@ int context_get_catch_label(Context *ctx, Module **mod);
  * @param ctx context to dump
  */
 void context_dump(Context *ctx);
+
+enum
+{
+    EXCEPTION_USE_LIVE_REGS_FLAG = 1
+};
+
+static inline term context_exception_class(const Context *ctx)
+{
+    return (ctx->exception_class & ~TERM_IMMED2_TAG_MASK) | TERM_IMMED2_ATOM;
+}
+
+static inline void context_set_exception_class(Context *ctx, term exception_class)
+{
+    ctx->exception_class = exception_class & ~TERM_IMMED2_TAG_MASK;
+}
+
+static inline void context_set_exception_class_use_live_flag(Context *ctx, term exception_class)
+{
+    ctx->exception_class
+        = (exception_class & ~TERM_IMMED2_TAG_MASK) | EXCEPTION_USE_LIVE_REGS_FLAG;
+}
+
+static inline bool context_exception_class_has_live_regs_flag(const Context *ctx)
+{
+    return (ctx->exception_class & EXCEPTION_USE_LIVE_REGS_FLAG) != 0;
+}
 
 #ifdef __cplusplus
 }
