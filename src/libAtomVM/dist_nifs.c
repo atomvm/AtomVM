@@ -405,7 +405,7 @@ static term nif_erlang_dist_ctrl_get_data(Context *ctx, int argc, term argv[])
         }
         result = term_from_literal_binary(packet->bytes, packet->size, &ctx->heap, ctx->global);
         list_remove(first);
-        free(first);
+        free(packet);
     }
     synclist_unlock(&conn_obj->pending_packets);
 
