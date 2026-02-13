@@ -35,8 +35,12 @@ func_info_stacktrace() ->
         Class:Reason:Stacktrace -> {info, Class, Reason, Stacktrace}
     end.
 
-id(X) ->
-    X.
+nif_stacktrace() ->
+    try integer_to_binary(?MODULE:id(noninteger2)) of
+        X -> X
+    catch
+        Class:Reason:Stacktrace -> {info, Class, Reason, Stacktrace}
+    end.
 
 % Only relative line numbers (using ?LINE) from here
 
@@ -51,12 +55,29 @@ start() ->
         {stacktrace_function_args, start, 0, [
             {file, ?FILE}, {line, ?LINE + 3}
         ]}
-        | Rest
+        | Rest1
     ]} = func_info_stacktrace(),
+    ok = empty_list_on_atomvm(Rest1),
 
-    case erlang:system_info(machine) of
-        "BEAM" -> true = is_list(Rest);
-        "ATOM" -> [] = Rest
-    end,
+    {info, error, badarg, [
+        {erlang, integer_to_binary, [noninteger2], ErrorInfo},
+        {stacktrace_function_args, nif_stacktrace, 0, [
+            {file, ?FILE}, {line, 39}
+        ]},
+        {stacktrace_function_args, start, 0, [{file, ?FILE}, {line, ?LINE + 2}]}
+        | Rest2
+    ]} = nif_stacktrace(),
+    ok = empty_list_on_atomvm(ErrorInfo),
+    ok = empty_list_on_atomvm(Rest2),
 
     0.
+
+id(X) ->
+    X.
+
+empty_list_on_atomvm(List) ->
+    case erlang:system_info(machine) of
+        "BEAM" -> true = is_list(List);
+        "ATOM" -> [] = List
+    end,
+    ok.

@@ -34,18 +34,18 @@
 extern "C" {
 #endif
 
-#define VALIDATE_VALUE(value, verify_function) \
-    if (UNLIKELY(!verify_function((value)))) { \
-        ctx->exception_class = ERROR_ATOM;     \
-        ctx->exception_reason = BADARG_ATOM;   \
-        return term_invalid_term();            \
+#define VALIDATE_VALUE(value, verify_function)        \
+    if (UNLIKELY(!verify_function((value)))) {        \
+        context_set_exception_class(ctx, ERROR_ATOM); \
+        ctx->exception_reason = BADARG_ATOM;          \
+        return term_invalid_term();                   \
     }
 
-#define RAISE_ERROR(error_type_atom)               \
-    do {                                           \
-        ctx->exception_class = ERROR_ATOM;         \
-        ctx->exception_reason = (error_type_atom); \
-        return term_invalid_term();                \
+#define RAISE_ERROR(error_type_atom)                  \
+    do {                                              \
+        context_set_exception_class(ctx, ERROR_ATOM); \
+        ctx->exception_reason = (error_type_atom);    \
+        return term_invalid_term();                   \
     } while (0);
 
 const struct Nif *nifs_get(const char *mfa);

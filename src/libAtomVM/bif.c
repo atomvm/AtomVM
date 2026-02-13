@@ -43,18 +43,18 @@
 #include "bifs_hash.h"
 #pragma GCC diagnostic pop
 
-#define RAISE_ERROR(error_type_atom)               \
-    do {                                           \
-        ctx->exception_class = ERROR_ATOM;         \
-        ctx->exception_reason = (error_type_atom); \
-        return term_invalid_term();                \
+#define RAISE_ERROR(error_type_atom)                  \
+    do {                                              \
+        context_set_exception_class(ctx, ERROR_ATOM); \
+        ctx->exception_reason = (error_type_atom);    \
+        return term_invalid_term();                   \
     } while (0);
 
-#define RAISE_ERROR_BIF(fail_label, error_type_atom) \
-    if (fail_label == 0) {                           \
-        ctx->exception_class = ERROR_ATOM;           \
-        ctx->exception_reason = (error_type_atom);   \
-    }                                                \
+#define RAISE_ERROR_BIF(fail_label, error_type_atom)  \
+    if (fail_label == 0) {                            \
+        context_set_exception_class(ctx, ERROR_ATOM); \
+        ctx->exception_reason = (error_type_atom);    \
+    }                                                 \
     return term_invalid_term();
 
 #define VALIDATE_VALUE_BIF(fail_label, value, verify_function) \
