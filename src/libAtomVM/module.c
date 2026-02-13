@@ -461,7 +461,8 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         while (!list_is_empty(&line_refs)) {
             struct ListHead *item = line_refs.next;
             list_remove(item);
-            free(item);
+            struct LineRefOffset *previous_ref_offset = GET_LIST_ENTRY(item, struct LineRefOffset, head);
+            free(previous_ref_offset);
         }
 #endif
 #ifndef AVM_NO_JIT
@@ -1093,7 +1094,8 @@ void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint
         while (!list_is_empty(line_refs)) {
             struct ListHead *item = line_refs->next;
             list_remove(item);
-            free(item);
+            struct LineRefOffset *previous_ref_offset = GET_LIST_ENTRY(item, struct LineRefOffset, head);
+            free(previous_ref_offset);
             num_refs++;
         }
         fprintf(stderr, "Warning: Unable to allocate space for an additional line ref offset (we had %zu).  Line information in stacktraces may be missing\n", num_refs);

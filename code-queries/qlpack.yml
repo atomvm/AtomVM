@@ -7,6 +7,8 @@
 #
 
 name: atomvm/cpp-atomvmql
+version: 0.0.1
 groups: [cpp]
-libraryPathDependencies: codeql/cpp-all
+dependencies:
+  codeql/cpp-all: "*"
 extractor: cpp

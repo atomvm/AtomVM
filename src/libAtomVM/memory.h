@@ -352,10 +352,10 @@ static inline void memory_destroy_heap_fragment(HeapFragment *fragment)
 {
     while (fragment->next) {
         HeapFragment *next = fragment->next;
-        free(fragment);
+        free((void *) fragment);
         fragment = next;
     }
-    free(fragment);
+    free((void *) fragment);
 }
 
 /**

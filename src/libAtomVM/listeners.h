@@ -152,7 +152,7 @@ static inline bool process_listener_handler(GlobalContext *glb, listener_event_t
 void sys_listener_destroy(struct ListHead *item)
 {
     EventListener *listener = GET_LIST_ENTRY(item, EventListener, listeners_list_head);
-    free(listener);
+    free((void *) listener);
 }
 #endif /* DOXYGEN_SKIP_SECTION */
 

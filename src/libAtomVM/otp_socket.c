@@ -21,6 +21,7 @@
 #include <context.h>
 #include <defaultatoms.h>
 #include <dictionary.h>
+#include <erl_nif.h>
 #include <erl_nif_priv.h>
 #include <globalcontext.h>
 #include <inet.h>
@@ -283,7 +284,9 @@ static void socket_dtor(ErlNifEnv *caller_env, void *obj)
     LWIP_END();
 #endif
 #ifndef AVM_NO_SMP
-    smp_rwlock_destroy(rsrc_obj->socket_lock);
+    if (LIKELY(rsrc_obj->socket_lock)) {
+        smp_rwlock_destroy(rsrc_obj->socket_lock);
+    }
 #endif
 }
 
@@ -568,8 +571,10 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_SMP
     rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(rsrc_obj->socket_lock)) {
-        // destroy resource object without calling dtor
-        free(rsrc_obj);
+#if OTP_SOCKET_BSD
+        rsrc_obj->fd = CLOSED_FD;
+#endif
+        enif_release_resource(rsrc_obj);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 #endif
@@ -851,8 +856,7 @@ static struct SocketResource *make_accepted_socket_resource(struct tcp_pcb *newp
 #ifndef AVM_NO_SMP
     conn_rsrc_obj->socket_lock = smp_rwlock_create();
     if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
-        // destroy resource without calling destructor
-        free(conn_rsrc_obj);
+        enif_release_resource(conn_rsrc_obj);
         return NULL;
     }
 #endif
@@ -1889,7 +1893,7 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 #ifndef AVM_NO_SMP
         conn_rsrc_obj->socket_lock = smp_rwlock_create();
         if (IS_NULL_PTR(conn_rsrc_obj->socket_lock)) {
-            free(conn_rsrc_obj);
+            enif_release_resource(conn_rsrc_obj);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
 #endif

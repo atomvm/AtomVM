@@ -458,7 +458,7 @@ static void mapped_file_avm_pack_destructor(struct AVMPackData *obj, GlobalConte
 
     struct MappedFileAVMPack *mmapped_avm = CONTAINER_OF(obj, struct MappedFileAVMPack, base);
     mapped_file_close(mmapped_avm->mapped);
-    free(obj);
+    free(mmapped_avm);
 }
 
 Module *sys_load_module_from_file(GlobalContext *global, const char *path)

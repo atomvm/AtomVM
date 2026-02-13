@@ -400,7 +400,8 @@ int enif_monitor_process(ErlNifEnv *env, void *obj, const ErlNifPid *target_pid,
     Context *target = globalcontext_get_process_lock(env->global, *target_pid);
     if (IS_NULL_PTR(target)) {
         free(resource_monitor);
-        free(monitor);
+        struct ResourceContextMonitor *resource_context_monitor = CONTAINER_OF(monitor, struct ResourceContextMonitor, monitor);
+        free(resource_context_monitor);
         return 1;
     }
 
