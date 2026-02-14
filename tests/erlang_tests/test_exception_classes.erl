@@ -32,6 +32,7 @@ start() ->
     ok = test_raise_error(),
     ok = test_raise_exit(),
     ok = test_raise_badarg(),
+    ok = test_double_reraise(),
     0.
 
 test_exit() ->
@@ -119,5 +120,21 @@ test_raise_badarg() ->
         badarg = erlang:raise(bar, foo, []),
         ok
     catch
+        C:V -> {unexpected, ?LINE, C, V}
+    end.
+
+test_double_reraise() ->
+    try
+        try
+            try
+                exit(foo)
+            catch
+                error:_ -> should_not_happen
+            end
+        catch
+            error:_ -> should_not_happen
+        end
+    catch
+        exit:foo -> ok;
         C:V -> {unexpected, ?LINE, C, V}
     end.
