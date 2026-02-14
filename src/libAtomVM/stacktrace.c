@@ -33,6 +33,19 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
     return exception_class;
 }
 
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term exception_class, term module_atom, term function_atom, int arity)
+{
+    UNUSED(ctx);
+    UNUSED(mod);
+    UNUSED(current_offset);
+    UNUSED(exception_class);
+    UNUSED(module_atom);
+    UNUSED(function_atom);
+    UNUSED(arity);
+
+    return exception_class;
+}
+
 term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     UNUSED(ctx);
@@ -88,6 +101,21 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
 
 term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
 {
+    return stacktrace_create_raw_mfa(ctx, mod, current_offset, exception_class, UNDEFINED_ATOM, UNDEFINED_ATOM, 0);
+}
+
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term exception_class, term module_atom, term function_atom, int arity)
+{
+    if (term_is_nonempty_list(ctx->exception_stacktrace)) {
+        // there is already a built stacktrace, nothing to do here
+        // (this happens when re-raising with raise/3
+        return ctx->exception_stacktrace;
+    }
+
+    // Check if EXCEPTION_USE_LIVE_REGS_FLAG is set
+    // If the flag is not set, x registers may contain invalid values
+    bool use_live_regs = context_exception_class_has_live_regs_flag(ctx);
+
     unsigned int num_frames = 0;
     unsigned int num_aux_terms = 0;
     size_t filename_lens = 0;
@@ -166,19 +194,63 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
     free(locations);
 
+    // there is an additional x register available as a temporary storage, we'll use it
+    // we'll backup the exception_reason in it
+    int live_x_regs;
+
     // {num_frames, num_aux_terms, filename_lens, num_mods, [{module, offset}, ...]}
-    size_t requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2));
-    // We need to preserve x0 and x1 that contain information on the current exception
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 2, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    size_t requested_size;
+
+    if (use_live_regs) {
+        live_x_regs = MINI(arity, MAX_REG) + 1;
+        // We are storing in raw stacktrace function arguments, since we know that live x regs are
+        // safely usable.
+        requested_size = TUPLE_SIZE(6) + (num_frames - 1) * (2 + TUPLE_SIZE(2))
+            + LIST_SIZE(1, arity) + TUPLE_SIZE(5);
+    } else {
+        live_x_regs = 1;
+        // When not using live regs, we store arity as integer instead of args list
+        requested_size = TUPLE_SIZE(6) + num_frames * (2 + TUPLE_SIZE(2)) + TUPLE_SIZE(5);
+    }
+
+    ctx->x[live_x_regs - 1] = ctx->exception_reason;
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, live_x_regs, ctx->x, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
         return OUT_OF_MEMORY_ATOM;
     }
+    ctx->exception_reason = ctx->x[live_x_regs - 1];
 
     term raw_stacktrace = term_nil();
 
-    term frame_info = term_alloc_tuple(2, &ctx->heap);
-    term_put_tuple_element(frame_info, 0, term_from_int(mod->module_index));
-    term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
+    term frame_info;
+    if (module_atom == UNDEFINED_ATOM) {
+        frame_info = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(frame_info, 0, term_from_int(mod->module_index));
+        term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
+    } else {
+        // When flag is set, use args list from x registers
+        // When flag is not set, use arity integer (x registers may contain invalid values)
+        if (use_live_regs) {
+            term args_list = term_nil();
+            for (int arg_i = arity - 1; arg_i >= 0; arg_i--) {
+                args_list = term_list_prepend(ctx->x[arg_i], args_list, &ctx->heap);
+            }
+
+            frame_info = term_alloc_tuple(5, &ctx->heap);
+            term_put_tuple_element(frame_info, 0, term_from_int(mod->module_index));
+            term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
+            term_put_tuple_element(frame_info, 2, module_atom);
+            term_put_tuple_element(frame_info, 3, function_atom);
+            term_put_tuple_element(frame_info, 4, args_list);
+        } else {
+            frame_info = term_alloc_tuple(5, &ctx->heap);
+            term_put_tuple_element(frame_info, 0, term_from_int(mod->module_index));
+            term_put_tuple_element(frame_info, 1, term_from_int(current_offset));
+            term_put_tuple_element(frame_info, 2, module_atom);
+            term_put_tuple_element(frame_info, 3, function_atom);
+            term_put_tuple_element(frame_info, 4, term_from_int(arity));
+        }
+    }
     raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
 
     prev_mod = NULL;
@@ -238,6 +310,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term e
 
 term stacktrace_exception_class(term stack_info)
 {
+    assert(term_is_tuple(stack_info) && term_get_tuple_arity(stack_info) >= 6);
     return term_get_tuple_element(stack_info, 5);
 }
 
@@ -260,6 +333,12 @@ static term find_path_created(const void *key, struct ModulePathPair *module_pat
 term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     GlobalContext *glb = ctx->global;
+
+    if (term_is_nonempty_list(*stack_info)) {
+        // stacktrace has been already built. Nothing to do here
+        // This may happen when re-raising with raise/3
+        return *stack_info;
+    }
 
     if (*stack_info == OUT_OF_MEMORY_ATOM) {
         return *stack_info;
@@ -295,6 +374,10 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
     int module_path_idx = 0;
     while (!term_is_nil(el)) {
         term mod_index_tuple = term_get_list_head(el);
+
+        size_t mod_index_tuple_arity = term_get_tuple_arity(mod_index_tuple);
+        assert((mod_index_tuple_arity == 2) || (mod_index_tuple_arity == 5));
+
         term cp = module_address(
             term_to_int(term_get_tuple_element(mod_index_tuple, 0)),
             term_to_int(term_get_tuple_element(mod_index_tuple, 1)));
@@ -305,9 +388,6 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
         module_cp_to_label_offset(cp, &cp_mod, &label, NULL, &mod_offset, ctx->global);
 
         term module_name = module_get_name(cp_mod);
-
-        term frame_i = term_alloc_tuple(4, &ctx->heap);
-        term_put_tuple_element(frame_i, 0, module_name);
 
         term aux_data = term_nil();
         if (module_has_line_chunk(cp_mod)) {
@@ -349,18 +429,35 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
                 aux_data = term_list_prepend(file_tuple, aux_data, &ctx->heap);
             }
         }
-        term_put_tuple_element(frame_i, 3, aux_data);
 
-        atom_index_t function_name;
-        int arity = 0;
-        bool result = module_get_function_from_label(cp_mod, label, &function_name, &arity);
+        term frame_i = term_alloc_tuple(4, &ctx->heap);
+        if (mod_index_tuple_arity == 5) {
+            term raw_module = term_get_tuple_element(mod_index_tuple, 2);
+            term raw_function = term_get_tuple_element(mod_index_tuple, 3);
+            term raw_arity = term_get_tuple_element(mod_index_tuple, 4);
+            term_put_tuple_element(frame_i, 0, raw_module);
+            term_put_tuple_element(frame_i, 1, raw_function);
+            term_put_tuple_element(frame_i, 2, raw_arity);
 
-        if (LIKELY(result)) {
-            term_put_tuple_element(frame_i, 1, term_from_atom_index(function_name));
-            term_put_tuple_element(frame_i, 2, term_from_int(arity));
+            if (module_name == raw_module) {
+                term_put_tuple_element(frame_i, 3, aux_data);
+            } else {
+                // mismatch means that error likely happened somewhere else, like a NIF, hence:
+                // aux_data is misleading and should be discarded
+                term_put_tuple_element(frame_i, 3, term_nil());
+            }
         } else {
-            term_put_tuple_element(frame_i, 1, UNDEFINED_ATOM);
-            term_put_tuple_element(frame_i, 2, term_from_int(0));
+            term_put_tuple_element(frame_i, 0, module_name);
+            atom_index_t function_name;
+            int arity = 0;
+            if (LIKELY(module_get_function_from_label(cp_mod, label, &function_name, &arity))) {
+                term_put_tuple_element(frame_i, 1, term_from_atom_index(function_name));
+                term_put_tuple_element(frame_i, 2, term_from_int(arity));
+            } else {
+                term_put_tuple_element(frame_i, 1, UNDEFINED_ATOM);
+                term_put_tuple_element(frame_i, 2, term_from_int(0));
+            }
+            term_put_tuple_element(frame_i, 3, aux_data);
         }
         stacktrace = term_list_prepend(frame_i, stacktrace, &ctx->heap);
 
