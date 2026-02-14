@@ -296,7 +296,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
     TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     ctx->x[0] = stacktrace_exception_class(stacktrace);
     ctx->x[1] = exc_value;
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, stacktrace);
+    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
