@@ -22,6 +22,7 @@
 // References
 // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/dac.html
 
+#include "memory.h"
 #include <sdkconfig.h>
 #ifdef CONFIG_AVM_ENABLE_DAC_NIF
 #include <context.h>
@@ -110,11 +111,6 @@ static term nif_oneshot_new_channel_p(Context *ctx, int argc, term argv[])
 
     chan_rsrc->handle = 0;
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        ESP_LOGE(TAG, "failed to allocate memory for resource: %s:%i.", __FILE__, __LINE__);
-        enif_release_resource(chan_rsrc);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     ERL_NIF_TERM chan_obj = enif_make_resource(erl_nif_env_from_context(ctx), chan_rsrc);
     enif_release_resource(chan_rsrc);
     if (term_is_invalid_term(chan_obj)) {
@@ -128,6 +124,11 @@ static term nif_oneshot_new_channel_p(Context *ctx, int argc, term argv[])
     const esp_err_t err = dac_oneshot_new_channel(&config, &chan_rsrc->handle);
 
     if (!err) {
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3) + REF_SIZE + TUPLE_SIZE(2), 1, &chan_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+            ESP_LOGE(TAG, "failed to allocate memory for result: %s:%i.", __FILE__, __LINE__);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
         term chan_tup = term_alloc_tuple(3, &ctx->heap);
         term_put_tuple_element(chan_tup, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "$dac")));
         term_put_tuple_element(chan_tup, 1, chan_obj);
