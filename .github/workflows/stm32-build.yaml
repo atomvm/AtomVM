@@ -124,6 +124,16 @@ jobs:
     - name: Checkout repo
       uses: actions/checkout@v4
 
+    - name: "Git config safe.directory for codeql"
+      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
+
+    - name: "Initialize CodeQL"
+      uses: github/codeql-action/init@v4
+      with:
+        languages: 'cpp'
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql,./code-queries/allocations-exceeding-ensure-free.ql
+
     - name: "Build for ${{ matrix.device }}"
       shell: bash
       working-directory: ./src/platforms/stm32/

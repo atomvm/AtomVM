@@ -216,12 +216,6 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     rsrc_obj->i2c_num = i2c_num;
     rsrc_obj->send_timeout_ms = send_timeout_ms_val;
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        i2c_driver_delete(i2c_num);
-        enif_release_resource(rsrc_obj);
-        ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
     enif_release_resource(rsrc_obj);
     if (term_is_invalid_term(obj)) {

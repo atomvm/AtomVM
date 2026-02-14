@@ -226,10 +226,6 @@ static term nif_ssl_entropy_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     struct EntropyContextResource *rsrc_obj = enif_alloc_resource(entropycontext_resource_type, sizeof(struct EntropyContextResource));
     if (IS_NULL_PTR(rsrc_obj)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -252,10 +248,6 @@ static term nif_ssl_ctr_drbg_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     struct CtrDrbgResource *rsrc_obj = enif_alloc_resource(ctrdrbg_resource_type, sizeof(struct CtrDrbgResource));
     if (IS_NULL_PTR(rsrc_obj)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -307,10 +299,6 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     struct SSLContextResource *rsrc_obj = enif_alloc_resource(sslcontext_resource_type, sizeof(struct SSLContextResource));
     if (IS_NULL_PTR(rsrc_obj)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
@@ -363,10 +351,6 @@ static term nif_ssl_config_init(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
     struct SSLConfigResource *rsrc_obj = enif_alloc_resource(sslconfig_resource_type, sizeof(struct SSLConfigResource));
     if (IS_NULL_PTR(rsrc_obj)) {
         AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);

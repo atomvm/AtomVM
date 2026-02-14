@@ -637,10 +637,6 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
 #endif
         rsrc_obj->buf_size = DEFAULT_BUFFER_SIZE;
 
-        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
         term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
         enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
         if (term_is_invalid_term(obj)) {
