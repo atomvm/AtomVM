@@ -533,10 +533,10 @@ static term make_err_result(int err, Context *ctx)
             return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "want_write"));
 #if MBEDTLS_VERSION_NUMBER >= 0x020B0000
         case MBEDTLS_ERR_SSL_ASYNC_IN_PROGRESS:
-            return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "async_in_progress"));
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x11", "async_in_progress"));
 #if MBEDTLS_VERSION_NUMBER >= 0x020E0000
         case MBEDTLS_ERR_SSL_CRYPTO_IN_PROGRESS:
-            return globalcontext_make_atom(ctx->global, ATOM_STR("\xA", "crypto_in_progress"));
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x12", "crypto_in_progress"));
 #endif
 #endif
         default: {
