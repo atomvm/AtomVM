@@ -128,7 +128,7 @@ term posix_errno_to_term(int err, GlobalContext *glb)
         case EXDEV:
             return globalcontext_make_atom(glb, ATOM_STR("\x5", "exdev"));
         case EPROTOTYPE:
-            return globalcontext_make_atom(glb, ATOM_STR("\x8", "eprototype"));
+            return globalcontext_make_atom(glb, ATOM_STR("\xA", "eprototype"));
         case ENOTCONN:
             return globalcontext_make_atom(glb, ATOM_STR("\x8", "enotconn"));
         case EOPNOTSUPP:
@@ -224,8 +224,8 @@ const ErlNifResourceTypeInit posix_fd_resource_type_init = {
 #define O_NOCTTY_ATOM_STR ATOM_STR("\x8", "o_noctty")
 #define O_NOFOLLOW_ATOM_STR ATOM_STR("\xA", "o_nofollow")
 // #define O_NONBLOCK_ATOM_STR ATOM_STR("\xA", "o_nonblock")
-#define O_RSYNC_ATOM_STR ATOM_STR("\x8", "o_rsync")
-#define O_SYNC_ATOM_STR ATOM_STR("\x7", "o_sync")
+#define O_RSYNC_ATOM_STR ATOM_STR("\x7", "o_rsync")
+#define O_SYNC_ATOM_STR ATOM_STR("\x6", "o_sync")
 #define O_TRUNC_ATOM_STR ATOM_STR("\x8", "o_trunc")
 #define O_TTY_INIT_ATOM_STR ATOM_STR("\xA", "o_tty_init")
 
