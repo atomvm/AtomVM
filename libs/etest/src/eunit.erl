@@ -222,7 +222,7 @@ report(Progress, Identification) ->
     ModuleString =
         case lists:keyfind(module, 1, Identification) of
             false -> "";
-            {module, Module} -> io_lib:format("~s:", [Module])
+            {module, Module} -> atom_to_list(Module)
         end,
     TestCaseString =
         case lists:keyfind(test_case, 1, Identification) of
@@ -231,8 +231,8 @@ report(Progress, Identification) ->
         end,
     LineString =
         case lists:keyfind(line, 1, Identification) of
-            false -> "";
-            {line, Line} -> io_lib:format("~B:", [Line])
+            false -> "0";
+            {line, Line} -> integer_to_list(Line)
         end,
     TitleString =
         case lists:keyfind(title, 1, Identification) of
@@ -247,7 +247,7 @@ report(Progress, Identification) ->
             {exit, Reason} -> io_lib:format(":FAIL:exited with ~p", [Reason]);
             timeout -> ":FAIL:timeout"
         end,
-    io:format("~s:~s ~s~s~s\n", [
+    io:format("~s:~s:~s~s~s\n", [
         ModuleString, LineString, TestCaseString, TitleString, ProgressString
     ]).
 
