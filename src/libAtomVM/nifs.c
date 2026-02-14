@@ -4027,7 +4027,7 @@ static term nif_erlang_exit(Context *ctx, int argc, term argv[])
                 self_is_signaled = target == ctx;
             } else {
                 if (target->trap_exit) {
-                    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &reason, MEMORY_NO_SHRINK) != MEMORY_GC_OK)) {
                         globalcontext_get_process_unlock(glb, target);
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }

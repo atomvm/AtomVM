@@ -61,10 +61,11 @@ jobs:
       uses: actions/checkout@v4
 
     - name: "Initialize CodeQL"
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}
-        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+        build-mode: manual
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql
 
     - name: "Build"
       run: |
@@ -74,4 +75,4 @@ jobs:
         ninja
 
     - name: "Perform CodeQL Analysis"
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4

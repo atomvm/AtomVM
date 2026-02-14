@@ -58,11 +58,11 @@ jobs:
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
 
     - name: "Initialize CodeQL"
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@v4
       with:
         languages: ${{matrix.language}}
         build-mode: manual
-        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql
 
     - name: Compile AtomVM and test modules
       run: |
@@ -74,7 +74,7 @@ jobs:
         ninja AtomVM atomvmlib erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
 
     - name: "Perform CodeQL Analysis"
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@v4
 
     - name: Upload AtomVM and test modules
       uses: actions/upload-artifact@v4
