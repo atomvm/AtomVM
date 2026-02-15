@@ -2929,6 +2929,7 @@ static term nif_erlang_process_info(Context *ctx, int argc, term argv[])
     term ret = term_invalid_term();
     if (ctx == target) {
         size_t term_size;
+        // NOLINT(allocations-without-ensure-free) called with NULL heap, only computes size
         if (UNLIKELY(!context_get_process_info(ctx, NULL, &term_size, item, NULL))) {
             globalcontext_get_process_unlock(ctx->global, target);
             RAISE_ERROR(BADARG_ATOM);
@@ -2992,7 +2993,11 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_literal_binary((const uint8_t *) buf, len, &ctx->heap, ctx->global);
     }
     if (key == ATOMVM_VERSION_ATOM) {
-        return term_from_literal_binary((const uint8_t *) ATOMVM_VERSION, strlen(ATOMVM_VERSION), &ctx->heap, ctx->global);
+        size_t len = strlen(ATOMVM_VERSION);
+        if (memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return term_from_literal_binary((const uint8_t *) ATOMVM_VERSION, len, &ctx->heap, ctx->global);
     }
     if (key == SYSTEM_VERSION_ATOM) {
         char system_version[256];
@@ -6232,6 +6237,7 @@ static term nif_lists_flatten(Context *ctx, int argc, term argv[])
                         break;
                     }
 
+                    // NOLINT(allocations-without-ensure-free) ensure_free was called when result_len > tail_len, and this path is only reached in that case
                     term *new_list_item = term_list_alloc(&ctx->heap);
                     if (prev_term) {
                         prev_term[0] = term_list_from_list_ptr(new_list_item);
