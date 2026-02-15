@@ -43,7 +43,7 @@ class GCCall extends FunctionCall {
 predicate isImmediateCreatingCall(FunctionCall fc) {
     fc.getTarget().hasName([
         "term_from_int", "term_from_int4", "term_from_int11", "term_from_int28",
-        "term_from_int64", "term_nil", "term_from_atom_index",
+        "term_from_int32", "term_from_int64", "term_nil", "term_from_atom_index",
         "term_from_local_process_id", "term_port_from_local_process_id",
         "term_from_catch_label", "term_invalid_term",
         "module_get_atom_term_by_id", "globalcontext_make_atom",
@@ -110,17 +110,63 @@ predicate isImmediateTypeCheckFunction(string name) {
 }
 
 /**
+ * Leaf functions that consume a term that must be an immediate type at
+ * a specific parameter index.
+ */
+predicate isImmediateConsumingParam(string funcName, int paramIndex) {
+    (funcName = "term_to_local_process_id" or funcName = "term_to_atom_index") and
+    paramIndex = 0
+}
+
+/**
+ * Holds if function `f` requires its parameter at `paramIndex` to be
+ * an immediate, because it (transitively) passes it to a leaf
+ * immediate-consuming function such as term_to_local_process_id.
+ */
+predicate isFunctionRequiringImmediateParam(Function f, int paramIndex) {
+    exists(FunctionCall innerCall, int innerParamIndex |
+        innerCall.getEnclosingFunction() = f and
+        isImmediateConsumingParam(innerCall.getTarget().getName(), innerParamIndex) and
+        innerCall.getArgument(innerParamIndex).(VariableAccess).getTarget() =
+            f.getParameter(paramIndex)
+    )
+    or
+    exists(FunctionCall innerCall, int innerParamIndex |
+        innerCall.getEnclosingFunction() = f and
+        isFunctionRequiringImmediateParam(innerCall.getTarget(), innerParamIndex) and
+        innerCall.getArgument(innerParamIndex).(VariableAccess).getTarget() =
+            f.getParameter(paramIndex)
+    )
+}
+
+/**
  * Holds if there is a call to a function that checks whether a term is
  * an immediate type (atom, integer, nil, pid, port) on variable `v`
  * before the GC call. The pattern is typically:
  *   VALIDATE_VALUE(v, term_is_atom)  -- expands to: if (!term_is_atom(v)) RAISE_ERROR(...)
  * After such a check, v is known to be immediate and safe across GC.
+ *
+ * Also matches calls to functions that consume an immediate term (e.g.
+ * term_to_local_process_id) -- if the call is dominated by the definition
+ * and dominates the GC call, the term must be immediate.
  */
 predicate hasImmediateTypeGuard(StackVariable v, GCCall gcCall) {
     exists(FunctionCall typeCheck |
         isImmediateTypeCheckFunction(typeCheck.getTarget().getName()) and
         typeCheck.getArgument(0).(VariableAccess).getTarget() = v and
         strictlyBeforeInDomTree(typeCheck, gcCall)
+    )
+    or
+    exists(FunctionCall consumeCall, int paramIndex |
+        isImmediateConsumingParam(consumeCall.getTarget().getName(), paramIndex) and
+        consumeCall.getArgument(paramIndex).(VariableAccess).getTarget() = v and
+        strictlyBeforeInDomTree(consumeCall, gcCall)
+    )
+    or
+    exists(FunctionCall consumeCall, int paramIndex |
+        isFunctionRequiringImmediateParam(consumeCall.getTarget(), paramIndex) and
+        consumeCall.getArgument(paramIndex).(VariableAccess).getTarget() = v and
+        strictlyBeforeInDomTree(consumeCall, gcCall)
     )
 }
 
@@ -194,8 +240,32 @@ predicate hasComparisonGuard(StackVariable v, GCCall gcCall) {
 }
 
 /**
+ * Holds if all return statements of a static function return immediate
+ * values. Calls to such functions are known to produce immediates.
+ * Handles both direct returns (e.g. return ATOM;) and returns through
+ * local variables whose SSA defining values are all immediate.
+ */
+predicate isStaticFunctionReturningOnlyImmediates(Function f) {
+    f.isStatic() and
+    exists(ReturnStmt ret | ret.getEnclosingFunction() = f) and
+    forall(ReturnStmt ret | ret.getEnclosingFunction() = f |
+        isImmediateExpr(ret.getExpr())
+        or
+        exists(SsaDefinition retDef, StackVariable retVar |
+            ret.getExpr().(VariableAccess).getTarget() = retVar and
+            retDef.getAUse(retVar) = ret.getExpr() and
+            exists(retDef.getAnUltimateDefiningValue(retVar)) and
+            forall(Expr defVal | defVal = retDef.getAnUltimateDefiningValue(retVar) |
+                isImmediateExpr(defVal)
+            )
+        )
+    )
+}
+
+/**
  * Holds if expression `e` is known to produce an immediate value,
- * including through ternary expressions where both branches are immediate.
+ * including through ternary expressions where both branches are immediate,
+ * or calls to static functions that only return immediates.
  */
 predicate isKnownImmediateExpr(Expr e) {
     isImmediateExpr(e)
@@ -205,6 +275,8 @@ predicate isKnownImmediateExpr(Expr e) {
         isKnownImmediateExpr(e.(ConditionalExpr).getThen()) and
         isKnownImmediateExpr(e.(ConditionalExpr).getElse())
     )
+    or
+    isStaticFunctionReturningOnlyImmediates(e.(FunctionCall).getTarget())
 }
 
 /**
@@ -287,6 +359,100 @@ predicate gcOnDifferentContext(GCCall gcCall) {
     )
 }
 
+/**
+ * Holds if the variable (same SSA definition) is used in a context that
+ * requires it to be an immediate value. This proves the variable holds
+ * an immediate regardless of whether the usage is before or after the GC.
+ *
+ * For example, if `pid` is passed to port_send_reply (which transitively
+ * calls term_to_local_process_id), pid must be a local PID (immediate).
+ */
+predicate isImpliedImmediateByUsage(SsaDefinition ssaDef, StackVariable v) {
+    exists(FunctionCall fc, VariableAccess va, int paramIndex |
+        va.getTarget() = v and
+        ssaDef.getAUse(v) = va and
+        va = fc.getArgument(paramIndex) and
+        (
+            isImmediateConsumingParam(fc.getTarget().getName(), paramIndex)
+            or
+            isFunctionRequiringImmediateParam(fc.getTarget(), paramIndex)
+        )
+    )
+}
+
+/**
+ * Holds if the expression directly produces a term from a message heap.
+ * Each mailbox message has its own heap, and `message->message` (where
+ * message is `struct Message`) gives a term on that heap.
+ * Sub-terms extracted via term_get_tuple_element also live on the message
+ * heap and are unaffected by GC on the context's heap.
+ */
+predicate isExternalHeapTerm(Expr e) {
+    // message->message field access on struct Message
+    e.(PointerFieldAccess).getTarget().hasName("message") and
+    e.(PointerFieldAccess).getTarget().getDeclaringType().hasName("Message")
+    or
+    // term_get_tuple_element(external_term, N)
+    e.(FunctionCall).getTarget().hasName("term_get_tuple_element") and
+    isKnownExternalHeapValue(e.(FunctionCall).getArgument(0))
+}
+
+/**
+ * Holds if the expression is known to be a term from an external heap,
+ * either directly or through SSA tracing of a local variable.
+ */
+predicate isKnownExternalHeapValue(Expr e) {
+    isExternalHeapTerm(e)
+    or
+    exists(SsaDefinition def, StackVariable var |
+        e.(VariableAccess).getTarget() = var and
+        def.getAUse(var) = e and
+        isExternalHeapTerm(def.getAnUltimateDefiningValue(var))
+    )
+}
+
+/**
+ * Holds if the expression is known to be safe across GC: either an
+ * immediate value or a term from an external heap.
+ */
+predicate isSafeAcrossGCExpr(Expr e) {
+    isKnownImmediateExpr(e)
+    or
+    isExternalHeapTerm(e)
+}
+
+/**
+ * Holds if the expression at a call site is known to be safe across GC,
+ * either directly or through SSA tracing where all defining values are safe.
+ */
+predicate isSafeAcrossGCAtCallSite(Expr e) {
+    isSafeAcrossGCExpr(e)
+    or
+    exists(SsaDefinition argDef, StackVariable argVar |
+        e.(VariableAccess).getTarget() = argVar and
+        argDef.getAUse(argVar) = e and
+        exists(argDef.getAnUltimateDefiningValue(argVar)) and
+        forall(Expr defVal | defVal = argDef.getAnUltimateDefiningValue(argVar) |
+            isSafeAcrossGCExpr(defVal)
+        )
+    )
+}
+
+/**
+ * Holds if the variable is a parameter of a static function and all call
+ * sites pass a value that is safe across GC (either immediate or from an
+ * external heap such as a message heap).
+ */
+predicate isStaticParamAlwaysSafeAcrossGC(StackVariable v) {
+    exists(Parameter p |
+        p = v and
+        p.getFunction().isStatic() and
+        forall(FunctionCall fc | fc.getTarget() = p.getFunction() |
+            isSafeAcrossGCAtCallSite(fc.getArgument(p.getIndex()))
+        )
+    )
+}
+
 from SsaDefinition ssaDef, StackVariable v, GCCall gcCall, VariableAccess use
 where
     isTermType(v.getType()) and
@@ -295,12 +461,14 @@ where
     ssaDef.getAUse(v) = use and
     strictlyBeforeInDomTree(ssaDef.getDefinition(), gcCall) and
     strictlyBeforeInDomTree(gcCall, use) and
-    not isImmediateExpr(ssaDef.getAnUltimateDefiningValue(v)) and
+    not isSafeAcrossGCExpr(ssaDef.getAnUltimateDefiningValue(v)) and
     not hasImmediateTypeGuard(v, gcCall) and
     not hasIndirectImmediateTypeGuard(ssaDef, v, gcCall) and
     not hasComparisonGuard(v, gcCall) and
     not isCopiedFromExternalHeap(ssaDef, v, gcCall) and
     not isStaticParamAlwaysImmediate(v) and
+    not isStaticParamAlwaysSafeAcrossGC(v) and
+    not isImpliedImmediateByUsage(ssaDef, v) and
     not gcOnDifferentContext(gcCall) and
     not hasSuppressionComment(gcCall)
 select use,
