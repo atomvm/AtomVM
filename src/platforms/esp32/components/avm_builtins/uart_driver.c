@@ -85,8 +85,8 @@ static const AtomStringIntPair parity_table[] = {
 
 static const AtomStringIntPair flow_control_table[] = {
     { ATOM_STR("\x4", "none"), UART_HW_FLOWCTRL_DISABLE },
-    { ATOM_STR("\x4", "hardware"), UART_HW_FLOWCTRL_CTS_RTS },
-    { ATOM_STR("\x3", "software"), -1 },
+    { ATOM_STR("\x8", "hardware"), UART_HW_FLOWCTRL_CTS_RTS },
+    { ATOM_STR("\x8", "software"), -1 },
     SELECT_INT_DEFAULT(-1)
 };
 

@@ -226,7 +226,7 @@ const ErlNifResourceTypeInit posix_fd_resource_type_init = {
 // #define O_NONBLOCK_ATOM_STR ATOM_STR("\xA", "o_nonblock")
 #define O_RSYNC_ATOM_STR ATOM_STR("\x7", "o_rsync")
 #define O_SYNC_ATOM_STR ATOM_STR("\x6", "o_sync")
-#define O_TRUNC_ATOM_STR ATOM_STR("\x8", "o_trunc")
+#define O_TRUNC_ATOM_STR ATOM_STR("\x7", "o_trunc")
 #define O_TTY_INIT_ATOM_STR ATOM_STR("\xA", "o_tty_init")
 
 static term make_posix_fd_resource(Context *ctx, int fd)
