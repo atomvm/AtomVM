@@ -58,10 +58,7 @@ test_ets_new() ->
     ets:new(heir_test, [{heir, none}]),
     ets:new(write_conc_test, [{write_concurrency, true}]),
     ets:new(read_conc_test, [{read_concurrency, true}]),
-    case otp_version() of
-        OTP when OTP >= 23 -> ets:new(decent_counters_test, [{decentralized_counters, true}]);
-        _ -> ok
-    end,
+    ets:new(decent_counters_test, [{decentralized_counters, true}]),
     ets:new(compressed_test, [compressed]),
     ok.
 
@@ -131,10 +128,7 @@ test_keys() ->
         #{another => "map"} => erlang:make_ref(),
         <<1, 2, 3, 4>> => <<-4, -3, -2, -1>>
     }),
-    case supports_v4_port_encoding() of
-        true -> ok = assert_stored_key(T, binary_to_term(DistributedPortBin));
-        false -> ok
-    end,
+    ok = assert_stored_key(T, binary_to_term(DistributedPortBin)),
     ok.
 
 test_keypos() ->
@@ -309,23 +303,3 @@ assert_badarg(Fun) ->
         OtherClass:OtherError ->
             erlang:error({OtherClass, OtherError})
     end.
-
-supports_v4_port_encoding() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            % small utf8 atom
-            true;
-        "BEAM" ->
-            OTP = otp_version(),
-            if
-                OTP < 24 -> false;
-                % v4 is supported but not the default
-                OTP < 26 -> true;
-                % small utf8 atom
-                true -> true
-            end
-    end.
-
-otp_version() ->
-    OTPRelease = erlang:system_info(otp_release),
-    list_to_integer(OTPRelease).
