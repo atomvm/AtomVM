@@ -71,7 +71,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx);
 
 static const char *const tcp_error_atom = "\x9" "tcp_error";
 
-static const char *const netconn_event_internal = ATOM_STR("\x14", "$atomvm_netconn_event_internal");
+static const char *const netconn_event_internal = ATOM_STR("\x1E", "$atomvm_netconn_event_internal");
 static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
 static const char *native_tcp_module_atom = ATOM_STR("\xC", "gen_tcp_inet");
 static const char *gen_udp_moniker_atom = ATOM_STR("\xC", "$avm_gen_udp");

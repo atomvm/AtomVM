@@ -96,7 +96,7 @@ static const char *const esp32_p4_atom = "\x8" "esp32_p4";
 #endif
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0)
 static const char *const esp32_c5_atom = "\x8" "esp32_c5";
-static const char *const esp32_c61_atom = "\x8" "esp32_c61";
+static const char *const esp32_c61_atom = "\x9" "esp32_c61";
 #endif
 #endif
 static const char *const emb_flash_atom = "\x9" "emb_flash";
