@@ -59,4 +59,4 @@ set(ERLANG_MODULES
 )
 
 pack_archive(test_estdlib_lib ${ERLANG_MODULES})
-pack_test(test_estdlib estdlib eavmlib etest)
+pack_test(test_estdlib estdlib eavmlib avm_network etest)
