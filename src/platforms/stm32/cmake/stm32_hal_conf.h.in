@@ -1,0 +1,215 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ *
+ * Template for family-specific HAL configuration.
+ * STM32_FAMILY and STM32_FAMILY_UPPER are substituted by CMake configure_file().
+ * Family-dependent values use preprocessor #if defined() guards.
+ */
+
+#ifndef __@STM32_FAMILY_UPPER@_HAL_CONF_H
+#define __@STM32_FAMILY_UPPER@_HAL_CONF_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* -------------------------  Module Selection  --------------------------- */
+#define HAL_MODULE_ENABLED
+#define HAL_RCC_MODULE_ENABLED
+#define HAL_GPIO_MODULE_ENABLED
+#define HAL_CORTEX_MODULE_ENABLED
+#define HAL_UART_MODULE_ENABLED
+#define HAL_FLASH_MODULE_ENABLED
+#define HAL_PWR_MODULE_ENABLED
+#define HAL_EXTI_MODULE_ENABLED
+#define HAL_DMA_MODULE_ENABLED
+#if defined(STM32H5XX) || defined(STM32L5XX) || defined(STM32U3XX) || defined(STM32U5XX)
+#define HAL_ICACHE_MODULE_ENABLED
+#endif
+
+/* -------------------------  Oscillator Values  -------------------------- */
+#if !defined(HSE_VALUE)
+#if defined(STM32F4XX)
+#define HSE_VALUE 8000000U /* Default: 8 MHz for Discovery/Nucleo boards */
+#elif defined(STM32U3XX) || defined(STM32U5XX)
+#define HSE_VALUE 16000000U
+#elif defined(STM32WBXX)
+#define HSE_VALUE 32000000U /* 32 MHz HSE required for BLE radio */
+#else
+#define HSE_VALUE 8000000U
+#endif
+#endif
+
+#if !defined(HSE_STARTUP_TIMEOUT)
+#define HSE_STARTUP_TIMEOUT 100U
+#endif
+
+#if !defined(HSI_VALUE)
+#if defined(STM32H5XX) || defined(STM32H7XX)
+#define HSI_VALUE 64000000U
+#else
+#define HSI_VALUE 16000000U
+#endif
+#endif
+
+#if defined(STM32H5XX) || defined(STM32H7XX)
+#if !defined(CSI_VALUE)
+#define CSI_VALUE 4000000U
+#endif
+#endif
+
+#if defined(STM32G4XX) || defined(STM32H5XX) || defined(STM32L4XX) || defined(STM32L5XX) \
+    || defined(STM32U3XX) || defined(STM32U5XX)
+#if !defined(HSI48_VALUE)
+#define HSI48_VALUE 48000000U
+#endif
+#endif
+
+#if defined(STM32L4XX) || defined(STM32L5XX) || defined(STM32U3XX) || defined(STM32U5XX) \
+    || defined(STM32WBXX)
+#if !defined(MSI_VALUE)
+#define MSI_VALUE 4000000U
+#endif
+#endif
+
+#if defined(STM32WBXX)
+#if !defined(LSI1_VALUE)
+#define LSI1_VALUE 32000U
+#endif
+#if !defined(LSI2_VALUE)
+#define LSI2_VALUE 32000U
+#endif
+#else
+#if !defined(LSI_VALUE)
+#define LSI_VALUE 32000U
+#endif
+#endif
+
+#if !defined(LSE_VALUE)
+#define LSE_VALUE 32768U
+#endif
+
+#if !defined(LSE_STARTUP_TIMEOUT)
+#define LSE_STARTUP_TIMEOUT 5000U
+#endif
+
+#if !defined(EXTERNAL_CLOCK_VALUE)
+#define EXTERNAL_CLOCK_VALUE 12288000U
+#endif
+
+#if defined(STM32G0XX)
+#if !defined(EXTERNAL_I2S1_CLOCK_VALUE)
+#define EXTERNAL_I2S1_CLOCK_VALUE 12288000U
+#endif
+#if !defined(EXTERNAL_I2S2_CLOCK_VALUE)
+#define EXTERNAL_I2S2_CLOCK_VALUE 12288000U
+#endif
+#endif
+
+#if defined(STM32G4XX) || defined(STM32L4XX) || defined(STM32L5XX) || defined(STM32U3XX) \
+    || defined(STM32U5XX) || defined(STM32WBXX)
+#if !defined(EXTERNAL_SAI1_CLOCK_VALUE)
+#define EXTERNAL_SAI1_CLOCK_VALUE 48000U
+#endif
+#endif
+
+#if defined(STM32L4XX) || defined(STM32L5XX)
+#if !defined(EXTERNAL_SAI2_CLOCK_VALUE)
+#define EXTERNAL_SAI2_CLOCK_VALUE 48000U
+#endif
+#endif
+
+/* -------------------------  System Configuration  ----------------------- */
+#define VDD_VALUE 3300U
+#define TICK_INT_PRIORITY ((1UL<<__NVIC_PRIO_BITS) - 1UL)
+#define USE_RTOS 0U
+
+#if defined(STM32H7XX)
+#define USE_SD_TRANSCEIVER 0U
+#endif
+
+#if defined(STM32F2XX) || defined(STM32F4XX) || defined(STM32F7XX) || defined(STM32G0XX) \
+    || defined(STM32G4XX) || defined(STM32U3XX) || defined(STM32U5XX) || defined(STM32WBXX)
+#define PREFETCH_ENABLE 1U
+#elif defined(STM32L4XX) || defined(STM32L5XX)
+#define PREFETCH_ENABLE 0U
+#endif
+
+#if defined(STM32F7XX)
+#define ART_ACCELERATOR_ENABLE 1U
+#endif
+
+#if defined(STM32F2XX) || defined(STM32F4XX) || defined(STM32F7XX) || defined(STM32G0XX) \
+    || defined(STM32G4XX) || defined(STM32L4XX) || defined(STM32WBXX)
+#define INSTRUCTION_CACHE_ENABLE 1U
+#define DATA_CACHE_ENABLE 1U
+#endif
+
+/* -------------------------  Include HAL modules  ------------------------ */
+#ifdef HAL_RCC_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_rcc.h"
+#endif
+
+#ifdef HAL_EXTI_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_exti.h"
+#endif
+
+#ifdef HAL_GPIO_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_gpio.h"
+#endif
+
+#ifdef HAL_DMA_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_dma.h"
+#endif
+
+#ifdef HAL_CORTEX_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_cortex.h"
+#endif
+
+#ifdef HAL_FLASH_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_flash.h"
+#endif
+
+#ifdef HAL_PWR_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_pwr.h"
+#endif
+
+#ifdef HAL_UART_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_uart.h"
+#endif
+
+#ifdef HAL_ICACHE_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_icache.h"
+#endif
+
+/* -------------------------  Assert Configuration  ----------------------- */
+/* #define USE_FULL_ASSERT    1U */
+
+#ifdef USE_FULL_ASSERT
+#define assert_param(expr) ((expr) ? (void) 0U : assert_failed((uint8_t *) __FILE__, __LINE__))
+void assert_failed(uint8_t *file, uint32_t line);
+#else
+#define assert_param(expr) ((void) 0U)
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* __@STM32_FAMILY_UPPER@_HAL_CONF_H */

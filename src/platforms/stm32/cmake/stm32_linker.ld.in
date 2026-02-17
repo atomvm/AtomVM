@@ -1,0 +1,146 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ *
+ * STM32 linker script template.
+ * Variables substituted by CMake configure_file():
+ *   FLASH_SIZE_KB, LINKER_RAM_ORIGIN, LINKER_RAM_SIZE,
+ *   LINKER_EXTRA_MEMORY, LINKER_EXTRA_SYMBOLS, LINKER_EXTRA_SECTIONS
+ */
+
+MEMORY
+{
+    FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = @FLASH_SIZE_KB@K
+    @LINKER_EXTRA_MEMORY@
+    RAM (rwx)   : ORIGIN = @LINKER_RAM_ORIGIN@, LENGTH = @LINKER_RAM_SIZE@
+}
+
+/* Entry point */
+ENTRY(Reset_Handler)
+
+/* Highest address of the user mode stack */
+_estack = ORIGIN(RAM) + LENGTH(RAM);
+_stack = _estack;
+@LINKER_EXTRA_SYMBOLS@
+
+/* Generate a link error if heap and stack don't fit into RAM */
+_Min_Heap_Size = 0x200;
+_Min_Stack_Size = 0x400;
+
+SECTIONS
+{
+    /* Interrupt vector table */
+    .isr_vector :
+    {
+        . = ALIGN(4);
+        KEEP(*(.isr_vector))
+        . = ALIGN(4);
+    } >FLASH
+
+    /* Program code */
+    .text :
+    {
+        . = ALIGN(4);
+        *(.text)
+        *(.text*)
+        *(.glue_7)
+        *(.glue_7t)
+        *(.eh_frame)
+
+        KEEP(*(.init))
+        KEEP(*(.fini))
+
+        . = ALIGN(4);
+        _etext = .;
+    } >FLASH
+
+    /* Read-only data */
+    .rodata :
+    {
+        . = ALIGN(4);
+        *(.rodata)
+        *(.rodata*)
+        . = ALIGN(4);
+    } >FLASH
+
+    .ARM.extab :
+    {
+        *(.ARM.extab* .gnu.linkonce.armextab.*)
+    } >FLASH
+
+    .ARM :
+    {
+        __exidx_start = .;
+        *(.ARM.exidx*)
+        __exidx_end = .;
+    } >FLASH
+
+    .preinit_array :
+    {
+        PROVIDE_HIDDEN(__preinit_array_start = .);
+        PROVIDE_HIDDEN(__bothinit_array_start = .);
+        KEEP(*(.preinit_array*))
+        PROVIDE_HIDDEN(__preinit_array_end = .);
+    } >FLASH
+
+    .init_array :
+    {
+        PROVIDE_HIDDEN(__init_array_start = .);
+        KEEP(*(SORT(.init_array.*)))
+        KEEP(*(.init_array*))
+        PROVIDE_HIDDEN(__init_array_end = .);
+        PROVIDE_HIDDEN(__bothinit_array_end = .);
+    } >FLASH
+
+    .fini_array :
+    {
+        PROVIDE_HIDDEN(__fini_array_start = .);
+        KEEP(*(SORT(.fini_array.*)))
+        KEEP(*(.fini_array*))
+        PROVIDE_HIDDEN(__fini_array_end = .);
+    } >FLASH
+
+    _sidata = LOADADDR(.data);
+
+    /* Initialized data */
+    .data :
+    {
+        . = ALIGN(4);
+        _sdata = .;
+        *(.data)
+        *(.data*)
+        . = ALIGN(4);
+        _edata = .;
+    } >RAM AT> FLASH
+
+    /* Uninitialized data */
+    .bss :
+    {
+        _sbss = .;
+        __bss_start__ = _sbss;
+        *(.bss)
+        *(.bss*)
+        *(COMMON)
+        . = ALIGN(4);
+        _ebss = .;
+        __bss_end__ = _ebss;
+    } >RAM
+
+    /* User_heap_stack section: check minimum heap and stack */
+    ._user_heap_stack :
+    {
+        . = ALIGN(8);
+        PROVIDE(end = .);
+        PROVIDE(_end = .);
+        . = . + _Min_Heap_Size;
+        . = . + _Min_Stack_Size;
+        . = ALIGN(8);
+    } >RAM
+
+    @LINKER_EXTRA_SECTIONS@
+
+    .ARM.attributes 0 : { *(.ARM.attributes) }
+}
