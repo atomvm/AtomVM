@@ -641,7 +641,7 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
             AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
+        term obj = term_from_resource(rsrc_obj, &ctx->heap);
         enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
@@ -1814,7 +1814,10 @@ static term nif_socket_listen(Context *ctx, int argc, term argv[])
 #if OTP_SOCKET_LWIP
 static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_rsrc_obj)
 {
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE + TUPLE_SIZE(2) + REF_SIZE) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term obj = term_from_resource(conn_rsrc_obj, &ctx->heap);
     enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_allocate_resource in make_accepted_socket_resource
 
     term socket_term = term_alloc_tuple(2, &ctx->heap);
@@ -1899,7 +1902,11 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 #endif
         TRACE("nif_socket_accept: Created socket on accept fd=%i\n", rsrc_obj->fd);
 
-        term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
+        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+            AVM_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term new_resource = term_from_resource(conn_rsrc_obj, &ctx->heap);
         enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_alloc_resource
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;

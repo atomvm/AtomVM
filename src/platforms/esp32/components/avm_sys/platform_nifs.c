@@ -324,8 +324,11 @@ static term nif_esp_partition_mmap(Context *ctx, int argc, term argv[])
         return ERROR_ATOM;
     }
 
-    ErlNifEnv *env = erl_nif_env_from_context(ctx);
-    ERL_NIF_TERM binary = enif_make_resource_binary(env, handle, mmap_ptr, size);
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+        enif_release_resource(handle);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    ERL_NIF_TERM binary = term_from_resource_binary(handle, mmap_ptr, size, &ctx->heap, ctx->global);
     enif_release_resource(handle);
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &binary, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {

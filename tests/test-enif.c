@@ -28,6 +28,7 @@
 #include "erl_nif_priv.h"
 #include "external_term.h"
 #include "globalcontext.h"
+#include "memory.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -114,7 +115,8 @@ void test_resource(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    ERL_NIF_TERM resource_term = enif_make_resource(env, ptr);
+    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) == MEMORY_GC_OK);
+    ERL_NIF_TERM resource_term = term_from_resource(ptr, &env->heap);
     assert(term_is_reference(resource_term));
     assert(term_is_resource_reference(resource_term));
 
@@ -475,7 +477,8 @@ void test_resource_binary(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    ERL_NIF_TERM binary = enif_make_resource_binary(env, ptr, "hello", 5);
+    assert(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    ERL_NIF_TERM binary = term_from_resource_binary(ptr, "hello", 5, &env->heap, env->global);
     assert(term_is_binary(binary));
     assert(term_is_refc_binary(binary));
     assert(term_binary_size(binary) == 5);
@@ -548,7 +551,8 @@ void test_resource_binaries(void)
     uint32_t *resource = (uint32_t *) ptr;
     *resource = 42;
 
-    ERL_NIF_TERM binary1 = enif_make_resource_binary(env1, ptr, "hello", 5);
+    assert(memory_erl_nif_env_ensure_free(env1, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    ERL_NIF_TERM binary1 = term_from_resource_binary(ptr, "hello", 5, &env1->heap, env1->global);
     assert(term_is_binary(binary1));
     assert(term_is_refc_binary(binary1));
     assert(term_binary_size(binary1) == 5);
@@ -556,7 +560,8 @@ void test_resource_binaries(void)
 
     assert(cb_read_resource == 0);
 
-    ERL_NIF_TERM binary2 = enif_make_resource_binary(env2, ptr, "world", 5);
+    assert(memory_erl_nif_env_ensure_free(env2, TERM_BOXED_REFC_BINARY_SIZE) == MEMORY_GC_OK);
+    ERL_NIF_TERM binary2 = term_from_resource_binary(ptr, "world", 5, &env2->heap, env2->global);
     assert(term_is_binary(binary2));
     assert(term_is_refc_binary(binary2));
     assert(term_binary_size(binary2) == 5);

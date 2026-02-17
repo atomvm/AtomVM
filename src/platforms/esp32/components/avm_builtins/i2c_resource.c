@@ -222,7 +222,7 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
         ESP_LOGW(TAG, "Failed to allocate memory: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
+    term obj = term_from_resource(rsrc_obj, &ctx->heap);
     enif_release_resource(rsrc_obj);
 
     //

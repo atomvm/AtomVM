@@ -115,7 +115,7 @@ static term nif_oneshot_new_channel_p(Context *ctx, int argc, term argv[])
         enif_release_resource(chan_rsrc);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    ERL_NIF_TERM chan_obj = enif_make_resource(erl_nif_env_from_context(ctx), chan_rsrc);
+    ERL_NIF_TERM chan_obj = term_from_resource(chan_rsrc, &ctx->heap);
 
     const dac_oneshot_config_t config = {
         .chan_id = term_to_uint8(argv[0])

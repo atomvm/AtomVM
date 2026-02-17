@@ -207,11 +207,14 @@ int enif_release_resource(void *resource);
  * usage confusion, users should rather call `term_from_resource` and should
  * not decrement the reference counter.
  *
+ * @deprecated This function aborts on out of memory. Use
+ * `memory_erl_nif_env_ensure_free` followed by `term_from_resource` instead.
+ *
  * @param env current environment
  * @param obj resource
  * @return a new term representing the resource
  */
-ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
+ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj) __attribute__((deprecated("use memory_erl_nif_env_ensure_free + term_from_resource instead")));
 
 /**
  * @brief create a binary term memory managed by a resource.
@@ -225,13 +228,17 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
  * resource. The resource destructor will only be called when all binaries
  * are garbage collected.
  *
+ * @deprecated This function aborts on out of memory. Use
+ * `memory_erl_nif_env_ensure_free` followed by `term_from_resource_binary`
+ * instead.
+ *
  * @param env current environment
  * @param obj resource
  * @param data binary data to encapsulate
  * @param size size of the data
  * @return a new binary term
  */
-ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size);
+ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size) __attribute__((deprecated("use memory_erl_nif_env_ensure_free + term_from_resource_binary instead")));
 
 /**
  * @brief Run a POSIX-like select on a given object (event) and send a message
