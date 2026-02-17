@@ -5,4 +5,3 @@
 build/
 *.elf
 *.bin
-generated.*.ld

@@ -40,10 +40,7 @@
 #include <sys/time.h>
 #endif
 
-#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY) \
-    || HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 #include <errno.h>
-#endif
 
 #if HAVE_OPENDIR && HAVE_READDIR && HAVE_CLOSEDIR
 #include <dirent.h>

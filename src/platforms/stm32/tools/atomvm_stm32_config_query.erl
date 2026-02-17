@@ -55,7 +55,9 @@ main(Args) ->
 
 error() ->
     io:format("~n    Usage: ~s <Device> <Parameter>~n", [?MODULE_STRING]),
-    io:format("~n        Where <Parameter> is one of: clock | rom |  ram | ccm~n"),
+    io:format(
+        "~n        Where <Parameter> is one of: clock | rom | ram | ccm | flash_size_kb | ram_size_kb~n"
+    ),
     erlang:halt(255).
 
 get_dev_config(Device) ->
@@ -71,8 +73,98 @@ get_dev_config(Device) ->
                 _ ->
                     Config
             end;
+        "stm32h7" ->
+            Config = get_h7dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32u5" ->
+            Config = get_u5dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32wb" ->
+            Config = get_wbdev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32h5" ->
+            Config = get_h5dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
         "stm32f7" ->
             Config = get_f7dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32g0" ->
+            Config = get_g0dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32g4" ->
+            Config = get_g4dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32l4" ->
+            Config = get_l4dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32l5" ->
+            Config = get_l5dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32f2" ->
+            Config = get_f2dev_config(Lookup),
+            case Config of
+                unsupported ->
+                    io:format("Error! Unsupported device ~s.~n", [Device]),
+                    erlang:halt(255);
+                _ ->
+                    Config
+            end;
+        "stm32u3" ->
+            Config = get_u3dev_config(Lookup),
             case Config of
                 unsupported ->
                     io:format("Error! Unsupported device ~s.~n", [Device]),
@@ -243,121 +335,321 @@ get_f4dev_config(Lookup) ->
             unsupported
     end.
 
+get_h7dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "43" ->
+            case Flash of
+                "i" ->
+                    ?STM32H743_I;
+                "g" ->
+                    ?STM32H743_G;
+                _ ->
+                    unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_u5dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "85" ->
+            case Flash of
+                "i" ->
+                    ?STM32U585_I;
+                _ ->
+                    unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_wbdev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "55" ->
+            case Flash of
+                "g" ->
+                    ?STM32WB55_G;
+                "e" ->
+                    ?STM32WB55_E;
+                _ ->
+                    unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_h5dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "62" ->
+            case Flash of
+                "g" ->
+                    ?STM32H562_G;
+                "i" ->
+                    ?STM32H562_I;
+                _ ->
+                    unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
 get_f7dev_config(Lookup) ->
     Line = string:slice(Lookup, 0, 2),
     Flash = string:slice(Lookup, 3, 1),
     case Line of
-        "22" ->
+        "22" -> f7_72_73(Flash);
+        "23" -> f7_72_73(Flash);
+        "32" -> f7_72_73(Flash);
+        "33" -> f7_72_73(Flash);
+        "30" -> f7_72_73(Flash);
+        "50" -> f7_72_73(Flash);
+        "45" -> f7_74_75(Flash);
+        "46" -> f7_74_75(Flash);
+        "56" -> f7_74_75(Flash);
+        "65" -> f7_76_77(Flash);
+        "67" -> f7_76_77(Flash);
+        "69" -> f7_76_77(Flash);
+        "77" -> f7_76_77(Flash);
+        "79" -> f7_76_77(Flash);
+        _ -> unsupported
+    end.
+
+f7_72_73(Flash) ->
+    case Flash of
+        "e" -> ?STM32F72_73_E;
+        _ -> unsupported
+    end.
+
+f7_74_75(Flash) ->
+    case Flash of
+        "e" -> ?STM32F74_75_E;
+        "g" -> ?STM32F74_75_G;
+        _ -> unsupported
+    end.
+
+f7_76_77(Flash) ->
+    case Flash of
+        "e" -> ?STM32F76_77_E;
+        "g" -> ?STM32F76_77_G;
+        "i" -> ?STM32F76_77_I;
+        _ -> unsupported
+    end.
+
+get_g0dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "b1" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_23_23_E;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G0B1_E;
+                _ -> unsupported
             end;
-        "23" ->
+        "71" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_23_23_E;
-                _ ->
-                    unsupported
+                "b" -> ?STM32G071_B;
+                _ -> unsupported
             end;
-        "32" ->
+        _ ->
+            unsupported
+    end.
+
+get_g4dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "73" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_23_23_E;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G47_48_E;
+                _ -> unsupported
             end;
-        "33" ->
+        "74" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_23_23_E;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G47_48_E;
+                _ -> unsupported
             end;
-        "45" ->
+        "83" ->
             case Flash of
-                "e" ->
-                    ?STM32F745_E;
-                "g" ->
-                    ?STM32F745_G;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G47_48_E;
+                _ -> unsupported
             end;
-        "46" ->
+        "84" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_45_6_E;
-                "g" ->
-                    ?STM32F7_45_6_G;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G47_48_E;
+                _ -> unsupported
             end;
-        "56" ->
+        "91" ->
             case Flash of
-                "e" ->
-                    ?STM32F7_45_6_E;
-                "g" ->
-                    ?STM32F7_45_6_G;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G49_4A_E;
+                _ -> unsupported
             end;
-        "65" ->
+        "a1" ->
             case Flash of
-                "g" ->
-                    ?STM32F765_G;
-                "i" ->
-                    ?STM32F765_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32G49_4A_E;
+                _ -> unsupported
             end;
-        "67" ->
+        _ ->
+            unsupported
+    end.
+
+get_l4dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "51" ->
             case Flash of
-                "g" ->
-                    ?STM32F7_67_7_G;
-                "i" ->
-                    ?STM32F7_67_7_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L45_46_E;
+                _ -> unsupported
             end;
-        "68" ->
+        "52" ->
             case Flash of
-                "i" ->
-                    ?STM32F7_67_89_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L45_46_E;
+                _ -> unsupported
             end;
-        "69" ->
+        "62" ->
             case Flash of
-                "g" ->
-                    ?STM32F769_G;
-                "i" ->
-                    ?STM32F7_67_89_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L45_46_E;
+                _ -> unsupported
             end;
-        "77" ->
+        "71" ->
             case Flash of
-                "g" ->
-                    ?STM32F7_67_7_G;
-                "i" ->
-                    ?STM32F7_67_7_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L47_E;
+                "g" -> ?STM32L47_48_G;
+                _ -> unsupported
             end;
-        "78" ->
+        "75" ->
             case Flash of
-                "i" ->
-                    ?STM32F7_67_89_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L47_E;
+                "g" -> ?STM32L47_48_G;
+                _ -> unsupported
             end;
-        "79" ->
+        "76" ->
             case Flash of
-                "i" ->
-                    ?STM32F7_67_89_I;
-                _ ->
-                    unsupported
+                "e" -> ?STM32L47_E;
+                "g" -> ?STM32L47_48_G;
+                _ -> unsupported
+            end;
+        "85" ->
+            case Flash of
+                "e" -> ?STM32L47_E;
+                "g" -> ?STM32L47_48_G;
+                _ -> unsupported
+            end;
+        "86" ->
+            case Flash of
+                "e" -> ?STM32L47_E;
+                "g" -> ?STM32L47_48_G;
+                _ -> unsupported
+            end;
+        "96" ->
+            case Flash of
+                "g" -> ?STM32L49_4A_G;
+                _ -> unsupported
+            end;
+        "a6" ->
+            case Flash of
+                "g" -> ?STM32L49_4A_G;
+                _ -> unsupported
+            end;
+        "r5" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        "r7" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        "r9" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        "s5" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        "s7" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        "s9" ->
+            case Flash of
+                "g" -> ?STM32L4R_4S_G;
+                "i" -> ?STM32L4R_4S_I;
+                _ -> unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_l5dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "52" ->
+            case Flash of
+                "e" -> ?STM32L55_56_E;
+                _ -> unsupported
+            end;
+        "62" ->
+            case Flash of
+                "e" -> ?STM32L55_56_E;
+                _ -> unsupported
+            end;
+        _ ->
+            unsupported
+    end.
+
+get_f2dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "05" -> f2_flash(Flash);
+        "07" -> f2_flash(Flash);
+        "15" -> f2_flash(Flash);
+        "17" -> f2_flash(Flash);
+        _ -> unsupported
+    end.
+
+f2_flash(Flash) ->
+    case Flash of
+        "e" -> ?STM32F2_E;
+        "f" -> ?STM32F2_F;
+        "g" -> ?STM32F2_G;
+        _ -> unsupported
+    end.
+
+get_u3dev_config(Lookup) ->
+    Line = string:slice(Lookup, 0, 2),
+    Flash = string:slice(Lookup, 3, 1),
+    case Line of
+        "75" ->
+            case Flash of
+                "e" -> ?STM32U37_38_E;
+                "g" -> ?STM32U37_38_G;
+                _ -> unsupported
+            end;
+        "85" ->
+            case Flash of
+                "e" -> ?STM32U37_38_E;
+                "g" -> ?STM32U37_38_G;
+                _ -> unsupported
             end;
         _ ->
             unsupported
@@ -385,6 +677,10 @@ get_param_key(Parameter) ->
             ccm;
         ["clock"] ->
             clock;
+        ["flash_size_kb"] ->
+            flash_size_kb;
+        ["ram_size_kb"] ->
+            ram_size_kb;
         _ ->
             io:format("Error: ~p is not a valid configuration parameter.~n", [Parameter]),
             erlang:halt(255)
