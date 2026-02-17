@@ -224,6 +224,9 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
     }
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
     enif_release_resource(rsrc_obj);
+    if (term_is_invalid_term(obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     //
     // Return result

@@ -350,6 +350,9 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
     }
     ERL_NIF_TERM unit_obj = enif_make_resource(erl_nif_env_from_context(ctx), unit_rsrc);
     enif_release_resource(unit_rsrc); // decrement refcount after enif_alloc_resource
+    if (term_is_invalid_term(unit_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     // {ok, {'$adc', Unit :: resource(), ref()}}
     size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
@@ -502,6 +505,9 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
 
     term chan_obj = enif_make_resource(erl_nif_env_from_context(ctx), chan_rsrc);
     enif_release_resource(chan_rsrc); // decrement refcount after enif_alloc_resource
+    if (term_is_invalid_term(chan_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     // {ok, {'$adc', resource(), ref()}}
     size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
