@@ -45,6 +45,7 @@ test() ->
             ok = test_link_local_unlink_remote(Platform),
             ok = test_link_local_unlink_local(Platform),
             ok = test_is_alive(Platform),
+            ok = test_ping_with_avm_dist_opts(Platform),
             ok;
         false ->
             io:format("~s: skipped\n", [?MODULE]),
@@ -481,6 +482,39 @@ test_is_alive(Platform) ->
     true = is_alive(),
     net_kernel:stop(),
     false = is_alive(),
+    ok.
+
+test_ping_with_avm_dist_opts("BEAM") ->
+    ok;
+test_ping_with_avm_dist_opts("ATOM" = Platform) ->
+    DistListenMin = 9100,
+    DistListenMax = 9110,
+    %% Pre-bind the first port so the scanner must skip it
+    {ok, BlockSock} = socket:open(inet, stream, tcp),
+    ok = socket:bind(BlockSock, #{family => inet, port => DistListenMin, addr => {0, 0, 0, 0}}),
+    ok = socket:listen(BlockSock),
+    {ok, _NetKernelPid} = net_kernel:start(atomvm, #{
+        name_domain => shortnames,
+        avm_dist_opts => #{listen_port_min => DistListenMin, listen_port_max => DistListenMax}
+    }),
+    Node = node(),
+    erlang:set_cookie(Node, 'AtomVM'),
+    %% Verify the listening port skipped the blocked port
+    [Name, Host] = string:split(atom_to_list(Node), "@"),
+    {ok, HostAddr} = inet:getaddr(Host, inet),
+    {port, Port, _Version} = erl_epmd:port_please(Name, HostAddr),
+    true = Port > DistListenMin,
+    true = Port =< DistListenMax,
+    %% Verify connectivity still works
+    Result = execute_command(
+        Platform,
+        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = net_adm:ping('" ++
+            atom_to_list(Node) ++
+            "'), erlang:display(R).\" -s init stop -noshell"
+    ),
+    "pong" ++ _ = Result,
+    net_kernel:stop(),
+    socket:close(BlockSock),
     ok.
 
 subprocess("BEAM", Command) ->
