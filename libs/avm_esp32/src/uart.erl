@@ -19,6 +19,9 @@
 %
 
 -module(uart).
+
+-behaviour(uart_hal).
+
 -export([open/1, open/2, close/1, read/1, read/2, write/2]).
 
 -type peripheral() :: string() | binary().

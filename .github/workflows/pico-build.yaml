@@ -59,14 +59,14 @@ jobs:
             https://repo.hex.pm
             https://cdn.jsdelivr.net/hex
 
-      - name: Build atomvmlib-pico.uf2/atomvmlib-pico2.uf2
+      - name: Build atomvmlib-rp2-pico.uf2/atomvmlib-rp2-pico2.uf2
         shell: bash
         run: |
           set -euo pipefail
           mkdir build
           cd build
           cmake .. -G Ninja
-          cmake --build . -t atomvmlib
+          cmake --build . -t atomvmlib-rp2
 
       - name: Upload atomvmlib artifacts
         uses: actions/upload-artifact@v4
@@ -225,13 +225,13 @@ jobs:
         name: AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
         path: src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-*.uf2
 
-    - name: Rename atomvmlib and write sha256sum
+    - name: Rename atomvmlib-rp2 and write sha256sum
       if: matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
         pushd build/libs
-        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
-        mv atomvmlib-${{matrix.board == 'pico_w' && 'pico' || matrix.board == 'pico2_w' && 'pico2' || matrix.board}}.uf2 "${ATOMVMLIB_FILE}"
+        ATOMVMLIB_FILE=atomvmlib-rp2-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        mv atomvmlib-rp2-${{matrix.board == 'pico_w' && 'pico' || matrix.board == 'pico2_w' && 'pico2' || matrix.board}}.uf2 "${ATOMVMLIB_FILE}"
         sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
         popd
 
@@ -240,7 +240,7 @@ jobs:
       shell: bash
       run: |
         ATOMVM_COMBINED_FILE=AtomVM-combined-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
-        ./uf2tool join -o "${ATOMVM_COMBINED_FILE}" src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2 build/libs/atomvmlib-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        ./uf2tool join -o "${ATOMVM_COMBINED_FILE}" src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2 build/libs/atomvmlib-rp2-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
         sha256sum "${ATOMVM_COMBINED_FILE}" > "${ATOMVM_COMBINED_FILE}.sha256"
         echo "ATOMVM_COMBINED_FILE=${ATOMVM_COMBINED_FILE}" >> $GITHUB_ENV
 
@@ -260,8 +260,8 @@ jobs:
         files: |
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
-          build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-          build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
+          build/libs/atomvmlib-rp2-${{ matrix.board }}-${{ github.ref_name }}.uf2
+          build/libs/atomvmlib-rp2-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
           ${{ env.ATOMVM_COMBINED_FILE }}
           ${{ env.ATOMVM_COMBINED_FILE }}.sha256
 

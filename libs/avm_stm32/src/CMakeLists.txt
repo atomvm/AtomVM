@@ -18,17 +18,33 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-project(examples_erlang_stm32)
+project(avm_stm32)
 
 include(BuildErlang)
 
-# STM32 examples bundle runtime libs in the same AVM and targets are flash-constrained.
-set(AVM_PRUNE_RUNNABLES ON)
+set(ERLANG_MODULES
+    gpio
+)
 
-pack_runnable(blink_weact_studio_blackpill blink_weact_studio_blackpill eavmlib avm_stm32)
-pack_runnable(blink_weact_studio_h562 blink_weact_studio_h562 eavmlib avm_stm32)
-pack_runnable(blink_weact_studio_h743 blink_weact_studio_h743 eavmlib avm_stm32)
-pack_runnable(blink_weact_studio_u585 blink_weact_studio_u585 eavmlib avm_stm32)
-pack_runnable(blink_weact_studio_wb55 blink_weact_studio_wb55 eavmlib avm_stm32)
-pack_runnable(blink_nucleo64 blink_nucleo64 eavmlib avm_stm32)
-pack_runnable(blink_nucleo144 blink_nucleo144 eavmlib avm_stm32)
+pack_archive(avm_stm32 DEPENDS_ON eavmlib ERLC_FLAGS +warnings_as_errors MODULES ${ERLANG_MODULES})
+
+include(../../../version.cmake)
+
+set(AVM_STM32_VERSION ${ATOMVM_BASE_VERSION})
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/beams/
+    DESTINATION lib/atomvm/lib/avm_stm32-${AVM_STM32_VERSION}/ebin
+    FILES_MATCHING PATTERN "*.beam"
+)
+
+install(
+    FILES ${CMAKE_CURRENT_BINARY_DIR}/avm_stm32.avm
+    DESTINATION lib/atomvm/lib/avm_stm32-${AVM_STM32_VERSION}/ebin/
+)
+
+install(
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION lib/atomvm/lib/avm_stm32-${AVM_STM32_VERSION}/src
+    FILES_MATCHING PATTERN "*.erl"
+)
