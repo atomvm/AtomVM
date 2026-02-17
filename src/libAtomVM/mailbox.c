@@ -45,6 +45,7 @@ void mailbox_init(Mailbox *mbx)
     mbx->inner_last = NULL;
     mbx->receive_pointer = NULL;
     mbx->receive_pointer_prev = NULL;
+    mbx->receive_has_match_clauses = false;
 }
 
 // Convert a mailbox message (struct Message or struct TermSignal) to a heap

@@ -2798,6 +2798,7 @@ loop:
                     }
                     PROCESS_SIGNAL_MESSAGES();
                     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+                    ctx->mailbox.receive_has_match_clauses = false;
                     // Cannot GC now as remove_message is GC neutral
                 #endif
                 break;
@@ -2808,6 +2809,7 @@ loop:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
+                    ctx->mailbox.receive_has_match_clauses = false;
 
                     mailbox_reset(&ctx->mailbox);
                 #endif
@@ -2823,6 +2825,7 @@ loop:
                 TRACE("loop_rec/2, dreg=%c%i\n", T_DEST_REG(dreg));
 
                 #ifdef IMPL_EXECUTE_LOOP
+                    ctx->mailbox.receive_has_match_clauses = true;
                     term ret;
                     PROCESS_SIGNAL_MESSAGES();
                     if (mailbox_peek(ctx, &ret)) {
@@ -2898,15 +2901,19 @@ loop:
                         needs_to_wait = 1;
                     } else if (context_get_flags(ctx, WaitingTimeout) != 0) {
                         needs_to_wait = 1;
-                    } else if (!mailbox_has_next(&ctx->mailbox)) {
-                        needs_to_wait = 1;
                     }
+                    // else: WaitingTimeoutExpired -- fall through to timeout.
+                    // Any messages in the mailbox are left for the next receive.
 
                     if (needs_to_wait) {
+                        // Signal processing may have moved messages to the inner
+                        // list. If there are match clauses (loop_rec was
+                        // executed), jump to loop_rec to scan them.
+                        if (ctx->mailbox.receive_has_match_clauses && mailbox_has_next(&ctx->mailbox)) {
+                            JUMP_TO_ADDRESS(mod->labels[label]);
+                        }
                         ctx->waiting_with_timeout = true;
                         SCHEDULE_WAIT(mod, saved_pc);
-                    } else {
-                        JUMP_TO_ADDRESS(mod->labels[label]);
                     }
                 #endif
 
@@ -2922,8 +2929,6 @@ loop:
 #ifdef IMPL_EXECUTE_LOOP
 wait_timeout_trap_handler:
             {
-                // Determine if a message arrived to either jump to timeout label
-                // or to continuation.
                 // Redo the offset computation and refetch the label
                 int label;
                 DECODE_LABEL(label, pc)
@@ -2932,6 +2937,8 @@ wait_timeout_trap_handler:
                 TRACE("wait_timeout_trap_handler, label: %i\n", label);
                 PROCESS_SIGNAL_MESSAGES();
                 if (context_get_flags(ctx, WaitingTimeoutExpired)) {
+                    // Timer expired -- fall through to timeout.
+                    // Any messages in the mailbox are left for the next receive.
                     ctx->waiting_with_timeout = false;
                 } else {
                     if (UNLIKELY(!mailbox_has_next(&ctx->mailbox))) {

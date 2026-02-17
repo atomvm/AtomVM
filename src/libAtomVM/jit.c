@@ -888,6 +888,7 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
 static term jit_mailbox_peek(Context *ctx)
 {
     TRACE("jit_mailbox_peek: ctx->process_id=%" PRId32 "\n", ctx->process_id);
+    ctx->mailbox.receive_has_match_clauses = true;
     term out = term_invalid_term();
     mailbox_peek(ctx, &out);
     return out;
@@ -897,12 +898,14 @@ static void jit_mailbox_remove_message(Context *ctx)
 {
     TRACE("jit_mailbox_remove_message: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+    ctx->mailbox.receive_has_match_clauses = false;
 }
 
 static void jit_timeout(Context *ctx)
 {
     TRACE("jit_timeout: ctx->process_id=%" PRId32 "\n", ctx->process_id);
     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
+    ctx->mailbox.receive_has_match_clauses = false;
     mailbox_reset(&ctx->mailbox);
 }
 
@@ -952,18 +955,23 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
         needs_to_wait = 1;
     } else if (context_get_flags(ctx, WaitingTimeout) != 0) {
         needs_to_wait = 1;
-    } else if (!mailbox_has_next(&ctx->mailbox)) {
-        needs_to_wait = 1;
     }
+    // else: WaitingTimeoutExpired -- fall through to timeout.
+    // Any messages in the mailbox are left for the next receive.
 
     if (needs_to_wait) {
+        // Signal processing may have moved messages to the inner list.
+        // If there are match clauses (loop_rec was executed), jump to
+        // loop_rec to scan them.
+        if (ctx->mailbox.receive_has_match_clauses && mailbox_has_next(&ctx->mailbox)) {
+            jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
+            return ctx;
+        }
         return jit_schedule_wait_cp(ctx, jit_state);
-    } else {
-        // clang cannot tail-optimize this, so return to loop to avoid any stack overflow
-        // __attribute__((musttail)) return jit_state->continuation(ctx, jit_state, &module_native_interface);
-        jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
-        return ctx;
     }
+    // else: timer expired, fall through to timeout
+    // jit_state->continuation already points to the trap handler code
+    return ctx;
 }
 
 static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state, int label)
@@ -976,6 +984,7 @@ static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state,
         return scheduler_wait(ctx);
     }
 
+    // Messages available, jump to loop_rec to scan them.
     jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
     return ctx;
 }

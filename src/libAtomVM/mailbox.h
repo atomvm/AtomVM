@@ -178,6 +178,10 @@ typedef struct
     // Receive pointers are on inner list items.
     MailboxMessage *receive_pointer;
     MailboxMessage *receive_pointer_prev;
+    // Set by loop_rec, cleared by remove_message and timeout.
+    // Used by wait_timeout to know if there are match clauses to try
+    // when signal processing moved messages to the inner list.
+    bool receive_has_match_clauses;
 } Mailbox;
 
 // TODO: a lot of this code depends on Context * and should be decoupled
