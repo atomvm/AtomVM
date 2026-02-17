@@ -602,7 +602,7 @@ jobs:
       id: cache
       with:
         path: 'build/tests/**/*.beam'
-        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch }}
+        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}
 
     - name: "Build: run cmake"
       working-directory: build
