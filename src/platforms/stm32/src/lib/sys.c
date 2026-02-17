@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 #include <errno.h>
-#include <malloc.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include <avmpack.h>
@@ -30,10 +30,7 @@
 // #define ENABLE_TRACE
 #include <trace.h>
 
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/cm3/scb.h>
-#include <libopencm3/stm32/flash.h>
-#include <libopencm3/stm32/rcc.h>
+#include "stm32_hal_platform.h"
 
 #include "avm_log.h"
 #include "stm_sys.h"
@@ -65,7 +62,7 @@ static void __local_ram(uint8_t **start, uint8_t **end)
     *end = (uint8_t *) (((uintptr_t) &_stack - RESERVE_STACK_SIZE));
 }
 
-void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
+void *sbrk(ptrdiff_t diff)
 {
     uint8_t *_old_brk;
 
@@ -75,19 +72,18 @@ void *_sbrk_r(struct _reent *reent, ptrdiff_t diff)
 
     _old_brk = _cur_brk;
     if (_cur_brk + diff > _heap_end) {
-        reent->_errno = ENOMEM;
+        errno = ENOMEM;
         return (void *) -1;
     }
     _cur_brk += diff;
     return _old_brk;
 }
 
-// Monotonically increasing number of milliseconds from reset
 static volatile uint64_t system_millis;
 
-// Called when systick fires
-void sys_tick_handler()
+void SysTick_Handler(void)
 {
+    HAL_IncTick();
     system_millis++;
 }
 
@@ -107,15 +103,37 @@ void platform_defaultatoms_init(GlobalContext *glb)
     UNUSED(glb);
 }
 
-void sys_enable_core_periph_clocks()
+void sys_enable_core_periph_clocks(void)
 {
-    uint32_t list[] = GPIO_CLOCK_LIST;
-    for (size_t i = 0; i < sizeof(list) / sizeof(list[0]); i++) {
-        rcc_periph_clock_enable((enum rcc_periph_clken) list[i]);
-    }
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_GPIOD_CLK_ENABLE();
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+#ifdef __HAL_RCC_GPIOF_CLK_ENABLE
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+#endif
+#ifdef __HAL_RCC_GPIOG_CLK_ENABLE
+    __HAL_RCC_GPIOG_CLK_ENABLE();
+#endif
+#ifdef __HAL_RCC_GPIOH_CLK_ENABLE
+    __HAL_RCC_GPIOH_CLK_ENABLE();
+#endif
+#ifdef __HAL_RCC_GPIOI_CLK_ENABLE
+    __HAL_RCC_GPIOI_CLK_ENABLE();
+#endif
+#ifdef __HAL_RCC_GPIOJ_CLK_ENABLE
+    __HAL_RCC_GPIOJ_CLK_ENABLE();
+#endif
+#ifdef __HAL_RCC_GPIOK_CLK_ENABLE
+    __HAL_RCC_GPIOK_CLK_ENABLE();
+#endif
+
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
-    // This clock enables the syscfg manger for external gpio interupts & ethernet PHY interface.
-    rcc_periph_clock_enable(RCC_SYSCFG);
+    /* Enable SYSCFG clock for EXTI configuration (not all families need it) */
+#ifdef __HAL_RCC_SYSCFG_CLK_ENABLE
+    __HAL_RCC_SYSCFG_CLK_ENABLE();
+#endif
 #endif
 }
 
@@ -216,9 +234,16 @@ void sys_monotonic_time(struct timespec *t)
     sys_clock_gettime(t);
 }
 
-uint64_t sys_monotonic_time_u64()
+uint64_t sys_monotonic_time_u64(void)
 {
-    return system_millis;
+    /* 64-bit read is not atomic on 32-bit ARM; disable interrupts briefly
+     * to prevent SysTick_Handler from updating system_millis mid-read.
+     * Save/restore PRIMASK so this is safe if called with IRQs already disabled. */
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    uint64_t val = system_millis;
+    __set_PRIMASK(primask);
+    return val;
 }
 
 uint64_t sys_monotonic_time_ms_to_u64(uint64_t ms)
@@ -268,33 +293,52 @@ term sys_get_info(Context *ctx, term key)
     return UNDEFINED_ATOM;
 }
 
-void sys_enable_flash_cache()
+void sys_enable_flash_cache(void)
 {
-    flash_unlock_option_bytes();
-    flash_set_ws(FLASH_ACR_LATENCY_5WS);
-    flash_prefetch_enable();
+    /* Enable flash prefetch and set appropriate wait states.
+     * The exact wait states depend on clock frequency and voltage range,
+     * but HAL_Init() and SystemClock_Config() will set them correctly.
+     * Here we just enable prefetch and instruction cache early. */
+#ifdef __HAL_FLASH_PREFETCH_BUFFER_ENABLE
+    __HAL_FLASH_PREFETCH_BUFFER_ENABLE();
+#endif
+#ifdef __HAL_FLASH_INSTRUCTION_CACHE_ENABLE
+    __HAL_FLASH_INSTRUCTION_CACHE_ENABLE();
+#endif
+#ifdef __HAL_FLASH_DATA_CACHE_ENABLE
+    __HAL_FLASH_DATA_CACHE_ENABLE();
+#endif
 }
 
 /* See: ARM V7-M Architecture Reference Manual :: https://static.docs.arm.com/ddi0403/eb/DDI0403E_B_armv7m_arm.pdf */
-void sys_init_icache()
+void sys_init_icache(void)
 {
-    // Synchronize data and instruction barriers
-    __dsb;
-    __isb;
-    // Invalidate the instruction cache
-    SCB_ICIALLU = 0UL;
-    // Invalidate all branch predictors
-    SCB_BPIALL = 0UL;
-    // Re-synchronize
-    __dsb;
-    __isb;
-    // Enable the I-cache
-    SCB_CCR |= (1 << 17);
-    // Enable branch prediction
-    SCB_CCR |= (1 << 18);
-    // Force a final resync and clear of the instruction pipeline
-    __dsb;
-    __isb;
+    __DSB();
+    __ISB();
+#if defined(__ICACHE_PRESENT) && (__ICACHE_PRESENT == 1U)
+    SCB_EnableICache();
+#endif
+#if defined(__DCACHE_PRESENT) && (__DCACHE_PRESENT == 1U)
+    SCB_EnableDCache();
+#endif
+    /* STM32H5 and STM32U5 (Cortex-M33) have a dedicated ICACHE peripheral.
+     * Invalidate then enable after SystemClock_Config() has set flash latency. */
+#ifdef HAL_ICACHE_MODULE_ENABLED
+    HAL_ICACHE_Invalidate();
+    HAL_ICACHE_Enable();
+#endif
+    __DSB();
+    __ISB();
+}
+
+/* Empty _init/_fini stubs required by __libc_init_array when
+ * linking with -nostartfiles (which skips crti.o/crtn.o). */
+void _init(void)
+{
+}
+
+void _fini(void)
+{
 }
 
 #ifndef AVM_NO_JIT

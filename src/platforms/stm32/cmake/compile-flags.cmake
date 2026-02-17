@@ -33,17 +33,17 @@ set(COMMON_WARN_FLAGS "${COMMON_WARN_FLAGS} -pedantic -Wall -Wextra")
 set(C_WARN_FLAGS "${COMMON_WARN_FLAGS}")
 set(CXX_WARN_FLAGS "${COMMON_WARN_FLAGS}")
 
-# Use C and C++ compiler optimizatons for size and speed.
+# Use C and C++ compiler optimizations for size and speed.
 if (${CMAKE_FLASH_SIZE} STREQUAL "ROM_512K")
-set(OPTIMIZE_FLAG "-Os")
-set(LINKER_FLAGS "${LINKER_FLAGS} -specs=nano.specs")
+    set(OPTIMIZE_FLAG "-Os")
 else()
-set(OPTIMIZE_FLAG "-O2")
+    set(OPTIMIZE_FLAG "-O2")
 endif()
 
 # Pass them back to the CMake variable
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_WARN_FLAGS} ${OPTIMIZE_FLAG}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} ${OPTIMIZE_FLAG}")
+# -ffunction-sections -fdata-sections enable --gc-sections to remove unused code
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${C_WARN_FLAGS} ${OPTIMIZE_FLAG} -ffunction-sections -fdata-sections")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CXX_WARN_FLAGS} ${OPTIMIZE_FLAG} -ffunction-sections -fdata-sections")
 
 if (LOG_VERBOSE)
     message("--------------Build Flags---------------")
