@@ -22,4 +22,4 @@ project(examples_elixir_stm32)
 
 include(BuildElixir)
 
-pack_runnable(MultiBlink MultiBlink estdlib eavmlib exavmlib)
+pack_runnable(MultiBlink MultiBlink estdlib eavmlib exavmlib avm_stm32)

@@ -71,7 +71,7 @@ jobs:
         cd build
         cmake .. -G Ninja -DAVM_WARNINGS_ARE_ERRORS=ON
         # test_eavmlib does not work with wasm due to http + ssl test
-        ninja AtomVM atomvmlib erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
+        ninja AtomVM atomvmlib atomvmlib-emscripten erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
 
     - name: "Perform CodeQL Analysis"
       uses: github/codeql-action/analyze@v4
