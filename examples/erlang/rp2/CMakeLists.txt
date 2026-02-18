@@ -25,6 +25,29 @@ include(BuildErlang)
 pack_uf2(hello_pico hello_pico)
 pack_uf2(pico_blink pico_blink)
 pack_uf2(pico_rtc pico_rtc)
+
+set(I2C_SCANNER_AVM ${CMAKE_BINARY_DIR}/examples/erlang/i2c_scanner.avm)
+add_custom_command(
+    OUTPUT i2c_scanner.uf2
+    DEPENDS ${I2C_SCANNER_AVM} UF2Tool
+    COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o i2c_scanner.uf2 -f universal -s 0x10180000 ${I2C_SCANNER_AVM}
+    COMMENT "Creating UF2 file i2c_scanner.uf2"
+    VERBATIM
+)
+add_custom_target(i2c_scanner_uf2 ALL DEPENDS i2c_scanner.uf2)
+add_dependencies(i2c_scanner_uf2 i2c_scanner)
+
+set(I2C_LIS3DH_AVM ${CMAKE_BINARY_DIR}/examples/erlang/i2c_lis3dh.avm)
+add_custom_command(
+    OUTPUT i2c_lis3dh.uf2
+    DEPENDS ${I2C_LIS3DH_AVM} UF2Tool
+    COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o i2c_lis3dh.uf2 -f universal -s 0x10180000 ${I2C_LIS3DH_AVM}
+    COMMENT "Creating UF2 file i2c_lis3dh.uf2"
+    VERBATIM
+)
+add_custom_target(i2c_lis3dh_uf2 ALL DEPENDS i2c_lis3dh.uf2)
+add_dependencies(i2c_lis3dh_uf2 i2c_lis3dh)
+
 pack_uf2(picow_blink picow_blink)
 pack_uf2(picow_wifi_sta picow_wifi_sta)
 pack_uf2(picow_wifi_ap picow_wifi_ap)

@@ -70,7 +70,7 @@
     | {send_timeout_ms, non_neg_integer()}.
 -type params() :: [param()].
 -type i2c() :: port() | {'$i2c', term(), reference()}.
--type address() :: non_neg_integer().
+-type address() :: 0..127.
 -type register() :: non_neg_integer().
 
 -export_type([
