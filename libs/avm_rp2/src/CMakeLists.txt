@@ -24,6 +24,7 @@ include(BuildErlang)
 
 set(ERLANG_MODULES
     gpio
+    i2c
     pico
 )
 
