@@ -48,6 +48,7 @@
 -export([
     init/1,
     deinit/1,
+    set_function/2,
     set_pin_mode/2,
     set_pin_pull/2,
     digital_write/2,
@@ -58,6 +59,8 @@
 %% The pin definition for RP2040 is a non-negative integer. A tuple is used for the extra "WL" pins on the Pico-W.
 -type pin_tuple() :: {wl, 0..2}.
 %% The extra "WL" pins on Pico-W use bank `wl'.
+-type gpio_function() :: spi | uart | i2c | pwm | sio | pio0 | pio1.
+%% GPIO function select values matching Pico SDK gpio_function_t.
 -type direction() :: input | output | output_od.
 %% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
 -type pull() :: up | down | up_down | floating.
@@ -238,6 +241,20 @@ init(_Pin) ->
 -spec deinit(Pin :: pin()) -> ok.
 deinit(_Pin) ->
     ok.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin GPIO pin number
+%% @param   Function the function to assign to the pin
+%% @returns ok
+%% @doc     Select the function for a GPIO pin.
+%%
+%%          Maps to `gpio_set_function()' in the Pico SDK.
+%%          Common functions: `sio' (default GPIO), `i2c', `spi', `uart', `pwm'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_function(Pin :: non_neg_integer(), Function :: gpio_function()) -> ok.
+set_function(_Pin, _Function) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set operational mode
