@@ -142,6 +142,16 @@ term refc_binary_create_binary_info(Context *ctx);
  */
 size_t refc_binary_total_size(Context *ctx);
 
+/**
+ * @brief Dump detailed information about reference counted binaries
+ *
+ * @details This function prints diagnostic information including the count,
+ * total size, and details about the top 5 largest binaries including
+ * their first bytes. Used for debugging memory issues.
+ * @param ctx the context
+ */
+COLD_FUNC void refc_binary_dump_info(Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
