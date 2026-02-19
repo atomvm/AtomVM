@@ -914,9 +914,59 @@ andb_test_() ->
 
 subq_test_() ->
     [
+        % 8-bit immediates
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#E8, 16#01>>, "subq $0x1, %rax", jit_x86_64_asm:subq(1, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#E9, 16#01>>, "subq $0x1, %rcx", jit_x86_64_asm:subq(1, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#EA, 16#01>>, "subq $0x1, %rdx", jit_x86_64_asm:subq(1, rdx)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#EE, 16#01>>, "subq $0x1, %rsi", jit_x86_64_asm:subq(1, rsi)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#EF, 16#01>>, "subq $0x1, %rdi", jit_x86_64_asm:subq(1, rdi)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#E8, 16#01>>, "subq $0x1, %r8", jit_x86_64_asm:subq(1, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#E9, 16#01>>, "subq $0x1, %r9", jit_x86_64_asm:subq(1, r9)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#EA, 16#01>>, "subq $0x1, %r10", jit_x86_64_asm:subq(1, r10)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#EB, 16#01>>, "subq $0x1, %r11", jit_x86_64_asm:subq(1, r11)
+        ),
+        % Register to register
         ?_assertAsmEqual(<<16#48, 16#29, 16#c1>>, "subq %rax, %rcx", jit_x86_64_asm:subq(rax, rcx)),
         ?_assertAsmEqual(<<16#49, 16#29, 16#c2>>, "subq %rax, %r10", jit_x86_64_asm:subq(rax, r10)),
-        ?_assertAsmEqual(<<16#4c, 16#29, 16#c1>>, "subq %r8, %rcx", jit_x86_64_asm:subq(r8, rcx))
+        ?_assertAsmEqual(<<16#4c, 16#29, 16#c1>>, "subq %r8, %rcx", jit_x86_64_asm:subq(r8, rcx)),
+        % 32-bit immediates
+        ?_assertAsmEqual(
+            <<16#48, 16#2D, 16#78, 16#56, 16#34, 16#12>>,
+            "subq $0x12345678,%rax",
+            jit_x86_64_asm:subq(16#12345678, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#81, 16#EE, 16#78, 16#56, 16#34, 16#12>>,
+            "subq $0x12345678,%rsi",
+            jit_x86_64_asm:subq(16#12345678, rsi)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#81, 16#EB, 16#78, 16#56, 16#34, 16#12>>,
+            "subq $0x12345678,%r11",
+            jit_x86_64_asm:subq(16#12345678, r11)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#2D, 16#88, 16#A9, 16#CB, 16#ED>>,
+            "subq $-0x12345678,%rax",
+            jit_x86_64_asm:subq(-16#12345678, rax)
+        )
     ].
 
 decl_test_() ->

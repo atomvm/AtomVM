@@ -483,6 +483,16 @@ addq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, REX_R, 0, REX_B), 16#01, 3:2, MODRM_REG:3, MODRM_RM:3>>.
 
+subq(Imm, Reg) when ?IS_SINT8_T(Imm), is_atom(Reg) ->
+    case x86_64_x_reg(Reg) of
+        {0, Index} -> <<16#48, 16#83, (16#E8 + Index), Imm>>;
+        {1, Index} -> <<16#49, 16#83, (16#E8 + Index), Imm>>
+    end;
+subq(Imm, rax) when ?IS_SINT32_T(Imm) ->
+    <<16#48, 16#2D, Imm:32/little>>;
+subq(Imm, Reg) when ?IS_SINT32_T(Imm), is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 5:3, MODRM_RM:3, Imm:32/little>>;
 subq(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
     {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
     {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
