@@ -183,6 +183,7 @@ void sys_init_platform(GlobalContext *glb)
     }
 #endif
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
@@ -195,6 +196,7 @@ void sys_init_platform(GlobalContext *glb)
 #endif
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+#endif
 
     glb->platform_data = platform;
 }
@@ -204,12 +206,14 @@ void sys_free_platform(GlobalContext *glb)
     struct EmscriptenPlatformData *platform = glb->platform_data;
     pthread_cond_destroy(&platform->poll_cond);
     pthread_mutex_destroy(&platform->poll_mutex);
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+#endif
     free(platform);
 }
 

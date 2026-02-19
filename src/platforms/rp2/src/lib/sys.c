@@ -98,6 +98,7 @@ void sys_init_platform(GlobalContext *glb)
     }
 #endif
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
@@ -111,6 +112,7 @@ void sys_init_platform(GlobalContext *glb)
 
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+#endif
 }
 
 void sys_free_platform(GlobalContext *glb)
@@ -122,6 +124,7 @@ void sys_free_platform(GlobalContext *glb)
     struct RP2PlatformData *platform = glb->platform_data;
     queue_free(&platform->event_queue);
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
@@ -133,6 +136,7 @@ void sys_free_platform(GlobalContext *glb)
 #ifndef AVM_NO_SMP
     smp_mutex_destroy(platform->entropy_mutex);
     smp_mutex_destroy(platform->random_mutex);
+#endif
 #endif
 
     free(platform);

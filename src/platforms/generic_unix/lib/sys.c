@@ -584,7 +584,6 @@ void sys_init_platform(GlobalContext *global)
         AVM_ABORT();
     }
 #else
-#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
@@ -597,7 +596,6 @@ void sys_init_platform(GlobalContext *global)
 #endif
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
-#endif
 #endif
     otp_ssl_init(global);
 #endif

@@ -21,8 +21,6 @@
 
 #include <otp_crypto.h>
 
-#include <stdio.h>
-
 #include <context.h>
 #include <defaultatoms.h>
 #include <erl_nif_priv.h>
@@ -348,7 +346,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     psa_hash_operation_t operation = PSA_HASH_OPERATION_INIT;
     psa_status_t status = psa_hash_setup(&operation, alg);
     if (UNLIKELY(status != PSA_SUCCESS)) {
-        fprintf(stderr, "crypto:hash psa_hash_setup failed with status %d for alg 0x%08lx\n", (int) status, (unsigned long) alg);
+        TRACE("crypto:hash psa_hash_setup failed with status %d for alg 0x%08lx\n", (int) status, (unsigned long) alg);
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -673,6 +671,9 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
     bool encrypt = true;
     bool padding_pkcs7 = false;
+    psa_key_id_t key_id = 0;
+    void *temp_buf = NULL;
+    psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
 
     if (term_is_list(flag_or_options)) {
         term encrypt_flag = interop_kv_get_value_default(
@@ -722,59 +723,45 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     psa_set_key_type(&attributes, key_type);
     psa_set_key_bits(&attributes, key_bits);
 
-    psa_key_id_t key_id;
     psa_status_t status = psa_import_key(&attributes, key_data, key_len, &key_id);
     if (UNLIKELY(status != PSA_SUCCESS)) {
-        free(allocated_key_data);
-        free(allocated_iv_data);
-        free(allocated_data_data);
         char err_msg[48];
         snprintf(err_msg, sizeof(err_msg), "key import err %d", (int) status);
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+        error_atom = make_crypto_error(__FILE__, __LINE__, err_msg, ctx);
+        goto psa_error;
     }
 
     size_t output_size = PSA_CIPHER_ENCRYPT_OUTPUT_SIZE(key_type, alg, data_size);
     if (!encrypt) {
         output_size = PSA_CIPHER_DECRYPT_OUTPUT_SIZE(key_type, alg, data_size);
     }
-    void *temp_buf = malloc(output_size);
+    temp_buf = malloc(output_size);
     if (IS_NULL_PTR(temp_buf)) {
-        psa_destroy_key(key_id);
         error_atom = OUT_OF_MEMORY_ATOM;
-        goto raise_error;
+        goto psa_error;
     }
 
     size_t output_len;
-    psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
     if (encrypt) {
         status = psa_cipher_encrypt_setup(&operation, key_id, alg);
     } else {
         status = psa_cipher_decrypt_setup(&operation, key_id, alg);
     }
     if (UNLIKELY(status != PSA_SUCCESS)) {
-        psa_destroy_key(key_id);
-        free(temp_buf);
-        free(allocated_key_data);
-        free(allocated_iv_data);
-        free(allocated_data_data);
         char err_msg[48];
         snprintf(err_msg, sizeof(err_msg), "cipher setup err %d", (int) status);
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+        error_atom = make_crypto_error(__FILE__, __LINE__, err_msg, ctx);
+        goto psa_error;
     }
 
     // PSA rejects IVs for ECB; ignore IV to preserve legacy behavior.
     if (iv_len > 0 && alg != PSA_ALG_ECB_NO_PADDING) {
         status = psa_cipher_set_iv(&operation, iv_data, iv_len);
         if (UNLIKELY(status != PSA_SUCCESS)) {
-            psa_cipher_abort(&operation);
-            psa_destroy_key(key_id);
-            free(temp_buf);
-            free(allocated_key_data);
-            free(allocated_iv_data);
-            free(allocated_data_data);
             char err_msg[24];
             snprintf(err_msg, sizeof(err_msg), "IV err %d", (int) status);
-            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+            error_atom = make_crypto_error(__FILE__, __LINE__, err_msg, ctx);
+            goto psa_error;
         }
     }
 
@@ -790,6 +777,9 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
             psa_cipher_abort(&operation);
             psa_destroy_key(key_id);
             free(temp_buf);
+            if (allocated_key_data) {
+                memset(allocated_key_data, 0, key_len);
+            }
             free(allocated_key_data);
             free(allocated_iv_data);
             free(allocated_data_data);
@@ -804,34 +794,27 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     size_t update_len = 0;
     status = psa_cipher_update(&operation, data_data, process_size, temp_buf, output_size, &update_len);
     if (UNLIKELY(status != PSA_SUCCESS)) {
-        psa_cipher_abort(&operation);
-        psa_destroy_key(key_id);
-        free(temp_buf);
-        free(allocated_key_data);
-        free(allocated_iv_data);
-        free(allocated_data_data);
         char err_msg[24];
         snprintf(err_msg, sizeof(err_msg), "update err %d", (int) status);
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+        error_atom = make_crypto_error(__FILE__, __LINE__, err_msg, ctx);
+        goto psa_error;
     }
 
     size_t finish_len = 0;
     status = psa_cipher_finish(&operation, (uint8_t *) temp_buf + update_len, output_size - update_len, &finish_len);
     if (UNLIKELY(status != PSA_SUCCESS)) {
-        psa_cipher_abort(&operation);
-        psa_destroy_key(key_id);
-        free(temp_buf);
-        free(allocated_key_data);
-        free(allocated_iv_data);
-        free(allocated_data_data);
         char err_msg[24];
         snprintf(err_msg, sizeof(err_msg), "finish err %d", (int) status);
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, err_msg, ctx));
+        error_atom = make_crypto_error(__FILE__, __LINE__, err_msg, ctx);
+        goto psa_error;
     }
     output_len = update_len + finish_len;
 
     psa_destroy_key(key_id);
 
+    if (allocated_key_data) {
+        memset(allocated_key_data, 0, key_len);
+    }
     free(allocated_key_data);
     free(allocated_iv_data);
     free(allocated_data_data);
@@ -845,6 +828,17 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     term out = term_from_literal_binary(temp_buf, output_len, &ctx->heap, ctx->global);
     free(temp_buf);
     return out;
+
+psa_error:
+    psa_cipher_abort(&operation);
+    if (key_id != 0) {
+        psa_destroy_key(key_id);
+    }
+    free(temp_buf);
+    if (allocated_key_data) {
+        memset(allocated_key_data, 0, key_len);
+    }
+    goto raise_error;
 #else
     mbedtls_operation_t operation;
     mbedtls_cipher_padding_t padding = MBEDTLS_PADDING_NONE;
