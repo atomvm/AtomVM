@@ -306,12 +306,12 @@ static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, t
     return jit_handle_error(ctx, jit_state, 0);
 }
 
-static Context *jit_raise_error_mfa(Context *ctx, JITState *jit_state, int offset,
-    int module_atom_index, int function_atom_index, int arity)
+static Context *jit_raise_error_mfa(
+    Context *ctx, JITState *jit_state, int offset, int function_atom_index, int arity)
 {
     TRACE("jit_raise_error_mfa: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id,
         offset);
-    term module_atom = module_get_atom_term_by_id(jit_state->module, module_atom_index);
+    term module_atom = module_get_name(jit_state->module);
     term function_atom = module_get_atom_term_by_id(jit_state->module, function_atom_index);
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);
     ctx->exception_reason = FUNCTION_CLAUSE_ATOM;

@@ -173,18 +173,39 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt1),
     first_pass(Rest1, MMod, MSt1, State0);
 % 2
-first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
-    {ModuleAtomIndex, Rest1} = decode_atom(Rest0),
+    {_ModuleAtomIndex, Rest1} = decode_atom(Rest0),
     {FunctionAtomIndex, Rest2} = decode_atom(Rest1),
     {Arity, Rest3} = decode_literal(Rest2),
-    ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [ModuleAtomIndex, FunctionAtomIndex, Arity]),
+    ?TRACE("OP_FUNC_INFO ~p, ~p, ~p\n", [_ModuleAtomIndex, FunctionAtomIndex, Arity]),
     Offset = MMod:offset(MSt0),
-    MSt1 = MMod:call_primitive_last(MSt0, ?PRIM_RAISE_ERROR_MFA, [
-        ctx, jit_state, Offset, ModuleAtomIndex, FunctionAtomIndex, Arity
-    ]),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest3, MMod, MSt1, State0);
+    {MSt1, OffsetReg} = MMod:move_to_native_register(MSt0, Offset),
+    {MSt2, FunctionAtomIndexReg} = MMod:move_to_native_register(MSt1, FunctionAtomIndex),
+    {MSt3, ArityReg} = MMod:move_to_native_register(MSt2, Arity),
+    TailCacheKey =
+        {call_primitive_last, ?PRIM_RAISE_ERROR_MFA, [OffsetReg, FunctionAtomIndexReg, ArityReg]},
+    {MSt4, State1} =
+        case lists:keyfind(TailCacheKey, 1, TC) of
+            false ->
+                CacheOffset = MMod:offset(MSt3),
+                MSt4a = MMod:call_primitive_last(MSt3, ?PRIM_RAISE_ERROR_MFA, [
+                    ctx,
+                    jit_state,
+                    {free, OffsetReg},
+                    {free, FunctionAtomIndexReg},
+                    {free, ArityReg}
+                ]),
+                {MSt4a, State0#state{tail_cache = [{TailCacheKey, CacheOffset} | TC]}};
+            {TailCacheKey, CacheOffset} ->
+                MSt4a = MMod:jump_to_offset(MSt3, CacheOffset),
+                MSt4b = MMod:free_native_registers(MSt4a, [
+                    OffsetReg, FunctionAtomIndexReg, ArityReg
+                ]),
+                {MSt4b, State0}
+        end,
+    ?ASSERT_ALL_NATIVE_FREE(MSt4),
+    first_pass(Rest3, MMod, MSt4, State1);
 % 3
 first_pass(
     <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
