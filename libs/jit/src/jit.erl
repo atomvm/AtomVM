@@ -137,7 +137,6 @@ compile(
     MMod,
     MSt0
 ) when OpcodeMax =< ?OPCODE_MAX ->
-    MSt1 = MMod:jump_table(MSt0, LabelsCount),
     State0 = #state{
         line_offsets = [],
         labels_count = LabelsCount,
@@ -146,6 +145,7 @@ compile(
         type_resolver = TypeResolver,
         tail_cache = []
     },
+    MSt1 = MMod:jump_table(MSt0, LabelsCount),
     {State1, MSt2} = first_pass(Opcodes, MMod, MSt1, State0),
     MSt3 = second_pass(MMod, MSt2, State1),
     MSt4 = MMod:flush(MSt3),
