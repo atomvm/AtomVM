@@ -636,6 +636,7 @@ compile_erlang(reraise_reraiser)
 compile_erlang(reraise_raiser)
 
 compile_erlang(stacktrace_function_args)
+compile_erlang(test_multi_value_comprehension)
 
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
@@ -1182,6 +1183,8 @@ set(erlang_test_beams
     reraise_raiser.beam
 
     stacktrace_function_args.beam
+
+    test_multi_value_comprehension.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}

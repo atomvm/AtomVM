@@ -564,6 +564,8 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_create_bin),
 
+    TEST_CASE(test_multi_value_comprehension),
+
     TEST_CASE(test_code_server_nifs),
 
     // noisy tests, keep them at the end
