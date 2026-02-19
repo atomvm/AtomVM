@@ -48,7 +48,7 @@ jobs:
     - name: "Install specific MbedTLS version"
       if: matrix.mbedtls == 'mbedtls@4'
       run: |
-        git clone --depth 1 --branch v4.0.0 https://github.com/Mbed-TLS/mbedtls
+        git clone --depth 1 --branch mbedtls-4.0.0 --recurse-submodules https://github.com/Mbed-TLS/mbedtls
         cd mbedtls
         mkdir build
         cd build

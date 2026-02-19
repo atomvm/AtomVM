@@ -33,14 +33,13 @@
 #include <emscripten/fetch.h>
 #include <emscripten/promise.h>
 
+#include <mbedtls/version.h>
+#include "sys_mbedtls.h"
+
 #if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #endif
-
-#include <mbedtls/version.h>
-
-#include "sys_mbedtls.h"
 
 struct PromiseResource
 {

@@ -81,8 +81,6 @@ struct ESP32PlatformData
 #endif
 #if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_context entropy_ctx;
-#else
-    char entropy_ctx;
 #endif
     bool entropy_is_initialized;
 
@@ -91,8 +89,6 @@ struct ESP32PlatformData
 #endif
 #if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_ctr_drbg_context random_ctx;
-#else
-    char random_ctx;
 #endif
     bool random_is_initialized;
 

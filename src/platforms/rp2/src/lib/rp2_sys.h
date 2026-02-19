@@ -97,9 +97,6 @@ struct RP2PlatformData
 #endif
     mbedtls_ctr_drbg_context random_ctx;
     bool random_is_initialized;
-#else
-    char entropy_ctx;
-    char random_ctx;
 #endif
 };
 
