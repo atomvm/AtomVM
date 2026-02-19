@@ -541,6 +541,13 @@ compile_erlang(test_list_to_tuple)
 
 compile_erlang(bs_context_byte_size)
 compile_erlang(bs_get_binary_fixed_size)
+compile_erlang(bs_get_integer_fixed_size)
+compile_erlang(bs_get_float_dynamic_size)
+compile_erlang(test_is_not_equal)
+compile_assembler(test_is_not_equal_asm)
+compile_erlang(test_has_map_fields)
+compile_erlang(test_bs_create_bin_accum)
+compile_assembler(test_bs_create_bin_accum_asm)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -614,7 +621,6 @@ compile_assembler(test_op_bs_start_match_asm)
 compile_erlang(test_op_bs_create_bin)
 compile_assembler(test_op_bs_create_bin_asm)
 
-compile_erlang(bs_get_binary_fixed_size)
 compile_assembler(bs_get_binary2_all_asm)
 
 compile_erlang(bigint)
@@ -637,6 +643,7 @@ endif()
 if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
     set(OTP25_OR_GREATER_TESTS
         test_op_bs_create_bin_asm.beam
+        test_bs_create_bin_accum_asm.beam
     )
 else()
     set(OTP25_OR_GREATER_TESTS)
@@ -1080,6 +1087,12 @@ set(erlang_test_beams
 
     bs_context_byte_size.beam
     bs_get_binary_fixed_size.beam
+    bs_get_integer_fixed_size.beam
+    bs_get_float_dynamic_size.beam
+    test_is_not_equal.beam
+    test_is_not_equal_asm.beam
+    test_has_map_fields.beam
+    test_bs_create_bin_accum.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam

@@ -2568,48 +2568,34 @@ first_pass_bs_create_bin_compute_size(
     float, Src, Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
     MSt1 = verify_is_number(Src, Fail, MMod, MSt0),
-    % Verify and get the float size (defaults to 64 if nil)
-    case Size of
-        ?TERM_NIL ->
-            {MSt1, AccLiteralSize0 + 64, AccSizeReg0, State0};
-        _ ->
-            {MSt2, SizeValue} = term_to_int(Size, Fail, MMod, MSt1),
-            if
-                is_integer(SizeValue) ->
-                    % If size is a literal, compiler would only allow 16/32/64.
-                    {MSt2, AccLiteralSize0 + SizeValue, AccSizeReg0, State0};
-                is_atom(SizeValue) ->
-                    % Check if size is 16, 32, or 64 using 'and' of '!=' checks
-                    MSt3 = cond_raise_badarg_or_jump_to_fail_label(
-                        {'and', [
-                            {SizeValue, '!=', 16},
-                            {SizeValue, '!=', 32},
-                            {SizeValue, '!=', 64}
-                        ]},
-                        Fail,
-                        MMod,
-                        MSt2
-                    ),
-                    case AccSizeReg0 of
-                        undefined ->
-                            {MSt3, AccLiteralSize0, SizeValue, State0};
-                        _ ->
-                            MSt4 = MMod:add(MSt3, AccSizeReg0, SizeValue),
-                            MSt5 = MMod:free_native_registers(MSt4, [SizeValue]),
-                            {MSt5, AccLiteralSize0, AccSizeReg0, State0}
-                    end
+    {MSt2, SizeValue} = term_to_int(Size, Fail, MMod, MSt1),
+    if
+        is_integer(SizeValue) ->
+            {MSt2, AccLiteralSize0 + SizeValue, AccSizeReg0, State0};
+        is_atom(SizeValue) ->
+            MSt3 = cond_raise_badarg_or_jump_to_fail_label(
+                {'and', [
+                    {SizeValue, '!=', 16},
+                    {SizeValue, '!=', 32},
+                    {SizeValue, '!=', 64}
+                ]},
+                Fail,
+                MMod,
+                MSt2
+            ),
+            case AccSizeReg0 of
+                undefined ->
+                    {MSt3, AccLiteralSize0, SizeValue, State0};
+                _ ->
+                    MSt4 = MMod:add(MSt3, AccSizeReg0, SizeValue),
+                    MSt5 = MMod:free_native_registers(MSt4, [SizeValue]),
+                    {MSt5, AccLiteralSize0, AccSizeReg0, State0}
             end
     end;
 first_pass_bs_create_bin_compute_size(
     integer, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) ->
     MSt1 = verify_is_any_integer(Src, Fail, MMod, MSt0),
-    first_pass_bs_create_bin_compute_size(
-        string, Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State0
-    );
-first_pass_bs_create_bin_compute_size(
-    string, _Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State0
-) ->
     MSt2 = verify_is_integer(Size, Fail, MMod, MSt1),
     {MSt3, SizeValue} = term_to_int(Size, 0, MMod, MSt2),
     MSt5 =
@@ -2641,6 +2627,23 @@ first_pass_bs_create_bin_compute_size(
                     {MSt8, AccLiteralSize0, AccSizeReg0, State0}
             end
     end;
+first_pass_bs_create_bin_compute_size(
+    string, _Src, Size, SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt1, State0
+) ->
+    MSt2 = verify_is_integer(Size, Fail, MMod, MSt1),
+    {MSt3, SizeValue} = term_to_int(Size, 0, MMod, MSt2),
+    MSt5 =
+        if
+            is_integer(SizeValue) andalso SizeValue > 0 ->
+                MSt3;
+            is_integer(SizeValue) andalso Fail =:= 0 ->
+                MMod:call_primitive_last(MSt3, ?PRIM_RAISE_ERROR, [
+                    ctx, jit_state, offset, ?BADARG_ATOM
+                ]);
+            is_integer(SizeValue) andalso Fail =/= 0 ->
+                MMod:jump_to_label(MSt3, Fail)
+        end,
+    {MSt5, AccLiteralSize0 + (SizeValue * SegmentUnit), AccSizeReg0, State0};
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, ?ALL_ATOM, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0
 ) when AtomType =:= binary orelse AtomType =:= append orelse AtomType =:= private_append ->
@@ -2758,17 +2761,9 @@ first_pass_bs_create_bin_insert_value(
 first_pass_bs_create_bin_insert_value(
     float, Flags, Src, Size, _SegmentUnit, Fail, CreatedBin, Offset, MMod, MSt0
 ) ->
-    % Src is a term (boxed float or integer)
     {MSt1, SrcReg} = MMod:move_to_native_register(MSt0, Src),
     {MSt2, FlagsValue} = decode_flags_list(Flags, MMod, MSt1),
-    % Get the float size (defaults to 64 if nil)
-    {MSt3, SizeValue} =
-        case Size of
-            ?TERM_NIL ->
-                {MSt2, 64};
-            _ ->
-                term_to_int(Size, Fail, MMod, MSt2)
-        end,
+    {MSt3, SizeValue} = term_to_int(Size, Fail, MMod, MSt2),
     % Call single primitive with size parameter
     {MSt4, BoolResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_INSERT_FLOAT, [
         CreatedBin, Offset, {free, SrcReg}, SizeValue, {free, FlagsValue}
@@ -2785,14 +2780,9 @@ first_pass_bs_create_bin_insert_value(
 ) ->
     {MSt1, SrcValue} = term_to_int(Src, Fail, MMod, MSt0),
     {MSt2, SizeValue} = term_to_int(Size, Fail, MMod, MSt1),
-    {MSt3, BitSize} =
-        if
-            is_integer(SizeValue) andalso is_integer(SegmentUnit) ->
-                {MSt2, SizeValue * SegmentUnit};
-            true ->
-                {MMod:mul(MSt2, SizeValue, SegmentUnit), SizeValue}
-        end,
-    {MSt4, VoidResult} = MMod:call_primitive(MSt3, ?PRIM_BITSTRING_COPY_MODULE_STR, [
+    true = is_integer(SizeValue) andalso is_integer(SegmentUnit),
+    BitSize = SizeValue * SegmentUnit,
+    {MSt4, VoidResult} = MMod:call_primitive(MSt2, ?PRIM_BITSTRING_COPY_MODULE_STR, [
         ctx, jit_state, CreatedBin, Offset, {free, SrcValue}, BitSize
     ]),
     MSt5 = MMod:free_native_registers(MSt4, [VoidResult]),
