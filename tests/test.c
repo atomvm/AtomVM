@@ -524,6 +524,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_list_to_tuple, 69),
 
     TEST_CASE(bs_context_byte_size),
+    TEST_CASE(bs_get_binary_fixed_size),
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
     TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 

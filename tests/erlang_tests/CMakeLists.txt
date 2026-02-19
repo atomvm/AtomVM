@@ -540,6 +540,7 @@ compile_erlang(test_function_exported)
 compile_erlang(test_list_to_tuple)
 
 compile_erlang(bs_context_byte_size)
+compile_erlang(bs_get_binary_fixed_size)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -613,6 +614,9 @@ compile_assembler(test_op_bs_start_match_asm)
 compile_erlang(test_op_bs_create_bin)
 compile_assembler(test_op_bs_create_bin_asm)
 
+compile_erlang(bs_get_binary_fixed_size)
+compile_assembler(bs_get_binary2_all_asm)
+
 compile_erlang(bigint)
 compile_erlang(bigint_stress)
 
@@ -624,6 +628,7 @@ compile_erlang(test_lists_keyfind)
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
         test_op_bs_start_match_asm.beam
+        bs_get_binary2_all_asm.beam
     )
 else()
     set(OTP23_OR_GREATER_TESTS)
@@ -1074,6 +1079,7 @@ set(erlang_test_beams
     test_list_to_tuple.beam
 
     bs_context_byte_size.beam
+    bs_get_binary_fixed_size.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam
