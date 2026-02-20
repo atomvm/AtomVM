@@ -48,3 +48,4 @@ pack_runnable(i2c_scanner i2c_scanner eavmlib estdlib DIALYZE_AGAINST avm_esp32 
 pack_runnable(i2c_lis3dh i2c_lis3dh eavmlib estdlib DIALYZE_AGAINST avm_esp32 avm_rp2 avm_stm32)
 pack_runnable(spi_flash spi_flash eavmlib estdlib DIALYZE_AGAINST avm_esp32 avm_rp2 avm_stm32)
 pack_runnable(spi_lis3dh spi_lis3dh eavmlib estdlib DIALYZE_AGAINST avm_esp32 avm_rp2 avm_stm32)
+pack_runnable(sim800l sim800l eavmlib estdlib DIALYZE_AGAINST avm_esp32 avm_rp2)
