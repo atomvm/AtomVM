@@ -22,3 +22,4 @@ include(BuildErlang)
 
 pack_runnable(stm32_boot_test test_boot)
 pack_runnable(stm32_gpio_test test_gpio eavmlib avm_stm32)
+pack_runnable(stm32_i2c_test test_i2c eavmlib avm_stm32)

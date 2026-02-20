@@ -60,10 +60,16 @@ jobs:
             max_size: 524288
             renode_platform: stm32f4.repl
             avm_address: "0x08080000"
+            # Renode's STM32F4_I2C model has a bug: it never calls
+            # FinishTransmission() on the I2C slave when a STOP condition
+            # occurs, causing the BME280 sensor to get stuck in Reading
+            # state and ignore subsequent writes.
+            skip_i2c_test: true
           - device: stm32f411ceu6
             max_size: 393216
             renode_platform: stm32f4.repl
             avm_address: "0x08060000"
+            skip_i2c_test: true
           - device: stm32f429zit6
             max_size: 524288
           - device: stm32h743vit6
@@ -90,6 +96,10 @@ jobs:
             max_size: 393216
             renode_platform: stm32l562.repl
             avm_address: "0x08060000"
+            # Renode's built-in stm32l552.repl uses STM32F4_I2C (legacy I2C
+            # register layout) but the L5 HAL uses the newer I2C registers
+            # (TIMINGR, ISR, etc.), causing a complete register mismatch.
+            skip_i2c_test: true
           - device: stm32f207zgt6
             max_size: 524288
           - device: stm32u375rgt6
@@ -160,7 +170,7 @@ jobs:
         mkdir build-host
         cd build-host
         cmake .. -G Ninja
-        cmake --build . -t stm32_boot_test stm32_gpio_test
+        cmake --build . -t stm32_boot_test stm32_gpio_test stm32_i2c_test
 
     - name: Install Renode
       if: matrix.renode_platform
@@ -199,5 +209,20 @@ jobs:
         renode-test src/platforms/stm32/tests/renode/stm32_gpio_test.robot \
           --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
           --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_gpio_test.avm \
+          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
+          --variable PLATFORM:$PLATFORM
+
+    - name: Run Renode I2C test
+      if: matrix.renode_platform && !matrix.skip_i2c_test
+      run: |
+        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
+        if [ -f "$LOCAL_REPL" ]; then
+          PLATFORM="@$PWD/$LOCAL_REPL"
+        else
+          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
+        fi
+        renode-test src/platforms/stm32/tests/renode/stm32_i2c_test.robot \
+          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
+          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_i2c_test.avm \
           --variable AVM_ADDRESS:${{ matrix.avm_address }} \
           --variable PLATFORM:$PLATFORM

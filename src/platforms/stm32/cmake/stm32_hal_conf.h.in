@@ -39,6 +39,7 @@ extern "C" {
 #define HAL_PWR_MODULE_ENABLED
 #define HAL_EXTI_MODULE_ENABLED
 #define HAL_DMA_MODULE_ENABLED
+#define HAL_I2C_MODULE_ENABLED
 #if defined(STM32H5XX) || defined(STM32L5XX) || defined(STM32U3XX) || defined(STM32U5XX)
 #define HAL_ICACHE_MODULE_ENABLED
 #endif
@@ -192,6 +193,10 @@ extern "C" {
 
 #ifdef HAL_UART_MODULE_ENABLED
 #include "@STM32_FAMILY@_hal_uart.h"
+#endif
+
+#ifdef HAL_I2C_MODULE_ENABLED
+#include "@STM32_FAMILY@_hal_i2c.h"
 #endif
 
 #ifdef HAL_ICACHE_MODULE_ENABLED
