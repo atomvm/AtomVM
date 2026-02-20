@@ -267,6 +267,9 @@ endmacro()
 
 macro(pack_runnable avm_name main)
 
+    set(multiValueArgs DIALYZE_AGAINST)
+    cmake_parse_arguments(PACK_RUNNABLE "" "" "${multiValueArgs}" ${ARGN})
+
     add_custom_command(
         OUTPUT ${main}.beam
         COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
@@ -281,9 +284,9 @@ macro(pack_runnable avm_name main)
     )
 
     # Select the right PLT based on platform-specific dependencies
-    set(pack_runnable_${avm_name}_plt_name "atomvmlib")
+    set(pack_runnable_${avm_name}_plt_names "")
 
-    foreach(archive_name ${ARGN})
+    foreach(archive_name ${PACK_RUNNABLE_UNPARSED_ARGUMENTS})
         if(NOT ${archive_name} STREQUAL "exavmlib")
             set(pack_runnable_${avm_name}_archives ${pack_runnable_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
             if(NOT ${archive_name} MATCHES "^eavmlib|estdlib|alisp|avm_network|avm_esp32|avm_rp2|avm_stm32|avm_emscripten$")
@@ -295,24 +298,47 @@ macro(pack_runnable avm_name main)
         set(pack_runnable_${avm_name}_archive_targets ${pack_runnable_${avm_name}_archive_targets} ${archive_name})
         # Pick the platform-specific PLT if a platform library is in the dependencies
         if(${archive_name} STREQUAL "avm_esp32")
-            set(pack_runnable_${avm_name}_plt_name "atomvmlib-esp32")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-esp32")
         elseif(${archive_name} STREQUAL "avm_rp2")
-            set(pack_runnable_${avm_name}_plt_name "atomvmlib-rp2")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-rp2")
         elseif(${archive_name} STREQUAL "avm_stm32")
-            set(pack_runnable_${avm_name}_plt_name "atomvmlib-stm32")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-stm32")
         elseif(${archive_name} STREQUAL "avm_emscripten")
-            set(pack_runnable_${avm_name}_plt_name "atomvmlib-emscripten")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-emscripten")
         endif()
     endforeach()
 
+    # DIALYZE_AGAINST overrides auto-detected PLTs
+    if(PACK_RUNNABLE_DIALYZE_AGAINST)
+        set(pack_runnable_${avm_name}_plt_names "")
+        foreach(plt_lib IN LISTS PACK_RUNNABLE_DIALYZE_AGAINST)
+            if(${plt_lib} STREQUAL "avm_esp32")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-esp32")
+            elseif(${plt_lib} STREQUAL "avm_rp2")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-rp2")
+            elseif(${plt_lib} STREQUAL "avm_stm32")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-stm32")
+            elseif(${plt_lib} STREQUAL "avm_emscripten")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-emscripten")
+            endif()
+        endforeach()
+    endif()
+
+    # Default to base PLT if no platform was detected
+    if(NOT pack_runnable_${avm_name}_plt_names)
+        set(pack_runnable_${avm_name}_plt_names "atomvmlib")
+    endif()
+
     if (Dialyzer_FOUND)
-        add_custom_target(
-            ${avm_name}_dialyzer
-            DEPENDS ${avm_name}_main
-            COMMAND dialyzer --plt ${CMAKE_BINARY_DIR}/libs/${pack_runnable_${avm_name}_plt_name}.plt -c ${main}.beam ${${avm_name}_dialyzer_beams_opt}
-        )
-        add_dependencies(${avm_name}_dialyzer ${pack_runnable_${avm_name}_plt_name}_plt ${pack_runnable_${avm_name}_archive_targets})
-        add_dependencies(dialyzer ${avm_name}_dialyzer)
+        foreach(plt_name IN LISTS pack_runnable_${avm_name}_plt_names)
+            add_custom_target(
+                ${avm_name}_${plt_name}_dialyzer
+                DEPENDS ${avm_name}_main
+                COMMAND dialyzer --plt ${CMAKE_BINARY_DIR}/libs/${plt_name}.plt -c ${main}.beam ${${avm_name}_dialyzer_beams_opt}
+            )
+            add_dependencies(${avm_name}_${plt_name}_dialyzer ${plt_name}_plt ${pack_runnable_${avm_name}_archive_targets})
+            add_dependencies(dialyzer ${avm_name}_${plt_name}_dialyzer)
+        endforeach()
     endif()
 
     if(AVM_RELEASE)
