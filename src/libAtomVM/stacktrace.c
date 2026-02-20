@@ -28,25 +28,25 @@
 
 #ifndef AVM_CREATE_STACKTRACES
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
 {
     UNUSED(ctx);
     UNUSED(mod);
     UNUSED(current_offset);
-    return exception_class;
+
+    return context_exception_class(ctx);
 }
 
-term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term exception_class, term module_atom, term function_atom, int arity)
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term module_atom, term function_atom, int arity)
 {
     UNUSED(ctx);
     UNUSED(mod);
     UNUSED(current_offset);
-    UNUSED(exception_class);
     UNUSED(module_atom);
     UNUSED(function_atom);
     UNUSED(arity);
 
-    return exception_class;
+    return context_exception_class(ctx);
 }
 
 term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
@@ -102,13 +102,15 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
     return true;
 }
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class)
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
 {
-    return stacktrace_create_raw_mfa(ctx, mod, current_offset, exception_class, UNDEFINED_ATOM, UNDEFINED_ATOM, 0);
+    return stacktrace_create_raw_mfa(ctx, mod, current_offset, UNDEFINED_ATOM, UNDEFINED_ATOM, 0);
 }
 
-term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term exception_class, term module_atom, term function_atom, int arity)
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term module_atom, term function_atom, int arity)
 {
+    term exception_class = context_exception_class(ctx);
+
     if (term_is_nonempty_list(ctx->exception_stacktrace)) {
         // there is already a built stacktrace, nothing to do here
         // (this happens when re-raising with raise/3

@@ -142,7 +142,7 @@ _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for doubl
             module_get_imported_function_module_and_name_atoms(                           \
                 (m), (i), &module_atom, &function_atom);                                  \
             ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, jit_state->module, \
-                (offset), context_exception_class(ctx), module_atom, function_atom, (a)); \
+                (offset), module_atom, function_atom, (a));                               \
             return jit_handle_error(ctx, jit_state, 0);                                   \
         } else {                                                                          \
             return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state);           \
@@ -224,7 +224,7 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
         ctx->exception_stacktrace
-            = stacktrace_create_raw(ctx, jit_state->module, offset, context_exception_class(ctx));
+            = stacktrace_create_raw(ctx, jit_state->module, offset);
     }
 
     // Copy exception fields to x registers and clear them
@@ -293,7 +293,7 @@ static void set_error(Context *ctx, JITState *jit_state, int offset, term error_
     ctx->exception_reason = error_term;
     if (offset) {
         ctx->exception_stacktrace
-            = stacktrace_create_raw(ctx, jit_state->module, offset, ERROR_ATOM);
+            = stacktrace_create_raw(ctx, jit_state->module, offset);
     } else {
         ctx->exception_stacktrace = term_invalid_term();
     }
@@ -316,7 +316,7 @@ static Context *jit_raise_error_mfa(
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);
     ctx->exception_reason = FUNCTION_CLAUSE_ATOM;
     ctx->exception_stacktrace = stacktrace_create_raw_mfa(
-        ctx, jit_state->module, offset, ERROR_ATOM, module_atom, function_atom, arity);
+        ctx, jit_state->module, offset, module_atom, function_atom, arity);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
@@ -343,7 +343,7 @@ static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term st
     context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
     ctx->exception_reason = exc_value;
     ctx->exception_stacktrace
-        = stacktrace_create_raw(ctx, jit_state->module, offset, context_exception_class(ctx));
+        = stacktrace_create_raw(ctx, jit_state->module, offset);
     return jit_handle_error(ctx, jit_state, 0);
 }
 

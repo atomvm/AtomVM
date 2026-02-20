@@ -66,21 +66,21 @@ extern "C" {
 #define SET_ERROR(error_type_atom)                \
     context_set_exception_class(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;      \
-    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code);
 #elif AVM_NO_EMU
 #define SET_ERROR(error_type_atom)                \
     context_set_exception_class(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;      \
-    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);
 #else
 #define SET_ERROR(error_type_atom)                                                          \
     context_set_exception_class(ctx, ERROR_ATOM);                                           \
     ctx->exception_reason = error_type_atom;                                                \
     if (mod->native_code) {                                                                 \
         ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod,                         \
-            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);  \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);  \
     } else {                                                                                \
-        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code); \
     }
 #endif
 
@@ -88,21 +88,21 @@ extern "C" {
 #define SET_ERROR_MFA(error_type_atom, m, f, a)                 \
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;                    \
-    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, ERROR_ATOM, m, f, a);
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, m, f, a);
 #elif AVM_NO_EMU
 #define SET_ERROR_MFA(error_type_atom, m, f, a)                 \
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;                    \
-    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM, m, f, a);
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);
 #else
 #define SET_ERROR_MFA(error_type_atom, m, f, a)                                                          \
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);                                          \
     ctx->exception_reason = error_type_atom;                                                             \
     if (mod->native_code) {                                                                              \
         ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod,                                  \
-            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM, m, f, a);      \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);                  \
     } else {                                                                                             \
-        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, ERROR_ATOM, m, f, a); \
+        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, m, f, a);             \
     }
 #endif
 
@@ -1362,12 +1362,12 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #endif
 
-#define HANDLE_ERROR()                                                  \
-    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code, context_exception_class(ctx));  \
+#define HANDLE_ERROR()                                                      \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code); \
     goto handle_error;
 
-#define HANDLE_ERROR_MFA(m, f, a)                                                                                            \
-    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, context_exception_class(ctx), (m), (f), (a)); \
+#define HANDLE_ERROR_MFA(m, f, a)                                                              \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, (m), (f), (a)); \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name, label)           \
@@ -4076,7 +4076,7 @@ wait_timeout_trap_handler:
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
                     context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
                     ctx->exception_reason = exc_value;
-                    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, saved_pc - code, context_exception_class(ctx));
+                    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, saved_pc - code);
                     goto handle_error;
                 #endif
 
