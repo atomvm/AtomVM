@@ -135,60 +135,86 @@ mkimage(RootDir, BootFile, OutputFile, Segments) ->
     io:format("=============================================~n"),
     case file:open(OutputFile, [write, binary]) of
         {ok, Fout} ->
-            lists:foldl(
-                fun(Segment, PrevOffset) ->
-                    SegmentOffset = from_hex(maps:get(offset, Segment)),
-                    case PrevOffset of
-                        undefined ->
-                            no_padding;
-                        _ ->
-                            case SegmentOffset > PrevOffset of
-                                true ->
-                                    Padding = [
-                                        16#FF
-                                     || _ <- lists:seq(1, SegmentOffset - PrevOffset)
-                                    ],
-                                    io:format("Padding ~p bytes~n", [SegmentOffset - PrevOffset]),
-                                    file:write(Fout, Padding);
-                                false ->
-                                    throw(
-                                        io_lib:format(
-                                            "Error: insufficient space for segment ~p.  Over by: ~p bytes~n",
-                                            [
-                                                maps:get(name, Segment), PrevOffset - SegmentOffset
-                                            ]
-                                        )
-                                    )
-                            end
-                    end,
-                    SegmentPaths = [
-                        replace(
-                            "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
-                        )
-                     || SegmentPath <- maps:get(path, Segment)
-                    ],
-                    case try_read(SegmentPaths) of
-                        {ok, Data} ->
-                            file:write(Fout, Data),
-                            io:format("Wrote ~s (~p bytes) at offset ~s (~p)~n", [
-                                maps:get(name, Segment),
-                                byte_size(Data),
-                                maps:get(offset, Segment),
-                                SegmentOffset
-                            ]),
-                            SegmentOffset + byte_size(Data);
-                        {error, Reason} ->
-                            Fmt =
-                                "Failed to read file ~p  Reason: ~p."
-                                "  Note that a full build is required before running this command.",
-                            throw(io_lib:format(Fmt, [SegmentPaths, Reason]))
-                    end
-                end,
-                undefined,
-                Segments
-            );
+            try
+                write_segments(RootDir, BootFile, Fout, Segments)
+            after
+                file:close(Fout)
+            end;
         {error, Reason} ->
             throw(io_lib:format("Failed to open ~s for writing.  Reason: ~p", [OutputFile, Reason]))
+    end.
+
+%% @private
+write_segments(_RootDir, _BootFile, Fout, []) ->
+    ok;
+write_segments(RootDir, BootFile, Fout, [Segment | Segments]) ->
+    SegmentOffset = from_hex(maps:get(offset, Segment)),
+    SegmentPaths = [
+        replace(
+            "BOOT_FILE", BootFile, replace("ROOT_DIR", RootDir, SegmentPath)
+        )
+     || SegmentPath <- maps:get(path, Segment)
+    ],
+    SegmentEnd =
+        case try_read(SegmentPaths) of
+            {ok, Data} ->
+                case file:write(Fout, Data) of
+                    ok ->
+                        ok;
+                    {error, WriteError} ->
+                        Fmt = "Failed to write segment data from ~p to image.  Reason: ~p.",
+                        throw(io_lib:format(Fmt, [SegmentPaths, WriteError]))
+                end,
+                io:format("Wrote ~s (~p bytes) at offset ~s (~p)~n", [
+                    maps:get(name, Segment),
+                    byte_size(Data),
+                    maps:get(offset, Segment),
+                    SegmentOffset
+                ]),
+                SegmentOffset + byte_size(Data);
+            {error, Reason} ->
+                Fmt =
+                    "Failed to read file ~p  Reason: ~p."
+                    "  Note that a full build is required before running this command.",
+                throw(io_lib:format(Fmt, [SegmentPaths, Reason]))
+        end,
+    if
+        Segments == [] ->
+            %% Pad to end on 32-byte alignment, since we don't have a next offset to pad to.
+            SectorPad = (32 - (SegmentEnd rem 32)) rem 32,
+            pad_to_size(Fout, SectorPad);
+        true ->
+            [PeekNext | _] = Segments,
+            NextOffset = from_hex(maps:get(offset, PeekNext)),
+            case SegmentEnd > NextOffset of
+                true ->
+                    throw(
+                        io_lib:format(
+                            "Error: insufficient space for segment ~p.  Overflows partition by: ~p bytes~n",
+                            [maps:get(name, Segment), SegmentEnd - NextOffset]
+                        )
+                    );
+                false ->
+                    PadSize = NextOffset - SegmentEnd,
+                    case PadSize of
+                        0 ->
+                            ok;
+                        PadSize ->
+                            ok = pad_to_size(Fout, PadSize)
+                    end
+            end
+    end,
+    write_segments(RootDir, BootFile, Fout, Segments).
+
+%% @private
+pad_to_size(Fout, PadSize) ->
+    Padding = [16#FF || _ <- lists:seq(1, PadSize)],
+    case file:write(Fout, Padding) of
+        ok ->
+            io:format("Padded ~p bytes~n", [PadSize]);
+        {error, Reason} ->
+            Fmt = "Failed to add ~p bytes padding.  Reason: ~p.",
+            throw(io_lib:format(Fmt, [PadSize, Reason]))
     end.
 
 %% @private
