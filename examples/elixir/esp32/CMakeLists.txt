@@ -22,8 +22,8 @@ project(examples_elixir_esp32)
 
 include(BuildElixir)
 
-pack_runnable(Blink Blink estdlib eavmlib exavmlib)
-pack_runnable(Ledc_x4 Ledc_x4 estdlib eavmlib exavmlib)
+pack_runnable(Blink Blink estdlib eavmlib exavmlib avm_esp32)
+pack_runnable(Ledc_x4 Ledc_x4 estdlib eavmlib exavmlib avm_esp32)
 if(NOT (AVM_DISABLE_FP))
-    pack_runnable(SHT31 SHT31 estdlib eavmlib exavmlib)
+    pack_runnable(SHT31 SHT31 estdlib eavmlib exavmlib avm_esp32)
 endif()

@@ -40,6 +40,8 @@
 %%
 -module(spi).
 
+-behaviour(spi_hal).
+
 -export([open/1, close/1, read_at/4, write_at/5, write/3, write_read/3]).
 
 %% TODO remove deprecated hspi and vspi
