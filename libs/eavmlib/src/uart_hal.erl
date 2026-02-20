@@ -26,7 +26,7 @@
 %% Asynchronous Receiver-Transmitter) operations across all supported
 %% platforms.
 %%
-%% Currently, only ESP32 provides a UART implementation.
+%% ESP32 and RP2 platforms provide UART implementations.
 %%
 %% <h3>Lifecycle</h3>
 %%
