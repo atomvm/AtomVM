@@ -21,16 +21,16 @@
 include(ExternalProject)
 if(NOT AVM_DISABLE_JIT)
 set(host_atomvm_jit_target "--target=jit")
-set(atomvlib_name "atomvmlib-${AVM_JIT_TARGET_ARCH}.avm")
+set(atomvlib_name "atomvmlib-rp2-${AVM_JIT_TARGET_ARCH}.avm")
 else()
 set(host_atomvm_jit_target "")
-set(atomvlib_name "atomvmlib.avm")
+set(atomvlib_name "atomvmlib-rp2.avm")
 endif()
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
     CMAKE_ARGS -DAVM_DISABLE_JIT=${AVM_DISABLE_JIT}
-    BUILD_COMMAND cmake --build . --target=atomvmlib ${host_atomvm_jit_target} --target=PackBEAM --target=UF2Tool
+    BUILD_COMMAND cmake --build . --target=atomvmlib-rp2 ${host_atomvm_jit_target} --target=PackBEAM --target=UF2Tool
 )
 
 macro(jit_precompile module_name)

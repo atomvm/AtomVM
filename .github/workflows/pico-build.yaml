@@ -138,7 +138,7 @@ jobs:
         npm install
         npx tsx run-tests.ts ../build.nosmp/tests/rp2_tests.uf2 ../build.nosmp/tests/test_erl_sources/rp2_test_modules.uf2
 
-    - name: Build atomvmlib.uf2
+    - name: Build atomvmlib-rp2.uf2
       if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
@@ -146,7 +146,7 @@ jobs:
         mkdir build
         cd build
         cmake ..
-        make atomvmlib-${{ matrix.board }}.uf2
+        make atomvmlib-rp2-${{ matrix.board }}.uf2
 
     - name: Rename AtomVM and write sha256sum
       if: startsWith(github.ref, 'refs/tags/') && matrix.platform == '' && matrix.jit == ''
@@ -157,19 +157,14 @@ jobs:
         mv src/AtomVM.uf2 "src/${ATOMVM_UF2}"
         sha256sum "src/${ATOMVM_UF2}" > "src/${ATOMVM_UF2}.sha256"
         popd
-        pushd build/libs
-        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-        mv atomvmlib.uf2 "${ATOMVMLIB_FILE}"
-        sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
-        popd
 
-    - name: Rename atomvmlib and write sha256sum
+    - name: Rename atomvmlib-rp2 and write sha256sum
       if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
         pushd build/libs
-        ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-        mv atomvmlib-${{ matrix.board }}.uf2 "${ATOMVMLIB_FILE}"
+        ATOMVMLIB_FILE=atomvmlib-rp2-${{ matrix.board }}-${{ github.ref_name }}.uf2
+        mv atomvmlib-rp2-${{ matrix.board }}.uf2 "${ATOMVMLIB_FILE}"
         sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
         popd
 
@@ -182,8 +177,8 @@ jobs:
         files: |
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
-          build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2
-          build/libs/atomvmlib-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
+          build/libs/atomvmlib-rp2-${{ matrix.board }}-${{ github.ref_name }}.uf2
+          build/libs/atomvmlib-rp2-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
 
     - name: Release (PicoW)
       uses: softprops/action-gh-release@v1
