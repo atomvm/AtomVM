@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added Erlang distribution over serial (uart)
+- Added UART API to rp2 platform
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
@@ -22,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added RISC-V 64-bit (RV64IMAC) JIT backend
 - Added arm32 JIT backend
 - Added DWARF debug information support for JIT-compiled code
-- Added I2C and SPI APIs to rp2 platform
+- Added I2C, SPI APIs to rp2 platform
 - Added `code:get_object_code/1`
 - Added `erlang:display_string/1` and `erlang:display_string/2`
 - Added Thumb-2 support to armv6m JIT backend, optimizing code for ARMv7-M and later cores
