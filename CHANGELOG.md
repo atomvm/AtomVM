@@ -105,6 +105,7 @@ instead `badarg`.
 - Supervisor now honors period and intensity options.
 - Fix supervisor crash if a `one_for_one` child fails to restart.
 - Fix collision in references created with `make_ref/0` on 32 bits platforms.
+- Fixed a bug in `OP_BS_CREATE_BIN`
 
 ## [0.6.7] - Unreleased
 

@@ -525,6 +525,11 @@ struct Test tests[] = {
 
     TEST_CASE(bs_context_byte_size),
     TEST_CASE(bs_get_binary_fixed_size),
+    TEST_CASE(bs_get_integer_fixed_size),
+    TEST_CASE(bs_get_float_dynamic_size),
+    TEST_CASE(test_is_not_equal),
+    TEST_CASE(test_has_map_fields),
+    TEST_CASE(test_bs_create_bin_accum),
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
     TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 

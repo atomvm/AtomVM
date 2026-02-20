@@ -7005,17 +7005,13 @@ wait_timeout_trap_handler:
                                         JUMP_TO_LABEL(mod, fail);
                                     }
                                 }
-                                // size is optional for floats, defaults to 64
-                                avm_int_t signed_size_value = 64;
-                                if (size != term_nil()) {
-                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                                    signed_size_value = term_to_int(size);
-                                    if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
-                                        if (fail == 0) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        } else {
-                                            JUMP_TO_LABEL(mod, fail);
-                                        }
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
                                     }
                                 }
                                 segment_size = signed_size_value;
@@ -7150,11 +7146,7 @@ wait_timeout_trap_handler:
                                 size_value = (size_t) term_to_int(size);
                                 break;
                             case FLOAT_ATOM:
-                                if (size != term_nil()) {
-                                    size_value = (size_t) term_to_int(size);
-                                } else {
-                                    size_value = 64;
-                                }
+                                size_value = (size_t) term_to_int(size);
                                 break;
                             default:
                                 break;
@@ -7195,7 +7187,7 @@ wait_timeout_trap_handler:
                                     TRACE("bs_create_bin/6: Failed to insert integer into binary\n");
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
-                                segment_size = size_value;
+                                segment_size = size_value * segment_unit;
                                 break;
                             }
                             case FLOAT_ATOM: {
