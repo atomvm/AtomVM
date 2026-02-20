@@ -30,6 +30,7 @@
 %% ESP32/S2/S3 (I2C0):     SDA=21,  SCL=22
 %% ESP32-C2/C3/C5 (I2C0):  SDA=8,   SCL=9
 %% ESP32-C6/C61 (I2C0):    SDA=8,   SCL=9
+%% STM32 (I2C1):            SDA=PB7, SCL=PB6
 %% @end
 %%-----------------------------------------------------------------------------
 -module(i2c_scanner).
@@ -64,7 +65,8 @@ default_config() ->
     default_config(atomvm:platform()).
 
 default_config(pico) -> [{sda, 4}, {scl, 5}, {peripheral, 0}];
-default_config(esp32) -> esp32_default_config().
+default_config(esp32) -> esp32_default_config();
+default_config(stm32) -> [{sda, {b, 7}}, {scl, {b, 6}}, {peripheral, 1}].
 
 esp32_default_config() ->
     #{model := Model} = erlang:system_info(esp32_chip_info),
