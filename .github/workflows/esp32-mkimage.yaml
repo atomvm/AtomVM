@@ -42,13 +42,13 @@ jobs:
 
     strategy:
       matrix:
-        idf-version: ["5.5.2"]
+        idf-version: ["5.5.3"]
         cc: ["clang-14"]
         cxx: ["clang++-14"]
         cflags: ["-O3"]
-        otp: ["27"]
+        otp: ["28"]
         elixir_version: ["1.17"]
-        rebar3_version: ["3.24.0"]
+        rebar3_version: ["3.26.0"]
         compiler_pkgs: ["clang-14"]
         soc: ["esp32", "esp32c2", "esp32c3", "esp32s2", "esp32s3", "esp32c5", "esp32c6", "esp32c61", "esp32h2", "esp32p4", "esp32p4_pre", "esp32p4_c6", "esp32p4_pre_c6"]
         flavor: ["", "-elixir"]
