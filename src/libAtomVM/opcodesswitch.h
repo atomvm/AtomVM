@@ -4058,9 +4058,6 @@ wait_timeout_trap_handler:
             }
 
             case OP_RAISE: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *saved_pc = pc - 1;
-                #endif
                 term stacktrace;
                 DECODE_COMPACT_TERM(stacktrace, pc);
                 term exc_value;
@@ -4076,7 +4073,7 @@ wait_timeout_trap_handler:
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
                     context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
                     ctx->exception_reason = exc_value;
-                    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, saved_pc - code);
+                    ctx->exception_stacktrace = stacktrace;
                     goto handle_error;
                 #endif
 

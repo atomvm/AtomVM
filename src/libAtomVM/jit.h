@@ -114,7 +114,7 @@ struct ModuleNativeInterface
     void (*mailbox_next)(Context *ctx);
     void (*cancel_timeout)(Context *ctx);
     void (*clear_timeout_flag)(Context *ctx);
-    Context *(*raise)(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value);
+    Context *(*raise)(Context *ctx, JITState *jit_state, term stacktrace, term exc_value);
     Context *(*schedule_wait_cp)(Context *ctx, JITState *jit_state);
     Context *(*wait_timeout)(Context *ctx, JITState *jit_state, term timeout, int label);
     Context *(*wait_timeout_trap_handler)(Context *ctx, JITState *jit_state, int label);

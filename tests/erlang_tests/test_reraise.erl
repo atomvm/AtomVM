@@ -20,12 +20,19 @@
 
 -module(test_reraise).
 
--export([start/0]).
+-export([start/0, do_error/0]).
 
 start() ->
     start(?OTP_RELEASE).
 
 start(OTPVersion) when OTPVersion >= 23 ->
+    test_reraise_raise_3_nif(),
+    test_reraise_preserves_stacktrace(),
+    0;
+start(_) ->
+    0.
+
+test_reraise_raise_3_nif() ->
     try
         reraise_reraiser:reraise_error()
     catch
@@ -38,7 +45,30 @@ start(OTPVersion) when OTPVersion >= 23 ->
                 {reraise_reraiser, reraise_error, 0, _Meta2}
                 | _Rest
             ] = Stacktrace
-    end,
-    0;
-start(_) ->
-    0.
+    end.
+
+test_reraise_preserves_stacktrace() ->
+    try
+        try
+            ?MODULE:do_error()
+        catch
+            throw:_ -> should_not_happen
+        end
+    catch
+        error:my_error:ST ->
+            case ST of
+                L when is_list(L) ->
+                    true = has_do_error(L),
+                    ok;
+                _ ->
+                    %% Stacktraces disabled
+                    ok
+            end
+    end.
+
+do_error() ->
+    erlang:error(my_error).
+
+has_do_error([{?MODULE, do_error, _, _} | _]) -> true;
+has_do_error([_ | T]) -> has_do_error(T);
+has_do_error([]) -> false.

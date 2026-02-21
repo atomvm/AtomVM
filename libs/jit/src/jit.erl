@@ -1165,7 +1165,7 @@ first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
     {MSt2, ExcValue, Rest2} = decode_compact_term(Rest1, MMod, MSt1, State0),
     ?TRACE("OP_RAISE ~p, ~p\n", [Stacktrace, ExcValue]),
     MSt3 = MMod:call_primitive_last(MSt2, ?PRIM_RAISE, [
-        ctx, jit_state, offset, Stacktrace, ExcValue
+        ctx, jit_state, Stacktrace, ExcValue
     ]),
     ?ASSERT_ALL_NATIVE_FREE(MSt3),
     first_pass(Rest2, MMod, MSt3, State0);

@@ -337,13 +337,12 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
     return jit_handle_error(ctx, jit_state, 0);
 }
 
-static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
+static Context *jit_raise(Context *ctx, JITState *jit_state, term stacktrace, term exc_value)
 {
-    TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
+    TRACE("jit_raise: ctx->process_id = %" PRId32 "\n", ctx->process_id);
     context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
     ctx->exception_reason = exc_value;
-    ctx->exception_stacktrace
-        = stacktrace_create_raw(ctx, jit_state->module, offset);
+    ctx->exception_stacktrace = stacktrace;
     return jit_handle_error(ctx, jit_state, 0);
 }
 
