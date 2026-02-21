@@ -25,7 +25,7 @@
 %% must implement. It provides a common interface for SPI (Serial
 %% Peripheral Interface) operations across all supported platforms.
 %%
-%% Currently, only ESP32 provides an SPI implementation.
+%% ESP32, RP2 and STM32 provide SPI implementations.
 %%
 %% <h3>Lifecycle</h3>
 %%

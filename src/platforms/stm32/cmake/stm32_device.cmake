@@ -75,6 +75,7 @@ if (STM32_FPU)
     list(APPEND STM32_ARCH_FLAGS "-mfloat-abi=${STM32_FLOAT_ABI}" "-mfpu=${STM32_FPU}")
 else()
     list(APPEND STM32_ARCH_FLAGS "-msoft-float")
+    set(STM32_FPU "none")
 endif()
 
 # Apply architecture flags to compiler
@@ -86,7 +87,30 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_arch_flags_str}")
 add_compile_definitions(${STM32_FAMILY_UC})
 add_compile_definitions(USE_HAL_DRIVER)
 
-# Linker script variables — defaults for most families
+# Helper: set <PREFIX>_STR, <PREFIX>_LEN_DEC, <PREFIX>_LEN_HEX variables
+# used by configure_file() to emit stm32_device_atoms.h.
+function(set_stm32_atom_vars prefix value)
+    string(LENGTH "${value}" _len_dec)
+    math(EXPR _len_hex_raw ${_len_dec} OUTPUT_FORMAT HEXADECIMAL)
+    # Strip the leading "0x" produced by OUTPUT_FORMAT HEXADECIMAL
+    string(SUBSTRING "${_len_hex_raw}" 2 -1 _len_hex)
+    # Zero-pad to two digits for readability (e.g. "0a" not "a")
+    string(LENGTH "${_len_hex}" _hex_digits)
+    if (_hex_digits EQUAL 1)
+        set(_len_hex "0${_len_hex}")
+    endif()
+    set(${prefix}_STR     "${value}"    PARENT_SCOPE)
+    set(${prefix}_LEN_DEC "${_len_dec}" PARENT_SCOPE)
+    set(${prefix}_LEN_HEX "${_len_hex}" PARENT_SCOPE)
+endfunction()
+
+# Set atom variables for configure_file()
+set_stm32_atom_vars(STM32_SERIES_ATOM "stm32${STM32_FAMILY_SHORT}")
+set_stm32_atom_vars(STM32_CPU_ATOM    "${STM32_CPU}")
+set_stm32_atom_vars(STM32_FPU_ATOM    "${STM32_FPU}")
+set_stm32_atom_vars(STM32_DEVICE_ATOM "${DEVICE_LOWER}")
+
+# Linker script variables, defaults for most families
 set(LINKER_RAM_ORIGIN "0x20000000")
 set(LINKER_RAM_SIZE_OVERRIDE "")
 set(LINKER_EXTRA_MEMORY "")
