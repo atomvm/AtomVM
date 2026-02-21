@@ -384,6 +384,7 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
     bool setup_output = false;
     uint32_t pull_up_down;
     uint32_t output_speed;
+    uint32_t alternate = 0;
     term mhz_atom = term_invalid_term();
     term pull_atom = term_invalid_term();
     if (term_is_tuple(mode_term)) {
@@ -403,30 +404,35 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             setup_output = true;
         }
 
-        pull_atom = term_get_tuple_element(mode_term, 1);
-        if (UNLIKELY(!term_is_atom(pull_atom))) {
-            AVM_LOGE(TAG, "GPIO pull direction must be one of the following atoms: up | down | floating");
-            return error_tuple_str_maybe_gc(ctx, invalid_pull_atom);
-        }
-
-        pull_up_down = ((uint32_t) interop_atom_term_select_int(pull_mode_table, pull_atom, ctx->global));
-        if ((setup_output) && (term_get_tuple_arity(mode_term) == 3)) {
-            mhz_atom = term_get_tuple_element(mode_term, 2);
-            if (UNLIKELY(!term_is_atom(mhz_atom))) {
-                AVM_LOGE(TAG, "GPIO output speed must be one of the following atoms: mhz_2 | mhz_25 | mhz_50 | mhz_100");
-                error_tuple_str_maybe_gc(ctx, invalid_rate_atom);
+        if (gpio_mode == GPIO_MODE_AF_PP && term_is_integer(term_get_tuple_element(mode_term, 1))) {
+            alternate = (uint32_t) term_to_int(term_get_tuple_element(mode_term, 1));
+            pull_up_down = GPIO_NOPULL;
+        } else {
+            pull_atom = term_get_tuple_element(mode_term, 1);
+            if (UNLIKELY(!term_is_atom(pull_atom))) {
+                AVM_LOGE(TAG, "GPIO pull direction must be one of the following atoms: up | down | floating");
+                return error_tuple_str_maybe_gc(ctx, invalid_pull_atom);
             }
 
-            output_speed = (uint32_t) interop_atom_term_select_int(output_mhz_table, mhz_atom, ctx->global);
-            if (output_speed == INVALID_GPIO_OSPEED) {
+            pull_up_down = ((uint32_t) interop_atom_term_select_int(pull_mode_table, pull_atom, ctx->global));
+            if ((setup_output) && (term_get_tuple_arity(mode_term) == 3)) {
+                mhz_atom = term_get_tuple_element(mode_term, 2);
+                if (UNLIKELY(!term_is_atom(mhz_atom))) {
+                    AVM_LOGE(TAG, "GPIO output speed must be one of the following atoms: mhz_2 | mhz_25 | mhz_50 | mhz_100");
+                    error_tuple_str_maybe_gc(ctx, invalid_rate_atom);
+                }
+
+                output_speed = (uint32_t) interop_atom_term_select_int(output_mhz_table, mhz_atom, ctx->global);
+                if (output_speed == INVALID_GPIO_OSPEED) {
+                    output_speed = GPIO_SPEED_FREQ_LOW;
+                    char *mhz_string = interop_atom_to_string(ctx, mhz_atom);
+                    AVM_LOGW(TAG, "Invalid output speed '%s' given, falling back to 2 Mhz default.", mhz_string);
+                    free(mhz_string);
+                }
+            } else if (setup_output) {
                 output_speed = GPIO_SPEED_FREQ_LOW;
-                char *mhz_string = interop_atom_to_string(ctx, mhz_atom);
-                AVM_LOGW(TAG, "Invalid output speed '%s' given, falling back to 2 Mhz default.", mhz_string);
-                free(mhz_string);
+                AVM_LOGW(TAG, "No output speed given, falling back to 2 Mhz default.");
             }
-        } else if (setup_output) {
-            output_speed = GPIO_SPEED_FREQ_LOW;
-            AVM_LOGW(TAG, "No output speed given, falling back to 2 Mhz default.");
         }
     } else {
         mode_atom = mode_term;
@@ -460,7 +466,8 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X input mode 0x%02lX, pull mode 0x%02lX", gpio_bank, gpio_pin_mask, gpio_mode, pull_up_down);
     } else if (gpio_mode == GPIO_MODE_AF_PP) {
         gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
-        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X AF mode", gpio_bank, gpio_pin_mask);
+        gpio_init.Alternate = alternate;
+        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X AF mode, alternate %lu", gpio_bank, gpio_pin_mask, alternate);
     } else if (gpio_mode == GPIO_MODE_ANALOG) {
         AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X analog mode", gpio_bank, gpio_pin_mask);
     }

@@ -111,6 +111,9 @@ elif request.IsRead:
     request.Value = regs.get(request.Offset, 0)
 '''
 
+spi1: SPI.STM32SPI @ sysbus 0x40013000
+    IRQ -> nvic@35
+
 gpioPortA: GPIOPort.STM32_GPIOPort @ sysbus <0x58020000, +0x400>
     modeResetValue: 0xABFFFFFF
     numberOfAFs: 16

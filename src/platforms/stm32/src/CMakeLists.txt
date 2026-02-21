@@ -52,6 +52,14 @@ if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_i2c_ex.c")
     list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_i2c_ex.c)
 endif()
 
+# SPI HAL
+list(APPEND HAL_SOURCES
+    ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi.c
+)
+if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi_ex.c")
+    list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi_ex.c)
+endif()
+
 # ICACHE HAL for families that have it (U5, H5)
 if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_icache.c")
     list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_icache.c)

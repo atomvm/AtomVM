@@ -108,6 +108,7 @@ default_pins() ->
 
 %%         {SCK, MOSI, MISO, CS}
 default_pins(pico) -> {2, 3, 4, 5};
+default_pins(stm32) -> {{a, 5}, {a, 7}, {a, 6}, {a, 4}};
 default_pins(esp32) -> esp32_default_pins().
 
 esp32_default_pins() ->

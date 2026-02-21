@@ -170,7 +170,7 @@ jobs:
         mkdir build-host
         cd build-host
         cmake .. -G Ninja
-        cmake --build . -t stm32_boot_test stm32_gpio_test stm32_i2c_test
+        cmake --build . -t stm32_boot_test stm32_gpio_test stm32_i2c_test stm32_spi_test
 
     - name: Install Renode
       if: matrix.renode_platform
@@ -224,5 +224,20 @@ jobs:
         renode-test src/platforms/stm32/tests/renode/stm32_i2c_test.robot \
           --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
           --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_i2c_test.avm \
+          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
+          --variable PLATFORM:$PLATFORM
+
+    - name: Run Renode SPI test
+      if: matrix.renode_platform
+      run: |
+        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
+        if [ -f "$LOCAL_REPL" ]; then
+          PLATFORM="@$PWD/$LOCAL_REPL"
+        else
+          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
+        fi
+        renode-test src/platforms/stm32/tests/renode/stm32_spi_test.robot \
+          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
+          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_spi_test.avm \
           --variable AVM_ADDRESS:${{ matrix.avm_address }} \
           --variable PLATFORM:$PLATFORM

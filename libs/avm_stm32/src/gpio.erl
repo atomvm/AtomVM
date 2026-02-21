@@ -58,8 +58,10 @@
 -type direction() :: input | output | output_od | mode_config().
 %% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
 %% Pull mode and output_speed must be set at the same time as direction. See @type mode_config()
--type mode_config() :: {direction(), pull()} | {output, pull(), output_speed()}.
+-type mode_config() ::
+    {direction(), pull()} | {output, pull(), output_speed()} | {af, non_neg_integer()}.
 %% Extended mode configuration options. Default pull() is `floating', default output_speed() is `mhz_2' if options are omitted.
+%% `{af, AFNumber}' configures the pin in alternate function push-pull mode with the given AF number (e.g. 5 for SPI1).
 -type pull() :: up | down | floating.
 %% Internal resistor pull mode. STM32 does not support `up_down'.
 -type output_speed() :: mhz_2 | mhz_25 | mhz_50 | mhz_100.

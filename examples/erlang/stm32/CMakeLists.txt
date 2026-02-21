@@ -30,3 +30,24 @@ pack_runnable(blink_weact_studio_wb55 blink_weact_studio_wb55 eavmlib avm_stm32)
 pack_runnable(blink_nucleo64 blink_nucleo64 eavmlib avm_stm32)
 pack_runnable(blink_nucleo144 blink_nucleo144 eavmlib avm_stm32)
 pack_runnable(stm32_lis3dh stm32_lis3dh eavmlib avm_stm32)
+
+set(SPI_FLASH_BEAM ${CMAKE_BINARY_DIR}/examples/erlang/spi_flash.beam)
+if(AVM_RELEASE)
+    set(INCLUDE_LINES "")
+else()
+    set(INCLUDE_LINES "-i")
+endif()
+add_custom_command(
+    OUTPUT stm32_spi_flash.avm
+    DEPENDS spi_flash_main ${SPI_FLASH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm estdlib
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm avm_stm32
+        PackBEAM
+    COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} stm32_spi_flash.avm
+        ${SPI_FLASH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm
+    COMMENT "Packing runnable stm32_spi_flash.avm"
+    VERBATIM
+)
+add_custom_target(stm32_spi_flash ALL DEPENDS stm32_spi_flash.avm)
