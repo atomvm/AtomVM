@@ -25,7 +25,8 @@
 -export([
     wait_for_sta/0, wait_for_sta/1, wait_for_sta/2,
     wait_for_ap/0, wait_for_ap/1, wait_for_ap/2,
-    sta_rssi/0
+    sta_rssi/0,
+    wifi_scan/0, wifi_scan/1
 ]).
 -export([start/1, start_link/1, stop/0]).
 -export([
@@ -38,11 +39,16 @@
 ]).
 
 -define(SERVER, ?MODULE).
+% These values ate used to calculate the gen_server:call/3 timeout.
+-define(DEVICE_TOTAL_CHANNELS, 14).
+-define(GEN_RESPONSE_MS, 5000).
+-define(MAX_SHORT_DWELL, 320).
 
 -type ipv4_info() :: {
     IPAddress :: inet:ip4_address(), NetMask :: inet:ip4_address(), Gateway :: inet:ip4_address()
 }.
 -type ip_info() :: ipv4_info().
+-type bssid_t() :: binary().
 
 -type ssid_config() :: {ssid, string() | binary()}.
 -type psk_config() :: {psk, string() | binary()}.
@@ -52,10 +58,16 @@
 -type sta_beacon_timeout_config() :: {beacon_timeout, fun(() -> term())}.
 -type sta_disconnected_config() :: {disconnected, fun(() -> term())}.
 -type sta_got_ip_config() :: {got_ip, fun((ip_info()) -> term())}.
+-type sta_scan_config() ::
+    {default_scan_results, 1..20}
+    | {scan_dwell_ms, 1..1500}
+    | scan_show_hidden
+    | scan_passive.
 -type sta_config_property() ::
     ssid_config()
     | psk_config()
     | dhcp_hostname_config()
+    | sta_scan_config()
     | sta_connected_config()
     | sta_beacon_timeout_config()
     | sta_disconnected_config()
@@ -115,6 +127,7 @@
     | ghz5_40mhz_channel()
     | ghz5_80mhz_channel()
     | ghz5_160mhz_channel().
+
 -type ap_channel_cfg() :: {ap_channel, wifi_channel()}.
 -type ap_ssid_hidden_config() :: {ap_ssid_hidden, boolean()}.
 -type ap_max_connections_config() :: {ap_max_connections, non_neg_integer()}.
@@ -151,7 +164,43 @@
 
 -type network_config() :: [sta_config() | ap_config() | sntp_config() | mdns_config()].
 
--type db() :: integer().
+-type dbm() :: integer().
+%% `dbm()' decibel-milliwatts (or dBm) will typically be a negative number, but in the presence of
+%% a powerful signal this can be a positive number. A level of 0 dBm corresponds to the power of 1
+%% milliwatt. A 10 dBm decrease in level is equivalent to a ten-fold decrease in signal power.
+
+-type scan_options() ::
+    {results, 1..14 | 1..20}
+    | {dwell, 1..1500}
+    | show_hidden
+    | passive.
+%% The `results' key is used to set the maximum number of networks returned in the
+%% networks list, and the `dwell' is used to set the dwell time (in milliseconds)
+%% spent on each channel. The maximum number of results on esp32 classic is 14 and 20
+%% on all other esp32 chips, due to network stack limitations. The option `show_hidden'
+%% will also include hidden networks in the scan results. Default options are:
+%% `[{results, 6}, {dwell, 120}]', if `passive' is used the default dwell time per
+%% channel is 360 ms.
+
+-type auth_type() ::
+    open
+    | wep
+    | wpa_psk
+    | wpa2_psk
+    | wpa_wpa2_psk
+    | eap
+    | wpa3_psk
+    | wpa2_wpa3_psk
+    | wapi
+    | owe
+    | wpa3_enterprise_192
+    | wpa3_ext_psk
+    | wpa3_ext_psk_mixed.
+
+-type network_properties() :: [
+    {rssi, dbm()} | [{authmode, auth_type()} | [{bssid, bssid_t()} | [{channel, wifi_channel()}]]]
+].
+%% A proplist of network properties with the keys: `rssi', `authmode' and `channel'
 
 -record(state, {
     config :: network_config(),
@@ -294,12 +343,12 @@ stop() ->
     gen_server:stop(?SERVER).
 
 %%-----------------------------------------------------------------------------
-%% @returns {ok, Rssi} in decibels, or {error, Reason}.
+%% @returns {ok, Rssi} in dBm, or {error, Reason}.
 %%
 %% @doc     Get the rssi information of AP to which the device is associated with.
 %% @end
 %%-----------------------------------------------------------------------------
--spec sta_rssi() -> {ok, Rssi :: db()} | {error, Reason :: term()}.
+-spec sta_rssi() -> {ok, Rssi :: dbm()} | {error, Reason :: term()}.
 sta_rssi() ->
     case whereis(network_port) of
         undefined ->
@@ -313,6 +362,73 @@ sta_rssi() ->
                 Other -> {error, Other}
             end
     end.
+
+%% @param   Options is a list of `scan_options()'
+%% @returns Scan result tuple, or {error, Reason} if a failure occurred.
+%%
+%% @doc     Scan for available WiFi networks.
+%%
+%% The network must first be started in sta or sta+ap mode before scanning for access points. While a
+%% scan is in progress network traffic will be inhibited for clients connected to the esp32 access point
+%% (in using ap+sta mode), but should not cause an active connection to be lost.  Espressif's documentation
+%% recommends not exceeding 1500 ms per-chanel scan times or network connections may be lost, this is
+%% enforced as a hard limit. The return is a tuple `{ok, Results}', where Results is a tuple with the number
+%% of discovered networks and a list of networks, which may be shorter than the size of the discovered
+%% networks if a smaller `MaxAPs' was used. The network tuples in the list consist of network name and a
+%% proplist of network information:
+%%
+%%  `{ok, {NumberResults, [{SSID, [{rssi, DBm}, {authmode, Mode}, {bssid, BSSID}, {channel, Number}]}, ...]}}'
+%%
+%% For convenience `network_wifi_scan/0' may be used to scan with default options.  If the driver
+%% had not been started before `network:wifi_scan/0,1' is used the network will be started in sta mode
+%% with the `managed' option, all other options will use the default settings. This means after making
+%% the first connection the driver will attempt to reconnect to the last network automatically and future
+%% scans will not be possible because the wifi will always be associated with an access point, or in the
+%% process of making a connection.
+%%
+%% Note: If a long dwell time is used, the return time for this function can be considerably longer
+%% than the default gen_server timeout, especially when performing a passive scan. Passive scans
+%% always use the full dwell time for each channel, active scans with a dwell time of more than 240
+%% milliseconds will have a minimum dwell of 1/2 the maximum dwell time set by the `dwell' option.
+%% The timeout for these longer scans is determined by the formula:
+%% <pre>
+%%     Timeout = (dwell * 14) + 5000
+%% </pre>
+%% That is the global ("world safe") maximum wifi channels multiplied by the dwell time with an
+%% additional gen_server default timeout period added.  The actual number of channels scanned will be
+%% determined by the country code, which currently does not have a configurable option, but is set to
+%% `01' (world safe mode) and will automatically change to match the devices connection to an access
+%% point.
+%%
+%% The default options may be configured by adding `sta_scan_config()' options to the
+%% `sta_config()'.
+%%
+%% Warning: This feature is not yet available on the rp2040 platform.
+%%
+%% @end
+%%-----------------------------------------------------------------------------
+-spec wifi_scan([Options :: scan_options(), ...]) ->
+    {ok, {NetworksDiscovered :: 0..20, [{SSID :: string(), [ApInfo :: network_properties()]}, ...]}}
+    | {error, Reason :: term()}.
+wifi_scan(Options) ->
+    Dwell = proplists:get_value(dwell, Options),
+    case Dwell of
+        undefined ->
+            gen_server:call(maybe_start(?SERVER), {scan, Options});
+        Millis when Millis =< ?MAX_SHORT_DWELL ->
+            gen_server:call(maybe_start(?SERVER), {scan, Options});
+        ChanDwellMs ->
+            Timeout = (ChanDwellMs * ?DEVICE_TOTAL_CHANNELS) + ?GEN_RESPONSE_MS,
+            gen_server:call(maybe_start(?SERVER), {scan, Options}, Timeout)
+    end.
+
+wifi_scan() ->
+    Config = gen_server:call(maybe_start(?SERVER), get_config),
+    Results = proplists:get_value(default_scan_results, proplists:get_value(sta, Config), 6),
+    Dwell = proplists:get_value(scan_dwell_ms, proplists:get_value(sta, Config), 120),
+    Hidden = proplists:get_value(scan_show_hidden, proplists:get_value(sta, Config), false),
+    Passive = proplists:get_value(scan_passive, proplists:get_value(sta, Config), false),
+    wifi_scan([{results, Results}, {dwell, Dwell}, {show_hidden, Hidden}, {passive, Passive}]).
 
 %%
 %% gen_server callbacks
@@ -333,7 +449,27 @@ handle_continue(start_port, #state{config = Config, port = Port, ref = Ref} = St
             {stop, {start_port_failed, Reason}, State}
     end.
 
+%% @private
+wait_scan_results(Ref, From, State) ->
+    receive
+        {Ref, {error, _Reason} = ER} ->
+            gen_server:reply(From, ER),
+            {noreply, State#state{ref = Ref}};
+        {Ref, Results} ->
+            gen_server:reply(From, Results),
+            {noreply, State#state{ref = Ref}};
+        Any ->
+            gen_server:reply(From, Any),
+            {noreply, State#state{ref = Ref}}
+    end.
+
 %% @hidden
+handle_call({scan, ScanOpts}, From, State) ->
+    Ref = make_ref(),
+    network_port ! {self(), Ref, {scan, ScanOpts}},
+    wait_scan_results(Ref, From, State#state{ref = Ref});
+handle_call(get_config, _From, #state{config = Config} = State) ->
+    {reply, Config, State};
 handle_call(_Msg, _From, State) ->
     {reply, {error, unknown_message}, State}.
 
@@ -527,4 +663,20 @@ wait_for_ap_started(Timeout) ->
             ok
     after Timeout ->
         {error, timeout}
+    end.
+
+%% @private
+maybe_start(Server) ->
+    case erlang:whereis(Server) of
+        undefined ->
+            StaConfig = [{sta, [managed]}],
+            io:format("WARNING: Network driver not initialized, starting with config: ~p", [
+                StaConfig
+            ]),
+            {ok, NewPid} = ?MODULE:start(StaConfig),
+            NewPid;
+        Pid when is_pid(Pid) ->
+            Pid;
+        _ ->
+            {error, network_init_fail}
     end.
