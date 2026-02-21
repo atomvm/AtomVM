@@ -3156,7 +3156,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     size_t bytes_read = 0;
     term dst = externalterm_from_binary(ctx, binary, &bytes_read);
     if (UNLIKELY(term_is_invalid_term(dst))) {
-        RAISE_ERROR(BADARG_ATOM)
+        RAISE_ERROR(BADARG_ATOM);
     }
     if (return_used) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &dst, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {

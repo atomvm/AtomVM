@@ -46,7 +46,7 @@ extern "C" {
         context_set_exception_class(ctx, ERROR_ATOM); \
         ctx->exception_reason = (error_type_atom);    \
         return term_invalid_term();                   \
-    } while (0);
+    } while (0)
 
 const struct Nif *nifs_get(const char *mfa);
 
