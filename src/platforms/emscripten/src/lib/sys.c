@@ -48,6 +48,12 @@
 #include "platform_defaultatoms.h"
 #include "websocket_nifs.h"
 
+size_t sys_get_next_tracked_object_key(GlobalContext *glb)
+{
+    struct EmscriptenPlatformData *platform = glb->platform_data;
+    return platform->next_tracked_object_key++;
+}
+
 /**
  * @brief resolve a promise with an int value and destroy it
  * @details called on the main thread using `emscripten_dispatch_to_thread`
@@ -158,6 +164,7 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
     list_init(&platform->messages);
+    platform->next_tracked_object_key = 0;
     ErlNifEnv env;
     erl_nif_env_partial_init_from_globalcontext(&env, glb);
     platform->promise_resource_type = enif_init_resource_type(&env, "promise", &promise_resource_type_init, ERL_NIF_RT_CREATE, NULL);
