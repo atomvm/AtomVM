@@ -85,7 +85,7 @@ jobs:
     needs: build-atomvmlib
     strategy:
       matrix:
-        board: ["pico", "pico_w", "pico2"]
+        board: ["pico", "pico_w", "pico2", "pico2_w"]
         platform: [""]
         jit: ["", "-DAVM_DISABLE_JIT=OFF"]
         include:
@@ -94,6 +94,14 @@ jobs:
             jit: ""
 
           - board: "pico2"
+            platform: "-DPICO_PLATFORM=rp2350-riscv"
+            jit: "-DAVM_DISABLE_JIT=OFF"
+
+          - board: "pico2_w"
+            platform: "-DPICO_PLATFORM=rp2350-riscv"
+            jit: ""
+
+          - board: "pico2_w"
             platform: "-DPICO_PLATFORM=rp2350-riscv"
             jit: "-DAVM_DISABLE_JIT=OFF"
 
@@ -170,7 +178,7 @@ jobs:
       uses: github/codeql-action/analyze@v4
 
     - name: Install nvm and nodejs 20
-      if: matrix.board != 'pico2'
+      if: matrix.board != 'pico2' && matrix.board != 'pico2_w'
       run: |
         set -euo pipefail
         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
@@ -178,7 +186,7 @@ jobs:
         nvm install 24
 
     - name: Build tests (without SMP)
-      if: matrix.board != 'pico2'
+      if: matrix.board != 'pico2' && matrix.board != 'pico2_w'
       shell: bash
       working-directory: ./src/platforms/rp2/
       run: |
@@ -190,7 +198,7 @@ jobs:
         cmake --build . --target=rp2_tests
 
     - name: Run tests with rp2040js
-      if: matrix.board != 'pico2'
+      if: matrix.board != 'pico2' && matrix.board != 'pico2_w'
       shell: bash
       working-directory: ./src/platforms/rp2/tests
       run: |
@@ -223,7 +231,7 @@ jobs:
       run: |
         pushd build/libs
         ATOMVMLIB_FILE=atomvmlib-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
-        mv atomvmlib-${{matrix.board == 'pico_w' && 'pico' || matrix.board}}.uf2 "${ATOMVMLIB_FILE}"
+        mv atomvmlib-${{matrix.board == 'pico_w' && 'pico' || matrix.board == 'pico2_w' && 'pico2' || matrix.board}}.uf2 "${ATOMVMLIB_FILE}"
         sha256sum "${ATOMVMLIB_FILE}" > "${ATOMVMLIB_FILE}.sha256"
         popd
 
@@ -245,7 +253,7 @@ jobs:
 
     - name: Release (Pico & Pico2)
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.platform == '' && matrix.jit == ''
+      if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.board != 'pico2_w' && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true
         fail_on_unmatched_files: true
@@ -257,9 +265,9 @@ jobs:
           ${{ env.ATOMVM_COMBINED_FILE }}
           ${{ env.ATOMVM_COMBINED_FILE }}.sha256
 
-    - name: Release (PicoW)
+    - name: Release (PicoW & Pico2W)
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/') && matrix.board == 'pico_w' && matrix.platform == '' && matrix.jit == ''
+      if: startsWith(github.ref, 'refs/tags/') && (matrix.board == 'pico_w' || matrix.board == 'pico2_w') && matrix.platform == '' && matrix.jit == ''
       with:
         draft: true
         fail_on_unmatched_files: true
