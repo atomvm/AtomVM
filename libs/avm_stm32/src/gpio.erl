@@ -1,0 +1,335 @@
+%
+% This file is part of AtomVM.
+%
+% Copyright 2018-2023 Davide Bettio <davide@uninstall.it>
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%    http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+%
+% SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+%
+
+%%-----------------------------------------------------------------------------
+%% @doc GPIO driver module for STM32
+%%
+%% This module provides functions for interacting with micro-controller GPIO
+%% (General Purpose Input and Output) pins on the STM32 platform.
+%%
+%% Note: `-type pin()' used in this driver refers to a tuple {GPIO_BANK, PIN}.
+%% @end
+%%-----------------------------------------------------------------------------
+-module(gpio).
+
+-behaviour(gpio_hal).
+
+-export([
+    start/0,
+    open/0,
+    read/2,
+    set_direction/3,
+    set_level/3,
+    set_int/3, set_int/4,
+    remove_int/2,
+    stop/0,
+    close/1
+]).
+-export([
+    init/1,
+    deinit/1,
+    set_pin_mode/2,
+    set_pin_pull/2,
+    digital_write/2,
+    digital_read/1
+]).
+
+-type pin() :: {gpio_bank(), 0..15}.
+%% A pin parameter on STM32 is a tuple consisting of a GPIO bank and pin number.
+-type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k.
+%% STM32 gpio banks vary by board, some only break out `a' thru `h'.
+-type direction() :: input | output | output_od | mode_config().
+%% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
+%% Pull mode and output_speed must be set at the same time as direction. See @type mode_config()
+-type mode_config() :: {direction(), pull()} | {output, pull(), output_speed()}.
+%% Extended mode configuration options. Default pull() is `floating', default output_speed() is `mhz_2' if options are omitted.
+-type pull() :: up | down | floating.
+%% Internal resistor pull mode. STM32 does not support `up_down'.
+-type output_speed() :: mhz_2 | mhz_25 | mhz_50 | mhz_100.
+%% Output clock speed. Default is `mhz_2'.
+-type low_level() :: low | 0.
+-type high_level() :: high | 1.
+-type level() :: low_level() | high_level().
+%% Valid pin levels can be atom or binary representation.
+-type gpio() :: port().
+%% This is the port returned by `gpio:start/0'.
+-type trigger() :: none | rising | falling | both | low | high.
+%% Event type that will trigger a `gpio_interrupt'.
+
+%%-----------------------------------------------------------------------------
+%% @returns Port | error | {error, Reason}
+%% @doc     Start the GPIO driver port
+%%
+%%          Returns the port of the active GPIO port driver, otherwise the GPIO
+%%          port driver will be stared and registered as `gpio'. The use of
+%%          `gpio:open/0' or `gpio:start/0' is required before using any functions
+%%          that require a GPIO port as a parameter.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec start() -> gpio() | {error, Reason :: atom()} | error.
+start() ->
+    case whereis(gpio) of
+        undefined ->
+            open();
+        GPIO ->
+            GPIO
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @returns Port | error | {error, Reason}
+%% @doc     Start the GPIO driver port
+%%
+%%          The GPIO port driver will be stared and registered as `gpio'. If the
+%%          port has already been started through the `gpio:open/0' or
+%%          `gpio:start/0' the command will fail. The use of `gpio:open/0' or
+%%          `gpio:start/0' is required before using any functions that require a
+%%          GPIO port as a parameter.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec open() -> gpio() | {error, Reason :: atom()} | error.
+open() ->
+    open_port({spawn, "gpio"}, []).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from gpio:start/0
+%% @returns ok | error | {error, Reason}
+%% @doc     Stop the GPIO interrupt port
+%%
+%%          This function disables any interrupts that are set, stops
+%%          the listening port, and frees all of its resources.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec close(GPIO :: gpio()) -> ok | {error, Reason :: atom()} | error.
+close(GPIO) ->
+    port:call(GPIO, {close}).
+
+%%-----------------------------------------------------------------------------
+%% @returns ok | error | {error, Reason}
+%% @doc     Stop the GPIO interrupt port
+%%
+%%          This function disables any interrupts that are set, stops
+%%          the listening port, and frees all of its resources.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec stop() -> ok | {error, Reason :: atom()} | error.
+stop() ->
+    case whereis(gpio) of
+        undefined ->
+            ok;
+        Port when is_port(Port) ->
+            close(Port)
+    end.
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from gpio:start/0
+%% @param   Pin number of the pin to read
+%% @returns high | low | error | {error, Reason}
+%% @doc     Read the digital state of a GPIO pin
+%%
+%%          Read if an input pin state is `high' or `low'.
+%%          Warning: if the pin was not previously configured as an input using
+%%          `gpio:set_direction/3' it will always read as low.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec read(GPIO :: gpio(), Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
+read(GPIO, Pin) ->
+    port:call(GPIO, {read, Pin}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to configure
+%% @param   Direction is `input', `output', or `output_od'
+%% @returns ok | error | {error, Reason}
+%% @doc     Set the operational mode of a pin
+%%
+%%          Pins can be used for input, output, or output with open drain.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_direction(GPIO :: gpio(), Pin :: pin(), Direction :: direction()) ->
+    ok | {error, Reason :: atom()} | error.
+set_direction(GPIO, Pin, Direction) ->
+    port:call(GPIO, {set_direction, Pin, Direction}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to write
+%% @param   Level the desired output level to set
+%% @returns ok | error | {error, Reason}
+%% @doc     Set GPIO digital output level
+%%
+%%          Set a pin to `high' (1) or `low' (0).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_level(GPIO :: gpio(), Pin :: pin(), Level :: level()) ->
+    ok | {error, Reason :: atom()} | error.
+set_level(GPIO, Pin, Level) ->
+    port:call(GPIO, {set_level, Pin, Level}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to set the interrupt on
+%% @param   Trigger is the state that will trigger an interrupt
+%% @returns ok | error | {error, Reason}
+%% @doc     Set a GPIO interrupt
+%%
+%%          Available triggers are `none' (which is the same as disabling an
+%%          interrupt), `rising', `falling', `both' (rising or falling), `low',
+%%          and `high'. When the interrupt is triggered it will send a tuple:
+%%          `{gpio_interrupt, {Bank, Pin}}' to the process that set the interrupt.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger()) ->
+    ok | {error, Reason :: atom()} | error.
+set_int(GPIO, Pin, Trigger) ->
+    port:call(GPIO, {set_int, Pin, Trigger}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to set the interrupt on
+%% @param   Trigger is the state that will trigger an interrupt
+%% @param   Pid is the process that will receive the interrupt message
+%% @returns ok | error | {error, Reason}
+%% @doc     Set a GPIO interrupt
+%%
+%%          Available triggers are `none' (which is the same as disabling an
+%%          interrupt), `rising', `falling', `both' (rising or falling), `low', and
+%%          `high'. When the interrupt is triggered it will send a tuple:
+%%            `{gpio_interrupt, {Bank, Pin}}'
+%%          to the specified process.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger(), Pid :: pid()) ->
+    ok | {error, Reason :: atom()} | error.
+set_int(GPIO, Pin, Trigger, Pid) ->
+    port:call(GPIO, {set_int, Pin, Trigger, Pid}).
+
+%%-----------------------------------------------------------------------------
+%% @param   GPIO port that was returned from `gpio:start/0'
+%% @param   Pin number of the pin to remove the interrupt
+%% @returns ok | error | {error, Reason}
+%% @doc     Remove a GPIO interrupt
+%%
+%%          Removes an interrupt from the specified pin.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | {error, Reason :: atom()} | error.
+remove_int(GPIO, Pin) ->
+    port:call(GPIO, {remove_int, Pin}).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number to initialize
+%% @returns ok
+%% @doc     Initialize a pin to be used as GPIO.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec init(Pin :: pin()) -> ok.
+init(_Pin) ->
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number to deinitialize
+%% @returns ok
+%% @doc     Reset a pin back to the NULL function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec deinit(Pin :: pin()) -> ok.
+deinit(_Pin) ->
+    ok.
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number to set operational mode
+%% @param   Direction is `input', `output', or `output_od'
+%% @returns ok | error | {error, Reason}
+%% @doc     Set the operational mode of a pin
+%%
+%%          Pins can be used for input, output, or output with open drain.
+%%
+%%          All configuration must be set using `set_pin_mode/2', including
+%%          pull() mode. If you are configuring multiple pins on the same GPIO
+%%          `bank' with the same options the pins may be configured all at the
+%%          same time by giving a list of pin numbers in the pin tuple.
+%%
+%%          Example to configure all of the leds on a Nucleo board:
+%%
+%% <pre>
+%%    gpio:set_pin_mode({b, [0,7,14]}, output)
+%% </pre>
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pin_mode(Pin :: pin(), Direction :: direction()) ->
+    ok | {error, Reason :: atom()} | error.
+set_pin_mode(_Pin, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number to set internal resistor direction
+%% @param   Pull is the internal resistor state
+%% @returns ok | error
+%% @doc     Set the internal resistor of a pin
+%%
+%%          Pins can be internally pulled `up', `down', or left `floating'.
+%%          STM32 does not support `up_down'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok | error.
+set_pin_pull(_Pin, _Pull) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number of the pin to write
+%% @param   Level the desired output level to set
+%% @returns ok | error | {error, Reason}
+%% @doc     Set GPIO digital output level
+%%
+%%          Set a pin to `high' (1) or `low' (0).
+%%
+%%          STM32 is capable of setting the state for any, or all of the output pins
+%%          on a single bank at the same time, this is done by passing a list of pins numbers
+%%          in the pin tuple. For example, setting all of the even numbered pins to a `high' state,
+%%          and all of the odd numbered pins to a `low' state can be accomplished in two lines:
+%%
+%% <pre>
+%%    gpio:digital_write({c, [0,2,4,6,8,10,12,14]}, high),
+%%    gpio:digital_write({c, [1,3,5,7,9,11,13,15]}, low).
+%% </pre>
+%%
+%%          To set the same state for all of the pins that have been previously configured as outputs
+%%          on a specific bank the atom `all' may be used, this will have no effect on any pins on the
+%%          same bank that have been configured as inputs, so it is safe to use with mixed direction
+%%          modes on a bank.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec digital_write(Pin :: pin(), Level :: level()) -> ok | {error, Reason :: atom()} | error.
+digital_write(_Pin, _Level) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Pin number of the pin to read
+%% @returns high | low | error | {error, Reason}
+%% @doc     Read the digital state of a GPIO pin
+%%
+%%          Read if an input pin state is high or low.
+%%          Warning: if the pin was not previously configured as an input using
+%%          `gpio:set_pin_mode/2' it will always read as low.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec digital_read(Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
+digital_read(_Pin) ->
+    erlang:nif_error(undefined).

@@ -19,17 +19,15 @@
 %
 
 %%-----------------------------------------------------------------------------
-%% @doc GPIO driver module
+%% @doc GPIO driver module for ESP32
 %%
 %% This module provides functions for interacting with micro-controller GPIO
-%% (General Purpose Input and Output) pins.
-%%
-%% Note: `-type pin()' used in this driver refers to a pin number on Espressif
-%% chips and normal Raspberry Pi Pico pins, or a tuple {GPIO_BANK, PIN} for STM32
-%% chips and the "extra" GPIOs available on the Pico-W.
+%% (General Purpose Input and Output) pins on the ESP32 platform.
 %% @end
 %%-----------------------------------------------------------------------------
 -module(gpio).
+
+-behaviour(gpio_hal).
 
 -export([
     start/0,
@@ -60,27 +58,18 @@
 
 -type gpio() :: port().
 %% This is the port returned by `gpio:start/0'.
--type pin() :: non_neg_integer() | pin_tuple().
-%% The pin definition for ESP32 and PR2040 is a non-negative integer. A tuple is used on the STM32 platform and for the extra "WL" pins on the Pico-W.
--type pin_tuple() :: {gpio_bank(), 0..15}.
-%% A pin parameter on STM32 is a tuple consisting of a GPIO bank and pin number, also used on the Pico-W for the extra "WL" pins `0..2'.
--type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k | wl.
-%% STM32 gpio banks vary by board, some only break out `a' thru `h'. The extra "WL" pins on Pico-W use bank `wl'.
--type direction() :: input | output | output_od | mode_config().
+-type pin() :: non_neg_integer().
+%% The pin definition for ESP32 is a non-negative integer.
+-type direction() :: input | output | output_od.
 %% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
-%% On the STM32 platform pull mode and output_speed must be set at the same time as direction. See @type mode_config()
--type mode_config() :: {direction(), pull()} | {output, pull(), output_speed()}.
-%% Extended mode configuration options on STM32. Default pull() is `floating', default output_speed() is `mhz_2' if options are omitted.
 -type pull() :: up | down | up_down | floating.
-%% Internal resistor pull mode. STM32 does not support `up_down'.
--type output_speed() :: mhz_2 | mhz_25 | mhz_50 | mhz_100.
-%% Output clock speed. Only available on STM32, default is `mhz_2'.
+%% Internal resistor pull mode.
 -type low_level() :: low | 0.
 -type high_level() :: high | 1.
 -type level() :: low_level() | high_level().
 %% Valid pin levels can be atom or binary representation.
 -type trigger() :: none | rising | falling | both | low | high.
-%% Event type that will trigger a `gpio_interrupt'. STM32 only supports `rising', `falling', or `both'.
+%% Event type that will trigger a `gpio_interrupt'.
 
 %%-----------------------------------------------------------------------------
 %% @returns Port | error | {error, Reason}
@@ -90,8 +79,6 @@
 %%          port driver will be stared and registered as `gpio'. The use of
 %%          `gpio:open/0' or `gpio:start/0' is required before using any functions
 %%          that require a GPIO port as a parameter.
-%%
-%%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec start() -> gpio() | {error, Reason :: atom()} | error.
@@ -112,8 +99,6 @@ start() ->
 %%          `gpio:start/0' the command will fail. The use of `gpio:open/0' or
 %%          `gpio:start/0' is required before using any functions that require a
 %%          GPIO port as a parameter.
-%%
-%%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec open() -> gpio() | {error, Reason :: atom()} | error.
@@ -127,8 +112,6 @@ open() ->
 %%
 %%          This function disables any interrupts that are set, stops
 %%          the listening port, and frees all of its resources.
-%%
-%%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec close(GPIO :: gpio()) -> ok | {error, Reason :: atom()} | error.
@@ -141,8 +124,6 @@ close(GPIO) ->
 %%
 %%          This function disables any interrupts that are set, stops
 %%          the listening port, and frees all of its resources.
-%%
-%%          Not currently available on rp2040 (Pico) port, use nif functions.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec stop() -> ok | {error, Reason :: atom()} | error.
@@ -163,8 +144,6 @@ stop() ->
 %%          Read if an input pin state is `high' or `low'.
 %%          Warning: if the pin was not previously configured as an input using
 %%          `gpio:set_direction/3' it will always read as low.
-%%
-%%          Not supported on rp2040 (Pico), use `gpio:digital_read/1' instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec read(GPIO :: gpio(), Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
@@ -179,21 +158,6 @@ read(GPIO, Pin) ->
 %% @doc     Set the operational mode of a pin
 %%
 %%          Pins can be used for input, output, or output with open drain.
-%%
-%%          The STM32 platform has extended direction mode configuration options.
-%%          See @type mode_config() for details. All configuration must be set using
-%%          `set_direction/3', including pull() mode, unlike the ESP32 which has a
-%%          separate function (`set_pin_pull/2'). If you are configuring multiple pins
-%%          on the same GPIO `bank' with the same options the pins may be configured all
-%%          at the same time by giving a list of pin numbers in the pin tuple.
-%%
-%%          Example to configure all of the leds on a Nucleo board:
-%%
-%%  <pre>
-%%    gpio:set_direction({b, [0,7,14], output)
-%% </pre>
-%%
-%%           Not supported on rp2040 (Pico), use `gpio:set_pin_mode/2' instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_direction(GPIO :: gpio(), Pin :: pin(), Direction :: direction()) ->
@@ -209,25 +173,6 @@ set_direction(GPIO, Pin, Direction) ->
 %% @doc     Set GPIO digital output level
 %%
 %%          Set a pin to `high' (1) or `low' (0).
-%%
-%%          The STM32 is capable of setting the state for any, or all of the output pins
-%%          on a single bank at the same time, this is done by passing a list of pins numbers
-%%          in the pin tuple.
-%%
-%%          For example, setting all of the even numbered pins to a `high' state,
-%%          and all of the odd numbered pins to a `low' state can be accomplished in two lines:
-%%
-%% <pre>
-%%    gpio:digital_write({c, [0,2,4,6,8,10,12,14]}, high}),
-%%    gpio:digital_write({c, [1,3,5,7,9,11,13,15]}, low}).
-%% </pre>
-%%
-%%          To set the same state for all of the pins that have been previously configured as outputs
-%%          on a specific bank the atom `all' may be used, this will have no effect on any pins on the
-%%          same bank that have been configured as inputs, so it is safe to use with mixed direction
-%%          modes on a bank.
-%%
-%%          Not supported on rp2040 (Pico), use `gpio:digital_write/2' instead.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_level(GPIO :: gpio(), Pin :: pin(), Level :: level()) ->
@@ -247,10 +192,6 @@ set_level(GPIO, Pin, Level) ->
 %%          and `high'. When the interrupt is triggered it will send a tuple:
 %%          `{gpio_interrupt, Pin}' to the process that set the interrupt. `Pin'
 %%          will be the number of the pin that triggered the interrupt.
-%%
-%%          The STM32 port only supports `rising', `falling', or `both'.
-%%
-%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger()) ->
@@ -272,10 +213,6 @@ set_int(GPIO, Pin, Trigger) ->
 %%            `{gpio_interrupt, Pin}'
 %%          to the process that set the interrupt. Pin will be the number
 %%          of the pin that triggered the interrupt.
-%%
-%%          The STM32 port only supports `rising', `falling', or `both'.
-%%
-%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_int(GPIO :: gpio(), Pin :: pin(), Trigger :: trigger(), Pid :: pid()) ->
@@ -290,8 +227,6 @@ set_int(GPIO, Pin, Trigger, Pid) ->
 %% @doc     Remove a GPIO interrupt
 %%
 %%          Removes an interrupt from the specified pin.
-%%
-%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec remove_int(GPIO :: gpio(), Pin :: pin()) -> ok | {error, Reason :: atom()} | error.
@@ -302,7 +237,7 @@ remove_int(GPIO, Pin) ->
 %% @param   Pin number to initialize
 %% @returns ok
 %% @doc     Initialize a pin to be used as GPIO.
-%%          This is required on RP2040 and for some pins on ESP32.
+%%          This may be required for some pins on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec init(Pin :: pin()) -> ok.
@@ -313,7 +248,6 @@ init(_Pin) ->
 %% @param   Pin number to deinitialize
 %% @returns ok
 %% @doc     Reset a pin back to the NULL function.
-%%          Currently only implemented for RP2040 (Pico).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec deinit(Pin :: pin()) -> ok.
@@ -327,18 +261,6 @@ deinit(_Pin) ->
 %% @doc     Set the operational mode of a pin
 %%
 %%          Pins can be used for input, output, or output with open drain.
-%%
-%%          The STM32 platform has extended direction mode configuration options.
-%%          See @type mode_config() for details. All configuration must be set using
-%%          `set_direction/3', including pull() mode, unlike the ESP32 which has a
-%%          separate function (`set_pin_pull/2'). If you are configuring multiple pins
-%%          on the same GPIO `bank' with the same options the pins may be configured all
-%%          at the same time by giving a list of pin numbers in the pin tuple.
-%%          Example to configure all of the leds on a Nucleo board:
-%%
-%% <pre>
-%%    gpio:set_direction({b, [0,7,14], output)
-%% </pre>
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_pin_mode(Pin :: pin(), Direction :: direction()) ->
@@ -354,10 +276,6 @@ set_pin_mode(_Pin, _Mode) ->
 %%
 %%          Pins can be internally pulled `up', `down', `up_down' (pulled in
 %%          both directions), or left `floating'.
-%%
-%%          This function is not supported on STM32, the internal resistor must
-%%          be configured when setting the direction mode, see `set_direction/3'
-%%          or `set_pin_mode/2'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec set_pin_pull(Pin :: pin(), Pull :: pull()) -> ok | error.
@@ -382,8 +300,6 @@ set_pin_pull(_Pin, _Pull) ->
 %%          will resume the hold function when the chip wakes up from
 %%          Deep-sleep. If the digital gpio also needs to be held during
 %%          Deep-sleep `gpio:deep_sleep_hold_en' should also be called.
-%%
-%%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec hold_en(Pin :: pin()) -> ok | error.
@@ -397,15 +313,13 @@ hold_en(_Pin) ->
 %%
 %%          When the chip is woken up from Deep-sleep, the gpio will be set to
 %%          the default mode, so, the gpio will output the default level if
-%%          this function is called. If you don’t want the level changes, the
+%%          this function is called. If you don't want the level changes, the
 %%          gpio should be configured to a known state before this function is
 %%          called. e.g. If you hold gpio18 high during Deep-sleep, after the
 %%          chip is woken up and `gpio:hold_dis' is called, gpio18 will output
-%%          low level(because gpio18 is input mode by default). If you don’t
+%%          low level(because gpio18 is input mode by default). If you don't
 %%          want this behavior, you should configure gpio18 as output mode and
 %%          set it to hight level before calling `gpio:hold_dis'.
-%%
-%%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec hold_dis(Pin :: pin()) -> ok | error.
@@ -429,8 +343,6 @@ hold_dis(_Pin) ->
 %%          Power down or call `gpio_hold_dis' will disable this function,
 %%          otherwise, the digital gpio hold feature works as long as the chip
 %%          enters Deep-sleep.
-%%
-%%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec deep_sleep_hold_en() -> ok.
@@ -440,8 +352,6 @@ deep_sleep_hold_en() ->
 %%-----------------------------------------------------------------------------
 %% @returns ok
 %% @doc     Disable all gpio pad functions during Deep-sleep.
-%%
-%%          This function is only supported on ESP32.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec deep_sleep_hold_dis() -> ok.
@@ -455,24 +365,6 @@ deep_sleep_hold_dis() ->
 %% @doc     Set GPIO digital output level
 %%
 %%          Set a pin to `high' (1) or `low' (0).
-%%
-%%          The STM32 is capable of setting the state for any, or all of the output pins
-%%          on a single bank at the same time, this is done by passing a list of pins numbers
-%%          in the pin tuple. For example, setting all of the even numbered pins to a `high' state,
-%%          and all of the odd numbered pins to a `low' state can be accomplished in two lines:
-%%
-%% <pre>
-%%    gpio:digital_write({c, [0,2,4,6,8,10,12,14]}, high}),
-%%    gpio:digital_write({c, [1,3,5,7,9,11,13,15]}, low}).
-%% </pre>
-%%
-%%          To set the same state for all of the pins that have been previously configured as outputs
-%%          on a specific bank the atom `all' may be used, this will have no effect on any pins on the
-%%          same bank that have been configured as inputs, so it is safe to use with mixed direction
-%%          modes on a bank.
-%%
-%%          The LED pin on the Pico-W can be controlled on the extended pin `{wl, 0}', and does not
-%%          require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec digital_write(Pin :: pin(), Level :: level()) -> ok | {error, Reason :: atom()} | error.
@@ -487,9 +379,6 @@ digital_write(_Pin, _Level) ->
 %%          Read if an input pin state is high or low.
 %%          Warning: if the pin was not previously configured as an input using
 %%          `gpio:set_pin_mode/2' it will always read as low.
-%%
-%%          The VBUS detect pin on the Pico-W can be read on the extended pin `{wl, 2}',
-%%          and does not require or accept `set_pin_mode' or `set_pin_pull' before use.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec digital_read(Pin :: pin()) -> high | low | {error, Reason :: atom()} | error.
@@ -510,8 +399,6 @@ digital_read(_Pin) ->
 %%          used in an application. If multiple pins are being configured with
 %%          interrupt triggers gpio:set_int/3 should be used otherwise there is
 %%          a race condition when start() is called internally by this function.
-%%
-%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec attach_interrupt(Pin :: pin(), Trigger :: trigger()) ->
@@ -529,8 +416,6 @@ attach_interrupt(Pin, Trigger) ->
 %%
 %%          Unlike `gpio:attach_interrupt/2' this function can be safely used
 %%          regardless of the number of interrupt pins used in the application.
-%%
-%%          The rp2040 (Pico) port does not support gpio interrupts at this time.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec detach_interrupt(Pin :: pin()) -> ok | {error, Reason :: atom()} | error.

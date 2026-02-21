@@ -37,6 +37,17 @@
 
 static const struct Nif *gpio_nif_get_nif(const char *nifname);
 
+static const AtomStringIntPair gpio_function_table[] = {
+    { ATOM_STR("\x3", "spi"), GPIO_FUNC_SPI },
+    { ATOM_STR("\x4", "uart"), GPIO_FUNC_UART },
+    { ATOM_STR("\x3", "i2c"), GPIO_FUNC_I2C },
+    { ATOM_STR("\x3", "pwm"), GPIO_FUNC_PWM },
+    { ATOM_STR("\x3", "sio"), GPIO_FUNC_SIO },
+    { ATOM_STR("\x4", "pio0"), GPIO_FUNC_PIO0 },
+    { ATOM_STR("\x4", "pio1"), GPIO_FUNC_PIO1 },
+    SELECT_INT_DEFAULT(-1)
+};
+
 static const AtomStringIntPair pin_mode_table[] = {
     { ATOM_STR("\x5", "input"), GPIO_IN },
     { ATOM_STR("\x6", "output"), GPIO_OUT },
@@ -96,6 +107,23 @@ static term nif_gpio_deinit(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
     gpio_deinit(gpio_num);
+    return OK_ATOM;
+}
+
+static term nif_gpio_set_function(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    uint gpio_num = term_to_int(argv[0]);
+    if (UNLIKELY(gpio_num >= NUM_BANK0_GPIOS)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    int func = interop_atom_term_select_int(gpio_function_table, argv[1], ctx->global);
+    if (UNLIKELY(func < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    gpio_set_function(gpio_num, (gpio_function_t) func);
     return OK_ATOM;
 }
 
@@ -228,6 +256,11 @@ static const struct Nif gpio_deinit_nif = {
     .nif_ptr = nif_gpio_deinit
 };
 
+static const struct Nif gpio_set_function_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_set_function
+};
+
 static const struct Nif gpio_set_pin_mode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_set_pin_mode
@@ -257,6 +290,10 @@ const struct Nif *gpio_nif_get_nif(const char *nifname)
     if (strcmp("gpio:deinit/1", nifname) == 0 || strcmp("Elixir.GPIO:deinit/1", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &gpio_deinit_nif;
+    }
+    if (strcmp("gpio:set_function/2", nifname) == 0 || strcmp("Elixir.GPIO:set_function/2", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &gpio_set_function_nif;
     }
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0 || strcmp("Elixir.GPIO:set_pin_mode/2", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
