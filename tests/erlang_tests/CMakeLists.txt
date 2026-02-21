@@ -630,6 +630,7 @@ compile_erlang(test_list_to_bitstring)
 compile_erlang(test_lists_member)
 compile_erlang(test_lists_keymember)
 compile_erlang(test_lists_keyfind)
+compile_erlang(test_multi_value_comprehension)
 
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
@@ -1170,6 +1171,8 @@ set(erlang_test_beams
 
     bigint.beam
     bigint_stress.beam
+
+    test_multi_value_comprehension.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}

@@ -83,6 +83,11 @@ jobs:
           otp: "28"
           container: erlang:28
 
+        - os: "ubuntu-24.04"
+          test_erlang_opts: "-s prime_smp"
+          otp: "29"
+          container: erlang:29
+
         # This is ARM64
         - os: "macos-15"
           otp: "26"
