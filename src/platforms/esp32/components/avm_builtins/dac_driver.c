@@ -116,14 +116,16 @@ static term nif_oneshot_new_channel_p(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     ERL_NIF_TERM chan_obj = enif_make_resource(erl_nif_env_from_context(ctx), chan_rsrc);
+    enif_release_resource(chan_rsrc);
+    if (term_is_invalid_term(chan_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     const dac_oneshot_config_t config = {
         .chan_id = term_to_uint8(argv[0])
     };
 
     const esp_err_t err = dac_oneshot_new_channel(&config, &chan_rsrc->handle);
-
-    enif_release_resource(chan_rsrc);
 
     if (!err) {
         term chan_tup = term_alloc_tuple(3, &ctx->heap);
