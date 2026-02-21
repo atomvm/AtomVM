@@ -121,10 +121,10 @@ static inline term make_atom(GlobalContext *global, AtomString atom_str)
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
     term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
+    terms[0] = term_from_int((addr >> 24) & 0xFF);
+    terms[1] = term_from_int((addr >> 16) & 0xFF);
+    terms[2] = term_from_int((addr >> 8) & 0xFF);
+    terms[3] = term_from_int(addr & 0xFF);
 
     return port_heap_create_tuple_n(heap, 4, terms);
 }
