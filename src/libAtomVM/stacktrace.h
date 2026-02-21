@@ -29,7 +29,11 @@
 extern "C" {
 #endif
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset, term exception_class);
+term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset);
+
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term module_atom,
+    term function_atom, int arity);
+
 /**
  * @brief Build a stack trace
  * @param ctx           context

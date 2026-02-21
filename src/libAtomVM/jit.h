@@ -114,7 +114,7 @@ struct ModuleNativeInterface
     void (*mailbox_next)(Context *ctx);
     void (*cancel_timeout)(Context *ctx);
     void (*clear_timeout_flag)(Context *ctx);
-    Context *(*raise)(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value);
+    Context *(*raise)(Context *ctx, JITState *jit_state, term stacktrace, term exc_value);
     Context *(*schedule_wait_cp)(Context *ctx, JITState *jit_state);
     Context *(*wait_timeout)(Context *ctx, JITState *jit_state, term timeout, int label);
     Context *(*wait_timeout_trap_handler)(Context *ctx, JITState *jit_state, int label);
@@ -161,6 +161,9 @@ struct ModuleNativeInterface
     term (*term_reuse_binary)(Context *ctx, term src, size_t len);
     term (*alloc_big_integer_fragment)(Context *ctx, size_t digits_len, term_integer_sign_t sign);
     bool (*bitstring_insert_float)(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags);
+    Context *(*raw_raise)(Context *ctx, JITState *jit_state);
+    Context *(*raise_error_mfa)(
+        Context *ctx, JITState *jit_state, int offset, int function_atom_index, int arity);
 };
 
 extern const ModuleNativeInterface module_native_interface;
@@ -170,6 +173,11 @@ enum TrapAndLoadResult
     TRAP_AND_LOAD_OK,
     TRAP_AND_LOAD_CODE_SERVER_NOT_FOUND
 };
+
+// n_words parameter values for call_ext
+// n_words >= 0 means CALL_EXT_LAST (deallocate n_words from stack)
+#define CALL_EXT_NO_DEALLOC -1
+#define CALL_EXT_NO_DEALLOC_MFA -2
 
 #define JIT_FORMAT_VERSION 1
 

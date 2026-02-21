@@ -95,12 +95,19 @@
 -define(PRIM_TERM_REUSE_BINARY, 72).
 -define(PRIM_ALLOC_BIG_INTEGER_FRAGMENT, 73).
 -define(PRIM_BITSTRING_INSERT_FLOAT, 74).
+-define(PRIM_RAW_RAISE, 75).
+-define(PRIM_RAISE_ERROR_MFA, 76).
 
 % Parameters to ?PRIM_MEMORY_ENSURE_FREE_WITH_ROOTS
 % -define(MEMORY_NO_SHRINK, 0).
 -define(MEMORY_CAN_SHRINK, 1).
 % -define(MEMORY_FORCE_SHRINK, 2).
 % -define(MEMORY_NO_GC, 3).
+
+% n_words parameter values for ?PRIM_CALL_EXT
+% n_words >= 0 means CALL_EXT_LAST (deallocate n_words from stack)
+-define(CALL_EXT_NO_DEALLOC, -1).
+-define(CALL_EXT_NO_DEALLOC_MFA, -2).
 
 % term_integer_sign_t sign parameter for PRIM_ALLOC_BIG_INTEGER_FRAGMENT
 -define(TERM_POSITIVE_INTEGER, 0).

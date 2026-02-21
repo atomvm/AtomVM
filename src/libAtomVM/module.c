@@ -199,6 +199,24 @@ void module_get_imported_function_module_and_name(const Module *this_module, int
 }
 #endif
 
+void module_get_imported_function_module_and_name_atoms(
+    const Module *this_module, int index, term *module_atom, term *function_atom)
+{
+    const uint8_t *table_data = (const uint8_t *) this_module->import_table;
+    int functions_count = READ_32_UNALIGNED(table_data + 8);
+
+    if (UNLIKELY(index >= functions_count)) {
+        AVM_ABORT();
+    }
+    int local_module_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 12);
+    int local_function_atom_index = READ_32_UNALIGNED(table_data + index * 12 + 4 + 12);
+
+    *module_atom
+        = term_from_atom_index(this_module->local_atoms_to_global_table[local_module_atom_index]);
+    *function_atom
+        = term_from_atom_index(this_module->local_atoms_to_global_table[local_function_atom_index]);
+}
+
 bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity)
 {
     int best_label = -1;
@@ -319,12 +337,10 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
         return NULL;
     }
 
-#ifdef ENABLE_ADVANCED_TRACE
-    mod->import_table = beam_file + offsets[IMPT];
-#endif
     if (offsets[CODE]) {
         mod->code = (CodeChunk *) (beam_file + offsets[CODE]);
     }
+    mod->import_table = beam_file + offsets[IMPT];
     mod->export_table = beam_file + offsets[EXPT];
     mod->local_table = beam_file + offsets[LOCT];
     mod->atom_table = beam_file + offsets[AT8U];

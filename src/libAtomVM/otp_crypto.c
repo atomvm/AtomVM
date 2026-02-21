@@ -240,42 +240,42 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     switch (algo) {
         case CryptoMd5: {
             if (UNLIKELY(!do_md5_hash(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 16;
             break;
         }
         case CryptoSha1: {
             if (UNLIKELY(!do_sha1_hash(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 20;
             break;
         }
         case CryptoSha224: {
             if (UNLIKELY(!do_sha256_hash_true(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 28;
             break;
         }
         case CryptoSha256: {
             if (UNLIKELY(!do_sha256_hash_false(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 32;
             break;
         }
         case CryptoSha384: {
             if (UNLIKELY(!do_sha512_hash_true(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 48;
             break;
         }
         case CryptoSha512: {
             if (UNLIKELY(!do_sha512_hash_false(data, digest))) {
-                RAISE_ERROR(BADARG_ATOM)
+                RAISE_ERROR(BADARG_ATOM);
             }
             digest_len = 64;
             break;

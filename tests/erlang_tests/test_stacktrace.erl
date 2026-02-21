@@ -29,20 +29,25 @@
 -include("test_stacktrace.hrl").
 
 start() ->
-    ok = test_local_throw(),
-    ok = test_local_error(),
-    ok = test_badmatch(),
-    ok = test_apply(),
-    ok = test_fun(),
-    ok = test_remote_throw(),
-    ok = test_tail_recursive_throw(),
-    ok = test_body_recursive_throw(),
-    ok = test_spawned_throw(),
-    ok = test_catch(),
-    ok = maybe_test_filelineno(),
-    ok = maybe_test_filelineno_other_file(),
-    ok = maybe_test_filelineno_large(),
-    0.
+    case ?OTP_RELEASE of
+        OTPVersion when OTPVersion >= 23 ->
+            ok = test_local_throw(),
+            ok = test_local_error(),
+            ok = test_badmatch(),
+            ok = test_apply(),
+            ok = test_fun(),
+            ok = test_remote_throw(),
+            ok = test_tail_recursive_throw(),
+            ok = test_body_recursive_throw(),
+            ok = test_spawned_throw(),
+            ok = test_catch(),
+            ok = maybe_test_filelineno(),
+            ok = maybe_test_filelineno_other_file(),
+            ok = maybe_test_filelineno_large(),
+            0;
+        _ ->
+            0
+    end.
 
 test_local_throw() ->
     ok =

@@ -69,10 +69,66 @@
 
 #define FLOAT_BUF_SIZE 64
 
-#define RAISE(a, b)  \
-    ctx->x[0] = (a); \
-    ctx->x[1] = (b); \
-    return term_invalid_term();
+#define RAISE(a, b)                               \
+    do {                                          \
+        term _tmp_a = (a);                        \
+        term _tmp_b = (b);                        \
+        context_set_exception_class(ctx, _tmp_a); \
+        ctx->exception_reason = _tmp_b;           \
+        return term_invalid_term();               \
+    } while (0)
+
+#define RAISE_WITH_STACKTRACE(a, b, c)            \
+    do {                                          \
+        term _tmp_a = (a);                        \
+        term _tmp_b = (b);                        \
+        term _tmp_c = (c);                        \
+        context_set_exception_class(ctx, _tmp_a); \
+        ctx->exception_reason = _tmp_b;           \
+        ctx->exception_stacktrace = _tmp_c;       \
+        return term_invalid_term();               \
+    } while (0)
+
+/**
+ * @brief Validate a NIF argument and raise badarg error if validation fails.
+ *
+ * This macro validates an argument from the argv array using a provided verification function.
+ * If validation fails, it raises a badarg error and tells the VM that function arguments
+ * can be added to the stacktrace.
+ *
+ * IMPORTANT: Because this macro sets the EXCEPTION_USE_LIVE_REGS_FLAG, all NIF parameters
+ * (argv) must contain valid terms when this macro is used. Therefore:
+ * - Use this macro BEFORE any garbage collection operations, OR
+ * - Ensure all arguments (argv) have been used as GC roots if GC has occurred
+ *
+ * @param out Variable to receive the validated argument value (must be a term lvalue)
+ * @param index Index into the argv array (0-based) to validate
+ * @param verify_function Validation function that takes a term and returns bool
+ *                        (e.g., term_is_any_integer, term_is_binary, term_is_list)
+ *
+ * Implicit parameters (must be in scope):
+ * @param argv The NIF arguments array (term argv[])
+ * @param ctx The execution context (Context *ctx)
+ *
+ * @note On validation failure, this macro:
+ *       - Sets exception class to ERROR_ATOM with EXCEPTION_USE_LIVE_REGS_FLAG
+ *       - Sets exception reason to BADARG_ATOM
+ *       - Returns term_invalid_term() immediately
+ *
+ * @note The EXCEPTION_USE_LIVE_REGS_FLAG tells the stacktrace builder that x registers
+ *       (which contain the function arguments) are valid and should be included in the
+ *       stacktrace for better error reporting.
+ */
+#define VALIDATE_ARG(out, index, verify_function)                       \
+    do {                                                                \
+        term _tmp_var = argv[index];                                    \
+        if (UNLIKELY(!verify_function(_tmp_var))) {                     \
+            context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
+            ctx->exception_reason = BADARG_ATOM;                        \
+            return term_invalid_term();                                 \
+        }                                                               \
+        out = _tmp_var;                                                 \
+    } while (0)
 
 #ifndef MAX
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -2370,9 +2426,9 @@ static term integer_to_buf(Context *ctx, int argc, term argv[], char *tmp_buf, s
 {
     *needs_cleanup = false;
 
-    term value = argv[0];
+    term value;
+    VALIDATE_ARG(value, 0, term_is_any_integer);
     avm_int_t base = 10;
-    VALIDATE_VALUE(value, term_is_any_integer);
     if (argc > 1) {
         VALIDATE_VALUE(argv[1], term_is_integer);
         base = term_to_int(argv[1]);
@@ -3068,9 +3124,7 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
         int new_value = term_to_int(value);
         int nb_processors = smp_get_online_processors();
         if (UNLIKELY(new_value < 1) || UNLIKELY(new_value > nb_processors)) {
-            argv[0] = ERROR_ATOM;
-            argv[1] = BADARG_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(BADARG_ATOM);
         }
         while (!ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&ctx->global->online_schedulers, &old_value, new_value)) {
         };
@@ -3102,7 +3156,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     size_t bytes_read = 0;
     term dst = externalterm_from_binary(ctx, binary, &bytes_read);
     if (UNLIKELY(term_is_invalid_term(dst))) {
-        RAISE_ERROR(BADARG_ATOM)
+        RAISE_ERROR(BADARG_ATOM);
     }
     if (return_used) {
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &dst, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -3615,25 +3669,20 @@ static term nif_erlang_throw(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    term t = argv[0];
-
-    ctx->x[0] = THROW_ATOM;
-    ctx->x[1] = t;
-    return term_invalid_term();
+    RAISE(THROW_ATOM, argv[0]);
 }
 
 static term nif_erlang_raise(Context *ctx, int argc, term argv[])
 {
-    UNUSED(argc);
-
     term ex_class = argv[0];
     if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
         return BADARG_ATOM;
     }
-    ctx->x[0] = ex_class;
-    ctx->x[1] = argv[1];
-    ctx->x[2] = term_nil();
-    return term_invalid_term();
+    if (argc == 2) {
+        RAISE(ex_class, argv[1]);
+    } else {
+        RAISE_WITH_STACKTRACE(ex_class, argv[1], argv[2]);
+    }
 }
 
 static term nif_ets_new(Context *ctx, int argc, term argv[])

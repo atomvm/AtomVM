@@ -63,23 +63,46 @@ extern "C" {
 #ifdef IMPL_EXECUTE_LOOP
 
 #if AVM_NO_JIT
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)                \
+    context_set_exception_class(ctx, ERROR_ATOM); \
+    ctx->exception_reason = error_type_atom;      \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code);
 #elif AVM_NO_EMU
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM);
+#define SET_ERROR(error_type_atom)                \
+    context_set_exception_class(ctx, ERROR_ATOM); \
+    ctx->exception_reason = error_type_atom;      \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);
 #else
-#define SET_ERROR(error_type_atom)                                      \
-    x_regs[0] = ERROR_ATOM;                                             \
-    x_regs[1] = error_type_atom;                                        \
-    if (mod->native_code) {                                             \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, ERROR_ATOM); \
-    } else {                                                            \
-        x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, ERROR_ATOM); \
+#define SET_ERROR(error_type_atom)                                                          \
+    context_set_exception_class(ctx, ERROR_ATOM);                                           \
+    ctx->exception_reason = error_type_atom;                                                \
+    if (mod->native_code) {                                                                 \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod,                         \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);  \
+    } else {                                                                                \
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code); \
+    }
+#endif
+
+#if AVM_NO_JIT
+#define SET_ERROR_MFA(error_type_atom, m, f, a)                 \
+    context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
+    ctx->exception_reason = error_type_atom;                    \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, m, f, a);
+#elif AVM_NO_EMU
+#define SET_ERROR_MFA(error_type_atom, m, f, a)                 \
+    context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
+    ctx->exception_reason = error_type_atom;                    \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);
+#else
+#define SET_ERROR_MFA(error_type_atom, m, f, a)                                                          \
+    context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);                                          \
+    ctx->exception_reason = error_type_atom;                                                             \
+    if (mod->native_code) {                                                                              \
+        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod,                                  \
+            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);                  \
+    } else {                                                                                             \
+        ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, m, f, a);             \
     }
 #endif
 
@@ -89,6 +112,10 @@ extern "C" {
 #endif
 #define RAISE_ERROR(error_type_atom) \
     SET_ERROR(error_type_atom)       \
+    goto handle_error;
+
+#define RAISE_ERROR_MFA(error_type_atom, m, f, a) \
+    SET_ERROR_MFA(error_type_atom, m, f, a)       \
     goto handle_error;
 
 #define VM_ABORT() \
@@ -1241,6 +1268,13 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         }                                                                                       \
     }
 
+#define RAISE_ERROR_FROM_HELPER(error_type_atom)           \
+    do {                                                   \
+        context_set_exception_class(ctx, ERROR_ATOM);      \
+        ctx->exception_reason = (error_type_atom);         \
+        return term_invalid_term();                        \
+    } while (0)
+
 #ifndef AVM_NO_EMU
 
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value)           \
@@ -1260,6 +1294,19 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         } else {                                                          \
             SCHEDULE_WAIT(mod, pc);                                       \
         }                                                                 \
+    }
+
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY(return_value, rest_pc, m, i, a)          \
+    if (term_is_invalid_term(return_value)) {                                                           \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {                                                  \
+            term module_atom;                                                                           \
+            term function_atom;                                                                         \
+            module_get_imported_function_module_and_name_atoms((m), (i), &module_atom, &function_atom); \
+            pc = rest_pc;                                                                               \
+            HANDLE_ERROR_MFA(module_atom, function_atom, (a));                                          \
+        } else {                                                                                        \
+            SCHEDULE_WAIT(mod, pc);                                                                     \
+        }                                                                                               \
     }
 
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value)      \
@@ -1315,8 +1362,12 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #endif
 
-#define HANDLE_ERROR()                                                  \
-    x_regs[2] = stacktrace_create_raw(ctx, mod, pc - code, x_regs[0]);  \
+#define HANDLE_ERROR()                                                      \
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code); \
+    goto handle_error;
+
+#define HANDLE_ERROR_MFA(m, f, a)                                                              \
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, (m), (f), (a)); \
     goto handle_error;
 
 #define VERIFY_IS_INTEGER(t, opcode_name, label)           \
@@ -1521,9 +1572,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR_FROM_HELPER(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -1533,9 +1582,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR_FROM_HELPER(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -1826,9 +1873,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         if (UNLIKELY(count < 0)) {
             // this is likely unreachable, compiler seem to generate an external term
             // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OVERFLOW_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR_FROM_HELPER(OVERFLOW_ATOM);
         }
 
         size_t intn_data_size;
@@ -1838,9 +1883,7 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         Heap heap;
         if (UNLIKELY(
                 memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR_FROM_HELPER(OUT_OF_MEMORY_ATOM);
         }
 
         term bigint_term
@@ -2093,9 +2136,9 @@ loop:
             }
 
             case OP_FUNC_INFO: {
-                int module_atom;
+                term module_atom;
                 DECODE_ATOM(module_atom, pc)
-                int function_name_atom;
+                term function_name_atom;
                 DECODE_ATOM(function_name_atom, pc)
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
@@ -2106,7 +2149,7 @@ loop:
                 USED_BY_TRACE(arity);
 
                 #ifdef IMPL_EXECUTE_LOOP
-                    RAISE_ERROR(FUNCTION_CLAUSE_ATOM);
+                    RAISE_ERROR_MFA(FUNCTION_CLAUSE_ATOM, module_atom, function_name_atom, arity);
                 #endif
                 break;
             }
@@ -2233,7 +2276,7 @@ loop:
                         case NIFFunctionType: {
                             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
                             term return_value = nif->nif_ptr(ctx, arity, x_regs);
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
+                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY(return_value, orig_pc, mod, index, arity);
                             x_regs[0] = return_value;
                             if (ctx->heap.root->next) {
                                 if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
@@ -4015,9 +4058,6 @@ wait_timeout_trap_handler:
             }
 
             case OP_RAISE: {
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *saved_pc = pc - 1;
-                #endif
                 term stacktrace;
                 DECODE_COMPACT_TERM(stacktrace, pc);
                 term exc_value;
@@ -4031,9 +4071,9 @@ wait_timeout_trap_handler:
 
                 #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
-                    x_regs[0] = stacktrace_exception_class(stacktrace);
-                    x_regs[1] = exc_value;
-                    x_regs[2] = stacktrace_create_raw(ctx, mod, saved_pc - code, x_regs[0]);
+                    context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
+                    ctx->exception_reason = exc_value;
+                    ctx->exception_stacktrace = stacktrace;
                     goto handle_error;
                 #endif
 
@@ -6673,6 +6713,9 @@ wait_timeout_trap_handler:
                                 ex_class != THROW_ATOM)) {
                         x_regs[0] = BADARG_ATOM;
                     } else {
+                        context_set_exception_class(ctx, x_regs[0]);
+                        ctx->exception_reason = x_regs[1];
+                        ctx->exception_stacktrace = x_regs[2];
                         goto handle_error;
                     }
                 #endif
@@ -7691,12 +7734,19 @@ bs_match_jump_to_fail:
 #ifdef IMPL_EXECUTE_LOOP
 #ifndef AVM_NO_EMU
 do_abort:
-        x_regs[0] = ERROR_ATOM;
-        x_regs[1] = VM_ABORT_ATOM;
+        context_set_exception_class(ctx, ERROR_ATOM);
+        ctx->exception_reason = VM_ABORT_ATOM;
 #endif
 
 handle_error:
         {
+            x_regs[0] = context_exception_class(ctx);
+            x_regs[1] = ctx->exception_reason;
+            x_regs[2] = ctx->exception_stacktrace;
+            context_set_exception_class(ctx, term_nil());
+            ctx->exception_reason = term_nil();
+            ctx->exception_stacktrace = term_nil();
+
             int target_label = context_get_catch_label(ctx, &mod);
             if (target_label) {
 #if AVM_NO_JIT
