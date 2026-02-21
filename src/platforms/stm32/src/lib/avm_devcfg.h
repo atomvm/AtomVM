@@ -20,13 +20,9 @@
 #ifndef _AVM_DEVCFG_H_
 #define _AVM_DEVCFG_H_
 
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/usart.h>
+#include "stm32_hal_platform.h"
 
-#if (defined(STM32F4) || defined(STM32F7))
 #define FLASH_START_ADDRESS (0x08000000U)
-#endif
 
 #if defined(ROM_512K)
 #define CFG_FLASH_END (FLASH_START_ADDRESS + 0x80000U)
@@ -47,65 +43,49 @@
 #define AVM_APP_ADDRESS (FLASH_START_ADDRESS + 0x80000U)
 #endif
 
-#if defined(MHZ_84)
-#define AVM_CLOCK_HZ (84000000U)
-#define AVM_CLOCK_CONFIGURATION (&rcc_hse_25mhz_3v3[(RCC_CLOCK_3V3_84MHZ)])
-#elif defined(MHZ_100)
-#define AVM_CLOCK_HZ (100000000U)
-#define AVM_CLOCK_CONFIGURATION (&rcc_hse_25mhz_3v3[(RCC_CLOCK_3V3_84MHZ)])
-#elif defined(MHZ_168)
-#define AVM_CLOCK_HZ (168000000U)
-#define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_168MHZ)])
-#elif defined(MHZ_180)
-#define AVM_CLOCK_HZ (180000000U)
-#define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_180MHZ)])
-#elif defined(MHZ_216)
-#define AVM_CLOCK_HZ (216000000U)
-#define AVM_CLOCK_CONFIGURATION (&rcc_hse_8mhz_3v3[(RCC_CLOCK_3V3_216MHZ)])
-#endif
-
+/* USART console configuration using HAL peripheral defines. */
 #if defined(CONSOLE_1)
-#define AVM_CONSOLE (USART1)
-#define AVM_CONSOLE_TX (GPIO9)
-#define AVM_CONSOLE_GPIO (GPIOA)
-#define AVM_CONSOLE_RCC (RCC_USART1)
+#define AVM_CONSOLE_USART USART1
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_9
+#define AVM_CONSOLE_TX_PORT GPIOA
+#if defined(STM32G0XX)
+#define AVM_CONSOLE_TX_AF GPIO_AF1_USART1
+#else
+#define AVM_CONSOLE_TX_AF GPIO_AF7_USART1
+#endif
 #elif defined(CONSOLE_2)
-#define AVM_CONSOLE (USART2)
-#define AVM_CONSOLE_TX (GPIO2)
-#define AVM_CONSOLE_GPIO (GPIOA)
-#define AVM_CONSOLE_RCC (RCC_USART2)
+#define AVM_CONSOLE_USART USART2
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_2
+#define AVM_CONSOLE_TX_PORT GPIOA
+#if defined(STM32G0XX)
+#define AVM_CONSOLE_TX_AF GPIO_AF1_USART2
+#else
+#define AVM_CONSOLE_TX_AF GPIO_AF7_USART2
+#endif
 #elif defined(CONSOLE_3)
-#define AVM_CONSOLE (USART3)
-#define AVM_CONSOLE_TX (GPIO8)
-#define AVM_CONSOLE_GPIO (GPIOD)
-#define AVM_CONSOLE_RCC (RCC_USART3)
+#define AVM_CONSOLE_USART USART3
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_8
+#define AVM_CONSOLE_TX_PORT GPIOD
+#if defined(STM32G0XX)
+#define AVM_CONSOLE_TX_AF GPIO_AF4_USART3
+#else
+#define AVM_CONSOLE_TX_AF GPIO_AF7_USART3
+#endif
 #elif defined(CONSOLE_4)
-#define AVM_CONSOLE (UART4)
-#define AVM_CONSOLE_TX (GPIO10)
-#define AVM_CONSOLE_GPIO (GPIOC)
-#define AVM_CONSOLE_RCC (RCC_UART4)
+#define AVM_CONSOLE_USART UART4
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_10
+#define AVM_CONSOLE_TX_PORT GPIOC
+#define AVM_CONSOLE_TX_AF GPIO_AF8_UART4
 #elif defined(CONSOLE_5)
-#define AVM_CONSOLE (UART5)
-#define AVM_CONSOLE_TX (GPIO12)
-#define AVM_CONSOLE_GPIO (GPIOC)
-#define AVM_CONSOLE_RCC (RCC_UART5)
-#ifdef LIBOPENCM3_USART_COMMON_F24_H
+#define AVM_CONSOLE_USART UART5
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_12
+#define AVM_CONSOLE_TX_PORT GPIOC
+#define AVM_CONSOLE_TX_AF GPIO_AF8_UART5
 #elif defined(CONSOLE_6)
-#define AVM_CONSOLE (USART6)
-#define AVM_CONSOLE_TX (GPIO6)
-#define AVM_CONSOLE_GPIO (GPIOC)
-#define AVM_CONSOLE_RCC (RCC_USART6)
-#elif defined(CONSOLE_7)
-#define AVM_CONSOLE (UART7)
-#define AVM_CONSOLE_TX (GPIO7)
-#define AVM_CONSOLE_GPIO (GPIOF)
-#define AVM_CONSOLE_RCC (RCC_UART7)
-#elif defined(CONSOLE_8)
-#define AVM_CONSOLE (UART8)
-#define AVM_CONSOLE_TX (GPIO8)
-#define AVM_CONSOLE_GPIO (GPIOJ)
-#define AVM_CONSOLE_RCC (RCC_UART8)
-#endif /* LIBOPENCM3_USART_COMMON_F24_H */
+#define AVM_CONSOLE_USART USART6
+#define AVM_CONSOLE_TX_PIN GPIO_PIN_6
+#define AVM_CONSOLE_TX_PORT GPIOC
+#define AVM_CONSOLE_TX_AF GPIO_AF8_USART6
 #endif
 
 #endif /* _AVM_DEVCFG_H_ */

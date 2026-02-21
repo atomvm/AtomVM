@@ -707,39 +707,21 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
 
 ## Building for STM32
 
+This section describes building AtomVM using the official ST HAL/LL SDK, which is downloaded automatically via CMake FetchContent. This platform supports STM32F2, STM32F4, STM32F7, STM32G0, STM32G4, STM32H5, STM32H7, STM32L4, STM32L5, STM32U3, STM32U5, and STM32WB families.
+
 ### STM32 Prerequisites
 
 The following software is required to build AtomVM for the STM32 platform:
 
-* [11.3 ARM toolchain](https://developer.arm.com/-/media/Files/downloads/gnu/11.3.rel1/binrel/arm-gnu-toolchain-11.3.rel1-x86_64-arm-none-eabi.tar.xz) (or compatible with your system)
-* [libopencm3](https://github.com/libopencm3/libopencm3.git) version 0.8.0
-* `cmake`
-* `make`
+* ARM toolchain (`arm-none-eabi-gcc`, e.g. 11.3 or later)
+* `cmake` (3.13 or later)
+* `meson`
+* `ninja`
 * `git`
-* `python`
 * Erlang/OTP `escript`
 
 ```{note}
-AtomVM tests this build on the latest Ubuntu github runner.
-```
-
-### Setup libopencm3
-
-Before building for the first time you need to have a compiled clone of the libopencm3 libraries, from inside the AtomVM/src/platforms/stm32 directory:
-
-```shell
-$ git clone -b v0.8.0 https://github.com/libopencm3/libopencm3.git
-$ cd libopencm3 && make -j4 && cd ..
-```
-
-```{tip}
-You can put libopencm3 wherever you want on your PC as long as you update LIBOPENCM3_DIR to point to it. This
-example assumes it has been cloned into /opt/libopencm3 and built. From inside the AtomVM/src/platforms/stm32
-directory:
-
-    $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake \
-    -DLIBOPENCM3_DIR=/opt/libopencm3 ..
-
+No external SDK download is required. The STM32 HAL/LL drivers and CMSIS headers are fetched automatically by CMake during the build. AtomVM is built with `picolibc` which is also downloaded as part of the build and requires `meson` and `ninja`.
 ```
 
 ### Build AtomVM with cmake toolchain file
@@ -749,14 +731,32 @@ $ cd <atomvm-source-tree-root>
 $ cd src/platforms/stm32
 $ mkdir build
 $ cd build
-$ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake ..
-$ make
+$ cmake -G Ninja -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DDEVICE=stm32f411ceu6 ..
+$ ninja
 ```
 
 ### Changing the target device
 
-The default build is based on the STM32F4Discovery board chip (`stm32f407vgt6`). If you want to target a different
-chip, pass the `-DDEVICE` flag when invoking cmake. For example, to use the BlackPill V2.0, pass `-DDEVICE=stm32f411ceu6`. At this time any `STM32F4` or `STM32F7` device with 512KB or more of on package flash should work with AtomVM. If an unsupported device is passed with the `DEVICE` parameter the configuration will fail. For devices with either 512KB or 768KB of flash the available application flash space will be limited to 128KB. Devices with only 512KB of flash may also suffer from slightly reduced performance because the compiler must optimize for size rather than performance.
+The default build targets the BlackPill (`stm32f411ceu6`). Pass the `-DDEVICE` flag to select a different device. Supported families and example devices:
+
+| Family | Example Devices | Max Clock |
+|--------|----------------|-----------|
+| STM32F2 | `stm32f205rgt6`, `stm32f207zgt6` | 120 MHz |
+| STM32F4 | `stm32f411ceu6`, `stm32f401ceu6`, `stm32f407vgt6`, `stm32f429zit6` | 84-180 MHz |
+| STM32F7 | `stm32f746zgt6`, `stm32f767zit6` | 216 MHz |
+| STM32G0 | `stm32g0b1ret6` | 64 MHz |
+| STM32G4 | `stm32g474ret6`, `stm32g491ret6` | 170 MHz |
+| STM32H5 | `stm32h562rgt6` | 250 MHz |
+| STM32H7 | `stm32h743vit6` | 480 MHz |
+| STM32L4 | `stm32l476rgt6`, `stm32l4r5zit6` | 80-120 MHz |
+| STM32L5 | `stm32l552ret6` | 110 MHz |
+| STM32U3 | `stm32u375rgt6`, `stm32u385rgt6` | 96 MHz |
+| STM32U5 | `stm32u585ait6q` | 160 MHz |
+| STM32WB | `stm32wb55rg` | 64 MHz |
+
+If an unsupported device is passed with the `DEVICE` parameter the configuration will fail.
+
+For devices with 512KB or less of flash, application flash space will be limited and the compiler optimizes for size rather than performance.
 
 ```{attention}
 For devices with only 512KB of flash the application address is different and must be adjusted when flashing your
@@ -766,7 +766,9 @@ devices is `0x8060000`.
 
 ### Configuring the Console
 
-The default build for any `DEVICE` will use `USART2` and output will be on `PA2`. This default will work well for most `Discovery` and generic boards that do not have an on-board TTL to USB-COM support (including the `stm32f411ceu6` A.K.A. `BlackPill V2.0`). For `Nucleo` boards that do have on board UART to USB-COM support you may pass the `cmake` parameter `-DBOARD=nucleo` to have the correct USART and TX pins configured automatically. The `Nucleo-144` series use `USART3` and `PD8`, while the supported `Nucleo-64` boards use `USART2`, but passing the `BOARD` parameter along with `DEVICE` will configure the correct `USART` for your model. If any other boards are discovered to have on board USB UART support pull requests, or opening issues with the details, are more than welcome.
+By default, stdout and stderr are printed on the configured console USART. Baudrate is 115200 and serial transmission is 8N1 with no flow control.
+
+The default console is `USART1` on `PA9`. For `Nucleo` boards, pass `-DBOARD=nucleo` to automatically select the correct USART for your board.
 
 Example to configure a `NUCLEO-F429ZI`:
 
@@ -777,16 +779,44 @@ $ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DDEVICE=stm32f429zi
 
 The AtomVM system console `USART` may also be configured to a specific uart peripheral. Pass one of the parameters from the chart below with the `cmake` option `-DAVM_CFG_CONSOLE=CONSOLE_#`, using the desired console parameter in place of `CONSOLE_#`. Not all UARTs are available on every supported board, but most will have several options that are not already used by other on board peripherals. Consult your data sheets for your device to select an appropriate console.
 
-| Parameter | USART | TX Pin | AtomVM Default | Nucleo-144 | Nucleo-64 |
-|-----------|-------|--------|----------------|------------|-----------|
-| `CONSOLE_1` | `USART1` | `PA9` |   |   |   |
-| `CONSOLE_2` | `USART2` | `PA2` | ✅ |   | ✅ |
+| Parameter | USART | TX Pin | Default | Nucleo-144 | Nucleo-64 |
+|-----------|-------|--------|---------|------------|-----------|
+| `CONSOLE_1` | `USART1` | `PA9` | ✅ |   |   |
+| `CONSOLE_2` | `USART2` | `PA2` |   |   | ✅ |
 | `CONSOLE_3` | `USART3` | `PD8` |   | ✅ |   |
 | `CONSOLE_4` | `UART4` | `PC10` |   |   |   |
 | `CONSOLE_5` | `UART5` | `PC12` |   |   |   |
 | `CONSOLE_6` | `USART6` | `PC6` |   |   |   |
-| `CONSOLE_7` | `UART7` | `PF7` |   |   |   |
-| `CONSOLE_8` | `UART8` | `PJ8` |   |   |   |
+
+### Configuring the HSE frequency
+
+The external oscillator (HSE) frequency varies between boards. Set it at build time with `-DAVM_HSE_VALUE=<freq_hz>`:
+
+```shell
+$ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/arm-toolchain.cmake -DDEVICE=stm32f407vgt6 \
+  -DAVM_HSE_VALUE=8000000 ..
+```
+
+Default HSE values per family (set in the family HAL configuration header):
+
+| Family | Default HSE | Typical Boards |
+|--------|-------------|----------------|
+| STM32F2 | 8 MHz | Nucleo boards |
+| STM32F4 | 25 MHz | BlackPill boards |
+| STM32F7 | 8 MHz | Nucleo boards (ST-Link MCO bypass) |
+| STM32G0 | 8 MHz | |
+| STM32G4 | 8 MHz | Nucleo boards |
+| STM32H5 | 8 MHz | Nucleo boards (ST-Link MCO bypass), WeAct Studio H562 |
+| STM32H7 | 8 MHz | Nucleo boards (ST-Link MCO bypass), WeAct Studio H743 (25 MHz) |
+| STM32L4 | 8 MHz | Nucleo boards |
+| STM32L5 | N/A (uses MSI) | Nucleo boards |
+| STM32U3 | 16 MHz | Nucleo boards |
+| STM32U5 | 16 MHz | Nucleo-U585AI-Q, WeAct Studio U585 (25 MHz) |
+| STM32WB | 32 MHz | Nucleo-WB55, WeAct Studio WB55 (required for BLE radio) |
+
+```{note}
+Not all STM32 families have been tested on hardware. The F4, H5, H7, U5, and WB families have been tested on actual boards. The F2, F7, G0, G4, L4, L5, and U3 families are supported in the build system but have not yet been validated on hardware. If you encounter issues with an untested family, please open an [issue on GitHub](https://github.com/atomvm/AtomVM/issues).
+```
 
 ### Configure STM32 logging with `cmake`
 
@@ -802,19 +832,6 @@ For log entries colorized by log level pass `-DAVM_ENABLE_LOG_COLOR=on` to cmake
 | DEBUG | Blue |
 
 By default only `ERROR` messages contain file and line number information. This can be included with all log entries by passing `-DAVM_ENABLE_LOG_LINES=on` to cmake, but it does incur a significant performance penalty and is only suggested for debugging during development.
-
-### Console Printing on STM32
-
-AtomVM is built with standard `newlib` to support `long long` integers (`signed` and `unsigned`). If you are building for a device with extremely limited flash space the `nano` version of `newlib` can be used instead. This may be done by passing `-DAVM_NEWLIB_NANO=on`. If the `nano newlib` is used logs will be automatically disabled, this is because many of the VM low level log messages will include `%ull` formatting and will cause buffer overflows and crash the VM if logging is not disabled for `nano newlib` builds. The total flash savings of using `nano newlib` and disabling logs is just under 40kB.
-
-By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them
-using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission
-is 8N1 with no flow control.
-
-```{seealso}
-If building for a different target USART may be configure as explained above in
-[Configuring the Console](#configuring-the-console).
-```
 
 ### Configuring deployment builds for STM32
 

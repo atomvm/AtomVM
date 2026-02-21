@@ -34,14 +34,28 @@ execute_process(
     COMMAND "${ESCRIPT}" "${DEVCONFIG_SCRIPT}" "${DEVICE}" "clock"
     OUTPUT_VARIABLE DEVCONFIG_CLOCK_HZ
 )
-add_compile_definitions(${DEVCONFIG_CLOCK_HZ})
+add_compile_definitions(AVM_CLOCK_HZ=${DEVCONFIG_CLOCK_HZ}U)
 execute_process(
     COMMAND "${ESCRIPT}" "${DEVCONFIG_SCRIPT}" "${DEVICE}" "rom"
     OUTPUT_VARIABLE DEVCONFIG_FLASH_SIZE
 )
 add_compile_definitions(${DEVCONFIG_FLASH_SIZE})
-## also needs to be set for correct optomization flags to be used.
+## also needs to be set for correct optimization flags to be used.
 set(CMAKE_FLASH_SIZE "${DEVCONFIG_FLASH_SIZE}")
+
+# Query memory sizes for linker script
+execute_process(
+    COMMAND "${ESCRIPT}" "${DEVCONFIG_SCRIPT}" "${DEVICE}" "flash_size_kb"
+    OUTPUT_VARIABLE DEVCONFIG_FLASH_SIZE_KB
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+    COMMAND "${ESCRIPT}" "${DEVCONFIG_SCRIPT}" "${DEVICE}" "ram_size_kb"
+    OUTPUT_VARIABLE DEVCONFIG_RAM_SIZE_KB
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set(FLASH_SIZE_KB "${DEVCONFIG_FLASH_SIZE_KB}")
+set(RAM_SIZE_KB "${DEVCONFIG_RAM_SIZE_KB}")
 
 if (AVM_CFG_CONSOLE)
     set(AVM_CFG_CONSOLE ${AVM_CFG_CONSOLE} CACHE STRING "AtomVM system console uart")
@@ -57,17 +71,18 @@ elseif (BOARD)
     set(BOARD ${BOARD} CACHE STRING "Board variant configuration")
     set_property(CACHE AVM_CFG_CONSOLE PROPERTY STRINGS CONSOLE_1 CONSOLE_2 CONSOLE_3 CONSOLE_4 CONSOLE_5 CONSOLE_6 CONSOLE_7 CONSOLE_8)
 else()
-    add_compile_definitions(CONSOLE_2)
-    set(AVM_CFG_CONSOLE CONSOLE_2 CACHE STRING "AtomVM system console uart")
+    add_compile_definitions(CONSOLE_1)
+    set(AVM_CFG_CONSOLE CONSOLE_1 CACHE STRING "AtomVM system console uart")
     set_property(CACHE AVM_CFG_CONSOLE PROPERTY STRINGS CONSOLE_1 CONSOLE_2 CONSOLE_3 CONSOLE_4 CONSOLE_5 CONSOLE_6 CONSOLE_7 CONSOLE_8)
 endif()
 
-message("----------------------------------------")
+message("--------Device Configuration Info-------")
 message(STATUS "Device      : ${DEVICE}")
 if (BOARD)
 message(STATUS "Board       : ${BOARD}")
 endif()
-message("--------Device Configuration Info-------")
 message(STATUS "Clock Hz    : ${DEVCONFIG_CLOCK_HZ}")
 message(STATUS "Flash Size  : ${DEVCONFIG_FLASH_SIZE}")
+message(STATUS "Flash KB    : ${FLASH_SIZE_KB}")
+message(STATUS "RAM KB      : ${RAM_SIZE_KB}")
 message(STATUS "Console     : ${AVM_CFG_CONSOLE}")

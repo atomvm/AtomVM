@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2018 Riccardo Binetti <rbino@gmx.com>
+# Copyright 2026 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,19 +18,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+project(examples_erlang_stm32)
 
-# Use ARM-GCC for crosscompiling
-set(CMAKE_SYSTEM_NAME Generic)
-set(CMAKE_SYSTEM_PROCESSOR arm)
+include(BuildErlang)
 
-find_program(ARM_CC arm-none-eabi-gcc)
-find_program(ARM_CXX arm-none-eabi-g++)
-find_program(ARM_OBJCOPY arm-none-eabi-objcopy)
-find_program(ARM_SIZE arm-none-eabi-size)
-
-mark_as_advanced(ARM_CC ARM_CXX ARM_OBJCOPY ARM_SIZE)
-
-SET(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-set(CMAKE_C_COMPILER ${ARM_CC})
-set(CMAKE_CXX_COMPILER ${ARM_CXX})
-set(CMAKE_ASM_COMPILER ${ARM_CC})
+pack_runnable(blink_weact_studio_blackpill blink_weact_studio_blackpill eavmlib)
+pack_runnable(blink_weact_studio_h562 blink_weact_studio_h562 eavmlib)
+pack_runnable(blink_weact_studio_h743 blink_weact_studio_h743 eavmlib)
+pack_runnable(blink_weact_studio_u585 blink_weact_studio_u585 eavmlib)
+pack_runnable(blink_weact_studio_wb55 blink_weact_studio_wb55 eavmlib)
