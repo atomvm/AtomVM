@@ -70,6 +70,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added initial support for ESP32C5 and ESP32C61
 - Added `Range:size/1`
 - Added missing `ledc` functions for esp32 platform
+- Added ESP32 `-DATOMVM_ELIXIR_SUPPORT=on` configuration option
+- Added support for ESP32 development builds to include NVS partition data at build time
 
 ### Changed
 
@@ -90,6 +92,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 instead `badarg`.
 - Resources are now references instead of empty binaries.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
+- ESP32 cmake build options are now also exposed in `idf.py menuconfig`.
+- ESP32 Elixir support is determined automatically from the offset of `boot.avm` in the partition
+table.
+- ESP32 ports now flash a complete working image using the `idf.py flash` task.
+- ESP32 platform now uses reproducible builds.
 
 ### Fixed
 

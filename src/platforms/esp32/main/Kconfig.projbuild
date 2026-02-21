@@ -46,4 +46,22 @@ menu "AtomVM configuration"
          help
              Enable Just in time compilation, or just execution of precompiled native code
              
+    config AVM_CREATE_STACKTRACES
+        bool  "Create BEAM stack traces."
+        default y
+        help
+            Create stacktraces for AtomVM application debugging, when an application crashes a stacktrace will be emitted.
+
+    config AVM_VERBOSE_ABORT
+        bool  "Verbose error when a VM abort occurs."
+        default n
+        help
+            Print the C module and line number when a VM abort occurs.
+
+    config ENABLE_REALLOC_GC
+        bool  "Enable experimental optimized realloc garbage collection."
+        default n
+        help
+            Enable experimental optimized garbage collection mode that makes use of C realloc instead of copying data.
+
 endmenu

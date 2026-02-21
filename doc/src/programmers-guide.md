@@ -163,6 +163,22 @@ Deployment of the AtomVM virtual machine and an AtomVM application currently req
 
 For more information about deploying the AtomVM image and AtomVM applications to your device, see the [Getting Started Guide](./getting-started-guide.md)
 
+```{note}
+The ESP32 platform uses reproducible builds; this has an effect when doing advanced debugging with
+GDB because paths are altered to strip away leading paths that are substituted with the following
+placeholders:
+
+* Path to ESP-IDF is replaced with /IDF
+* Path to the project is replaced with /IDF_PROJECT
+* Path to the build directory is replaced with /IDF_BUILD
+* Paths to components are replaced with /COMPONENT_NAME_DIR (where NAME is the name of the
+component)
+
+For information on how to configure GDB for debugging reproducible builds, consult the ESP-IDF
+documentation about
+[Reproducible Builds and Debugging](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/api-guides/reproducible-builds.html#reproducible-builds-and-debugging).
+```
+
 ## Applications
 
 An AtomVM application is a collection of BEAM files, aggregated into an AtomVM "Packbeam" (`.avm`) file, and typically deployed (flashed) to some device.  These BEAM files be be compiled from Erlang, Elixir, or any other language that targets the Erlang VM.
