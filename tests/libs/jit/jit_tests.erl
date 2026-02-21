@@ -112,6 +112,7 @@ compile_minimal_x86_64_test() ->
         fun(_) -> undefined end,
         fun(_) -> undefined end,
         fun(_) -> any end,
+        fun(_) -> undefined end,
         jit_x86_64,
         Stream2
     ),
@@ -159,10 +160,11 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     AtomResolver = jit_precompile:atom_resolver(AtomChunk),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(TypeChunk),
+    ImportResolver = fun(_) -> {test, test, 2} end,
 
     % Compile with typed register support
     {LabelsCount, Stream3} = jit:compile(
-        CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
+        CodeChunk, AtomResolver, LiteralResolver, TypeResolver, ImportResolver, Backend, Stream2
     ),
     Backend:stream(Stream3).
 

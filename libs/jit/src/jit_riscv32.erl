@@ -184,6 +184,7 @@
 -type condition() ::
     {riscv32_register(), '<', integer()}
     | {maybe_free_riscv32_register(), '<', riscv32_register()}
+    | {integer(), '<', maybe_free_riscv32_register()}
     | {maybe_free_riscv32_register(), '==', integer()}
     | {maybe_free_riscv32_register(), '!=', riscv32_register() | integer()}
     | {'(int)', maybe_free_riscv32_register(), '==', integer()}
@@ -955,16 +956,29 @@ if_else_block(
         {beq | bne | blt | bge, atom(), atom() | integer()},
         non_neg_integer()
     }.
-if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '<', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     %% RISC-V: bge Reg, zero, offset (branch if Reg >= 0, i.e., NOT negative/NOT less than 0)
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream1 = StreamModule:append(Stream0, BranchInstr),
-    State1 = State0#state{stream = Stream1},
-    {State1, {bge, Reg, zero}, 0};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {bge, Reg, zero}, 0};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val), Val >= 0, Val =< 255 ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     % RISC-V: bge Reg, Val, offset (branch if Reg >= Val, i.e., NOT less than)
     % Load immediate into a temp register for comparison
     [Temp | _] = State0#state.available_regs,
@@ -974,12 +988,18 @@ if_block_cond(
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
-    State2 = State1#state{stream = Stream2},
-    {State2, {bge, Reg, Temp}, BranchDelta};
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Reg, Temp}, BranchDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val) ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     % RISC-V: bge Reg, Temp, offset (branch if Reg >= Temp, i.e., NOT less than)
     OffsetBefore = StreamModule:offset(Stream0),
     State1 = mov_immediate(State0, Temp, Val),
@@ -987,8 +1007,47 @@ if_block_cond(
     BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
     BranchInstr = <<16#FFFFFFFF:32/little>>,
     Stream2 = StreamModule:append(Stream1, BranchInstr),
-    State2 = State1#state{stream = Stream2},
-    {State2, {bge, Reg, Temp}, BranchDelta};
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Reg, Temp}, BranchDelta};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % RISC-V: bge Temp, Reg, offset (branch if Val >= Reg, i.e., NOT Val < Reg)
+    OffsetBefore = StreamModule:offset(Stream0),
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream2 = StreamModule:append(Stream1, BranchInstr),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Temp, Reg}, BranchDelta};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    % RISC-V: bge Temp, Reg, offset (branch if Val >= Reg, i.e., NOT Val < Reg)
+    OffsetBefore = StreamModule:offset(Stream0),
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream1 = State1#state.stream,
+    BranchDelta = StreamModule:offset(Stream1) - OffsetBefore,
+    BranchInstr = <<16#FFFFFFFF:32/little>>,
+    Stream2 = StreamModule:append(Stream1, BranchInstr),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, {bge, Temp, Reg}, BranchDelta};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
