@@ -83,6 +83,26 @@ if (MbedTLS_FOUND)
         ../../../libAtomVM/otp_ssl.c
         ../../../libAtomVM/otp_ssl.h
     )
+    if (MBEDTLS_ROOT_DIR)
+        set(CMAKE_REQUIRED_INCLUDES "${MBEDTLS_ROOT_DIR}/include")
+    endif()
+    include(CheckCSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES MbedTLS::mbedcrypto)
+    check_c_source_compiles("
+        #include <mbedtls/version.h>
+        #ifndef MBEDTLS_PSA_CRYPTO_C
+        #error PSA Crypto not available
+        #endif
+        #include <psa/crypto.h>
+        int main(void) { psa_crypto_init(); return 0; }
+    " HAVE_PSA_CRYPTO)
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    if (MBEDTLS_ROOT_DIR)
+        unset(CMAKE_REQUIRED_INCLUDES)
+    endif()
+    if (HAVE_PSA_CRYPTO)
+        target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_PSA_CRYPTO)
+    endif()
 else()
     message("WARNING:  Could NOT find MbedTLS, ssl and crypto modules will not be supported. Install MbedTLS 3.x or try to set MBEDTLS_ROOT_DIR to installation prefix of MbedTLS 2.x")
 endif()

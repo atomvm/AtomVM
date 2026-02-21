@@ -88,6 +88,7 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `erlang:system_time/0`, `erlang:monotonic_time/0`, and `os:system_time/0,1` NIFs
 - Added `filename:join/1` and `filename:split/1`
 - Added `crypto:generate_key/2`, `crypto:compute_key/4`, `crypto:sign/4`, `crypto:verify/5` and `crypto:mac/4`
+- Added `crypto:hash_init/1`, `crypto:hash_update/2` and `crypto:hash_final/1`
 - Added `crypto:info_lib/0`
 
 ### Changed

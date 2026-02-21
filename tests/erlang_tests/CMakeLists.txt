@@ -663,6 +663,7 @@ endif()
 
 compile_erlang(test_crypto_pk)
 compile_erlang(test_crypto_mac)
+compile_erlang(test_crypto_hash_update)
 
 set(erlang_test_beams
     add.beam
@@ -1204,6 +1205,7 @@ set(erlang_test_beams
 
     test_crypto_pk.beam
     test_crypto_mac.beam
+    test_crypto_hash_update.beam
 )
 
 if(NOT AVM_DISABLE_JIT)

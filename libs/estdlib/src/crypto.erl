@@ -22,6 +22,9 @@
 
 -export([
     hash/2,
+    hash_init/1,
+    hash_update/2,
+    hash_final/1,
     crypto_one_time/4,
     crypto_one_time/5,
     generate_key/2,
@@ -35,6 +38,9 @@
 
 -type hash_algorithm() :: md5 | sha | sha224 | sha256 | sha384 | sha512.
 -type digest() :: binary().
+
+-export_type([hash_state/0]).
+-opaque hash_state() :: reference().
 
 -type cipher_no_iv() ::
     aes_128_ecb
@@ -109,6 +115,46 @@
 %%-----------------------------------------------------------------------------
 -spec hash(Type :: hash_algorithm(), Data :: iolist()) -> digest().
 hash(_Type, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type the hash algorithm
+%% @returns Returns an opaque hash state that can be passed to `hash_update/2'
+%%          and `hash_final/1'.
+%% @doc     Initialize a streaming hash computation.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec hash_init(Type :: hash_algorithm()) -> hash_state().
+hash_init(_Type) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State an opaque hash state returned from `hash_init/1' or a
+%%          previous call to `hash_update/2'
+%% @param   Data the data to feed into the hash computation
+%% @returns Returns a new opaque hash state with the supplied data folded in.
+%% @doc     Update a streaming hash computation with new data.
+%%
+%%          The original `State' is not modified; a new state is returned so
+%%          the same state can be forked into independent hash computations.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec hash_update(State :: hash_state(), Data :: iolist()) -> hash_state().
+hash_update(_State, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State an opaque hash state returned from `hash_init/1' or
+%%          `hash_update/2'
+%% @returns Returns the final hash digest as a binary.
+%% @doc     Finalize a streaming hash computation and return the digest.
+%%
+%%          The state is not consumed; calling `hash_final/1' again on the
+%%          same state will produce the same digest.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec hash_final(State :: hash_state()) -> digest().
+hash_final(_State) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

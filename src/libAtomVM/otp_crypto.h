@@ -21,6 +21,7 @@
 #ifndef _OTP_CRYPTO_H_
 #define _OTP_CRYPTO_H_
 
+#include <erl_nif_priv.h>
 #include <nifs.h>
 
 #ifdef __cplusplus
@@ -28,6 +29,10 @@ extern "C" {
 #endif
 
 const struct Nif *otp_crypto_nif_get_nif(const char *nifname);
+
+#ifdef HAVE_PSA_CRYPTO
+extern const ErlNifResourceTypeInit psa_hash_op_resource_type_init;
+#endif
 
 #ifdef __cplusplus
 }

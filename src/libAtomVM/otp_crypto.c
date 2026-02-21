@@ -23,6 +23,7 @@
 
 #include <context.h>
 #include <defaultatoms.h>
+#include <erl_nif_priv.h>
 #include <globalcontext.h>
 #include <interop.h>
 #include <nifs.h>
@@ -1500,6 +1501,193 @@ cleanup:
     return result;
 }
 
+struct HashState
+{
+    psa_algorithm_t psa_algo;
+    psa_hash_operation_t psa_op;
+};
+
+static void psa_hash_op_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct HashState *hash_state = (struct HashState *) obj;
+    psa_hash_abort(&hash_state->psa_op);
+}
+
+const ErlNifResourceTypeInit psa_hash_op_resource_type_init = {
+    .members = 1,
+    .dtor = psa_hash_op_dtor
+};
+
+static term nif_crypto_hash_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    term hash_algo_term = argv[0];
+    psa_algorithm_t hash_algo
+        = interop_atom_term_select_int(psa_hash_algorithm_table, hash_algo_term, glb);
+    if (UNLIKELY(hash_algo == PSA_ALG_NONE)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad digest type", ctx));
+    }
+
+    struct HashState *hash_obj
+        = enif_alloc_resource(glb->psa_hash_op_resource_type, sizeof(struct HashState));
+    if (IS_NULL_PTR(hash_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    memset(hash_obj, 0, sizeof(struct HashState));
+    hash_obj->psa_algo = hash_algo;
+    psa_status_t status = psa_hash_setup(&hash_obj->psa_op, hash_algo);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        enif_release_resource(hash_obj);
+        switch (status) {
+            case PSA_ERROR_NOT_SUPPORTED:
+                RAISE_ERROR(make_crypto_error(
+                    __FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+            default:
+                RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+        }
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        enif_release_resource(hash_obj);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term obj = term_from_resource(hash_obj, &ctx->heap);
+    enif_release_resource(hash_obj);
+
+    return obj;
+}
+
+static term nif_crypto_hash_update(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    void *psa_hash_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_hash_op_resource_type, &psa_hash_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad state", ctx));
+    }
+    struct HashState *hash_state = (struct HashState *) psa_hash_obj_ptr;
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *maybe_allocated_data = NULL;
+    struct HashState *new_hash_obj = NULL;
+
+    size_t data_len;
+    term data_term = argv[1];
+    const void *data;
+    term iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        result = BADARG_ATOM;
+        goto cleanup;
+    }
+
+    new_hash_obj = enif_alloc_resource(glb->psa_hash_op_resource_type, sizeof(struct HashState));
+    if (IS_NULL_PTR(new_hash_obj)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+    memset(new_hash_obj, 0, sizeof(struct HashState));
+    new_hash_obj->psa_algo = hash_state->psa_algo;
+    psa_status_t status = psa_hash_clone(&hash_state->psa_op, &new_hash_obj->psa_op);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    status = psa_hash_update(&new_hash_obj->psa_op, data, data_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_resource(new_hash_obj, &ctx->heap);
+
+cleanup:
+    free(maybe_allocated_data);
+    if (new_hash_obj) {
+        enif_release_resource(new_hash_obj);
+    }
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_hash_final(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    void *psa_hash_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_hash_op_resource_type, &psa_hash_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad state", ctx));
+    }
+    struct HashState *hash_state = (struct HashState *) psa_hash_obj_ptr;
+
+    bool success = false;
+    term result = ERROR_ATOM;
+
+    psa_algorithm_t psa_algo = hash_state->psa_algo;
+    psa_hash_operation_t psa_op = PSA_HASH_OPERATION_INIT;
+    psa_status_t status = psa_hash_clone(&hash_state->psa_op, &psa_op);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    size_t hash_size = PSA_HASH_LENGTH(psa_algo);
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(hash_size)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    term hash_bin = term_create_uninitialized_binary(hash_size, &ctx->heap, glb);
+    void *hash_buf = (void *) term_binary_data(hash_bin);
+
+    size_t hash_len = 0;
+    status = psa_hash_finish(&psa_op, hash_buf, hash_size, &hash_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+    assert(hash_size == hash_len);
+
+    success = true;
+    result = hash_bin;
+
+cleanup:
+    psa_hash_abort(&psa_op);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
 #endif
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -1628,6 +1816,18 @@ static const struct Nif crypto_mac_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_mac
 };
+static const struct Nif crypto_hash_init_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_hash_init
+};
+static const struct Nif crypto_hash_update_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_hash_update
+};
+static const struct Nif crypto_hash_final_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_hash_final
+};
 #endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
@@ -1682,6 +1882,18 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("mac/4", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_mac_nif;
+        }
+        if (strcmp("hash_init/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_hash_init_nif;
+        }
+        if (strcmp("hash_update/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_hash_update_nif;
+        }
+        if (strcmp("hash_final/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_hash_final_nif;
         }
 #endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {
