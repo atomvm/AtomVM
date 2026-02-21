@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added I2C and SPI APIs to rp2 platform
+- Added I2C and SPI APIs to stm32 platform
 
 ## [0.7.0-alpha.0] - 2026-03-20
 
