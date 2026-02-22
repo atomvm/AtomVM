@@ -181,6 +181,7 @@ struct GlobalContext
 
 #ifdef HAVE_PSA_CRYPTO
     ErlNifResourceType *psa_hash_op_resource_type;
+    ErlNifResourceType *psa_cipher_op_resource_type;
 #endif
 
     void *platform_data;

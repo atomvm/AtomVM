@@ -27,6 +27,10 @@
     hash_final/1,
     crypto_one_time/4,
     crypto_one_time/5,
+    crypto_init/3,
+    crypto_init/4,
+    crypto_update/2,
+    crypto_final/1,
     generate_key/2,
     compute_key/4,
     sign/4,
@@ -42,6 +46,13 @@
 -export_type([hash_state/0]).
 -opaque hash_state() :: reference().
 
+-export_type([crypto_state/0]).
+%% Opaque mutable state for streaming cipher operations.
+%% The state is mutated in place by crypto_update/2 and crypto_final/1.
+-opaque crypto_state() :: reference().
+
+%% Note: PKCS7 padding (`pkcs_padding') is **not** supported for ECB ciphers
+%% in AtomVM.  Use a CBC cipher if you need PKCS7 padding.
 -type cipher_no_iv() ::
     aes_128_ecb
     | aes_192_ecb
@@ -56,7 +67,10 @@
     | aes_256_cfb128
     | aes_128_ctr
     | aes_192_ctr
-    | aes_256_ctr.
+    | aes_256_ctr
+    | aes_128_ofb
+    | aes_192_ofb
+    | aes_256_ofb.
 
 -type padding() :: none | pkcs_padding.
 
@@ -195,6 +209,93 @@ crypto_one_time(_Cipher, _Key, _Data, _FlagOrOptions) ->
     FlagOrOptions :: crypto_opts()
 ) -> binary().
 crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher a supported cipher (no IV required, e.g. ECB modes)
+%% @param   Key the encryption / decryption key
+%% @param   FlagOrOptions either `true' for encryption, `false' for decryption,
+%%          or a proplist with options such as `{encrypt, boolean()}' and
+%%          `{padding, padding()}'.
+%% @returns Returns an opaque `crypto_state()' reference for use with
+%%          `crypto_update/2' and `crypto_final/1'.
+%% @doc     Initialize a streaming cipher operation for ciphers that do not use an IV.
+%%
+%%          This is equivalent to `crypto_init(Cipher, Key, <<>>, FlagOrOptions)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_init(
+    Cipher :: cipher_no_iv(),
+    Key :: iodata(),
+    FlagOrOptions :: boolean() | crypto_opts()
+) -> crypto_state().
+crypto_init(Cipher, Key, FlagOrOptions) ->
+    crypto_init(Cipher, Key, <<>>, FlagOrOptions).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher a supported cipher
+%% @param   Key the encryption / decryption key
+%% @param   IV an initialization vector (use `<<>>' for ciphers that do not require one)
+%% @param   FlagOrOptions either `true' for encryption, `false' for decryption,
+%%          or a proplist with options such as `{encrypt, boolean()}' and
+%%          `{padding, padding()}'.
+%% @returns Returns an opaque `crypto_state()' reference for use with
+%%          `crypto_update/2' and `crypto_final/1'.
+%% @doc     Initialize a streaming cipher operation.
+%%
+%%          The returned state is **mutable**: `crypto_update/2' and `crypto_final/1'
+%%          mutate it in place.  After `crypto_final/1' the state must not be reused.
+%%
+%%          **AtomVM padding support:**
+%%          `{padding, pkcs_padding}' is supported **only with CBC ciphers**
+%%          (e.g. `aes_128_cbc', `aes_192_cbc', `aes_256_cbc').  Requesting
+%%          PKCS7 padding with ECB or any other cipher mode raises a `badarg'
+%%          error.  This differs from OTP, which silently accepts the option
+%%          for non-CBC modes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_init(
+    Cipher :: cipher_no_iv() | cipher_iv(),
+    Key :: iodata(),
+    IV :: iodata(),
+    FlagOrOptions :: boolean() | crypto_opts()
+) -> crypto_state().
+crypto_init(_Cipher, _Key, _IV, _FlagOrOptions) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State an opaque cipher state returned from `crypto_init/3' or
+%%          `crypto_init/4'
+%% @param   Data the data to encrypt or decrypt (iodata)
+%% @returns Returns the encrypted/decrypted bytes produced so far as a binary.
+%% @doc     Feed data into a streaming cipher operation.
+%%
+%%          For block ciphers the output may be shorter than the input if an
+%%          incomplete block is buffered internally.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_update(State :: crypto_state(), Data :: iodata()) -> binary().
+crypto_update(_State, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State an opaque cipher state returned from `crypto_init/3' or
+%%          `crypto_init/4'
+%% @returns Returns any remaining bytes (e.g. a padded final block) as a binary,
+%%          or `<<>>' if there are none.
+%% @doc     Finalize a streaming cipher operation.
+%%
+%%          For block ciphers with `{padding, none}' an error is raised if the
+%%          total data fed was not a multiple of the block size.
+%%
+%%          **AtomVM limitation:** after `crypto_final/1' returns, the state is
+%%          permanently finalized.  Calling `crypto_final/1' again, or calling
+%%          `crypto_update/2' on the same state, raises a `badarg' error.
+%%          OTP allows reuse of the state after `crypto_final/1'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_final(State :: crypto_state()) -> binary().
+crypto_final(_State) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

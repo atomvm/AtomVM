@@ -89,6 +89,8 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `filename:join/1` and `filename:split/1`
 - Added `crypto:generate_key/2`, `crypto:compute_key/4`, `crypto:sign/4`, `crypto:verify/5` and `crypto:mac/4`
 - Added `crypto:hash_init/1`, `crypto:hash_update/2` and `crypto:hash_final/1`
+- Added `crypto:crypto_init/3`, `crypto:crypto_init/4`, `crypto:crypto_update/2` and
+`crypto:crypto_final/1`
 - Added `crypto:info_lib/0`
 
 ### Changed

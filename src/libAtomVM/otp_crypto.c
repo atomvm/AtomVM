@@ -1688,6 +1688,489 @@ cleanup:
 
     return result;
 }
+
+enum cipher_padding
+{
+    CipherPaddingDefault = 0, /* discard partial block on final, return <<>> */
+    CipherPaddingNone = 1, /* error if partial block remains on final */
+    CipherPaddingPkcs = 2 /* PKCS7-pad last block on final (CBC only, via PSA) */
+};
+
+struct CipherState
+{
+#ifndef AVM_NO_SMP
+    Mutex *mutex;
+#endif
+    psa_cipher_operation_t psa_op;
+    psa_key_id_t key_id;
+    psa_algorithm_t psa_algo;
+    psa_key_type_t key_type;
+    bool encrypting;
+    bool finalized; /* true after crypto_final; further calls raise badarg */
+    uint8_t block_size;
+    enum cipher_padding padding;
+};
+
+static void psa_cipher_op_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct CipherState *cipher_state = (struct CipherState *) obj;
+    psa_cipher_abort(&cipher_state->psa_op);
+    psa_destroy_key(cipher_state->key_id);
+}
+
+const ErlNifResourceTypeInit psa_cipher_op_resource_type_init = {
+    .members = 1,
+    .dtor = psa_cipher_op_dtor
+};
+
+struct PsaCipherParams
+{
+    const char *atom_str;
+    psa_key_type_t key_type;
+    psa_algorithm_t algorithm;
+    uint16_t key_bits;
+    uint8_t block_size;
+    uint8_t iv_len;
+};
+
+static const struct PsaCipherParams psa_cipher_table[] = {
+    // ECB modes - block cipher, no IV
+    { ATOM_STR("\xB", "aes_128_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 128, 16, 0 },
+    { ATOM_STR("\xB", "aes_192_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 192, 16, 0 },
+    { ATOM_STR("\xB", "aes_256_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 256, 16, 0 },
+    // CBC modes - block cipher, with IV
+    { ATOM_STR("\xB", "aes_128_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 128, 16, 16 },
+    { ATOM_STR("\xB", "aes_192_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 192, 16, 16 },
+    { ATOM_STR("\xB", "aes_256_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 256, 16, 16 },
+    // CFB128 modes - stream-like, with IV
+    { ATOM_STR("\xE", "aes_128_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 128, 0, 16 },
+    { ATOM_STR("\xE", "aes_192_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 192, 0, 16 },
+    { ATOM_STR("\xE", "aes_256_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 256, 0, 16 },
+    // CTR modes - stream cipher, with IV
+    { ATOM_STR("\xB", "aes_128_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 128, 0, 16 },
+    { ATOM_STR("\xB", "aes_192_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 192, 0, 16 },
+    { ATOM_STR("\xB", "aes_256_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 256, 0, 16 },
+    // OFB modes - stream-like, with IV
+    { ATOM_STR("\xB", "aes_128_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 128, 0, 16 },
+    { ATOM_STR("\xB", "aes_192_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 192, 0, 16 },
+    { ATOM_STR("\xB", "aes_256_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 256, 0, 16 },
+};
+
+#define PSA_CIPHER_TABLE_LEN (sizeof(psa_cipher_table) / sizeof(psa_cipher_table[0]))
+
+static const struct PsaCipherParams *psa_cipher_table_lookup(GlobalContext *glb, term cipher_atom)
+{
+    for (size_t i = 0; i < PSA_CIPHER_TABLE_LEN; i++) {
+        AtomString atom_str = (AtomString) psa_cipher_table[i].atom_str;
+        if (globalcontext_is_term_equal_to_atom_string(glb, cipher_atom, atom_str)) {
+            return &psa_cipher_table[i];
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Accepts:
+ *   - true / false  (boolean shorthand for {encrypt, true/false})
+ *   - proplist with {encrypt, boolean()} and/or {padding, none|pkcs_padding}
+ */
+static term parse_cipher_flag_or_options(term flag_or_opts, bool *encrypting,
+    enum cipher_padding *padding, GlobalContext *glb, Context *ctx)
+{
+    if (flag_or_opts == TRUE_ATOM) {
+        *encrypting = true;
+        return OK_ATOM;
+    }
+
+    if (flag_or_opts == FALSE_ATOM) {
+        *encrypting = false;
+        return OK_ATOM;
+    }
+
+    if (!term_is_list(flag_or_opts)) {
+        return make_crypto_error(
+            __FILE__, __LINE__, "Options are not a boolean or a proper list", ctx);
+    }
+
+    term t = flag_or_opts;
+    while (term_is_nonempty_list(t)) {
+        term head = term_get_list_head(t);
+
+        if (UNLIKELY(!term_is_tuple(head) || term_get_tuple_arity(head) != 2)) {
+            return make_crypto_error(__FILE__, __LINE__, "Bad option format", ctx);
+        }
+
+        term opt_key = term_get_tuple_element(head, 0);
+        term opt_val = term_get_tuple_element(head, 1);
+
+        if (globalcontext_is_term_equal_to_atom_string(glb, opt_key, ATOM_STR("\x7", "encrypt"))) {
+            if (opt_val == TRUE_ATOM) {
+                *encrypting = true;
+            } else if (opt_val == FALSE_ATOM) {
+                *encrypting = false;
+            } else {
+                return make_crypto_error(__FILE__, __LINE__, "Bad encrypt option value", ctx);
+            }
+        } else if (globalcontext_is_term_equal_to_atom_string(
+                       glb, opt_key, ATOM_STR("\x7", "padding"))) {
+            if (globalcontext_is_term_equal_to_atom_string(glb, opt_val, ATOM_STR("\x4", "none"))) {
+                *padding = CipherPaddingNone;
+            } else if (globalcontext_is_term_equal_to_atom_string(
+                           glb, opt_val, ATOM_STR("\xC", "pkcs_padding"))) {
+                *padding = CipherPaddingPkcs;
+            } else {
+                return make_crypto_error(__FILE__, __LINE__, "Bad padding option value", ctx);
+            }
+        } else {
+            return make_crypto_error(__FILE__, __LINE__, "Unknown option", ctx);
+        }
+
+        t = term_get_list_tail(t);
+    }
+
+    if (UNLIKELY(!term_is_nil(t))) {
+        return make_crypto_error(__FILE__, __LINE__, "Options is not a proper list", ctx);
+    }
+
+    return OK_ATOM;
+}
+
+static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    /* 1. Look up cipher parameters */
+    term cipher_atom = argv[0];
+    const struct PsaCipherParams *cipher_params = psa_cipher_table_lookup(glb, cipher_atom);
+    if (IS_NULL_PTR(cipher_params)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
+    }
+
+    /* 2. Validate key - must be a flat binary of the correct size */
+    term key_term = argv[1];
+    if (UNLIKELY(!term_is_binary(key_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad key", ctx));
+    }
+    size_t key_len = term_binary_size(key_term);
+    if (UNLIKELY(key_len != cipher_params->key_bits / 8)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad key size", ctx));
+    }
+    const uint8_t *key_data = (const uint8_t *) term_binary_data(key_term);
+
+    /* 3. Validate IV - must be a flat binary of the correct size.
+     *    For ciphers that do not use an IV (iv_len == 0, e.g. ECB) any binary
+     *    is accepted and silently ignored, matching OTP behaviour. */
+    term iv_term = argv[2];
+    if (UNLIKELY(!term_is_binary(iv_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad iv type", ctx));
+    }
+    size_t iv_len = term_binary_size(iv_term);
+    if (cipher_params->iv_len > 0 && UNLIKELY(iv_len != cipher_params->iv_len)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad iv size", ctx));
+    }
+
+    /* 4. Parse FlagOrOptions */
+    bool encrypting = true;
+    enum cipher_padding padding = CipherPaddingDefault;
+    term parse_result = parse_cipher_flag_or_options(argv[3], &encrypting, &padding, glb, ctx);
+    if (UNLIKELY(parse_result != OK_ATOM)) {
+        RAISE_ERROR(parse_result);
+    }
+
+    /* 4b. Resolve effective PSA algorithm based on padding option.
+     *     PKCS7 padding is natively supported by PSA only for CBC; for any
+     *     other cipher mode it is not available and we reject it early. */
+    psa_algorithm_t effective_algo = cipher_params->algorithm;
+    if (padding == CipherPaddingPkcs) {
+        if (cipher_params->algorithm == PSA_ALG_CBC_NO_PADDING) {
+            effective_algo = PSA_ALG_CBC_PKCS7;
+        } else {
+            RAISE_ERROR(make_crypto_error(
+                __FILE__, __LINE__, "PKCS padding is supported only with CBC ciphers", ctx));
+        }
+    }
+
+    /* 5. Import key via PSA */
+    bool success = false;
+    term result = ERROR_ATOM;
+    psa_key_id_t key_id = 0;
+    struct CipherState *cipher_obj = NULL;
+
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, cipher_params->key_type);
+    psa_set_key_bits(&attr, cipher_params->key_bits);
+    psa_set_key_usage_flags(&attr, encrypting ? PSA_KEY_USAGE_ENCRYPT : PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attr, effective_algo);
+
+    psa_status_t status = psa_import_key(&attr, key_data, key_len, &key_id);
+    psa_reset_key_attributes(&attr);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        switch (status) {
+            case PSA_ERROR_NOT_SUPPORTED:
+                result = make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx);
+                break;
+            default:
+                result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+                break;
+        }
+        goto cleanup;
+    }
+
+    /* 6. Allocate and initialise the resource */
+    cipher_obj = enif_alloc_resource(glb->psa_cipher_op_resource_type, sizeof(struct CipherState));
+    if (IS_NULL_PTR(cipher_obj)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+    memset(cipher_obj, 0, sizeof(struct CipherState));
+#ifndef AVM_NO_SMP
+    cipher_obj->mutex = smp_mutex_create();
+    if (IS_NULL_PTR(cipher_obj->mutex)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+#endif
+    cipher_obj->key_id = key_id;
+    cipher_obj->psa_algo = effective_algo;
+    cipher_obj->key_type = cipher_params->key_type;
+    cipher_obj->encrypting = encrypting;
+    cipher_obj->block_size = cipher_params->block_size;
+    cipher_obj->padding = padding;
+
+    /* 7. Set up the cipher operation */
+    if (encrypting) {
+        status = psa_cipher_encrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+    } else {
+        status = psa_cipher_decrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+    }
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    /* 8. Set IV if this cipher requires one */
+    if (cipher_params->iv_len > 0) {
+        const uint8_t *iv_data = (const uint8_t *) term_binary_data(iv_term);
+        status = psa_cipher_set_iv(&cipher_obj->psa_op, iv_data, iv_len);
+        if (UNLIKELY(status != PSA_SUCCESS)) {
+            result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+            goto cleanup;
+        }
+    }
+
+    /* 9. Transfer key ownership to the resource (cleared so cleanup won't
+     *    destroy it - the destructor now owns it). */
+    key_id = 0;
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_resource(cipher_obj, &ctx->heap);
+
+cleanup:
+    if (key_id != 0) {
+        psa_destroy_key(key_id);
+    }
+    if (!IS_NULL_PTR(cipher_obj)) {
+        enif_release_resource(cipher_obj);
+    }
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    /* 1. Retrieve the cipher state from the resource reference */
+    void *cipher_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_cipher_op_resource_type, &cipher_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad State", ctx));
+    }
+    struct CipherState *cipher_state = (struct CipherState *) cipher_obj_ptr;
+    SMP_MUTEX_LOCK(cipher_state->mutex);
+
+    if (UNLIKELY(cipher_state->finalized)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__,
+            "Bad state: AtomVM does not allow operations after crypto_final", ctx));
+    }
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *maybe_allocated_data = NULL;
+    void *out_buf = NULL;
+
+    /* 2. Handle iodata input */
+    const void *data;
+    size_t data_len;
+    term iodata_result = handle_iodata(argv[1], &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_result == BADARG_ATOM)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        result = make_crypto_error(__FILE__, __LINE__, "expected binary", ctx);
+        goto cleanup;
+    }
+    if (UNLIKELY(iodata_result != OK_ATOM)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        result = iodata_result;
+        goto cleanup;
+    }
+
+    /* 3. Encrypt/decrypt via PSA - PSA handles internal block buffering */
+    size_t out_size = PSA_CIPHER_UPDATE_OUTPUT_MAX_SIZE(data_len);
+    if (out_size == 0) {
+        out_size = 1; /* ensure valid malloc even for zero-length input */
+    }
+    out_buf = malloc(out_size);
+    if (IS_NULL_PTR(out_buf)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    size_t out_len = 0;
+    psa_status_t status
+        = psa_cipher_update(&cipher_state->psa_op, data, data_len, out_buf, out_size, &out_len);
+    SMP_MUTEX_UNLOCK(cipher_state->mutex);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(out_len)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_literal_binary(out_buf, out_len, &ctx->heap, glb);
+
+cleanup:
+    free(maybe_allocated_data);
+    free(out_buf);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    /* 1. Retrieve the cipher state */
+    void *cipher_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_cipher_op_resource_type, &cipher_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad State", ctx));
+    }
+    struct CipherState *cipher_state = (struct CipherState *) cipher_obj_ptr;
+    SMP_MUTEX_LOCK(cipher_state->mutex);
+
+    if (UNLIKELY(cipher_state->finalized)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__,
+            "Bad state: AtomVM does not allow calling crypto_final more than once", ctx));
+    }
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *out_buf = NULL;
+
+    /* 2. Finalise via PSA - this terminates the operation */
+    size_t out_size = PSA_CIPHER_FINISH_OUTPUT_MAX_SIZE;
+    if (out_size == 0) {
+        out_size = 1;
+    }
+    out_buf = malloc(out_size);
+    if (IS_NULL_PTR(out_buf)) {
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    size_t out_len = 0;
+    psa_status_t status = psa_cipher_finish(&cipher_state->psa_op, out_buf, out_size, &out_len);
+    cipher_state->finalized = true;
+    SMP_MUTEX_UNLOCK(cipher_state->mutex);
+
+    if (status == PSA_SUCCESS) {
+        if (UNLIKELY(memory_ensure_free_with_roots(
+                         ctx, TERM_BINARY_HEAP_SIZE(out_len), 1, &argv[0], MEMORY_NO_SHRINK)
+                != MEMORY_GC_OK)) {
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+        success = true;
+        result = term_from_literal_binary(out_buf, out_len, &ctx->heap, glb);
+    } else if (status == PSA_ERROR_INVALID_ARGUMENT) {
+        /* Block cipher with a partial last block: behaviour depends on padding.
+         * Note: CipherPaddingPkcs uses PSA_ALG_CBC_PKCS7 which PSA handles
+         * natively, so this branch should never be reached for PKCS padding. */
+        psa_cipher_abort(&cipher_state->psa_op);
+        switch (cipher_state->padding) {
+            case CipherPaddingNone:
+                result = make_crypto_error_tag(
+                    __FILE__, __LINE__, "Padding 'none' but unfilled last block", ERROR_ATOM, ctx);
+                goto cleanup;
+            case CipherPaddingDefault:
+                /* Silently discard the partial block */
+                if (UNLIKELY(memory_ensure_free_with_roots(
+                                 ctx, TERM_BINARY_HEAP_SIZE(0), 1, &argv[0], MEMORY_NO_SHRINK)
+                        != MEMORY_GC_OK)) {
+                    result = OUT_OF_MEMORY_ATOM;
+                    goto cleanup;
+                }
+                success = true;
+                result = term_from_literal_binary("", 0, &ctx->heap, glb);
+                break;
+            case CipherPaddingPkcs:
+                /* Defensive: should be unreachable since PSA_ALG_CBC_PKCS7
+                 * handles padding natively and never returns INVALID_ARGUMENT
+                 * for a partial block. */
+                result
+                    = make_crypto_error(__FILE__, __LINE__, "Unexpected PKCS padding error", ctx);
+                goto cleanup;
+        }
+    } else {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+cleanup:
+    free(out_buf);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
 #endif
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -1828,6 +2311,18 @@ static const struct Nif crypto_hash_final_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_hash_final
 };
+static const struct Nif crypto_crypto_init_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_crypto_init
+};
+static const struct Nif crypto_crypto_update_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_crypto_update
+};
+static const struct Nif crypto_crypto_final_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_crypto_final
+};
 #endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
@@ -1894,6 +2389,18 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("hash_final/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_hash_final_nif;
+        }
+        if (strcmp("crypto_init/4", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_crypto_init_nif;
+        }
+        if (strcmp("crypto_update/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_crypto_update_nif;
+        }
+        if (strcmp("crypto_final/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_crypto_final_nif;
         }
 #endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {

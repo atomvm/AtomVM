@@ -176,6 +176,20 @@ GlobalContext *globalcontext_new(void)
         free(glb);
         return NULL;
     }
+    glb->psa_cipher_op_resource_type = enif_init_resource_type(
+        &env, "psa_cipher_op", &psa_cipher_op_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->psa_cipher_op_resource_type)) {
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        atom_table_destroy(glb->atom_table);
+        free(glb);
+        return NULL;
+    }
 #endif
 
     sys_init_platform(glb);
