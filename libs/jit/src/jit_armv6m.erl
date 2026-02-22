@@ -166,15 +166,15 @@
     | {{free, armv6m_register()}, '==', {free, armv6m_register()}}.
 
 % ctx->e is 0x28
-% ctx->x is 0x30
+% ctx->x is 0x2C
 -define(CTX_REG, r0).
 -define(NATIVE_INTERFACE_REG, r2).
--define(Y_REGS, {?CTX_REG, 16#14}).
--define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
--define(CP, {?CTX_REG, 16#5C}).
--define(FP_REGS, {?CTX_REG, 16#60}).
--define(BS, {?CTX_REG, 16#64}).
--define(BS_OFFSET, {?CTX_REG, 16#68}).
+-define(Y_REGS, {?CTX_REG, 16#28}).
+-define(X_REG(N), {?CTX_REG, 16#2C + (N * 4)}).
+-define(CP, {?CTX_REG, 16#70}).
+-define(FP_REGS, {?CTX_REG, 16#74}).
+-define(BS, {?CTX_REG, 16#78}).
+-define(BS_OFFSET, {?CTX_REG, 16#7C}).
 % JITSTATE is on stack, accessed via stack offset
 % These macros now expect a register that contains the jit_state pointer
 -define(JITSTATE_MODULE(Reg), {Reg, 0}).

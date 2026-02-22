@@ -81,6 +81,8 @@ Context *context_new(GlobalContext *glb)
     ctx->min_heap_size = 0;
     ctx->max_heap_size = 0;
     ctx->heap_growth_strategy = BoundedFreeHeapGrowth;
+    ctx->fullsweep_after = 65535;
+    ctx->gc_count = 0;
     ctx->has_min_heap_size = 0;
     ctx->has_max_heap_size = 0;
 
@@ -1207,6 +1209,14 @@ COLD_FUNC void context_dump(Context *ctx)
         }
 
         ct++;
+    }
+
+    fprintf(stderr, "\n\nHeap\n----\n");
+    fprintf(stderr, "young heap: %zu words\n", (size_t) (ctx->heap.heap_end - ctx->heap.heap_start));
+    if (ctx->heap.old_heap_start) {
+        fprintf(stderr, "old heap: %zu words (used: %zu)\n",
+            (size_t) (ctx->heap.old_heap_end - ctx->heap.old_heap_start),
+            (size_t) (ctx->heap.old_heap_ptr - ctx->heap.old_heap_start));
     }
 
     fprintf(stderr, "\n\nMailbox\n-------\n");

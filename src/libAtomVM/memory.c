@@ -46,12 +46,14 @@
 #ifdef ENABLE_REALLOC_GC
 #define MEMORY_SHRINK memory_shrink
 #else
-#define MEMORY_SHRINK memory_gc
+#define MEMORY_SHRINK memory_full_gc
 #endif
 
 static void memory_scan_and_copy(HeapFragment *old_fragment, term *mem_start, const term *mem_end, term **new_heap_pos, term *mso_list, bool move);
 static term memory_shallow_copy_term(HeapFragment *old_fragment, term t, term **new_heap, bool move);
 static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots);
+static enum MemoryGCResult memory_full_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots);
+static enum MemoryGCResult memory_minor_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots);
 #ifdef ENABLE_REALLOC_GC
 static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t num_roots, term *roots);
 static void memory_scan_and_rewrite(size_t count, term *terms, const term *old_start, const term *old_end, intptr_t delta, bool is_heap);
@@ -76,6 +78,11 @@ void memory_init_heap_root_fragment(Heap *heap, HeapFragment *root, size_t size)
     heap->heap_start = root->storage;
     heap->heap_ptr = heap->heap_start;
     heap->heap_end = heap->heap_start + size;
+    heap->high_water_mark = NULL;
+    heap->old_heap_start = NULL;
+    heap->old_heap_ptr = NULL;
+    heap->old_heap_end = NULL;
+    heap->old_mso_list = term_nil();
 }
 
 #ifdef ENABLE_REALLOC_GC
@@ -204,42 +211,55 @@ enum MemoryGCResult memory_ensure_free_with_roots(Context *c, size_t size, size_
             if (UNLIKELY(c->has_max_heap_size && (target_size > c->max_heap_size))) {
                 return MEMORY_GC_DENIED_ALLOCATION;
             }
-            if (UNLIKELY(memory_gc(c, target_size, num_roots, roots) != MEMORY_GC_OK)) {
+            enum MemoryGCResult gc_result;
+            if (alloc_mode == MEMORY_FORCE_SHRINK) {
+                gc_result = memory_full_gc(c, target_size, num_roots, roots);
+                if (gc_result == MEMORY_GC_OK) {
+                    c->heap.high_water_mark = c->heap.heap_ptr;
+                    c->gc_count = 0;
+                }
+            } else {
+                gc_result = memory_gc(c, target_size, num_roots, roots);
+            }
+            if (UNLIKELY(gc_result != MEMORY_GC_OK)) {
                 // TODO: handle this more gracefully
                 TRACE("Unable to allocate memory for GC.  target_size=%zu\n", target_size);
                 return MEMORY_GC_ERROR_FAILED_ALLOCATION;
             }
-            should_gc = alloc_mode == MEMORY_FORCE_SHRINK;
-            size_t new_memory_size = memory_heap_memory_size(&c->heap);
-            size_t new_target_size = new_memory_size;
-            size_t new_free_space = context_avail_free_memory(c);
-            switch (c->heap_growth_strategy) {
-                case BoundedFreeHeapGrowth: {
-                    size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
-                    should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > maximum_free_space);
-                    if (should_gc) {
-                        new_target_size = (new_memory_size - new_free_space) + maximum_free_space;
-                    }
-                } break;
-                case MinimumHeapGrowth:
-                    should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > 0);
-                    if (should_gc) {
-                        new_target_size = new_memory_size - new_free_space + size;
-                    }
-                    break;
-                case FibonacciHeapGrowth:
-                    should_gc = should_gc || (new_memory_size > FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD && new_free_space >= 3 * new_memory_size / 4);
-                    if (should_gc) {
-                        new_target_size = next_fibonacci_heap_size(new_memory_size - new_free_space + size);
-                    }
-                    break;
-            }
-            if (should_gc) {
-                new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
-                if (new_target_size != new_memory_size) {
-                    if (UNLIKELY(MEMORY_SHRINK(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
-                        TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, (unsigned int) size);
-                        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+            {
+                should_gc = alloc_mode == MEMORY_FORCE_SHRINK;
+                size_t new_memory_size = memory_heap_memory_size(&c->heap);
+                size_t new_free_space = context_avail_free_memory(c);
+                size_t new_target_size = new_memory_size;
+                switch (c->heap_growth_strategy) {
+                    case BoundedFreeHeapGrowth: {
+                        size_t maximum_free_space = 2 * (size + MIN_FREE_SPACE_SIZE);
+                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > maximum_free_space);
+                        if (should_gc) {
+                            new_target_size = (new_memory_size - new_free_space) + maximum_free_space;
+                        }
+                    } break;
+                    case MinimumHeapGrowth:
+                        should_gc = should_gc || (alloc_mode != MEMORY_NO_SHRINK && new_free_space > 0);
+                        if (should_gc) {
+                            new_target_size = new_memory_size - new_free_space + size;
+                        }
+                        break;
+                    case FibonacciHeapGrowth:
+                        should_gc = should_gc || (new_memory_size > FIBONACCI_HEAP_GROWTH_REDUCTION_THRESHOLD && new_free_space >= 3 * new_memory_size / 4);
+                        if (should_gc) {
+                            new_target_size = next_fibonacci_heap_size(new_memory_size - new_free_space + size);
+                        }
+                        break;
+                }
+                if (should_gc) {
+                    new_target_size = MAX(c->has_min_heap_size ? c->min_heap_size : 0, new_target_size);
+                    if (new_target_size != new_memory_size) {
+                        if (UNLIKELY(MEMORY_SHRINK(c, new_target_size, num_roots, roots) != MEMORY_GC_OK)) {
+                            TRACE("Unable to allocate memory for GC shrink.  new_memory_size=%zu new_free_space=%zu size=%u\n", new_memory_size, new_free_space, (unsigned int) size);
+                            return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+                        }
+                        c->heap.high_water_mark = c->heap.heap_ptr;
                     }
                 }
             }
@@ -257,11 +277,39 @@ static inline void push_to_stack(term **stack, term value)
 
 static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots)
 {
-    TRACE("Going to perform gc on process %i\n", ctx->process_id);
+    bool force_full = ctx->fullsweep_after == 0 || ctx->gc_count >= ctx->fullsweep_after;
+    if (ctx->heap.high_water_mark == NULL || force_full) {
+        enum MemoryGCResult result = memory_full_gc(ctx, new_size, num_roots, roots);
+        if (result == MEMORY_GC_OK) {
+            ctx->heap.high_water_mark = ctx->heap.heap_ptr;
+            ctx->gc_count = 0;
+        }
+        return result;
+    }
+    return memory_minor_gc(ctx, new_size, num_roots, roots);
+}
+
+static enum MemoryGCResult memory_full_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots)
+{
+    TRACE("Going to perform full gc on process %i\n", ctx->process_id);
     term old_mso_list = ctx->heap.root->mso_list;
+    term old_old_mso_list = ctx->heap.old_mso_list;
     term *old_stack_ptr = context_stack_base(ctx);
     term *old_heap_end = ctx->heap.heap_end;
     HeapFragment *old_root_fragment = ctx->heap.root;
+
+    // Chain old heap into fragment list so all terms are from-space
+    if (ctx->heap.old_heap_start) {
+        HeapFragment *old_heap_fragment = OLD_HEAP_TO_FRAGMENT(ctx->heap.old_heap_start);
+        old_heap_fragment->heap_end = ctx->heap.old_heap_ptr;
+        old_heap_fragment->next = NULL;
+        // Append at the end of the fragment chain
+        HeapFragment *tail = old_root_fragment;
+        while (tail->next != NULL) {
+            tail = tail->next;
+        }
+        tail->next = old_heap_fragment;
+    }
 
     if (UNLIKELY(memory_init_heap(&ctx->heap, new_size) != MEMORY_GC_OK)) {
         return MEMORY_GC_ERROR_FAILED_ALLOCATION;
@@ -320,9 +368,17 @@ static enum MemoryGCResult memory_gc(Context *ctx, size_t new_size, size_t num_r
     ctx->heap.heap_ptr = temp_end;
 
     memory_sweep_mso_list(old_mso_list, ctx->global, false);
+    memory_sweep_mso_list(old_old_mso_list, ctx->global, false);
     ctx->heap.root->mso_list = new_mso_list;
 
+    // old heap fragment is already chained into old_root_fragment, freed together
     memory_destroy_heap_fragment(old_root_fragment);
+
+    // Reset old generation
+    ctx->heap.old_heap_start = NULL;
+    ctx->heap.old_heap_ptr = NULL;
+    ctx->heap.old_heap_end = NULL;
+    ctx->heap.old_mso_list = term_nil();
 
     return MEMORY_GC_OK;
 }
@@ -376,6 +432,13 @@ static enum MemoryGCResult memory_shrink(Context *ctx, size_t new_size, size_t n
     memory_scan_and_rewrite(1, &ctx->exit_reason, old_heap_root, old_end, delta, true);
     // ...group_leader
     memory_scan_and_rewrite(1, &ctx->group_leader, old_heap_root, old_end, delta, true);
+    // ...in old heap (pointers from old generation into young generation)
+    if (ctx->heap.old_heap_start != NULL) {
+        memory_scan_and_rewrite(
+            ctx->heap.old_heap_ptr - ctx->heap.old_heap_start,
+            ctx->heap.old_heap_start,
+            old_heap_root, old_end, delta, true);
+    }
     // ...and MSO list.
     term *mso_ptr = &ctx->heap.root->mso_list;
     while (!term_is_nil(*mso_ptr)) {
@@ -901,6 +964,368 @@ HOT_FUNC static term memory_shallow_copy_term(HeapFragment *old_fragment, term t
         }
         default:
             UNREACHABLE();
+    }
+}
+
+HOT_FUNC static inline bool memory_is_in_old_heap(const Heap *heap, const term *ptr)
+{
+    return ptr >= heap->old_heap_start && ptr < heap->old_heap_end;
+}
+
+HOT_FUNC static term memory_shallow_copy_term_generational(
+    HeapFragment *old_fragment, const Heap *heap, term t,
+    term **new_young_heap, term **old_heap_ptr)
+{
+    switch (t & TERM_PRIMARY_MASK) {
+        case TERM_PRIMARY_IMMED:
+            return t;
+
+        case TERM_PRIMARY_CP:
+            return t;
+
+        case TERM_PRIMARY_BOXED: {
+            term *boxed_value = term_to_term_ptr(t);
+
+            if (memory_is_in_old_heap(heap, boxed_value)) {
+                return t;
+            }
+
+            if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, boxed_value)) {
+                return t;
+            }
+
+            if (memory_is_moved_marker(boxed_value)) {
+                return memory_dereference_moved_marker(boxed_value);
+            }
+
+            int boxed_size = term_boxed_size(t) + 1;
+
+            if (boxed_size == 1) {
+                return ((term) &empty_tuple) | TERM_PRIMARY_BOXED;
+            }
+
+            term *dest;
+            if (boxed_value >= heap->heap_start && boxed_value < heap->high_water_mark) {
+                dest = *old_heap_ptr;
+                *old_heap_ptr += boxed_size;
+            } else {
+                dest = *new_young_heap;
+                *new_young_heap += boxed_size;
+            }
+
+            for (int i = 0; i < boxed_size; i++) {
+                dest[i] = boxed_value[i];
+            }
+
+            term new_term = ((term) dest) | TERM_PRIMARY_BOXED;
+            memory_replace_with_moved_marker(boxed_value, new_term);
+            return new_term;
+        }
+        case TERM_PRIMARY_LIST: {
+            term *list_ptr = term_get_list_ptr(t);
+
+            if (memory_is_in_old_heap(heap, list_ptr)) {
+                return t;
+            }
+
+            if (old_fragment != NULL && !memory_heap_fragment_contains_pointer(old_fragment, list_ptr)) {
+                return t;
+            }
+
+            if (memory_is_moved_marker(list_ptr)) {
+                return memory_dereference_moved_marker(list_ptr);
+            }
+
+            term *dest;
+            if (list_ptr >= heap->heap_start && list_ptr < heap->high_water_mark) {
+                dest = *old_heap_ptr;
+                *old_heap_ptr += 2;
+            } else {
+                dest = *new_young_heap;
+                *new_young_heap += 2;
+            }
+
+            dest[0] = list_ptr[0];
+            dest[1] = list_ptr[1];
+
+            term new_term = ((term) dest) | 0x1;
+            memory_replace_with_moved_marker(list_ptr, new_term);
+            return new_term;
+        }
+        default:
+            UNREACHABLE();
+    }
+}
+
+static void memory_scan_and_copy_generational(
+    HeapFragment *old_fragment, const Heap *heap,
+    term *mem_start, const term *mem_end,
+    term **new_young_heap, term **old_heap_ptr,
+    term *young_mso_list, term *old_mso_list)
+{
+    term *ptr = mem_start;
+
+    while (ptr < mem_end) {
+        term t = *ptr;
+        switch (t & TERM_PRIMARY_MASK) {
+            case TERM_PRIMARY_IMMED:
+                ptr++;
+                break;
+            case TERM_PRIMARY_CP: {
+                size_t arity = term_get_size_from_boxed_header(t);
+                switch (t & TERM_BOXED_TAG_MASK) {
+                    case TERM_BOXED_TUPLE: {
+                        for (size_t i = 1; i <= arity; i++) {
+                            ptr[i] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[i], new_young_heap, old_heap_ptr);
+                        }
+                        break;
+                    }
+                    case TERM_BOXED_BIN_MATCH_STATE: {
+                        ptr[1] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[1], new_young_heap, old_heap_ptr);
+                        break;
+                    }
+                    case TERM_BOXED_POSITIVE_INTEGER:
+                    case TERM_BOXED_NEGATIVE_INTEGER:
+                    case TERM_BOXED_EXTERNAL_PID:
+                    case TERM_BOXED_EXTERNAL_PORT:
+                    case TERM_BOXED_EXTERNAL_REF:
+                    case TERM_BOXED_FLOAT:
+                    case TERM_BOXED_HEAP_BINARY:
+                        break;
+
+                    case TERM_BOXED_REF: {
+                        term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
+                        if (term_is_resource_reference(ref)) {
+                            term *target_mso = (ptr >= heap->old_heap_start && ptr < heap->old_heap_end) ? old_mso_list : young_mso_list;
+                            *target_mso = term_list_init_prepend(ptr + REFERENCE_RESOURCE_CONS_OFFSET, ref, *target_mso);
+                            refc_binary_increment_refcount((struct RefcBinary *) term_resource_refc_binary_ptr(ref));
+                        }
+                        break;
+                    }
+
+                    case TERM_BOXED_FUN: {
+                        for (size_t i = 3; i <= arity; i++) {
+                            ptr[i] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[i], new_young_heap, old_heap_ptr);
+                        }
+                        break;
+                    }
+
+                    case TERM_BOXED_REFC_BINARY: {
+                        term ref = ((term) ptr) | TERM_PRIMARY_BOXED;
+                        if (!term_refc_binary_is_const(ref)) {
+                            term *target_mso = (ptr >= heap->old_heap_start && ptr < heap->old_heap_end) ? old_mso_list : young_mso_list;
+                            *target_mso = term_list_init_prepend(ptr + REFC_BINARY_CONS_OFFSET, ref, *target_mso);
+                            refc_binary_increment_refcount((struct RefcBinary *) term_refc_binary_ptr(ref));
+                        }
+                        break;
+                    }
+
+                    case TERM_BOXED_SUB_BINARY: {
+                        ptr[3] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[3], new_young_heap, old_heap_ptr);
+                        break;
+                    }
+
+                    case TERM_BOXED_MAP: {
+                        size_t map_size = arity - 1;
+                        size_t keys_offset = term_get_map_keys_offset();
+                        size_t value_offset = term_get_map_value_offset();
+                        ptr[keys_offset] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[keys_offset], new_young_heap, old_heap_ptr);
+                        for (size_t i = value_offset; i < value_offset + map_size; ++i) {
+                            ptr[i] = memory_shallow_copy_term_generational(old_fragment, heap, ptr[i], new_young_heap, old_heap_ptr);
+                        }
+                        break;
+                    }
+
+                    default:
+                        fprintf(stderr, "- Found unknown boxed type: %" TERM_X_FMT "\n", (t >> 2) & 0xF);
+                        AVM_ABORT();
+                }
+                ptr += arity + 1;
+                break;
+            }
+            case TERM_PRIMARY_LIST:
+                *ptr = memory_shallow_copy_term_generational(old_fragment, heap, t, new_young_heap, old_heap_ptr);
+                ptr++;
+                break;
+            case TERM_PRIMARY_BOXED:
+                *ptr = memory_shallow_copy_term_generational(old_fragment, heap, t, new_young_heap, old_heap_ptr);
+                ptr++;
+                break;
+            default:
+                UNREACHABLE();
+        }
+    }
+}
+
+static enum MemoryGCResult memory_minor_gc(Context *ctx, size_t new_size, size_t num_roots, term *roots)
+{
+    TRACE("Going to perform minor gc on process %i\n", ctx->process_id);
+
+    term old_young_mso_list = ctx->heap.root->mso_list;
+    term *old_stack_ptr = context_stack_base(ctx);
+    term *old_heap_end = ctx->heap.heap_end;
+    HeapFragment *old_root_fragment = ctx->heap.root;
+    term *high_water_mark = ctx->heap.high_water_mark;
+
+    size_t mature_size = high_water_mark - ctx->heap.heap_start;
+
+    // Save old heap state before memory_init_heap clears it
+    term *saved_old_heap_start = ctx->heap.old_heap_start;
+    term *saved_old_heap_ptr = ctx->heap.old_heap_ptr;
+    term *saved_old_heap_end = ctx->heap.old_heap_end;
+    term saved_old_mso_list = ctx->heap.old_mso_list;
+
+    bool newly_allocated_old_heap = false;
+
+    if (saved_old_heap_start == NULL) {
+        if (mature_size > 0) {
+            HeapFragment *old_fragment = (HeapFragment *) malloc(sizeof(HeapFragment) + mature_size * sizeof(term));
+            if (IS_NULL_PTR(old_fragment)) {
+                goto fallback_full_gc;
+            }
+            old_fragment->next = NULL;
+            saved_old_heap_start = old_fragment->storage;
+            saved_old_heap_ptr = old_fragment->storage;
+            saved_old_heap_end = old_fragment->storage + mature_size;
+            newly_allocated_old_heap = true;
+        }
+    } else {
+        size_t old_free = saved_old_heap_end - saved_old_heap_ptr;
+        if (old_free < mature_size) {
+            goto fallback_full_gc;
+        }
+    }
+
+    if (UNLIKELY(memory_init_heap(&ctx->heap, new_size) != MEMORY_GC_OK)) {
+        if (newly_allocated_old_heap) {
+            free(OLD_HEAP_TO_FRAGMENT(saved_old_heap_start));
+        }
+        return MEMORY_GC_ERROR_FAILED_ALLOCATION;
+    }
+    old_root_fragment->heap_end = old_heap_end;
+
+    {
+        Heap gen_heap;
+        gen_heap.heap_start = old_root_fragment->storage;
+        gen_heap.high_water_mark = high_water_mark;
+        gen_heap.old_heap_start = saved_old_heap_start;
+        gen_heap.old_heap_ptr = saved_old_heap_ptr;
+        gen_heap.old_heap_end = saved_old_heap_end;
+
+        term *new_young_heap = ctx->heap.heap_start;
+        term *old_heap_ptr = saved_old_heap_ptr;
+
+        // Root scanning: stack
+        term *stack_ptr = new_young_heap + new_size;
+        while (old_stack_ptr > ctx->e) {
+            term new_root = memory_shallow_copy_term_generational(
+                old_root_fragment, &gen_heap, *(--old_stack_ptr),
+                &ctx->heap.heap_ptr, &old_heap_ptr);
+            push_to_stack(&stack_ptr, new_root);
+        }
+        ctx->e = stack_ptr;
+
+        struct ListHead *item;
+        LIST_FOR_EACH (item, &ctx->dictionary) {
+            struct DictEntry *entry = GET_LIST_ENTRY(item, struct DictEntry, head);
+            entry->key = memory_shallow_copy_term_generational(
+                old_root_fragment, &gen_heap, entry->key,
+                &ctx->heap.heap_ptr, &old_heap_ptr);
+            entry->value = memory_shallow_copy_term_generational(
+                old_root_fragment, &gen_heap, entry->value,
+                &ctx->heap.heap_ptr, &old_heap_ptr);
+        }
+
+        LIST_FOR_EACH (item, &ctx->extended_x_regs) {
+            struct ExtendedRegister *ext_reg = GET_LIST_ENTRY(item, struct ExtendedRegister, head);
+            ext_reg->value = memory_shallow_copy_term_generational(
+                old_root_fragment, &gen_heap, ext_reg->value,
+                &ctx->heap.heap_ptr, &old_heap_ptr);
+        }
+
+        ctx->exit_reason = memory_shallow_copy_term_generational(
+            old_root_fragment, &gen_heap, ctx->exit_reason,
+            &ctx->heap.heap_ptr, &old_heap_ptr);
+        ctx->group_leader = memory_shallow_copy_term_generational(
+            old_root_fragment, &gen_heap, ctx->group_leader,
+            &ctx->heap.heap_ptr, &old_heap_ptr);
+
+        for (size_t i = 0; i < num_roots; i++) {
+            roots[i] = memory_shallow_copy_term_generational(
+                old_root_fragment, &gen_heap, roots[i],
+                &ctx->heap.heap_ptr, &old_heap_ptr);
+        }
+
+        // Dual scan loop on new young heap and promoted old region
+        {
+            term *young_scan = new_young_heap;
+            term *young_end = ctx->heap.heap_ptr;
+            term *old_scan = saved_old_heap_ptr;
+            term *old_end = old_heap_ptr;
+            term new_young_mso_list = term_nil();
+            term new_old_mso_list = saved_old_mso_list;
+
+            do {
+                term *next_young_end = young_end;
+                term *next_old_end = old_end;
+
+                if (young_scan < young_end) {
+                    memory_scan_and_copy_generational(
+                        old_root_fragment, &gen_heap,
+                        young_scan, young_end,
+                        &next_young_end, &old_heap_ptr,
+                        &new_young_mso_list, &new_old_mso_list);
+                    young_scan = young_end;
+                    young_end = next_young_end;
+                    next_old_end = old_heap_ptr;
+                }
+
+                if (old_scan < old_end) {
+                    memory_scan_and_copy_generational(
+                        old_root_fragment, &gen_heap,
+                        old_scan, old_end,
+                        &young_end, &old_heap_ptr,
+                        &new_young_mso_list, &new_old_mso_list);
+                    old_scan = old_end;
+                    old_end = old_heap_ptr;
+                    next_young_end = young_end;
+                }
+
+                young_end = next_young_end;
+                old_end = next_old_end > old_heap_ptr ? next_old_end : old_heap_ptr;
+            } while (young_scan != young_end || old_scan != old_end);
+
+            ctx->heap.heap_ptr = young_end;
+
+            memory_sweep_mso_list(old_young_mso_list, ctx->global, false);
+            ctx->heap.root->mso_list = new_young_mso_list;
+            ctx->heap.old_mso_list = new_old_mso_list;
+        }
+
+        ctx->heap.old_heap_start = saved_old_heap_start;
+        ctx->heap.old_heap_ptr = old_heap_ptr;
+        ctx->heap.old_heap_end = saved_old_heap_end;
+        ctx->heap.high_water_mark = ctx->heap.heap_ptr;
+        ctx->gc_count++;
+
+        memory_destroy_heap_fragment(old_root_fragment);
+
+        return MEMORY_GC_OK;
+    }
+
+fallback_full_gc:
+    // Restore old heap pointers
+    ctx->heap.old_heap_start = saved_old_heap_start;
+    ctx->heap.old_heap_ptr = saved_old_heap_ptr;
+    ctx->heap.old_heap_end = saved_old_heap_end;
+    ctx->heap.old_mso_list = saved_old_mso_list;
+    {
+        enum MemoryGCResult result = memory_full_gc(ctx, new_size, num_roots, roots);
+        if (result == MEMORY_GC_OK) {
+            ctx->heap.high_water_mark = ctx->heap.heap_ptr;
+            ctx->gc_count = 0;
+        }
+        return result;
     }
 }
 

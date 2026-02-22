@@ -922,3 +922,40 @@ match binaries, as with the case of refc binaries on the process heap.
 #### Deletion
 
 Once all terms have been copied from the old heap to the new heap, and once the MSO list has been swept for unreachable references, the old heap is simply discarded via the `free` function.
+
+### Generational Garbage Collection
+
+The garbage collection described above is a *full sweep*: every live term is copied from the old heap to the new heap and the entire old heap is freed. While correct, this can be expensive for processes with large heaps, because long-lived data that has already survived previous collections must be copied again each time.
+
+AtomVM implements *generational* (or *minor*) garbage collection to reduce this cost, using the same approach as BEAM. The key observation is that most terms die young: they are allocated, used briefly, and become garbage. Terms that have survived at least one collection are likely to survive many more. Generational GC exploits this by dividing the heap into two generations:
+
+* **Young generation**: recently allocated terms, between the *high water mark* and the current heap pointer.
+* **Old (mature) generation**: terms that have survived at least one minor collection, stored in a separate old heap.
+
+#### High Water Mark
+
+After each garbage collection, the heap pointer position is recorded as the *high water mark*. On the next collection, terms allocated below the high water mark (i.e., terms that existed at the time of the previous collection) are considered mature. Terms allocated above the high water mark are young.
+
+#### Minor Collection
+
+During a minor collection:
+
+1. A new young heap is allocated.
+2. Mature terms (below the high water mark) are *promoted*: copied to the old heap rather than the new young heap.
+3. Young terms that are still reachable are copied to the new young heap.
+4. Both the new young heap and the newly promoted old region are scanned for references, since promoted terms may reference young terms and vice versa.
+5. Only the young MSO list is swept; the old MSO list is preserved.
+6. The previous heap is freed, but the old heap persists across minor collections.
+
+Because the old heap is not scanned for garbage during a minor collection, the cost is proportional to the size of the young generation rather than the entire heap.
+
+#### When Full vs. Minor Collection Occurs
+
+AtomVM keeps a counter (`gc_count`) of how many minor collections have occurred since the last full sweep. A full sweep is forced when:
+
+* The process has never been garbage collected (no high water mark exists).
+* `gc_count` reaches the `fullsweep_after` threshold.
+* The old heap does not have enough space to accommodate promoted terms.
+* A `MEMORY_FORCE_SHRINK` request is made (e.g., via `erlang:garbage_collect/0`).
+
+The `fullsweep_after` value can be set per-process via [`spawn_opt`](./programmers-guide.md#spawning-processes) or [`erlang:process_flag/2`](./apidocs/erlang/estdlib/erlang.md#process_flag2). The default value is 65535, meaning full sweeps are infrequent under normal operation. Setting it to `0` disables generational collection entirely, forcing a full sweep on every garbage collection event.

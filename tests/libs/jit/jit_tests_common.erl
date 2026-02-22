@@ -178,7 +178,10 @@ assert_stream(Arch, Dump, Stream) ->
         true ->
             ok;
         false ->
-            diff_disasm(Arch, Expected, Stream),
+            case erlang:system_info(machine) of
+                "BEAM" -> diff_disasm(Arch, Expected, Stream);
+                "ATOM" -> ok
+            end,
             ?assertEqual(Expected, Stream)
     end.
 

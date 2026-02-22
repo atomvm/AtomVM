@@ -150,19 +150,19 @@
 -define(WORD_SIZE, 8).
 
 % Following offsets are verified with static asserts in jit.c
-% ctx->e is 0x28
-% ctx->x is 0x30
-% ctx->cp is 0xB8
-% ctx->fr is 0xC0
-% ctx->bs is 0xC8
-% ctx->bs_offset is 0xD0
+% ctx->e is 0x50
+% ctx->x is 0x58
+% ctx->cp is 0xE0
+% ctx->fr is 0xE8
+% ctx->bs is 0xF0
+% ctx->bs_offset is 0xF8
 -define(CTX_REG, rdi).
 -define(JITSTATE_REG, rsi).
 -define(NATIVE_INTERFACE_REG, rdx).
--define(Y_REGS, {16#28, ?CTX_REG}).
--define(X_REG(N), {16#30 + (N * ?WORD_SIZE), ?CTX_REG}).
--define(CP, {16#B8, ?CTX_REG}).
--define(FP_REGS, {16#C0, ?CTX_REG}).
+-define(Y_REGS, {16#50, ?CTX_REG}).
+-define(X_REG(N), {16#58 + (N * ?WORD_SIZE), ?CTX_REG}).
+-define(CP, {16#E0, ?CTX_REG}).
+-define(FP_REGS, {16#E8, ?CTX_REG}).
 -define(FP_REG_OFFSET(State, F),
     (F *
         case (State)#state.variant band ?JIT_VARIANT_FLOAT32 of
@@ -170,8 +170,8 @@
             _ -> 4
         end)
 ).
--define(BS, {16#C8, ?CTX_REG}).
--define(BS_OFFSET, {16#D0, ?CTX_REG}).
+-define(BS, {16#F0, ?CTX_REG}).
+-define(BS_OFFSET, {16#F8, ?CTX_REG}).
 -define(JITSTATE_MODULE, {0, ?JITSTATE_REG}).
 -define(JITSTATE_CONTINUATION, {16#8, ?JITSTATE_REG}).
 -define(JITSTATE_REMAINING_REDUCTIONS, {16#10, ?JITSTATE_REG}).

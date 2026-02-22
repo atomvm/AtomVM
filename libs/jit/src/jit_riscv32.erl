@@ -195,16 +195,16 @@
     | {{free, riscv32_register()}, '==', {free, riscv32_register()}}.
 
 % Context offsets (32-bit architecture)
-% ctx->e is 0x14
-% ctx->x is 0x18
+% ctx->e is 0x28
+% ctx->x is 0x2C
 -define(CTX_REG, a0).
 -define(NATIVE_INTERFACE_REG, a2).
--define(Y_REGS, {?CTX_REG, 16#14}).
--define(X_REG(N), {?CTX_REG, 16#18 + (N * 4)}).
--define(CP, {?CTX_REG, 16#5C}).
--define(FP_REGS, {?CTX_REG, 16#60}).
--define(BS, {?CTX_REG, 16#64}).
--define(BS_OFFSET, {?CTX_REG, 16#68}).
+-define(Y_REGS, {?CTX_REG, 16#28}).
+-define(X_REG(N), {?CTX_REG, 16#2C + (N * 4)}).
+-define(CP, {?CTX_REG, 16#70}).
+-define(FP_REGS, {?CTX_REG, 16#74}).
+-define(BS, {?CTX_REG, 16#78}).
+-define(BS_OFFSET, {?CTX_REG, 16#7C}).
 % JITSTATE is in a1 register (no prolog, following aarch64 model)
 -define(JITSTATE_REG, a1).
 % Return address register (like LR in AArch64)

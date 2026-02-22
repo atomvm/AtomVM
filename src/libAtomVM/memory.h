@@ -85,6 +85,11 @@ struct Heap
     term *heap_start;
     term *heap_ptr;
     term *heap_end;
+    term *high_water_mark;
+    term *old_heap_start;
+    term *old_heap_ptr;
+    term *old_heap_end;
+    term old_mso_list;
 };
 
 #ifndef TYPEDEF_HEAP
@@ -179,6 +184,9 @@ static inline size_t memory_heap_memory_size(const Heap *heap)
     size_t result = memory_heap_youngest_size(heap);
     if (heap->root->next) {
         result += memory_heap_fragment_memory_size(heap->root->next);
+    }
+    if (heap->old_heap_start) {
+        result += heap->old_heap_end - heap->old_heap_start;
     }
     return result;
 }
@@ -359,6 +367,12 @@ static inline void memory_destroy_heap_fragment(HeapFragment *fragment)
 }
 
 /**
+ * @brief Recover the HeapFragment pointer from an old_heap_start pointer.
+ */
+#define OLD_HEAP_TO_FRAGMENT(ptr) \
+    ((HeapFragment *) ((char *) (ptr) -offsetof(HeapFragment, storage)))
+
+/**
  * @brief Destroy a root heap. First sweep its mso list.
  *
  * @details This function shall only be called from a scheduler thread
@@ -371,6 +385,10 @@ static inline void memory_destroy_heap_fragment(HeapFragment *fragment)
 static inline void memory_destroy_heap(Heap *heap, GlobalContext *global)
 {
     memory_sweep_mso_list(heap->root->mso_list, global, false);
+    if (heap->old_heap_start) {
+        memory_sweep_mso_list(heap->old_mso_list, global, false);
+        free(OLD_HEAP_TO_FRAGMENT(heap->old_heap_start));
+    }
     memory_destroy_heap_fragment(heap->root);
 }
 
@@ -386,6 +404,10 @@ static inline void memory_destroy_heap(Heap *heap, GlobalContext *global)
 static inline void memory_destroy_heap_from_task(Heap *heap, GlobalContext *global)
 {
     memory_sweep_mso_list(heap->root->mso_list, global, true);
+    if (heap->old_heap_start) {
+        memory_sweep_mso_list(heap->old_mso_list, global, true);
+        free(OLD_HEAP_TO_FRAGMENT(heap->old_heap_start));
+    }
     memory_destroy_heap_fragment(heap->root);
 }
 #endif

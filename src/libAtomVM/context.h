@@ -113,6 +113,8 @@ struct Context
     size_t min_heap_size;
     size_t max_heap_size;
     enum HeapGrowthStrategy heap_growth_strategy;
+    unsigned int fullsweep_after;
+    unsigned int gc_count;
 
     // saved state when scheduled out
     Module *saved_module;
