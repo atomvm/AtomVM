@@ -573,6 +573,7 @@ compile_erlang(link_kill_parent)
 compile_erlang(link_throw)
 compile_erlang(unlink_error)
 compile_erlang(trap_exit_flag)
+compile_erlang(test_process_flag_fullsweep_after)
 compile_erlang(test_exit1)
 compile_erlang(test_exit2)
 
@@ -1139,6 +1140,7 @@ set(erlang_test_beams
     link_throw.beam
     unlink_error.beam
     trap_exit_flag.beam
+    test_process_flag_fullsweep_after.beam
     test_exit1.beam
     test_exit2.beam
 
