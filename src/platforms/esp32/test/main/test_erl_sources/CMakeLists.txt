@@ -29,7 +29,7 @@ endif()
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../../../
     INSTALL_COMMAND cmake -E echo "Skipping install step."
-    BUILD_COMMAND cmake --build . --target=atomvmlib ${host_atomvm_jit_target} --target=PackBEAM
+    BUILD_COMMAND cmake --build . --target=atomvmlib-esp32 ${host_atomvm_jit_target} --target=PackBEAM
 )
 
 macro(jit_precompile module_name)
@@ -113,7 +113,7 @@ endif()
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
-        HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
+        HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib-esp32.avm
         ${erlang_test_beams_to_package}
     DEPENDS
         HostAtomVM

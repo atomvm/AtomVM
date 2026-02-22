@@ -23,7 +23,7 @@ project(esp32boot)
 include(BuildErlang)
 
 if (Elixir_FOUND)
-    pack_runnable(elixir_esp32boot esp32init esp32devmode eavmlib estdlib alisp exavmlib)
+    pack_runnable(elixir_esp32boot esp32init esp32devmode eavmlib estdlib alisp avm_network avm_esp32 exavmlib)
 endif()
 
-pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp)
+pack_runnable(esp32boot esp32init esp32devmode eavmlib estdlib alisp avm_network avm_esp32)
