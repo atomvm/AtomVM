@@ -60,6 +60,12 @@ _Static_assert(ALL_ATOM_INDEX == 15, "ALL_ATOM_INDEX is 15 in libs/jit/src/defau
 _Static_assert(LOWERCASE_EXIT_ATOM_INDEX == 16, "LOWERCASE_EXIT_ATOM_INDEX is 16 in libs/jit/src/default_atoms.hrl ");
 _Static_assert(BADRECORD_ATOM_INDEX == 17, "BADRECORD_ATOM_INDEX is 17 in libs/jit/src/default_atoms.hrl ");
 
+// Verify n_words constants in primitives.hrl
+_Static_assert(
+    CALL_EXT_NO_DEALLOC == -1, "CALL_EXT_NO_DEALLOC is -1 in libs/jit/src/primitives.hrl");
+_Static_assert(
+    CALL_EXT_NO_DEALLOC_MFA == -2, "CALL_EXT_NO_DEALLOC_MFA is -2 in libs/jit/src/primitives.hrl");
+
 // Verify offsets in jit_x86_64.erl
 #if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
 _Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64}.erl");
@@ -126,6 +132,21 @@ _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for doubl
         } else {                                                                \
             return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state); \
         }                                                                       \
+    }
+
+#define PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST_MFA(return_value, offset, m, i, a)           \
+    if (term_is_invalid_term(return_value)) {                                             \
+        if (UNLIKELY(!context_get_flags(ctx, Trap))) {                                    \
+            term module_atom;                                                             \
+            term function_atom;                                                           \
+            module_get_imported_function_module_and_name_atoms(                           \
+                (m), (i), &module_atom, &function_atom);                                  \
+            ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, jit_state->module, \
+                (offset), module_atom, function_atom, (a));                               \
+            return jit_handle_error(ctx, jit_state, 0);                                   \
+        } else {                                                                          \
+            return jit_schedule_wait_cp(jit_return(ctx, jit_state), jit_state);           \
+        }                                                                                 \
     }
 
 #ifndef MIN
@@ -200,10 +221,20 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
-    TRACE("jit_terminate_context: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    if (offset || term_is_invalid_term(ctx->x[2])) {
-        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
+    TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
+    if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
+        ctx->exception_stacktrace
+            = stacktrace_create_raw(ctx, jit_state->module, offset);
     }
+
+    // Copy exception fields to x registers and clear them
+    ctx->x[0] = context_exception_class(ctx);
+    ctx->x[1] = ctx->exception_reason;
+    ctx->x[2] = ctx->exception_stacktrace;
+    context_set_exception_class(ctx, term_nil());
+    ctx->exception_reason = term_nil();
+    ctx->exception_stacktrace = term_nil();
+
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {
         if (jit_state->module->native_code) {
@@ -258,12 +289,13 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 
 static void set_error(Context *ctx, JITState *jit_state, int offset, term error_term)
 {
-    ctx->x[0] = ERROR_ATOM;
-    ctx->x[1] = error_term;
+    context_set_exception_class(ctx, ERROR_ATOM);
+    ctx->exception_reason = error_term;
     if (offset) {
-        ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ERROR_ATOM);
+        ctx->exception_stacktrace
+            = stacktrace_create_raw(ctx, jit_state->module, offset);
     } else {
-        ctx->x[2] = term_invalid_term();
+        ctx->exception_stacktrace = term_invalid_term();
     }
 }
 
@@ -271,6 +303,20 @@ static Context *jit_raise_error(Context *ctx, JITState *jit_state, int offset, t
 {
     TRACE("jit_raise_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
     set_error(ctx, jit_state, offset, error_type_atom);
+    return jit_handle_error(ctx, jit_state, 0);
+}
+
+static Context *jit_raise_error_mfa(
+    Context *ctx, JITState *jit_state, int offset, int function_atom_index, int arity)
+{
+    TRACE("jit_raise_error_mfa: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id,
+        offset);
+    term module_atom = module_get_name(jit_state->module);
+    term function_atom = module_get_atom_term_by_id(jit_state->module, function_atom_index);
+    context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);
+    ctx->exception_reason = FUNCTION_CLAUSE_ATOM;
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(
+        ctx, jit_state->module, offset, module_atom, function_atom, arity);
     return jit_handle_error(ctx, jit_state, 0);
 }
 
@@ -291,12 +337,21 @@ static Context *jit_raise_error_tuple(Context *ctx, JITState *jit_state, int off
     return jit_handle_error(ctx, jit_state, 0);
 }
 
-static Context *jit_raise(Context *ctx, JITState *jit_state, int offset, term stacktrace, term exc_value)
+static Context *jit_raise(Context *ctx, JITState *jit_state, term stacktrace, term exc_value)
 {
-    TRACE("jit_raise: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    ctx->x[0] = stacktrace_exception_class(stacktrace);
-    ctx->x[1] = exc_value;
-    ctx->x[2] = stacktrace_create_raw(ctx, jit_state->module, offset, ctx->x[0]);
+    TRACE("jit_raise: ctx->process_id = %" PRId32 "\n", ctx->process_id);
+    context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
+    ctx->exception_reason = exc_value;
+    ctx->exception_stacktrace = stacktrace;
+    return jit_handle_error(ctx, jit_state, 0);
+}
+
+static Context *jit_raw_raise(Context *ctx, JITState *jit_state)
+{
+    TRACE("jit_raw_raise: ctx->process_id = %" PRId32 "\n", ctx->process_id);
+    context_set_exception_class(ctx, ctx->x[0]);
+    ctx->exception_reason = ctx->x[1];
+    ctx->exception_stacktrace = ctx->x[2];
     return jit_handle_error(ctx, jit_state, 0);
 }
 
@@ -356,7 +411,19 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
         case NIFFunctionType: {
             const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
             term return_value = nif->nif_ptr(ctx, arity, ctx->x);
-            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
+            if (UNLIKELY(term_is_invalid_term(return_value))) {
+                if (n_words == CALL_EXT_NO_DEALLOC_MFA) {
+                    // CALL_EXT_NO_DEALLOC_MFA uses MFA enriched error handling
+                    // like the emulator's
+                    // PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY.
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST_MFA(
+                        return_value, offset, jit_state->module, index, arity);
+                } else {
+                    // CALL_EXT_NO_DEALLOC (CALL_EXT_ONLY) or n_words >= 0
+                    // (CALL_EXT_LAST) use the regular error path.
+                    PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value, offset);
+                }
+            }
             ctx->x[0] = return_value;
 
             // We deallocate after (instead of before) as a
@@ -593,9 +660,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -604,9 +669,7 @@ static term jit_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
 #endif
     Heap heap;
     if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-        ctx->x[0] = ERROR_ATOM;
-        ctx->x[1] = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -619,9 +682,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
     if ((value < AVM_INT_MIN) || (value > AVM_INT_MAX)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT64_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -631,9 +692,7 @@ static term maybe_alloc_boxed_integer_fragment(Context *ctx, avm_int64_t value)
         if ((value < MIN_NOT_BOXED_INT) || (value > MAX_NOT_BOXED_INT)) {
         Heap heap;
         if (UNLIKELY(memory_init_heap(&heap, BOXED_INT_SIZE) != MEMORY_GC_OK)) {
-            ctx->x[0] = ERROR_ATOM;
-            ctx->x[1] = OUT_OF_MEMORY_ATOM;
-            return term_invalid_term();
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         memory_heap_append_heap(&ctx->heap, &heap);
 
@@ -655,9 +714,7 @@ static term jit_alloc_big_integer_fragment(
     term_bigint_size_requirements(digits_len, &intn_data_size, &rounded_res_len);
 
     if (UNLIKELY(memory_init_heap(&heap, BOXED_BIGINT_HEAP_SIZE(intn_data_size)) != MEMORY_GC_OK)) {
-        ctx->x[0] = ERROR_ATOM;
-        ctx->x[1] = OUT_OF_MEMORY_ATOM;
-        return term_invalid_term();
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term bigint_term
@@ -1866,7 +1923,9 @@ const ModuleNativeInterface module_native_interface = {
     jit_stacktrace_build,
     jit_term_reuse_binary,
     jit_alloc_big_integer_fragment,
-    jit_bitstring_insert_float
+    jit_bitstring_insert_float,
+    jit_raw_raise,
+    jit_raise_error_mfa
 };
 
 #endif

@@ -289,35 +289,26 @@ tail_call_cache_armv6m_test() ->
         jit_armv6m, ?CODE_CHUNK_3, ?ATU8_CHUNK_3, ?TYPE_CHUNK_3
     ),
 
-    % Check that we have the following pattern:
-    %  8c:	278c      	movs	r7, #140	; 0x8c
-    %  8e:	6816      	ldr	r6, [r2, #0]
-    %  90:	463a      	mov	r2, r7
-    %  92:	23ff      	movs	r3, #255	; 0xff
-    %  94:	33cc      	adds	r3, #204	; 0xcc
-    %  96:	9f05      	ldr	r7, [sp, #20]
-    %  98:	9605      	str	r6, [sp, #20]
-    %  9a:	46be      	mov	lr, r7
-    %  9c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}
+    % PRIM_RETURN (primitive index 1) tail call pattern on armv6m:
+    %   ldr  r7, [r2, #4]   ; load PRIM_RETURN function pointer
+    %   ldr  r6, [sp, #20]  ; load saved LR
+    %   str  r7, [sp, #20]  ; store function ptr as return address
+    %   mov  lr, r6         ; restore LR
+    %   pop  {r1,r4,r5,r6,r7,pc}  ; tail call via popped PC
+    ReturnPattern =
+        <<16#6857:16/little, 16#9e05:16/little, 16#9705:16/little, 16#46b6:16/little,
+            16#bdf2:16/little>>,
 
-    % Check for the first return implementation (call_primitive_last for PRIM_RETURN)
-    ?assertMatch(
-        {_, _},
-        binary:match(
-            CompiledCode,
-            <<16#278c:16/little, 16#6816:16/little, 16#463a:16/little, 16#23ff:16/little,
-                16#33cc:16/little, 16#9f05:16/little, 16#9605:16/little, 16#46be:16/little,
-                16#bdf2:16/little>>
-        )
-    ),
-
-    % Check for tail-call cache jump: ldr r7, [pc, #0] followed by b.n (backward branch)
-    % 29c:	27a7      	movs	r7, #167	; 0xa7
-    % 29e:	00bf      	lsls	r7, r7, #2
-    % 2a0:	e6f4      	b.n	0x8c
-
-    ?assertMatch(
-        {_, _},
-        binary:match(CompiledCode, <<16#27a7:16/little, 16#00bf:16/little, 16#e6f4:16/little>>)
+    % The PRIM_RETURN pattern must appear exactly once in the compiled code.
+    % The module has multiple OP_RETURN opcodes, so if caching works,
+    % subsequent returns jump back to the first instance instead of
+    % duplicating the tail call sequence.
+    {Pos, Len} = binary:match(CompiledCode, ReturnPattern),
+    % Verify there is no second occurrence after the first one
+    ?assertEqual(
+        nomatch,
+        binary:match(CompiledCode, ReturnPattern, [
+            {scope, {Pos + Len, byte_size(CompiledCode) - Pos - Len}}
+        ])
     ),
     ok.

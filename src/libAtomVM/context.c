@@ -123,6 +123,10 @@ Context *context_new(GlobalContext *glb)
     ctx->bs = term_invalid_term();
     ctx->bs_offset = 0;
 
+    context_set_exception_class(ctx, term_nil());
+    ctx->exception_reason = term_nil();
+    ctx->exception_stacktrace = term_nil();
+
     ctx->exit_reason = NORMAL_ATOM;
 
     globalcontext_init_process(glb, ctx);

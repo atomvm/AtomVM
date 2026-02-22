@@ -109,11 +109,8 @@ struct Module
 {
     int module_index;
 
-#ifdef ENABLE_ADVANCED_TRACE
-    void *import_table;
-#endif
-
     CodeChunk *code;
+    void *import_table;
     void *export_table;
     void *local_table;
     void *atom_table;
@@ -179,6 +176,18 @@ enum ModuleLoadResult
  */
 void module_get_imported_function_module_and_name(const Module *this_module, int index, AtomString *module_atom, AtomString *function_atom, GlobalContext *glb);
 #endif
+
+/**
+ * @brief Gets imported function module and name atom
+ *
+ * @details Gets imported function module and name given its import table index.
+ * @param this_module the module on which the function will be searched.
+ * @param index the modules import table offset to begin searching.
+ * @param module_atom module name atom
+ * @param function_atom function name atom
+ */
+void module_get_imported_function_module_and_name_atoms(
+    const Module *this_module, int index, term *module_atom, term *function_atom);
 
 /**
  * @brief Count exported functions of a given module

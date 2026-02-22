@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 instead `badarg`.
 - Resources are now references instead of empty binaries.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
+- When function head doesn't match, function arguments are now in stacktrace
+- Function arguments are added to stacktrace also for some NIFs, when one of the arguments is badarg
 
 ### Fixed
 
@@ -106,6 +108,7 @@ instead `badarg`.
 - Fix supervisor crash if a `one_for_one` child fails to restart.
 - Fix collision in references created with `make_ref/0` on 32 bits platforms.
 - Fixed a bug in `OP_BS_CREATE_BIN`
+- Fix re-raise behavior by implementing `erlang:raise/3` 3rd argument support
 
 ## [0.6.7] - Unreleased
 
