@@ -2975,7 +2975,7 @@ wait_timeout_trap_handler:
                 // Redo the offset computation and refetch the label
                 int label;
                 DECODE_LABEL(label, pc)
-                int timeout;
+                term timeout;
                 DECODE_COMPACT_TERM(timeout, pc)
                 TRACE("wait_timeout_trap_handler, label: %i\n", label);
                 PROCESS_SIGNAL_MESSAGES();
@@ -4511,8 +4511,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_skip_utf16/5\n");
@@ -4528,7 +4528,7 @@ wait_timeout_trap_handler:
 
                     int32_t val = 0;
                     size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags);
+                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];
@@ -4623,8 +4623,8 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
-                term flags;
-                DECODE_LITERAL(flags, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc);
 
                 #ifdef IMPL_CODE_LOADER
                     TRACE("bs_skip_utf32/5\n");
@@ -4639,7 +4639,7 @@ wait_timeout_trap_handler:
                     avm_int_t offset_bits = term_get_match_state_offset(src);
 
                     int32_t val = 0;
-                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags);
+                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
 
                     if (!is_valid) {
                         pc = mod->labels[fail];

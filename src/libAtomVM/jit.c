@@ -1370,7 +1370,7 @@ static term jit_bitstring_extract_integer(
     if (n <= 64) {
         union maybe_unsigned_int64 value;
         bool status = bitstring_extract_integer(
-            ((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            (term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
         if (UNLIKELY(!status)) {
             return FALSE_ATOM;
         }
@@ -1402,13 +1402,13 @@ static term jit_bitstring_extract_float(Context *ctx, term *bin_ptr, size_t offs
     bool status;
     switch (n) {
         case 16:
-            status = bitstring_extract_f16(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            status = bitstring_extract_f16((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
             break;
         case 32:
-            status = bitstring_extract_f32(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            status = bitstring_extract_f32((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
             break;
         case 64:
-            status = bitstring_extract_f64(((term) bin_ptr) | TERM_PRIMARY_BOXED, offset, n, bs_flags, &value);
+            status = bitstring_extract_f64((term) (((uintptr_t) bin_ptr) | TERM_PRIMARY_BOXED), offset, n, bs_flags, &value);
             break;
         default:
             status = false;
