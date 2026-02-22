@@ -158,23 +158,23 @@ start_link(SupName, Module, Args) ->
 
 -spec start_child(Supervisor :: sup_ref(), ChildSpec :: child_spec()) -> startchild_ret().
 start_child(Supervisor, ChildSpec) ->
-    gen_server:call(Supervisor, {start_child, ChildSpec}).
+    gen_server:call(Supervisor, {start_child, ChildSpec}, infinity).
 
 -spec terminate_child(Supervisor :: sup_ref(), ChildId :: any()) -> ok | {error, not_found}.
 terminate_child(Supervisor, ChildId) ->
-    gen_server:call(Supervisor, {terminate_child, ChildId}).
+    gen_server:call(Supervisor, {terminate_child, ChildId}, infinity).
 
 -spec restart_child(Supervisor :: sup_ref(), ChildId :: any()) ->
     {ok, Child :: child()}
     | {ok, Child :: child(), Info :: term()}
     | {error, Reason :: running | restarting | not_found | term()}.
 restart_child(Supervisor, ChildId) ->
-    gen_server:call(Supervisor, {restart_child, ChildId}).
+    gen_server:call(Supervisor, {restart_child, ChildId}, infinity).
 
 -spec delete_child(Supervisor :: sup_ref(), ChildId :: any()) ->
     ok | {error, Reason :: running | restarting | not_found}.
 delete_child(Supervisor, ChildId) ->
-    gen_server:call(Supervisor, {delete_child, ChildId}).
+    gen_server:call(Supervisor, {delete_child, ChildId}, infinity).
 
 -spec which_children(Supervisor :: sup_ref()) ->
     [
@@ -186,7 +186,7 @@ delete_child(Supervisor, ChildId) ->
         }
     ].
 which_children(Supervisor) ->
-    gen_server:call(Supervisor, which_children).
+    gen_server:call(Supervisor, which_children, infinity).
 
 -spec count_children(Supervisor :: sup_ref()) ->
     [
@@ -196,7 +196,7 @@ which_children(Supervisor) ->
         | {workers, ChildWorkerCount :: non_neg_integer()}
     ].
 count_children(Supervisor) ->
-    gen_server:call(Supervisor, count_children).
+    gen_server:call(Supervisor, count_children, infinity).
 
 % @hidden
 -spec init({Mod :: module(), Args :: [any()]}) ->
