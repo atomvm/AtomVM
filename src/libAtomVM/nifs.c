@@ -1291,6 +1291,7 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
 {
     term min_heap_size_term = interop_proplist_get_value(opts_term, MIN_HEAP_SIZE_ATOM);
     term max_heap_size_term = interop_proplist_get_value(opts_term, MAX_HEAP_SIZE_ATOM);
+    term fullsweep_after_term = interop_proplist_get_value(opts_term, FULLSWEEP_AFTER_ATOM);
     term link_term = interop_proplist_get_value(opts_term, LINK_ATOM);
     term monitor_term = interop_proplist_get_value(opts_term, MONITOR_ATOM);
     term heap_growth_strategy = interop_proplist_get_value_default(opts_term, ATOMVM_HEAP_GROWTH_ATOM, BOUNDED_FREE_ATOM);
@@ -1331,6 +1332,13 @@ static term do_spawn(Context *ctx, Context *new_ctx, size_t arity, size_t n_free
             context_destroy(new_ctx);
             RAISE_ERROR(BADARG_ATOM);
         }
+    }
+    if (fullsweep_after_term != term_nil()) {
+        if (UNLIKELY(!term_is_integer(fullsweep_after_term))) {
+            context_destroy(new_ctx);
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        new_ctx->fullsweep_after = term_to_int(fullsweep_after_term);
     }
 
     int size = 0;
@@ -2868,6 +2876,14 @@ static term nif_erlang_process_flag(Context *ctx, int argc, term argv[])
                     default:
                         RAISE_ERROR(BADARG_ATOM);
                 }
+                return prev;
+            }
+            case FULLSWEEP_AFTER_ATOM: {
+                if (UNLIKELY(!term_is_integer(value))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                term prev = term_from_int(ctx->fullsweep_after);
+                ctx->fullsweep_after = term_to_int(value);
                 return prev;
             }
         }

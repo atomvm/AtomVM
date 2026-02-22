@@ -184,36 +184,36 @@ call_primitive_few_regs_test() ->
     Stream = ?BACKEND:stream(State7),
     Dump =
         <<
-            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-            "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
-            "   8:	4c 8b 57 40          	mov    0x40(%rdi),%r10\n"
-            "   c:	4c 8b 4f 48          	mov    0x48(%rdi),%r9\n"
-            "  10:	4c 8b 47 50          	mov    0x50(%rdi),%r8\n"
-            "  14:	48 8b 4f 58          	mov    0x58(%rdi),%rcx\n"
-            "  18:	57                   	push   %rdi\n"
-            "  19:	56                   	push   %rsi\n"
-            "  1a:	52                   	push   %rdx\n"
-            "  1b:	41 51                	push   %r9\n"
-            "  1d:	41 52                	push   %r10\n"
-            "  1f:	41 53                	push   %r11\n"
-            "  21:	50                   	push   %rax\n"
-            "  22:	48 8b 92 c8 01 00 00 	mov    0x1c8(%rdx),%rdx\n"
-            "  29:	52                   	push   %rdx\n"
-            "  2a:	48 89 c7             	mov    %rax,%rdi\n"
-            "  2d:	4c 89 de             	mov    %r11,%rsi\n"
-            "  30:	4c 89 c2             	mov    %r8,%rdx\n"
-            "  33:	4c 87 c9             	xchg   %r9,%rcx\n"
-            "  36:	4d 89 c8             	mov    %r9,%r8\n"
-            "  39:	58                   	pop    %rax\n"
-            "  3a:	ff d0                	callq  *%rax\n"
-            "  3c:	49 89 c0             	mov    %rax,%r8\n"
-            "  3f:	58                   	pop    %rax\n"
-            "  40:	41 5b                	pop    %r11\n"
-            "  42:	41 5a                	pop    %r10\n"
-            "  44:	41 59                	pop    %r9\n"
-            "  46:	5a                   	pop    %rdx\n"
-            "  47:	5e                   	pop    %rsi\n"
-            "  48:	5f                   	pop    %rdi"
+            "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+            "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
+            "   8:	4c 8b 57 68          	mov    0x68(%rdi),%r10\n"
+            "   c:	4c 8b 4f 70          	mov    0x70(%rdi),%r9\n"
+            "  10:	4c 8b 47 78          	mov    0x78(%rdi),%r8\n"
+            "  14:	48 8b 8f 80 00 00 00 	mov    0x80(%rdi),%rcx\n"
+            "  1b:	57                   	push   %rdi\n"
+            "  1c:	56                   	push   %rsi\n"
+            "  1d:	52                   	push   %rdx\n"
+            "  1e:	41 51                	push   %r9\n"
+            "  20:	41 52                	push   %r10\n"
+            "  22:	41 53                	push   %r11\n"
+            "  24:	50                   	push   %rax\n"
+            "  25:	48 8b 92 c8 01 00 00 	mov    0x1c8(%rdx),%rdx\n"
+            "  2c:	52                   	push   %rdx\n"
+            "  2d:	48 89 c7             	mov    %rax,%rdi\n"
+            "  30:	4c 89 de             	mov    %r11,%rsi\n"
+            "  33:	4c 89 c2             	mov    %r8,%rdx\n"
+            "  36:	4c 87 c9             	xchg   %r9,%rcx\n"
+            "  39:	4d 89 c8             	mov    %r9,%r8\n"
+            "  3c:	58                   	pop    %rax\n"
+            "  3d:	ff d0                	callq  *%rax\n"
+            "  3f:	49 89 c0             	mov    %rax,%r8\n"
+            "  42:	58                   	pop    %rax\n"
+            "  43:	41 5b                	pop    %r11\n"
+            "  45:	41 5a                	pop    %r10\n"
+            "  47:	41 59                	pop    %r9\n"
+            "  49:	5a                   	pop    %rdx\n"
+            "  4a:	5e                   	pop    %rsi\n"
+            "  4b:	5f                   	pop    %rdi"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -341,9 +341,9 @@ move_to_cp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+            "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
             "   4:	48 8b 00             	mov    (%rax),%rax\n"
-            "   7:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)\n"
+            "   7:	48 89 87 e0 00 00 00 	mov    %rax,0xe0(%rdi)\n"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -353,9 +353,9 @@ increment_sp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+            "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
             "   4:	48 83 c0 38          	add    $0x38,%rax\n"
-            "   8:	48 89 47 28          	mov    %rax,0x28(%rdi)\n"
+            "   8:	48 89 47 50          	mov    %rax,0x50(%rdi)\n"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -379,8 +379,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 85 c0             	test   %rax,%rax\n"
                         "   b:	7d 04                	jge    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -398,8 +398,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	4c 39 d8             	cmp    %r11,%rax\n"
                         "   b:	7d 04                	jge    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -417,8 +417,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 85 c0             	test   %rax,%rax\n"
                         "   b:	75 04                	jne    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -436,8 +436,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 85 c0             	test   %rax,%rax\n"
                         "   b:	75 04                	jne    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -455,8 +455,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	85 c0                	test   %eax,%eax\n"
                         "   a:	75 04                	jne    0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -474,8 +474,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	85 c0                	test   %eax,%eax\n"
                         "   a:	75 04                	jne    0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -493,8 +493,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 3b          	cmp    $0x3b,%rax\n"
                         "   c:	74 04                	je     0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -512,8 +512,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 3b          	cmp    $0x3b,%rax\n"
                         "   c:	74 04                	je     0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -531,8 +531,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	83 f8 2a             	cmp    $0x2a,%eax\n"
                         "   b:	74 04                	je     0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -550,8 +550,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	83 f8 2a             	cmp    $0x2a,%eax\n"
                         "   b:	74 04                	je     0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -569,8 +569,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 3b          	cmp    $0x3b,%rax\n"
                         "   c:	75 04                	jne    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -588,8 +588,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 3b          	cmp    $0x3b,%rax\n"
                         "   c:	75 04                	jne    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -607,8 +607,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	83 f8 2a             	cmp    $0x2a,%eax\n"
                         "   b:	75 04                	jne    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -626,8 +626,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	83 f8 2a             	cmp    $0x2a,%eax\n"
                         "   b:	75 04                	jne    0x11\n"
                         "   d:	49 83 c3 02          	add    $0x2,%r11"
@@ -645,8 +645,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	84 c0                	test   %al,%al\n"
                         "   a:	75 04                	jne    0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -664,8 +664,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	84 c0                	test   %al,%al\n"
                         "   a:	75 04                	jne    0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -683,8 +683,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	84 c0                	test   %al,%al\n"
                         "   a:	74 04                	je     0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -702,8 +702,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	84 c0                	test   %al,%al\n"
                         "   a:	74 04                	je     0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -721,8 +721,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	a8 07                	test   $0x7,%al\n"
                         "   a:	74 04                	je     0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -740,8 +740,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	a8 07                	test   $0x7,%al\n"
                         "   a:	74 04                	je     0x10\n"
                         "   c:	49 83 c3 02          	add    $0x2,%r11"
@@ -759,8 +759,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	49 89 c2             	mov    %rax,%r10\n"
                         "   b:	41 80 e2 0f          	and    $0xf,%r10b\n"
                         "   f:	41 80 fa 0f          	cmp    $0xf,%r10b\n"
@@ -780,8 +780,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	24 0f                	and    $0xf,%al\n"
                         "   a:	80 f8 0f             	cmp    $0xf,%al\n"
                         "   d:	74 04                	je     0x13\n"
@@ -800,8 +800,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 64          	cmp    $0x64,%rax\n"
                         "   c:	7e 04                	jle    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -819,8 +819,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 64          	cmp    $0x64,%rax\n"
                         "   c:	7e 04                	jle    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -838,8 +838,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 64          	cmp    $0x64,%rax\n"
                         "   c:	7d 04                	jge    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -857,8 +857,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	48 83 f8 64          	cmp    $0x64,%rax\n"
                         "   c:	7d 04                	jge    0x12\n"
                         "   e:	49 83 c3 02          	add    $0x2,%r11"
@@ -876,8 +876,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	49 ba 00 00 00 00 01 	movabs $0x100000000,%r10\n"
                         "   f:	00 00 00 \n"
                         "  12:	4c 39 d0             	cmp    %r10,%rax\n"
@@ -897,8 +897,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	49 ba 00 00 00 00 01 	movabs $0x100000000,%r10\n"
                         "   f:	00 00 00 \n"
                         "  12:	4c 39 d0             	cmp    %r10,%rax\n"
@@ -918,8 +918,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	49 ba 00 00 00 00 01 	movabs $0x100000000,%r10\n"
                         "   f:	00 00 00 \n"
                         "  12:	4c 39 d0             	cmp    %r10,%rax\n"
@@ -939,8 +939,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
                         "   8:	49 ba 00 00 00 00 01 	movabs $0x100000000,%r10\n"
                         "   f:	00 00 00 \n"
                         "  12:	4c 39 d0             	cmp    %r10,%rax\n"
@@ -970,8 +970,8 @@ if_else_block_test() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-            "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11\n"
+            "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+            "   4:	4c 8b 5f 60          	mov    0x60(%rdi),%r11\n"
             "   8:	48 83 f8 3b          	cmp    $0x3b,%rax\n"
             "   c:	75 06                	jne    0x14\n"
             "   e:	49 83 c3 02          	add    $0x2,%r11\n"
@@ -989,7 +989,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
                     "   4:	48 c1 e8 03          	shr    $0x3,%rax"
                 >>,
             ?assertEqual(dump_to_bin(Dump), Stream)
@@ -1002,7 +1002,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                    "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
                     "   4:	49 89 c3             	mov    %rax,%r11\n"
                     "   7:	49 c1 eb 03          	shr    $0x3,%r11"
                 >>,
@@ -1017,7 +1017,7 @@ shift_left_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+            "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
             "   4:	48 c1 e0 03          	shl    $0x3,%rax"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
@@ -1130,7 +1130,7 @@ call_bif_with_large_literal_integer_test() ->
             "  36:	52                   	push   %rdx\n"
             "  37:	48 c7 c6 00 00 00 00 	mov    $0x0,%rsi\n"
             "  3e:	48 c7 c2 01 00 00 00 	mov    $0x1,%rdx\n"
-            "  45:	48 8b 4f 30          	mov    0x30(%rdi),%rcx\n"
+            "  45:	48 8b 4f 58          	mov    0x58(%rdi),%rcx\n"
             "  49:	4d 89 d8             	mov    %r11,%r8\n"
             "  4c:	ff d0                	callq  *%rax\n"
             "  4e:	5a                   	pop    %rdx\n"
@@ -1141,7 +1141,7 @@ call_bif_with_large_literal_integer_test() ->
             "  56:	48 8b 42 30          	mov    0x30(%rdx),%rax\n"
             "  5a:	48 c7 c2 5a 00 00 00 	mov    $0x5a,%rdx\n"
             "  61:	ff e0                	jmpq   *%rax\n"
-            "  63:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+            "  63:	48 89 47 58          	mov    %rax,0x58(%rdi)"
         >>,
     ?assertEqual(dump_to_bin(Dump), Stream).
 
@@ -1155,12 +1155,12 @@ get_list_test() ->
     ?BACKEND:assert_all_native_free(State5),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
         "   4:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax\n"
-        "   8:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+        "   8:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
         "   c:	4c 8b 50 08          	mov    0x8(%rax),%r10\n"
         "  10:	4d 89 53 08          	mov    %r10,0x8(%r11)\n"
-        "  14:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+        "  14:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
         "  18:	4c 8b 10             	mov    (%rax),%r10\n"
         "  1b:	4d 89 13             	mov    %r10,(%r11)\n"
     >>,
@@ -1205,7 +1205,7 @@ is_integer_test() ->
     Dump = <<
         "   0:	e9 ff ff ff ff       	jmpq   0x4\n"
         "   5:	e9 36 01 00 00       	jmpq   0x140\n"
-        "   a:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   a:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
         "   e:	49 89 c3             	mov    %rax,%r11\n"
         "  11:	41 80 e3 0f          	and    $0xf,%r11b\n"
         "  15:	41 80 fb 0f          	cmp    $0xf,%r11b\n"
@@ -1262,7 +1262,7 @@ is_number_test() ->
     Dump = <<
         "   0:	e9 ff ff ff ff       	jmpq   0x4\n"
         "   5:	e9 43 01 00 00       	jmpq   0x14d\n"
-        "   a:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   a:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
         "   e:	49 89 c3             	mov    %rax,%r11\n"
         "  11:	41 80 e3 0f          	and    $0xf,%r11b\n"
         "  15:	41 80 fb 0f          	cmp    $0xf,%r11b\n"
@@ -1304,7 +1304,7 @@ is_boolean_test() ->
     Dump = <<
         "   0:	e9 ff ff ff ff       	jmpq   0x4\n"
         "   5:	e9 15 01 00 00       	jmpq   0x11f\n"
-        "   a:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   a:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
         "   e:	48 83 f8 4b          	cmp    $0x4b,%rax\n"
         "  12:	74 0b                	je     0x1f\n"
         "  14:	48 83 f8 0b          	cmp    $0xb,%rax\n"
@@ -1331,7 +1331,7 @@ call_ext_test() ->
         "  19:	8b 00                	mov    (%rax),%eax\n"
         "  1b:	48 c1 e0 18          	shl    $0x18,%rax\n"
         "  1f:	48 0d 1c 01 00 00    	or     $0x11c,%rax\n"
-        "  25:	48 89 87 b8 00 00 00 	mov    %rax,0xb8(%rdi)\n"
+        "  25:	48 89 87 e0 00 00 00 	mov    %rax,0xe0(%rdi)\n"
         "  2c:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
         "  30:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
         "  37:	48 c7 c1 05 00 00 00 	mov    $0x5,%rcx\n"
@@ -1376,7 +1376,7 @@ call_fun_test() ->
         "   c:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
         "  10:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
         "  14:	ff e0                	jmpq   *%rax\n"
-        "  16:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "  16:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
         "  1a:	49 89 c3             	mov    %rax,%r11\n"
         "  1d:	4d 89 da             	mov    %r11,%r10\n"
         "  20:	41 80 e2 03          	and    $0x3,%r10b\n"
@@ -1402,7 +1402,7 @@ call_fun_test() ->
         "  75:	45 8b 1b             	mov    (%r11),%r11d\n"
         "  78:	49 c1 e3 18          	shl    $0x18,%r11\n"
         "  7c:	49 81 cb 78 02 00 00 	or     $0x278,%r11\n"
-        "  83:	4c 89 9f b8 00 00 00 	mov    %r11,0xb8(%rdi)\n"
+        "  83:	4c 89 9f e0 00 00 00 	mov    %r11,0xe0(%rdi)\n"
         "  8a:	4c 8b 9a 00 01 00 00 	mov    0x100(%rdx),%r11\n"
         "  91:	48 89 c2             	mov    %rax,%rdx\n"
         "  94:	48 c7 c1 00 00 00 00 	mov    $0x0,%rcx\n"
@@ -1424,12 +1424,12 @@ move_to_vm_register_test_() ->
             [
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, 0}, <<
-                        "   0:	48 83 67 30 00       	andq   $0x0,0x30(%rdi)"
+                        "   0:	48 83 67 58 00       	andq   $0x0,0x58(%rdi)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, extra}, <<
-                        "   0:	48 83 a7 b0 00 00 00 	andq   $0x0,0xb0(%rdi)\n"
+                        "   0:	48 83 a7 d8 00 00 00 	andq   $0x0,0xd8(%rdi)\n"
                         "   7:	00 "
                     >>)
                 end),
@@ -1440,13 +1440,13 @@ move_to_vm_register_test_() ->
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 2}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 83 60 10 00       	andq   $0x0,0x10(%rax)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 20}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 83 a0 a0 00 00 00 	andq   $0x0,0xa0(%rax)\n"
                         "   b:	00 "
                     >>)
@@ -1454,26 +1454,26 @@ move_to_vm_register_test_() ->
                 %% Test: Immediate to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
-                        "   0:	48 c7 47 30 2a 00 00 	movq   $0x2a,0x30(%rdi)\n"
+                        "   0:	48 c7 47 58 2a 00 00 	movq   $0x2a,0x58(%rdi)\n"
                         "   7:	00 "
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, extra}, <<
-                        "   0:	48 c7 87 b0 00 00 00 	movq   $0x2a,0xb0(%rdi)\n"
+                        "   0:	48 c7 87 d8 00 00 00 	movq   $0x2a,0xd8(%rdi)\n"
                         "   7:	2a 00 00 00 "
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 2}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 c7 40 10 2a 00 00 	movq   $0x2a,0x10(%rax)\n"
                         "   b:	00 "
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 20}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 c7 80 a0 00 00 00 	movq   $0x2a,0xa0(%rax)\n"
                         "   b:	2a 00 00 00 "
                     >>)
@@ -1488,14 +1488,14 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
-                        "   0:	48 8b 47 38          	mov    0x38(%rdi),%rax\n"
-                        "   4:	48 89 47 40          	mov    %rax,0x40(%rdi)"
+                        "   0:	48 8b 47 60          	mov    0x60(%rdi),%rax\n"
+                        "   4:	48 89 47 68          	mov    %rax,0x68(%rdi)"
                     >>)
                 end),
                 %% Test: x_reg to ptr
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r8}, <<
-                        "   0:	48 8b 47 38          	mov    0x38(%rdi),%rax\n"
+                        "   0:	48 8b 47 60          	mov    0x60(%rdi),%rax\n"
                         "   4:	49 89 00             	mov    %rax,(%r8)"
                     >>)
                 end),
@@ -1503,42 +1503,42 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, {ptr, r9}, {x_reg, 3}, <<
                         "   0:	49 8b 01             	mov    (%r9),%rax\n"
-                        "   3:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                        "   3:	48 89 47 70          	mov    %rax,0x70(%rdi)"
                     >>)
                 end),
                 %% Test: x_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
-                        "   4:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+                        "   4:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
                         "   8:	49 89 43 08          	mov    %rax,0x8(%r11)"
                     >>)
                 end),
                 %% Test: y_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 8b 00             	mov    (%rax),%rax\n"
-                        "   7:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                        "   7:	48 89 47 70          	mov    %rax,0x70(%rdi)"
                     >>)
                 end),
                 %% Test: y_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 8b 40 08          	mov    0x8(%rax),%rax\n"
-                        "   8:	48 89 47 48          	mov    %rax,0x48(%rdi)"
+                        "   8:	48 89 47 70          	mov    %rax,0x70(%rdi)"
                     >>)
                 end),
                 %% Test: Native register to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, rax, {x_reg, 0}, <<
-                        "   0:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                        "   0:	48 89 47 58          	mov    %rax,0x58(%rdi)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, rax, {x_reg, extra}, <<
-                        "   0:	48 89 87 b0 00 00 00 	mov    %rax,0xb0(%rdi)"
+                        "   0:	48 89 87 d8 00 00 00 	mov    %rax,0xd8(%rdi)"
                     >>)
                 end),
                 %% Test: Atom register to ptr
@@ -1550,7 +1550,7 @@ move_to_vm_register_test_() ->
                 %% Test: Native register to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, rax, {y_reg, 0}, <<
-                        "   0:\t48 8b 47 28           mov    0x28(%rdi),%rax\n"
+                        "   0:\t48 8b 47 50           mov    0x50(%rdi),%rax\n"
                         "   4:\t48 89 00              mov    %rax,(%rax)"
                     >>)
                 end),
@@ -1559,19 +1559,19 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, 16#123456789abcdef0, {x_reg, 0}, <<
                         "   0:	48 b8 f0 de bc 9a 78 	movabs $0x123456789abcdef0,%rax\n"
                         "   7:	56 34 12 \n"
-                        "   a:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                        "   a:	48 89 47 58          	mov    %rax,0x58(%rdi)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#123456789abcdef0, {x_reg, extra}, <<
                         "   0:	48 b8 f0 de bc 9a 78 	movabs $0x123456789abcdef0,%rax\n"
                         "   7:	56 34 12 \n"
-                        "   a:	48 89 87 b0 00 00 00 	mov    %rax,0xb0(%rdi)"
+                        "   a:	48 89 87 d8 00 00 00 	mov    %rax,0xd8(%rdi)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#123456789abcdef0, {y_reg, 2}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	49 bb f0 de bc 9a 78 	movabs $0x123456789abcdef0,%r11\n"
                         "   b:	56 34 12 \n"
                         "   e:	4c 89 58 10          	mov    %r11,0x10(%rax)"
@@ -1579,7 +1579,7 @@ move_to_vm_register_test_() ->
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#123456789abcdef0, {y_reg, 20}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	49 bb f0 de bc 9a 78 	movabs $0x123456789abcdef0,%r11\n"
                         "   b:	56 34 12 \n"
                         "   e:	4c 89 98 a0 00 00 00 	mov    %r11,0xa0(%rax)"
@@ -1596,30 +1596,30 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to y_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
-                        "   0:	48 8b 87 a8 00 00 00 	mov    0xa8(%rdi),%rax\n"
-                        "   7:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   0:	48 8b 87 d0 00 00 00 	mov    0xd0(%rdi),%rax\n"
+                        "   7:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
                         "   b:	49 89 83 f8 00 00 00 	mov    %rax,0xf8(%r11)"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, extra}, {y_reg, 31}, <<
-                        "   0:	48 8b 87 b0 00 00 00 	mov    0xb0(%rdi),%rax\n"
-                        "   7:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   0:	48 8b 87 d8 00 00 00 	mov    0xd8(%rdi),%rax\n"
+                        "   7:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
                         "   b:	49 89 83 f8 00 00 00 	mov    %rax,0xf8(%r11)"
                     >>)
                 end),
                 %% Test: y_reg to x_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	48 8b 80 f8 00 00 00 	mov    0xf8(%rax),%rax\n"
-                        "   b:	48 89 87 a8 00 00 00 	mov    %rax,0xa8(%rdi)"
+                        "   b:	48 89 87 d0 00 00 00 	mov    %rax,0xd0(%rdi)"
                     >>)
                 end),
                 %% Test: Negative immediate to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
-                        "   0:	48 c7 47 30 ff ff ff 	movq   $0xffffffffffffffff,0x30(%rdi)\n"
+                        "   0:	48 c7 47 58 ff ff ff 	movq   $0xffffffffffffffff,0x58(%rdi)\n"
                         "   7:	ff "
                     >>)
                 end),
@@ -1631,9 +1631,9 @@ move_to_vm_register_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
                         "   4:	48 8b 40 08          	mov    0x8(%rax),%rax\n"
-                        "   8:	4c 8b 9f c0 00 00 00 	mov    0xc0(%rdi),%r11\n"
+                        "   8:	4c 8b 9f e8 00 00 00 	mov    0xe8(%rdi),%r11\n"
                         "   f:	49 89 43 18          	mov    %rax,0x18(%r11)"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
@@ -1657,7 +1657,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r8, 2, {x_reg, 0}, <<
                         "   0:	49 8b 40 10          	mov    0x10(%r8),%rax\n"
-                        "   4:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+                        "   4:	48 89 47 58          	mov    %rax,0x58(%rdi)"
                     >>)
                 end),
                 %% move_array_element: reg[x] to ptr
@@ -1670,7 +1670,7 @@ move_array_element_test_() ->
                 %% move_array_element: reg[x] to y_reg
                 ?_test(begin
                     move_array_element_test0(State0, r8, 1, {y_reg, 2}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	4d 8b 58 08          	mov    0x8(%r8),%r11\n"
                         "   8:	4c 89 58 10          	mov    %r11,0x10(%rax)"
                     >>)
@@ -1684,7 +1684,7 @@ move_array_element_test_() ->
                 %% move_array_element: reg[x] to y_reg (high index)
                 ?_test(begin
                     move_array_element_test0(State0, r8, 7, {y_reg, 31}, <<
-                        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+                        "   0:	48 8b 47 50          	mov    0x50(%rdi),%rax\n"
                         "   4:	4d 8b 58 38          	mov    0x38(%r8),%r11\n"
                         "   8:	4c 89 98 f8 00 00 00 	mov    %r11,0xf8(%rax)"
                     >>)
@@ -1693,7 +1693,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r8, 7, {x_reg, 15}, <<
                         "   0:	49 8b 40 38          	mov    0x38(%r8),%rax\n"
-                        "   4:	48 89 87 a8 00 00 00 	mov    %rax,0xa8(%rdi)"
+                        "   4:	48 89 87 d0 00 00 00 	mov    %rax,0xd0(%rdi)"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to x_reg
@@ -1704,7 +1704,7 @@ move_array_element_test_() ->
                         "   4:	48 c1 e0 03          	shl    $0x3,%rax\n"
                         "   8:	4c 01 c0             	add    %r8,%rax\n"
                         "   b:	48 8b 00             	mov    (%rax),%rax\n"
-                        "   e:	48 89 47 40          	mov    %rax,0x40(%rdi)\n"
+                        "   e:	48 89 47 68          	mov    %rax,0x68(%rdi)\n"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to pointer (large x reg)
@@ -1723,7 +1723,7 @@ move_array_element_test_() ->
                     {State1, Reg} = ?BACKEND:get_array_element(State0, r8, 4),
                     move_array_element_test0(State1, r8, {free, Reg}, {y_reg, 31}, <<
                         "   0:	49 8b 40 20          	mov    0x20(%r8),%rax\n"
-                        "   4:	4c 8b 5f 28          	mov    0x28(%rdi),%r11\n"
+                        "   4:	4c 8b 5f 50          	mov    0x50(%rdi),%r11\n"
                         "   8:	48 c1 e0 03          	shl    $0x3,%rax\n"
                         "   c:	4c 01 c0             	add    %r8,%rax\n"
                         "   f:	48 8b 00             	mov    (%rax),%rax\n"
@@ -1765,7 +1765,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
                         "   4:	49 89 40 10          	mov    %rax,0x10(%r8)"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
@@ -1775,7 +1775,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r8, 2, 1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+                        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
                         "   4:	49 89 40 18          	mov    %rax,0x18(%r8)"
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream)
