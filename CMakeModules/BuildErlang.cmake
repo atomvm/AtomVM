@@ -289,7 +289,7 @@ macro(pack_runnable avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${main}.beam ${pack_runnable_${avm_name}_archives} ${pack_runnable_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
@@ -421,7 +421,7 @@ macro(pack_uf2 avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${main}.beam ${pack_uf2_${avm_name}_archives} ${pack_uf2_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} -s ${main} ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} -p -s ${main} ${avm_name}.avm ${main}.beam ${pack_uf2_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
