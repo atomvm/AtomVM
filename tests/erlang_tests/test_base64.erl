@@ -83,6 +83,7 @@ start() ->
     end,
 
     test_padding_option(get_otp_version()),
+    test_urlsafe_mode(get_otp_version()),
 
     0.
 
@@ -157,6 +158,99 @@ test_padding_option(_OTPVersion) ->
 
 lists_seq(0, 20) ->
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].
+
+test_urlsafe_mode(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 26) orelse OTPVersion == atomvm
+->
+    %% Known vectors: bytes that produce + or / in standard mode
+    %% Generated via OTP: base64:encode(Bin, #{mode => urlsafe})
+    UrlsafeVectors = [
+        %% standard: /9/mtEw=   urlsafe: _9_mtEw=
+        {<<255, 223, 230, 180, 76>>, <<"_9_mtEw=">>},
+        %% standard: /HCDQIqL   urlsafe: _HCDQIqL
+        {<<252, 112, 131, 64, 138, 139>>, <<"_HCDQIqL">>},
+        %% standard: /FeEpVDrhC/rG4QG   urlsafe: _FeEpVDrhC_rG4QG
+        {<<252, 87, 132, 165, 80, 235, 132, 47, 235, 27, 132, 6>>, <<"_FeEpVDrhC_rG4QG">>},
+        %% standard: I+sD2LcvbzBBJdRWhYSZ   urlsafe: I-sD2LcvbzBBJdRWhYSZ
+        {
+            <<35, 235, 3, 216, 183, 47, 111, 48, 65, 37, 212, 86, 133, 132, 153>>,
+            <<"I-sD2LcvbzBBJdRWhYSZ">>
+        },
+        %% standard: gF4ZmTX2F12Sgoi/c8xRGQ==   urlsafe: gF4ZmTX2F12Sgoi_c8xRGQ==
+        {
+            <<128, 94, 25, 153, 53, 246, 23, 93, 146, 130, 136, 191, 115, 204, 81, 25>>,
+            <<"gF4ZmTX2F12Sgoi_c8xRGQ==">>
+        },
+        %% standard: bQHgkybfy+4h21QClW7P0PajtxM=   urlsafe: bQHgkybfy-4h21QClW7P0PajtxM=
+        {
+            <<109, 1, 224, 147, 38, 223, 203, 238, 33, 219, 84, 2, 149, 110, 207, 208, 246, 163,
+                183, 19>>,
+            <<"bQHgkybfy-4h21QClW7P0PajtxM=">>
+        }
+    ],
+
+    %% encode/2 with mode => urlsafe produces correct output
+    [
+        begin
+            Encoded = base64:encode(Bin, #{mode => urlsafe}),
+            Encoded = Expected
+        end
+     || {Bin, Expected} <- UrlsafeVectors
+    ],
+
+    %% decode/2 with mode => urlsafe decodes back to original
+    [
+        begin
+            Decoded = base64:decode(Expected, #{mode => urlsafe}),
+            Decoded = Bin
+        end
+     || {Bin, Expected} <- UrlsafeVectors
+    ],
+
+    %% encode_to_string/2 with mode => urlsafe
+    "_9_mtEw=" = base64:encode_to_string(<<255, 223, 230, 180, 76>>, #{mode => urlsafe}),
+    "I-sD2LcvbzBBJdRWhYSZ" = base64:encode_to_string(
+        <<35, 235, 3, 216, 183, 47, 111, 48, 65, 37, 212, 86, 133, 132, 153>>, #{mode => urlsafe}
+    ),
+
+    %% decode_to_string/2 with mode => urlsafe
+    [255, 223, 230, 180, 76] = base64:decode_to_string(<<"_9_mtEw=">>, #{mode => urlsafe}),
+
+    %% mode => standard is the default (same as encode/1)
+    <<"AQIDBA==">> = base64:encode(<<1, 2, 3, 4>>, #{mode => standard}),
+    <<"AQIDBA==">> = base64:encode(<<1, 2, 3, 4>>, #{}),
+
+    %% combined mode => urlsafe, padding => false
+    <<"_9_mtEw">> = base64:encode(<<255, 223, 230, 180, 76>>, #{mode => urlsafe, padding => false}),
+    <<"_HCDQIqL">> = base64:encode(<<252, 112, 131, 64, 138, 139>>, #{
+        mode => urlsafe, padding => false
+    }),
+    <<255, 223, 230, 180, 76>> = base64:decode(<<"_9_mtEw">>, #{mode => urlsafe, padding => false}),
+    <<252, 112, 131, 64, 138, 139>> = base64:decode(<<"_HCDQIqL">>, #{
+        mode => urlsafe, padding => false
+    }),
+
+    %% cross-mode: standard chars invalid in urlsafe, urlsafe chars invalid in standard
+    expect_error(fun() -> base64:decode(<<"/9/mtEw=">>, #{mode => urlsafe}) end, badarg),
+    expect_error(fun() -> base64:decode(<<"_9_mtEw=">>, #{mode => standard}) end, badarg),
+    expect_error(fun() -> base64:decode(<<"I+sD2Lc=">>, #{mode => urlsafe}) end, badarg),
+    expect_error(fun() -> base64:decode(<<"I-sD2Lc=">>, #{mode => standard}) end, badarg),
+
+    %% round-trip with mode => urlsafe for various sizes
+    [verify_b64_urlsafe(rand_bytes(I)) || I <- lists_seq(0, 20) ++ [50, 100, 131]],
+
+    ok;
+test_urlsafe_mode(_OTPVersion) ->
+    ok.
+
+verify_b64_urlsafe(Input) ->
+    Encoded = base64:encode(Input, #{mode => urlsafe}),
+    %% verify no standard-only chars (+, /) are present
+    nomatch = binary:match(Encoded, <<"+">>),
+    nomatch = binary:match(Encoded, <<"/">>),
+    %% verify round-trip
+    Decoded = base64:decode(Encoded, #{mode => urlsafe}),
+    Input = Decoded.
 
 rand_bytes(I) ->
     case erlang:system_info(machine) of

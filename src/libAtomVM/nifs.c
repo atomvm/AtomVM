@@ -5035,6 +5035,14 @@ static const char b64_table[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 
                                    'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
                                    'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7',
                                    '8', '9', '+', '/'};
+
+static const char b64_table_urlsafe[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+                                           'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+                                           'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd',
+                                           'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+                                           'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
+                                           'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7',
+                                           '8', '9', '-', '_'};
 // clang-format on
 
 // per https://tools.ietf.org/rfc/rfc4648.txt
@@ -5044,6 +5052,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     term src = argv[0];
 
     bool emit_padding = true;
+    bool urlsafe = false;
     if (argc == 2) {
         term opts = argv[1];
         if (UNLIKELY(!term_is_map(opts))) {
@@ -5052,6 +5061,10 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         term padding_val = interop_kv_get_value_default(
             opts, ATOM_STR("\x7", "padding"), TRUE_ATOM, ctx->global);
         emit_padding = (padding_val != FALSE_ATOM);
+        term mode_val = interop_kv_get_value_default(
+            opts, ATOM_STR("\x4", "mode"), UNDEFINED_ATOM, ctx->global);
+        urlsafe = globalcontext_is_term_equal_to_atom_string(
+            ctx->global, mode_val, ATOM_STR("\x7", "urlsafe"));
     }
 
     size_t src_size;
@@ -5113,6 +5126,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             break;
     }
     size_t dst_size_with_pad = emit_padding ? dst_size + pad : dst_size;
+    const char *table = urlsafe ? b64_table_urlsafe : b64_table;
     size_t heap_free = return_binary ? term_binary_heap_size(dst_size_with_pad)
                                      : 2 * dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -5139,7 +5153,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         uint8_t accum = 0;
         switch (i & 0x03) {
             case 0:
-                dst_pos[i] = b64_table[(*src_pos) >> 2];
+                dst_pos[i] = table[(*src_pos) >> 2];
                 break;
             case 1:
                 accum = ((*src_pos) & 0x03) << 4;
@@ -5147,7 +5161,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
                 if (i < dst_size - 1) {
                     accum |= ((*src_pos) & 0xF0) >> 4;
                 }
-                dst_pos[i] = b64_table[accum];
+                dst_pos[i] = table[accum];
                 break;
             case 2:
                 accum = ((*src_pos) & 0x0F) << 2;
@@ -5155,10 +5169,10 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
                 if (i < dst_size - 1) {
                     accum |= ((*src_pos) & 0xC0) >> 6;
                 }
-                dst_pos[i] = b64_table[accum];
+                dst_pos[i] = table[accum];
                 break;
             case 3:
-                dst_pos[i] = b64_table[(*src_pos) & 0x3F];
+                dst_pos[i] = table[(*src_pos) & 0x3F];
                 src_pos++;
                 break;
         }
@@ -5193,11 +5207,30 @@ static inline uint8_t find_index(uint8_t c)
     }
 }
 
+// RFC 4648 Section 5: URL and filename safe alphabet ('-' and '_' replace '+' and '/')
+static inline uint8_t find_index_urlsafe(uint8_t c)
+{
+    if ('A' <= c && c <= 'Z') {
+        return c - 'A';
+    } else if ('a' <= c && c <= 'z') {
+        return 26 + (c - 'a');
+    } else if ('0' <= c && c <= '9') {
+        return 52 + (c - '0');
+    } else if (c == '-') {
+        return 62;
+    } else if (c == '_') {
+        return 63;
+    } else {
+        return NOT_FOUND;
+    }
+}
+
 static term base64_decode(Context *ctx, int argc, term argv[], bool return_binary)
 {
     term src = argv[0];
 
     bool require_padding = true;
+    bool urlsafe = false;
     if (argc == 2) {
         term opts = argv[1];
         if (UNLIKELY(!term_is_map(opts))) {
@@ -5206,6 +5239,10 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         term padding_val = interop_kv_get_value_default(
             opts, ATOM_STR("\x7", "padding"), TRUE_ATOM, ctx->global);
         require_padding = (padding_val != FALSE_ATOM);
+        term mode_val = interop_kv_get_value_default(
+            opts, ATOM_STR("\x4", "mode"), UNDEFINED_ATOM, ctx->global);
+        urlsafe = globalcontext_is_term_equal_to_atom_string(
+            ctx->global, mode_val, ATOM_STR("\x7", "urlsafe"));
     }
 
     size_t src_size;
@@ -5306,7 +5343,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     // iterate over real (non-'=') source characters only
     size_t n = src_size - explicit_pad;
     for (size_t i = 0; i < n; ++i) {
-        uint8_t octet = find_index(src_pos[i]);
+        uint8_t octet = urlsafe ? find_index_urlsafe(src_pos[i]) : find_index(src_pos[i]);
         if (octet == NOT_FOUND) {
             free(src_buf);
             free(dst_buf);
