@@ -72,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added missing `ledc` functions for esp32 platform
 - Added support for Elixir GenServer and Supervisor.
 - Added support for 10 new STM32 families by switching to STM32 official SDK
+- Added missing `inet` functions: `ntoa/1`, `parse_address/1`, `parse_ipv4_address/1`,
+`parse_ipv4strict_address/1`
 
 ### Changed
 

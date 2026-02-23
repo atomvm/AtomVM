@@ -21,6 +21,7 @@
 -module(inet).
 
 -export([port/1, close/1, sockname/1, peername/1, getaddr/2]).
+-export([ntoa/1, parse_address/1, parse_ipv4_address/1, parse_ipv4strict_address/1]).
 
 -include("inet-priv.hrl").
 
@@ -146,3 +147,121 @@ getaddr(Name, Family) when is_list(Name) ->
     end;
 getaddr(_Name, _Family) ->
     {error, einval}.
+
+%%-----------------------------------------------------------------------------
+%% @param   IpAddress an IPv4 address tuple
+%% @returns a string representation of the IP address, or `{error, einval}'
+%%          if the argument is not a valid IPv4 address.
+%% @doc     Convert an IPv4 address to a string.
+%%
+%%          This function converts an `ip4_address()' tuple to its dotted-decimal
+%%          string representation, for example `{192, 168, 0, 1}' becomes
+%%          `"192.168.0.1"'.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, IPv6 addresses are not supported.
+%%          Passing an IPv6 address tuple will return `{error, einval}'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec ntoa(IpAddress :: ip_address()) -> string() | {error, einval}.
+ntoa({A, B, C, D} = Addr) ->
+    case is_ipv4_address(Addr) of
+        true ->
+            integer_to_list(A) ++ "." ++ integer_to_list(B) ++ "." ++ integer_to_list(C) ++ "." ++
+                integer_to_list(D);
+        false ->
+            {error, einval}
+    end;
+ntoa(_) ->
+    {error, einval}.
+
+%%-----------------------------------------------------------------------------
+%% @param   Address a string representation of an IPv4 address
+%% @returns `{ok, IPv4Address}' if the string is a valid strict IPv4 address,
+%%          or `{error, einval}' otherwise.
+%% @doc     Parse an IP address string to an `ip4_address()'.
+%%
+%%          This function is an alias for `parse_ipv4strict_address/1'.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, IPv6 addresses are not supported.
+%%          Only strict dotted-decimal IPv4 addresses with exactly four fields
+%%          are accepted.  Short form addresses such as `"127.1"' or
+%%          `"0x7f000001"' are not supported. Leading zeros are not supported
+%%          as well, so `"127.0.0.001"' is not allowed.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec parse_address(Address :: string()) -> {ok, ip4_address()} | {error, einval}.
+parse_address(AddrString) ->
+    parse_ipv4_address(AddrString).
+
+%%-----------------------------------------------------------------------------
+%% @param   Address a string representation of an IPv4 address
+%% @returns `{ok, IPv4Address}' if the string is a valid strict IPv4 address,
+%%          or `{error, einval}' otherwise.
+%% @doc     Parse an IPv4 address string to an `ip4_address()'.
+%%
+%%          This function is an alias for `parse_ipv4strict_address/1'.
+%%
+%%          <b>Note:</b> Unlike Erlang/OTP, this function behaves like
+%%          `parse_ipv4strict_address/1' and only accepts strict dotted-decimal
+%%          IPv4 addresses with exactly four fields.  Short form addresses such
+%%          as `"127.1"' or `"0x7f000001"' are not supported. Leading zeros are
+%%          not supported as well, so `"127.0.0.001"' is not allowed.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec parse_ipv4_address(Address :: string()) -> {ok, ip4_address()} | {error, einval}.
+parse_ipv4_address(AddrString) ->
+    parse_ipv4strict_address(AddrString).
+
+%%-----------------------------------------------------------------------------
+%% @param   Address a string representation of a strict IPv4 address
+%% @returns `{ok, IPv4Address}' if the string is a valid strict IPv4 address,
+%%          or `{error, einval}' otherwise.
+%% @doc     Parse a strict IPv4 address string to an `ip4_address()'.
+%%
+%%          Requires an IPv4 address string containing exactly four decimal
+%%          fields separated by dots, where each field is in the range 0-255.
+%%          For example: `"192.168.0.1"' or `"127.0.0.1"'.
+%%
+%%          Short form addresses such as `"127.1"' or hexadecimal notation
+%%          such as `"0x7f000001"' are not accepted.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec parse_ipv4strict_address(Address :: string()) -> {ok, ip4_address()} | {error, einval}.
+parse_ipv4strict_address(AddrString) ->
+    case string:split(AddrString, ".", all) of
+        [A, B, C, D] ->
+            try
+                has_no_leading_zeros(A),
+                has_no_leading_zeros(B),
+                has_no_leading_zeros(C),
+                has_no_leading_zeros(D),
+                MaybeAddr = {
+                    list_to_integer(A), list_to_integer(B), list_to_integer(C), list_to_integer(D)
+                },
+                case is_ipv4_address(MaybeAddr) of
+                    true -> {ok, MaybeAddr};
+                    false -> {error, einval}
+                end
+            catch
+                error:badarg -> {error, einval}
+            end;
+        _ ->
+            {error, einval}
+    end.
+
+has_no_leading_zeros([$0]) ->
+    ok;
+has_no_leading_zeros([H | _T]) when H =/= $0 ->
+    ok;
+has_no_leading_zeros(_) ->
+    error(badarg).
+
+is_ipv4_address({A, B, C, D}) when
+    is_integer(A) andalso A >= 0 andalso A < 256 andalso
+        is_integer(B) andalso B >= 0 andalso B < 256 andalso
+        is_integer(C) andalso C >= 0 andalso C < 256 andalso
+        is_integer(D) andalso D >= 0 andalso D < 256
+->
+    true;
+is_ipv4_address(_) ->
+    false.
