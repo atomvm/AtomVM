@@ -5041,8 +5041,18 @@ static const char b64_table[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 
 
 static term base64_encode(Context *ctx, int argc, term argv[], bool return_binary)
 {
-    UNUSED(argc);
     term src = argv[0];
+
+    bool emit_padding = true;
+    if (argc == 2) {
+        term opts = argv[1];
+        if (UNLIKELY(!term_is_map(opts))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        term padding_val = interop_kv_get_value_default(
+            opts, ATOM_STR("\x7", "padding"), TRUE_ATOM, ctx->global);
+        emit_padding = (padding_val != FALSE_ATOM);
+    }
 
     size_t src_size;
     uint8_t *src_pos = NULL, *src_buf = NULL;
@@ -5102,7 +5112,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
             dst_size++;
             break;
     }
-    size_t dst_size_with_pad = dst_size + pad;
+    size_t dst_size_with_pad = emit_padding ? dst_size + pad : dst_size;
     size_t heap_free = return_binary ? term_binary_heap_size(dst_size_with_pad)
                                      : 2 * dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -5154,8 +5164,10 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
         }
     }
     free(src_buf);
-    for (size_t i = 0; i < pad; ++i) {
-        dst_pos[dst_size + i] = '=';
+    if (emit_padding) {
+        for (size_t i = 0; i < pad; ++i) {
+            dst_pos[dst_size + i] = '=';
+        }
     }
     if (!return_binary) {
         dst = term_from_string(dst_pos, dst_size_with_pad, &ctx->heap);
@@ -5183,8 +5195,18 @@ static inline uint8_t find_index(uint8_t c)
 
 static term base64_decode(Context *ctx, int argc, term argv[], bool return_binary)
 {
-    UNUSED(argc);
     term src = argv[0];
+
+    bool require_padding = true;
+    if (argc == 2) {
+        term opts = argv[1];
+        if (UNLIKELY(!term_is_map(opts))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        term padding_val = interop_kv_get_value_default(
+            opts, ATOM_STR("\x7", "padding"), TRUE_ATOM, ctx->global);
+        require_padding = (padding_val != FALSE_ATOM);
+    }
 
     size_t src_size;
     uint8_t *src_pos, *src_buf = NULL;
@@ -5193,8 +5215,12 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         if (src_size == 0) {
             return return_binary ? src : term_nil();
         }
-        // for now, we only accept valid encodings (no whitespace)
-        if (src_size % 4 != 0) {
+        // length % 4 == 1 is never valid base64 (padded or unpadded)
+        if (src_size % 4 == 1) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        // without padding option, input must be a multiple of 4
+        if (require_padding && src_size % 4 != 0) {
             RAISE_ERROR(BADARG_ATOM);
         }
         src_pos = (uint8_t *) term_binary_data(src);
@@ -5217,8 +5243,12 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
                 return term_nil();
             }
         }
-        // for now, we only accept valid encodings (no whitespace)
-        if (src_size % 4 != 0) {
+        // length % 4 == 1 is never valid base64 (padded or unpadded)
+        if (src_size % 4 == 1) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        // without padding option, input must be a multiple of 4
+        if (require_padding && src_size % 4 != 0) {
             RAISE_ERROR(BADARG_ATOM);
         }
         src_buf = malloc(src_size);
@@ -5240,16 +5270,18 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    size_t dst_size = (3 * src_size) / 4;
-    size_t pad = 0;
+    // count explicit '=' padding characters at the end of the input
+    size_t explicit_pad = 0;
     if (src_pos[src_size - 1] == '=') {
-        if (src_pos[src_size - 2] == '=') {
-            pad = 2;
-        } else {
-            pad = 1;
-        }
+        explicit_pad = (src_pos[src_size - 2] == '=') ? 2 : 1;
     }
-    dst_size -= pad;
+    // total logical padding: explicit '=' chars, or inferred from unpadded length
+    size_t pad = explicit_pad;
+    if (pad == 0 && src_size % 4 != 0) {
+        pad = 4 - (src_size % 4);
+    }
+    // decoded size: round up to the next group of 4, decode 3 bytes per group, subtract pad
+    size_t dst_size = ((src_size + 3) / 4) * 3 - pad;
     size_t heap_free = return_binary ? term_binary_heap_size(dst_size)
                                      : 2 * dst_size;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -5271,7 +5303,8 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     if (term_is_binary(src)) {
         src_pos = (uint8_t *) term_binary_data(src);
     }
-    size_t n = src_size - pad;
+    // iterate over real (non-'=') source characters only
+    size_t n = src_size - explicit_pad;
     for (size_t i = 0; i < n; ++i) {
         uint8_t octet = find_index(src_pos[i]);
         if (octet == NOT_FOUND) {

@@ -81,7 +81,82 @@ start() ->
             <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", "BAUG"]),
             <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", <<"BAUG">>])
     end,
+
+    test_padding_option(get_otp_version()),
+
     0.
+
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
+        _ -> atomvm
+    end.
+
+test_padding_option(OTPVersion) when
+    (is_integer(OTPVersion) andalso OTPVersion >= 26) orelse OTPVersion == atomvm
+->
+    %% encode/2 with padding => true behaves identically to encode/1
+    <<"AQID">> = base64:encode(<<1, 2, 3>>, #{padding => true}),
+    <<"AQIDBA==">> = base64:encode(<<1, 2, 3, 4>>, #{padding => true}),
+    <<"AQIDBAU=">> = base64:encode(<<1, 2, 3, 4, 5>>, #{padding => true}),
+    <<"AQIDBAUG">> = base64:encode(<<1, 2, 3, 4, 5, 6>>, #{padding => true}),
+    <<>> = base64:encode(<<>>, #{padding => true}),
+
+    %% encode/2 with padding => false strips trailing '=' padding
+    <<>> = base64:encode(<<>>, #{padding => false}),
+    <<"AQID">> = base64:encode(<<1, 2, 3>>, #{padding => false}),
+    <<"AQIDBA">> = base64:encode(<<1, 2, 3, 4>>, #{padding => false}),
+    <<"AQIDBAU">> = base64:encode(<<1, 2, 3, 4, 5>>, #{padding => false}),
+    <<"AQIDBAUG">> = base64:encode(<<1, 2, 3, 4, 5, 6>>, #{padding => false}),
+
+    %% encode_to_string/2 with padding options
+    "AQIDBA==" = base64:encode_to_string(<<1, 2, 3, 4>>, #{padding => true}),
+    "AQIDBAU=" = base64:encode_to_string(<<1, 2, 3, 4, 5>>, #{padding => true}),
+    "AQIDBA" = base64:encode_to_string(<<1, 2, 3, 4>>, #{padding => false}),
+    "AQIDBAU" = base64:encode_to_string(<<1, 2, 3, 4, 5>>, #{padding => false}),
+
+    %% decode/2 with padding => true behaves identically to decode/1
+    <<1, 2, 3>> = base64:decode(<<"AQID">>, #{padding => true}),
+    <<1, 2, 3, 4>> = base64:decode(<<"AQIDBA==">>, #{padding => true}),
+    <<1, 2, 3, 4, 5>> = base64:decode(<<"AQIDBAU=">>, #{padding => true}),
+    <<>> = base64:decode(<<>>, #{padding => true}),
+
+    %% decode/2 with padding => false accepts unpadded input
+    <<1, 2, 3, 4>> = base64:decode(<<"AQIDBA">>, #{padding => false}),
+    <<1, 2, 3, 4, 5>> = base64:decode(<<"AQIDBAU">>, #{padding => false}),
+    <<1, 2, 3>> = base64:decode(<<"AQID">>, #{padding => false}),
+    <<>> = base64:decode(<<>>, #{padding => false}),
+
+    %% decode/2 with padding => false also accepts padded input (OTP-compatible)
+    <<1, 2, 3, 4>> = base64:decode(<<"AQIDBA==">>, #{padding => false}),
+    <<1, 2, 3, 4, 5>> = base64:decode(<<"AQIDBAU=">>, #{padding => false}),
+
+    %% decode_to_string/2 with padding options
+    [1, 2, 3, 4] = base64:decode_to_string(<<"AQIDBA==">>, #{padding => true}),
+    [1, 2, 3, 4] = base64:decode_to_string(<<"AQIDBA">>, #{padding => false}),
+
+    %% decode/1 and decode/2 with padding => true reject unpadded input (default)
+    expect_error(fun() -> base64:decode(<<"AQIDBA">>) end, badarg),
+    expect_error(fun() -> base64:decode(<<"AQIDBAU">>) end, badarg),
+    expect_error(fun() -> base64:decode(<<"AQIDBA">>, #{padding => true}) end, badarg),
+    expect_error(fun() -> base64:decode(<<"AQIDBAU">>, #{padding => true}) end, badarg),
+
+    %% length % 4 == 1 is always invalid, even with padding => false
+    expect_error(fun() -> base64:decode(<<"A">>, #{padding => false}) end, badarg),
+    expect_error(fun() -> base64:decode(<<"AQIDA">>, #{padding => false}) end, badarg),
+
+    %% round-trip with padding => false
+    [
+        verify_b64_no_padding(rand_bytes(I))
+     || I <- lists_seq(0, 20) ++ [50, 100, 131, 147, 200, 201]
+    ],
+
+    ok;
+test_padding_option(_OTPVersion) ->
+    ok.
+
+lists_seq(0, 20) ->
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].
 
 rand_bytes(I) ->
     case erlang:system_info(machine) of
@@ -102,6 +177,14 @@ verify_b64(Input, ExpectedEncoding) ->
     %erlang:display({decoded, Decoded}),
     DecodedString = base64:decode_to_string(Encoded),
     DecodedString = base64:decode_to_string(binary_to_list(Encoded)),
+    Input = Decoded.
+
+verify_b64_no_padding(Input) ->
+    Encoded = base64:encode(Input, #{padding => false}),
+    %% verify no padding characters are present
+    nomatch = binary:match(Encoded, <<"=">>),
+    %% verify round-trip
+    Decoded = base64:decode(Encoded, #{padding => false}),
     Input = Decoded.
 
 verify_value(_Value, undefined) ->

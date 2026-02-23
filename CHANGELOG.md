@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `Range:size/1`
 - Added missing `ledc` functions for esp32 platform
 - Added support for Elixir GenServer and Supervisor.
+- Added `base64:encode/2` and `base64:decode/2` functions, that take in addition also a map with
+encoding/decoding options
 
 ### Changed
 

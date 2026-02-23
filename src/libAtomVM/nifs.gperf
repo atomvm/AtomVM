@@ -186,9 +186,13 @@ code_server:type_resolver/2, IF_HAVE_JIT(&code_server_type_resolver_nif)
 code_server:set_native_code/3, IF_HAVE_JIT(&code_server_set_native_code_nif)
 console:print/1, &console_print_nif
 base64:encode/1, &base64_encode_nif
+base64:encode/2, &base64_encode_nif
 base64:decode/1, &base64_decode_nif
+base64:decode/2, &base64_decode_nif
 base64:encode_to_string/1, &base64_encode_to_string_nif
+base64:encode_to_string/2, &base64_encode_to_string_nif
 base64:decode_to_string/1, &base64_decode_to_string_nif
+base64:decode_to_string/2, &base64_decode_to_string_nif
 lists:flatten/1, &lists_flatten_nif
 lists:keyfind/3, &lists_keyfind_nif
 lists:keymember/3, &lists_keymember_nif
