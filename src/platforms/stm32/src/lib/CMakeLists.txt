@@ -1,7 +1,7 @@
 #
 # This file is part of AtomVM.
 #
-# Copyright 2022 Paul Guyot <pguyot@kallisys.net>
+# Copyright 2022-2026 Paul Guyot <pguyot@kallisys.net>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpio_driver.c
+    i2c_driver.c
     jit_stream_flash.c
     platform_nifs.c
     sys.c
@@ -53,6 +54,14 @@ endif()
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LINK_OPTIONS} -Wl,--whole-archive ${CMAKE_CURRENT_BINARY_DIR}/liblibAtomVMGeneric-arm.a -Wl,--no-whole-archive)
 
-target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} SYSTEM PUBLIC ${OPENCM3_INCLUDE})
-target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENCM3_LIB})
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${OPENCM3_RUNTIME})
+# Include HAL/CMSIS headers
+target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} SYSTEM PUBLIC
+    ${CMSIS_CORE_INCLUDE}
+    ${CMSIS_DEVICE_INCLUDE}
+    ${HAL_DRIVER_INCLUDE}
+)
+
+# Include the generated hal_conf.h directory
+target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC
+    "${CMAKE_BINARY_DIR}/generated"
+)

@@ -24,14 +24,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <libopencm3/cm3/cortex.h>
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/cm3/scb.h>
-#include <libopencm3/cm3/systick.h>
-#include <libopencm3/stm32/gpio.h>
-#include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/usart.h>
-
 #include <avm_version.h>
 #include <avmpack.h>
 #include <context.h>
@@ -40,17 +32,13 @@
 #include <module.h>
 #include <utils.h>
 
+#include "clock_config.h"
 #include "lib/avm_devcfg.h"
 #include "lib/avm_log.h"
 #include "lib/stm_sys.h"
 
-#define USART_CONSOLE (AVM_CONSOLE)
-#define USART_TX (AVM_CONSOLE_TX)
-#define USART_GPIO (AVM_CONSOLE_GPIO)
-#define USART_RCC (AVM_CONSOLE_RCC)
 #define AVM_ADDRESS (AVM_APP_ADDRESS)
 #define AVM_FLASH_END (CFG_FLASH_END)
-#define CLOCK_FREQUENCY (AVM_CLOCK_HZ)
 
 #define TAG "AtomVM"
 
@@ -69,76 +57,73 @@
     "    ###########################################################\n" \
     "\n"
 
-int _write(int file, char *ptr, int len);
+static UART_HandleTypeDef huart_console;
+
 pid_t _getpid(void);
 int _kill(pid_t pid, int sig);
 
-// setup errno to work with newlib
-#undef errno
-extern int errno;
-
-static void clock_setup()
-{
-    // Setup external clock, set divider for device clock frequency
-    rcc_clock_setup_pll(AVM_CLOCK_CONFIGURATION);
-}
-
 static void usart_setup(GlobalContext *glb)
 {
-    // Enable clock for USART
-    rcc_periph_clock_enable(USART_RCC);
+#if defined(CONSOLE_1)
+    __HAL_RCC_USART1_CLK_ENABLE();
+#elif defined(CONSOLE_2)
+    __HAL_RCC_USART2_CLK_ENABLE();
+#elif defined(CONSOLE_3)
+    __HAL_RCC_USART3_CLK_ENABLE();
+#elif defined(CONSOLE_4)
+    __HAL_RCC_UART4_CLK_ENABLE();
+#elif defined(CONSOLE_5)
+    __HAL_RCC_UART5_CLK_ENABLE();
+#elif defined(CONSOLE_6)
+    __HAL_RCC_USART6_CLK_ENABLE();
+#endif
 
-    // Setup GPIO pins for USART transmit
-    gpio_mode_setup(USART_GPIO, GPIO_MODE_AF, GPIO_PUPD_NONE, USART_TX);
-    sys_lock_pin(glb, USART_GPIO, USART_TX);
+    GPIO_InitTypeDef gpio_init = { 0 };
+    gpio_init.Pin = AVM_CONSOLE_TX_PIN;
+    gpio_init.Mode = GPIO_MODE_AF_PP;
+    gpio_init.Pull = GPIO_NOPULL;
+    gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+    gpio_init.Alternate = AVM_CONSOLE_TX_AF;
+    HAL_GPIO_Init(AVM_CONSOLE_TX_PORT, &gpio_init);
 
-    // Setup USART TX pin as alternate function
-    gpio_set_af(USART_GPIO, GPIO_AF7, USART_TX);
+    sys_lock_pin(glb, (uint32_t) AVM_CONSOLE_TX_PORT, AVM_CONSOLE_TX_PIN);
 
-    usart_set_baudrate(USART_CONSOLE, 115200);
-    usart_set_databits(USART_CONSOLE, 8);
-    usart_set_stopbits(USART_CONSOLE, USART_STOPBITS_1);
-    usart_set_mode(USART_CONSOLE, USART_MODE_TX);
-    usart_set_parity(USART_CONSOLE, USART_PARITY_NONE);
-    usart_set_flow_control(USART_CONSOLE, USART_FLOWCONTROL_NONE);
-
-    // Finally enable the USART
-    usart_enable(USART_CONSOLE);
+    huart_console.Instance = AVM_CONSOLE_USART;
+    huart_console.Init.BaudRate = 115200;
+    huart_console.Init.WordLength = UART_WORDLENGTH_8B;
+    huart_console.Init.StopBits = UART_STOPBITS_1;
+    huart_console.Init.Parity = UART_PARITY_NONE;
+    huart_console.Init.Mode = UART_MODE_TX;
+    huart_console.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+    huart_console.Init.OverSampling = UART_OVERSAMPLING_16;
+    if (HAL_UART_Init(&huart_console) != HAL_OK) {
+        while (1) {
+        }
+    }
 }
 
-// Set up a timer to create 1ms ticks
-// The handler is in sys.c
-static void systick_setup()
+// picolibc posix-console syscall
+int write(int file, const void *buf, size_t len)
 {
-    // ((clock rate / 1000) - 1) to get 1ms interrupt rate
-    systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
-    systick_set_reload((CLOCK_FREQUENCY / 1000U) - 1U);
-    systick_clear();
-    systick_counter_enable();
-    systick_interrupt_enable();
-}
-
-// Use USART_CONSOLE as a console.
-// This is a syscall for newlib
-int _write(int file, char *ptr, int len)
-{
-    int i;
+    const char *ptr = (const char *) buf;
+    size_t i;
 
     if (file == STDOUT_FILENO || file == STDERR_FILENO) {
         for (i = 0; i < len; i++) {
             if (ptr[i] == '\n') {
-                usart_send_blocking(USART_CONSOLE, '\r');
+                uint8_t cr = '\r';
+                HAL_UART_Transmit(&huart_console, &cr, 1, HAL_MAX_DELAY);
             }
-            usart_send_blocking(USART_CONSOLE, ptr[i]);
+            HAL_UART_Transmit(&huart_console, (uint8_t *) &ptr[i], 1, HAL_MAX_DELAY);
         }
-        return i;
+        return (int) i;
     }
     errno = EIO;
     return -1;
 }
 
-// newlib stubs to support AVM_ABORT
-pid_t _getpid()
+// picolibc stubs to support AVM_ABORT
+pid_t _getpid(void)
 {
     return 1;
 }
@@ -155,39 +140,147 @@ int _kill(pid_t pid, int sig)
     return -1;
 }
 
-// Redefine weak linked while(1) loop from libopencm3/cm3/nvic.h.
-void hard_fault_handler()
+/* HardFault handler that dumps Cortex-M fault status registers.
+ * The naked attribute + asm extracts the correct stack pointer (MSP or PSP)
+ * and passes it to the C diagnostic function.
+ * Note: Cortex-M0/M0+ does not have CFSR/HFSR/MMFAR/BFAR or IT instructions. */
+#if (__CORTEX_M >= 3)
+void HardFault_Diagnostic(uint32_t *stack_frame)
 {
-    fprintf(stderr, "\nHard Fault detected!\n");
-    AVM_ABORT();
+    volatile uint32_t cfsr = SCB->CFSR;
+    volatile uint32_t hfsr = SCB->HFSR;
+    volatile uint32_t mmfar = SCB->MMFAR;
+    volatile uint32_t bfar = SCB->BFAR;
+
+    uint32_t stacked_r0 = stack_frame[0];
+    uint32_t stacked_r1 = stack_frame[1];
+    uint32_t stacked_r2 = stack_frame[2];
+    uint32_t stacked_r3 = stack_frame[3];
+    uint32_t stacked_r12 = stack_frame[4];
+    uint32_t stacked_lr = stack_frame[5];
+    uint32_t stacked_pc = stack_frame[6];
+    uint32_t stacked_psr = stack_frame[7];
+
+    fprintf(stderr, "\n--- Hard Fault ---\n");
+    fprintf(stderr, "CFSR:  0x%08lx\n", (unsigned long) cfsr);
+    fprintf(stderr, "HFSR:  0x%08lx\n", (unsigned long) hfsr);
+    fprintf(stderr, "MMFAR: 0x%08lx\n", (unsigned long) mmfar);
+    fprintf(stderr, "BFAR:  0x%08lx\n", (unsigned long) bfar);
+    fprintf(stderr, "PC:    0x%08lx\n", (unsigned long) stacked_pc);
+    fprintf(stderr, "LR:    0x%08lx\n", (unsigned long) stacked_lr);
+    fprintf(stderr, "R0:    0x%08lx\n", (unsigned long) stacked_r0);
+    fprintf(stderr, "R1:    0x%08lx\n", (unsigned long) stacked_r1);
+    fprintf(stderr, "R2:    0x%08lx\n", (unsigned long) stacked_r2);
+    fprintf(stderr, "R3:    0x%08lx\n", (unsigned long) stacked_r3);
+    fprintf(stderr, "R12:   0x%08lx\n", (unsigned long) stacked_r12);
+    fprintf(stderr, "PSR:   0x%08lx\n", (unsigned long) stacked_psr);
+
+    /* Decode CFSR bits */
+    if (cfsr & 0x8000) {
+        fprintf(stderr, "  BFAR valid\n");
+    }
+    if (cfsr & 0x2000) {
+        fprintf(stderr, "  Lazy FP stacking BusFault\n");
+    }
+    if (cfsr & 0x1000) {
+        fprintf(stderr, "  Stacking BusFault\n");
+    }
+    if (cfsr & 0x0800) {
+        fprintf(stderr, "  Unstacking BusFault\n");
+    }
+    if (cfsr & 0x0400) {
+        fprintf(stderr, "  Imprecise BusFault\n");
+    }
+    if (cfsr & 0x0200) {
+        fprintf(stderr, "  Precise BusFault\n");
+    }
+    if (cfsr & 0x0100) {
+        fprintf(stderr, "  Instruction BusFault\n");
+    }
+    if (cfsr & 0x80) {
+        fprintf(stderr, "  MMFAR valid\n");
+    }
+    if (cfsr & 0x20) {
+        fprintf(stderr, "  Lazy FP stacking MemManage\n");
+    }
+    if (cfsr & 0x10) {
+        fprintf(stderr, "  Stacking MemManage\n");
+    }
+    if (cfsr & 0x08) {
+        fprintf(stderr, "  Unstacking MemManage\n");
+    }
+    if (cfsr & 0x02) {
+        fprintf(stderr, "  Data access MemManage\n");
+    }
+    if (cfsr & 0x01) {
+        fprintf(stderr, "  Instruction access MemManage\n");
+    }
+    if (cfsr & 0x02000000) {
+        fprintf(stderr, "  Divide by zero UsageFault\n");
+    }
+    if (cfsr & 0x01000000) {
+        fprintf(stderr, "  Unaligned access UsageFault\n");
+    }
+    if (cfsr & 0x00080000) {
+        fprintf(stderr, "  No coprocessor UsageFault\n");
+    }
+    if (cfsr & 0x00040000) {
+        fprintf(stderr, "  Invalid PC UsageFault\n");
+    }
+    if (cfsr & 0x00020000) {
+        fprintf(stderr, "  Invalid state UsageFault\n");
+    }
+    if (cfsr & 0x00010000) {
+        fprintf(stderr, "  Undefined instruction UsageFault\n");
+    }
+
+    while (1) {
+    }
 }
 
-/* define newlib weakly defined functions to prevent compiler warnings
- * Reference: https://sourceware.org/newlib/libc.html#Stubs
- * These are minimal non-functional implementations that can be modified as needed to
- * implement functionality.
- */
+__attribute__((naked)) void HardFault_Handler(void)
+{
+    __asm volatile(
+        "tst lr, #4        \n"
+        "ite eq             \n"
+        "mrseq r0, msp      \n"
+        "mrsne r0, psp      \n"
+        "b HardFault_Diagnostic \n");
+}
 
-int _close(int file)
+#else /* Cortex-M0/M0+ */
+
+void HardFault_Handler(void)
+{
+    fprintf(stderr, "\n--- Hard Fault ---\n");
+    while (1) {
+    }
+}
+
+#endif /* __CORTEX_M >= 3 */
+
+/* Stubs for picolibc's POSIX console and libc requirements */
+
+int close(int file)
 {
     UNUSED(file);
     return -1;
 }
 
-int _fstat_r(int file, struct stat *st)
+int fstat(int file, struct stat *st)
 {
     UNUSED(file);
     st->st_mode = S_IFCHR;
     return 0;
 }
 
-int _isatty(int file)
+int isatty(int file)
 {
     UNUSED(file);
     return 1;
 }
 
-off_t _lseek_r(int file, off_t ptr, int dir)
+off_t lseek(int file, off_t ptr, int dir)
 {
     UNUSED(file);
     UNUSED(ptr);
@@ -195,15 +288,7 @@ off_t _lseek_r(int file, off_t ptr, int dir)
     return 0;
 }
 
-int open(const char *name, int flags, int mode)
-{
-    UNUSED(name);
-    UNUSED(flags);
-    UNUSED(mode);
-    return -1;
-}
-
-int _read_r(int file, void *ptr, size_t len)
+int read(int file, void *ptr, size_t len)
 {
     UNUSED(file);
     UNUSED(ptr);
@@ -211,30 +296,30 @@ int _read_r(int file, void *ptr, size_t len)
     return 0;
 }
 
-int unlink(const char *name)
+void _exit(int status)
 {
-    UNUSED(name);
-    errno = ENOENT;
-    return -1;
+    UNUSED(status);
+    while (1) {
+    }
 }
 
-int main()
+int main(void)
 {
-    // Flash cache must be enabled before system clock is activated
+    HAL_Init();
     sys_enable_flash_cache();
+    SystemClock_Config();
     sys_init_icache();
-    clock_setup();
-    systick_setup();
-    // Start core peripheral clocks now so there are no accidental resets of peripherals that share a clock later.
     sys_enable_core_periph_clocks();
 
     GlobalContext *glb = globalcontext_new();
 
     usart_setup(glb);
 
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     fprintf(stdout, "%s", ATOMVM_BANNER);
     AVM_LOGI(TAG, "Starting AtomVM revision " ATOMVM_VERSION);
-    AVM_LOGD(TAG, "Using usart mapped at register 0x%x for stdout/stderr.", USART_CONSOLE);
 
     const void *flashed_avm = (void *) AVM_ADDRESS;
     uint32_t size = (AVM_FLASH_END - AVM_ADDRESS);
@@ -281,11 +366,11 @@ int main()
 #endif
     if (reboot_on_not_ok && result != RUN_SUCCESS) {
         AVM_LOGE(TAG, "AtomVM application terminated with non-ok return value.  Rebooting ...");
-        scb_reset_system();
+        NVIC_SystemReset();
     } else {
         AVM_LOGI(TAG, "AtomVM application terminated.  Going to sleep forever ...");
         // Disable all interrupts
-        cm_disable_interrupts();
+        __disable_irq();
         while (1) {
             ;
         }

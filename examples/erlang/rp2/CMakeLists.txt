@@ -24,6 +24,8 @@ include(BuildErlang)
 
 pack_uf2(hello_pico hello_pico)
 pack_uf2(pico_blink pico_blink)
+pack_uf2(pico_i2c_scanner pico_i2c_scanner)
+pack_uf2(pico_lis3dh pico_lis3dh)
 pack_uf2(pico_rtc pico_rtc)
 pack_uf2(picow_blink picow_blink)
 pack_uf2(picow_wifi_sta picow_wifi_sta)

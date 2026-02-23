@@ -23,31 +23,18 @@ project(eavmlib)
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    ahttp_client
     atomvm
     avm_pubsub
     console
-    emscripten
-    epmd
-    esp
-    esp_dac
-    esp_adc
-    gpio
-    i2c
-    http_server
+    gpio_hal
+    i2c_hal
     json_encoder
-    ledc
     logger_manager
-    mdns
-    network
-    network_fsm
-    pico
     port
-    spi
+    spi_hal
     timer_manager
     timestamp_util
-    uart
-    websocket
+    uart_hal
 )
 
 pack_archive(eavmlib ${ERLANG_MODULES})
