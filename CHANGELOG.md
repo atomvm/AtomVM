@@ -81,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added missing `inet` functions: `ntoa/1`, `parse_address/1`, `parse_ipv4_address/1`,
 `parse_ipv4strict_address/1`
 - Added `base64:encode/2` and `base64:decode/2` functions, that take in addition also a map with
-encoding/decoding options
+encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have been added to `Base`.
 
 ### Changed
 
