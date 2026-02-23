@@ -23,9 +23,12 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include <libopencm3/cm3/nvic.h>
-#include <libopencm3/stm32/exti.h>
-#include <libopencm3/stm32/gpio.h>
+#include "stm32_hal_platform.h"
+
+/* Normalize GPIO_PIN_All vs GPIO_PIN_ALL across HAL versions */
+#if !defined(GPIO_PIN_All) && defined(GPIO_PIN_ALL)
+#define GPIO_PIN_All GPIO_PIN_ALL
+#endif
 
 #include <atom.h>
 #include <bif.h>
@@ -48,7 +51,6 @@
 
 #define TAG "gpio_driver"
 
-#define GPIO_MODE_OUTPUT_OD 0x4
 // Error that cannot be used for these registers
 #define GPIOInvalidBank 0x0000U
 #define GPIO_INVALID_MODE 0xE
@@ -103,9 +105,9 @@ enum gpio_cmd
 };
 
 static const AtomStringIntPair exti_trigger_table[] = {
-    { ATOM_STR("\x6", "rising"), EXTI_TRIGGER_RISING },
-    { ATOM_STR("\x7", "falling"), EXTI_TRIGGER_FALLING },
-    { ATOM_STR("\x4", "both"), EXTI_TRIGGER_BOTH },
+    { ATOM_STR("\x6", "rising"), GPIO_MODE_IT_RISING },
+    { ATOM_STR("\x7", "falling"), GPIO_MODE_IT_FALLING },
+    { ATOM_STR("\x4", "both"), GPIO_MODE_IT_RISING_FALLING },
     SELECT_INT_DEFAULT(INVALID_EXTI_TRIGGER)
 };
 
@@ -129,27 +131,37 @@ enum gpio_pin_state
 };
 
 static const AtomStringIntPair gpio_bank_table[] = {
-    { ATOM_STR("\x1", "a"), GPIOA },
-    { ATOM_STR("\x1", "b"), GPIOB },
-    { ATOM_STR("\x1", "c"), GPIOC },
-    { ATOM_STR("\x1", "d"), GPIOD },
-    { ATOM_STR("\x1", "e"), GPIOE },
-    { ATOM_STR("\x1", "f"), GPIOF },
-    { ATOM_STR("\x1", "g"), GPIOG },
-    { ATOM_STR("\x1", "h"), GPIOH },
-#ifdef LIBOPENCM3_GPIO_COMMON_F24_H
-    { ATOM_STR("\x1", "i"), GPIOI },
-    { ATOM_STR("\x1", "j"), GPIOJ },
-    { ATOM_STR("\x1", "k"), GPIOK },
-#endif /* defined LIBOPENCM3_GPIO_COMMON_F24_H */
+    { ATOM_STR("\x1", "a"), (int) GPIOA },
+    { ATOM_STR("\x1", "b"), (int) GPIOB },
+    { ATOM_STR("\x1", "c"), (int) GPIOC },
+    { ATOM_STR("\x1", "d"), (int) GPIOD },
+    { ATOM_STR("\x1", "e"), (int) GPIOE },
+#ifdef GPIOF
+    { ATOM_STR("\x1", "f"), (int) GPIOF },
+#endif
+#ifdef GPIOG
+    { ATOM_STR("\x1", "g"), (int) GPIOG },
+#endif
+#ifdef GPIOH
+    { ATOM_STR("\x1", "h"), (int) GPIOH },
+#endif
+#ifdef GPIOI
+    { ATOM_STR("\x1", "i"), (int) GPIOI },
+#endif
+#ifdef GPIOJ
+    { ATOM_STR("\x1", "j"), (int) GPIOJ },
+#endif
+#ifdef GPIOK
+    { ATOM_STR("\x1", "k"), (int) GPIOK },
+#endif
     SELECT_INT_DEFAULT(GPIOInvalidBank)
 };
 
 static const AtomStringIntPair output_mhz_table[] = {
-    { ATOM_STR("\x5", "mhz_2"), GPIO_OSPEED_2MHZ },
-    { ATOM_STR("\x6", "mhz_25"), GPIO_OSPEED_25MHZ },
-    { ATOM_STR("\x6", "mhz_50"), GPIO_OSPEED_50MHZ },
-    { ATOM_STR("\x7", "mhz_100"), GPIO_OSPEED_100MHZ },
+    { ATOM_STR("\x5", "mhz_2"), GPIO_SPEED_FREQ_LOW },
+    { ATOM_STR("\x6", "mhz_25"), GPIO_SPEED_FREQ_MEDIUM },
+    { ATOM_STR("\x6", "mhz_50"), GPIO_SPEED_FREQ_HIGH },
+    { ATOM_STR("\x7", "mhz_100"), GPIO_SPEED_FREQ_VERY_HIGH },
     SELECT_INT_DEFAULT(INVALID_GPIO_OSPEED)
 };
 
@@ -161,59 +173,101 @@ static const AtomStringIntPair pin_level_table[] = {
 
 static const AtomStringIntPair pin_mode_table[] = {
     { ATOM_STR("\x5", "input"), GPIO_MODE_INPUT },
-    { ATOM_STR("\x6", "output"), GPIO_MODE_OUTPUT },
+    { ATOM_STR("\x6", "output"), GPIO_MODE_OUTPUT_PP },
     { ATOM_STR("\x9", "output_od"), GPIO_MODE_OUTPUT_OD },
-    { ATOM_STR("\x2", "af"), GPIO_MODE_AF },
+    { ATOM_STR("\x2", "af"), GPIO_MODE_AF_PP },
     { ATOM_STR("\x6", "analog"), GPIO_MODE_ANALOG },
     SELECT_INT_DEFAULT(GPIO_INVALID_MODE)
 };
 
 static const AtomStringIntPair pull_mode_table[] = {
-    { ATOM_STR("\x2", "up"), GPIO_PUPD_PULLUP },
-    { ATOM_STR("\x4", "down"), GPIO_PUPD_PULLDOWN },
-    { ATOM_STR("\x8", "floating"), GPIO_PUPD_NONE },
-    SELECT_INT_DEFAULT(GPIO_PUPD_NONE)
+    { ATOM_STR("\x2", "up"), GPIO_PULLUP },
+    { ATOM_STR("\x4", "down"), GPIO_PULLDOWN },
+    { ATOM_STR("\x8", "floating"), GPIO_NOPULL },
+    SELECT_INT_DEFAULT(GPIO_NOPULL)
 };
 
 #ifndef AVM_DISABLE_GPIO_PORT_DRIVER
 // Obtain the IRQ interrupt associated with a pin number
-static uint8_t pin_num_to_exti_irq(uint16_t pin_num)
+static IRQn_Type pin_num_to_exti_irq(uint16_t pin_num)
 {
     switch (pin_num) {
+#if defined(STM32G0XX)
+        /* G0: grouped IRQs for lines 0-1, 2-3, 4-15 */
         case 0:
-            return NVIC_EXTI0_IRQ;
         case 1:
-            return NVIC_EXTI1_IRQ;
+            return EXTI0_1_IRQn;
         case 2:
-            return NVIC_EXTI2_IRQ;
         case 3:
-            return NVIC_EXTI3_IRQ;
+            return EXTI2_3_IRQn;
         case 4:
-            return NVIC_EXTI4_IRQ;
         case 5:
-            return NVIC_EXTI9_5_IRQ;
         case 6:
-            return NVIC_EXTI9_5_IRQ;
         case 7:
-            return NVIC_EXTI9_5_IRQ;
         case 8:
-            return NVIC_EXTI9_5_IRQ;
         case 9:
-            return NVIC_EXTI9_5_IRQ;
         case 10:
-            return NVIC_EXTI15_10_IRQ;
         case 11:
-            return NVIC_EXTI15_10_IRQ;
         case 12:
-            return NVIC_EXTI15_10_IRQ;
         case 13:
-            return NVIC_EXTI15_10_IRQ;
         case 14:
-            return NVIC_EXTI15_10_IRQ;
         case 15:
-            return NVIC_EXTI15_10_IRQ;
+            return EXTI4_15_IRQn;
+#else
+        case 0:
+            return EXTI0_IRQn;
+        case 1:
+            return EXTI1_IRQn;
+        case 2:
+            return EXTI2_IRQn;
+        case 3:
+            return EXTI3_IRQn;
+        case 4:
+            return EXTI4_IRQn;
+#if defined(STM32F4XX) || defined(STM32H7XX) || defined(STM32WBXX) || defined(STM32F7XX) \
+    || defined(STM32G4XX) || defined(STM32L4XX) || defined(STM32F2XX)
+        /* Classic EXTI: lines 5-9 and 10-15 share IRQs */
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+            return EXTI9_5_IRQn;
+        case 10:
+        case 11:
+        case 12:
+        case 13:
+        case 14:
+        case 15:
+            return EXTI15_10_IRQn;
+#else
+        /* Per-line EXTI: each line has its own IRQ (U5, H5, L5, U3) */
+        case 5:
+            return EXTI5_IRQn;
+        case 6:
+            return EXTI6_IRQn;
+        case 7:
+            return EXTI7_IRQn;
+        case 8:
+            return EXTI8_IRQn;
+        case 9:
+            return EXTI9_IRQn;
+        case 10:
+            return EXTI10_IRQn;
+        case 11:
+            return EXTI11_IRQn;
+        case 12:
+            return EXTI12_IRQn;
+        case 13:
+            return EXTI13_IRQn;
+        case 14:
+            return EXTI14_IRQn;
+        case 15:
+            return EXTI15_IRQn;
+#endif
+#endif /* STM32G0XX */
         default:
-            return 0;
+            return (IRQn_Type) -1;
     }
 }
 
@@ -285,6 +339,7 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         free(bank_string);
         return error_tuple_str_maybe_gc(ctx, invalid_bank_atom);
     }
+    GPIO_TypeDef *gpio_port = (GPIO_TypeDef *) gpio_bank;
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
     uint16_t gpio_pin_mask = 0x0000U;
@@ -319,17 +374,17 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
         if (pin_term != ALL_ATOM) {
             return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
         }
-        gpio_pin_mask = GPIO_ALL;
+        gpio_pin_mask = GPIO_PIN_All;
     } else {
         return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
     }
 
     term mode_atom;
-    uint8_t gpio_mode;
+    uint32_t gpio_mode;
     bool setup_output = false;
-    uint8_t pull_up_down;
-    uint8_t out_type;
-    uint8_t output_speed;
+    uint32_t pull_up_down;
+    uint32_t output_speed;
+    uint32_t alternate = 0;
     term mhz_atom = term_invalid_term();
     term pull_atom = term_invalid_term();
     if (term_is_tuple(mode_term)) {
@@ -338,47 +393,46 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             AVM_LOGE(TAG, "GPIO Mode must be an atom ('input', 'output', 'output_od').");
             return error_tuple_str_maybe_gc(ctx, invalid_mode_atom);
         }
-        gpio_mode = ((uint8_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
+        gpio_mode = ((uint32_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
         if (UNLIKELY(gpio_mode == GPIO_INVALID_MODE)) {
             char *mode_string = interop_atom_to_string(ctx, mode_atom);
             AVM_LOGE(TAG, "Invalid gpio mode: %s", mode_string);
             free(mode_string);
             return error_tuple_str_maybe_gc(ctx, invalid_mode_atom);
         }
-        if ((gpio_mode == GPIO_MODE_OUTPUT) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
-            if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
-                gpio_mode = GPIO_MODE_OUTPUT;
-                out_type = GPIO_OTYPE_OD;
-            } else {
-                out_type = GPIO_OTYPE_PP;
-            }
+        if ((gpio_mode == GPIO_MODE_OUTPUT_PP) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
             setup_output = true;
         }
 
-        pull_atom = term_get_tuple_element(mode_term, 1);
-        if (UNLIKELY(!term_is_atom(pull_atom))) {
-            AVM_LOGE(TAG, "GPIO pull direction must be one of the following atoms: up | down | floating");
-            return error_tuple_str_maybe_gc(ctx, invalid_pull_atom);
-        }
-
-        pull_up_down = ((uint8_t) interop_atom_term_select_int(pull_mode_table, pull_atom, ctx->global));
-        if ((setup_output) && (term_get_tuple_arity(mode_term) == 3)) {
-            mhz_atom = term_get_tuple_element(mode_term, 2);
-            if (UNLIKELY(!term_is_atom(mhz_atom))) {
-                AVM_LOGE(TAG, "GPIO output speed must be one of the following atoms: mhz_2 | mhz_25 | mhz_50 | mhz_100");
-                error_tuple_str_maybe_gc(ctx, invalid_rate_atom);
+        if (gpio_mode == GPIO_MODE_AF_PP && term_is_integer(term_get_tuple_element(mode_term, 1))) {
+            alternate = (uint32_t) term_to_int(term_get_tuple_element(mode_term, 1));
+            pull_up_down = GPIO_NOPULL;
+        } else {
+            pull_atom = term_get_tuple_element(mode_term, 1);
+            if (UNLIKELY(!term_is_atom(pull_atom))) {
+                AVM_LOGE(TAG, "GPIO pull direction must be one of the following atoms: up | down | floating");
+                return error_tuple_str_maybe_gc(ctx, invalid_pull_atom);
             }
 
-            output_speed = (uint8_t) interop_atom_term_select_int(output_mhz_table, mhz_atom, ctx->global);
-            if (output_speed == INVALID_GPIO_OSPEED) {
-                output_speed = GPIO_OSPEED_2MHZ;
-                char *mhz_string = interop_atom_to_string(ctx, mhz_atom);
-                AVM_LOGW(TAG, "Invalid output speed '%s' given, falling back to 2 Mhz default.", mhz_string);
-                free(mhz_string);
+            pull_up_down = ((uint32_t) interop_atom_term_select_int(pull_mode_table, pull_atom, ctx->global));
+            if ((setup_output) && (term_get_tuple_arity(mode_term) == 3)) {
+                mhz_atom = term_get_tuple_element(mode_term, 2);
+                if (UNLIKELY(!term_is_atom(mhz_atom))) {
+                    AVM_LOGE(TAG, "GPIO output speed must be one of the following atoms: mhz_2 | mhz_25 | mhz_50 | mhz_100");
+                    error_tuple_str_maybe_gc(ctx, invalid_rate_atom);
+                }
+
+                output_speed = (uint32_t) interop_atom_term_select_int(output_mhz_table, mhz_atom, ctx->global);
+                if (output_speed == INVALID_GPIO_OSPEED) {
+                    output_speed = GPIO_SPEED_FREQ_LOW;
+                    char *mhz_string = interop_atom_to_string(ctx, mhz_atom);
+                    AVM_LOGW(TAG, "Invalid output speed '%s' given, falling back to 2 Mhz default.", mhz_string);
+                    free(mhz_string);
+                }
+            } else if (setup_output) {
+                output_speed = GPIO_SPEED_FREQ_LOW;
+                AVM_LOGW(TAG, "No output speed given, falling back to 2 Mhz default.");
             }
-        } else if (setup_output) {
-            output_speed = GPIO_OSPEED_2MHZ;
-            AVM_LOGW(TAG, "No output speed given, falling back to 2 Mhz default.");
         }
     } else {
         mode_atom = mode_term;
@@ -386,33 +440,39 @@ static term setup_gpio_pin(Context *ctx, term gpio_pin_tuple, term mode_term)
             AVM_LOGE(TAG, "GPIO Mode must be an atom ('input', 'output', 'output_od').");
             return error_tuple_str_maybe_gc(ctx, invalid_mode_atom);
         }
-        gpio_mode = ((uint8_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
+        gpio_mode = ((uint32_t) interop_atom_term_select_int(pin_mode_table, mode_atom, ctx->global));
         if (UNLIKELY(gpio_mode == GPIO_INVALID_MODE)) {
             char *mode_string = interop_atom_to_string(ctx, mode_atom);
             AVM_LOGE(TAG, "Invalid gpio mode: %s", mode_string);
             free(mode_string);
             return error_tuple_str_maybe_gc(ctx, invalid_mode_atom);
         }
-        pull_up_down = GPIO_PUPD_NONE;
-        if ((gpio_mode == GPIO_MODE_OUTPUT) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
-            if (gpio_mode == GPIO_MODE_OUTPUT_OD) {
-                gpio_mode = GPIO_MODE_OUTPUT;
-                out_type = GPIO_OTYPE_OD;
-            } else {
-                out_type = GPIO_OTYPE_PP;
-            }
-            output_speed = GPIO_OSPEED_2MHZ;
+        pull_up_down = GPIO_NOPULL;
+        if ((gpio_mode == GPIO_MODE_OUTPUT_PP) || (gpio_mode == GPIO_MODE_OUTPUT_OD)) {
+            output_speed = GPIO_SPEED_FREQ_LOW;
             setup_output = true;
         }
     }
 
-    gpio_mode_setup(gpio_bank, gpio_mode, pull_up_down, gpio_pin_mask);
+    GPIO_InitTypeDef gpio_init = { 0 };
+    gpio_init.Pin = gpio_pin_mask;
+    gpio_init.Pull = pull_up_down;
+
+    gpio_init.Mode = gpio_mode;
     if (setup_output) {
-        gpio_set_output_options(gpio_bank, out_type, output_speed, gpio_pin_mask);
-        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X output mode 0x%02X, output speed 0x%04X, pull mode 0x%02X", gpio_bank, gpio_pin_mask, gpio_mode, output_speed, pull_up_down);
-    } else {
-        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X input mode 0x%02X, pull mode 0x%02X", gpio_bank, gpio_pin_mask, gpio_mode, pull_up_down);
+        gpio_init.Speed = output_speed;
+        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X output mode 0x%02lX, output speed 0x%04lX, pull mode 0x%02lX", gpio_bank, gpio_pin_mask, gpio_mode, output_speed, pull_up_down);
+    } else if (gpio_mode == GPIO_MODE_INPUT) {
+        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X input mode 0x%02lX, pull mode 0x%02lX", gpio_bank, gpio_pin_mask, gpio_mode, pull_up_down);
+    } else if (gpio_mode == GPIO_MODE_AF_PP) {
+        gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+        gpio_init.Alternate = alternate;
+        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X AF mode, alternate %lu", gpio_bank, gpio_pin_mask, alternate);
+    } else if (gpio_mode == GPIO_MODE_ANALOG) {
+        AVM_LOGD(TAG, "Setup: Pin bank 0x%08lX pin bitmask 0x%04X analog mode", gpio_bank, gpio_pin_mask);
     }
+
+    HAL_GPIO_Init(gpio_port, &gpio_init);
     return OK_ATOM;
 }
 
@@ -436,6 +496,7 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         free(bank_string);
         return error_tuple_str_maybe_gc(ctx, invalid_bank_atom);
     }
+    GPIO_TypeDef *gpio_port = (GPIO_TypeDef *) gpio_bank;
 
     term pin_term = term_get_tuple_element(gpio_pin_tuple, 1);
     uint16_t gpio_pin_mask = 0x0000U;
@@ -471,7 +532,7 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
             AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
             return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
         }
-        gpio_pin_mask = GPIO_ALL;
+        gpio_pin_mask = GPIO_PIN_All;
     } else {
         return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
     }
@@ -494,11 +555,7 @@ static term gpio_digital_write(Context *ctx, term gpio_pin_tuple, term level_ter
         }
     }
 
-    if (level != 0) {
-        gpio_set(gpio_bank, gpio_pin_mask);
-    } else {
-        gpio_clear(gpio_bank, gpio_pin_mask);
-    }
+    HAL_GPIO_WritePin(gpio_port, gpio_pin_mask, level ? GPIO_PIN_SET : GPIO_PIN_RESET);
     TRACE("Write: bank: 0x%08lX, pin mask: 0x%04X, level: %i\n", gpio_bank, gpio_pin_mask, level);
     return OK_ATOM;
 }
@@ -523,6 +580,8 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
         free(bank_string);
         return error_tuple_str_maybe_gc(ctx, invalid_bank_atom);
     }
+    GPIO_TypeDef *gpio_port = (GPIO_TypeDef *) gpio_bank;
+
     // TODO: Add support for reading list, or all input pins on port?
     uint16_t gpio_pin_num = ((uint16_t) term_to_int32(term_get_tuple_element(gpio_pin_tuple, 1)));
     if (UNLIKELY(gpio_pin_num > 15)) {
@@ -530,8 +589,8 @@ static term gpio_digital_read(Context *ctx, term gpio_pin_tuple)
         return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
     }
 
-    uint16_t pin_levels = gpio_get(gpio_bank, (1U << gpio_pin_num));
-    uint16_t level = (pin_levels >> gpio_pin_num);
+    GPIO_PinState state = HAL_GPIO_ReadPin(gpio_port, (uint16_t) (1U << gpio_pin_num));
+    uint16_t level = (state == GPIO_PIN_SET) ? 1 : 0;
     TRACE("Read: Bank 0x%08lX Pin %u. RESULT: %u\n", gpio_bank, gpio_pin_num, level);
 
     return level_to_atom(ctx, level);
@@ -584,10 +643,10 @@ static term gpiodriver_close(Context *ctx)
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
         MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
-            uint32_t exti = gpio_listener->exti;
-            uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
-            nvic_disable_irq(irqn);
-            exti_disable_request(exti);
+            uint32_t exti_line = gpio_listener->exti;
+            IRQn_Type irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+            HAL_NVIC_DisableIRQ(irqn);
+            __HAL_GPIO_EXTI_CLEAR_IT(exti_line);
             list_remove(&gpio_listener->gpio_listener_list_head);
             free(gpio_listener);
         }
@@ -631,7 +690,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
 }
 
 // This function is used to store the local Context pointer during gpiodriver_set_int and to relay messages to the interrupt_callback
-// from the exti#_isr interrupt handlers (defined in libopencm3/stm32/CHIP-SERIES/nvic.h) that have no access to the context.
+// from the exti#_isr interrupt handlers that have no access to the context.
 void isr_handler(Context *ctx, uint32_t exti)
 {
     static Context *local_ctx;
@@ -651,84 +710,158 @@ void isr_error_handler(const char *isr_name)
     AVM_LOGE(TAG, "%s triggered, but no match found!", isr_name);
 }
 
-void exti0_isr()
-{
-    exti_reset_request(EXTI0);
-    isr_handler(NULL, EXTI0);
-}
+/* Compatibility macros for families with separate rising/falling EXTI
+ * registers (U5, H5) where __HAL_GPIO_EXTI_GET_IT may not be defined */
+#ifndef __HAL_GPIO_EXTI_GET_IT
+#define __HAL_GPIO_EXTI_GET_IT(__EXTI_LINE__) \
+    (__HAL_GPIO_EXTI_GET_RISING_IT(__EXTI_LINE__) || __HAL_GPIO_EXTI_GET_FALLING_IT(__EXTI_LINE__))
+#define __HAL_GPIO_EXTI_CLEAR_IT(__EXTI_LINE__)          \
+    do {                                                 \
+        __HAL_GPIO_EXTI_CLEAR_RISING_IT(__EXTI_LINE__);  \
+        __HAL_GPIO_EXTI_CLEAR_FALLING_IT(__EXTI_LINE__); \
+    } while (0)
+#endif
 
-void exti1_isr()
-{
-    exti_reset_request(EXTI1);
-    isr_handler(NULL, EXTI1);
-}
+/* EXTI ISR handlers - HAL provides HAL_GPIO_EXTI_Callback but we handle
+ * them directly for more control over the interrupt handling */
 
-void exti2_isr()
+#if defined(STM32G0XX)
+/* G0: grouped handlers for lines 0-1, 2-3, 4-15 */
+void EXTI0_1_IRQHandler(void)
 {
-    exti_reset_request(EXTI2);
-    isr_handler(NULL, EXTI2);
-}
-
-void exti3_isr()
-{
-    exti_reset_request(EXTI3);
-    isr_handler(NULL, EXTI3);
-}
-
-void exti4_isr()
-{
-    exti_reset_request(EXTI4);
-    isr_handler(NULL, EXTI4);
-}
-
-void exti9_5_isr()
-{
-    if (exti_get_flag_status(EXTI5) == EXTI5) {
-        exti_reset_request(EXTI5);
-        isr_handler(NULL, EXTI5);
-    } else if (exti_get_flag_status(EXTI6) == EXTI6) {
-        exti_reset_request(EXTI6);
-        isr_handler(NULL, EXTI6);
-    } else if (exti_get_flag_status(EXTI7) == EXTI7) {
-        exti_reset_request(EXTI7);
-        isr_handler(NULL, EXTI7);
-    } else if (exti_get_flag_status(EXTI8) == EXTI8) {
-        exti_reset_request(EXTI8);
-        isr_handler(NULL, EXTI8);
-    } else if (exti_get_flag_status(EXTI9) == EXTI9) {
-        exti_reset_request(EXTI9);
-        isr_handler(NULL, EXTI9);
-    } else {
-        static const char *const isr_name = "exti9_5_isr";
-        isr_error_handler(isr_name);
+    for (uint16_t pin = 0; pin <= 1; pin++) {
+        uint16_t pin_mask = (uint16_t) (1U << pin);
+        if (__HAL_GPIO_EXTI_GET_IT(pin_mask)) {
+            __HAL_GPIO_EXTI_CLEAR_IT(pin_mask);
+            isr_handler(NULL, pin_mask);
+        }
     }
 }
 
-void exti15_10_isr()
+void EXTI2_3_IRQHandler(void)
 {
-    if (exti_get_flag_status(EXTI10)) {
-        exti_reset_request(EXTI10);
-        isr_handler(NULL, EXTI10);
-    } else if (exti_get_flag_status(EXTI11)) {
-        exti_reset_request(EXTI11);
-        isr_handler(NULL, EXTI11);
-    } else if (exti_get_flag_status(EXTI12)) {
-        exti_reset_request(EXTI12);
-        isr_handler(NULL, EXTI12);
-    } else if (exti_get_flag_status(EXTI13)) {
-        exti_reset_request(EXTI13);
-        isr_handler(NULL, EXTI13);
-    } else if (exti_get_flag_status(EXTI14)) {
-        exti_reset_request(EXTI14);
-        isr_handler(NULL, EXTI14);
-    } else if (exti_get_flag_status(EXTI15)) {
-        exti_reset_request(EXTI15);
-        isr_handler(NULL, EXTI15);
-    } else {
-        static const char *const isr_name = "exti15_10_isr";
-        isr_error_handler(isr_name);
+    for (uint16_t pin = 2; pin <= 3; pin++) {
+        uint16_t pin_mask = (uint16_t) (1U << pin);
+        if (__HAL_GPIO_EXTI_GET_IT(pin_mask)) {
+            __HAL_GPIO_EXTI_CLEAR_IT(pin_mask);
+            isr_handler(NULL, pin_mask);
+        }
     }
 }
+
+void EXTI4_15_IRQHandler(void)
+{
+    for (uint16_t pin = 4; pin <= 15; pin++) {
+        uint16_t pin_mask = (uint16_t) (1U << pin);
+        if (__HAL_GPIO_EXTI_GET_IT(pin_mask)) {
+            __HAL_GPIO_EXTI_CLEAR_IT(pin_mask);
+            isr_handler(NULL, pin_mask);
+        }
+    }
+}
+
+#else /* !STM32G0XX */
+
+void EXTI0_IRQHandler(void)
+{
+    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_0)) {
+        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);
+        isr_handler(NULL, GPIO_PIN_0);
+    }
+}
+
+void EXTI1_IRQHandler(void)
+{
+    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_1)) {
+        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_1);
+        isr_handler(NULL, GPIO_PIN_1);
+    }
+}
+
+void EXTI2_IRQHandler(void)
+{
+    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_2)) {
+        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_2);
+        isr_handler(NULL, GPIO_PIN_2);
+    }
+}
+
+void EXTI3_IRQHandler(void)
+{
+    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_3)) {
+        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_3);
+        isr_handler(NULL, GPIO_PIN_3);
+    }
+}
+
+void EXTI4_IRQHandler(void)
+{
+    if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_4)) {
+        __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_4);
+        isr_handler(NULL, GPIO_PIN_4);
+    }
+}
+
+#if defined(STM32F4XX) || defined(STM32H7XX) || defined(STM32WBXX) || defined(STM32F7XX) \
+    || defined(STM32G4XX) || defined(STM32L4XX) || defined(STM32F2XX)
+/* Classic EXTI: shared handlers for lines 5-9 and 10-15 */
+void EXTI9_5_IRQHandler(void)
+{
+    bool handled = false;
+    for (uint16_t pin = 5; pin <= 9; pin++) {
+        uint16_t pin_mask = (uint16_t) (1U << pin);
+        if (__HAL_GPIO_EXTI_GET_IT(pin_mask)) {
+            __HAL_GPIO_EXTI_CLEAR_IT(pin_mask);
+            isr_handler(NULL, pin_mask);
+            handled = true;
+        }
+    }
+    if (!handled) {
+        isr_error_handler("EXTI9_5_IRQHandler");
+    }
+}
+
+void EXTI15_10_IRQHandler(void)
+{
+    bool handled = false;
+    for (uint16_t pin = 10; pin <= 15; pin++) {
+        uint16_t pin_mask = (uint16_t) (1U << pin);
+        if (__HAL_GPIO_EXTI_GET_IT(pin_mask)) {
+            __HAL_GPIO_EXTI_CLEAR_IT(pin_mask);
+            isr_handler(NULL, pin_mask);
+            handled = true;
+        }
+    }
+    if (!handled) {
+        isr_error_handler("EXTI15_10_IRQHandler");
+    }
+}
+#else
+/* Per-line EXTI: each line has its own handler (U5, H5, L5, U3) */
+#define DEFINE_EXTI_HANDLER(n)                      \
+    void EXTI##n##_IRQHandler(void)                 \
+    {                                               \
+        if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_##n)) { \
+            __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_##n); \
+            isr_handler(NULL, GPIO_PIN_##n);        \
+        }                                           \
+    }
+
+DEFINE_EXTI_HANDLER(5)
+DEFINE_EXTI_HANDLER(6)
+DEFINE_EXTI_HANDLER(7)
+DEFINE_EXTI_HANDLER(8)
+DEFINE_EXTI_HANDLER(9)
+DEFINE_EXTI_HANDLER(10)
+DEFINE_EXTI_HANDLER(11)
+DEFINE_EXTI_HANDLER(12)
+DEFINE_EXTI_HANDLER(13)
+DEFINE_EXTI_HANDLER(14)
+DEFINE_EXTI_HANDLER(15)
+
+#undef DEFINE_EXTI_HANDLER
+#endif
+#endif /* !STM32G0XX */
 
 static term gpiodriver_set_level(Context *ctx, term cmd)
 {
@@ -801,7 +934,7 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         AVM_LOGE(TAG, "GPIO interrupt trigger must be an atom ('rising', 'falling', or 'both').");
         return error_tuple_str_maybe_gc(ctx, invalid_trigger_atom);
     }
-    enum exti_trigger_type interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
+    int interrupt_type = interop_atom_term_select_int(exti_trigger_table, trigger, ctx->global);
     if (UNLIKELY(interrupt_type == INVALID_EXTI_TRIGGER)) {
         char *trigger_string = interop_atom_to_string(ctx, trigger);
         AVM_LOGE(TAG, "Interrupt type %s not supported on stm32 platform.", trigger_string);
@@ -829,13 +962,13 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         target_local_pid = target_pid;
     }
 
-    uint32_t exti = 1U << gpio_pin;
+    uint32_t exti_line = 1U << gpio_pin;
 
     if (!list_is_empty(&gpio_data->gpio_listeners)) {
         struct ListHead *item;
         LIST_FOR_EACH (item, &gpio_data->gpio_listeners) {
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
-            if (gpio_listener->exti == exti) {
+            if (gpio_listener->exti == exti_line) {
                 char *bank_string = interop_atom_to_string(ctx, gpio_bank_atom);
                 AVM_LOGE(TAG, "Cannot set interrupt for pin %s%u, exti%u device already in use!", bank_string, gpio_pin, gpio_pin);
                 free(bank_string);
@@ -844,8 +977,8 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
         }
     }
 
-    uint8_t exti_irq = pin_num_to_exti_irq(gpio_pin);
-    if (UNLIKELY(exti_irq == 0)) {
+    IRQn_Type exti_irq = pin_num_to_exti_irq(gpio_pin);
+    if (UNLIKELY(exti_irq == (IRQn_Type) -1)) {
         AVM_LOGE(TAG, "BUG: No valid exti irq found!");
         return error_tuple_str_maybe_gc(ctx, invalid_irq_atom);
     }
@@ -859,21 +992,23 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     data->target_local_pid = target_local_pid;
     data->bank_atom = gpio_bank_atom;
     data->gpio_pin = gpio_pin;
-    data->exti = exti;
-    data->exti_irq = exti_irq;
+    data->exti = exti_line;
+    data->exti_irq = (uint8_t) exti_irq;
 
     AVM_LOGD(TAG, "Installing interrupt type 0x%02X with exti%u for bank 0x%08lX pin %u.", interrupt_type, gpio_pin, gpio_bank, gpio_pin);
 
-    exti_disable_request(exti);
-    exti_select_source(exti, gpio_bank);
-    exti_set_trigger(exti, interrupt_type);
+    GPIO_TypeDef *gpio_port = (GPIO_TypeDef *) gpio_bank;
+    GPIO_InitTypeDef gpio_init = { 0 };
+    gpio_init.Pin = exti_line;
+    gpio_init.Pull = GPIO_NOPULL;
+    gpio_init.Mode = interrupt_type;
+    HAL_GPIO_Init(gpio_port, &gpio_init);
+
     // Store the Context pointer in the isr_handler
     isr_handler(ctx, 0x0000U);
-    exti_enable_request(exti);
-    if (!nvic_get_irq_enabled(exti_irq)) {
-        nvic_enable_irq(exti_irq);
-    }
-    nvic_set_priority(exti_irq, 1);
+
+    HAL_NVIC_SetPriority(exti_irq, 1, 0);
+    HAL_NVIC_EnableIRQ(exti_irq);
 
     return OK_ATOM;
 }
@@ -898,7 +1033,11 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
         return error_tuple_str_maybe_gc(ctx, invalid_bank_atom);
     }
     uint16_t target_num = (uint16_t) term_to_int32(term_get_tuple_element(gpio_tuple, 1));
-    uint8_t target_irq = pin_num_to_exti_irq(target_num);
+    if (UNLIKELY(target_num > 15)) {
+        AVM_LOGE(TAG, "Pin number must be between 0 and 15!");
+        return error_tuple_str_maybe_gc(ctx, invalid_pin_atom);
+    }
+    IRQn_Type target_irq = pin_num_to_exti_irq(target_num);
 
     bool stop_irq = true;
     bool int_removed = false;
@@ -909,20 +1048,20 @@ static term gpiodriver_remove_int(Context *ctx, term cmd)
         MUTABLE_LIST_FOR_EACH (item, tmp, &gpio_data->gpio_listeners) {
             struct GPIOListenerData *gpio_listener = GET_LIST_ENTRY(item, struct GPIOListenerData, gpio_listener_list_head);
             if ((gpio_listener->gpio_pin == target_num) && (gpio_listener->bank_atom == target_bank_atom)) {
-                uint16_t exti = gpio_listener->exti;
-                uint8_t irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
-                nvic_disable_irq(irqn);
+                uint32_t exti_line = gpio_listener->exti;
+                IRQn_Type irqn = pin_num_to_exti_irq(gpio_listener->gpio_pin);
+                HAL_NVIC_DisableIRQ(irqn);
                 list_remove(&gpio_listener->gpio_listener_list_head);
-                exti_disable_request(exti);
+                __HAL_GPIO_EXTI_CLEAR_IT(exti_line);
                 free(gpio_listener);
                 int_removed = true;
                 // some pins share irqs - don't stop the irq if another pin is still using it.
-            } else if (gpio_listener->exti_irq == target_irq) {
+            } else if (gpio_listener->exti_irq == (uint8_t) target_irq) {
                 stop_irq = false;
             }
         }
         if (stop_irq) {
-            nvic_disable_irq(target_irq);
+            HAL_NVIC_DisableIRQ(target_irq);
         }
         if (int_removed == false) {
             AVM_LOGW(TAG, "No interrupt removed, match not found for bank 0x%08lX pin %u.", target_bank, target_num);
@@ -1016,6 +1155,23 @@ REGISTER_PORT_DRIVER(gpio, gpiodriver_init, NULL, gpio_driver_create_port)
 
 #ifndef AVM_DISABLE_GPIO_NIFS
 
+static term nif_gpio_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    /* GPIO clocks are already enabled at startup in sys_enable_core_periph_clocks() */
+    return OK_ATOM;
+}
+
+static term nif_gpio_deinit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(ctx);
+    UNUSED(argc);
+    UNUSED(argv);
+    return OK_ATOM;
+}
+
 static term nif_gpio_set_pin_mode(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -1070,6 +1226,16 @@ static term nif_gpio_digital_read(Context *ctx, int argc, term argv[])
     return ret;
 }
 
+static const struct Nif gpio_init_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_init
+};
+
+static const struct Nif gpio_deinit_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_gpio_deinit
+};
+
 static const struct Nif gpio_set_pin_mode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_set_pin_mode
@@ -1092,6 +1258,16 @@ static const struct Nif gpio_digital_read_nif = {
 
 const struct Nif *gpio_nif_get_nif(const char *nifname)
 {
+    if (strcmp("gpio:init/1", nifname) == 0 || strcmp("Elixir.GPIO:init/1", nifname) == 0) {
+        AVM_LOGD(TAG, "Resolved platform nif %s ...", nifname);
+        return &gpio_init_nif;
+    }
+
+    if (strcmp("gpio:deinit/1", nifname) == 0 || strcmp("Elixir.GPIO:deinit/1", nifname) == 0) {
+        AVM_LOGD(TAG, "Resolved platform nif %s ...", nifname);
+        return &gpio_deinit_nif;
+    }
+
     if (strcmp("gpio:set_pin_mode/2", nifname) == 0 || strcmp("Elixir.GPIO:set_pin_mode/2", nifname) == 0) {
         AVM_LOGD(TAG, "Resolved platform nif %s ...", nifname);
         return &gpio_set_pin_mode_nif;

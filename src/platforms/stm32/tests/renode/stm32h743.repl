@@ -1,0 +1,135 @@
+//
+// This file is part of AtomVM.
+//
+// Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+//
+
+dtcmram: Memory.MappedMemory @ sysbus 0x20000000
+    size: 0x20000
+
+axiram: Memory.MappedMemory @ sysbus 0x24000000
+    size: 0x80000
+
+flash: Memory.MappedMemory @ sysbus 0x08000000
+    size: 0x200000
+
+nvic: IRQControllers.NVIC @ sysbus 0xE000E000
+    priorityMask: 0xF0
+    systickFrequency: 480000000
+    IRQ -> cpu@0
+
+cpu: CPU.CortexM @ sysbus
+    cpuType: "cortex-m7"
+    nvic: nvic
+
+usart1: UART.STM32F7_USART @ sysbus <0x40011000, +0x100>
+    frequency: 120000000
+    IRQ -> nvic@37
+
+// RCC Python peripheral at 0x58024400.
+// H7 RCC register layout:
+//   CR (0x00):   HSION[0], HSIRDY[2], CSION[7], CSIRDY[8],
+//                HSEON[16], HSERDY[17], PLL1ON[24], PLL1RDY[25],
+//                PLL2ON[26], PLL2RDY[27], PLL3ON[28], PLL3RDY[29]
+//   CFGR (0x10): SW[2:0], SWS[5:3]
+rcc: Python.PythonPeripheral @ sysbus 0x58024400
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    regs = {0x0: 0x83}
+
+if request.IsWrite:
+    regs[request.Offset] = request.Value
+    if request.Offset == 0x10:
+        sw = request.Value & 0x7
+        regs[0x10] = (request.Value & ~0x38) | (sw << 3)
+elif request.IsRead:
+    if request.Offset == 0x0:
+        cr = regs.get(0x0, 0x83)
+        hsion = cr & 0x1
+        csion = (cr >> 7) & 0x1
+        hseon = (cr >> 16) & 0x1
+        pll1on = (cr >> 24) & 0x1
+        pll2on = (cr >> 26) & 0x1
+        pll3on = (cr >> 28) & 0x1
+        cr &= ~((1 << 2) | (1 << 8) | (1 << 17) | (1 << 25) | (1 << 27) | (1 << 29))
+        request.Value = cr | (hsion << 2) | (csion << 8) | (hseon << 17) | (pll1on << 25) | (pll2on << 27) | (pll3on << 29)
+    else:
+        request.Value = regs.get(request.Offset, 0)
+'''
+
+// PWR Python peripheral at 0x58024800.
+// H7 PWR register layout:
+//   CR1 (0x00), CSR1 (0x04): ACTVOSRDY[13]
+//   CR3 (0x0C): LDOEN[1]
+//   D3CR (0x18): VOSRDY[13], VOS[15:14]
+// CSR1 ACTVOSRDY and D3CR VOSRDY are always set (ready).
+pwr: Python.PythonPeripheral @ sysbus 0x58024800
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    regs = {0x0C: 0x2}
+
+if request.IsWrite:
+    regs[request.Offset] = request.Value
+elif request.IsRead:
+    request.Value = regs.get(request.Offset, 0)
+    if request.Offset == 0x04:
+        request.Value |= (1 << 13)
+    elif request.Offset == 0x18:
+        request.Value |= (1 << 13)
+'''
+
+// Flash controller at 0x52002000 (D1_AHB1PERIPH_BASE + 0x2000).
+// HAL_RCC_ClockConfig reads back FLASH_ACR to verify latency was applied.
+flash_ctrl: Python.PythonPeripheral @ sysbus 0x52002000
+    size: 0x400
+    initable: true
+    script: '''
+if request.IsInit:
+    regs = {}
+
+if request.IsWrite:
+    regs[request.Offset] = request.Value
+elif request.IsRead:
+    request.Value = regs.get(request.Offset, 0)
+'''
+
+spi1: SPI.STM32SPI @ sysbus 0x40013000
+    IRQ -> nvic@35
+
+gpioPortA: GPIOPort.STM32_GPIOPort @ sysbus <0x58020000, +0x400>
+    modeResetValue: 0xABFFFFFF
+    numberOfAFs: 16
+
+gpioPortB: GPIOPort.STM32_GPIOPort @ sysbus <0x58020400, +0x400>
+    numberOfAFs: 16
+
+i2c1: I2C.STM32F7_I2C @ sysbus 0x40005400
+    EventInterrupt -> nvic@31
+    ErrorInterrupt -> nvic@32
+
+sysbus:
+    init:
+        Tag <0x58000400, 0x580007FF> "SYSCFG"
+        Tag <0x5C001000, 0x5C0013FF> "DBGMCU"
+        Tag <0x51008000, 0x510083FF> "ART"
+        Tag <0x52004000, 0x520043FF> "OCTOSPI"
+        Tag <0x40020000, 0x400203FF> "DMA1"
+        Tag <0x40020400, 0x400207FF> "DMA2"
