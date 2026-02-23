@@ -44,7 +44,6 @@
 %% <ul>
 %%     <li>No support for decoding data with whitespace in base64 data</li>
 %%     <li>No support for mime decoding functions</li>
-%%     <li>No support for the `mode' option (`urlsafe' encoding)</li>
 %% </ul>
 %% @end
 %%-----------------------------------------------------------------------------
@@ -57,22 +56,32 @@
     decode_to_string/1, decode_to_string/2
 ]).
 
--type encode_options() :: #{padding => boolean()}.
+-type encode_options() :: #{padding => boolean(), mode => standard | urlsafe}.
 %% Options for encoding functions.
 %%
 %% <ul>
 %%     <li>`padding': when `true' (default), appends `=' padding characters to
 %%         the encoded output so its length is a multiple of 4.  When `false',
 %%         trailing `=' characters are omitted.</li>
+%%     <li>`mode': selects the encoding alphabet.  `standard' (default) uses
+%%         the standard alphabet from RFC 4648 Section 4 (`+' and `/' for
+%%         indices 62 and 63).  `urlsafe' uses the URL and filename safe
+%%         alphabet from RFC 4648 Section 5 (`-' and `_' for indices 62 and
+%%         63).</li>
 %% </ul>
 
--type decode_options() :: #{padding => boolean()}.
+-type decode_options() :: #{padding => boolean(), mode => standard | urlsafe}.
 %% Options for decoding functions.
 %%
 %% <ul>
 %%     <li>`padding': when `true' (default), the input must be padded with the
 %%         correct number of `=' characters.  When `false', missing `='
 %%         padding is accepted, though padded input is still accepted too.</li>
+%%     <li>`mode': selects the decoding alphabet.  `standard' (default) uses
+%%         the standard alphabet from RFC 4648 Section 4; `+' and `/' are
+%%         valid, while `-' and `_' are illegal.  `urlsafe' uses the URL and
+%%         filename safe alphabet from RFC 4648 Section 5; `-' and `_' are
+%%         valid, while `+' and `/' are illegal.</li>
 %% </ul>
 
 %%-----------------------------------------------------------------------------
@@ -94,8 +103,8 @@ encode(Data) when is_binary(Data) orelse is_list(Data) ->
 %%          The `padding' option controls whether `=' padding characters are
 %%          appended.  The default is `#{padding => true}'.
 %%
-%%          Note: the `mode' option is not supported; only the standard
-%%          alphabet (RFC 4648 Section 4) is available.
+%%          The `mode' option selects the encoding alphabet: `standard'
+%%          (default, RFC 4648 Section 4) or `urlsafe' (RFC 4648 Section 5).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encode(Data :: binary() | iolist(), Options :: encode_options()) -> binary().
@@ -121,8 +130,8 @@ encode_to_string(Data) when is_binary(Data) ->
 %%          The `padding' option controls whether `=' padding characters are
 %%          appended.  The default is `#{padding => true}'.
 %%
-%%          Note: the `mode' option is not supported; only the standard
-%%          alphabet (RFC 4648 Section 4) is available.
+%%          The `mode' option selects the encoding alphabet: `standard'
+%%          (default, RFC 4648 Section 4) or `urlsafe' (RFC 4648 Section 5).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encode_to_string(Data :: binary() | iolist(), Options :: encode_options()) -> string().
@@ -153,11 +162,12 @@ decode(Data) when is_binary(Data) orelse is_list(Data) ->
 %%          `#{padding => false}', missing `=' padding is tolerated; padded
 %%          input is still accepted.
 %%
+%%          The `mode' option selects the decoding alphabet: `standard'
+%%          (default, RFC 4648 Section 4) or `urlsafe' (RFC 4648 Section 5).
+%%          Characters from the wrong alphabet cause a `badarg' exception.
+%%
 %%          Raises a `badarg' exception if the input is not valid
 %%          base-64-encoded data.  Whitespace in the input is not accepted.
-%%
-%%          Note: the `mode' option is not supported; only the standard
-%%          alphabet (RFC 4648 Section 4) is available.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decode(Data :: binary() | iolist(), Options :: decode_options()) -> binary().
@@ -188,11 +198,12 @@ decode_to_string(Data) when is_binary(Data) ->
 %%          `#{padding => false}', missing `=' padding is tolerated; padded
 %%          input is still accepted.
 %%
+%%          The `mode' option selects the decoding alphabet: `standard'
+%%          (default, RFC 4648 Section 4) or `urlsafe' (RFC 4648 Section 5).
+%%          Characters from the wrong alphabet cause a `badarg' exception.
+%%
 %%          Raises a `badarg' exception if the input is not valid
 %%          base-64-encoded data.  Whitespace in the input is not accepted.
-%%
-%%          Note: the `mode' option is not supported; only the standard
-%%          alphabet (RFC 4648 Section 4) is available.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decode_to_string(Data :: binary() | iolist(), Options :: decode_options()) -> string().
