@@ -34,6 +34,7 @@ defmodule Tests do
     :ok = test_exception()
     :ok = test_chars_protocol()
     :ok = test_inspect()
+    :ok = test_base()
     :ok = test_gen_server()
     :ok = test_supervisor()
     :ok = IO.puts("Finished Elixir tests")
@@ -497,5 +498,65 @@ defmodule Tests do
     unless Process.whereis(name) do
       wait_until_registered(name)
     end
+  end
+
+  def test_base() do
+    # encode64/decode64
+
+    # Encode
+    "SGVsbG8=" = Base.encode64("Hello")
+    "SGVsbG8" = Base.encode64("Hello", padding: false)
+
+    # Decode
+    {:ok, "Hello"} = Base.decode64("SGVsbG8=")
+    {:ok, "Hello"} = Base.decode64("SGVsbG8=", padding: false)
+    {:ok, "Hello"} = Base.decode64("SGVsbG8", padding: false)
+    "Hello" = Base.decode64!("SGVsbG8=")
+
+    # Missing padding
+    :error = Base.decode64("SGVsbG8")
+    # Just 1 byte: not allowed
+    :error = Base.decode64("A", padding: false)
+    # Invalid
+    :error = Base.decode64("^^^", padding: false)
+    # Spaces are not allowed
+    :error = Base.decode64("SGV sbG8=")
+
+    :exp_err =
+      try do
+        Base.decode64!("^^^", padding: false)
+      rescue
+        ArgumentError -> :exp_err
+      end
+
+    # url_encode64/url_decode64
+
+    # Encode
+    "-vv8_f7_AA==" = Base.url_encode64(<<250, 251, 252, 253, 254, 255, 0>>)
+    "-vv8_f7_AA" = Base.url_encode64(<<250, 251, 252, 253, 254, 255, 0>>, padding: false)
+
+    # Decode
+    {:ok, <<250, 251, 252, 253, 254, 255, 0>>} = Base.url_decode64("-vv8_f7_AA==")
+    {:ok, <<250, 251, 252, 253, 254, 255, 0>>} = Base.url_decode64("-vv8_f7_AA==", padding: false)
+    {:ok, <<250, 251, 252, 253, 254, 255, 0>>} = Base.url_decode64("-vv8_f7_AA", padding: false)
+    <<250, 251, 252, 253, 254, 255, 0>> = Base.url_decode64!("-vv8_f7_AA==")
+
+    # Missing padding
+    :error = Base.url_decode64("-vv8_f7_AA")
+    # Just 1 byte: not allowed
+    :error = Base.url_decode64("A", padding: false)
+    # Invalid
+    :error = Base.url_decode64("^^^", padding: false)
+    # Spaces are not allowed
+    :error = Base.url_decode64("-vv8_  f7_AA==")
+
+    :exp_err =
+      try do
+        Base.url_decode64!("^^^", padding: false)
+      rescue
+        ArgumentError -> :exp_err
+      end
+
+    :ok
   end
 end
