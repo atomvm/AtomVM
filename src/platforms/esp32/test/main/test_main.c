@@ -613,6 +613,12 @@ TEST_CASE("test_wifi_example", "[test_run]")
     term ret_value = avm_test_case("test_wifi_example.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
+
+TEST_CASE("test_wifi_managed", "[test_run]")
+{
+    term ret_value = avm_test_case("test_wifi_managed.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
 #endif
 
 // Works C3 on local runs, but fails GH actions
