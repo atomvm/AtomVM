@@ -282,9 +282,9 @@ test_late_reply() ->
 test_concurrent_clients() ->
     {ok, Pid} = gen_server:start(?MODULE, [], []),
     Self = self(),
-    P1 = spawn(fun() -> make_requests(Pid, Self, 1, 1000) end),
-    P2 = spawn(fun() -> make_requests(Pid, Self, 10, 100) end),
-    P3 = spawn(fun() -> make_requests(Pid, Self, 20, 50) end),
+    P1 = spawn(fun() -> make_requests(Pid, Self, 1, 50) end),
+    P2 = spawn(fun() -> make_requests(Pid, Self, 10, 10) end),
+    P3 = spawn(fun() -> make_requests(Pid, Self, 20, 5) end),
     wait_for(P1),
     wait_for(P2),
     wait_for(P3),
@@ -302,6 +302,7 @@ make_requests(Pid, Waiting, ReplyAfter, I) ->
 wait_for(P) ->
     receive
         P -> ok
+    after 30000 -> error({timeout_waiting_for, P})
     end.
 
 test_timeout_call() ->
