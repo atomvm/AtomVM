@@ -68,15 +68,11 @@ accept(Pid, ListenSocket, SpawnControllingProcess) ->
                 false ->
                     echo(Pid, Socket);
                 true ->
-                    Self = self(),
                     NewPid = spawn_link(fun() ->
-                        receive
-                            {Self, controlling_process_done} -> ok
-                        end,
                         echo(Pid, Socket)
                     end),
                     ok = gen_tcp:controlling_process(Socket, NewPid),
-                    NewPid ! {Self, controlling_process_done}
+                    Pid ! echo_ready
             end;
         {error, closed} ->
             ok
@@ -102,6 +98,10 @@ test_send_receive(Port, N, SpawnControllingProcess) ->
         false ->
             loop(Socket, N);
         true ->
+            receive
+                echo_ready -> ok
+            after 5000 -> throw({timeout, test_send_receive_echo_ready, ?LINE})
+            end,
             Pid = spawn_link(fun() ->
                 receive
                     {Parent, go} ->
