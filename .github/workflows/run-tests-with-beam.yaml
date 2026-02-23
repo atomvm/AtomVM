@@ -177,7 +177,7 @@ jobs:
       working-directory: build
       run: |
         export PATH="${{ matrix.path_prefix }}$PATH"
-        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -pa libs/eavmlib/src/beams -s tests -s init stop -noshell
+        erl -pa tests/libs/estdlib/ -pa tests/libs/estdlib/beams/ -pa libs/etest/src/beams -pa libs/eavmlib/src/beams -pa libs/avm_network/src/beams -s tests -s init stop -noshell
 
     # Test
     - name: "Run tests/libs/etest/test_eunit with OTP eunit"

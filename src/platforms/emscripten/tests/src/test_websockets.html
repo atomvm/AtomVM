@@ -35,7 +35,7 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     const echoServer = hashParams.get('echo_server');
 
     var Module = {
-        arguments: ['/tests/build/test_websockets.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/estdlib/src/estdlib.avm'],
+        arguments: ['/tests/build/test_websockets.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/avm_emscripten/src/avm_emscripten.avm', '/build/libs/estdlib/src/estdlib.avm'],
         preRun: [function() {
             if (echoServer) {
                 // Set environment variable for the Erlang code to read

@@ -20,9 +20,18 @@
 
 macro(pack_archive avm_name)
 
-    set(multiValueArgs ERLC_FLAGS MODULES)
+    set(multiValueArgs ERLC_FLAGS MODULES DEPENDS_ON)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
     list(JOIN PACK_ARCHIVE_ERLC_FLAGS " " PACK_ARCHIVE_ERLC_FLAGS)
+
+    # Build -pa flags and file dependencies from DEPENDS_ON
+    set(_pack_archive_pa_flags "")
+    set(_pack_archive_extra_deps "")
+    foreach(_dep_name IN LISTS PACK_ARCHIVE_DEPENDS_ON)
+        list(APPEND _pack_archive_pa_flags -pa ${CMAKE_BINARY_DIR}/libs/${_dep_name}/src/beams)
+        list(APPEND _pack_archive_extra_deps ${CMAKE_BINARY_DIR}/libs/${_dep_name}/src/${_dep_name}.avm)
+    endforeach()
+
     foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
@@ -32,8 +41,9 @@ macro(pack_archive avm_name)
                     -I ${CMAKE_SOURCE_DIR}/libs/include
                     -I ${CMAKE_SOURCE_DIR}/libs
                     -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                    ${_pack_archive_pa_flags}
                     ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
-            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl ${_pack_archive_extra_deps}
             COMMENT "Compiling ${module_name}.erl"
             VERBATIM
         )
@@ -63,6 +73,10 @@ macro(pack_archive avm_name)
         ${avm_name} ALL
         DEPENDS ${avm_name}_emu
     )
+    # Add target-level dependencies from DEPENDS_ON
+    foreach(_dep_name IN LISTS PACK_ARCHIVE_DEPENDS_ON)
+        add_dependencies(${avm_name} ${_dep_name})
+    endforeach()
 endmacro()
 
 macro(pack_precompiled_archive avm_name)
@@ -127,12 +141,17 @@ macro(pack_precompiled_archive avm_name)
 endmacro()
 
 macro(pack_lib avm_name)
+    set(options UF2)
+    cmake_parse_arguments(PACK_LIB "${options}" "" "" ${ARGN})
+
     set(pack_lib_${avm_name}_archive_targets "")
+    set(pack_lib_${avm_name}_archives "")
+    set(pack_lib_${avm_name}_emu_archives "")
     if(NOT AVM_DISABLE_JIT)
         set(pack_lib_${avm_name}_archive_targets jit)
     endif()
 
-    foreach(archive_name ${ARGN})
+    foreach(archive_name ${PACK_LIB_UNPARSED_ARGUMENTS})
         if(${archive_name} STREQUAL "exavmlib")
             set(pack_lib_${avm_name}_archives ${pack_lib_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         elseif(${archive_name} STREQUAL "estdlib")
@@ -164,7 +183,7 @@ macro(pack_lib avm_name)
         foreach(jit_target_arch_variant ${AVM_PRECOMPILED_TARGETS})
             # Build JIT archives list for this specific target architecture
             set(pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant} ${CMAKE_BINARY_DIR}/libs/jit/src/jit-${jit_target_arch_variant}.avm)
-            foreach(archive_name ${ARGN})
+            foreach(archive_name ${PACK_LIB_UNPARSED_ARGUMENTS})
                 if(${archive_name} STREQUAL "estdlib")
                     set(pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant} ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}-${jit_target_arch_variant}.avm)
                 endif()
@@ -180,56 +199,59 @@ macro(pack_lib avm_name)
             set(target_deps ${target_deps} ${avm_name}-${jit_target_arch_variant}.avm)
         endforeach()
     endif()
-    add_custom_command(
-        OUTPUT ${avm_name}-pico.uf2
-        DEPENDS ${avm_name}.avm UF2Tool
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico.uf2 -s 0x10100000 ${avm_name}.avm
-        COMMENT "Creating UF2 file ${avm_name}.uf2"
-        VERBATIM
-    )
-    add_custom_command(
-        OUTPUT ${avm_name}-pico2.uf2
-        DEPENDS ${avm_name}.avm UF2Tool
-        COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico2.uf2 -f data -s 0x10100000 ${avm_name}.avm
-        COMMENT "Creating UF2 file ${avm_name}.uf2"
-        VERBATIM
-    )
-    set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
 
-    if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST AVM_PRECOMPILED_TARGETS))
+    if(PACK_LIB_UF2)
         add_custom_command(
-            OUTPUT ${avm_name}-armv6m-pico.uf2
-            DEPENDS ${avm_name}-armv6m.avm UF2Tool
-            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico.uf2 -s 0x10100000 ${avm_name}-armv6m.avm
-            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            OUTPUT ${avm_name}-pico.uf2
+            DEPENDS ${avm_name}.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico.uf2 -s 0x10100000 ${avm_name}.avm
+            COMMENT "Creating UF2 file ${avm_name}-pico.uf2"
             VERBATIM
         )
         add_custom_command(
-            OUTPUT ${avm_name}-armv6m-pico2.uf2
-            DEPENDS ${avm_name}-armv6m.avm UF2Tool
-            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m.avm
-            COMMENT "Creating UF2 file ${avm_name}-armv6m.uf2"
+            OUTPUT ${avm_name}-pico2.uf2
+            DEPENDS ${avm_name}.avm UF2Tool
+            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-pico2.uf2 -f data -s 0x10100000 ${avm_name}.avm
+            COMMENT "Creating UF2 file ${avm_name}-pico2.uf2"
             VERBATIM
         )
-        set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
-    endif()
+        set(target_deps ${target_deps} ${avm_name}-pico.uf2 ${avm_name}-pico2.uf2)
 
-    if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+float32" IN_LIST AVM_PRECOMPILED_TARGETS))
-        add_custom_command(
-            OUTPUT ${avm_name}-armv6m+float32-pico.uf2
-            DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
-            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico.uf2 -s 0x10100000 ${avm_name}-armv6m+float32.avm
-            COMMENT "Creating UF2 file ${avm_name}-armv6m+float32.uf2"
-            VERBATIM
-        )
-        add_custom_command(
-            OUTPUT ${avm_name}-armv6m+float32-pico2.uf2
-            DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
-            COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+float32.avm
-            COMMENT "Creating UF2 file ${avm_name}-armv6m+float32.uf2"
-            VERBATIM
-        )
-        set(target_deps ${target_deps} ${avm_name}-armv6m+float32-pico.uf2 ${avm_name}-armv6m+float32-pico2.uf2)
+        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m" IN_LIST AVM_PRECOMPILED_TARGETS))
+            add_custom_command(
+                OUTPUT ${avm_name}-armv6m-pico.uf2
+                DEPENDS ${avm_name}-armv6m.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico.uf2 -s 0x10100000 ${avm_name}-armv6m.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m-pico.uf2"
+                VERBATIM
+            )
+            add_custom_command(
+                OUTPUT ${avm_name}-armv6m-pico2.uf2
+                DEPENDS ${avm_name}-armv6m.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m-pico2.uf2"
+                VERBATIM
+            )
+            set(target_deps ${target_deps} ${avm_name}-armv6m-pico.uf2 ${avm_name}-armv6m-pico2.uf2)
+        endif()
+
+        if((NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED) AND ("armv6m+float32" IN_LIST AVM_PRECOMPILED_TARGETS))
+            add_custom_command(
+                OUTPUT ${avm_name}-armv6m+float32-pico.uf2
+                DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico.uf2 -s 0x10100000 ${avm_name}-armv6m+float32.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m+float32-pico.uf2"
+                VERBATIM
+            )
+            add_custom_command(
+                OUTPUT ${avm_name}-armv6m+float32-pico2.uf2
+                DEPENDS ${avm_name}-armv6m+float32.avm UF2Tool
+                COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o ${avm_name}-armv6m+float32-pico2.uf2 -f data -s 0x10100000 ${avm_name}-armv6m+float32.avm
+                COMMENT "Creating UF2 file ${avm_name}-armv6m+float32-pico2.uf2"
+                VERBATIM
+            )
+            set(target_deps ${target_deps} ${avm_name}-armv6m+float32-pico.uf2 ${avm_name}-armv6m+float32-pico2.uf2)
+        endif()
     endif()
 
     add_custom_target(
@@ -245,6 +267,9 @@ endmacro()
 
 macro(pack_runnable avm_name main)
 
+    set(multiValueArgs DIALYZE_AGAINST)
+    cmake_parse_arguments(PACK_RUNNABLE "" "" "${multiValueArgs}" ${ARGN})
+
     add_custom_command(
         OUTPUT ${main}.beam
         COMMAND erlc +debug_info -I ${CMAKE_SOURCE_DIR}/libs/include ${CMAKE_CURRENT_SOURCE_DIR}/${main}.erl
@@ -258,26 +283,62 @@ macro(pack_runnable avm_name main)
         DEPENDS ${main}.beam
     )
 
-    foreach(archive_name ${ARGN})
+    # Select the right PLT based on platform-specific dependencies
+    set(pack_runnable_${avm_name}_plt_names "")
+
+    foreach(archive_name ${PACK_RUNNABLE_UNPARSED_ARGUMENTS})
         if(NOT ${archive_name} STREQUAL "exavmlib")
             set(pack_runnable_${avm_name}_archives ${pack_runnable_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/${archive_name}.avm)
-            if(NOT ${archive_name} MATCHES "^eavmlib|estdlib|alisp$")
+            if(NOT ${archive_name} MATCHES "^eavmlib|estdlib|alisp|avm_network|avm_esp32|avm_rp2|avm_stm32|avm_emscripten$")
                 set(${avm_name}_dialyzer_beams_opt ${${avm_name}_dialyzer_beams_opt} "-r" ${CMAKE_BINARY_DIR}/libs/${archive_name}/src/beams/)
             endif()
         else()
             set(pack_runnable_${avm_name}_archives ${pack_runnable_${avm_name}_archives} ${CMAKE_BINARY_DIR}/libs/${archive_name}/lib/${archive_name}.avm)
         endif()
         set(pack_runnable_${avm_name}_archive_targets ${pack_runnable_${avm_name}_archive_targets} ${archive_name})
+        # Pick the platform-specific PLT if a platform library is in the dependencies
+        if(${archive_name} STREQUAL "avm_esp32")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-esp32")
+        elseif(${archive_name} STREQUAL "avm_rp2")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-rp2")
+        elseif(${archive_name} STREQUAL "avm_stm32")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-stm32")
+        elseif(${archive_name} STREQUAL "avm_emscripten")
+            list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-emscripten")
+        endif()
     endforeach()
 
+    # DIALYZE_AGAINST overrides auto-detected PLTs
+    if(PACK_RUNNABLE_DIALYZE_AGAINST)
+        set(pack_runnable_${avm_name}_plt_names "")
+        foreach(plt_lib IN LISTS PACK_RUNNABLE_DIALYZE_AGAINST)
+            if(${plt_lib} STREQUAL "avm_esp32")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-esp32")
+            elseif(${plt_lib} STREQUAL "avm_rp2")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-rp2")
+            elseif(${plt_lib} STREQUAL "avm_stm32")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-stm32")
+            elseif(${plt_lib} STREQUAL "avm_emscripten")
+                list(APPEND pack_runnable_${avm_name}_plt_names "atomvmlib-emscripten")
+            endif()
+        endforeach()
+    endif()
+
+    # Default to base PLT if no platform was detected
+    if(NOT pack_runnable_${avm_name}_plt_names)
+        set(pack_runnable_${avm_name}_plt_names "atomvmlib")
+    endif()
+
     if (Dialyzer_FOUND)
-        add_custom_target(
-            ${avm_name}_dialyzer
-            DEPENDS ${avm_name}_main
-            COMMAND dialyzer --plt ${CMAKE_BINARY_DIR}/libs/atomvmlib.plt -c ${main}.beam ${${avm_name}_dialyzer_beams_opt}
-        )
-        add_dependencies(${avm_name}_dialyzer atomvmlib_plt ${pack_runnable_${avm_name}_archive_targets})
-        add_dependencies(dialyzer ${avm_name}_dialyzer)
+        foreach(plt_name IN LISTS pack_runnable_${avm_name}_plt_names)
+            add_custom_target(
+                ${avm_name}_${plt_name}_dialyzer
+                DEPENDS ${avm_name}_main
+                COMMAND dialyzer --plt ${CMAKE_BINARY_DIR}/libs/${plt_name}.plt -c ${main}.beam ${${avm_name}_dialyzer_beams_opt}
+            )
+            add_dependencies(${avm_name}_${plt_name}_dialyzer ${plt_name}_plt ${pack_runnable_${avm_name}_archive_targets})
+            add_dependencies(dialyzer ${avm_name}_${plt_name}_dialyzer)
+        endforeach()
     endif()
 
     if(AVM_RELEASE)
