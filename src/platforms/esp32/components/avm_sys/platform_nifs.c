@@ -327,6 +327,9 @@ static term nif_esp_partition_mmap(Context *ctx, int argc, term argv[])
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     ERL_NIF_TERM binary = enif_make_resource_binary(env, handle, mmap_ptr, size);
     enif_release_resource(handle);
+    if (term_is_invalid_term(binary)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &binary, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -707,6 +710,9 @@ static term nif_esp_get_default_mac(Context *ctx, int argc, term argv[])
     esp_err_t err = esp_efuse_mac_get_default(mac);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Unable to read default mac.  err=%i", err);
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         return port_create_error_tuple(ctx, esp_err_to_term(ctx->global, err));
     }
 
@@ -829,6 +835,9 @@ static term nif_esp_task_wdt_deinit(Context *ctx, int argc, term argv[])
         return OK_ATOM;
     }
 
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     term error_tuple = term_alloc_tuple(2, &ctx->heap);
     term_put_tuple_element(error_tuple, 0, ERROR_ATOM);
     term_put_tuple_element(error_tuple, 1, term_from_int(result));
@@ -924,7 +933,12 @@ static term nif_esp_timer_get_time(Context *ctx, int argc, term argv[])
     UNUSED(argv);
     UNUSED(argc);
 
-    return term_make_maybe_boxed_int64(esp_timer_get_time(), &ctx->heap);
+    uint64_t val = esp_timer_get_time();
+    size_t term_size = term_boxed_integer_size(val);
+    if (UNLIKELY(memory_ensure_free_opt(ctx, term_size, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    return term_make_maybe_boxed_int64(val, &ctx->heap);
 }
 
 //

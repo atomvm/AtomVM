@@ -123,7 +123,7 @@ int enif_release_resource(void *resource)
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
 {
     if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+        return term_invalid_term();
     }
     return term_from_resource(obj, &env->heap);
 }
@@ -633,8 +633,8 @@ const ErlNifResourceTypeInit resource_binary_resource_type_init = {
 
 ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size)
 {
-    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        AVM_ABORT();
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
+        return term_invalid_term();
     }
     struct ResourceBinary *resource_binary = enif_alloc_resource(env->global->resource_binary_resource_type, sizeof(struct ResourceBinary));
     resource_binary->managing_resource = refc_binary_from_data(obj);
