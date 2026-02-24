@@ -177,23 +177,6 @@ static inline external_term_read_result_t externalterm_deserialize_buf(const voi
 /**
  * @brief Create a term from a binary.
  *
- * @details Deserialize a binary term that stores term data in Erlang external
- * term format, and instantiate the serialized terms.  The heap from the
- * context will be used to allocate the instantiated terms.  This function is
- * the complement of externalterm_to_binary.
- * WARNING: This function may call the GC, which may render the input binary
- * invalid. See `externalterm_from_binary_with_roots'
- * @param ctx the context that owns the memory that will be allocated.
- * @param binary the binary.
- * @param bytes_read the number of bytes read from the input binary.
- * @returns the term deserialized from the input term, or an invalid term, if
- * deserialization fails.
- */
-term externalterm_from_binary(Context *ctx, term binary, size_t *bytes_read);
-
-/**
- * @brief Create a term from a binary.
- *
  * @details Deserialize a binary term that stores term data in Erlang external term format,
  * and instantiate the serialized terms.  The heap from the context will be used to
  * allocate the instantiated terms.  This function is the complement of externalterm_to_binary.

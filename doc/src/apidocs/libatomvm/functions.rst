@@ -80,7 +80,6 @@ Functions
 .. doxygenfunction:: event_listener_is_event
 .. doxygenfunction:: externalterm_deserialize
 .. doxygenfunction:: externalterm_deserialize_buf_raw
-.. doxygenfunction:: externalterm_from_binary
 .. doxygenfunction:: externalterm_to_binary
 .. doxygenfunction:: externalterm_validate_buf
 .. doxygenfunction:: externalterm_validate_buf_raw
