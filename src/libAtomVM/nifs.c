@@ -3138,9 +3138,6 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 {
-    if (argc < 1 || 2 < argc) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
     if (argc == 2 && !term_is_list(argv[1])) {
         RAISE_ERROR(BADARG_ATOM);
     }
