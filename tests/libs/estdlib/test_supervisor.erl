@@ -166,6 +166,9 @@ test_terminate_timeout() ->
     {ok, Pid} = supervisor:start_child(SupPid, #{
         id => child_start, start => {?MODULE, child_start, [{trap_exit, Self}]}, shutdown => 500
     }),
+    receive
+        {Pid, ready} -> ok
+    end,
     ok = supervisor:terminate_child(SupPid, child_start),
     ok =
         receive
@@ -173,6 +176,9 @@ test_terminate_timeout() ->
         after 1000 -> timeout
         end,
     {ok, Pid2} = supervisor:restart_child(SupPid, child_start),
+    receive
+        {Pid2, ready} -> ok
+    end,
     Pid2 ! ok,
     ok = supervisor:terminate_child(SupPid, child_start),
     ok =
@@ -184,6 +190,9 @@ test_terminate_timeout() ->
     {ok, Pid3} = supervisor:start_child(SupPid, #{
         id => child_start, start => {?MODULE, child_start, [{trap_exit, Self}]}, shutdown => 500
     }),
+    receive
+        {Pid3, ready} -> ok
+    end,
     unlink(SupPid),
     exit(SupPid, shutdown),
     ok =
@@ -216,6 +225,7 @@ child_start(fail) ->
 child_start({trap_exit, Parent}) ->
     Pid = spawn_link(fun() ->
         process_flag(trap_exit, true),
+        Parent ! {self(), ready},
         receive
             {'EXIT', From, Reason} -> Parent ! {self(), {From, Reason}}
         end,
