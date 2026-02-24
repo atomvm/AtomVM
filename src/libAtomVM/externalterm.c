@@ -171,11 +171,6 @@ term externalterm_from_const_literal(const void *external_term, size_t size, Con
     return result;
 }
 
-term externalterm_from_binary(Context *ctx, term binary, size_t *bytes_read)
-{
-    return externalterm_from_binary_with_roots(ctx, 0, 0, bytes_read, 1, &binary);
-}
-
 static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb)
 {
     *len = compute_external_size(t, glb) + 1;
