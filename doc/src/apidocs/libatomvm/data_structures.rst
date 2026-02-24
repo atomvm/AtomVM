@@ -167,7 +167,8 @@ Enumerations
 .. doxygenenum:: DictionaryFunctionResult
 .. doxygenenum:: ErlNifResourceFlags
 .. doxygenenum:: ErlNifSelectFlags
-.. doxygenenum:: ExternalTermOpts
+.. doxygenenum:: external_term_read_opts_t
+.. doxygenenum:: external_term_read_result_t
 .. doxygenenum:: ExternalTermResult
 .. doxygenenum:: FunctionType
 .. doxygenenum:: GenMessageParseResult
