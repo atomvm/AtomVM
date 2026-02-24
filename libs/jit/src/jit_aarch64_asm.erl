@@ -56,7 +56,8 @@
     stp/4,
     ldp/4,
     subs/3,
-    adr/2
+    adr/2,
+    eor/3
 ]).
 
 -export_type([
@@ -844,6 +845,33 @@ and_(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
         {ok, N, Immr, Imms} ->
             % AND immediate encoding: sf=1(64b) 00(op) 100100 N immr imms Rn Rd
             Opcode = 16#92000000,
+            Instr =
+                Opcode bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5) bor
+                    RdNum,
+            <<Instr:32/little>>;
+        error ->
+            error({unencodable_immediate, Imm})
+    end.
+
+%% Emit an EOR instruction (bitwise exclusive OR)
+-spec eor(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register() | integer()) ->
+    binary().
+eor(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    %% AArch64 EOR (shifted register) encoding: EOR Rd, Rn, Rm
+    %% 11001010000mmmmm000000nnnnndddddd (64-bit)
+    <<
+        (16#CA000000 bor (RmNum bsl 16) bor (RnNum bsl 5) bor RdNum):32/little
+    >>;
+eor(Rd, Rn, Imm) when is_atom(Rd), is_atom(Rn), is_integer(Imm) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    case encode_bitmask_immediate(<<Imm:64>>) of
+        {ok, N, Immr, Imms} ->
+            % EOR immediate encoding: sf=1(64b) 10(op) 100100 N immr imms Rn Rd
+            Opcode = 16#D2000000,
             Instr =
                 Opcode bor (N bsl 22) bor (Immr bsl 16) bor (Imms bsl 10) bor (RnNum bsl 5) bor
                     RdNum,

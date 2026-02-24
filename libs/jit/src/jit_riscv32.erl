@@ -70,7 +70,8 @@
     call_func_ptr/3,
     return_labels_and_lines/2,
     add_label/2,
-    add_label/3
+    add_label/3,
+    xor_/3
 ]).
 
 -ifdef(JIT_DWARF).
@@ -3020,6 +3021,36 @@ or_(
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
     Stream1 = State1#state.stream,
     I = jit_riscv32_asm:or_(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
+    State1#state{available_regs = Avail, stream = Stream2, regs = Regs1}.
+
+xor_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State0, Reg, SrcReg
+) when
+    is_atom(SrcReg)
+->
+    I = jit_riscv32_asm:xor_(Reg, Reg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State0#state{stream = Stream1, regs = Regs1};
+xor_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State0, Reg, Val) when
+    Val >= -2048 andalso Val =< 2047
+->
+    I = jit_riscv32_asm:xori(Reg, Reg, Val),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State0#state{stream = Stream1, regs = Regs1};
+xor_(
+    #state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} = State0,
+    Reg,
+    Val
+) ->
+    Temp = first_avail(Avail),
+    AT = Avail band (bnot reg_bit(Temp)),
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_riscv32_asm:xor_(Reg, Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
     State1#state{available_regs = Avail, stream = Stream2, regs = Regs1}.

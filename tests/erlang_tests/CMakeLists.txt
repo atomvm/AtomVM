@@ -186,6 +186,7 @@ compile_erlang(is_record)
 compile_erlang(test_bitshift)
 compile_erlang(test_bitwise)
 compile_erlang(test_bitwise2)
+compile_erlang(test_bitwise_large)
 compile_erlang(test_boolean)
 compile_erlang(test_gt_and_le)
 compile_erlang(test_tuple_size)
@@ -748,6 +749,7 @@ set(erlang_test_beams
     test_bitshift.beam
     test_bitwise.beam
     test_bitwise2.beam
+    test_bitwise_large.beam
     test_boolean.beam
     test_gt_and_le.beam
     test_tuple_size.beam

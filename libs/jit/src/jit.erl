@@ -38,6 +38,11 @@
     stream/0
 ]).
 
+-export([
+    small_integer_bounds/1,
+    is_small_integer_range/3
+]).
+
 -compile([warnings_as_errors]).
 
 -include_lib("jit.hrl").
@@ -3258,6 +3263,93 @@ op_gc_bif2(
     Arg2Value = Arg2 bsr 4,
     Range2 = {Arg2Value, Arg2Value},
     op_gc_bif2_sub(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% band - both typed integers with range: inline if proven small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'band',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_band(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'band',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_band(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% bor - both typed integers with range: inline if proven small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bor',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_bor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bor',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_bor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% bxor - both typed integers with range: inline if proven small, XOR zeroes tag
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bxor',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bxor',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
 % Default case
 op_gc_bif2(
     MMod, MSt0, FailLabel, Live, Bif, _Module, _Function, {typed, Arg1, _}, {typed, Arg2, _}, Dest
@@ -3286,18 +3378,19 @@ op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest) ->
     ]),
     bif_faillabel_test(FailLabel, MMod, MSt4, {free, ResultReg}, {free, Dest}).
 
+% Platform-specific bounds for small integers
+small_integer_bounds(MMod) ->
+    case MMod:word_size() of
+        % 32-bit
+        4 -> {-(1 bsl 27), (1 bsl 27) - 1};
+        % 64-bit
+        8 -> {-(1 bsl 59), (1 bsl 59) - 1}
+    end.
+
 % Check if addition can overflow based on type ranges
 % Returns true if the result is guaranteed to fit in a small integer
 can_inline_add(Range1, Range2, MMod) ->
-    % Platform-specific bounds
-    {MinSafe, MaxSafe} =
-        case MMod:word_size() of
-            % 32-bit
-            4 -> {-(1 bsl 27), (1 bsl 27) - 1};
-            % 64-bit
-            8 -> {-(1 bsl 59), (1 bsl 59) - 1}
-        end,
-
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
     case {Range1, Range2} of
         {{Min1, Max1}, {Min2, Max2}} when
             is_integer(Min1),
@@ -3308,10 +3401,8 @@ can_inline_add(Range1, Range2, MMod) ->
             % Calculate min and max possible results
             MinResult = Min1 + Min2,
             MaxResult = Max1 + Max2,
-            % Check if both are in safe range
             MinResult >= MinSafe andalso MaxResult =< MaxSafe;
         _ ->
-            % Unbounded range (has '-inf' or '+inf'), cannot optimize
             false
     end.
 
@@ -3349,15 +3440,7 @@ op_gc_bif2_add(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
 % Check if subtraction can overflow based on type ranges
 % Returns true if the result is guaranteed to fit in a small integer
 can_inline_sub(Range1, Range2, MMod) ->
-    % Platform-specific bounds
-    {MinSafe, MaxSafe} =
-        case MMod:word_size() of
-            % 32-bit
-            4 -> {-(1 bsl 27), (1 bsl 27) - 1};
-            % 64-bit
-            8 -> {-(1 bsl 59), (1 bsl 59) - 1}
-        end,
-
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
     case {Range1, Range2} of
         {{Min1, Max1}, {Min2, Max2}} when
             is_integer(Min1),
@@ -3365,15 +3448,11 @@ can_inline_sub(Range1, Range2, MMod) ->
             is_integer(Min2),
             is_integer(Max2)
         ->
-            % Calculate min and max possible results
-            % Min result: Min1 - Max2 (smallest value minus largest value)
-            % Max result: Max1 - Min2 (largest value minus smallest value)
+            % Min result: Min1 - Max2, Max result: Max1 - Min2
             MinResult = Min1 - Max2,
             MaxResult = Max1 - Min2,
-            % Check if both are in safe range
             MinResult >= MinSafe andalso MaxResult =< MaxSafe;
         _ ->
-            % Unbounded range (has '-inf' or '+inf'), cannot optimize
             false
     end.
 
@@ -3405,6 +3484,97 @@ op_gc_bif2_sub(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
             MMod:free_native_registers(MSt5, [Reg1, Reg2Stripped, Dest]);
         false ->
             % Cannot prove safety, use default BIF call
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if both ranges are guaranteed to be small integers
+% Sufficient for bitwise ops where result magnitude cannot exceed input magnitudes
+is_small_integer_range(Range1, Range2, MMod) ->
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    case {Range1, Range2} of
+        {{Min1, Max1}, {Min2, Max2}} when
+            is_integer(Min1),
+            is_integer(Max1),
+            is_integer(Min2),
+            is_integer(Max2)
+        ->
+            Min1 >= MinSafe andalso Max1 =< MaxSafe andalso
+                Min2 >= MinSafe andalso Max2 =< MaxSafe;
+        _ ->
+            false
+    end.
+
+op_gc_bif2_band(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, Arg2),
+            MSt3 = MMod:move_to_vm_register(MSt2, Reg1, Dest),
+            MMod:free_native_registers(MSt3, [Reg1, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end;
+op_gc_bif2_band(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, Reg2),
+            MSt4 = MMod:move_to_vm_register(MSt3, Reg1, Dest),
+            MMod:free_native_registers(MSt4, [Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+op_gc_bif2_bor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            MSt2 = MMod:or_(MSt1, Reg1, Arg2),
+            MSt3 = MMod:move_to_vm_register(MSt2, Reg1, Dest),
+            MMod:free_native_registers(MSt3, [Reg1, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end;
+op_gc_bif2_bor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            MSt3 = MMod:or_(MSt2, Reg1, Reg2),
+            MSt4 = MMod:move_to_vm_register(MSt3, Reg1, Dest),
+            MMod:free_native_registers(MSt4, [Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            MSt2 = MMod:xor_(MSt1, Reg1, Arg2),
+            MSt3 = MMod:or_(MSt2, Reg1, ?TERM_INTEGER_TAG),
+            MSt4 = MMod:move_to_vm_register(MSt3, Reg1, Dest),
+            MMod:free_native_registers(MSt4, [Reg1, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end;
+op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case is_small_integer_range(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            MSt3 = MMod:xor_(MSt2, Reg1, Reg2),
+            MSt4 = MMod:or_(MSt3, Reg1, ?TERM_INTEGER_TAG),
+            MSt5 = MMod:move_to_vm_register(MSt4, Reg1, Dest),
+            MMod:free_native_registers(MSt5, [Reg1, Reg2, Dest]);
+        false ->
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.
 

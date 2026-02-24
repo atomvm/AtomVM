@@ -70,7 +70,8 @@
     call_func_ptr/3,
     return_labels_and_lines/2,
     add_label/2,
-    add_label/3
+    add_label/3,
+    xor_/3
 ]).
 
 -include_lib("jit.hrl").
@@ -2373,6 +2374,21 @@ and_(
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     {State#state{stream = Stream1, regs = Regs1}, Reg};
 and_(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
+        State,
+    {free, Reg},
+    Val
+) when
+    ?IS_GPR(Reg), is_integer(Val), Val < -16#80 orelse Val > 16#FFFFFFFF
+->
+    TempReg = first_avail(Avail),
+    I1 = jit_x86_64_asm:movabsq(Val, TempReg),
+    I2 = jit_x86_64_asm:andq(TempReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
+    {State#state{stream = Stream2, regs = Regs1}, Reg};
+and_(
     #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {free, Reg}, Val
 ) when
     ?IS_GPR(Reg)
@@ -2387,6 +2403,35 @@ and_(
     %% AND modifies the register, invalidate its contents tracking
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     {State#state{stream = Stream1, regs = Regs1}, Reg};
+and_(
+    #state{
+        stream_module = StreamModule,
+        available_regs = Avail,
+        used_regs = UR,
+        stream = Stream0,
+        regs = Regs0
+    } = State,
+    Reg,
+    Val
+) when
+    ?IS_GPR(Reg), is_integer(Val), Val < -16#80 orelse Val > 16#FFFFFFFF
+->
+    ResultReg = first_avail(Avail),
+    Bit = reg_bit(ResultReg),
+    I1 = jit_x86_64_asm:movabsq(Val, ResultReg),
+    I2 = jit_x86_64_asm:andq(Reg, ResultReg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
+    {
+        State#state{
+            stream = Stream2,
+            available_regs = Avail band (bnot Bit),
+            used_regs = UR bor Bit,
+            regs = Regs1
+        },
+        ResultReg
+    };
 and_(
     #state{
         stream_module = StreamModule,
@@ -2428,8 +2473,47 @@ or_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
     Stream1 = StreamModule:append(Stream0, I1),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State#state{stream = Stream1, regs = Regs1};
+or_(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
+        State,
+    Reg,
+    Val
+) when is_integer(Val), Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+    TempReg = first_avail(Avail),
+    I1 = jit_x86_64_asm:movabsq(Val, TempReg),
+    I2 = jit_x86_64_asm:orq(TempReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
+    State#state{stream = Stream2, regs = Regs1};
 or_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
     I1 = jit_x86_64_asm:orq(Val, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State#state{stream = Stream1, regs = Regs1}.
+
+xor_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, SrcReg) when
+    is_atom(SrcReg)
+->
+    I1 = jit_x86_64_asm:xorq(SrcReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State#state{stream = Stream1, regs = Regs1};
+xor_(
+    #state{stream_module = StreamModule, stream = Stream0, available_regs = Avail, regs = Regs0} =
+        State,
+    Reg,
+    Val
+) when is_integer(Val), Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+    TempReg = first_avail(Avail),
+    I1 = jit_x86_64_asm:movabsq(Val, TempReg),
+    I2 = jit_x86_64_asm:xorq(TempReg, Reg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Stream2 = StreamModule:append(Stream1, I2),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
+    State#state{stream = Stream2, regs = Regs1};
+xor_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
+    I1 = jit_x86_64_asm:xorq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State#state{stream = Stream1, regs = Regs1}.

@@ -313,3 +313,54 @@ tail_call_cache_armv6m_test() ->
         ])
     ),
     ok.
+
+small_integer_bounds_test_() ->
+    [
+        ?_assertEqual({-(1 bsl 59), (1 bsl 59) - 1}, jit:small_integer_bounds(jit_x86_64)),
+        ?_assertEqual({-(1 bsl 27), (1 bsl 27) - 1}, jit:small_integer_bounds(jit_armv6m))
+    ].
+
+is_small_integer_range_test_() ->
+    [
+        % Both ranges within 32-bit small integer bounds
+        ?_assert(jit:is_small_integer_range({0, 100}, {-50, 50}, jit_armv6m)),
+        % Both ranges within 64-bit small integer bounds
+        ?_assert(jit:is_small_integer_range({0, 100}, {-50, 50}, jit_x86_64)),
+        % At the exact boundary for 32-bit
+        ?_assert(
+            jit:is_small_integer_range(
+                {-(1 bsl 27), (1 bsl 27) - 1}, {0, 0}, jit_armv6m
+            )
+        ),
+        % Exceeding boundary for 32-bit
+        ?_assertNot(
+            jit:is_small_integer_range(
+                {-(1 bsl 27) - 1, 0}, {0, 0}, jit_armv6m
+            )
+        ),
+        ?_assertNot(
+            jit:is_small_integer_range(
+                {0, (1 bsl 27)}, {0, 0}, jit_armv6m
+            )
+        ),
+        % Second range exceeding boundary
+        ?_assertNot(
+            jit:is_small_integer_range(
+                {0, 0}, {0, (1 bsl 27)}, jit_armv6m
+            )
+        ),
+        % Unbounded range (atom bounds like '-inf'/'+inf')
+        ?_assertNot(jit:is_small_integer_range({'-inf', 100}, {0, 50}, jit_x86_64)),
+        ?_assertNot(jit:is_small_integer_range({0, '+inf'}, {0, 50}, jit_x86_64)),
+        % At the exact boundary for 64-bit
+        ?_assert(
+            jit:is_small_integer_range(
+                {-(1 bsl 59), (1 bsl 59) - 1}, {0, 0}, jit_x86_64
+            )
+        ),
+        ?_assertNot(
+            jit:is_small_integer_range(
+                {-(1 bsl 59) - 1, 0}, {0, 0}, jit_x86_64
+            )
+        )
+    ].

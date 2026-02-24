@@ -59,7 +59,9 @@
     jmpq/1,
     retq/0,
     cmpb/2,
-    xchgq/2
+    xchgq/2,
+    xorl/2,
+    xorq/2
 ]).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -402,11 +404,16 @@ andq(Imm, {Offset, DestReg}) when ?IS_SINT8_T(Imm) andalso ?IS_SINT8_T(Offset) -
     <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 1:2, 4:3, MODRM_RM:3, Offset, Imm>>;
 andq(Imm, {Offset, DestReg}) when ?IS_SINT8_T(Imm) andalso ?IS_SINT32_T(Offset) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
-    <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 2:2, 4:3, MODRM_RM:3, Offset:32/little, Imm>>.
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 2:2, 4:3, MODRM_RM:3, Offset:32/little, Imm>>;
+andq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#21, 3:2, MODRM_REG:3, MODRM_RM:3>>.
 
-andl(Imm, Reg) when ?IS_UINT8_T(Imm), is_atom(Reg) ->
+andl(Imm, Reg) when is_integer(Imm), Imm >= 0, Imm =< 127, is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
     % AND r/m32, imm8: 0x83 /4 ModRM imm8 (REX prefix for r8-r15)
+    % imm8 is sign-extended to 32 bits, so only values 0-127 are safe
     Prefix =
         case REX_B of
             0 -> <<>>;
@@ -546,7 +553,32 @@ orq(Imm, rax) when ?IS_UINT32_T(Imm) ->
     <<?X86_64_REX(1, 0, 0, 0), 16#0D, Imm:32/little>>;
 orq(Imm, Reg) when ?IS_UINT32_T(Imm) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
-    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 1:3, MODRM_RM:3, Imm:32/little>>.
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 1:3, MODRM_RM:3, Imm:32/little>>;
+orq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#09, 3:2, MODRM_REG:3, MODRM_RM:3>>.
+
+xorl(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    (case {REX_R, REX_B} of
+        {0, 0} -> <<16#31, 3:2, MODRM_REG:3, MODRM_RM:3>>;
+        _ -> <<(16#40 bor (REX_R bsl 2) bor REX_B), 16#31, 3:2, MODRM_REG:3, MODRM_RM:3>>
+    end).
+
+xorq(Imm, DestReg) when ?IS_SINT8_T(Imm) andalso is_atom(DestReg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 3:2, 6:3, MODRM_RM:3, Imm>>;
+xorq(Imm, rax) when ?IS_UINT32_T(Imm) ->
+    <<?X86_64_REX(1, 0, 0, 0), 16#35, Imm:32/little>>;
+xorq(Imm, DestReg) when ?IS_UINT32_T(Imm) andalso is_atom(DestReg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 6:3, MODRM_RM:3, Imm:32/little>>;
+xorq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
+    {REX_R, MODRM_REG} = x86_64_x_reg(SrcReg),
+    {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
+    <<?X86_64_REX(1, REX_R, 0, REX_B), 16#31, 3:2, MODRM_REG:3, MODRM_RM:3>>.
 
 leaq_rel32({Offset, rip}, Reg) when is_atom(Reg), ?IS_SINT32_T(Offset) ->
     case x86_64_x_reg(Reg) of
