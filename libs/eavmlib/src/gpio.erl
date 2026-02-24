@@ -62,7 +62,7 @@
 %% This is the port returned by `gpio:start/0'.
 -type pin() :: non_neg_integer() | pin_tuple().
 %% The pin definition for ESP32 and PR2040 is a non-negative integer. A tuple is used on the STM32 platform and for the extra "WL" pins on the Pico-W.
--type pin_tuple() :: {gpio_bank(), 0..15}.
+-type pin_tuple() :: {gpio_bank(), 0..15 | all | [0..15]}.
 %% A pin parameter on STM32 is a tuple consisting of a GPIO bank and pin number, also used on the Pico-W for the extra "WL" pins `0..2'.
 -type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k | wl.
 %% STM32 gpio banks vary by board, some only break out `a' thru `h'. The extra "WL" pins on Pico-W use bank `wl'.
