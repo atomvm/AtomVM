@@ -82,6 +82,41 @@ static size_t compute_external_size(term t, GlobalContext *glb);
 static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
 static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
+external_term_read_result_t externalterm_validate_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb)
+{
+    UNUSED(opts);
+    UNUSED(glb);
+
+    size_t eterm_size = 0;
+    int heap_usage = calculate_heap_usage(buf, buf_size, &eterm_size, true);
+    if (UNLIKELY(heap_usage < 0)) {
+        return ExternalTermReadInvalid;
+    }
+
+    *bytes_read = eterm_size;
+    *required_heap = heap_usage;
+
+    return ExternalTermReadOk;
+}
+
+external_term_read_result_t externalterm_deserialize_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb)
+{
+    UNUSED(buf_size);
+    UNUSED(opts);
+
+    size_t eterm_size = 0;
+    term result = parse_external_terms(buf, &eterm_size, true, heap, glb);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        return ExternalTermReadInvalid;
+    }
+
+    *out_term = result;
+
+    return ExternalTermReadOk;
+}
+
 term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots)
 {
     if (!term_is_binary(roots[binary_ix])) {

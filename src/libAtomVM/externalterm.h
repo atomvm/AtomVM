@@ -29,6 +29,7 @@
 #define _EXTERNALTERM_H_
 
 #include "term.h"
+#include "utils.h"
 
 #define EXTERNAL_TERM_TAG 131
 
@@ -43,6 +44,135 @@ enum ExternalTermResult
     EXTERNAL_TERM_MALLOC = 2,
     EXTERNAL_TERM_HEAP_ALLOC = 3
 };
+
+/**
+ * @brief Result of an external term read operation.
+ *
+ * Returned by validate and deserialize functions to indicate whether
+ * the operation succeeded or the input was malformed.
+ */
+typedef enum
+{
+    ExternalTermReadOk,
+    ExternalTermReadInvalid
+} external_term_read_result_t;
+
+/**
+ * @brief Options for external term read operations.
+ *
+ * Passed to validate and deserialize functions to control their behavior.
+ * Reserved for future use; pass \c ExternalTermReadNoOpts for now.
+ */
+typedef enum
+{
+    ExternalTermReadNoOpts
+} external_term_read_opts_t;
+
+/**
+ * @brief Validate a raw external term buffer (tag byte excluded).
+ *
+ * Like \c externalterm_validate_buf() but expects a buffer without the
+ * leading \c EXTERNAL_TERM_TAG byte. \p bytes_read does not account for
+ * the tag byte.
+ *
+ * @see externalterm_validate_buf() for the standard tag-included variant.
+ */
+external_term_read_result_t externalterm_validate_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb);
+
+/**
+ * @brief Deserialize a raw external term buffer (tag byte excluded) into a term.
+ *
+ * Like \c externalterm_deserialize_buf() but expects a buffer without the
+ * leading \c EXTERNAL_TERM_TAG byte.
+ *
+ * @warning \c externalterm_validate_buf_raw() MUST be called successfully on
+ * the same buffer before calling this function, and the heap must have been
+ * grown to accommodate at least the number of words reported by that call.
+ * Skipping validation or providing insufficient heap space results in undefined
+ * behavior.
+ *
+ * @see externalterm_deserialize_buf() for the standard tag-included variant.
+ */
+external_term_read_result_t externalterm_deserialize_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb);
+
+/**
+ * @brief Validate an external term buffer and compute required heap size.
+ *
+ * Verifies that \p buf contains a well-formed Erlang external term, starting
+ * with \c EXTERNAL_TERM_TAG. On success, \p required_heap holds the number of
+ * heap words needed by \c externalterm_deserialize_buf() and \p bytes_read
+ * holds the total number of bytes consumed (including the tag byte).
+ *
+ * @warning This function MUST be called and must return \c ExternalTermReadOk
+ * before calling \c externalterm_deserialize_buf() on the same buffer.
+ * Calling the deserialize function on an unvalidated or invalid buffer results
+ * in undefined behavior.
+ *
+ * @param buf buffer holding the external term, including the leading \c EXTERNAL_TERM_TAG byte
+ * @param buf_size size of \p buf in bytes
+ * @param opts options for the read operation; pass \c ExternalTermReadNoOpts
+ * @param[out] required_heap number of heap words needed to deserialize the term
+ * @param[out] bytes_read total number of bytes consumed from \p buf
+ * @param glb the global context
+ * @return \c ExternalTermReadOk on success, \c ExternalTermReadInvalid if the
+ *         buffer does not contain a valid external term
+ *
+ * @see externalterm_deserialize_buf() to deserialize after a successful validation
+ * @see externalterm_validate_buf_raw() for the tag-excluded variant
+ */
+static inline external_term_read_result_t externalterm_validate_buf(const void *buf,
+    size_t buf_size, external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read,
+    GlobalContext *glb)
+{
+    if (UNLIKELY(buf_size < 1)) {
+        return ExternalTermReadInvalid;
+    }
+
+    const uint8_t *external_term_buf = (const uint8_t *) buf;
+    if (UNLIKELY(external_term_buf[0] != EXTERNAL_TERM_TAG)) {
+        return ExternalTermReadInvalid;
+    }
+
+    size_t raw_bytes_read;
+    external_term_read_result_t res = externalterm_validate_buf_raw(
+        external_term_buf + 1, buf_size - 1, opts, required_heap, &raw_bytes_read, glb);
+    if (LIKELY(res == ExternalTermReadOk)) {
+        *bytes_read = raw_bytes_read + 1;
+    }
+
+    return res;
+}
+
+/**
+ * @brief Deserialize an external term buffer into a term.
+ *
+ * Instantiates the Erlang external term stored in \p buf, allocating storage
+ * from \p heap. \p buf must start with the \c EXTERNAL_TERM_TAG byte.
+ *
+ * @warning \c externalterm_validate_buf() MUST be called successfully on the
+ * same buffer before calling this function, and the heap must have been grown
+ * to accommodate at least the number of words reported by that call. Skipping
+ * validation or providing insufficient heap space results in undefined behavior.
+ *
+ * @param buf buffer holding the external term, including the leading \c EXTERNAL_TERM_TAG byte
+ * @param buf_size size of \p buf in bytes
+ * @param opts options for the read operation; pass \c ExternalTermReadNoOpts
+ * @param[in,out] heap heap from which term storage is allocated
+ * @param[out] out_term the deserialized term (undefined on error)
+ * @param glb the global context
+ * @return \c ExternalTermReadOk on success, \c ExternalTermReadInvalid on failure
+ *
+ * @see externalterm_validate_buf() which MUST be called before this function
+ * @see externalterm_deserialize_buf_raw() for the tag-excluded variant
+ */
+static inline external_term_read_result_t externalterm_deserialize_buf(const void *buf,
+    size_t buf_size, external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb)
+{
+    const uint8_t *raw_buf = ((const uint8_t *) buf) + 1;
+    return externalterm_deserialize_buf_raw(raw_buf, buf_size - 1, opts, heap, out_term, glb);
+}
 
 /**
  * @brief Create a term from a binary.
