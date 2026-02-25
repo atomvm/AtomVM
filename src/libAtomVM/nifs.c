@@ -5130,6 +5130,7 @@ static term base64_encode(Context *ctx, int argc, term argv[], bool return_binar
     size_t heap_free = return_binary ? term_binary_heap_size(dst_size_with_pad)
                                      : 2 * dst_size_with_pad;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(src_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     // src may have been invalidated by GC
@@ -5322,6 +5323,7 @@ static term base64_decode(Context *ctx, int argc, term argv[], bool return_binar
     size_t heap_free = return_binary ? term_binary_heap_size(dst_size)
                                      : 2 * dst_size;
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_free, 1, &src, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(src_buf);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
     term dst = term_invalid_term();
