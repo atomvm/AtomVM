@@ -47,11 +47,11 @@ jobs:
       matrix:
         esp-idf-target: ["esp32", "esp32c3"]
         idf-version:
-         - 'v5.1.6'
+         - 'v5.1.7'
          - 'v5.2.6'
          - 'v5.3.4'
          - 'v5.4.3'
-         - 'v5.5.2'
+         - 'v5.5.3'
 
         exclude:
         - esp-idf-target: "esp32c3"
@@ -112,7 +112,7 @@ jobs:
       with:
         otp-version: "28"
         elixir-version: "1.19"
-        rebar3-version: "3.25.1"
+        rebar3-version: "3.26.0"
         gleam-version: "1.11.1"
         hexpm-mirrors: |
           https://builds.hex.pm
