@@ -646,7 +646,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Unable to get STA or AP configuration");
         term error = port_create_error_tuple(ctx, BADARG_ATOM);
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup0;
     }
 
     struct ClientData *data = malloc(sizeof(struct ClientData));
@@ -654,7 +654,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Failed to allocate ClientData");
         term error = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
     data->global = ctx->global;
     data->port_process_id = ctx->process_id;
@@ -670,7 +670,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             ESP_LOGE(TAG, "Failed to create network STA interface");
             term error = port_create_error_tuple(ctx, ERROR_ATOM);
             port_send_reply(ctx, pid, ref, error);
-            return;
+            goto cleanup1;
         }
     }
     esp_netif_t *ap_wifi_interface = NULL;
@@ -680,7 +680,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             ESP_LOGE(TAG, "Failed to create network AP interface");
             term error = port_create_error_tuple(ctx, ERROR_ATOM);
             port_send_reply(ctx, pid, ref, error);
-            return;
+            goto cleanup1;
         }
     }
 
@@ -689,38 +689,38 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Failed to initialize ESP WiFi");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
     if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
         ESP_LOGE(TAG, "Failed to set ESP WiFi storage");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
 
     if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register wifi event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register got_ip event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register staipassigned event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
     if ((err = esp_event_handler_register(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register sntp event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     }
 
     //
@@ -738,7 +738,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Error setting wifi mode %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     } else {
         ESP_LOGI(TAG, "WIFI mode set to %d", wifi_mode);
     }
@@ -749,16 +749,13 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     if (!IS_NULL_PTR(sta_wifi_config)) {
         if ((err = esp_wifi_set_config(WIFI_IF_STA, sta_wifi_config)) != ESP_OK) {
             ESP_LOGE(TAG, "Error setting STA mode config %d", err);
-            free(sta_wifi_config);
-            if (!IS_NULL_PTR(ap_wifi_config)) {
-                free(ap_wifi_config);
-            }
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
-            return;
+            goto cleanup1;
         } else {
             ESP_LOGI(TAG, "STA mode configured");
             free(sta_wifi_config);
+            sta_wifi_config = NULL;
         }
     }
 
@@ -771,10 +768,11 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             free(ap_wifi_config);
             term error = port_create_error_tuple(ctx, term_from_int(err));
             port_send_reply(ctx, pid, ref, error);
-            return;
+            goto cleanup1;
         } else {
             ESP_LOGI(TAG, "AP mode configured");
             free(ap_wifi_config);
+            ap_wifi_config = NULL;
         }
     }
 
@@ -785,7 +783,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         ESP_LOGE(TAG, "Error in esp_wifi_start %d", err);
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
-        return;
+        goto cleanup1;
     } else {
         ESP_LOGI(TAG, "WIFI started");
     }
@@ -809,6 +807,22 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Done -- send an ok so the FSM can proceed
     //
     port_send_reply(ctx, pid, ref, OK_ATOM);
+
+cleanup0:
+    free(sta_wifi_config);
+    sta_wifi_config = NULL;
+    free(ap_wifi_config);
+    ap_wifi_config = NULL;
+    return;
+
+cleanup1:
+    free(sta_wifi_config);
+    sta_wifi_config = NULL;
+    free(ap_wifi_config);
+    ap_wifi_config = NULL;
+    free(data);
+    data = NULL;
+    return;
 }
 
 static void stop_network(Context *ctx)
