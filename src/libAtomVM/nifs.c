@@ -43,7 +43,7 @@
 #include "dist_nifs.h"
 #include "erl_nif_priv.h"
 #include "ets.h"
-#include "externalterm.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "intn.h"
@@ -3155,7 +3155,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 
     size_t required_heap;
     size_t bytes_read;
-    external_term_read_result_t res = externalterm_validate_buf(term_binary_data(binary),
+    external_term_read_result_t res = external_term_validate_buf(term_binary_data(binary),
         term_binary_size(binary), ExternalTermReadNoOpts, &required_heap, &bytes_read, glb);
     if (UNLIKELY(res != ExternalTermReadOk)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -3170,7 +3170,7 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
     }
 
     term dst;
-    res = externalterm_deserialize_buf(term_binary_data(binary), term_binary_size(binary),
+    res = external_term_deserialize_buf(term_binary_data(binary), term_binary_size(binary),
         ExternalTermReadNoOpts, &ctx->heap, &dst, glb);
     if (UNLIKELY(res != ExternalTermReadOk)) {
         RAISE_ERROR(BADARG_ATOM);
@@ -3190,7 +3190,7 @@ static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term t = argv[0];
-    term ret = externalterm_to_binary(ctx, t);
+    term ret = external_term_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {
         RAISE_ERROR(BADARG_ATOM);
     }

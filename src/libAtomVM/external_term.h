@@ -19,14 +19,14 @@
  */
 
 /**
- * @file externalterm.h
+ * @file external_term.h
  * @brief External term deserialization functions
  *
  * @details This header provides external term deserialization functions.
  */
 
-#ifndef _EXTERNALTERM_H_
-#define _EXTERNALTERM_H_
+#ifndef _EXTERNAL_TERM_H_
+#define _EXTERNAL_TERM_H_
 
 #include "term.h"
 #include "utils.h"
@@ -74,30 +74,30 @@ typedef enum
 /**
  * @brief Validate a raw external term buffer (tag byte excluded).
  *
- * Like \c externalterm_validate_buf() but expects a buffer without the
+ * Like \c external_term_validate_buf() but expects a buffer without the
  * leading \c EXTERNAL_TERM_TAG byte. \p bytes_read does not account for
  * the tag byte.
  *
- * @see externalterm_validate_buf() for the standard tag-included variant.
+ * @see external_term_validate_buf() for the standard tag-included variant.
  */
-external_term_read_result_t externalterm_validate_buf_raw(const void *buf, size_t buf_size,
+external_term_read_result_t external_term_validate_buf_raw(const void *buf, size_t buf_size,
     external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb);
 
 /**
  * @brief Deserialize a raw external term buffer (tag byte excluded) into a term.
  *
- * Like \c externalterm_deserialize_buf() but expects a buffer without the
+ * Like \c external_term_deserialize_buf() but expects a buffer without the
  * leading \c EXTERNAL_TERM_TAG byte.
  *
- * @warning \c externalterm_validate_buf_raw() MUST be called successfully on
+ * @warning \c external_term_validate_buf_raw() MUST be called successfully on
  * the same buffer before calling this function, and the heap must have been
  * grown to accommodate at least the number of words reported by that call.
  * Skipping validation or providing insufficient heap space results in undefined
  * behavior.
  *
- * @see externalterm_deserialize_buf() for the standard tag-included variant.
+ * @see external_term_deserialize_buf() for the standard tag-included variant.
  */
-external_term_read_result_t externalterm_deserialize_buf_raw(const void *buf, size_t buf_size,
+external_term_read_result_t external_term_deserialize_buf_raw(const void *buf, size_t buf_size,
     external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb);
 
 /**
@@ -105,11 +105,11 @@ external_term_read_result_t externalterm_deserialize_buf_raw(const void *buf, si
  *
  * Verifies that \p buf contains a well-formed Erlang external term, starting
  * with \c EXTERNAL_TERM_TAG. On success, \p required_heap holds the number of
- * heap words needed by \c externalterm_deserialize_buf() and \p bytes_read
+ * heap words needed by \c external_term_deserialize_buf() and \p bytes_read
  * holds the total number of bytes consumed (including the tag byte).
  *
  * @warning This function MUST be called and must return \c ExternalTermReadOk
- * before calling \c externalterm_deserialize_buf() on the same buffer.
+ * before calling \c external_term_deserialize_buf() on the same buffer.
  * Calling the deserialize function on an unvalidated or invalid buffer results
  * in undefined behavior.
  *
@@ -122,10 +122,10 @@ external_term_read_result_t externalterm_deserialize_buf_raw(const void *buf, si
  * @return \c ExternalTermReadOk on success, \c ExternalTermReadInvalid if the
  *         buffer does not contain a valid external term
  *
- * @see externalterm_deserialize_buf() to deserialize after a successful validation
- * @see externalterm_validate_buf_raw() for the tag-excluded variant
+ * @see external_term_deserialize_buf() to deserialize after a successful validation
+ * @see external_term_validate_buf_raw() for the tag-excluded variant
  */
-static inline external_term_read_result_t externalterm_validate_buf(const void *buf,
+static inline external_term_read_result_t external_term_validate_buf(const void *buf,
     size_t buf_size, external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read,
     GlobalContext *glb)
 {
@@ -139,7 +139,7 @@ static inline external_term_read_result_t externalterm_validate_buf(const void *
     }
 
     size_t raw_bytes_read;
-    external_term_read_result_t res = externalterm_validate_buf_raw(
+    external_term_read_result_t res = external_term_validate_buf_raw(
         external_term_buf + 1, buf_size - 1, opts, required_heap, &raw_bytes_read, glb);
     if (LIKELY(res == ExternalTermReadOk)) {
         *bytes_read = raw_bytes_read + 1;
@@ -154,7 +154,7 @@ static inline external_term_read_result_t externalterm_validate_buf(const void *
  * Instantiates the Erlang external term stored in \p buf, allocating storage
  * from \p heap. \p buf must start with the \c EXTERNAL_TERM_TAG byte.
  *
- * @warning \c externalterm_validate_buf() MUST be called successfully on the
+ * @warning \c external_term_validate_buf() MUST be called successfully on the
  * same buffer before calling this function, and the heap must have been grown
  * to accommodate at least the number of words reported by that call. Skipping
  * validation or providing insufficient heap space results in undefined behavior.
@@ -167,14 +167,14 @@ static inline external_term_read_result_t externalterm_validate_buf(const void *
  * @param glb the global context
  * @return \c ExternalTermReadOk on success, \c ExternalTermReadInvalid on failure
  *
- * @see externalterm_validate_buf() which MUST be called before this function
- * @see externalterm_deserialize_buf_raw() for the tag-excluded variant
+ * @see external_term_validate_buf() which MUST be called before this function
+ * @see external_term_deserialize_buf_raw() for the tag-excluded variant
  */
-static inline external_term_read_result_t externalterm_deserialize_buf(const void *buf,
+static inline external_term_read_result_t external_term_deserialize_buf(const void *buf,
     size_t buf_size, external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb)
 {
     const uint8_t *raw_buf = ((const uint8_t *) buf) + 1;
-    return externalterm_deserialize_buf_raw(raw_buf, buf_size - 1, opts, heap, out_term, glb);
+    return external_term_deserialize_buf_raw(raw_buf, buf_size - 1, opts, heap, out_term, glb);
 }
 
 /**
@@ -182,7 +182,7 @@ static inline external_term_read_result_t externalterm_deserialize_buf(const voi
  *
  * @details Deserialize a binary term that stores term data in Erlang external term format,
  * and instantiate the serialized terms.  The heap from the context will be used to
- * allocate the instantiated terms.  This function is the complement of externalterm_to_binary.
+ * allocate the instantiated terms.  This function is the complement of external_term_to_binary.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param binary_ix offset of the binary in roots
@@ -193,7 +193,7 @@ static inline external_term_read_result_t externalterm_deserialize_buf(const voi
  * @return the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots);
+term external_term_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots);
 
 /**
  * @brief Gets a term from a const literal (module in flash).
@@ -206,21 +206,21 @@ term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t 
  * @param ctx the context that owns the memory that will be allocated.
  * @return a term.
  */
-term externalterm_from_const_literal(const void *external_term, size_t size, Context *ctx);
+term external_term_from_const_literal(const void *external_term, size_t size, Context *ctx);
 
 /**
  * @brief Create a binary from a term.
  *
  * @details Serialize a term in Erlang external term format, and store the result in
  * a binary term.  The heap from the context will be used to allocate the hydrated
- * terms.  This function is the complement of externalterm_to_binary.
+ * terms.  This function is the complement of external_term_to_binary.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param t the term to return as binary.
  * @return the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
-term externalterm_to_binary(Context *ctx, term t);
+term external_term_to_binary(Context *ctx, term t);
 
 /**
  * @brief Computes the size required for a external term (tag excluded)
@@ -234,7 +234,7 @@ term externalterm_to_binary(Context *ctx, term t);
  * @param glb the global context
  * @return \c ExternalTermWriteOk in case of success
  */
-external_term_write_result_t externalterm_compute_external_size_raw(
+external_term_write_result_t external_term_compute_external_size_raw(
     term t, size_t *size, GlobalContext *glb);
 
 /**
@@ -248,7 +248,7 @@ external_term_write_result_t externalterm_compute_external_size_raw(
  * @param glb the global context
  * @return \c ExternalTermWriteOk in case of success
  */
-external_term_write_result_t externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb);
+external_term_write_result_t external_term_serialize_term_raw(term t, void *buf, GlobalContext *glb);
 
 /**
  * @brief Computes the size required for a external term
@@ -261,11 +261,11 @@ external_term_write_result_t externalterm_serialize_term_raw(term t, void *buf, 
  * @param glb the global context
  * @return \c ExternalTermWriteOk in case of success
  */
-static inline external_term_write_result_t externalterm_compute_external_size(
+static inline external_term_write_result_t external_term_compute_external_size(
     term t, size_t *size, GlobalContext *glb)
 {
     size_t raw_size;
-    external_term_write_result_t result = externalterm_compute_external_size_raw(t, &raw_size, glb);
+    external_term_write_result_t result = external_term_compute_external_size_raw(t, &raw_size, glb);
     if (LIKELY(result == ExternalTermWriteOk)) {
         *size = raw_size + 1;
     }
@@ -283,10 +283,10 @@ static inline external_term_write_result_t externalterm_compute_external_size(
  * @param glb the global context
  * @return \c ExternalTermWriteOk in case of success
  */
-static inline external_term_write_result_t externalterm_serialize_term(
+static inline external_term_write_result_t external_term_serialize_term(
     term t, void *buf, GlobalContext *glb)
 {
-    external_term_write_result_t result = externalterm_serialize_term_raw(t, (uint8_t *) buf + 1, glb);
+    external_term_write_result_t result = external_term_serialize_term_raw(t, (uint8_t *) buf + 1, glb);
     if (LIKELY(result == ExternalTermWriteOk)) {
         ((uint8_t *) buf)[0] = EXTERNAL_TERM_TAG;
     }
