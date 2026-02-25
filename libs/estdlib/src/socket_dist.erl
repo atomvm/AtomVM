@@ -65,18 +65,28 @@ do_listen(Name, SocketPort) ->
     {ok, LSock} = socket:open(inet, stream, tcp),
     case socket:bind(LSock, #{family => inet, port => SocketPort, addr => {0, 0, 0, 0}}) of
         ok ->
-            ok = socket:listen(LSock),
-            {ok, #{addr := Addr, port := Port}} = socket:sockname(LSock),
-            ErlEpmd = net_kernel:epmd_module(),
-            Address = #net_address{
-                host = Addr,
-                protocol = tcp,
-                family = inet
-            },
-            case ErlEpmd:register_node(Name, Port) of
-                {ok, Creation} ->
-                    {ok, {LSock, Address, Creation}};
-                Error ->
+            case socket:listen(LSock) of
+                ok ->
+                    case socket:sockname(LSock) of
+                        {ok, #{addr := Addr, port := Port}} ->
+                            ErlEpmd = net_kernel:epmd_module(),
+                            Address = #net_address{
+                                host = Addr,
+                                protocol = tcp,
+                                family = inet
+                            },
+                            case ErlEpmd:register_node(Name, Port) of
+                                {ok, Creation} ->
+                                    {ok, {LSock, Address, Creation}};
+                                Error ->
+                                    socket:close(LSock),
+                                    Error
+                            end;
+                        {error, _} = Error ->
+                            socket:close(LSock),
+                            Error
+                    end;
+                {error, _} = Error ->
                     socket:close(LSock),
                     Error
             end;
