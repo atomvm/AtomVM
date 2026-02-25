@@ -36,6 +36,7 @@ start() ->
     ok = test_match_8bit(Bin),
     ok = test_match_16bit(Bin),
     ok = test_match_32bit(Bin),
+    ok = test_match_64bit(Bin),
     ok = test_match_fail(Bin),
     0.
 
@@ -58,6 +59,13 @@ test_match_32bit(Bin) ->
     16909060 = X,
     4 = byte_size(Rest),
     <<5, 6, 7, 8>> = Rest,
+    ok.
+
+test_match_64bit(Bin) ->
+    <<X:64, Rest/binary>> = Bin,
+    72623859790382856 = X,
+    0 = byte_size(Rest),
+    <<"">> = Rest,
     ok.
 
 test_match_fail(Bin) ->

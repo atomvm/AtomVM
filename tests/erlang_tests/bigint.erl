@@ -73,6 +73,7 @@ start() ->
         test_gt_lt_guards() +
         to_external_term() +
         test_pattern_match() +
+        test_pattern_match_u64() +
         test_band() +
         test_bxor() +
         test_bor() +
@@ -2210,6 +2211,31 @@ test_pattern_match() ->
             <<"foo", _I128:128/unsigned-little-integer, Bar/binary>> -> error;
             _ -> ok
         end,
+    0.
+
+test_pattern_match_u64() ->
+    % 64-bit unsigned integers make use of big integers
+
+    <<U64_1:64/unsigned-little, Rest_1/binary>> = ?MODULE:id(<<0, 0, 0, 0, 0, 0, 0, 128>>),
+    Expected_1 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"9223372036854775808">>))),
+    Expected_1 = U64_1,
+    <<"">> = ?MODULE:id(Rest_1),
+
+    <<U64_2:64/unsigned-big, Rest_2/binary>> = ?MODULE:id(<<128, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3>>),
+    Expected_2 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"9223372036854775808">>))),
+    Expected_2 = U64_2,
+    <<1, 2, 3>> = ?MODULE:id(Rest_2),
+
+    <<U64_3:64/unsigned-little, Rest_3/binary>> = ?MODULE:id(
+        <<255, 255, 255, 255, 255, 255, 255, 255, 4>>
+    ),
+    Expected_3 = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"18446744073709551615">>))),
+    Expected_3 = U64_3,
+    <<4>> = ?MODULE:id(Rest_3),
+
+    <<S64:64/signed-little>> = ?MODULE:id(<<255, 255, 255, 255, 255, 255, 255, 127>>),
+    Expected_S = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"9223372036854775807">>))),
+    Expected_S = S64,
     0.
 
 test_band() ->

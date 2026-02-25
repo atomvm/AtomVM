@@ -1865,17 +1865,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #endif
 
 #ifndef AVM_NO_EMU
-    static term extract_nbits_integer(Context *ctx, const uint8_t *bytes, size_t bytes_size, intn_from_integer_options_t opts)
+    static term make_bigint_from_digits(Context *ctx, intn_digit_t *bigint, intn_integer_sign_t sign, size_t count)
     {
-        intn_integer_sign_t sign;
-        intn_digit_t bigint[INTN_MAX_RES_LEN];
-        int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
-        if (UNLIKELY(count < 0)) {
-            // this is likely unreachable, compiler seem to generate an external term
-            // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
-            RAISE_ERROR_FROM_HELPER(OVERFLOW_ATOM);
-        }
-
         size_t intn_data_size;
         size_t rounded_res_len;
         term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
@@ -1893,6 +1884,20 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         memory_heap_append_heap(&ctx->heap, &heap);
 
         return bigint_term;
+    }
+
+    static term extract_nbits_integer(Context *ctx, const uint8_t *bytes, size_t bytes_size, intn_from_integer_options_t opts)
+    {
+        intn_integer_sign_t sign;
+        intn_digit_t bigint[INTN_MAX_RES_LEN];
+        int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
+        if (UNLIKELY(count < 0)) {
+            // this is likely unreachable, compiler seem to generate an external term
+            // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
+            RAISE_ERROR_FROM_HELPER(OVERFLOW_ATOM);
+        }
+
+        return make_bigint_from_digits(ctx, bigint, sign, count);
     }
 
     static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
@@ -5443,7 +5448,15 @@ wait_timeout_trap_handler:
                         } else {
                             term_set_match_state_offset(src, bs_offset + increment);
 
-                            t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                            if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                                t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                            } else {
+                                intn_digit_t int_buf[INTN_UINT64_LEN];
+                                intn_from_uint64(value.u, int_buf);
+                                t = make_bigint_from_digits(
+                                    ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                            }
+
                             if (UNLIKELY(term_is_invalid_term(t))) {
                                 HANDLE_ERROR();
                             }
@@ -7540,8 +7553,14 @@ wait_timeout_trap_handler:
                                         TRACE("bs_match/3: error extracting integer.\n");
                                         goto bs_match_jump_to_fail;
                                     }
-                                    //FIXME: handling of 64-bit unsigned integers is not reliable
-                                    t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                    if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                                        t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                    } else {
+                                        intn_digit_t int_buf[INTN_UINT64_LEN];
+                                        intn_from_uint64(value.u, int_buf);
+                                        t = make_bigint_from_digits(
+                                            ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                                    }
                                     if (UNLIKELY(term_is_invalid_term(t))) {
                                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                     }

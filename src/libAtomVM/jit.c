@@ -1335,14 +1335,9 @@ static term jit_term_alloc_bin_match_state(Context *ctx, term src, int slots)
     return term_alloc_bin_match_state(src, slots, &ctx->heap);
 }
 
-static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *bytes,
-    size_t bytes_size, intn_from_integer_options_t opts)
+static term make_bigint_from_digits(
+    Context *ctx, JITState *jit_state, intn_digit_t *bigint, intn_integer_sign_t sign, int count)
 {
-    intn_integer_sign_t sign;
-    intn_digit_t bigint[INTN_MAX_RES_LEN];
-    int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
-    // count will be always >= 0, caller ensures that bits <= INTN_MAX_UNSIGNED_BITS_SIZE
-
     size_t intn_data_size;
     size_t rounded_res_len;
     term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
@@ -1362,6 +1357,17 @@ static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *byt
     return bigint_term;
 }
 
+static term extract_bigint(Context *ctx, JITState *jit_state, const uint8_t *bytes,
+    size_t bytes_size, intn_from_integer_options_t opts)
+{
+    intn_integer_sign_t sign;
+    intn_digit_t bigint[INTN_MAX_RES_LEN];
+    int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
+    // count will be always >= 0, caller ensures that bits <= INTN_MAX_UNSIGNED_BITS_SIZE
+
+    return make_bigint_from_digits(ctx, jit_state, bigint, sign, count);
+}
+
 static term jit_bitstring_extract_integer(
     Context *ctx, JITState *jit_state, term *bin_ptr, size_t offset, int n, int bs_flags)
 {
@@ -1374,10 +1380,21 @@ static term jit_bitstring_extract_integer(
         if (UNLIKELY(!status)) {
             return FALSE_ATOM;
         }
-        term t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+
+        term t;
+        if ((bs_flags & SignedInteger) || (value.u <= INT64_MAX)) {
+            t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+        } else {
+            intn_digit_t int_buf[INTN_UINT64_LEN];
+            intn_from_uint64(value.u, int_buf);
+            t = make_bigint_from_digits(
+                ctx, jit_state, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+        }
+
         if (UNLIKELY(term_is_invalid_term(t))) {
             set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
         }
+
         return t;
     } else if ((offset % 8 == 0) && (n % 8 == 0) && (n <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
         term bs_bin = ((term) bin_ptr) | TERM_PRIMARY_BOXED;
