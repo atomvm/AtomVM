@@ -5047,6 +5047,7 @@ static const char b64_table_urlsafe[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H
 
 // per https://tools.ietf.org/rfc/rfc4648.txt
 
+// FIXME: this function should take a binary or a bytelist not a iolist
 static term base64_encode(Context *ctx, int argc, term argv[], bool return_binary)
 {
     term src = argv[0];
@@ -5226,6 +5227,7 @@ static inline uint8_t find_index_urlsafe(uint8_t c)
     }
 }
 
+// FIXME: this function should take a binary or a bytelist not a iolist
 static term base64_decode(Context *ctx, int argc, term argv[], bool return_binary)
 {
     term src = argv[0];
