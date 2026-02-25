@@ -24,6 +24,10 @@ include(BuildElixir)
 
 set(TEST_MODULES
     Some.Submodule
+    GenServerTest.Stack
+    GenServerTest.CustomStack
+    SupervisorTest.Stack
+    SupervisorTest.Stack.Sup
 )
 
 pack_test(Tests Tests ${TEST_MODULES})

@@ -70,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added initial support for ESP32C5 and ESP32C61
 - Added `Range:size/1`
 - Added missing `ledc` functions for esp32 platform
+- Added support for Elixir GenServer and Supervisor.
 
 ### Changed
 
