@@ -2564,6 +2564,7 @@ sub(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State#state{stream = Stream1, regs = Regs1}.
 
+-spec mul(state(), x86_64_register(), integer() | x86_64_register()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -2584,17 +2585,26 @@ mul(
     } = State,
     Reg,
     Val
-) when Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+) when is_integer(Val), (Val < -16#80000000 orelse Val > 16#7FFFFFFF) ->
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:imulq(TempReg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
     State#state{stream = Stream1, regs = Regs1};
-mul(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
+mul(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) when
+    is_integer(Val)
+->
     I1 = jit_x86_64_asm:imulq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State#state{stream = Stream1, regs = Regs1};
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, DestReg, SrcReg
+) when is_atom(SrcReg) ->
+    I1 = jit_x86_64_asm:imulq(SrcReg, DestReg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DestReg),
     State#state{stream = Stream1, regs = Regs1}.
 
 %% Signed integer division: quotient = DividendReg / DivisorReg

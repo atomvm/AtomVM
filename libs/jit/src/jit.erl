@@ -3359,6 +3359,65 @@ op_gc_bif2(
     Arg2Value = Arg2 bsr 4,
     Range2 = {Arg2Value, Arg2Value},
     op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% mul - both typed integers with range: inline if proven small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    '*',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    '*',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% bsl - typed integer with literal shift amount: inline if result fits
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bsl',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    op_gc_bif2_bsl(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Arg2Value);
+% bsr - typed integer with literal shift amount: inline if non-negative and small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bsr',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    op_gc_bif2_bsr(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Arg2Value);
 % Default case
 op_gc_bif2(
     MMod, MSt0, FailLabel, Live, Bif, _Module, _Function, {typed, Arg1, _}, {typed, Arg2, _}, Dest
@@ -3583,6 +3642,160 @@ op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Rang
             MSt4 = MMod:or_(MSt3, Reg1, ?TERM_INTEGER_TAG),
             MSt5 = MMod:move_to_vm_register(MSt4, Reg1, Dest),
             MMod:free_native_registers(MSt5, [Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if multiplication can be inlined based on type ranges
+% Returns true if the result is guaranteed to fit in a small integer
+can_inline_mul(Range1, Range2, MMod) ->
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    case {Range1, Range2} of
+        {{Min1, Max1}, {Min2, Max2}} when
+            is_integer(Min1),
+            is_integer(Max1),
+            is_integer(Min2),
+            is_integer(Max2)
+        ->
+            % For multiplication, all four corner products must be checked
+            Products = [Min1 * Min2, Min1 * Max2, Max1 * Min2, Max1 * Max2],
+            MinResult = lists:min(Products),
+            MaxResult = lists:max(Products),
+            MinResult >= MinSafe andalso MaxResult =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized multiplication with compile-time range checking
+op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    case can_inline_mul(Range1, Range2, MMod) of
+        true ->
+            Arg2Value = Arg2 bsr 4,
+            case Arg2Value of
+                C when C > 1 ->
+                    % Strip tag, multiply by constant, re-tag
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, bnot (?TERM_IMMED_TAG_MASK)),
+                    MSt3 = MMod:mul(MSt2, Reg, C),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest]);
+                _ ->
+                    % 0 or 1 would need special handling (0 produces wrong
+                    % tag, 1 is identity), and negative constants require
+                    % sign-aware logic. The compiler typically folds these,
+                    % but fall back defensively.
+                    op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+            end;
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end;
+op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case can_inline_mul(Range1, Range2, MMod) of
+        true ->
+            % Both operands in registers: strip tags, extract value, multiply
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            % Strip tag from Reg1: value1 << 4
+            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+            % Strip tag from Reg2 and shift right by 4 to get raw value2
+            {MSt4, Reg2} = MMod:and_(MSt3, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt5, Reg2} = MMod:shift_right(MSt4, {free, Reg2}, 4),
+            % Multiply: (value1 << 4) * value2 = (value1 * value2) << 4
+            MSt6 = MMod:mul(MSt5, Reg1, Reg2),
+            % Add tag back
+            MSt7 = MMod:or_(MSt6, Reg1, ?TERM_INTEGER_TAG),
+            MSt8 = MMod:move_to_vm_register(MSt7, Reg1, Dest),
+            MMod:free_native_registers(MSt8, [Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if left shift can be inlined based on type range and shift amount
+can_inline_bsl(Range1, ShiftAmount, MMod) ->
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    case Range1 of
+        {Min1, Max1} when
+            is_integer(Min1),
+            is_integer(Max1),
+            ShiftAmount >= 0
+        ->
+            MinResult = Min1 bsl ShiftAmount,
+            MaxResult = Max1 bsl ShiftAmount,
+            MinResult >= MinSafe andalso MaxResult =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized bsl with compile-time range checking
+op_gc_bif2_bsl(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, ShiftAmount) ->
+    case can_inline_bsl(Range1, ShiftAmount, MMod) of
+        true ->
+            case ShiftAmount of
+                0 ->
+                    % No shift - just copy
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    MSt2 = MMod:move_to_vm_register(MSt1, Reg, Dest),
+                    MMod:free_native_registers(MSt2, [Reg, Dest]);
+                _ ->
+                    % Strip tag, shift left, re-tag
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, bnot (?TERM_IMMED_TAG_MASK)),
+                    MSt3 = MMod:shift_left(MSt2, Reg, ShiftAmount),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest])
+            end;
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if right shift can be inlined
+% Only safe for non-negative inputs (the generated native code uses logical
+% shift right, which does not preserve sign for negative values)
+can_inline_bsr(Range1, ShiftAmount, MMod) ->
+    {_MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    % Ensure (ShiftAmount + 4) does not exceed register width
+    % (would be undefined behavior in native shift)
+    WordBits = MMod:word_size() * 8,
+    case Range1 of
+        {Min1, Max1} when
+            is_integer(Min1),
+            is_integer(Max1),
+            Min1 >= 0,
+            ShiftAmount >= 0,
+            ShiftAmount + 4 < WordBits
+        ->
+            % Non-negative input: right shift can only reduce magnitude
+            Max1 =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized bsr with compile-time range checking
+op_gc_bif2_bsr(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, ShiftAmount) ->
+    case can_inline_bsr(Range1, ShiftAmount, MMod) of
+        true ->
+            case ShiftAmount of
+                0 ->
+                    % No shift - just copy
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    MSt2 = MMod:move_to_vm_register(MSt1, Reg, Dest),
+                    MMod:free_native_registers(MSt2, [Reg, Dest]);
+                _ ->
+                    % For non-negative values: shift right by (S+4), shift left by 4, re-tag.
+                    % This avoids a separate tag-stripping instruction: the combined
+                    % shift (S+4) removes both the 4 tag bits and applies the S-bit
+                    % shift in one operation. The tag bits get shifted away since S+4 >= 5.
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:shift_right(MSt1, {free, Reg}, ShiftAmount + 4),
+                    MSt3 = MMod:shift_left(MSt2, Reg, 4),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest])
+            end;
         false ->
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.
