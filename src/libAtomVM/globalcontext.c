@@ -504,11 +504,11 @@ void globalcontext_init_process(GlobalContext *glb, Context *ctx)
 {
     ctx->global = glb;
 
-    synclist_append(&glb->processes_table, &ctx->processes_table_head);
     SMP_SPINLOCK_LOCK(&glb->processes_spinlock);
     ctx->process_id = ++glb->last_process_id;
     list_append(&glb->waiting_processes, &ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&glb->processes_spinlock);
+    synclist_append(&glb->processes_table, &ctx->processes_table_head);
 }
 
 bool globalcontext_register_process(GlobalContext *glb, int atom_index, term local_pid_or_port)
