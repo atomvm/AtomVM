@@ -342,8 +342,9 @@ handle_info(
     {noreply, State#state{connections = NewConnections}}.
 
 %% @hidden
-terminate(_Reason, State) ->
-    {ok, State}.
+terminate(_Reason, #state{listen = Listen, proto_dist = ProtoDist}) ->
+    ProtoDist:close(Listen),
+    ok.
 
 split_name(Options) ->
     LongNames = maps:get(name_domain, Options, longnames) =:= longnames,
