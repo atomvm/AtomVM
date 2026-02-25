@@ -38,7 +38,7 @@ set(HEADER_FILES
     ets.h
     ets_hashtable.h
     exportedfunction.h
-    externalterm.h
+    external_term.h
     globalcontext.h
     iff.h
     interop.h
@@ -87,7 +87,7 @@ set(SOURCE_FILES
     dist_nifs.c
     ets.c
     ets_hashtable.c
-    externalterm.c
+    external_term.c
     globalcontext.c
     iff.c
     interop.c

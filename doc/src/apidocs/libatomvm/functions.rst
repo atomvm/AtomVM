@@ -78,13 +78,13 @@ Functions
 .. doxygenfunction:: enif_select
 .. doxygenfunction:: event_listener_add_to_polling_set
 .. doxygenfunction:: event_listener_is_event
-.. doxygenfunction:: externalterm_deserialize
-.. doxygenfunction:: externalterm_deserialize_buf_raw
-.. doxygenfunction:: externalterm_to_binary
-.. doxygenfunction:: externalterm_validate_buf
-.. doxygenfunction:: externalterm_validate_buf_raw
-.. TODO: figure out why  Doxgen cant find externalterm_to_term_internal in externalterm.c
-.. c:function:: static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts, size_t *bytes_read, bool copy)
+.. doxygenfunction:: external_term_deserialize
+.. doxygenfunction:: external_term_deserialize_buf_raw
+.. doxygenfunction:: external_term_to_binary
+.. doxygenfunction:: external_term_validate_buf
+.. doxygenfunction:: external_term_validate_buf_raw
+.. TODO: figure out why  Doxgen cant find external_term_to_term_internal in external_term.c
+.. c:function:: static term external_term_to_term_internal(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts, size_t *bytes_read, bool copy)
 
    Copy an external term to internal storage.
 
