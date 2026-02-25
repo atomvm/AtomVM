@@ -37,13 +37,16 @@
 extern "C" {
 #endif
 
-enum ExternalTermResult
+/**
+ * @brief Result of an external term write operation.
+ *
+ * Returned by serialize and compute-size functions to indicate whether
+ * the operation succeeded.
+ */
+typedef enum
 {
-    EXTERNAL_TERM_OK = 0,
-    EXTERNAL_TERM_BAD_ARG = 1,
-    EXTERNAL_TERM_MALLOC = 2,
-    EXTERNAL_TERM_HEAP_ALLOC = 3
-};
+    ExternalTermWriteOk
+} external_term_write_result_t;
 
 /**
  * @brief Result of an external term read operation.
@@ -187,7 +190,7 @@ static inline external_term_read_result_t externalterm_deserialize_buf(const voi
  * @param bytes_read the number of bytes read from the input binary.
  * @param num_roots number of roots to preserve in case of GC
  * @param roots roots to preserve in case of GC
- * @returns the term deserialized from the input term, or an invalid term, if
+ * @return the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
 term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots);
@@ -201,7 +204,7 @@ term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t 
  * @param external_term the const literal buffer that will be deserialized
  * @param size to allocate for term.
  * @param ctx the context that owns the memory that will be allocated.
- * @returns a term.
+ * @return a term.
  */
 term externalterm_from_const_literal(const void *external_term, size_t size, Context *ctx);
 
@@ -214,7 +217,7 @@ term externalterm_from_const_literal(const void *external_term, size_t size, Con
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param t the term to return as binary.
- * @returns the term deserialized from the input term, or an invalid term, if
+ * @return the term deserialized from the input term, or an invalid term, if
  * deserialization fails.
  */
 term externalterm_to_binary(Context *ctx, term t);
@@ -229,9 +232,9 @@ term externalterm_to_binary(Context *ctx, term t);
  * @param t the term for which size is calculated
  * @param size the required buffer size (tag excluded)
  * @param glb the global context
- * @returns EXTERNAL_TERM_OK in case of success
+ * @return \c ExternalTermWriteOk in case of success
  */
-enum ExternalTermResult externalterm_compute_external_size_raw(
+external_term_write_result_t externalterm_compute_external_size_raw(
     term t, size_t *size, GlobalContext *glb);
 
 /**
@@ -243,9 +246,9 @@ enum ExternalTermResult externalterm_compute_external_size_raw(
  * @param t the term that will be serialized
  * @param buf the buffer where the external term is written
  * @param glb the global context
- * @returns EXTERNAL_TERM_OK in case of success
+ * @return \c ExternalTermWriteOk in case of success
  */
-enum ExternalTermResult externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb);
+external_term_write_result_t externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb);
 
 /**
  * @brief Computes the size required for a external term
@@ -256,14 +259,14 @@ enum ExternalTermResult externalterm_serialize_term_raw(term t, void *buf, Globa
  * @param t the term for which size is calculated
  * @param size the required buffer size (tag excluded)
  * @param glb the global context
- * @returns EXTERNAL_TERM_OK in case of success
+ * @return \c ExternalTermWriteOk in case of success
  */
-static inline enum ExternalTermResult externalterm_compute_external_size(
+static inline external_term_write_result_t externalterm_compute_external_size(
     term t, size_t *size, GlobalContext *glb)
 {
     size_t raw_size;
-    enum ExternalTermResult result = externalterm_compute_external_size_raw(t, &raw_size, glb);
-    if (LIKELY(result == EXTERNAL_TERM_OK)) {
+    external_term_write_result_t result = externalterm_compute_external_size_raw(t, &raw_size, glb);
+    if (LIKELY(result == ExternalTermWriteOk)) {
         *size = raw_size + 1;
     }
     return result;
@@ -278,13 +281,13 @@ static inline enum ExternalTermResult externalterm_compute_external_size(
  * @param t the term that will be serialized
  * @param buf the buffer where the external term is written
  * @param glb the global context
- * @returns EXTERNAL_TERM_OK in case of success
+ * @return \c ExternalTermWriteOk in case of success
  */
-static inline enum ExternalTermResult externalterm_serialize_term(
+static inline external_term_write_result_t externalterm_serialize_term(
     term t, void *buf, GlobalContext *glb)
 {
-    enum ExternalTermResult result = externalterm_serialize_term_raw(t, (uint8_t *) buf + 1, glb);
-    if (LIKELY(result == EXTERNAL_TERM_OK)) {
+    external_term_write_result_t result = externalterm_serialize_term_raw(t, (uint8_t *) buf + 1, glb);
+    if (LIKELY(result == ExternalTermWriteOk)) {
         ((uint8_t *) buf)[0] = EXTERNAL_TERM_TAG;
     }
     return result;

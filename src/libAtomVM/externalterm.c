@@ -1414,17 +1414,17 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
     }
 }
 
-enum ExternalTermResult externalterm_compute_external_size_raw(
+external_term_write_result_t externalterm_compute_external_size_raw(
     term t, size_t *size, GlobalContext *glb)
 {
     *size = compute_external_size(t, glb);
 
-    return EXTERNAL_TERM_OK;
+    return ExternalTermWriteOk;
 }
 
-enum ExternalTermResult externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb)
+external_term_write_result_t externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb)
 {
     serialize_term(buf, t, glb);
 
-    return EXTERNAL_TERM_OK;
+    return ExternalTermWriteOk;
 }
