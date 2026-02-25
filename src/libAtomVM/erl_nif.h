@@ -207,9 +207,13 @@ int enif_release_resource(void *resource);
  * usage confusion, users should rather call `term_from_resource` and should
  * not decrement the reference counter.
  *
+ * AtomVM implementation differs from BEAM as it can return an invalid term if
+ * there is an out of memory error.
+ *
  * @param env current environment
  * @param obj resource
- * @return a new term representing the resource
+ * @return a new term representing the resource or an invalid term in case of
+ * out of memory error
  */
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
 
@@ -224,6 +228,9 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj);
  * Several binaries can be created with a shared `obj`
  * resource. The resource destructor will only be called when all binaries
  * are garbage collected.
+ *
+ * AtomVM implementation differs from BEAM as it can return an invalid term if
+ * there is an out of memory error.
  *
  * @param env current environment
  * @param obj resource

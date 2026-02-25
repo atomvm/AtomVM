@@ -266,6 +266,10 @@ static term nif_esp_mount(Context *ctx, int argc, term argv[])
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
         term mount_term = enif_make_resource(erl_nif_env_from_context(ctx), mount);
+        if (term_is_invalid_term(mount_term)) {
+            enif_release_resource(mount);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         return_term = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(return_term, 0, OK_ATOM);
         term_put_tuple_element(return_term, 1, mount_term);

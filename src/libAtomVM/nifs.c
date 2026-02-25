@@ -3956,11 +3956,6 @@ static term nif_erlang_fun_to_list(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    if (UNLIKELY(memory_ensure_free_opt(ctx, str_len * 2, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        free(buf);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-
     // it looks like unicode is not supported right now for module names but it looks like a
     // compiler limitation rather than a BEAM limitation, so let's assume that one day they might
     // be unicode.
