@@ -287,9 +287,6 @@ Context *scheduler_run(GlobalContext *global)
             // process signal messages and also empty outer list to inner list.
             scheduler_process_native_signal_messages(result);
             if (UNLIKELY(result->flags & Killed)) {
-                SMP_SPINLOCK_LOCK(&global->processes_spinlock);
-                list_remove(&result->processes_list_head);
-                SMP_SPINLOCK_UNLOCK(&global->processes_spinlock);
                 context_destroy(result);
             } else {
                 if (mailbox_has_next(&result->mailbox)) {
@@ -429,6 +426,7 @@ void scheduler_terminate(Context *ctx)
     SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
     context_update_flags(ctx, ~NoFlags, Killed);
     list_remove(&ctx->processes_list_head);
+    list_init(&ctx->processes_list_head);
     SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
     if (!ctx->leader) {
         context_destroy(ctx);
