@@ -1422,7 +1422,7 @@ enum ExternalTermResult externalterm_compute_external_size_raw(
     return EXTERNAL_TERM_OK;
 }
 
-enum ExternalTermResult externalterm_serialize_term_raw(void *buf, term t, GlobalContext *glb)
+enum ExternalTermResult externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb)
 {
     serialize_term(buf, t, glb);
 

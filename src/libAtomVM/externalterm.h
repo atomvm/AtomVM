@@ -240,12 +240,12 @@ enum ExternalTermResult externalterm_compute_external_size_raw(
  * @details This function serializes in external term format given term, and writes it to the given
  * buffer. This function doesn't prepend the external term 1 byte tag.
  *
- * @param buf the buffer where the external term is written
  * @param t the term that will be serialized
+ * @param buf the buffer where the external term is written
  * @param glb the global context
  * @returns EXTERNAL_TERM_OK in case of success
  */
-enum ExternalTermResult externalterm_serialize_term_raw(void *buf, term t, GlobalContext *glb);
+enum ExternalTermResult externalterm_serialize_term_raw(term t, void *buf, GlobalContext *glb);
 
 /**
  * @brief Computes the size required for a external term
@@ -275,15 +275,15 @@ static inline enum ExternalTermResult externalterm_compute_external_size(
  * @details This function serializes in external term format given term, and writes it to the given
  * buffer.
  *
- * @param buf the buffer where the external term is written
  * @param t the term that will be serialized
+ * @param buf the buffer where the external term is written
  * @param glb the global context
  * @returns EXTERNAL_TERM_OK in case of success
  */
 static inline enum ExternalTermResult externalterm_serialize_term(
-    void *buf, term t, GlobalContext *glb)
+    term t, void *buf, GlobalContext *glb)
 {
-    enum ExternalTermResult result = externalterm_serialize_term_raw((uint8_t *) buf + 1, t, glb);
+    enum ExternalTermResult result = externalterm_serialize_term_raw(t, (uint8_t *) buf + 1, glb);
     if (LIKELY(result == EXTERNAL_TERM_OK)) {
         ((uint8_t *) buf)[0] = EXTERNAL_TERM_TAG;
     }
