@@ -5052,6 +5052,9 @@ static const char b64_table_urlsafe[64] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H
 
 // per https://tools.ietf.org/rfc/rfc4648.txt
 
+// Support for iolists is an AtomVM extension;
+// the original base64 implementation accepts only byte lists
+// TODO: Evaluate whether this extension is worthwhile
 static term base64_encode(Context *ctx, int argc, term argv[], bool return_binary)
 {
     term src = argv[0];
@@ -5231,6 +5234,9 @@ static inline uint8_t find_index_urlsafe(uint8_t c)
     }
 }
 
+// Support for iolists is an AtomVM extension;
+// the original base64 implementation accepts only byte lists
+// TODO: Evaluate whether this extension is worthwhile
 static term base64_decode(Context *ctx, int argc, term argv[], bool return_binary)
 {
     term src = argv[0];
