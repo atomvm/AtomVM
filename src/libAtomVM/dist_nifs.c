@@ -149,9 +149,9 @@ static void dist_enqueue_message(term control_message, term payload, struct Dist
             if (LIKELY(packet != NULL)) {
                 packet->size = 1 + control_message_size + payload_size;
                 packet->bytes[0] = 112;
-                externalterm_serialize_term(&packet->bytes[1], control_message, global);
+                externalterm_serialize_term(control_message, &packet->bytes[1], global);
                 if (!term_is_invalid_term(payload)) {
-                    externalterm_serialize_term(&packet->bytes[1 + control_message_size], payload, global);
+                    externalterm_serialize_term(payload, &packet->bytes[1 + control_message_size], global);
                 }
                 // Use the lock on the list of pending packets to notify process
                 struct ListHead *pending_packets = synclist_wrlock(&connection->pending_packets);
