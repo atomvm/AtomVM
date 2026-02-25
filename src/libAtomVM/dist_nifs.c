@@ -138,13 +138,13 @@ static void dist_connection_dtor(ErlNifEnv *caller_env, void *obj)
 static void dist_enqueue_message(term control_message, term payload, struct DistConnection *connection, GlobalContext *global)
 {
     size_t control_message_size = 0; // some compilers including esp-idf 5.0.7 are not smart enough
-    enum ExternalTermResult serialize_result = externalterm_compute_external_size(control_message, &control_message_size, global);
-    if (LIKELY(serialize_result == EXTERNAL_TERM_OK)) {
+    external_term_write_result_t serialize_result = externalterm_compute_external_size(control_message, &control_message_size, global);
+    if (LIKELY(serialize_result == ExternalTermWriteOk)) {
         size_t payload_size = 0;
         if (!term_is_invalid_term(payload)) {
             serialize_result = externalterm_compute_external_size(payload, &payload_size, global);
         }
-        if (LIKELY(serialize_result == EXTERNAL_TERM_OK)) {
+        if (LIKELY(serialize_result == ExternalTermWriteOk)) {
             struct DistributionPacket *packet = malloc(sizeof(struct DistributionPacket) + 1 + control_message_size + payload_size);
             if (LIKELY(packet != NULL)) {
                 packet->size = 1 + control_message_size + payload_size;

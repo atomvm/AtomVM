@@ -169,7 +169,7 @@ Enumerations
 .. doxygenenum:: ErlNifSelectFlags
 .. doxygenenum:: external_term_read_opts_t
 .. doxygenenum:: external_term_read_result_t
-.. doxygenenum:: ExternalTermResult
+.. doxygenenum:: external_term_write_result_t
 .. doxygenenum:: FunctionType
 .. doxygenenum:: GenMessageParseResult
 .. doxygenenum:: HeapGrowthStrategy
