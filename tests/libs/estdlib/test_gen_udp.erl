@@ -25,19 +25,12 @@
 -include("etest.hrl").
 
 test() ->
-    BackendOptions =
-        case get_otp_version() of
-            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
-                [[{inet_backend, inet}], [{inet_backend, socket}]];
-            _ ->
-                [[]]
-        end,
     [
         ok = test_send_receive(SpawnControllingProcess, IsActive, Mode, BackendOption)
      || SpawnControllingProcess <- [false, true],
         IsActive <- [false, true],
         Mode <- [binary, list],
-        BackendOption <- BackendOptions
+        BackendOption <- [[{inet_backend, inet}], [{inet_backend, socket}]]
     ],
     ok.
 
@@ -162,12 +155,4 @@ count_passive_received(Socket, Mode, I) ->
         Other ->
             erlang:display({count_passive_received, unexpected, Other}),
             count_passive_received(Socket, Mode, I)
-    end.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            list_to_integer(erlang:system_info(otp_release));
-        _ ->
-            atomvm
     end.

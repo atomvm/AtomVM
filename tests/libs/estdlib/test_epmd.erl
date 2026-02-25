@@ -25,35 +25,21 @@
 -define(EPMD_PORT, 4369).
 
 test() ->
-    % AtomVM's epmd only runs on AtomVM and OTP 24+
-    CanRunEpmd =
-        case erlang:system_info(machine) of
-            "ATOM" ->
-                true;
-            "BEAM" ->
-                OTPRelease = erlang:system_info(otp_release),
-                OTPRelease >= "24"
-        end,
-    if
-        CanRunEpmd ->
-            case stop_epmd() of
-                ok ->
-                    {ok, Pid} = epmd:start_link([]),
-                    ok = test_client(),
-                    ok = test_two_clients(),
-                    MonitorRef = monitor(process, Pid),
-                    unlink(Pid),
-                    exit(Pid, shutdown),
-                    ok =
-                        receive
-                            {'DOWN', MonitorRef, process, Pid, shutdown} -> ok
-                        after 5000 -> timeout
-                        end,
-                    ok;
-                {error, not_found} ->
-                    ok
-            end;
-        true ->
+    case stop_epmd() of
+        ok ->
+            {ok, Pid} = epmd:start_link([]),
+            ok = test_client(),
+            ok = test_two_clients(),
+            MonitorRef = monitor(process, Pid),
+            unlink(Pid),
+            exit(Pid, shutdown),
+            ok =
+                receive
+                    {'DOWN', MonitorRef, process, Pid, shutdown} -> ok
+                after 5000 -> timeout
+                end,
+            ok;
+        {error, not_found} ->
             ok
     end,
     case start_epmd() of
@@ -177,28 +163,10 @@ stop_epmd() ->
 
 test_client() ->
     {ok, Pid1} = erl_epmd:start_link(),
-    ok =
-        case erl_epmd:port_please("test_epmd", "host.invalid") of
-            noport ->
-                ok;
-            {error, nxdomain} ->
-                "BEAM" = erlang:system_info(machine),
-                true = erlang:system_info(otp_release) =< "22",
-                ok
-        end,
+    noport = erl_epmd:port_please("test_epmd", "host.invalid"),
     noport = erl_epmd:port_please("test_epmd", "localhost"),
     {ok, Creation1} = erl_epmd:register_node("test_epmd", 12345),
-    {port, 12345, Version} = erl_epmd:port_please("test_epmd", "localhost"),
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            case erlang:system_info(otp_release) of
-                "21" -> 5 = Version;
-                "22" -> 5 = Version;
-                _ -> 6 = Version
-            end;
-        "ATOM" ->
-            6 = Version
-    end,
+    {port, 12345, 6} = erl_epmd:port_please("test_epmd", "localhost"),
     {error, already_registered} = erl_epmd:register_node("test_epmd", 12345),
     {error, already_registered} = erl_epmd:register_node("test_epmd_new", 12346),
     {ok, Names} = erl_epmd:names("localhost"),

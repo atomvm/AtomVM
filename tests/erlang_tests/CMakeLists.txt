@@ -637,23 +637,6 @@ compile_erlang(reraise_raiser)
 
 compile_erlang(stacktrace_function_args)
 
-if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
-    set(OTP23_OR_GREATER_TESTS
-        test_op_bs_start_match_asm.beam
-        bs_get_binary2_all_asm.beam
-    )
-else()
-    set(OTP23_OR_GREATER_TESTS)
-endif()
-
-if(Erlang_VERSION VERSION_GREATER_EQUAL "25")
-    set(OTP25_OR_GREATER_TESTS
-        test_op_bs_create_bin_asm.beam
-        test_bs_create_bin_accum_asm.beam
-    )
-else()
-    set(OTP25_OR_GREATER_TESTS)
-endif()
 
 set(erlang_test_beams
     add.beam
@@ -1183,8 +1166,10 @@ set(erlang_test_beams
 
     stacktrace_function_args.beam
 
-    ${OTP23_OR_GREATER_TESTS}
-    ${OTP25_OR_GREATER_TESTS}
+    test_op_bs_start_match_asm.beam
+    bs_get_binary2_all_asm.beam
+    test_op_bs_create_bin_asm.beam
+    test_bs_create_bin_accum_asm.beam
 )
 
 if(NOT AVM_DISABLE_JIT)

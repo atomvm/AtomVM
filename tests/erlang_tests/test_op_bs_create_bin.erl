@@ -23,26 +23,12 @@
 -export([start/0]).
 
 start() ->
-    HasBSCreateBin =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "25";
-            "ATOM" ->
-                % If code was compiled with OTP < 25, we won't have bs_create_bin asm file
-                ?OTP_RELEASE >= 25
-        end,
-    ok =
-        if
-            HasBSCreateBin ->
-                ok = test_bs_create_bin_utf8(),
-                ok = test_bs_create_bin_utf16(),
-                ok = test_bs_create_bin_utf32(),
-                ok = test_bs_create_bin_integer(),
-                ok = test_bs_create_bin_binary(),
-                ok = test_bs_create_bin_alloc_list();
-            true ->
-                ok
-        end,
+    ok = test_bs_create_bin_utf8(),
+    ok = test_bs_create_bin_utf16(),
+    ok = test_bs_create_bin_utf32(),
+    ok = test_bs_create_bin_integer(),
+    ok = test_bs_create_bin_binary(),
+    ok = test_bs_create_bin_alloc_list(),
     0.
 
 test_bs_create_bin_utf8() ->

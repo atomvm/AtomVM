@@ -34,9 +34,8 @@
 ]).
 
 start() ->
-    % Starting from OTP-26, atoms are encoded as UTF-8 by default.
-    test_reverse(foo, {<<131, 119, 3, 102, 111, 111>>, <<131, 100, 0, 3, 102, 111, 111>>}),
-    test_reverse(bar, {<<131, 119, 3, 98, 97, 114>>, <<131, 100, 0, 3, 98, 97, 114>>}),
+    test_reverse(foo, <<131, 119, 3, 102, 111, 111>>),
+    test_reverse(bar, <<131, 119, 3, 98, 97, 114>>),
     test_reverse(
         '∀x∃y.f(x,y)',
         <<131, 119, 15, 226, 136, 128, 120, 226, 136, 131, 121, 46, 102, 40, 120, 44, 121, 41>>,
@@ -55,57 +54,32 @@ start() ->
     test_reverse(32768, <<131, 98, 0, 0, 128, 0>>),
     test_reverse(-32768, <<131, 98, 255, 255, 128, 0>>),
     test_reverse(
-        {foo, bar}, {
-            <<131, 104, 2, 119, 3, 102, 111, 111, 119, 3, 98, 97, 114>>,
-            <<131, 104, 2, 100, 0, 3, 102, 111, 111, 100, 0, 3, 98, 97, 114>>
-        }
+        {foo, bar}, <<131, 104, 2, 119, 3, 102, 111, 111, 119, 3, 98, 97, 114>>
     ),
-    test_reverse({foo, 0}, {
-        <<131, 104, 2, 119, 3, 102, 111, 111, 97, 0>>,
-        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0>>
-    }),
+    test_reverse({foo, 0}, <<131, 104, 2, 119, 3, 102, 111, 111, 97, 0>>),
     test_reverse([], <<131, 106>>),
     test_reverse(
-        [{foo, 0}, {bar, 1}], {
-            <<131, 108, 0, 0, 0, 2, 104, 2, 119, 3, 102, 111, 111, 97, 0, 104, 2, 119, 3, 98, 97,
-                114, 97, 1, 106>>,
-            <<131, 108, 0, 0, 0, 2, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0, 104, 2, 100, 0, 3, 98,
-                97, 114, 97, 1, 106>>
-        }
+        [{foo, 0}, {bar, 1}],
+        <<131, 108, 0, 0, 0, 2, 104, 2, 119, 3, 102, 111, 111, 97, 0, 104, 2, 119, 3, 98, 97, 114,
+            97, 1, 106>>
     ),
     test_reverse(
         [improper | list],
-        {
-            <<131, 108, 0, 0, 0, 1, 119, 8, 105, 109, 112, 114, 111, 112, 101, 114, 119, 4, 108,
-                105, 115, 116>>,
-            <<131, 108, 0, 0, 0, 1, 100, 0, 8, 105, 109, 112, 114, 111, 112, 101, 114, 100, 0, 4,
-                108, 105, 115, 116>>
-        }
+        <<131, 108, 0, 0, 0, 1, 119, 8, 105, 109, 112, 114, 111, 112, 101, 114, 119, 4, 108, 105,
+            115, 116>>
     ),
-    test_reverse({foo, bar}, {
-        <<131, 104, 2, 119, 3, 102, 111, 111, 119, 3, 98, 97, 114>>,
-        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 100, 0, 3, 98, 97, 114>>
-    }),
-    test_reverse({foo, 0}, {
-        <<131, 104, 2, 119, 3, 102, 111, 111, 97, 0>>,
-        <<131, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0>>
-    }),
+    test_reverse({foo, bar}, <<131, 104, 2, 119, 3, 102, 111, 111, 119, 3, 98, 97, 114>>),
+    test_reverse({foo, 0}, <<131, 104, 2, 119, 3, 102, 111, 111, 97, 0>>),
     test_reverse([], <<131, 106>>),
     test_reverse(
-        [{foo, 0}, {bar, 1}], {
-            <<131, 108, 0, 0, 0, 2, 104, 2, 119, 3, 102, 111, 111, 97, 0, 104, 2, 119, 3, 98, 97,
-                114, 97, 1, 106>>,
-            <<131, 108, 0, 0, 0, 2, 104, 2, 100, 0, 3, 102, 111, 111, 97, 0, 104, 2, 100, 0, 3, 98,
-                97, 114, 97, 1, 106>>
-        }
+        [{foo, 0}, {bar, 1}],
+        <<131, 108, 0, 0, 0, 2, 104, 2, 119, 3, 102, 111, 111, 97, 0, 104, 2, 119, 3, 98, 97, 114,
+            97, 1, 106>>
     ),
     test_reverse(
-        [improper | list], {
-            <<131, 108, 0, 0, 0, 1, 119, 8, 105, 109, 112, 114, 111, 112, 101, 114, 119, 4, 108,
-                105, 115, 116>>,
-            <<131, 108, 0, 0, 0, 1, 100, 0, 8, 105, 109, 112, 114, 111, 112, 101, 114, 100, 0, 4,
-                108, 105, 115, 116>>
-        }
+        [improper | list],
+        <<131, 108, 0, 0, 0, 1, 119, 8, 105, 109, 112, 114, 111, 112, 101, 114, 119, 4, 108, 105,
+            115, 116>>
     ),
     test_reverse(<<"foobar">>, <<131, 109, 0, 0, 0, 6, 102, 111, 111, 98, 97, 114>>),
     test_reverse(<<":アトムＶＭ">>, <<131, 109, 0, 0, 0, 6, 58, 162, 200, 224, 54, 45>>),
@@ -185,15 +159,6 @@ start() ->
 test_reverse(T, Interop) ->
     test_reverse(T, Interop, []).
 
-test_reverse(T, {Utf8Interop, Latin1Interop}, Options) ->
-    case get_otp_version() of
-        X when is_integer(X) andalso X >= 26 ->
-            test_reverse(T, Utf8Interop, Options);
-        atomvm ->
-            test_reverse(T, Utf8Interop, Options);
-        _ ->
-            test_reverse(T, Latin1Interop, Options)
-    end;
 test_reverse(T, Interop, Options) when is_binary(Interop) andalso is_list(Options) ->
     Bin =
         case Options of
@@ -271,21 +236,10 @@ mutate_bin(Bin, I) ->
 test_external_function() ->
     T = T = [?MODULE:id(fun ?MODULE:apply/2), ?MODULE:id(fun ?MODULE:apply/3)],
     Bin =
-        case get_otp_version() of
-            X when is_integer(X) andalso X >= 26 orelse X == atomvm ->
-                %% expect SMALL_ATOM_UTF8_EXT encoding
-                <<131, 108, 0, 0, 0, 2, 113, 119, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114,
-                    121, 95, 116, 111, 95, 116, 101, 114, 109, 119, 5, 97, 112, 112, 108, 121, 97,
-                    2, 113, 119, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121, 95, 116,
-                    111, 95, 116, 101, 114, 109, 119, 5, 97, 112, 112, 108, 121, 97, 3, 106>>;
-            _ ->
-                %% expect ATOM_EXT encoding
-                <<131, 108, 0, 0, 0, 2, 113, 100, 0, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97,
-                    114, 121, 95, 116, 111, 95, 116, 101, 114, 109, 100, 0, 5, 97, 112, 112, 108,
-                    121, 97, 2, 113, 100, 0, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121,
-                    95, 116, 111, 95, 116, 101, 114, 109, 100, 0, 5, 97, 112, 112, 108, 121, 97, 3,
-                    106>>
-        end,
+        <<131, 108, 0, 0, 0, 2, 113, 119, 19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121,
+            95, 116, 111, 95, 116, 101, 114, 109, 119, 5, 97, 112, 112, 108, 121, 97, 2, 113, 119,
+            19, 116, 101, 115, 116, 95, 98, 105, 110, 97, 114, 121, 95, 116, 111, 95, 116, 101, 114,
+            109, 119, 5, 97, 112, 112, 108, 121, 97, 3, 106>>,
 
     Bin = erlang:term_to_binary(T),
 
@@ -489,21 +443,7 @@ test_encode_pid() ->
             hello -> ok
         after 500 -> error
         end,
-    {ExpectedSize, CreationOrder} =
-        case erlang:system_info(machine) of
-            "ATOM" ->
-                {29, true};
-            "BEAM" ->
-                OTPRelease = erlang:system_info(otp_release),
-                if
-                    OTPRelease =:= "21" -> {27, true};
-                    OTPRelease =:= "22" -> {27, false};
-                    OTPRelease < "26" -> {30, true};
-                    % small utf8 atom
-                    true -> {29, true}
-                end
-        end,
-    ExpectedSize = byte_size(Bin),
+    29 = byte_size(Bin),
 
     % Creation is not displayed in list representation
     FalsePid1 = binary_to_term_idempotent(
@@ -516,7 +456,7 @@ test_encode_pid() ->
     ),
     "<0.1.0>" = pid_to_list(FalsePid1Cr),
     false = FalsePid1 =:= FalsePid1Cr,
-    CreationOrder = FalsePid1 < FalsePid1Cr,
+    true = FalsePid1 < FalsePid1Cr,
 
     % Order is done by pid on a given node
     FalsePid2 = binary_to_term_idempotent(
@@ -601,47 +541,32 @@ test_encode_pid() ->
             error:badarg -> ok
         end,
 
-    case has_setnode_creation() of
-        true ->
-            % Test distributed pid
-            Ref42 = do_setnode(test@test_node, 42),
-            DistributedPid1 = binary_to_term(
-                <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
-            ),
-            true = is_pid(DistributedPid1),
-            true = is_process_alive(DistributedPid1),
+    % Test distributed pid
+    Ref42 = do_setnode(test@test_node, 42),
+    DistributedPid1 = binary_to_term(
+        <<131, 88, 119, 14, "test@test_node", 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 42>>
+    ),
+    true = is_pid(DistributedPid1),
+    true = is_process_alive(DistributedPid1),
 
-            DistributedBin42 = term_to_binary(self()),
-            true = DistributedBin42 =/= Bin,
-            DistributedPid42 = binary_to_term(DistributedBin42),
-            true = DistributedPid42 =:= Pid,
-            ExpectedSize = byte_size(DistributedBin42) - 1,
+    DistributedBin42 = term_to_binary(self()),
+    true = DistributedBin42 =/= Bin,
+    DistributedPid42 = binary_to_term(DistributedBin42),
+    true = DistributedPid42 =:= Pid,
+    30 = byte_size(DistributedBin42),
 
-            ok = do_unsetnode(Ref42),
-            Bin = term_to_binary(self()),
+    ok = do_unsetnode(Ref42),
+    Bin = term_to_binary(self()),
 
-            Ref43 = do_setnode(test@test_node, 43),
-            DistributedBin43 = term_to_binary(self()),
-            true = DistributedBin43 =/= DistributedBin42,
-            DistributedPid43 = binary_to_term(DistributedBin43),
-            true = DistributedPid43 =:= Pid,
+    Ref43 = do_setnode(test@test_node, 43),
+    DistributedBin43 = term_to_binary(self()),
+    true = DistributedBin43 =/= DistributedBin42,
+    DistributedPid43 = binary_to_term(DistributedBin43),
+    true = DistributedPid43 =:= Pid,
 
-            ok = do_unsetnode(Ref43),
-            Bin = term_to_binary(self()),
-            ok;
-        false ->
-            ok
-    end,
+    ok = do_unsetnode(Ref43),
+    Bin = term_to_binary(self()),
     ok.
-
-has_setnode_creation() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            true;
-        "BEAM" ->
-            OTPRelease = erlang:system_info(otp_release),
-            OTPRelease >= "23"
-    end.
 
 do_setnode(Node, Creation) ->
     {NetKernelPid, MonitorRef} = spawn_opt(
@@ -680,102 +605,73 @@ test_encode_port() ->
     Bin = term_to_binary(TestPort),
     TestPort = binary_to_term(Bin),
     true = is_port(TestPort),
-    {ExpectedSize, SupportsV4PortEncoding} =
-        case erlang:system_info(machine) of
-            "ATOM" ->
-                % small utf8 atom
-                {29, true};
-            "BEAM" ->
-                OTPRelease = erlang:system_info(otp_release),
-                if
-                    OTPRelease < "23" -> {23, false};
-                    OTPRelease < "24" -> {26, false};
-                    % v4 is supported but not the default
-                    OTPRelease < "26" -> {26, true};
-                    % small utf8 atom
-                    true -> {29, true}
-                end
-        end,
-    ExpectedSize = byte_size(Bin),
-    case SupportsV4PortEncoding of
-        true ->
-            LocalPort1 = binary_to_term(
-                <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
-            ),
-            true = is_port(LocalPort1),
-            "#Port<0.1>" = port_to_list(LocalPort1),
-            Port1 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 0:32>>),
-            Port2 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 1:32>>),
-            false = Port1 =:= Port2,
-            true = Port1 < Port2,
-            "#Port<1.43>" = port_to_list(Port1),
-            "#Port<1.43>" = port_to_list(Port2),
+    29 = byte_size(Bin),
+    LocalPort1 = binary_to_term(
+        <<131, 120, 119, 13, "nonode@nohost", 1:64, 0:32>>
+    ),
+    true = is_port(LocalPort1),
+    "#Port<0.1>" = port_to_list(LocalPort1),
+    Port1 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 0:32>>),
+    Port2 = binary_to_term(<<131, 120, 119, 4, "true", 43:64, 1:32>>),
+    false = Port1 =:= Port2,
+    true = Port1 < Port2,
+    "#Port<1.43>" = port_to_list(Port1),
+    "#Port<1.43>" = port_to_list(Port2),
 
-            % Order
-            FalsePort_42_43 = binary_to_term_idempotent(
-                <<131, 120, 119, 5, "false", 42:64, 43:32>>, "26"
-            ),
-            FalsePort_43_42 = binary_to_term_idempotent(
-                <<131, 120, 119, 5, "false", 43:64, 42:32>>, "26"
-            ),
-            FalsePort_43_43 = binary_to_term_idempotent(
-                <<131, 120, 119, 5, "false", 43:64, 43:32>>, "26"
-            ),
-            FalsfPort_42_41 = binary_to_term_idempotent(
-                <<131, 120, 119, 5, "falsf", 42:64, 41:32>>, "26"
-            ),
+    % Order
+    FalsePort_42_43 = binary_to_term_idempotent(
+        <<131, 120, 119, 5, "false", 42:64, 43:32>>, "26"
+    ),
+    FalsePort_43_42 = binary_to_term_idempotent(
+        <<131, 120, 119, 5, "false", 43:64, 42:32>>, "26"
+    ),
+    FalsePort_43_43 = binary_to_term_idempotent(
+        <<131, 120, 119, 5, "false", 43:64, 43:32>>, "26"
+    ),
+    FalsfPort_42_41 = binary_to_term_idempotent(
+        <<131, 120, 119, 5, "falsf", 42:64, 41:32>>, "26"
+    ),
 
-            % Node first, creation second, number third
-            true = FalsePort_42_43 > FalsePort_43_42,
-            true = FalsfPort_42_41 > FalsePort_42_43,
-            true = FalsfPort_42_41 > FalsePort_43_42,
-            true = FalsePort_43_42 < FalsePort_43_43,
+    % Node first, creation second, number third
+    true = FalsePort_42_43 > FalsePort_43_42,
+    true = FalsfPort_42_41 > FalsePort_42_43,
+    true = FalsfPort_42_41 > FalsePort_43_42,
+    true = FalsePort_43_42 < FalsePort_43_43,
 
-            % Order is done by node atom, with local pid as nonode@nohost
-            true =
-                TestPort >
-                    binary_to_term_idempotent(<<131, 120, 119, 5, "false", 1:64, 0:32>>, "26"),
-            true =
-                TestPort >
-                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonode", 1:64, 0:32>>, "26"),
-            true =
-                TestPort <
-                    binary_to_term_idempotent(<<131, 120, 119, 6, "nonodf", 1:64, 0:32>>, "26"),
+    % Order is done by node atom, with local pid as nonode@nohost
+    true =
+        TestPort >
+            binary_to_term_idempotent(<<131, 120, 119, 5, "false", 1:64, 0:32>>, "26"),
+    true =
+        TestPort >
+            binary_to_term_idempotent(<<131, 120, 119, 6, "nonode", 1:64, 0:32>>, "26"),
+    true =
+        TestPort <
+            binary_to_term_idempotent(<<131, 120, 119, 6, "nonodf", 1:64, 0:32>>, "26"),
+    % Test distributed ports
+    % Test doesn't pass on BEAM if we use 42 and 43 like for refs,
+    % as there probably is a side-effect we don't have
+    Ref42 = do_setnode(test@test_node, 1042),
+    DistributedBin42 = term_to_binary(TestPort),
+    true = DistributedBin42 =/= Bin,
+    TestRef42 = binary_to_term(DistributedBin42),
+    true = TestRef42 =:= TestPort,
+    ExpectedSize = byte_size(DistributedBin42) - 1,
 
-            ok;
-        false ->
-            ok
-    end,
-    case has_setnode_creation() of
-        true ->
-            % Test distributed ports
-            % Test doesn't pass on BEAM if we use 42 and 43 like for refs,
-            % as there probably is a side-effect we don't have
-            Ref42 = do_setnode(test@test_node, 1042),
-            DistributedBin42 = term_to_binary(TestPort),
-            true = DistributedBin42 =/= Bin,
-            TestRef42 = binary_to_term(DistributedBin42),
-            true = TestRef42 =:= TestPort,
-            ExpectedSize = byte_size(DistributedBin42) - 1,
+    ok = do_unsetnode(Ref42),
 
-            ok = do_unsetnode(Ref42),
+    Ref43 = do_setnode(test@test_node, 1043),
+    DistributedBin43 = term_to_binary(TestPort),
+    true = DistributedBin43 =/= DistributedBin42,
+    TestRef43 = binary_to_term(DistributedBin43),
+    true = TestRef43 =:= TestPort,
+    ExpectedSize = byte_size(DistributedBin43) - 1,
 
-            Ref43 = do_setnode(test@test_node, 1043),
-            DistributedBin43 = term_to_binary(TestPort),
-            true = DistributedBin43 =/= DistributedBin42,
-            TestRef43 = binary_to_term(DistributedBin43),
-            true = TestRef43 =:= TestPort,
-            ExpectedSize = byte_size(DistributedBin43) - 1,
+    % If our creation is 1043, encoded binary with creation 1042 is a different port
+    TestRef42_43 = binary_to_term(DistributedBin42),
+    false = TestRef42_43 =:= TestPort,
 
-            % If our creation is 1043, encoded binary with creation 1042 is a different port
-            TestRef42_43 = binary_to_term(DistributedBin42),
-            false = TestRef42_43 =:= TestPort,
-
-            ok = do_unsetnode(Ref43),
-            ok;
-        false ->
-            ok
-    end,
+    ok = do_unsetnode(Ref43),
     ok.
 
 test_encode_reference() ->
@@ -787,20 +683,14 @@ test_encode_reference() ->
         <<131, 90, 0, 2, 119, 13, "nonode@nohost", 0:32, 1:32, 2:32>>
     ),
     true = is_reference(Ref123),
-    {ExpectedSize, HasV4NC} =
+    ExpectedSize =
         case erlang:system_info(machine) of
             "ATOM" ->
                 % small utf8 atom & reference with 2 words
-                {31, true};
+                31;
             "BEAM" ->
-                OTPRelease = erlang:system_info(otp_release),
-                if
-                    OTPRelease < "23" -> {33, false};
-                    OTPRelease < "24" -> {36, false};
-                    OTPRelease < "26" -> {36, true};
-                    % small utf8 atom
-                    true -> {35, true}
-                end
+                % small utf8 atom
+                35
         end,
     ExpectedSize = byte_size(Bin),
 
@@ -832,32 +722,27 @@ test_encode_reference() ->
     true = Ref6 > Ref3,
 
     % Starting from OTP-24 that introduced DFLAG_V4_NC, references can have 4 or 5 words
-    if
-        HasV4NC ->
-            Ref7 = binary_to_term_idempotent(
-                <<131, 90, 0, 4, 119, 4, "true", 1:32, 41:32, 42:32, 43:32, 44:32>>, "26"
-            ),
-            Ref8 = binary_to_term_idempotent(
-                <<131, 90, 0, 4, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32>>, "26"
-            ),
-            "#Ref<1.44.43.42.41>" = ref_to_list(Ref7),
-            "#Ref<1.41.42.43.44>" = ref_to_list(Ref8),
-            true = Ref7 > Ref8,
-            true = Ref8 > Ref5,
+    Ref7 = binary_to_term_idempotent(
+        <<131, 90, 0, 4, 119, 4, "true", 1:32, 41:32, 42:32, 43:32, 44:32>>, "26"
+    ),
+    Ref8 = binary_to_term_idempotent(
+        <<131, 90, 0, 4, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32>>, "26"
+    ),
+    "#Ref<1.44.43.42.41>" = ref_to_list(Ref7),
+    "#Ref<1.41.42.43.44>" = ref_to_list(Ref8),
+    true = Ref7 > Ref8,
+    true = Ref8 > Ref5,
 
-            Ref9 = binary_to_term_idempotent(
-                <<131, 90, 0, 5, 119, 4, "true", 1:32, 40:32, 41:32, 42:32, 43:32, 44:32>>, "26"
-            ),
-            RefA = binary_to_term_idempotent(
-                <<131, 90, 0, 5, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32, 40:32>>, "26"
-            ),
-            "#Ref<1.44.43.42.41.40>" = ref_to_list(Ref9),
-            "#Ref<1.40.41.42.43.44>" = ref_to_list(RefA),
-            true = Ref9 > RefA,
-            true = RefA > Ref7;
-        true ->
-            ok
-    end,
+    Ref9 = binary_to_term_idempotent(
+        <<131, 90, 0, 5, 119, 4, "true", 1:32, 40:32, 41:32, 42:32, 43:32, 44:32>>, "26"
+    ),
+    RefA = binary_to_term_idempotent(
+        <<131, 90, 0, 5, 119, 4, "true", 1:32, 44:32, 43:32, 42:32, 41:32, 40:32>>, "26"
+    ),
+    "#Ref<1.44.43.42.41.40>" = ref_to_list(Ref9),
+    "#Ref<1.40.41.42.43.44>" = ref_to_list(RefA),
+    true = Ref9 > RefA,
+    true = RefA > Ref7,
 
     % Zero-length is tolerated
     RefB = binary_to_term_idempotent(<<131, 90, 0, 0, 119, 4, "true", 1:32>>, "26"),
@@ -1020,62 +905,52 @@ test_encode_reference() ->
             error:badarg -> ok
         end,
 
-    case has_setnode_creation() of
-        true ->
-            % Test distributed pid
-            Ref42 = do_setnode(test@test_node, 42),
-            DistributedRef123_42 = binary_to_term(
-                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
-            ),
-            true = is_reference(DistributedRef123_42),
-            true = DistributedRef123_42 =:= Ref123,
+    % Test distributed pid
+    Ref42 = do_setnode(test@test_node, 42),
+    DistributedRef123_42 = binary_to_term(
+        <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+    ),
+    true = is_reference(DistributedRef123_42),
+    true = DistributedRef123_42 =:= Ref123,
 
-            DistributedBin42 = term_to_binary(TestRef),
-            true = DistributedBin42 =/= Bin,
-            TestRef42 = binary_to_term(DistributedBin42),
-            true = TestRef42 =:= TestRef,
-            ExpectedSize = byte_size(DistributedBin42) - 1,
+    DistributedBin42 = term_to_binary(TestRef),
+    true = DistributedBin42 =/= Bin,
+    TestRef42 = binary_to_term(DistributedBin42),
+    true = TestRef42 =:= TestRef,
+    ExpectedSize = byte_size(DistributedBin42) - 1,
 
-            ok = do_unsetnode(Ref42),
+    ok = do_unsetnode(Ref42),
 
-            Ref43 = do_setnode(test@test_node, 43),
-            DistributedRef123_43 = binary_to_term(
-                <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
-            ),
-            true = is_reference(DistributedRef123_43),
-            true = DistributedRef123_43 =:= Ref123,
+    Ref43 = do_setnode(test@test_node, 43),
+    DistributedRef123_43 = binary_to_term(
+        <<131, 90, 0, 2, 119, 14, "test@test_node", 43:32, 1:32, 2:32>>
+    ),
+    true = is_reference(DistributedRef123_43),
+    true = DistributedRef123_43 =:= Ref123,
 
-            DistributedRef123_42_43 = binary_to_term(
-                <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
-            ),
-            true = is_reference(DistributedRef123_42_43),
-            false = DistributedRef123_42_43 =:= Ref123,
+    DistributedRef123_42_43 = binary_to_term(
+        <<131, 90, 0, 2, 119, 14, "test@test_node", 42:32, 1:32, 2:32>>
+    ),
+    true = is_reference(DistributedRef123_42_43),
+    false = DistributedRef123_42_43 =:= Ref123,
 
-            DistributedBin43 = term_to_binary(TestRef),
-            true = DistributedBin43 =/= Bin,
-            TestRef43 = binary_to_term(DistributedBin43),
-            true = TestRef43 =:= TestRef,
+    DistributedBin43 = term_to_binary(TestRef),
+    true = DistributedBin43 =/= Bin,
+    TestRef43 = binary_to_term(DistributedBin43),
+    true = TestRef43 =:= TestRef,
 
-            ok = do_unsetnode(Ref43),
-            ok;
-        false ->
-            ok
-    end,
+    ok = do_unsetnode(Ref43),
     ok.
 
 test_encode_resource() ->
     OTPVersion = get_otp_version(),
     test_encode_resource(OTPVersion).
 
-test_encode_resource(21) ->
-    ok;
 test_encode_resource(OTPVersion) ->
     R = socket:open(inet, stream, tcp),
     case OTPVersion of
         atomvm ->
             {ok, {Resource, _Ref}} = R;
-        22 ->
-            {ok, {socket, Resource}} = R;
         _ ->
             {ok, {'$socket', Resource}} = R
     end,
@@ -1105,27 +980,7 @@ test_encode_resource(OTPVersion) ->
             AlteredResourceBin3 =
                 <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, A:32, (B + 4):32, C:32>>,
             AlteredResourceBin4 =
-                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32>>;
-        OTPVersion >= 23 ->
-            <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, C:32>> = ResourceBin,
-            AlteredResourceBin1 =
-                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 1):32>>,
-            AlteredResourceBin2 =
-                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, B:32, (C + 4):32>>,
-            AlteredResourceBin3 =
-                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, A:32, (B + 4):32, C:32>>,
-            AlteredResourceBin4 =
-                <<131, 90, 0, 3, 100, 0, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32>>;
-        OTPVersion =:= 22 ->
-            <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, C:32>> = ResourceBin,
-            AlteredResourceBin1 =
-                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, (C + 1):32>>,
-            AlteredResourceBin2 =
-                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, B:32, (C + 4):32>>,
-            AlteredResourceBin3 =
-                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, A:32, (B + 4):32, C:32>>,
-            AlteredResourceBin4 =
-                <<131, 114, 0, 3, 100, 0, 13, "nonode@nohost", 0, (A + 4):32, B:32, C:32>>
+                <<131, 90, 0, 3, 119, 13, "nonode@nohost", 0:32, (A + 4):32, B:32, C:32>>
     end,
     AlteredResource1 = binary_to_term(AlteredResourceBin1),
     false = AlteredResource1 =:= Resource,
@@ -1175,13 +1030,7 @@ compare_pair_encoding(Id) ->
     A = ?MODULE:get_atom(Id),
     B = ?MODULE:get_binary(Id),
     A = erlang:binary_to_term(erlang:term_to_binary(A)),
-    OTPVersion = get_otp_version(),
-    if
-        OTPVersion =:= atomvm orelse OTPVersion >= 26 ->
-            B == erlang:term_to_binary(A);
-        true ->
-            true
-    end.
+    B == erlang:term_to_binary(A).
 
 % We don't have access to erlang module in tests.
 apply(F, []) ->

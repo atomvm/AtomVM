@@ -32,6 +32,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  DEFAULT_OTP_VERSION: "28"
+  DEFAULT_ELIXIR_VERSION: "1.19"
+  DEFAULT_REBAR3_VERSION: "3.25.1"
+  DEFAULT_GLEAM_VERSION: "1.11.1"
+  DEFAULT_CFLAGS: "-O3"
+  DEFAULT_CMAKE_OPTS_OTHER: "-DAVM_WARNINGS_ARE_ERRORS=ON"
+
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
@@ -48,312 +56,173 @@ jobs:
         # Ubuntu 22.04 has clang from 12 to 15 ("clang" is 14)
         # Ubuntu 24.04 has clang from 14 to 18 ("clang" is 18)
         # We want to test every compiler but don't need to test every OS
-        # We only test several OTP versions with default compilers (gcc-9, 11, 13, clang-10, 14, 18)
-        cc: ["gcc-9", "gcc-11", "gcc-13", "clang-10", "clang-14", "clang-18"]
-        cflags: ["-O3"]
-        otp: ["25", "26", "27"]
-        gleam_version: ["1.11.1"]
+        # We only test several OTP versions with default compilers for supported OSes (gcc 11, gcc 13, clang 14, clang 18)
+        cc: ["gcc-11", "gcc-13", "clang-14", "clang-18"]
+        otp: ["26", "27", "28"]
 
         include:
+        ### gcc
+        # erlef/setup-beam officially supports ubuntu 22 and 24, we are getting
+        # warnings for gcc 7 and 8 that require ubuntu 20.
         - cc: "gcc-7"
           cxx: "g++-7"
           compiler_pkgs: "gcc-7 g++-7"
           container: "ubuntu:20.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
+          cmake_opts_other: " "
         - cc: "gcc-8"
           cxx: "g++-8"
           compiler_pkgs: "gcc-8 g++-8"
           container: "ubuntu:20.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
+        # from gcc 9 we can use ubuntu 24.
         - cc: "gcc-9"
           cxx: "g++-9"
           compiler_pkgs: "gcc-9 g++-9"
-          container: "ubuntu:20.04"
-          # otp: all
         - cc: "gcc-10"
           cxx: "g++-10"
           compiler_pkgs: "gcc-10 g++-10"
-          # Use Werror for recent GCC versions that have better diagnostics
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-22.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "gcc-11"
           cxx: "g++-11"
           compiler_pkgs: "gcc-11 g++-11"
-          # Use Werror for recent GCC versions that have better diagnostics
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-22.04"
           # otp: all
         - cc: "gcc-12"
           cxx: "g++-12"
           compiler_pkgs: "gcc-12 g++-12"
-          # Use Werror for recent GCC versions that have better diagnostics
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "gcc-13"
           cxx: "g++-13"
           compiler_pkgs: "gcc-13 g++-13"
-          # Use Werror for recent GCC versions that have better diagnostics
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
           # otp: all
         - cc: "gcc-14"
           cxx: "g++-14"
           compiler_pkgs: "gcc-14 g++-14"
-          # Use Werror for recent GCC versions that have better diagnostics
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
 
+        ### clang
         - cc: "clang-10"
           cxx: "clang++-10"
           compiler_pkgs: "clang-10"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           container: "ubuntu:20.04"
-          # otp: all
         - cc: "clang-11"
           cxx: "clang++-11"
           compiler_pkgs: "clang-11"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           container: "ubuntu:20.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
+
+        # from clang 12 we can use ubuntu 22
         - cc: "clang-12"
           cxx: "clang++-12"
           compiler_pkgs: "clang-12"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-22.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "clang-13"
           cxx: "clang++-13"
           compiler_pkgs: "clang-13"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
           os: "ubuntu-22.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "clang-14"
           cxx: "clang++-14"
           compiler_pkgs: "clang-14"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-22.04"
           # otp: all
         - cc: "clang-15"
           cxx: "clang++-15"
           compiler_pkgs: "clang-15"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "clang-16"
           cxx: "clang++-16"
           compiler_pkgs: "clang-16"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "clang-17"
           cxx: "clang++-17"
           compiler_pkgs: "clang-17"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
         - cc: "clang-18"
           cxx: "clang++-18"
           compiler_pkgs: "clang-18"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON"
-          os: "ubuntu-24.04"
           # otp: all
 
-        - otp: "25"
-          elixir_version: "1.14"
-          rebar3_version: "3.24.0"
-
-        - otp: "26"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
-
-        - otp: "27"
+        # Additional runs with older elixir
+        - cc: "cc"
+          cxx: "c++"
+          otp: "27"
           elixir_version: "1.18"
-          rebar3_version: "3.24.0"
 
-        # Old versions of OTP/Elixir
-        - container: "ubuntu:20.04"
-          cc: "cc"
+        - cc: "cc"
           cxx: "c++"
-          cflags: ""
-          otp: "21"
-          elixir_version: "1.8"
-          rebar3_version: "3.15.2"
-          compiler_pkgs: "g++"
+          otp: "27"
+          elixir_version: "1.17"
 
-        - container: "ubuntu:20.04"
-          cc: "cc"
+        - cc: "cc"
           cxx: "c++"
-          cflags: ""
-          otp: "22"
-          elixir_version: "1.8"
-          rebar3_version: "3.18.0"
-          compiler_pkgs: "g++"
+          otp: "26"
+          elixir_version: "1.18"
 
-        - container: "ubuntu:20.04"
-          cc: "cc"
+        - cc: "cc"
           cxx: "c++"
-          cflags: ""
-          otp: "23"
-          elixir_version: "1.11"
-          rebar3_version: "3.20.0"
-          compiler_pkgs: "g++"
+          otp: "26"
+          elixir_version: "1.17"
 
-        - container: "ubuntu:20.04"
-          cc: "cc"
-          cxx: "c++"
-          cflags: ""
-          otp: "24"
-          elixir_version: "1.14"
-          rebar3_version: "3.23.0"
-          compiler_pkgs: "g++"
-
-        - os: "ubuntu-24.04"
-          cc: "cc"
+        # Additional run with OTP master and default compiler
+        - cc: "cc"
           cxx: "c++"
           otp: "master"
           elixir_version: "main"
-          rebar3_version: "3.24.0"
-
-        # Additional default compiler builds
-        - container: "ubuntu:20.04"
-          cc: "cc"
-          cxx: "c++"
-          cflags: ""
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
-          compiler_pkgs: "g++"
-
-        - os: "ubuntu-22.04"
-          cc: "cc"
-          cxx: "c++"
-          cflags: ""
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
 
         # Additional latest & -Os compiler builds
-        - os: "ubuntu-24.04"
-          cc: "gcc-14"
+        - cc: "gcc-14"
           cxx: "g++-14"
           cflags: "-Os"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           compiler_pkgs: "gcc-14 g++-14"
 
-        - os: "ubuntu-24.04"
-          cc: "clang-18"
+        - cc: "clang-18"
           cxx: "clang++-18"
           cflags: "-Os"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           compiler_pkgs: "clang-18"
 
         # Additional build with 32 bits floats
-        - os: "ubuntu-24.04"
-          cc: "cc"
+        - cc: "cc"
           cxx: "c++"
-          otp: "27"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_USE_32BIT_FLOAT=ON"
+          cmake_opts_other: "-DAVM_USE_32BIT_FLOAT=ON -DAVM_WARNINGS_ARE_ERRORS=ON"
+
+        # Additional run with -DAVM_CREATE_STACKTRACES=off
+        - cc: "cc"
+          cxx: "c++"
+          cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
+
+        # JIT build
+        - cc: "cc"
+          cxx: "c++"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          jit_target_arch: "x86_64"
 
         # Additional 32 bits build
         - container: "ubuntu:20.04"
           cc: "gcc-10"
           cxx: "g++-10"
           cflags: "-m32 -O3"
-          otp: "23"
-          elixir_version: "1.11"
-          rebar3_version: "3.20.0"
-          # Use Werror so we get an error with 32 bit specific warnings
           cmake_opts_other: "-DAVM_CREATE_STACKTRACES=off -DAVM_WARNINGS_ARE_ERRORS=ON"
           arch: "i386"
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
             libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
-        # JIT build
-        - os: "ubuntu-24.04"
-          cc: "cc"
-          cxx: "c++"
-          cflags: ""
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
-          jit_target_arch: "x86_64"
-
         # arm64 builds
         - os: "ubuntu-24.04-arm"
           cc: "cc"
           cxx: "c++"
-          cflags: "-O2"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
-          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=OFF"
 
         - os: "ubuntu-24.04-arm"
           cc: "cc"
           cxx: "c++"
-          cflags: ""
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "aarch64"
 
         # armhf builds
-        - os: "ubuntu-24.04"
-          cc: "arm-linux-gnueabihf-gcc"
+        - cc: "arm-linux-gnueabihf-gcc"
           cxx: "arm-linux-gnueabihf-g++"
           # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
           # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
-          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O3 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
           compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
           arch: "armhf"
           library-arch: arm-linux-gnueabihf
 
-        - os: "ubuntu-24.04"
-          cc: "arm-linux-gnueabihf-gcc"
+        - cc: "arm-linux-gnueabihf-gcc"
           cxx: "arm-linux-gnueabihf-g++"
           # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
           # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
-          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O3 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=armv6m -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
           compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
           arch: "armhf"
@@ -361,15 +230,8 @@ jobs:
           jit_target_arch: "armv6m"
 
         # s390x build
-        - os: "ubuntu-24.04"
-          cc: "s390x-linux-gnu-gcc"
+        - cc: "s390x-linux-gnu-gcc"
           cxx: "s390x-linux-gnu-g++"
-          # -D_FILE_OFFSET_BITS=64 is required for making atomvm:posix_readdir/1 test work
-          # otherwise readdir will fail due to 64 bits inode numbers with 32 bit ino_t
-          cflags: "-O2"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/s390x_toolchain.cmake"
           compiler_pkgs: "crossbuild-essential-s390x libc6-dbg:s390x zlib1g-dev:s390x libmbedtls-dev:s390x qemu-user qemu-user-binfmt binfmt-support"
           arch: "s390x"
@@ -379,10 +241,6 @@ jobs:
         - os: "ubuntu-24.04"
           cc: "riscv32-unknown-linux-gnu-gcc"
           cxx: "riscv32-unknown-linux-gnu-g++"
-          cflags: "-O2"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
           compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
           arch: "riscv32"
@@ -392,10 +250,6 @@ jobs:
         - os: "ubuntu-24.04"
           cc: "riscv32-unknown-linux-gnu-gcc"
           cxx: "riscv32-unknown-linux-gnu-g++"
-          cflags: "-O2"
-          otp: "28"
-          elixir_version: "1.17"
-          rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=riscv32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
           compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
           arch: "riscv32"
@@ -413,6 +267,13 @@ jobs:
 
     steps:
     # Setup
+    - name: "Set CFLAGS"
+      run: |
+        if [ $"CFLAGS" = "" ]; then
+            echo "CFLAGS=$DEFAULT_CFLAGS" >> $GITHUB_ENV
+            echo "CXXFLAGS=$DEFAULT_CFLAGS" >> $GITHUB_ENV
+        fi
+
     - name: "Install deps for containers"
       if: matrix.container != ''
       run: apt-get update && apt-get install -y --no-install-recommends sudo unzip git tzdata
@@ -566,12 +427,26 @@ jobs:
       with:
         submodules: 'recursive'
 
+    # There is no working arm64 binary for gleam
+    # https://github.com/erlef/setup-beam/issues/398
     - uses: erlef/setup-beam@v1
+      if: matrix.os != 'ubuntu-24.04-arm'
       with:
-        otp-version: ${{ matrix.otp }}
-        elixir-version: ${{ matrix.elixir_version }}
-        rebar3-version: ${{ matrix.rebar3_version }}
-        gleam-version: ${{ matrix.gleam_version }}
+        otp-version: ${{ matrix.otp || env.DEFAULT_OTP_VERSION }}
+        elixir-version: ${{ matrix.elixir_version || env.DEFAULT_ELIXIR_VERSION }}
+        rebar3-version: ${{ matrix.rebar3_version || env.DEFAULT_REBAR3_VERSION }}
+        gleam-version: ${{ matrix.gleam_version || env.DEFAULT_GLEAM_VERSION }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
+
+    - uses: erlef/setup-beam@v1
+      if: matrix.os == 'ubuntu-24.04-arm'
+      with:
+        otp-version: ${{ matrix.otp || env.DEFAULT_OTP_VERSION }}
+        elixir-version: ${{ matrix.elixir_version || env.DEFAULT_ELIXIR_VERSION }}
+        rebar3-version: ${{ matrix.rebar3_version || env.DEFAULT_REBAR3_VERSION }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -587,6 +462,8 @@ jobs:
         echo "**C Compiler version:**"
         $CC --version
         $CXX --version
+        echo "**CFLAGS:**"
+        echo $CFLAGS
         echo "**Linker version:**"
         ld --version
         echo "**CMake version:**"
@@ -602,12 +479,12 @@ jobs:
       id: cache
       with:
         path: 'build/tests/**/*.beam'
-        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}
+        key: ${{ matrix.otp || env.DEFAULT_OTP_VERSION }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}
 
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        cmake ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other }} ..
+        cmake ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other || env.DEFAULT_CMAKE_OPTS_OTHER }} ..
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
         find . -name '*.beam' -exec touch {} \;
@@ -749,7 +626,7 @@ jobs:
         ./src/AtomVM ./tests/libs/eavmlib/test_eavmlib.avm
 
     - name: "Test: test_jit.avm with valgrind"
-      if: matrix.library-arch == '' && matrix.otp != '21' && matrix.otp != '22'
+      if: matrix.library-arch == ''
       timeout-minutes: 60
       working-directory: build
       run: |
@@ -758,7 +635,6 @@ jobs:
 
     - name: "Test: test_jit.avm"
       timeout-minutes: 60
-      if: matrix.otp != '21' && matrix.otp != '22'
       working-directory: build
       run: |
         ulimit -c unlimited
@@ -840,7 +716,7 @@ jobs:
       uses: actions/upload-artifact@v4
       if: ${{ failure() }}
       with:
-        name: core-${{ matrix.os }}-${{ matrix.cc }}-${{ matrix.otp }}-${{ github.run_id }}-${{ github.run_attempt }}
+        name: core-${{ matrix.os }}-${{ matrix.cc }}-${{ matrix.otp || env.DEFAULT_OTP_VERSION }}-${{ github.run_id }}-${{ github.run_attempt }}
         path: |
             core/*
         retention-days: 5

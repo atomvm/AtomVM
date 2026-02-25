@@ -30,23 +30,12 @@ start() ->
     ok = test_tail(),
     0.
 
--ifdef(OTP_RELEASE).
-%% OTP 21 or higher
--if(?OTP_RELEASE >= 26).
 test_guard(min, X, Y, Z) when min(X, Y) < Z ->
     ok;
 test_guard(max, X, Y, Z) when max(X, Y) > Z ->
     ok;
 test_guard(_Op, _X, _Y, _Z) ->
     fail.
--else.
-test_guard(_Op, _X, _Y, _Z) ->
-    ok.
--endif.
--else.
-test_guard(_Op, _X, _Y, _Z) ->
-    ok.
--endif.
 
 test_without_guard(min, X, Y, Z) ->
     case min(X, Y) < Z of

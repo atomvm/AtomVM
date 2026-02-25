@@ -187,15 +187,7 @@ comp(A, A) -> 1;
 comp(_A, _B) -> 0.
 
 comp_opt(Fun1, Fun2) ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            case erlang:system_info(otp_release) of
-                Version when Version >= "23" -> comp(Fun1(), Fun2());
-                _OldVersion -> 1
-            end;
-        _ ->
-            comp(Fun1(), Fun2())
-    end.
+    comp(Fun1(), Fun2()).
 
 get_atom(Id) ->
     case Id of

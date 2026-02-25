@@ -27,10 +27,7 @@ add_subdirectory(alisp/src)
 add_subdirectory(etest/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
-# JIT compiler doesn't compile with OTP < 23
-if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
-    add_subdirectory(jit/src)
-endif()
+add_subdirectory(jit/src)
 
 
 set(ATOMVM_LIBS eavmlib estdlib alisp)
@@ -84,9 +81,7 @@ if (Dialyzer_FOUND)
             ${CMAKE_CURRENT_BINARY_DIR}/eavmlib_beams.txt
             ${CMAKE_CURRENT_BINARY_DIR}/alisp_beams.txt
     )
-    if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
-        set(dialyzer_lists ${dialyzer_lists} ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt)
-    endif()
+    set(dialyzer_lists ${dialyzer_lists} ${CMAKE_CURRENT_BINARY_DIR}/jit_beams.txt)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/atomvmlib.plt
         DEPENDS ${dialyzer_lists}

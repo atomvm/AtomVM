@@ -50,7 +50,7 @@
 // These constants can be used to reduce the size of the VM for a specific
 // range of compiler versions
 #ifndef MINIMUM_OTP_COMPILER_VERSION
-#define MINIMUM_OTP_COMPILER_VERSION 21
+#define MINIMUM_OTP_COMPILER_VERSION 26
 #endif
 #ifndef MAXIMUM_OTP_COMPILER_VERSION
 #define MAXIMUM_OTP_COMPILER_VERSION 29
@@ -2685,36 +2685,6 @@ loop:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 23
-            case OP_ALLOCATE_HEAP_ZERO: {
-                uint32_t stack_need;
-                DECODE_LITERAL(stack_need, pc);
-                uint32_t heap_need;
-                DECODE_ALLOCATOR_LIST(heap_need, pc);
-                uint32_t live;
-                DECODE_LITERAL(live, pc);
-                TRACE("allocate_heap_zero/3 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
-                USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
-                        TRIM_LIVE_REGS(live);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                    }
-                    ctx->e -= stack_need + 1;
-                    for (uint32_t s = 0; s < stack_need; s++) {
-                        ctx->e[s] = term_nil();
-                    }
-                    ctx->e[stack_need] = ctx->cp;
-                #endif
-                break;
-            }
-#endif
-
             case OP_TEST_HEAP: {
                 uint32_t heap_need;
                 DECODE_ALLOCATOR_LIST(heap_need, pc);
@@ -3708,45 +3678,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 21
-            case OP_PUT_TUPLE: {
-                uint32_t size;
-                DECODE_LITERAL(size, pc);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    term t = term_alloc_tuple(size, &ctx->heap);
-                #endif
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                TRACE("put_tuple/2 size=%u, dest=%c%i\n", (unsigned) size, T_DEST_REG(dreg));
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    WRITE_REGISTER(dreg, t);
-                #endif
-
-                for (uint32_t j = 0; j < size; j++) {
-                    if (*pc++ != OP_PUT) {
-                        fprintf(stderr, "Expected put, got opcode: %i\n", pc[-1]);
-                        AVM_ABORT();
-                    }
-                    term put_value;
-                    DECODE_COMPACT_TERM(put_value, pc);
-                    #ifdef IMPL_CODE_LOADER
-                        TRACE("put/2\n");
-                        UNUSED(put_value);
-                    #endif
-
-                    #ifdef IMPL_EXECUTE_LOOP
-                        TRACE("put/2 elem=%i, value=0x%" TERM_X_FMT "\n", j, put_value);
-                        term_put_tuple_element(t, j, put_value);
-                    #endif
-                }
-                break;
-            }
-#endif
-
             case OP_BADMATCH: {
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
@@ -4171,163 +4102,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_INIT2: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t words;
-                DECODE_LITERAL(words, pc)
-                uint32_t live;
-                DECODE_LITERAL(live, pc)
-                term flags;
-                UNUSED(flags);
-                DECODE_COMPACT_TERM(flags, pc)
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_init2/6\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init2", 0);
-                    avm_int_t size_val = term_to_int(size);
-
-                    TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term t = term_create_empty_binary(size_val, &ctx->heap, ctx->global);
-                    if (UNLIKELY(term_is_invalid_term(t))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    ctx->bs = t;
-                    ctx->bs_offset = 0;
-                #endif
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_init2/6, fail=%u size=" AVM_INT_FMT " words=%u live=%u dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) words, (unsigned) live, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, t);
-                #endif
-                break;
-            }
-
-            case OP_BS_INIT_BITS: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t words;
-                DECODE_LITERAL(words, pc)
-                uint32_t live;
-                DECODE_LITERAL(live, pc)
-                uint32_t flags_value;
-                DECODE_LITERAL(flags_value, pc)
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_init_bits/6\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(size, "bs_init_bits", 0);
-                    avm_int_t size_val = term_to_int(size);
-                    if (size_val % 8 != 0) {
-                        TRACE("bs_init_bits: size_val (" AVM_INT_FMT ") is not evenly divisible by 8\n", size_val);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    if (flags_value != 0) {
-                        TRACE("bs_init_bits: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-
-                    TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
-                    if (UNLIKELY(term_is_invalid_term(t))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    ctx->bs = t;
-                    ctx->bs_offset = 0;
-                #endif
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_init_bits/6, fail=%i size=" AVM_INT_FMT " words=%i live=%u dreg=%c%i\n", fail, size_val, words, (unsigned) live, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, t);
-                #endif
-                break;
-            }
-
-            case OP_BS_UTF8_SIZE: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_utf8_size/3\n");
-                #endif
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf8_size/3", 0);
-                    avm_int_t src_value = term_to_int(src);
-                    TRACE("bs_utf8_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
-                    size_t utf8_size;
-                    if (UNLIKELY(!bitstring_utf8_size(src_value, &utf8_size))) {
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    WRITE_REGISTER(dreg, term_from_int(utf8_size));
-                #endif
-                break;
-            }
-
-            case OP_BS_PUT_UTF8: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                uint32_t flags;
-                DECODE_LITERAL(flags, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_utf8/3 flags=%x\n", (int) flags);
-                    if (flags != 0) {
-                        fprintf(stderr, "bs_put_utf8/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
-                    }
-                #endif
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf8/3", 0);
-                    avm_int_t src_value = term_to_int(src);
-                    TRACE("bs_put_utf8/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
-                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        TRACE("bs_put_utf8/3: Bad state.  ctx->bs is not a binary.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_put_utf8/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    size_t byte_size;
-                    bool result = bitstring_insert_utf8(ctx->bs, ctx->bs_offset, src_value, &byte_size);
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_utf8/3: Failed to insert character as utf8 into binary: %i\n", result);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    ctx->bs_offset += byte_size * 8;
-                #endif
-                break;
-            }
-#endif
-
             case OP_BS_GET_UTF8: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4403,68 +4177,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_UTF16_SIZE: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_utf16_size/3\n");
-                #endif
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_utf16_size/3", 0);
-                    avm_int_t src_value = term_to_int(src);
-                    TRACE("bs_utf16_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
-                    size_t utf16_size;
-                    if (UNLIKELY(!bitstring_utf16_size(src_value, &utf16_size))) {
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    WRITE_REGISTER(dreg, term_from_int(utf16_size));
-                #endif
-                break;
-            }
-
-            case OP_BS_PUT_UTF16: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                uint32_t flags;
-                DECODE_LITERAL(flags, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_utf16/3 flags=%x\n", (int) flags);
-                    if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
-                        fprintf(stderr, "bs_put_utf16/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
-                    }
-                #endif
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf16/3", 0);
-                    avm_int_t src_value = term_to_int(src);
-                    TRACE("bs_put_utf16/3 flags=%x, src=" AVM_INT_FMT "\n", (int) flags, src_value);
-                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        TRACE("bs_put_utf16: Bad state.  ctx->bs is not a binary.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_put_utf16: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    size_t byte_size;
-                    bool result = bitstring_insert_utf16(ctx->bs, ctx->bs_offset, src_value, flags, &byte_size);
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_utf8/3: Failed to insert character as utf8 into binary: %i\n", result);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    ctx->bs_offset += byte_size * 8;
-                #endif
-                break;
-            }
-#endif
-
             case OP_BS_GET_UTF16: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -4539,44 +4251,6 @@ wait_timeout_trap_handler:
 
                 break;
             }
-
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_PUT_UTF32: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                uint32_t flags;
-                DECODE_LITERAL(flags, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_utf32/3 flags=%x\n", (int) flags);
-                    if (flags != 0 && flags != LittleEndianInteger && flags != NativeEndianInteger) {
-                        fprintf(stderr, "bs_put_utf32/3 : unsupported flags %x\n", (int) flags);
-                        AVM_ABORT();
-                    }
-                #endif
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_INTEGER(src, "bs_put_utf32/3", 0);
-                    avm_int_t src_value = term_to_int(src);
-                    TRACE("bs_put_utf32/3 flags=%x, src=" AVM_INT_FMT "\n", (int) flags, src_value);
-                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        TRACE("bs_put_utf32/3: Bad state.  ctx->bs is not a binary.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_put_utf32/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    bool result = bitstring_insert_utf32(ctx->bs, ctx->bs_offset, src_value, flags);
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_utf32/3: Failed to insert integer into binary: %i\n", result);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    ctx->bs_offset += 4 * 8;
-                #endif
-                break;
-            }
-#endif
 
             case OP_BS_GET_UTF32: {
                 uint32_t fail;
@@ -4671,371 +4345,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_APPEND: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                term extra;
-                UNUSED(extra);
-                DECODE_COMPACT_TERM(extra, pc)
-                uint32_t live;
-                UNUSED(live);
-                DECODE_LITERAL(live, pc);
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-                term src;
-                DECODE_COMPACT_TERM(src, pc)
-                term flags;
-                UNUSED(flags);
-                DECODE_COMPACT_TERM(flags, pc)
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_append/8\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_append", 0);
-                    VERIFY_IS_INTEGER(size, "bs_append", 0);
-                    VERIFY_IS_INTEGER(extra, "bs_append", 0);
-                    avm_int_t size_val = term_to_int(size);
-                    avm_int_t extra_val = term_to_int(extra);
-
-                    if (size_val % 8 != 0) {
-                        TRACE("bs_append: size_val (" AVM_INT_FMT ") is not evenly divisible by 8\n", size_val);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    if (unit != 8) {
-                        TRACE("bs_append: unit is not equal to 8; unit=%u\n", (unsigned) unit);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-
-                    size_t src_size = term_binary_size(src);
-                    TRIM_LIVE_REGS(live);
-                    // there is always room for a MAX_REG + 1 register, used as working register
-                    x_regs[live] = src;
-                    // TODO: further investigate extra_val
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, src_size + term_binary_heap_size(size_val / 8) + extra_val, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                #endif
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-                
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_append/8, fail=%u size=" AVM_INT_FMT " unit=%u src=0x%" TERM_X_FMT " dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
-                    src = x_regs[live];
-                    term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
-                    if (UNLIKELY(term_is_invalid_term(t))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
-
-                    ctx->bs = t;
-                    ctx->bs_offset = src_size * 8;
-
-                    WRITE_REGISTER(dreg, t);
-                #endif
-                break;
-            }
-
-            case OP_BS_PRIVATE_APPEND: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-                term src;
-                #ifdef IMPL_EXECUTE_LOOP
-                    const uint8_t *src_pc = pc;
-                #endif
-                DECODE_COMPACT_TERM(src, pc)
-                term flags;
-                UNUSED(flags);
-                DECODE_COMPACT_TERM(flags, pc)
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_private_append/6\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_private_append", 0);
-                    VERIFY_IS_INTEGER(size, "bs_private_append", 0);
-                    avm_int_t size_val = term_to_int(size);
-
-                    if (size_val % 8 != 0) {
-                        TRACE("bs_private_append: size_val (%li) is not evenly divisible by 8\n", (long int) size_val);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    // TODO: further investigate unit.
-                    // We currently do not support unaligned binaries, unit seems to be equal to 1 binary comprehensions
-                    size_t src_size = term_binary_size(src);
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, src_size + term_binary_heap_size(size_val / 8), MEMORY_NO_GC) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    DECODE_COMPACT_TERM(src, src_pc)
-                    term t = term_reuse_binary(src, src_size + size_val / 8, &ctx->heap, ctx->global);
-                    if (UNLIKELY(term_is_invalid_term(t))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
-                    ctx->bs = t;
-                    ctx->bs_offset = src_size * 8;
-                #endif
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_private_append/6, fail=%u size=" AVM_INT_FMT " unit=%u src=0x%" TERM_X_FMT " dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, t);
-                #endif
-                break;
-            }
-
-            case OP_BS_PUT_INTEGER: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-                uint32_t flags_value;
-                DECODE_LITERAL(flags_value, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_integer/5\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_ANY_INTEGER(src, "bs_put_integer", 0);
-                    VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
-
-                    avm_int64_t src_value = term_maybe_unbox_int64(src);
-                    avm_int_t size_value = term_to_int(size);
-
-                    TRACE("bs_put_integer/5, fail=%u size=" AVM_INT_FMT " unit=%u flags=%x src=%i\n", (unsigned) fail, size_value, (unsigned) unit, (int) flags_value, (unsigned int) src_value);
-
-                    bool result = bitstring_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_integer: Failed to insert integer into binary\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-
-                    ctx->bs_offset += size_value * unit;
-                #endif
-                break;
-            }
-
-            case OP_BS_PUT_BINARY: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-                uint32_t flags_value;
-                DECODE_LITERAL(flags_value, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_binary/5\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_BINARY(src, "bs_put_binary", 0);
-                    unsigned long size_val = 0;
-                    if (term_is_integer(size)) {
-                        avm_int_t bit_size = term_to_int(size) * unit;
-                        if (bit_size % 8 != 0) {
-                            TRACE("bs_put_binary: Bit size must be evenly divisible by 8.\n");
-                            RAISE_ERROR(UNSUPPORTED_ATOM);
-                        }
-                        size_val = bit_size / 8;
-                    } else if (size == ALL_ATOM) {
-                        size_val = term_binary_size(src);
-                    } else {
-                        TRACE("bs_put_binary: Unsupported size term type in put binary: %p\n", (void *) size);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (size_val > term_binary_size(src)) {
-                        TRACE("bs_put_binary: binary data size (%li) larger than source binary size (%li)\n", size_val, term_binary_size(src));
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (flags_value != 0) {
-                        TRACE("bs_put_binary: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-
-                    if (ctx->bs_offset % 8 != 0) {
-                        TRACE("bs_put_binary: Unsupported bit syntax operation.  Writing binaries must be byte-aligend.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-
-                    TRACE("bs_put_binary/5, fail=%u size=%li unit=%u flags=%x src=0x%x\n", (unsigned) fail, size_val, (unsigned) unit, (int) flags_value, (unsigned int) src);
-
-                    int result = term_bs_insert_binary(ctx->bs, ctx->bs_offset, src, size_val);
-                    if (UNLIKELY(result)) {
-                        TRACE("bs_put_binary: Failed to insert binary into binary: %i\n", result);
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    ctx->bs_offset += 8 * size_val;
-                #endif
-                break;
-            }
-
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_PUT_FLOAT: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term size;
-                DECODE_COMPACT_TERM(size, pc)
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-                uint32_t flags_value;
-                DECODE_LITERAL(flags_value, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_float/5\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    avm_float_t float_value = 0;
-                    bool is_number = false;
-                    if (term_is_float(src)) {
-                        float_value = term_to_float(src);
-                        is_number = true;
-                    } else if (term_is_any_integer(src)) {
-                        float_value = term_conv_to_float(src);
-                        is_number = isfinite(float_value);
-                    }
-
-                    if (UNLIKELY(!is_number)) {
-                        if (fail == 0) {
-                            RAISE_ERROR(BADARG_ATOM);
-                        } else {
-                            JUMP_TO_LABEL(mod, fail);
-                        }
-                    }
-
-                    avm_int_t signed_size_value = 64;
-                    if (size != term_nil()) {
-                        VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                        signed_size_value = term_to_int(size);
-                        if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
-                            if (fail == 0) {
-                                RAISE_ERROR(BADARG_ATOM);
-                            } else {
-                                JUMP_TO_LABEL(mod, fail);
-                            }
-                        }
-                    }
-
-                    bool result;
-                    if (signed_size_value == 16) {
-                        result = bitstring_insert_f16(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                    } else if (signed_size_value == 32) {
-                        result = bitstring_insert_f32(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                    } else {
-                        result = bitstring_insert_f64(ctx->bs, ctx->bs_offset, float_value, flags_value);
-                    }
-
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_float: Failed to insert float into binary\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-
-                    ctx->bs_offset += signed_size_value * unit;
-                #endif
-                break;
-            }
-#endif
-
-            case OP_BS_PUT_STRING: {
-                uint32_t size;
-                DECODE_LITERAL(size, pc);
-                uint32_t offset;
-                DECODE_LITERAL(offset, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_put_string/2\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    if (UNLIKELY(!term_is_binary(ctx->bs))) {
-                        TRACE("bs_put_string: Bad state.  ctx->bs is not a binary.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-
-                    TRACE("bs_put_string/2, size=%u offset=%u\n", size, offset);
-
-                    size_t remaining = 0;
-                    const uint8_t *str = module_get_str(mod, offset, &remaining);
-                    if (IS_NULL_PTR(str)) {
-                        TRACE("bs_put_string: Bad offset in strings table.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-
-                    size_t size_in_bits = size * 8;
-                    uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs);
-                    bitstring_copy_bits(dst, ctx->bs_offset, str, size_in_bits);
-                    ctx->bs_offset += size_in_bits;
-                #endif
-                break;
-            }
-#endif
-
-#if MINIMUM_OTP_COMPILER_VERSION <= 21
-            case OP_BS_START_MATCH2: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-                uint32_t live;
-                DECODE_LITERAL(live, pc);
-                term slots_term;
-                DECODE_COMPACT_TERM(slots_term, pc);
-                GC_SAFE_DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match2/5\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    TRACE("bs_start_match2/5, fail=%i src=0x%" TERM_X_FMT " live=%u arg3=0x%" TERM_X_FMT " dreg=%c%i\n", fail, src, (unsigned) live, slots_term, T_DEST_REG_GC_SAFE(dreg));
-                    if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        WRITE_REGISTER_GC_SAFE(dreg, src);
-                        pc = mod->labels[fail];
-                    } else {
-                        int slots = term_to_int(slots_term);
-
-                        TRIM_LIVE_REGS(live);
-                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                        x_regs[live] = src;
-                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE + slots, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        src = x_regs[live];
-
-                        term match_state = term_alloc_bin_match_state(src, slots, &ctx->heap);
-
-                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
-                    }
-                #endif
-                break;
-            }
-#endif
-
-#if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_BS_START_MATCH3: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -5166,8 +4475,8 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
-#endif
 
+#if MINIMUM_OTP_COMPILER_VERSION <= 27
             case OP_BS_MATCH_STRING: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -5249,64 +4558,6 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
-
-#if MINIMUM_OTP_COMPILER_VERSION <= 21
-            case OP_BS_SAVE2: {
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-                term index = 0;
-                DECODE_COMPACT_TERM(index, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_save2/2\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_save2", 0);
-
-                    avm_int_t index_val;
-                    if (index == START_ATOM) {
-                        // TODO: not sure if 'start' is used anytime in generated code
-                        term_match_state_save_start_offset(src);
-                    } else if (term_is_integer(index)) {
-                        index_val = term_to_int(index);
-                        term_match_state_save_offset(src, index_val);
-                    } else {
-                        AVM_ABORT();
-                    }
-
-                    TRACE("bs_save2/2, src=0x%" TERM_X_FMT " pos=" AVM_INT_FMT "\n", src, index == START_ATOM ? -1 : index_val);
-                #endif
-                break;
-            }
-
-            case OP_BS_RESTORE2: {
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-                term index = 0;
-                DECODE_COMPACT_TERM(index, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_restore2/5\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_restore2", 0);
-
-                    avm_int_t index_val;
-                    if (index == START_ATOM) {
-                        term_match_state_restore_start_offset(src);
-                    } else if (term_is_integer(index)) {
-                        index_val = term_to_int(index);
-                        term_match_state_restore_offset(src, index_val);
-                    } else {
-                        AVM_ABORT();
-                    }
-
-                    TRACE("bs_restore2/2, src=0x%" TERM_X_FMT " pos=" AVM_INT_FMT "\n", src, index == START_ATOM ? -1 : index_val);
-                #endif
-                break;
-            }
 #endif
 
             case OP_BS_SKIP_BITS2: {
@@ -5347,33 +4598,7 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 24
-            case OP_BS_TEST_UNIT: {
-                uint32_t fail;
-                DECODE_LABEL(fail, pc)
-                term src;
-                DECODE_COMPACT_TERM(src, pc);
-                uint32_t unit;
-                DECODE_LITERAL(unit, pc);
-
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_test_unit/3\n");
-                #endif
-
-                #ifdef IMPL_EXECUTE_LOOP
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
-
-                    TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
-
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    if ((term_binary_size(src) * 8 - bs_offset) % unit != 0) {
-                        TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    }
-                #endif
-                break;
-            }
-
+#if MINIMUM_OTP_COMPILER_VERSION <= 26
             case OP_BS_TEST_TAIL2: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -6036,28 +5261,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 23
-            //it looks like it can be safely left unimplemented
-            case OP_RECV_MARK: {
-                uint32_t label;
-                DECODE_LABEL(label, pc);
-
-                TRACE("recv_mark/1 label=%i\n", label);
-                USED_BY_TRACE(label);
-                break;
-            }
-
-            //it looks like it can be safely left unimplemented
-            case OP_RECV_SET: {
-                uint32_t label;
-                DECODE_LABEL(label, pc);
-
-                TRACE("recv_set/1 label=%i\n", label);
-                USED_BY_TRACE(label);
-                break;
-            }
-#endif
-
             case OP_LINE: {
                 #ifdef IMPL_CODE_LOADER
                     unsigned int offset = pc - code;
@@ -6406,21 +5609,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MINIMUM_OTP_COMPILER_VERSION <= 23
-            case OP_FCLEARERROR: {
-                // This can be a noop as we raise from bifs
-                TRACE("fclearerror/0\n");
-                break;
-            }
-
-            case OP_FCHECKERROR: {
-                // This can be a noop as we raise from bifs
-                int fail_label;
-                DECODE_LABEL(fail_label, pc);
-                break;
-            }
-#endif
-
             case OP_FMOVE: {
                 if (IS_EXTENDED_FP_REGISTER(pc)) {
                     int freg;
@@ -6764,7 +5952,6 @@ wait_timeout_trap_handler:
                 break;
             }
 
-#if MAXIMUM_OTP_COMPILER_VERSION >= 22
             case OP_PUT_TUPLE2: {
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
@@ -6797,9 +5984,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
-#endif
 
-#if MAXIMUM_OTP_COMPILER_VERSION >= 23
             case OP_SWAP: {
                 DEST_REGISTER(reg_a);
                 DECODE_DEST_REGISTER(reg_a, pc);
@@ -6857,9 +6042,7 @@ wait_timeout_trap_handler:
                 #endif
                 break;
             }
-#endif
 
-#if MAXIMUM_OTP_COMPILER_VERSION >= 24
             case OP_MAKE_FUN3: {
                 uint32_t fun_index;
                 DECODE_LITERAL(fun_index, pc);
@@ -6941,9 +6124,7 @@ wait_timeout_trap_handler:
                 TRACE("recv_marker_use/1: reg1=%c%i\n", T_DEST_REG(reg_a));
                 break;
             }
-#endif
 
-#if MAXIMUM_OTP_COMPILER_VERSION >= 25
             case OP_BS_CREATE_BIN: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc);
@@ -7386,9 +6567,7 @@ wait_timeout_trap_handler:
 
                 break;
             }
-#endif
 
-#if MAXIMUM_OTP_COMPILER_VERSION >= 26
             case OP_UPDATE_RECORD: {
                 #ifdef IMPL_CODE_LOADER
                     TRACE("update_record/5\n");
@@ -7716,7 +6895,6 @@ bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 #endif
             }
-#endif
 
             default:
                 printf("Undecoded opcode: %i\n", pc[-1]);

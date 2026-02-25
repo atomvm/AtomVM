@@ -138,13 +138,8 @@ loop(Socket, I) ->
     end.
 
 test_listen_connect_parameters() ->
-    case get_otp_version() of
-        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
-            ok = test_listen_connect_parameters(socket, socket),
-            ok = test_listen_connect_parameters(inet, inet);
-        _ ->
-            ok = test_listen_connect_parameters(inet, inet)
-    end,
+    ok = test_listen_connect_parameters(socket, socket),
+    ok = test_listen_connect_parameters(inet, inet),
     ok.
 
 test_listen_connect_parameters(InetClientBackend, InetServerBackend) ->
@@ -169,15 +164,8 @@ test_listen_connect_parameters(
     InetClientBackend, InetServerBackend, ListenMode, ConnectMode, ListenActive, ConnectActive
 ) ->
     etest:flush_msg_queue(),
-
-    case get_otp_version() of
-        Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
-            ServerBackendOption = [{inet_backend, InetServerBackend}],
-            ClientBackendOption = [{inet_backend, InetClientBackend}];
-        _ ->
-            ServerBackendOption = [],
-            ClientBackendOption = []
-    end,
+    ServerBackendOption = [{inet_backend, InetServerBackend}],
+    ClientBackendOption = [{inet_backend, InetClientBackend}],
 
     io:format(
         "GEN_TCP-TEST> ServerBackendOption=~p ClientBackendOption=~p ListenMode=~p ConnectMode=~p ListenActive=~p ConnectActive=~p~n",
@@ -378,21 +366,12 @@ test_connect_parameters() ->
         end,
     Hostname = "www.atomvm.org",
     Port = 80,
-    OptTests =
-        case get_otp_version() of
-            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
-                [
-                    [{active, true}],
-                    [{active, false}],
-                    [{inet_backend, socket}, {active, true}],
-                    [{inet_backend, socket}, {active, false}]
-                ];
-            _ ->
-                [
-                    [{active, true}],
-                    [{active, false}]
-                ]
-        end,
+    OptTests = [
+        [{active, true}],
+        [{active, false}],
+        [{inet_backend, socket}, {active, true}],
+        [{inet_backend, socket}, {active, false}]
+    ],
     test_connect_parameters(OptTests, IP, Hostname, Port, []).
 
 test_connect_parameters([], _IP, _Host, _Port, Results) ->
@@ -427,13 +406,7 @@ test_connect_parameters([Test | TestOpts], IP, Host, Port, Results) ->
 
 test_connect_bad_address() ->
     InetTest = test_connect_bad_address(inet_backend, []),
-    SocketTest =
-        case get_otp_version() of
-            Version when Version =:= atomvm orelse (is_integer(Version) andalso Version >= 24) ->
-                test_connect_bad_address(socket_backend, [{inet_backend, socket}]);
-            _ ->
-                ok
-        end,
+    SocketTest = test_connect_bad_address(socket_backend, [{inet_backend, socket}]),
     Result = [InetTest, SocketTest],
     case Result of
         [ok, ok] ->
@@ -532,11 +505,3 @@ test_tcp_double_close() ->
     ok = gen_tcp:close(Socket),
     {error, closed} = gen_tcp:recv(Socket, 512, 5000),
     ok.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" ->
-            list_to_integer(erlang:system_info(otp_release));
-        _ ->
-            atomvm
-    end.

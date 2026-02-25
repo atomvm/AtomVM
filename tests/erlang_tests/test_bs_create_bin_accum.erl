@@ -23,21 +23,8 @@
 -export([start/0]).
 
 start() ->
-    HasBSCreateBin =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "25";
-            "ATOM" ->
-                ?OTP_RELEASE >= 25
-        end,
-    ok =
-        if
-            HasBSCreateBin ->
-                ok = test_int_utf8(),
-                ok = test_int_float();
-            true ->
-                ok
-        end,
+    ok = test_int_utf8(),
+    ok = test_int_float(),
     0.
 
 test_int_utf8() ->

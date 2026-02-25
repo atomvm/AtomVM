@@ -67,13 +67,7 @@ test_node_distribution() ->
     ok.
 
 has_setnode_creation() ->
-    case erlang:system_info(machine) of
-        "ATOM" ->
-            true;
-        "BEAM" ->
-            OTPRelease = erlang:system_info(otp_release),
-            OTPRelease >= "23"
-    end.
+    true.
 
 get_creation() ->
     case erlang:system_info(machine) of

@@ -93,6 +93,7 @@ instead `badarg`.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
 - When function head doesn't match, function arguments are now in stacktrace
 - Function arguments are added to stacktrace also for some NIFs, when one of the arguments is badarg
+- Removed support for OTP versions < 26
 
 ### Fixed
 

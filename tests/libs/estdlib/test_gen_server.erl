@@ -94,23 +94,17 @@ test_start_link() ->
     ok.
 
 test_start_monitor() ->
-    case get_otp_version() of
-        %% Test on AtomVM and OTP 23 and later
-        Version when Version >= 23 ->
-            {ok, {Pid, Ref}} = gen_server:start_monitor(?MODULE, [], []),
+    {ok, {Pid, Ref}} = gen_server:start_monitor(?MODULE, [], []),
 
-            pong = gen_server:call(Pid, ping),
-            pong = gen_server:call(Pid, reply_ping),
-            ok = gen_server:cast(Pid, crash),
-            ok =
-                receive
-                    {'DOWN', Ref, process, Pid, _Reason} -> ok
-                after 30000 -> timeout
-                end,
-            ok;
-        _ ->
-            ok
-    end.
+    pong = gen_server:call(Pid, ping),
+    pong = gen_server:call(Pid, reply_ping),
+    ok = gen_server:cast(Pid, crash),
+    ok =
+        receive
+            {'DOWN', Ref, process, Pid, _Reason} -> ok
+        after 30000 -> timeout
+        end,
+    ok.
 
 test_start_name() ->
     undefined = whereis(?MODULE),
@@ -131,18 +125,12 @@ test_start_name() ->
     undefined = whereis(?MODULE),
     true = erlang:process_flag(trap_exit, PreviousTrapExit),
 
-    case get_otp_version() of
-        %% Test on AtomVM and OTP 23 and later
-        Version when Version >= 23 ->
-            {ok, {Pid3, MonitorRef}} = gen_server:start_monitor({local, ?MODULE}, ?MODULE, [], []),
-            Pid3 = whereis(?MODULE),
-            % Demonitor to avoid any DOWN message
-            true = demonitor(MonitorRef),
-            ok = gen_server:stop(Pid3),
-            undefined = whereis(?MODULE);
-        _ ->
-            ok
-    end,
+    {ok, {Pid3, MonitorRef}} = gen_server:start_monitor({local, ?MODULE}, ?MODULE, [], []),
+    Pid3 = whereis(?MODULE),
+    % Demonitor to avoid any DOWN message
+    true = demonitor(MonitorRef),
+    ok = gen_server:stop(Pid3),
+    undefined = whereis(?MODULE),
     ok.
 
 test_continue() ->
