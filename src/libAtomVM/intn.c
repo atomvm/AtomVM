@@ -434,7 +434,7 @@ size_t intn_divu(const intn_digit_t m[], size_t m_len, const intn_digit_t n[], s
     return padded_q_len / UINT16_IN_A_DIGIT;
 }
 
-int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len)
+int intn_cmpu(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len)
 {
     size_t normal_a_len = intn_count_digits(a, a_len);
     size_t normal_b_len = intn_count_digits(b, b_len);
@@ -456,6 +456,18 @@ int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_
     }
 
     return 0;
+}
+
+int intn_cmp(const intn_digit_t a[], size_t a_len, intn_integer_sign_t a_sign,
+    const intn_digit_t b[], size_t b_len, intn_integer_sign_t b_sign)
+{
+    if (a_sign != b_sign) {
+        return (a_sign == IntNNegativeInteger) ? -1 : 1;
+    }
+
+    int cmp = intn_cmpu(a, a_len, b, b_len);
+
+    return (a_sign == IntNNegativeInteger) ? -cmp : cmp;
 }
 
 size_t intn_addu(
@@ -515,7 +527,7 @@ size_t intn_add(const intn_digit_t m[], size_t m_len, intn_integer_sign_t m_sign
     }
     // Case 2: Different signs - subtract smaller from larger
     else {
-        int cmp = intn_cmp(m, m_len, n, n_len);
+        int cmp = intn_cmpu(m, m_len, n, n_len);
         if (cmp >= 0) {
             // |m| >= |n|, result takes sign of m
             *out_sign = m_sign;

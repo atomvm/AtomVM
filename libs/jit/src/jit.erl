@@ -2533,7 +2533,26 @@ first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     ?TRACE("]\n", []),
     MSt9 = MMod:free_native_registers(MSt8, [BSBinaryReg, NewBSOffsetReg, MatchStateReg2]),
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
-    first_pass(Rest4, MMod, MSt9, State0).
+    first_pass(Rest4, MMod, MSt9, State0);
+% 185
+first_pass(<<?OP_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {FailLabel, Rest1} = decode_label(Rest0),
+    {Bif, Rest2} = decode_literal(Rest1),
+    {MSt1, FuncPtr} = MMod:call_primitive(MSt0, ?PRIM_GET_IMPORTED_BIF, [
+        jit_state, Bif
+    ]),
+    {MSt2, Arg1, Rest3} = decode_compact_term(Rest2, MMod, MSt1, State0),
+    {MSt3, Arg2, Rest4} = decode_compact_term(Rest3, MMod, MSt2, State0),
+    {MSt4, Arg3, Rest5} = decode_compact_term(Rest4, MMod, MSt3, State0),
+    {MSt5, Dest, Rest6} = decode_dest(Rest5, MMod, MSt4),
+    ?TRACE("OP_BIF3 ~p, ~p, ~p, ~p, ~p, ~p\n", [FailLabel, Bif, Arg1, Arg2, Arg3, Dest]),
+    {MSt6, ResultReg} = MMod:call_func_ptr(MSt5, {free, FuncPtr}, [
+        ctx, FailLabel, {free, Arg1}, {free, Arg2}, {free, Arg3}
+    ]),
+    MSt7 = bif_faillabel_test(FailLabel, MMod, MSt6, {free, ResultReg}, {free, Dest}),
+    ?ASSERT_ALL_NATIVE_FREE(MSt7),
+    first_pass(Rest6, MMod, MSt7, State0).
 
 first_pass_bs_create_bin_compute_size(
     AtomType, Src, _Size, _SegmentUnit, Fail, AccLiteralSize0, AccSizeReg0, MMod, MSt0, State0

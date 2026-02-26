@@ -299,7 +299,7 @@ jobs:
           compiler_pkgs: "gcc-10 g++-10 gcc-10-multilib g++-10-multilib libc6-dev-i386
             libc6-dbg:i386 zlib1g-dev:i386 libmbedtls-dev:i386"
 
-        # JIT build
+        # JIT build with OTP-28
         - os: "ubuntu-24.04"
           cc: "cc"
           cxx: "c++"
@@ -307,6 +307,18 @@ jobs:
           otp: "28"
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          jit_target_arch: "x86_64"
+
+        # JIT build with OTP-29.0-rc1
+        - os: "ubuntu-24.04"
+          cc: "cc"
+          cxx: "c++"
+          cflags: ""
+          otp: "29.0-rc1"
+          version_type: "strict"
+          elixir_version: "1.19.5"
+          rebar3_version: "3.27.0"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "x86_64"
 
@@ -568,6 +580,7 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
+        version-type: ${{ matrix.version_type || 'loose' }}
         otp-version: ${{ matrix.otp }}
         elixir-version: ${{ matrix.elixir_version }}
         rebar3-version: ${{ matrix.rebar3_version }}

@@ -171,6 +171,7 @@
 #define OP_BADRECORD 180
 #define OP_UPDATE_RECORD 181
 #define OP_BS_MATCH 182
+#define OP_BIF3 185
 
 // Remember to keep this list in sync with libs/jit/src/opcodes.hrl
 

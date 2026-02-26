@@ -85,7 +85,7 @@ ecosystem. It can execute unmodified, compiled BEAM modules, and most
 [core standard library functions](https://doc.atomvm.org/main/api-reference-documentation.html)
 are already supported.
 
-AtomVM is tested with code compiled with any version from OTP 21 to 27 (28 is supported only in `main` branch).
+AtomVM is tested with code compiled with any version from OTP 21 to 27 (29 is supported only in `main` branch).
 
 Crashes may still occur in edge cases, so we recommend using either the
 [latest stable release](https://github.com/atomvm/AtomVM/releases)

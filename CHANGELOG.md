@@ -80,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for ESP32 development builds to include NVS partition data at build time
 - Added missing `inet` functions: `ntoa/1`, `parse_address/1`, `parse_ipv4_address/1`,
 `parse_ipv4strict_address/1`
+- Added support for new `is_integer/3` BIF, introduced with OTP-29
+- Support for OTP-29
 
 ### Changed
 
