@@ -32,7 +32,18 @@
     bsr_small/1,
     mul_const/1,
     mul_regs/2,
-    mul_regs_neg/2
+    mul_regs_neg/2,
+    div_by_literal/1,
+    div_regs/2,
+    rem_by_literal/1,
+    rem_regs/2,
+    div_negative/1,
+    rem_negative/1,
+    mul_neg_regs/2,
+    div_by_pow2/1,
+    rem_by_pow2/1,
+    div_by_pow2_large/1,
+    rem_by_pow2_large/1
 ]).
 
 % Test inline addition with safe ranges - SHOULD BE INLINED
@@ -80,6 +91,51 @@ mul_regs(X, Y) when is_integer(X), X >= 0, X < 100, is_integer(Y), Y >= 0, Y < 1
 % Exercises the reg*reg path where Arg2 can be negative
 mul_regs_neg(X, Y) when is_integer(X), X >= 0, X < 10, is_integer(Y), Y >= -10, Y < 10 ->
     X * Y.
+
+% Test inline div with literal divisor
+div_by_literal(X) when is_integer(X), X >= 0, X < 100 ->
+    X div 3.
+
+% Test inline div with register operands
+div_regs(X, Y) when is_integer(X), X >= 0, X < 100, is_integer(Y), Y >= 1, Y < 50 ->
+    X div Y.
+
+% Test inline rem with literal divisor
+rem_by_literal(X) when is_integer(X), X >= 0, X < 100 ->
+    X rem 3.
+
+% Test inline rem with register operands
+rem_regs(X, Y) when is_integer(X), X >= 0, X < 100, is_integer(Y), Y >= 1, Y < 50 ->
+    X rem Y.
+
+% Test inline div with negative values
+div_negative(X) when is_integer(X), X >= -100, X < 100 ->
+    X div 3.
+
+% Test inline rem with negative values
+rem_negative(X) when is_integer(X), X >= -100, X < 100 ->
+    X rem 3.
+
+% Test multiplication with negative register operands
+% This tests correctness of the shift_right used in mul register-register path
+mul_neg_regs(X, Y) when is_integer(X), X >= -10, X =< 10, is_integer(Y), Y >= -10, Y =< 10 ->
+    X * Y.
+
+% Test inline div by power of 2 - should use shift optimization
+div_by_pow2(X) when is_integer(X), X >= 0, X < 100 ->
+    X div 4.
+
+% Test inline rem by power of 2 - should use AND optimization
+rem_by_pow2(X) when is_integer(X), X >= 0, X < 100 ->
+    X rem 8.
+
+% Test div by larger power of 2
+div_by_pow2_large(X) when is_integer(X), X >= 0, X < 10000 ->
+    X div 256.
+
+% Test rem by larger power of 2
+rem_by_pow2_large(X) when is_integer(X), X >= 0, X < 10000 ->
+    X rem 256.
 
 start() ->
     % Test safe addition - should be inlined
@@ -145,5 +201,87 @@ start() ->
     -30 = ?MODULE:mul_regs_neg(6, -5),
     -9 = ?MODULE:mul_regs_neg(9, -1),
     45 = ?MODULE:mul_regs_neg(9, 5),
+
+    % Test inline div by literal
+    0 = ?MODULE:div_by_literal(0),
+    0 = ?MODULE:div_by_literal(2),
+    1 = ?MODULE:div_by_literal(3),
+    3 = ?MODULE:div_by_literal(10),
+    33 = ?MODULE:div_by_literal(99),
+
+    % Test inline div with register operands
+    0 = ?MODULE:div_regs(0, 1),
+    5 = ?MODULE:div_regs(10, 2),
+    3 = ?MODULE:div_regs(10, 3),
+    2 = ?MODULE:div_regs(10, 4),
+    2 = ?MODULE:div_regs(99, 49),
+
+    % Test inline rem by literal
+    0 = ?MODULE:rem_by_literal(0),
+    2 = ?MODULE:rem_by_literal(2),
+    0 = ?MODULE:rem_by_literal(3),
+    1 = ?MODULE:rem_by_literal(10),
+    0 = ?MODULE:rem_by_literal(99),
+
+    % Test inline rem with register operands
+    0 = ?MODULE:rem_regs(0, 1),
+    0 = ?MODULE:rem_regs(10, 2),
+    1 = ?MODULE:rem_regs(10, 3),
+    2 = ?MODULE:rem_regs(10, 4),
+    1 = ?MODULE:rem_regs(99, 49),
+
+    % Test inline div with negative values
+    0 = ?MODULE:div_negative(0),
+    -1 = ?MODULE:div_negative(-3),
+    0 = ?MODULE:div_negative(-2),
+    -33 = ?MODULE:div_negative(-99),
+    3 = ?MODULE:div_negative(10),
+    -3 = ?MODULE:div_negative(-10),
+
+    % Test inline rem with negative values
+    0 = ?MODULE:rem_negative(0),
+    0 = ?MODULE:rem_negative(-3),
+    -2 = ?MODULE:rem_negative(-2),
+    0 = ?MODULE:rem_negative(-99),
+    1 = ?MODULE:rem_negative(10),
+    -1 = ?MODULE:rem_negative(-10),
+
+    % Test multiplication with negative register operands
+    0 = ?MODULE:mul_neg_regs(0, 5),
+    -50 = ?MODULE:mul_neg_regs(-5, 10),
+    50 = ?MODULE:mul_neg_regs(-5, -10),
+    100 = ?MODULE:mul_neg_regs(10, 10),
+    -100 = ?MODULE:mul_neg_regs(10, -10),
+    100 = ?MODULE:mul_neg_regs(-10, -10),
+
+    % Test div by power of 2 (shift optimization)
+    0 = ?MODULE:div_by_pow2(0),
+    0 = ?MODULE:div_by_pow2(3),
+    1 = ?MODULE:div_by_pow2(4),
+    1 = ?MODULE:div_by_pow2(7),
+    2 = ?MODULE:div_by_pow2(8),
+    24 = ?MODULE:div_by_pow2(99),
+
+    % Test rem by power of 2 (AND optimization)
+    0 = ?MODULE:rem_by_pow2(0),
+    3 = ?MODULE:rem_by_pow2(3),
+    0 = ?MODULE:rem_by_pow2(8),
+    1 = ?MODULE:rem_by_pow2(9),
+    7 = ?MODULE:rem_by_pow2(15),
+    3 = ?MODULE:rem_by_pow2(99),
+
+    % Test div by larger power of 2
+    0 = ?MODULE:div_by_pow2_large(0),
+    0 = ?MODULE:div_by_pow2_large(255),
+    1 = ?MODULE:div_by_pow2_large(256),
+    3 = ?MODULE:div_by_pow2_large(1000),
+    39 = ?MODULE:div_by_pow2_large(9999),
+
+    % Test rem by larger power of 2
+    0 = ?MODULE:rem_by_pow2_large(0),
+    255 = ?MODULE:rem_by_pow2_large(255),
+    0 = ?MODULE:rem_by_pow2_large(256),
+    232 = ?MODULE:rem_by_pow2_large(1000),
+    15 = ?MODULE:rem_by_pow2_large(9999),
 
     0.
