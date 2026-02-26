@@ -56,6 +56,8 @@ test() ->
     ok = test_last(),
     ok = test_mapfoldl(),
     ok = test_append(),
+    ok = test_min(),
+    ok = test_max(),
     ok.
 
 test_nth() ->
@@ -483,6 +485,28 @@ test_append() ->
     ?ASSERT_MATCH(lists:append("abc", "def"), "abcdef"),
     ?ASSERT_MATCH(lists:append([1, 2], [3, 4]), [1, 2, 3, 4]),
     ?ASSERT_ERROR(lists:append(1, 3), badarg),
+    ok.
+
+test_min() ->
+    ?ASSERT_MATCH(lists:min([1]), 1),
+    ?ASSERT_MATCH(lists:min([1, 2, 3]), 1),
+    ?ASSERT_MATCH(lists:min([3, 1, 2]), 1),
+    ?ASSERT_MATCH(lists:min([3, 2, 1]), 1),
+    ?ASSERT_MATCH(lists:min([-5, 0, 5]), -5),
+    ?ASSERT_MATCH(lists:min([a, b, c]), a),
+    ?ASSERT_MATCH(lists:min([c, b, a]), a),
+    ?ASSERT_ERROR(lists:min([]), function_clause),
+    ok.
+
+test_max() ->
+    ?ASSERT_MATCH(lists:max([1]), 1),
+    ?ASSERT_MATCH(lists:max([1, 2, 3]), 3),
+    ?ASSERT_MATCH(lists:max([3, 1, 2]), 3),
+    ?ASSERT_MATCH(lists:max([1, 3, 2]), 3),
+    ?ASSERT_MATCH(lists:max([-5, 0, 5]), 5),
+    ?ASSERT_MATCH(lists:max([a, b, c]), c),
+    ?ASSERT_MATCH(lists:max([c, b, a]), c),
+    ?ASSERT_ERROR(lists:max([]), function_clause),
     ok.
 
 id(X) ->
