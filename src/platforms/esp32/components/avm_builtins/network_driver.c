@@ -754,8 +754,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             goto cleanup1;
         } else {
             ESP_LOGI(TAG, "STA mode configured");
-            free(sta_wifi_config);
-            sta_wifi_config = NULL;
         }
     }
 
@@ -771,8 +769,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
             goto cleanup1;
         } else {
             ESP_LOGI(TAG, "AP mode configured");
-            free(ap_wifi_config);
-            ap_wifi_config = NULL;
         }
     }
 
@@ -807,6 +803,7 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     // Done -- send an ok so the FSM can proceed
     //
     port_send_reply(ctx, pid, ref, OK_ATOM);
+    goto cleanup;
 
 cleanup0:
     free(sta_wifi_config);
