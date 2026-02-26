@@ -55,6 +55,7 @@ term bif_erlang_is_float_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_function_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_function_2(Context *ctx, uint32_t fail_label, term arg1, term arg2);
 term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1);
+term bif_erlang_is_integer_3(Context *ctx, uint32_t fail_label, term arg1, term arg2, term arg3);
 term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_number_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_is_pid_1(Context *ctx, uint32_t fail_label, term arg1);

@@ -50,6 +50,7 @@ erlang:is_float/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang
 erlang:is_function/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_function_1}
 erlang:is_function/2, {.bif.base.type = BIFFunctionType, .bif.bif2_ptr = bif_erlang_is_function_2}
 erlang:is_integer/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_integer_1}
+erlang:is_integer/3, {.bif.base.type = BIFFunctionType, .bif.bif3_ptr = bif_erlang_is_integer_3}
 erlang:is_list/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_list_1}
 erlang:is_number/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_number_1}
 erlang:is_pid/1, {.bif.base.type = BIFFunctionType, .bif.bif1_ptr = bif_erlang_is_pid_1}

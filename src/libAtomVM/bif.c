@@ -81,6 +81,9 @@
 #define INT64_MAX_AS_AVM_FLOAT 9223372036854775295.0 // 0x43DFFFFFFFFFFFFF = 2^62 * 1.1...1b
 #endif
 
+static void conv_term_to_bigint(term t, intn_digit_t *tmp_buf, const intn_digit_t **bigint,
+    size_t *bigint_len, intn_integer_sign_t *bigint_sign);
+
 const struct ExportedFunction *bif_registry_get_handler(const char *mfa)
 {
     const BifNameAndPtr *nameAndPtr = in_word_set(mfa, strlen(mfa));
@@ -248,6 +251,57 @@ term bif_erlang_is_integer_1(Context *ctx, uint32_t fail_label, term arg1)
     UNUSED(fail_label);
 
     return term_is_any_integer(arg1) ? TRUE_ATOM : FALSE_ATOM;
+}
+
+term bif_erlang_is_integer_3(Context *ctx, uint32_t fail_label, term arg1, term arg2, term arg3)
+{
+    UNUSED(ctx);
+    UNUSED(fail_label);
+
+    if (term_is_int(arg1) && term_is_int(arg2) && term_is_int(arg3)) {
+        avm_int_t n = term_to_int(arg1);
+        avm_int_t a = term_to_int(arg2);
+        avm_int_t b = term_to_int(arg3);
+        return (a <= n) && (n <= b) ? TRUE_ATOM : FALSE_ATOM;
+
+    } else if (term_is_int64(arg1) && term_is_int64(arg2) && term_is_int64(arg3)) {
+        avm_int64_t n = term_maybe_unbox_int64(arg1);
+        avm_int64_t a = term_maybe_unbox_int64(arg2);
+        avm_int64_t b = term_maybe_unbox_int64(arg3);
+        return (a <= n) && (n <= b) ? TRUE_ATOM : FALSE_ATOM;
+    } else {
+        if ((!term_is_any_integer(arg2) || !term_is_any_integer(arg3))) {
+            RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+        }
+        if (UNLIKELY(!term_is_any_integer(arg1))) {
+          return FALSE_ATOM;
+        }
+
+        intn_digit_t tmp_buf1[INTN_INT64_LEN];
+        intn_digit_t tmp_buf2[INTN_INT64_LEN];
+
+        const intn_digit_t *big1;
+        size_t big1_len;
+        intn_integer_sign_t big1_sign;
+        conv_term_to_bigint(arg1, tmp_buf1, &big1, &big1_len, &big1_sign);
+
+        const intn_digit_t *big2;
+        size_t big2_len;
+        intn_integer_sign_t big2_sign;
+        conv_term_to_bigint(arg2, tmp_buf2, &big2, &big2_len, &big2_sign);
+
+        // `big1` is `n`, `big2` is `a`
+        if (intn_cmp(big2, big2_len, big2_sign, big1, big1_len, big1_sign) <= 0) {
+            // reuse tmp_buf2; we no longer need `a`
+            conv_term_to_bigint(arg3, tmp_buf2, &big2, &big2_len, &big2_sign); // now `big2` is `b`
+
+            if (intn_cmp(big1, big1_len, big1_sign, big2, big2_len, big2_sign) <= 0) {
+                return TRUE_ATOM;
+            }
+        }
+
+        return FALSE_ATOM;
+    }
 }
 
 term bif_erlang_is_list_1(Context *ctx, uint32_t fail_label, term arg1)
@@ -1033,7 +1087,7 @@ static term div_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_integer_sign_t big2_sign;
     conv_term_to_bigint(arg2, tmp_buf2, &big2, &big2_len, &big2_sign);
 
-    int cmp_result = intn_cmp(big1, big1_len, big2, big2_len);
+    int cmp_result = intn_cmpu(big1, big1_len, big2, big2_len);
     if (cmp_result < 0) {
         // a / b when a < b -> always 0
         return term_from_int(0);
@@ -1356,7 +1410,7 @@ static term rem_maybe_bigint(Context *ctx, uint32_t fail_label, uint32_t live, t
     intn_integer_sign_t big2_sign;
     conv_term_to_bigint(arg2, tmp_buf2, &big2, &big2_len, &big2_sign);
 
-    int cmp_result = intn_cmp(big1, big1_len, big2, big2_len);
+    int cmp_result = intn_cmpu(big1, big1_len, big2, big2_len);
     if (cmp_result < 0) {
         // a rem b when |a| < |b| -> always a
         return arg1;
