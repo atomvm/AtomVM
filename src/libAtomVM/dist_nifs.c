@@ -29,7 +29,7 @@
 #include "defaultatoms.h"
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
-#include "externalterm.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "list.h"
 #include "memory.h"
@@ -138,20 +138,20 @@ static void dist_connection_dtor(ErlNifEnv *caller_env, void *obj)
 static void dist_enqueue_message(term control_message, term payload, struct DistConnection *connection, GlobalContext *global)
 {
     size_t control_message_size = 0; // some compilers including esp-idf 5.0.7 are not smart enough
-    enum ExternalTermResult serialize_result = externalterm_compute_external_size(control_message, &control_message_size, global);
-    if (LIKELY(serialize_result == EXTERNAL_TERM_OK)) {
+    external_term_write_result_t serialize_result = external_term_compute_external_size(control_message, &control_message_size, global);
+    if (LIKELY(serialize_result == ExternalTermWriteOk)) {
         size_t payload_size = 0;
         if (!term_is_invalid_term(payload)) {
-            serialize_result = externalterm_compute_external_size(payload, &payload_size, global);
+            serialize_result = external_term_compute_external_size(payload, &payload_size, global);
         }
-        if (LIKELY(serialize_result == EXTERNAL_TERM_OK)) {
+        if (LIKELY(serialize_result == ExternalTermWriteOk)) {
             struct DistributionPacket *packet = malloc(sizeof(struct DistributionPacket) + 1 + control_message_size + payload_size);
             if (LIKELY(packet != NULL)) {
                 packet->size = 1 + control_message_size + payload_size;
                 packet->bytes[0] = 112;
-                externalterm_serialize_term(&packet->bytes[1], control_message, global);
+                external_term_serialize_term(control_message, &packet->bytes[1], global);
                 if (!term_is_invalid_term(payload)) {
-                    externalterm_serialize_term(&packet->bytes[1 + control_message_size], payload, global);
+                    external_term_serialize_term(payload, &packet->bytes[1 + control_message_size], global);
                 }
                 // Use the lock on the list of pending packets to notify process
                 struct ListHead *pending_packets = synclist_wrlock(&connection->pending_packets);
@@ -462,7 +462,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
     struct DistConnection *conn_obj = (struct DistConnection *) rsrc_obj_ptr;
 
     size_t bytes_read = 0;
-    term control = externalterm_from_binary_with_roots(ctx, 1, 1, &bytes_read, 2, argv);
+    term control = external_term_from_binary_with_roots(ctx, 1, 1, &bytes_read, 2, argv);
 
     if (UNLIKELY(!term_is_tuple(control))) {
         RAISE_ERROR(BADARG_ATOM);
@@ -505,7 +505,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             term to_name = term_get_tuple_element(control, 3);
             term target_process_pid = globalcontext_get_registered_process(ctx->global, term_to_atom_index(to_name));
             if (term_is_local_pid(target_process_pid)) {
-                term payload = externalterm_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 2, argv);
+                term payload = external_term_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 2, argv);
                 globalcontext_send_message(ctx->global, term_to_local_process_id(target_process_pid), payload);
             }
             break;
@@ -556,7 +556,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
                 RAISE_ERROR(BADARG_ATOM);
             }
             int target_process_id = term_to_local_process_id(target);
-            term payload = externalterm_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 2, argv);
+            term payload = external_term_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 2, argv);
             globalcontext_send_message(ctx->global, target_process_id, payload);
             break;
         }
@@ -568,7 +568,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             roots[0] = argv[0]; // dist handle, ensure it's not garbage collected until we return
             roots[1] = argv[1];
             roots[2] = control;
-            roots[3] = externalterm_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 3, roots);
+            roots[3] = external_term_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 3, roots);
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(1, TUPLE_SIZE(2) + TUPLE_SIZE(5)), 4, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }
@@ -619,7 +619,7 @@ static term nif_erlang_dist_ctrl_put_data(Context *ctx, int argc, term argv[])
             roots[0] = argv[0]; // dist handle, ensure it's not garbage collected until we return
             roots[1] = argv[1];
             roots[2] = control;
-            roots[3] = externalterm_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 3, roots);
+            roots[3] = external_term_from_binary_with_roots(ctx, 1, 1 + bytes_read, &bytes_read, 3, roots);
             if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 4, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
             }

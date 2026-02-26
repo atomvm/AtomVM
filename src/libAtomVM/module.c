@@ -24,7 +24,7 @@
 #include "atom_table.h"
 #include "bif.h"
 #include "context.h"
-#include "externalterm.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "iff.h"
 #include "jit.h"
@@ -570,7 +570,7 @@ static struct LiteralEntry *module_build_literals_table(const void *literalsBuf)
 
 term module_load_literal(Module *mod, int index, Context *ctx)
 {
-    term t = externalterm_from_const_literal(mod->literals_table[index].data, mod->literals_table[index].size, ctx);
+    term t = external_term_from_const_literal(mod->literals_table[index].data, mod->literals_table[index].size, ctx);
     if (UNLIKELY(term_is_invalid_term(t))) {
         fprintf(stderr, "Either OOM or invalid term while reading literals_table[%i] from module\n", index);
     }

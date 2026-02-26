@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
-#include "externalterm.h"
+#include "external_term.h"
 
 #include "context.h"
 #include "list.h"
@@ -79,10 +79,45 @@
 static term parse_external_terms(const uint8_t *external_term_buf, size_t *eterm_size, bool copy, Heap *heap, GlobalContext *glb);
 static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaining, size_t *eterm_size, bool copy);
 static size_t compute_external_size(term t, GlobalContext *glb);
-static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
+static int external_term_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb);
 static int serialize_term(uint8_t *buf, term t, GlobalContext *glb);
 
-term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots)
+external_term_read_result_t external_term_validate_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, size_t *required_heap, size_t *bytes_read, GlobalContext *glb)
+{
+    UNUSED(opts);
+    UNUSED(glb);
+
+    size_t eterm_size = 0;
+    int heap_usage = calculate_heap_usage(buf, buf_size, &eterm_size, true);
+    if (UNLIKELY(heap_usage < 0)) {
+        return ExternalTermReadInvalid;
+    }
+
+    *bytes_read = eterm_size;
+    *required_heap = heap_usage;
+
+    return ExternalTermReadOk;
+}
+
+external_term_read_result_t external_term_deserialize_buf_raw(const void *buf, size_t buf_size,
+    external_term_read_opts_t opts, Heap *heap, term *out_term, GlobalContext *glb)
+{
+    UNUSED(buf_size);
+    UNUSED(opts);
+
+    size_t eterm_size = 0;
+    term result = parse_external_terms(buf, &eterm_size, true, heap, glb);
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        return ExternalTermReadInvalid;
+    }
+
+    *out_term = result;
+
+    return ExternalTermReadOk;
+}
+
+term external_term_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t offset, size_t *bytes_read, size_t num_roots, term *roots)
 {
     if (!term_is_binary(roots[binary_ix])) {
         return term_invalid_term();
@@ -114,7 +149,7 @@ term externalterm_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t 
     return result;
 }
 
-term externalterm_from_const_literal(const void *external_term, size_t size, Context *ctx)
+term external_term_from_const_literal(const void *external_term, size_t size, Context *ctx)
 {
     const uint8_t *external_term_buf = external_term;
     if (UNLIKELY(external_term_buf[0] != EXTERNAL_TERM_TAG)) {
@@ -136,12 +171,7 @@ term externalterm_from_const_literal(const void *external_term, size_t size, Con
     return result;
 }
 
-term externalterm_from_binary(Context *ctx, term binary, size_t *bytes_read)
-{
-    return externalterm_from_binary_with_roots(ctx, 0, 0, bytes_read, 1, &binary);
-}
-
-static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb)
+static int external_term_from_term(uint8_t **buf, size_t *len, term t, GlobalContext *glb)
 {
     *len = compute_external_size(t, glb) + 1;
     *buf = malloc(*len);
@@ -154,14 +184,14 @@ static int externalterm_from_term(uint8_t **buf, size_t *len, term t, GlobalCont
     return k + 1;
 }
 
-term externalterm_to_binary(Context *ctx, term t)
+term external_term_to_binary(Context *ctx, term t)
 {
     //
     // convert
     //
     uint8_t *buf;
     size_t len;
-    externalterm_from_term(&buf, &len, t, ctx->global);
+    external_term_from_term(&buf, &len, t, ctx->global);
     //
     // Ensure enough free space in heap for binary
     //
@@ -1384,17 +1414,17 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
     }
 }
 
-enum ExternalTermResult externalterm_compute_external_size_raw(
+external_term_write_result_t external_term_compute_external_size_raw(
     term t, size_t *size, GlobalContext *glb)
 {
     *size = compute_external_size(t, glb);
 
-    return EXTERNAL_TERM_OK;
+    return ExternalTermWriteOk;
 }
 
-enum ExternalTermResult externalterm_serialize_term_raw(void *buf, term t, GlobalContext *glb)
+external_term_write_result_t external_term_serialize_term_raw(term t, void *buf, GlobalContext *glb)
 {
     serialize_term(buf, t, glb);
 
-    return EXTERNAL_TERM_OK;
+    return ExternalTermWriteOk;
 }

@@ -43,7 +43,7 @@
 #include "dist_nifs.h"
 #include "erl_nif_priv.h"
 #include "ets.h"
-#include "externalterm.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "intn.h"
@@ -3138,9 +3138,6 @@ static term nif_erlang_system_flag(Context *ctx, int argc, term argv[])
 
 static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
 {
-    if (argc < 1 || 2 < argc) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
     if (argc == 2 && !term_is_list(argv[1])) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -3153,15 +3150,33 @@ static term nif_erlang_binary_to_term(Context *ctx, int argc, term argv[])
         && interop_proplist_get_value_default(argv[1], USED_ATOM, FALSE_ATOM) == TRUE_ATOM) {
         return_used = 1;
     }
-    size_t bytes_read = 0;
-    term dst = externalterm_from_binary(ctx, binary, &bytes_read);
-    if (UNLIKELY(term_is_invalid_term(dst))) {
+
+    GlobalContext *glb = ctx->global;
+
+    size_t required_heap;
+    size_t bytes_read;
+    external_term_read_result_t res = external_term_validate_buf(term_binary_data(binary),
+        term_binary_size(binary), ExternalTermReadNoOpts, &required_heap, &bytes_read, glb);
+    if (UNLIKELY(res != ExternalTermReadOk)) {
         RAISE_ERROR(BADARG_ATOM);
     }
+
     if (return_used) {
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &dst, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
+        required_heap += TUPLE_SIZE(2);
+    }
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, required_heap, 1, &binary, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term dst;
+    res = external_term_deserialize_buf(term_binary_data(binary), term_binary_size(binary),
+        ExternalTermReadNoOpts, &ctx->heap, &dst, glb);
+    if (UNLIKELY(res != ExternalTermReadOk)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (return_used) {
         term ret = term_alloc_tuple(2, &ctx->heap);
         term_put_tuple_element(ret, 0, dst);
         term_put_tuple_element(ret, 1, term_from_int(bytes_read));
@@ -3175,7 +3190,7 @@ static term nif_erlang_term_to_binary(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
     term t = argv[0];
-    term ret = externalterm_to_binary(ctx, t);
+    term ret = external_term_to_binary(ctx, t);
     if (term_is_invalid_term(ret)) {
         RAISE_ERROR(BADARG_ATOM);
     }

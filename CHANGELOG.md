@@ -26,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for list insertion in 'ets:insert/2'.
 - Support to OTP-28
 - Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
-- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
 - Added `erl_epmd` client implementation to epmd using `socket` module
 - Added support for socket asynchronous API for `recv`, `recvfrom` and `accept`.
 - Added support for UDP multicast with socket API.
@@ -75,7 +74,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
 - Release images for ESP32 chips are built with ESP-IDF v5.5
 - Only support ESP32P4 on ESP-IDF v5.5.2, v5.4.4 and later.
 - ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
@@ -94,6 +92,7 @@ instead `badarg`.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
 - When function head doesn't match, function arguments are now in stacktrace
 - Function arguments are added to stacktrace also for some NIFs, when one of the arguments is badarg
+- C API: `externalterm` module was renamed to `external_term` and it has a completely new API
 
 ### Fixed
 
