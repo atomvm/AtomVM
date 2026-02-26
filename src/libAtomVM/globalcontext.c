@@ -262,6 +262,7 @@ COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
     smp_mutex_destroy(glb->schedulers_mutex);
     smp_rwlock_destroy(glb->modules_lock);
 #endif
+    synclist_destroy(&glb->dist_connections);
     synclist_destroy(&glb->registered_processes);
     synclist_destroy(&glb->processes_table);
 
