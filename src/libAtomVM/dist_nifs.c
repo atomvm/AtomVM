@@ -111,6 +111,7 @@ struct DistConnection
 static void dist_connection_dtor(ErlNifEnv *caller_env, void *obj)
 {
     struct DistConnection *conn_obj = (struct DistConnection *) obj;
+    synclist_remove(&caller_env->global->dist_connections, &conn_obj->head);
     if (conn_obj->connection_process_id != INVALID_PROCESS_ID) {
         enif_demonitor_process(caller_env, conn_obj, &conn_obj->connection_process_monitor);
     }
@@ -132,7 +133,6 @@ static void dist_connection_dtor(ErlNifEnv *caller_env, void *obj)
     }
     synclist_unlock(&conn_obj->pending_packets);
     synclist_destroy(&conn_obj->pending_packets);
-    synclist_remove(&caller_env->global->dist_connections, &conn_obj->head);
 }
 
 static void dist_enqueue_message(term control_message, term payload, struct DistConnection *connection, GlobalContext *global)
