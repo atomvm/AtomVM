@@ -32,6 +32,28 @@ ok = net_kernel:set_cookie(<<"AtomVM">>).
 
 `net_kernel:stop/0` can be used to stop distribution.
 
+### Distribution options
+
+The options map passed to `net_kernel:start/2` supports an `avm_dist_opts` key containing a map of options that are forwarded to the distribution module's `listen/2` function.
+
+#### socket_dist options
+
+The built-in `socket_dist` module supports the following `avm_dist_opts`:
+
+- `listen_port_min` — minimum port number to listen on
+- `listen_port_max` — maximum port number to listen on
+
+Both must be specified together. `socket_dist` will try each port in the range until one is available. This is useful on systems where only a specific range of ports is open (e.g. firewall rules on embedded devices).
+
+```erlang
+{ok, _NetKernelPid} = net_kernel:start(mynode, #{
+    name_domain => shortnames,
+    avm_dist_opts => #{listen_port_min => 9100, listen_port_max => 9110}
+}).
+```
+
+When `avm_dist_opts` is omitted or the port keys are not set, the OS assigns an ephemeral port (the default behaviour).
+
 ## `epmd`
 
 AtomVM nodes can use Erlang/OTP's epmd on Unix systems. AtomVM is also bundled with a pure Erlang implementation of `epmd` which can be used on all platforms. Module is called `epmd`, to be distinguished from `erl_epmd` which is the client.

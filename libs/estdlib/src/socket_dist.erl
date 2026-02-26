@@ -22,6 +22,7 @@
 % dist interface
 -export([
     listen/1,
+    listen/2,
     accept/1,
     accept_connection/5,
     setup/5,
@@ -37,24 +38,60 @@
 
 -spec listen(string()) -> {ok, {any(), #net_address{}, pos_integer()}} | {error, any()}.
 listen(Name) ->
+    listen(Name, #{}).
+
+-spec listen(string(), map()) ->
+    {ok, {any(), #net_address{}, pos_integer()}} | {error, any()}.
+listen(Name, Opts) ->
+    PortMin = maps:get(listen_port_min, Opts, 0),
+    PortMax = maps:get(listen_port_max, Opts, 0),
+    validate_port_range(PortMin, PortMax),
+    try_listen_port(Name, PortMin, PortMax).
+
+validate_port_range(0, 0) -> ok;
+validate_port_range(Min, Max) when is_integer(Min), is_integer(Max), Min =< Max -> ok;
+validate_port_range(Min, Max) -> error({invalid_port_range, Min, Max}).
+
+try_listen_port(_Name, Port, PortMax) when Port > PortMax ->
+    {error, no_port_available};
+try_listen_port(Name, Port, PortMax) ->
+    case do_listen(Name, Port) of
+        {ok, _} = Ok -> Ok;
+        {error, _} when Port < PortMax -> try_listen_port(Name, Port + 1, PortMax);
+        {error, _} = Error -> Error
+    end.
+
+do_listen(Name, SocketPort) ->
     {ok, LSock} = socket:open(inet, stream, tcp),
-    ok = socket:bind(LSock, #{
-        family => inet,
-        port => 0,
-        addr => {0, 0, 0, 0}
-    }),
-    ok = socket:listen(LSock),
-    {ok, #{addr := Addr, port := Port}} = socket:sockname(LSock),
-    ErlEpmd = net_kernel:epmd_module(),
-    Address = #net_address{
-        host = Addr,
-        protocol = tcp,
-        family = inet
-    },
-    case ErlEpmd:register_node(Name, Port) of
-        {ok, Creation} ->
-            {ok, {LSock, Address, Creation}};
-        Error ->
+    case socket:bind(LSock, #{family => inet, port => SocketPort, addr => {0, 0, 0, 0}}) of
+        ok ->
+            case socket:listen(LSock) of
+                ok ->
+                    case socket:sockname(LSock) of
+                        {ok, #{addr := Addr, port := Port}} ->
+                            ErlEpmd = net_kernel:epmd_module(),
+                            Address = #net_address{
+                                host = Addr,
+                                protocol = tcp,
+                                family = inet
+                            },
+                            case ErlEpmd:register_node(Name, Port) of
+                                {ok, Creation} ->
+                                    {ok, {LSock, Address, Creation}};
+                                Error ->
+                                    socket:close(LSock),
+                                    Error
+                            end;
+                        {error, _} = Error ->
+                            socket:close(LSock),
+                            Error
+                    end;
+                {error, _} = Error ->
+                    socket:close(LSock),
+                    Error
+            end;
+        {error, _} = Error ->
+            socket:close(LSock),
             Error
     end.
 

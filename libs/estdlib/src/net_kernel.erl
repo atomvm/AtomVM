@@ -73,6 +73,7 @@
 %% @param Options options for distribution. Supported options are:
 %% - `name_domain' : whether name should be short or long
 %% - `proto_dist' : the module used for distribution (e.g. `socket_dist')
+%% - `avm_dist_opts' : a map of options passed through to the dist module's `listen/2'
 %%-----------------------------------------------------------------------------
 -spec start(atom(), map()) -> {ok, pid()}.
 start(Name, Options0) when is_atom(Name) andalso is_map(Options0) ->
@@ -81,6 +82,7 @@ start(Name, Options0) when is_atom(Name) andalso is_map(Options0) ->
             case Key of
                 name_domain when Val =:= shortnames orelse Val =:= longnames -> ok;
                 proto_dist when is_atom(Val) -> ok;
+                avm_dist_opts when is_map(Val) -> ok;
                 _ -> error({invalid_option, Key, Val}, [Name, Options0])
             end
         end,
@@ -189,13 +191,14 @@ init(Options) ->
     process_flag(trap_exit, true),
     LongNames = maps:get(name_domain, Options, longnames) =:= longnames,
     ProtoDist = maps:get(proto_dist, Options, socket_dist),
+    DistOpts = maps:get(avm_dist_opts, Options, #{}),
     Name = maps:get(name, Options),
     Node = maps:get(node, Options),
     Cookie = crypto:strong_rand_bytes(16),
     TickInterval = (?NET_TICK_TIME * 1000) div ?NET_TICK_INTENSITY,
     Self = self(),
     Ticker = spawn_link(fun() -> ticker(Self, TickInterval) end),
-    case ProtoDist:listen(Name) of
+    case ProtoDist:listen(Name, DistOpts) of
         {ok, {Listen, _Address, Creation}} ->
             true = erlang:setnode(Node, Creation),
             AcceptPid = ProtoDist:accept(Listen),
