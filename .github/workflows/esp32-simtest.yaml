@@ -80,26 +80,28 @@ jobs:
             "esp32c6",
             "esp32h2"
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.6", "v5.2.6", "v5.3.4", "v5.4.3", "v5.5.2"]')) || fromJSON('["v5.5.2"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.7", "v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["v5.5.3"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.1.6"
+            idf-version: "v5.1.7"
           - esp-idf-target: "esp32p4"
             idf-version: "v5.2.6"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.1.6"
+            idf-version: "v5.1.7"
           - esp-idf-target: "esp32h2"
             idf-version: "v5.2.6"
           - esp-idf-target: "esp32c5"
-            idf-version: "v5.1.6"
+            idf-version: "v5.1.7"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.2.6"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.3.4"
+          - esp-idf-target: "esp32c5"
+            idf-version: "v5.4.3"
         # CI now uses chip revision 3 that is currently only available in 5.5.2
         include:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.5.2"
+            idf-version: "v5.5.3"
 
     steps:
       - name: Checkout repo
@@ -110,14 +112,21 @@ jobs:
           set -eu
           apt update
           DEBIAN_FRONTEND=noninteractive apt install -y -q \
-              doxygen erlang-base erlang-dev erlang-dialyzer erlang-eunit \
-              erlang-asn1 erlang-common-test erlang-crypto erlang-edoc \
-              erlang-parsetools erlang-reltool erlang-syntax-tools erlang-tools \
-              libglib2.0-0 libpixman-1-0 \
+              doxygen libglib2.0-0 libpixman-1-0 \
               gcc g++ zlib1g-dev libsdl2-2.0-0 libslirp0 libmbedtls-dev
-          wget --no-verbose https://github.com/erlang/rebar3/releases/download/3.18.0/rebar3
-          chmod +x rebar3
-          ./rebar3 local install
+
+      - name: "Set ImageOS for erlef/setup-beam"
+        run: |
+          sed -n -E -e 's|VERSION_ID="(.+)\..+"|ImageOS=ubuntu\1|p' /etc/os-release >> ${GITHUB_ENV}
+
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "28"
+          rebar3-version: "3.25.1"
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://repo.hex.pm
+            https://cdn.jsdelivr.net/hex
 
       - name: Install the Wokwi CLI
         run: curl -L https://wokwi.com/ci/install.sh | sh
