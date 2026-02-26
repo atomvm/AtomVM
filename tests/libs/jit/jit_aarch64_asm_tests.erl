@@ -718,3 +718,33 @@ nop_test_() ->
             <<16#d503201f:32/little>>, "nop", jit_aarch64_asm:nop()
         )
     ].
+
+asr_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#9341fc41:32/little>>, "asr x1, x2, #1", jit_aarch64_asm:asr(r1, r2, 1)
+        ),
+        ?_assertAsmEqual(
+            <<16#9344fc41:32/little>>, "asr x1, x2, #4", jit_aarch64_asm:asr(r1, r2, 4)
+        ),
+        ?_assertAsmEqual(
+            <<16#937ffc00:32/little>>, "asr x0, x0, #63", jit_aarch64_asm:asr(r0, r0, 63)
+        )
+    ].
+
+sdiv_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#9ac30c41:32/little>>, "sdiv x1, x2, x3", jit_aarch64_asm:sdiv(r1, r2, r3)
+        ),
+        ?_assertAsmEqual(
+            <<16#9ac00c00:32/little>>, "sdiv x0, x0, x0", jit_aarch64_asm:sdiv(r0, r0, r0)
+        )
+    ].
+
+msub_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#9b039041:32/little>>, "msub x1, x2, x3, x4", jit_aarch64_asm:msub(r1, r2, r3, r4)
+        )
+    ].

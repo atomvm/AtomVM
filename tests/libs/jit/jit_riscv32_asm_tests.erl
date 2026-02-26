@@ -609,6 +609,32 @@ mul_test_() ->
         )
     ].
 
+div_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#02f54533:32/little>>, "div a0, a0, a5", jit_riscv32_asm:'div'(a0, a0, a5)
+        ),
+        ?_assertAsmEqual(
+            <<16#02b646b3:32/little>>, "div a3, a2, a1", jit_riscv32_asm:'div'(a3, a2, a1)
+        ),
+        ?_assertAsmEqual(
+            <<16#026342b3:32/little>>, "div t0, t1, t1", jit_riscv32_asm:'div'(t0, t1, t1)
+        )
+    ].
+
+rem_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#02f56533:32/little>>, "rem a0, a0, a5", jit_riscv32_asm:'rem'(a0, a0, a5)
+        ),
+        ?_assertAsmEqual(
+            <<16#02b666b3:32/little>>, "rem a3, a2, a1", jit_riscv32_asm:'rem'(a3, a2, a1)
+        ),
+        ?_assertAsmEqual(
+            <<16#026362b3:32/little>>, "rem t0, t1, t1", jit_riscv32_asm:'rem'(t0, t1, t1)
+        )
+    ].
+
 %%-----------------------------------------------------------------------------
 %% System instruction tests
 %%-----------------------------------------------------------------------------

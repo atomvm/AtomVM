@@ -61,7 +61,10 @@
     cmpb/2,
     xchgq/2,
     xorl/2,
-    xorq/2
+    xorq/2,
+    cqo/0,
+    idivq/1,
+    sarq/2
 ]).
 
 -define(IS_SINT8_T(X), is_integer(X) andalso X >= -128 andalso X =< 127).
@@ -650,3 +653,16 @@ xchgq(RegA, RegB) when is_atom(RegA), is_atom(RegB) ->
     {REX_R, MODRM_REG} = x86_64_x_reg(RegA),
     {REX_B, MODRM_RM} = x86_64_x_reg(RegB),
     <<?X86_64_REX(1, REX_R, 0, REX_B), 16#87, 3:2, MODRM_REG:3, MODRM_RM:3>>.
+
+cqo() ->
+    <<16#48, 16#99>>.
+
+idivq(Reg) when is_atom(Reg) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    <<?X86_64_REX(1, 0, 0, REX_B), 16#F7, 3:2, 7:3, MODRM_RM:3>>.
+
+sarq(Imm, Reg) when ?IS_UINT8_T(Imm) ->
+    case x86_64_x_reg(Reg) of
+        {0, Index} -> <<16#48, 16#C1, (16#F8 + Index), Imm>>;
+        {1, Index} -> <<16#49, 16#C1, (16#F8 + Index), Imm>>
+    end.

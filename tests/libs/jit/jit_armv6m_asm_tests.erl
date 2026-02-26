@@ -348,3 +348,11 @@ mvns_test_() ->
         ?_assertAsmEqual(<<16#43f3:16/little>>, "mvns r3, r6", jit_armv6m_asm:mvns(r3, r6)),
         ?_assertAsmEqual(<<16#43c8:16/little>>, "mvns r0, r1", jit_armv6m_asm:mvns(r0, r1))
     ].
+
+asrs_test_() ->
+    [
+        ?_assertAsmEqual(<<16#1148:16/little>>, "asrs r0, r1, #5", jit_armv6m_asm:asrs(r0, r1, 5)),
+        ?_assertAsmEqual(<<16#1212:16/little>>, "asrs r2, r2, #8", jit_armv6m_asm:asrs(r2, r2, 8)),
+        ?_assertAsmEqual(<<16#1109:16/little>>, "asrs r1, r1, #4", jit_armv6m_asm:asrs(r1, r1, 4)),
+        ?_assertAsmEqual(<<16#1000:16/little>>, "asrs r0, r0, #32", jit_armv6m_asm:asrs(r0, r0, 32))
+    ].
