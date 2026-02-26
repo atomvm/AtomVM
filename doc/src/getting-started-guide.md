@@ -197,14 +197,22 @@ For information about how to flash your application to your ESP32, see the [Atom
 
 ## Getting Started on the STM32 platform
 
-AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The support is not nearly as mature as for the ESP32 platform, but work is ongoing, and pull requests are always welcome. At this time AtomVM will work on any board with a minimum of around 128KB ram and 512KB (1M recommended) flash. Simple applications and tests have been successfully run on a stm32f411ceu6 (A.K.A. Black Pill V2). These minimum requirements may need to be raised as platform support matures.
+AtomVM can run on a wide variety of STM32 chip-sets available from [STMicroelectronics](https://www.st.com). The STM32 platform uses the official ST HAL/LL SDK and supports STM32F2, F4, F7, G0, G4, H5, H7, L4, L5, U3, U5, and WB families. The SDK is downloaded automatically during the build.
+
+The firmware reports `stm32` from `atomvm:platform/0` and uses the GPIO pin tuple format `{Bank :: atom(), Pin :: non_neg_integer()}`.
+
+At this time AtomVM will work on any board with a minimum of around 128KB RAM and 512KB (1M recommended) flash. Typical boards include ST Nucleo and Discovery boards, as well as WeAct Studio boards (H562, U585, WB55) and BlackPill (F411) boards.
+
+```{note}
+Not all STM32 families have been tested on hardware. The F4, H5, H7, U5, and WB families have been tested on actual boards. The F2, F7, G0, G4, L4, L5, and U3 families are supported in the build system but have not yet been validated on hardware. If you encounter issues with an untested family, please open an [issue on GitHub](https://github.com/atomvm/AtomVM/issues).
+```
 
 ### STM32 Requirements
 
 Deployment of AtomVM on the STM32 platform requires the following components:
 
 * A computer running MacOS or Linux (Windows is not currently supported);
-* An stm32 board and a USB/UART connector (these are built into some boards such as the Nucleo product line) and a minimum of 512k (1M recommended) of flash and a recommended minimum of 100k RAM;
+* An STM32 board with a minimum of 512KB (1M recommended) of flash and a recommended minimum of 128K RAM;
 * A USB cable capable of connecting the STM32 module or board to your development machine (laptop or PC);
 * `st-flash` via [stlink](https://github.com/stlink-org/stlink), to flash both AtomVM and your packed AVM applications. Make sure to follow its [installation procedure](https://github.com/stlink-org/stlink#installation) before proceeding further.
 * A [st-link v2](https://www.st.com/en/development-tools/st-link-v2.html) or [st-link v3](https://www.st.com/en/development-tools/stlink-v3set.html) device (typically already included on Nucleo and Discovery boards), is needed for flashing and optional jtag debugging.
@@ -245,7 +253,7 @@ of flash the application address is 0x8060000, leaving 128KB of application flas
 
 #### Console Printing
 
-By default, stdout and stderr are printed on USART2. On the STM32F4Discovery board, you can see them using a TTL-USB with the TX pin connected to board's pin PA2 (USART2 RX). Baudrate is 115200 and serial transmission is 8N1 with no flow control.
+By default, stdout and stderr are printed on the configured console USART. Baudrate is 115200 and serial transmission is 8N1 with no flow control.
 
 For Nucleo boards the on board USB-COM to USART may be used by configuring your build with a BOARD parameter, see the [STM32 Build Instructions](./build-instructions.md#building-for-stm32) for [Configuring the Console](./build-instructions.md#configuring-the-console).
 

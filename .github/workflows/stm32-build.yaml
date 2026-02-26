@@ -14,6 +14,7 @@ on:
       - 'CMakeModules/**'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
+      - 'libs/**'
   pull_request:
     paths:
       - '.github/workflows/stm32-build.yaml'
@@ -21,6 +22,7 @@ on:
       - 'CMakeModules/**'
       - 'src/platforms/stm32/**'
       - 'src/libAtomVM/**'
+      - 'libs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref != 'refs/heads/main' && github.ref || github.run_id }}
@@ -34,17 +36,74 @@ jobs:
       contents: read
       security-events: write
 
-    steps:
-    - uses: actions/cache@v4
-      id: builddeps-cache
-      with:
-        path: |
-              /home/runner/libopencm3
-        key: ${{ runner.os }}-build-deps
+    strategy:
+      fail-fast: false
+      matrix:
+        device:
+          - stm32f407vgt6
+          - stm32f411ceu6
+          - stm32f429zit6
+          - stm32h743vit6
+          - stm32h743zit6
+          - stm32u585ait6q
+          - stm32wb55rg
+          - stm32h562rgt6
+          - stm32f746zgt6
+          - stm32g474ret6
+          - stm32l476rgt6
+          - stm32l562qei6
+          - stm32f207zgt6
+          - stm32u375rgt6
+          - stm32g0b1ret6
+        include:
+          - device: stm32f407vgt6
+            max_size: 524288
+            renode_platform: stm32f4.repl
+            avm_address: "0x08080000"
+          - device: stm32f411ceu6
+            max_size: 393216
+            renode_platform: stm32f4.repl
+            avm_address: "0x08060000"
+          - device: stm32f429zit6
+            max_size: 524288
+          - device: stm32h743vit6
+            max_size: 524288
+            renode_platform: stm32h743.repl
+            avm_address: "0x08080000"
+          - device: stm32h743zit6
+            max_size: 524288
+          - device: stm32u585ait6q
+            max_size: 524288
+          - device: stm32wb55rg
+            max_size: 524288
+          - device: stm32h562rgt6
+            max_size: 524288
+          - device: stm32f746zgt6
+            max_size: 524288
+            renode_platform: stm32f746.repl
+            avm_address: "0x08080000"
+          - device: stm32g474ret6
+            max_size: 393216
+          - device: stm32l476rgt6
+            max_size: 524288
+          - device: stm32l562qei6
+            max_size: 393216
+            renode_platform: stm32l562.repl
+            avm_address: "0x08060000"
+          - device: stm32f207zgt6
+            max_size: 524288
+          - device: stm32u375rgt6
+            max_size: 524288
+          - device: stm32g0b1ret6
+            max_size: 393216
+            renode_platform: stm32g0b1.repl
+            avm_address: "0x08060000"
 
+    steps:
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "27"
+        otp-version: "28"
+        rebar3-version: "3.25.1"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -54,42 +113,91 @@ jobs:
       run: sudo apt update
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf gcc-arm-none-eabi
+      run: sudo apt install -y cmake ninja-build gperf python3-pip && pip3 install meson
 
-    - name: Checkout and build libopencm3
-      if: ${{ steps.builddeps-cache.outputs.cache-hit != 'true' }}
-      working-directory: /home/runner
+    - name: "Install ARM GNU Toolchain"
       run: |
-        set -euo pipefail
-        cd /home/runner
-        test -d libopencm3 && rm -fr libopencm3
-        git clone https://github.com/libopencm3/libopencm3.git -b v0.8.0
-        cd libopencm3
-        make
+        wget -q https://developer.arm.com/-/media/Files/downloads/gnu/15.2.rel1/binrel/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi.tar.xz
+        tar xJf arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi.tar.xz -C /opt
+        echo "/opt/arm-gnu-toolchain-15.2.rel1-x86_64-arm-none-eabi/bin" >> $GITHUB_PATH
 
     - name: Checkout repo
       uses: actions/checkout@v4
 
-    - name: "Git config safe.directory for codeql"
-      run: git config --global --add safe.directory /__w/AtomVM/AtomVM
-
-    - name: "Initialize CodeQL"
-      uses: github/codeql-action/init@v4
-      with:
-        languages: 'cpp'
-        build-mode: manual
-        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql
-
-    - name: Build
+    - name: "Build for ${{ matrix.device }}"
       shell: bash
       working-directory: ./src/platforms/stm32/
       run: |
         set -euo pipefail
         mkdir build
         cd build
-        # -DAVM_WARNINGS_ARE_ERRORS=ON
-        cmake .. -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DLIBOPENCM3_DIR=/home/runner/libopencm3
-        make -j
+        cmake .. -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-toolchain.cmake -DDEVICE=${{ matrix.device }}
+        cmake --build .
 
-    - name: "Perform CodeQL Analysis"
-      uses: github/codeql-action/analyze@v4
+    - name: "Check firmware size for ${{ matrix.device }}"
+      shell: bash
+      working-directory: ./src/platforms/stm32/build
+      run: |
+        set -euo pipefail
+        ELF="AtomVM-${{ matrix.device }}.elf"
+        SIZES=$(arm-none-eabi-size "$ELF" | tail -1)
+        TEXT=$(echo "$SIZES" | awk '{print $1}')
+        DATA=$(echo "$SIZES" | awk '{print $2}')
+        FLASH_USED=$((TEXT + DATA))
+        MAX=${{ matrix.max_size }}
+        echo "Firmware flash usage: ${FLASH_USED} bytes ($(( FLASH_USED / 1024 )) KB)"
+        echo "Flash limit: ${MAX} bytes ($(( MAX / 1024 )) KB)"
+        if [ "$FLASH_USED" -gt "$MAX" ]; then
+          echo "::error::Firmware too large: ${FLASH_USED} bytes exceeds ${MAX} byte limit for ${{ matrix.device }}"
+          exit 1
+        fi
+        echo "OK: ${FLASH_USED} / ${MAX} bytes ($(( FLASH_USED * 100 / MAX ))% used)"
+
+    - name: Build host AtomVM and test AVMs
+      if: matrix.renode_platform
+      run: |
+        set -euo pipefail
+        mkdir build-host
+        cd build-host
+        cmake .. -G Ninja
+        cmake --build . -t stm32_boot_test stm32_gpio_test
+
+    - name: Install Renode
+      if: matrix.renode_platform
+      run: |
+        set -euo pipefail
+        mkdir -p renode-portable
+        wget -qO- https://builds.renode.io/renode-latest.linux-portable.tar.gz \
+          | tar -xzf - -C renode-portable --strip-components=1
+        echo "$PWD/renode-portable" >> $GITHUB_PATH
+        pip install -r renode-portable/tests/requirements.txt
+
+    - name: Run Renode boot test
+      if: matrix.renode_platform
+      run: |
+        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
+        if [ -f "$LOCAL_REPL" ]; then
+          PLATFORM="@$PWD/$LOCAL_REPL"
+        else
+          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
+        fi
+        renode-test src/platforms/stm32/tests/renode/stm32_boot_test.robot \
+          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
+          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_boot_test.avm \
+          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
+          --variable PLATFORM:$PLATFORM
+
+    - name: Run Renode GPIO test
+      if: matrix.renode_platform
+      run: |
+        LOCAL_REPL="src/platforms/stm32/tests/renode/${{ matrix.renode_platform }}"
+        if [ -f "$LOCAL_REPL" ]; then
+          PLATFORM="@$PWD/$LOCAL_REPL"
+        else
+          PLATFORM="@platforms/cpus/${{ matrix.renode_platform }}"
+        fi
+        renode-test src/platforms/stm32/tests/renode/stm32_gpio_test.robot \
+          --variable ELF:@$PWD/src/platforms/stm32/build/AtomVM-${{ matrix.device }}.elf \
+          --variable AVM:@$PWD/build-host/src/platforms/stm32/tests/test_erl_sources/stm32_gpio_test.avm \
+          --variable AVM_ADDRESS:${{ matrix.avm_address }} \
+          --variable PLATFORM:$PLATFORM

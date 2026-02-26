@@ -24,6 +24,7 @@ include(BuildErlang)
 
 add_subdirectory(esp32)
 add_subdirectory(rp2)
+add_subdirectory(stm32)
 
 pack_runnable(hello_world hello_world estdlib)
 pack_runnable(udp_server udp_server estdlib eavmlib)
