@@ -175,6 +175,7 @@
 -type spawn_option() ::
     {min_heap_size, pos_integer()}
     | {max_heap_size, pos_integer()}
+    | {fullsweep_after, non_neg_integer()}
     | {atomvm_heap_growth, atomvm_heap_growth_strategy()}
     | link
     | monitor.
@@ -1293,7 +1294,9 @@ group_leader(_Leader, _Pid) ->
 %%
 %% @end
 %%-----------------------------------------------------------------------------
--spec process_flag(Flag :: trap_exit, Value :: boolean()) -> pid().
+-spec process_flag
+    (trap_exit, boolean()) -> boolean();
+    (fullsweep_after, non_neg_integer()) -> non_neg_integer().
 process_flag(_Flag, _Value) ->
     erlang:nif_error(undefined).
 
