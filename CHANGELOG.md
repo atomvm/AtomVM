@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added missing `ledc` functions for esp32 platform
 - Added support for Elixir GenServer and Supervisor.
 - Added support for 10 new STM32 families by switching to STM32 official SDK
+- Added `network:sta_connect/0,1` and `network:sta_disconnect/0` to ESP32 network driver.
+- Added option to set a custom callback for esp32 network driver
+`disconnected` events
+- Added `network:sta_status/0` to get the current connection state of the sta interface.
 
 ### Changed
 
@@ -94,6 +98,8 @@ instead `badarg`.
 - Badarg error return from calling crypto:crypto_one_time with invalid arguments now matches OTP24+.
 - When function head doesn't match, function arguments are now in stacktrace
 - Function arguments are added to stacktrace also for some NIFs, when one of the arguments is badarg
+- Using a custom callback for STA disconnected events in esp32 network driver will stop automatic re-connect,
+allowing applications to use scan results or other means to decide when and where to connect.
 
 ### Fixed
 

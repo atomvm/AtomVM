@@ -62,6 +62,7 @@ compile_erlang(test_esp_partition)
 compile_erlang(test_esp_timer_get_time)
 compile_erlang(test_file)
 compile_erlang(test_wifi_example)
+compile_erlang(test_wifi_managed)
 compile_erlang(test_list_to_atom)
 compile_erlang(test_list_to_binary)
 compile_erlang(test_md5)
@@ -83,6 +84,7 @@ set(erlang_test_beams
     test_esp_timer_get_time.beam
     test_file.beam
     test_wifi_example.beam
+    test_wifi_managed.beam
     test_list_to_atom.beam
     test_list_to_binary.beam
     test_md5.beam
