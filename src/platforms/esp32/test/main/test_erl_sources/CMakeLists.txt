@@ -114,7 +114,7 @@ endif()
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
-    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/PackBEAM -i esp32_test_modules.avm
+    COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/packbeam create esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib.avm
         ${erlang_test_beams_to_package}
     DEPENDS

@@ -41,15 +41,15 @@ macro(pack_archive avm_name)
     )
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_beams PackBEAM ${BEAMS}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM -a ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS}
         COMMENT "Packing archive ${avm_name}.avm"
         VERBATIM
     )
@@ -77,9 +77,9 @@ macro(pack_runnable avm_name main)
     )
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     foreach(archive_name ${ARGN})
@@ -94,7 +94,7 @@ macro(pack_runnable avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${ARCHIVES}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s Elixir.${main} ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
@@ -149,9 +149,9 @@ macro(pack_test avm_name main)
     )
 
     if(AVM_RELEASE)
-        set(INCLUDE_LINES "")
+        set(INCLUDE_LINES "--remove_lines")
     else()
-        set(INCLUDE_LINES "-i")
+        set(INCLUDE_LINES "")
     endif()
 
     # Set up standard libraries
@@ -171,7 +171,7 @@ macro(pack_test avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${avm_name}_tests ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/PackBEAM ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${TEST_BEAMS} ${ARCHIVES}
         COMMENT "Packing test ${avm_name}.avm"
         VERBATIM
     )

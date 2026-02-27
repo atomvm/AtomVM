@@ -25,16 +25,22 @@ set(UF2TOOL_PATH "" CACHE PATH "Path to UF2Tool source tree. If unset, hex packa
 
 if(NOT UF2TOOL_PATH STREQUAL "")
     file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/_checkouts)
-    file(CREATE_LINK ${UF2TOOL_PATH} ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/uf2tool SYMBOLIC)
+    file(REMOVE ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/uf2tool)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink ${UF2TOOL_PATH} ${CMAKE_CURRENT_BINARY_DIR}/_checkouts/uf2tool)
 endif()
 
-file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
-    DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
-)
+find_program(REBAR3 rebar3)
+if(NOT REBAR3)
+    message(FATAL_ERROR "rebar3 is required but was not found")
+endif()
 
 add_custom_command(
     OUTPUT uf2tool
-    COMMAND rebar3 escriptize && cp _build/default/bin/uf2tool .
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/rebar.config ${CMAKE_CURRENT_BINARY_DIR}/rebar.config
+    COMMAND ${REBAR3} escriptize
+    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/_build/default/bin/uf2tool ${CMAKE_CURRENT_BINARY_DIR}/uf2tool
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM
 )
 
