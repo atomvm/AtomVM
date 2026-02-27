@@ -3119,7 +3119,7 @@ decrement_reductions_and_maybe_schedule_next(
     I4 = <<16#FFFF:16>>,
     % Set continuation to the next instruction
     ADROffset = BNEOffset + byte_size(I4),
-    ?ASSERT(byte_size(jit_armv6m_asm:adr(Temp, 4) =:= 2)),
+    ?ASSERT(byte_size(jit_armv6m_asm:adr(Temp, 4)) =:= 2),
     I5 = <<16#FFFF:16>>,
     I6 = jit_armv6m_asm:adds(Temp, Temp, 1),
     I7 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
