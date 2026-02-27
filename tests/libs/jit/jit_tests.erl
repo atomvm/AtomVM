@@ -427,3 +427,183 @@ byte_size_inline_binary_x86_64_test() ->
         )
     ),
     ok.
+
+%%-----------------------------------------------------------------------------
+%% Tuple fusion tests
+%%
+%% Test that is_tuple + test_arity + get_tuple_element sequences are fused
+%% into a single operation that loads the register, strips the tag, and loads
+%% the header only once.
+%%
+%% The distinctive fused pattern on x86_64 is:
+%%   48 83 e0 fc    and  $-4,%rax           (strip tag)
+%%   4c 8b 18       mov  (%rax),%r11        (header into separate register)
+%%
+%% In the unfused code, move_array_element loads the header into the SAME
+%% register as the pointer:
+%%   48 83 e0 fc    and  $-4,%rax
+%%   48 8b 00       mov  (%rax),%rax        (header overwrites pointer)
+%%-----------------------------------------------------------------------------
+
+% is_tuple + test_arity + single get_tuple_element
+% f({A, _B}) -> A.
+-define(FUSE_CODE_1,
+    <<16#00, 16#00, 16#00, 16#10, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#B1, 16#00,
+        16#00, 16#00, 16#03, 16#00, 16#00, 16#00, 16#01, 16#01, 16#10, 16#02, 16#12, 16#22, 16#10,
+        16#01, 16#20, 16#39, 16#15, 16#03, 16#3A, 16#15, 16#03, 16#20, 16#42, 16#03, 16#00, 16#03,
+        16#13, 16#03>>
+).
+-define(FUSE_ATU8_1,
+    <<16#FF, 16#FF, 16#FF, 16#FE, 16#A0, 16#74, 16#65, 16#73, 16#74, 16#5F, 16#66, 16#75, 16#73,
+        16#65, 16#31, 16#10, 16#66>>
+).
+
+% is_tuple + test_arity + multiple get_tuple_elements
+% f({A, B, C}) -> {C, B, A}. (just the destructuring part)
+-define(FUSE_CODE_2,
+    <<16#00, 16#00, 16#00, 16#10, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#B1, 16#00,
+        16#00, 16#00, 16#03, 16#00, 16#00, 16#00, 16#01, 16#01, 16#10, 16#02, 16#12, 16#22, 16#10,
+        16#01, 16#20, 16#39, 16#15, 16#03, 16#3A, 16#15, 16#03, 16#30, 16#42, 16#03, 16#00, 16#13,
+        16#42, 16#03, 16#10, 16#23, 16#42, 16#03, 16#20, 16#03, 16#13, 16#03>>
+).
+-define(FUSE_ATU8_2,
+    <<16#FF, 16#FF, 16#FF, 16#FE, 16#A0, 16#74, 16#65, 16#73, 16#74, 16#5F, 16#66, 16#75, 16#73,
+        16#65, 16#32, 16#10, 16#66>>
+).
+
+% is_tuple + test_arity only (no get_tuple_element)
+-define(FUSE_CODE_3,
+    <<16#00, 16#00, 16#00, 16#10, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#B1, 16#00,
+        16#00, 16#00, 16#03, 16#00, 16#00, 16#00, 16#01, 16#01, 16#10, 16#02, 16#12, 16#22, 16#10,
+        16#01, 16#20, 16#39, 16#15, 16#03, 16#3A, 16#15, 16#03, 16#20, 16#13, 16#03>>
+).
+-define(FUSE_ATU8_3,
+    <<16#FF, 16#FF, 16#FF, 16#FE, 16#A0, 16#74, 16#65, 16#73, 16#74, 16#5F, 16#66, 16#75, 16#73,
+        16#65, 16#33, 16#10, 16#66>>
+).
+
+% is_tuple + test_arity with different fail labels + get_tuple_element
+-define(FUSE_CODE_4,
+    <<16#00, 16#00, 16#00, 16#10, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#B1, 16#00,
+        16#00, 16#00, 16#04, 16#00, 16#00, 16#00, 16#01, 16#01, 16#10, 16#02, 16#12, 16#22, 16#10,
+        16#01, 16#20, 16#39, 16#15, 16#03, 16#3A, 16#35, 16#03, 16#20, 16#42, 16#03, 16#00, 16#03,
+        16#13, 16#01, 16#30, 16#40, 16#32, 16#03, 16#13, 16#03>>
+).
+-define(FUSE_ATU8_4,
+    <<16#FF, 16#FF, 16#FF, 16#FD, 16#A0, 16#74, 16#65, 16#73, 16#74, 16#5F, 16#66, 16#75, 16#73,
+        16#65, 16#34, 16#10, 16#66, 16#50, 16#66, 16#61, 16#6C, 16#73, 16#65>>
+).
+
+% is_tuple alone (no test_arity follows) - should NOT fuse
+-define(FUSE_CODE_5,
+    <<16#00, 16#00, 16#00, 16#10, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00, 16#B1, 16#00,
+        16#00, 16#00, 16#03, 16#00, 16#00, 16#00, 16#01, 16#01, 16#10, 16#02, 16#12, 16#22, 16#10,
+        16#01, 16#20, 16#39, 16#15, 16#03, 16#13, 16#03>>
+).
+-define(FUSE_ATU8_5,
+    <<16#FF, 16#FF, 16#FF, 16#FE, 16#A0, 16#74, 16#65, 16#73, 16#74, 16#5F, 16#66, 16#75, 16#73,
+        16#65, 16#35, 16#10, 16#66>>
+).
+
+fuse_tuple_single_get_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64, ?FUSE_CODE_1, ?FUSE_ATU8_1, <<>>
+    ),
+    % Fused: strip tag + load header into separate register
+    %   48 83 e0 fc    and  $-4,%rax
+    %   4c 8b 18       mov  (%rax),%r11
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#4c, 16#8b, 16#18>>)
+    ),
+    % Fused: element 0 loaded using kept untagged pointer
+    %   4c 8b 58 08    mov  0x8(%rax),%r11
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#4c, 16#8b, 16#58, 16#08>>)
+    ),
+    ok.
+
+fuse_tuple_multi_get_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64, ?FUSE_CODE_2, ?FUSE_ATU8_2, <<>>
+    ),
+    % Fused: strip + header into separate register
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#4c, 16#8b, 16#18>>)
+    ),
+    % All three elements loaded from the same untagged pointer:
+    %   4c 8b 58 08    mov  0x8(%rax),%r11     (element 0 -> x[1])
+    %   4c 89 5f 38    mov  %r11,0x38(%rdi)
+    %   4c 8b 58 10    mov  0x10(%rax),%r11    (element 1 -> x[2])
+    %   4c 89 5f 40    mov  %r11,0x40(%rdi)
+    %   4c 8b 58 18    mov  0x18(%rax),%r11    (element 2 -> x[0])
+    ?assertMatch(
+        {_, _},
+        binary:match(
+            CompiledCode,
+            <<16#4c, 16#8b, 16#58, 16#08, 16#4c, 16#89, 16#5f, 16#38, 16#4c, 16#8b, 16#58, 16#10,
+                16#4c, 16#89, 16#5f, 16#40, 16#4c, 16#8b, 16#58, 16#18>>
+        )
+    ),
+    ok.
+
+fuse_tuple_arity_only_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64, ?FUSE_CODE_3, ?FUSE_ATU8_3, <<>>
+    ),
+    % Fused: strip + header into separate register (even without get_tuple_element)
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#4c, 16#8b, 16#18>>)
+    ),
+    ok.
+
+fuse_tuple_diff_labels_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64, ?FUSE_CODE_4, ?FUSE_ATU8_4, <<>>
+    ),
+    % Fused: strip + header into separate register
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#4c, 16#8b, 16#18>>)
+    ),
+    ok.
+
+no_fuse_tuple_alone_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64, ?FUSE_CODE_5, ?FUSE_ATU8_5, <<>>
+    ),
+    % Unfused: header loaded into SAME register (rax) since no need to keep ptr
+    %   48 83 e0 fc    and  $-4,%rax
+    %   48 8b 00       mov  (%rax),%rax
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#48, 16#8b, 16#00>>)
+    ),
+    % The fused pattern should NOT appear
+    ?assertEqual(
+        nomatch,
+        binary:match(CompiledCode, <<16#48, 16#83, 16#e0, 16#fc, 16#4c, 16#8b, 16#18>>)
+    ),
+    ok.
+
+fuse_tuple_armv6m_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_armv6m, ?FUSE_CODE_1, ?FUSE_ATU8_1, <<>>
+    ),
+    % Fused: header loaded into r6 while r7 keeps the untagged pointer
+    %   43b7    bics  r7, r6       (strip tag, r7 = untagged ptr)
+    %   683e    ldr   r6, [r7, #0] (header into r6)
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#b7, 16#43, 16#3e, 16#68>>)
+    ),
+    % Element loaded using kept r7
+    %   687e    ldr   r6, [r7, #4]
+    ?assertMatch(
+        {_, _},
+        binary:match(CompiledCode, <<16#7e, 16#68>>)
+    ),
+    ok.
