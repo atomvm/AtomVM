@@ -327,6 +327,9 @@ static term nif_esp_partition_mmap(Context *ctx, int argc, term argv[])
     ErlNifEnv *env = erl_nif_env_from_context(ctx);
     ERL_NIF_TERM binary = enif_make_resource_binary(env, handle, mmap_ptr, size);
     enif_release_resource(handle);
+    if (term_is_invalid_term(binary)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &binary, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);

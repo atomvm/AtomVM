@@ -91,6 +91,9 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
 
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
     enif_release_resource(js); // decrement refcount after enif_alloc_resource
+    if (term_is_invalid_term(obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
     return obj;
 }
 

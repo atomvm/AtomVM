@@ -643,6 +643,9 @@ static term nif_socket_open(Context *ctx, int argc, term argv[])
         }
         term obj = enif_make_resource(erl_nif_env_from_context(ctx), rsrc_obj);
         enif_release_resource(rsrc_obj); // decrement refcount after enif_alloc_resource
+        if (term_is_invalid_term(obj)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -1816,6 +1819,9 @@ static term make_accepted_socket_term(Context *ctx, struct SocketResource *conn_
 {
     term obj = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
     enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_allocate_resource in make_accepted_socket_resource
+    if (term_is_invalid_term(obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
 
     term socket_term = term_alloc_tuple(2, &ctx->heap);
     uint64_t ref_ticks = globalcontext_get_ref_ticks(ctx->global);
@@ -1901,6 +1907,9 @@ static term nif_socket_accept(Context *ctx, int argc, term argv[])
 
         term new_resource = enif_make_resource(erl_nif_env_from_context(ctx), conn_rsrc_obj);
         enif_release_resource(conn_rsrc_obj); // decrement refcount after enif_alloc_resource
+        if (term_is_invalid_term(new_resource)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
 
         size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2) + REF_SIZE;
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &new_resource, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {

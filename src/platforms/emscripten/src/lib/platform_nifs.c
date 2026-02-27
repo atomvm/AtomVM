@@ -684,6 +684,9 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
         }                                                                                                                                                                                \
         term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \
         enif_release_resource(resource);                                                                                                                                                 \
+        if (term_is_invalid_term(resource_term)) {                                                                                                                                       \
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                                                                                             \
+        }                                                                                                                                                                                \
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {                                                         \
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                                                                                             \
         }                                                                                                                                                                                \
