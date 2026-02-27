@@ -35,6 +35,8 @@
     jnz_rel8/1,
     jge/1,
     jge_rel8/1,
+    jle/1,
+    jle_rel8/1,
     jmp/1,
     jmp_rel8/1,
     jmp_rel32/1,
@@ -360,6 +362,14 @@ jge(Offset) when Offset >= -126 andalso Offset =< 129 ->
 jge_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
     {1, jge(Offset)}.
 
+jle(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    % Use short jump (matches assembler behavior)
+    AdjustedOffset = Offset - 2,
+    <<16#7E, AdjustedOffset>>.
+
+jle_rel8(Offset) when Offset >= -126 andalso Offset =< 129 ->
+    {1, jle(Offset)}.
+
 jmp(Offset) when Offset >= -126 andalso Offset =< 129 ->
     % Use short jump (matches assembler behavior)
     AdjustedOffset = Offset - 2,
@@ -489,6 +499,7 @@ subq(Imm, Reg) when ?IS_SINT8_T(Imm), is_atom(Reg) ->
         {1, Index} -> <<16#49, 16#83, (16#E8 + Index), Imm>>
     end;
 subq(Imm, rax) when ?IS_SINT32_T(Imm) ->
+    % Special short encoding for sub imm32, %rax
     <<16#48, 16#2D, Imm:32/little>>;
 subq(Imm, Reg) when ?IS_SINT32_T(Imm), is_atom(Reg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(Reg),

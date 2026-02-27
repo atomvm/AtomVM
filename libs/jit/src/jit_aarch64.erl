@@ -154,6 +154,7 @@
 -type condition() ::
     {aarch64_register(), '<', integer()}
     | {maybe_free_aarch64_register(), '<', aarch64_register()}
+    | {integer(), '<', maybe_free_aarch64_register()}
     | {maybe_free_aarch64_register(), '==', integer()}
     | {maybe_free_aarch64_register(), '!=', aarch64_register() | integer()}
     | {'(int)', maybe_free_aarch64_register(), '==', integer()}
@@ -757,15 +758,49 @@ if_else_block(
         jit_aarch64_asm:cc() | {tbz | tbnz, atom(), 0..63} | {cbz, atom()},
         non_neg_integer()
     }.
-if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '<', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     I = jit_aarch64_asm:tbz(Reg, 63, 0),
     Stream1 = StreamModule:append(Stream0, I),
-    State1 = State0#state{stream = Stream1},
-    {State1, {tbz, Reg, 63}, 0};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, {tbz, Reg, 63}, 0};
+% Handle {Val, '<', Reg} - means Val < Reg, jump if false (i.e., if Val >= Reg or Reg <= Val)
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val) ->
+    {Val, '<', RegOrTuple}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    I1 = jit_aarch64_asm:cmp(Reg, Val),
+    % le = less than or equal
+    I2 = jit_aarch64_asm:bcc(le, 0),
+    Code = <<
+        I1/binary,
+        I2/binary
+    >>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, le, byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    {RegOrTuple, '<', Val}
+) when is_integer(Val), Val =/= 0 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     I1 = jit_aarch64_asm:cmp(Reg, Val),
     % ge = greater than or equal
     I2 = jit_aarch64_asm:bcc(ge, 0),
@@ -774,8 +809,9 @@ if_block_cond(
         I2/binary
     >>,
     Stream1 = StreamModule:append(Stream0, Code),
-    State1 = State0#state{stream = Stream1},
-    {State1, ge, byte_size(I1)};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, ge, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -2073,8 +2109,10 @@ add(State, Reg, Val) ->
 %% @param Val immediate value to subtract
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec sub(state(), aarch64_register(), integer()) -> state().
-sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) ->
+-spec sub(state(), aarch64_register(), integer() | aarch64_register()) -> state().
+sub(State, Reg, Val) when is_integer(Val) ->
+    op_imm(State, sub, Reg, Reg, Val);
+sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when is_atom(Val) ->
     I1 = jit_aarch64_asm:sub(Reg, Reg, Val),
     Stream1 = StreamModule:append(Stream0, I1),
     State#state{stream = Stream1}.

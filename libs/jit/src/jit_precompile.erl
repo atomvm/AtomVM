@@ -19,7 +19,7 @@
 %
 -module(jit_precompile).
 
--export([start/0, compile/3, atom_resolver/1, type_resolver/1]).
+-export([start/0, compile/3, atom_resolver/1, type_resolver/1, import_resolver/2]).
 
 -include_lib("jit.hrl").
 
@@ -84,6 +84,15 @@ compile(Target, Dir, Path) ->
             end,
         TypeResolver = type_resolver(TypesChunk),
 
+        ImportedFunctionsChunk =
+            case lists:keyfind("ImpT", 1, InitialChunks) of
+                {"ImpT", ImportedFunctionsChunk0} ->
+                    ImportedFunctionsChunk0;
+                false ->
+                    <<>>
+            end,
+        ImportedFunctionResolver = import_resolver(ImportedFunctionsChunk, AtomResolver),
+
         % Parse target to extract arch and variant
         {BaseTarget, RequestedVariant} = parse_target(Target),
         Backend = list_to_atom("jit_" ++ BaseTarget),
@@ -107,7 +116,13 @@ compile(Target, Dir, Path) ->
 
         Stream2 = Backend:new(RequestedVariant, jit_stream_binary, Stream1),
         {LabelsCount, Stream3} = jit:compile(
-            CodeChunk, AtomResolver, LiteralResolver, TypeResolver, Backend, Stream2
+            CodeChunk,
+            AtomResolver,
+            LiteralResolver,
+            TypeResolver,
+            ImportedFunctionResolver,
+            Backend,
+            Stream2
         ),
         NativeCode = Backend:stream(Stream3),
         UpdatedChunks = FilteredChunks ++ [{"avmN", NativeCode}],
@@ -174,6 +189,26 @@ parse_literals_chunk0(0, <<>>, Acc) ->
 parse_literals_chunk0(N, <<TermSize:32, TermBin:TermSize/binary, Rest/binary>>, Acc) ->
     Term = binary_to_term(TermBin),
     parse_literals_chunk0(N - 1, Rest, [Term | Acc]).
+
+import_resolver(FunctionChunks, AtomResolver) ->
+    ImportedFunctions = parse_imported_functions_chunk(FunctionChunks, AtomResolver),
+    fun(Index) -> lists:nth(Index + 1, ImportedFunctions) end.
+
+%% @doc Parse imported functions chunk to extract {Module, Function, Arity} triplets
+parse_imported_functions_chunk(<<FunctionsCount:32, Rest/binary>>, AtomResolver) ->
+    parse_imported_functions_chunk0(FunctionsCount, Rest, AtomResolver, []);
+parse_imported_functions_chunk(<<>>, _AtomResolver) ->
+    [].
+
+parse_imported_functions_chunk0(0, <<>>, _AtomResolver, Acc) ->
+    lists:reverse(Acc);
+parse_imported_functions_chunk0(
+    N, <<ModuleIndex:32, FunctionIndex:32, Arity:32, Rest/binary>>, AtomResolver, Acc
+) ->
+    Module = AtomResolver(ModuleIndex),
+    Function = AtomResolver(FunctionIndex),
+    ImportedFunction = {Module, Function, Arity},
+    parse_imported_functions_chunk0(N - 1, Rest, AtomResolver, [ImportedFunction | Acc]).
 
 %% Version (from beam_types.hrl)
 -define(BEAM_TYPES_VERSION, 3).

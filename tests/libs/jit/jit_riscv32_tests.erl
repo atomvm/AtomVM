@@ -1076,6 +1076,82 @@ if_block_test_() ->
                     >>,
                     ?assertEqual(dump_to_bin(Dump), Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', RegA},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	01852f83          	lw	t6,24(a0)\n"
+                        "   4:	01c52f03          	lw	t5,28(a0)\n"
+                        "   8:	06400e93          	li	t4,100\n"
+                        "   c:	01fed363          	bge	t4,t6,0x12\n"
+                        "  10:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {100, '<', {free, RegA}},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	01852f83          	lw	t6,24(a0)\n"
+                        "   4:	01c52f03          	lw	t5,28(a0)\n"
+                        "   8:	06400e93          	li	t4,100\n"
+                        "   c:	01fed363          	bge	t4,t6,0x12\n"
+                        "  10:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {1024, '<', RegA},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	01852f83          	lw	t6,24(a0)\n"
+                        "   4:	01c52f03          	lw	t5,28(a0)\n"
+                        "   8:	40000e93          	li	t4,1024\n"
+                        "   c:	01fed363          	bge	t4,t6,0x12\n"
+                        "  10:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
+                end),
+                ?_test(begin
+                    State1 = ?BACKEND:if_block(
+                        State0,
+                        {1024, '<', {free, RegA}},
+                        fun(BSt0) ->
+                            ?BACKEND:add(BSt0, RegB, 2)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State1),
+                    Dump = <<
+                        "   0:	01852f83          	lw	t6,24(a0)\n"
+                        "   4:	01c52f03          	lw	t5,28(a0)\n"
+                        "   8:	40000e93          	li	t4,1024\n"
+                        "   c:	01fed363          	bge	t4,t6,0x12\n"
+                        "  10:	0f09                	addi	t5,t5,2"
+                    >>,
+                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end)
             ]
         end}.

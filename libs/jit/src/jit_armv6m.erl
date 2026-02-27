@@ -155,6 +155,7 @@
 -type condition() ::
     {armv6m_register(), '<', integer()}
     | {maybe_free_armv6m_register(), '<', armv6m_register()}
+    | {integer(), '<', maybe_free_armv6m_register()}
     | {maybe_free_armv6m_register(), '==', integer()}
     | {maybe_free_armv6m_register(), '!=', armv6m_register() | integer()}
     | {'(int)', maybe_free_armv6m_register(), '==', integer()}
@@ -1110,30 +1111,49 @@ if_block_cond(
     State2 = if_block_free_reg(RegOrTuple, State1),
     State3 = State2#state{stream = Stream2},
     {State3, le, Offset1 - Offset0 + byte_size(I1)};
-if_block_cond(#state{stream_module = StreamModule, stream = Stream0} = State0, {Reg, '<', 0}) ->
+if_block_cond(
+    #state{stream_module = StreamModule, stream = Stream0} = State0, {RegOrTuple, '<', 0}
+) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     %% Compare register with 0
     I1 = jit_armv6m_asm:cmp(Reg, 0),
     %% Branch if positive (N flag clear)
     CC = pl,
     ?ASSERT(byte_size(jit_armv6m_asm:bcc(pl, 0)) =:= 2),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
-    State1 = State0#state{stream = Stream1},
-    {State1, CC, byte_size(I1)};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val), Val >= 0, Val =< 255 ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val), Val >= 0, Val =< 255 ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     I1 = jit_armv6m_asm:cmp(Reg, Val),
     % ge = greater than or equal
     CC = ge,
     ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
-    State1 = State0#state{stream = Stream1},
-    {State1, CC, byte_size(I1)};
+    State1 = if_block_free_reg(RegOrTuple, State0),
+    State2 = State1#state{stream = Stream1},
+    {State2, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
-    {Reg, '<', Val}
-) when is_atom(Reg), is_integer(Val) ->
+    {RegOrTuple, '<', Val}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
     Offset0 = StreamModule:offset(Stream0),
     State1 = mov_immediate(State0, Temp, Val),
     Stream1 = State1#state.stream,
@@ -1143,8 +1163,28 @@ if_block_cond(
     CC = ge,
     ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
     Stream2 = StreamModule:append(Stream1, <<I1/binary, 16#FFFF:16>>),
-    State2 = State1#state{stream = Stream2},
-    {State2, CC, Offset1 - Offset0 + byte_size(I1)};
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream2},
+    {State3, CC, Offset1 - Offset0 + byte_size(I1)};
+if_block_cond(
+    #state{stream_module = StreamModule, available_regs = [Temp | _]} = State0,
+    {Val, '<', RegOrTuple}
+) when is_integer(Val) ->
+    Reg =
+        case RegOrTuple of
+            {free, Reg0} -> Reg0;
+            RegOrTuple -> RegOrTuple
+        end,
+    State1 = mov_immediate(State0, Temp, Val),
+    Stream0 = State1#state.stream,
+    I1 = jit_armv6m_asm:cmp(Reg, Temp),
+    % le = less than or equal (branch when Val >= Reg, i.e., NOT Val < Reg)
+    CC = le,
+    ?ASSERT(byte_size(jit_armv6m_asm:bcc(CC, 0)) =:= 2),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, 16#FFFF:16>>),
+    State2 = if_block_free_reg(RegOrTuple, State1),
+    State3 = State2#state{stream = Stream1},
+    {State3, CC, byte_size(I1)};
 if_block_cond(
     #state{stream_module = StreamModule, stream = Stream0} = State0,
     {RegOrTuple, '<', RegB}
@@ -2087,33 +2127,95 @@ move_array_element(
     Reg,
     Index,
     {x_reg, X}
-) when X < ?MAX_REG andalso is_atom(Reg) andalso is_integer(Index) ->
+) when X < ?MAX_REG andalso is_atom(Reg) andalso is_integer(Index) andalso Index * 4 =< 124 ->
     I1 = jit_armv6m_asm:ldr(Temp, {Reg, Index * 4}),
     I2 = jit_armv6m_asm:str(Temp, ?X_REG(X)),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 move_array_element(
+    #state{stream_module = StreamModule, available_regs = [Temp1, Temp2 | _]} =
+        State,
+    Reg,
+    Index,
+    {x_reg, X}
+) when X < ?MAX_REG andalso is_atom(Reg) andalso is_integer(Index) ->
+    % For large offsets, use max offset (124) in ldr + remainder in temp register
+    Offset = Index * 4,
+    LdrOffset = 124,
+    Remainder = Offset - LdrOffset,
+    % Load offset remainder into temp register and add to base
+    State1 = mov_immediate(State, Temp1, Remainder),
+    Stream1 = State1#state.stream,
+    % add Temp1, Reg (Temp1 = Temp1 + Reg)
+    I1 = jit_armv6m_asm:add(Temp1, Reg),
+    % ldr Temp2, [Temp1, #124]
+    I2 = jit_armv6m_asm:ldr(Temp2, {Temp1, LdrOffset}),
+    % str Temp2, [r0, #X*4]
+    I3 = jit_armv6m_asm:str(Temp2, ?X_REG(X)),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary, I3/binary>>),
+    State1#state{stream = Stream2};
+move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State,
     Reg,
     Index,
     {ptr, Dest}
-) when is_atom(Reg) andalso is_integer(Index) ->
+) when is_atom(Reg) andalso is_integer(Index) andalso Index * 4 =< 124 ->
     I1 = jit_armv6m_asm:ldr(Temp, {Reg, Index * 4}),
     I2 = jit_armv6m_asm:str(Temp, {Dest, 0}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
+move_array_element(
+    #state{stream_module = StreamModule, available_regs = [Temp | _]} =
+        State,
+    Reg,
+    Index,
+    {ptr, Dest}
+) when is_atom(Reg) andalso is_integer(Index) ->
+    % For large offsets, use max offset (124) in ldr + remainder in temp register
+    Offset = Index * 4,
+    LdrOffset = 124,
+    Remainder = Offset - LdrOffset,
+    % Load offset remainder into temp register and add to base
+    State1 = mov_immediate(State, Temp, Remainder),
+    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:add(Temp, Reg),
+    I2 = jit_armv6m_asm:ldr(Temp, {Temp, LdrOffset}),
+    I3 = jit_armv6m_asm:str(Temp, {Dest, 0}),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary, I3/binary>>),
+    State1#state{stream = Stream2};
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp1, Temp2 | AT]} =
         State,
     Reg,
     Index,
     {y_reg, Y}
-) when is_atom(Reg) andalso is_integer(Index) ->
+) when is_atom(Reg) andalso is_integer(Index) andalso Index * 4 =< 124 ->
     I1 = jit_armv6m_asm:ldr(Temp2, {Reg, Index * 4}),
     YCode = str_y_reg(Temp2, Y, Temp1, AT),
     Code = <<I1/binary, YCode/binary>>,
     Stream1 = StreamModule:append(Stream0, Code),
     State#state{stream = Stream1};
+move_array_element(
+    #state{
+        stream_module = StreamModule, available_regs = [Temp1, Temp2 | AT]
+    } =
+        State,
+    Reg,
+    Index,
+    {y_reg, Y}
+) when is_atom(Reg) andalso is_integer(Index) ->
+    % For large offsets, use max offset (124) in ldr + remainder in temp register
+    Offset = Index * 4,
+    LdrOffset = 124,
+    Remainder = Offset - LdrOffset,
+    State1 = mov_immediate(State, Temp2, Remainder),
+    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:add(Temp2, Reg),
+    I2 = jit_armv6m_asm:ldr(Temp2, {Temp2, LdrOffset}),
+    YCode = str_y_reg(Temp2, Y, Temp1, AT),
+    Code = <<I1/binary, I2/binary, YCode/binary>>,
+    Stream2 = StreamModule:append(Stream1, Code),
+    State1#state{stream = Stream2};
 move_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | AT]} =
         State,
@@ -2213,10 +2315,27 @@ get_array_element(
     } = State,
     {free, Reg},
     Index
-) ->
+) when Index * 4 =< 124 ->
     I1 = jit_armv6m_asm:ldr(Reg, {Reg, Index * 4}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary>>),
     {State#state{stream = Stream1}, Reg};
+get_array_element(
+    #state{
+        stream_module = StreamModule,
+        available_regs = [Temp | _]
+    } = State,
+    {free, Reg},
+    Index
+) ->
+    % For large offsets, split into ldr immediate (max 124) + remainder in temp register
+    Offset = Index * 4,
+    Remainder = Offset - 124,
+    State1 = mov_immediate(State, Temp, Remainder),
+    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:add(Reg, Temp),
+    I2 = jit_armv6m_asm:ldr(Reg, {Reg, 124}),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary>>),
+    {State1#state{stream = Stream2}, Reg};
 get_array_element(
     #state{
         stream_module = StreamModule,
@@ -2226,12 +2345,38 @@ get_array_element(
     } = State,
     Reg,
     Index
-) ->
+) when Index * 4 =< 124 ->
     I1 = jit_armv6m_asm:ldr(ElemReg, {Reg, Index * 4}),
     Stream1 = StreamModule:append(Stream0, <<I1/binary>>),
     {
         State#state{
             stream = Stream1, available_regs = AvailableT, used_regs = [ElemReg | UsedRegs0]
+        },
+        ElemReg
+    };
+get_array_element(
+    #state{
+        stream_module = StreamModule,
+        available_regs = [ElemReg, Temp | AvailableT],
+        used_regs = UsedRegs0
+    } = State,
+    Reg,
+    Index
+) ->
+    % For large offsets, split into ldr immediate (max 124) + remainder in temp register
+    Offset = Index * 4,
+    Remainder = Offset - 124,
+    % Load offset remainder into temp register
+    State1 = mov_immediate(State, Temp, Remainder),
+    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:add(Temp, Reg),
+    I2 = jit_armv6m_asm:ldr(ElemReg, {Temp, 124}),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary>>),
+    {
+        State1#state{
+            stream = Stream2,
+            available_regs = [Temp | AvailableT],
+            used_regs = [ElemReg | UsedRegs0]
         },
         ElemReg
     }.
@@ -2245,10 +2390,26 @@ move_to_array_element(
     ValueReg,
     Reg,
     Index
-) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso is_integer(Index) ->
+) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso is_integer(Index) andalso Index < 32 ->
     I1 = jit_armv6m_asm:str(ValueReg, {Reg, Index * 4}),
     Stream1 = StreamModule:append(Stream0, I1),
     State0#state{stream = Stream1};
+move_to_array_element(
+    #state{stream_module = StreamModule, available_regs = [Temp | _]} = State0,
+    ValueReg,
+    Reg,
+    Index
+) when ?IS_GPR(ValueReg) andalso ?IS_GPR(Reg) andalso is_integer(Index) ->
+    % For large offsets, split into str immediate (max 124) + remainder in temp register
+    Offset = Index * 4,
+    Remainder = Offset - 124,
+    % Load offset remainder into temp register
+    State1 = mov_immediate(State0, Temp, Remainder),
+    Stream1 = State1#state.stream,
+    I1 = jit_armv6m_asm:add(Temp, Reg),
+    I2 = jit_armv6m_asm:str(ValueReg, {Temp, 124}),
+    Stream2 = StreamModule:append(Stream1, <<I1/binary, I2/binary>>),
+    State1#state{stream = Stream2};
 move_to_array_element(
     #state{stream_module = StreamModule, stream = Stream0, available_regs = [Temp | _]} = State0,
     ValueReg,
@@ -2265,7 +2426,7 @@ move_to_array_element(
     Value,
     Reg,
     Index
-) ->
+) when not ?IS_GPR(Value) andalso ?IS_GPR(Reg) ->
     {State1, Temp} = copy_to_native_register(State0, Value),
     State2 = move_to_array_element(State1, Temp, Reg, Index),
     free_native_register(State2, Temp).
