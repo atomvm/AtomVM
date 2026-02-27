@@ -274,7 +274,28 @@ typedef uint32_t intn_digit_t;
  * @note Leading zeros are ignored in comparison
  * @note Accepts both normalized and non-normalized inputs
  */
-int intn_cmp(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
+int intn_cmpu(const intn_digit_t a[], size_t a_len, const intn_digit_t b[], size_t b_len);
+
+/**
+ * @brief Compare two signed multi-precision integers
+ *
+ * Compares two multi-precision integers with explicit sign information.
+ * Magnitudes are compared using intn_cmp(), which ignores sign and tolerates
+ * non-normalized inputs (leading zeros).
+ *
+ * @param a First integer array (magnitude digits)
+ * @param a_len Length of first integer in digits
+ * @param a_sign Sign of the first integer
+ * @param b Second integer array (magnitude digits)
+ * @param b_len Length of second integer in digits
+ * @param b_sign Sign of the second integer
+ * @return -1 if a < b, 0 if a == b, 1 if a > b
+ *
+ * @note Leading zeros are ignored in comparison
+ * @note Accepts both normalized and non-normalized inputs
+ */
+int intn_cmp(const intn_digit_t a[], size_t a_len, intn_integer_sign_t a_sign,
+    const intn_digit_t b[], size_t b_len, intn_integer_sign_t b_sign);
 
 /**
  * @brief Add two unsigned multi-precision integers

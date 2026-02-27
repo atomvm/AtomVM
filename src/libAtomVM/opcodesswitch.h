@@ -7715,6 +7715,49 @@ wait_timeout_trap_handler:
 bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
                 #endif
+
+                case OP_BIF3: {
+                    uint32_t fail_label;
+                    DECODE_LABEL(fail_label, pc);
+                    uint32_t bif;
+                    DECODE_LITERAL(bif, pc);
+                    term arg1;
+                    DECODE_COMPACT_TERM(arg1, pc)
+                    term arg2;
+                    DECODE_COMPACT_TERM(arg2, pc)
+                    term arg3;
+                    DECODE_COMPACT_TERM(arg3, pc);
+                    DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER(dreg, pc);
+
+                    TRACE("bif2/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
+                    USED_BY_TRACE(bif);
+
+                    #ifdef IMPL_CODE_LOADER
+                        UNUSED(arg1);
+                        UNUSED(arg2);
+                        UNUSED(arg3);
+                    #endif
+
+                    #ifdef IMPL_EXECUTE_LOOP
+                        const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                        BifImpl3 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif3_ptr;
+                        DEBUG_FAIL_NULL(func);
+                        term ret = func(ctx, fail_label, arg1, arg2, arg3);
+                        if (UNLIKELY(term_is_invalid_term(ret))) {
+                            if (fail_label) {
+                                pc = mod->labels[fail_label];
+                                break;
+                            } else {
+                                HANDLE_ERROR();
+                            }
+                        }
+
+                        WRITE_REGISTER(dreg, ret);
+                    #endif
+
+                    break;
+                }
             }
 #endif
 
