@@ -133,7 +133,37 @@
     dist_ctrl_put_data/2,
     unique_integer/0,
     unique_integer/1,
-    raise/3
+    raise/3,
+    abs/1,
+    byte_size/1,
+    element/2,
+    error/1,
+    error/2,
+    hd/1,
+    is_atom/1,
+    is_binary/1,
+    is_boolean/1,
+    is_float/1,
+    is_function/1,
+    is_function/2,
+    is_integer/1,
+    is_list/1,
+    is_number/1,
+    is_pid/1,
+    is_reference/1,
+    is_tuple/1,
+    length/1,
+    list_to_float/1,
+    node/0,
+    round/1,
+    self/0,
+    setelement/3,
+    size/1,
+    throw/1,
+    tl/1,
+    trunc/1,
+    tuple_size/1,
+    tuple_to_list/1
 ]).
 
 -export_type([
@@ -369,7 +399,7 @@ system_flag(_Key, _Value) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec md5(Data :: binary()) -> binary().
-md5(Data) when is_binary(Data) ->
+md5(Data) when erlang:is_binary(Data) ->
     crypto:hash(md5, Data).
 
 %%-----------------------------------------------------------------------------
@@ -406,7 +436,7 @@ apply(Module, Function, Args) ->
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Module:Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
         _ ->
-            error(badarg)
+            erlang:error(badarg)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -441,7 +471,7 @@ apply(Function, Args) ->
         [Arg1, Arg2, Arg3, Arg4, Arg5, Arg6] ->
             Function(Arg1, Arg2, Arg3, Arg4, Arg5, Arg6);
         _ ->
-            error(badarg)
+            erlang:error(badarg)
     end.
 
 %%-----------------------------------------------------------------------------
@@ -1464,7 +1494,7 @@ setnode(_TargetNode, _ConnPid, _TargetFlagsCreation) ->
 %% @end
 -spec is_alive() -> boolean().
 is_alive() ->
-    node() =/= nonode@nohost.
+    erlang:node() =/= nonode@nohost.
 
 %% @hidden
 -spec dist_ctrl_get_data_notification(binary()) -> ok.
@@ -1567,14 +1597,369 @@ nif_error(_Reason) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Options list of options.
-%% @returns a unique integer
-%% @doc     Return a unique integer. If positive is passed, returned integer is
-%%          positive. If monotonic is passed, returned integer is monotonically increasing
-%%          across all processes.
+%% @param   Class exception class to raise
+%% @param   Reason reason of the exception
+%% @param   Stacktrace list as provided by a try/catch clause
+%% @returns badarg if arguments are invalid
+%% @doc     Raise an exception of the specified class or return badarg if
+%%          arguments are invalid. To be sure to not return, the pattern
+%%          `error(erlang:raise(Class, Reason, Stacktrace))` is common.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec raise(error | exit | throw, Reason :: term(), Stacktrace :: raise_stacktrace()) ->
-    no_return().
+    badarg.
 raise(_Class, _Reason, _Stacktrace) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Number  the number to get the absolute value of
+%% @returns the absolute value of `Number'
+%% @doc     Return the absolute value of `Number'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec abs(Number) -> Number when Number :: number().
+abs(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Bitstring  the bitstring to get the byte size of
+%% @returns the number of bytes needed to contain `Bitstring'
+%% @doc     Return the number of bytes needed to contain `Bitstring'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec byte_size(Bitstring :: bitstring()) -> non_neg_integer().
+byte_size(_Bitstring) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   N       the one-based index of the element to return
+%% @param   Tuple   the tuple from which to get the element
+%% @returns the element at the given one-based index in the tuple
+%% @doc     Return the element at the given one-based index in a tuple.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec element(N :: pos_integer(), Tuple :: tuple()) -> term().
+element(_N, _Tuple) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Reason  the reason for the error
+%% @doc     Raises an exception of class `error' with reason `Reason'.
+%%
+%% The stacktrace is automatically added.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec error(Reason :: term()) -> no_return().
+error(_Reason) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Reason  the reason for the error
+%% @param   Args    the argument list, or a list of extra error information
+%% @doc     Raises an exception of class `error' with reason `Reason' and
+%%          arguments or extra error info `Args'.
+%%
+%% The stacktrace is automatically added.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec error(Reason :: term(), Args :: [term()] | none) -> no_return().
+error(_Reason, _Args) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   List    a nonempty list
+%% @returns the first element (head) of the list
+%% @doc     Return the first element of a list.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec hd(List :: nonempty_list()) -> term().
+hd(_List) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is an atom; `false', otherwise.
+%% @doc     Return `true' if `Term' is an atom; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_atom(Term :: term()) -> boolean().
+is_atom(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a binary; `false', otherwise.
+%% @doc     Return `true' if `Term' is a binary; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_binary(Term :: term()) -> boolean().
+is_binary(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a boolean (`true' or `false'); `false', otherwise.
+%% @doc     Return `true' if `Term' is a boolean; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_boolean(Term :: term()) -> boolean().
+is_boolean(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a float; `false', otherwise.
+%% @doc     Return `true' if `Term' is a floating point number; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_float(Term :: term()) -> boolean().
+is_float(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a function; `false', otherwise.
+%% @doc     Return `true' if `Term' is a function; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_function(Term :: term()) -> boolean().
+is_function(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term    the term to test
+%% @param   Arity   the expected arity
+%% @returns `true' if `Term' is a function with arity `Arity'; `false', otherwise.
+%% @doc     Return `true' if `Term' is a function with the given arity; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_function(Term :: term(), Arity :: non_neg_integer()) -> boolean().
+is_function(_Term, _Arity) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is an integer; `false', otherwise.
+%% @doc     Return `true' if `Term' is an integer; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_integer(Term :: term()) -> boolean().
+is_integer(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a list (including the empty list); `false', otherwise.
+%% @doc     Return `true' if `Term' is a list; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_list(Term :: term()) -> boolean().
+is_list(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a number (integer or float); `false', otherwise.
+%% @doc     Return `true' if `Term' is a number; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_number(Term :: term()) -> boolean().
+is_number(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a pid; `false', otherwise.
+%% @doc     Return `true' if `Term' is a process identifier; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_pid(Term :: term()) -> boolean().
+is_pid(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a reference; `false', otherwise.
+%% @doc     Return `true' if `Term' is a reference; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_reference(Term :: term()) -> boolean().
+is_reference(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Term  the term to test
+%% @returns `true' if `Term' is a tuple; `false', otherwise.
+%% @doc     Return `true' if `Term' is a tuple; `false', otherwise.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec is_tuple(Term :: term()) -> boolean().
+is_tuple(_Term) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   List  the list to get the length of
+%% @returns the length of the list
+%% @doc     Return the length of a list.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec length(List :: list()) -> non_neg_integer().
+length(_List) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   String  a string representation of a float
+%% @returns the float represented by the string
+%% @doc     Parse a string to a floating point number.
+%% Errors with `badarg' if the string is not a valid float representation.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_float(String :: string()) -> float().
+list_to_float(_String) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns the node name of the local node
+%% @doc     Return the name of the local node.
+%% If the node is not alive, `nonode@nohost' is returned.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec node() -> node().
+node() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Number  the number to round
+%% @returns `Number' rounded to the nearest integer
+%% @doc     Return the integer closest to `Number'.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec round(Number :: number()) -> integer().
+round(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns the pid of the calling process
+%% @doc     Return the pid of the calling process.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec self() -> pid().
+self() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Index   the one-based index of the element to replace
+%% @param   Tuple   the original tuple
+%% @param   Value   the new value to set
+%% @returns a new tuple with the element at position `Index' replaced by `Value'
+%% @doc     Return a new tuple with element at `Index' replaced by `Value'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec setelement(Index :: pos_integer(), Tuple :: tuple(), Value :: term()) -> tuple().
+setelement(_Index, _Tuple, _Value) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   TupleOrBinary  a tuple or a binary
+%% @returns the size of the tuple or binary
+%% @doc     Return the size of a tuple or binary.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec size(TupleOrBinary :: tuple() | binary()) -> non_neg_integer().
+size(_TupleOrBinary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Reason  the reason for the exception
+%% @doc     Raises an exception of class `throw' with reason `Reason'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec throw(Reason :: term()) -> no_return().
+throw(_Reason) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   List    a nonempty list
+%% @returns the tail of the list (all elements except the first)
+%% @doc     Return the tail of a list (the list without its first element).
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec tl(List :: nonempty_list()) -> term().
+tl(_List) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Number  the number to truncate
+%% @returns the integer part of `Number'
+%% @doc     Return the integer part of `Number' by truncating towards zero.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec trunc(Number :: number()) -> integer().
+trunc(_Number) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Tuple  the tuple to get the size of
+%% @returns the number of elements in the tuple
+%% @doc     Return the number of elements in a tuple.
+%%
+%% This function may be used in a guard expression.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec tuple_size(Tuple :: tuple()) -> non_neg_integer().
+tuple_size(_Tuple) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Tuple  the tuple to convert
+%% @returns a list containing the elements of the tuple
+%% @doc     Convert a tuple to a list of its elements.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec tuple_to_list(Tuple :: tuple()) -> [term()].
+tuple_to_list(_Tuple) ->
     erlang:nif_error(undefined).

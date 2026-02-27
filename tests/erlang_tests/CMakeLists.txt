@@ -238,6 +238,7 @@ compile_erlang(prime_ext)
 compile_erlang(prime_smp)
 compile_erlang(test_try_case_end)
 compile_erlang(test_exception_classes)
+compile_erlang(test_erlang_builtins)
 compile_erlang(test_recursion_and_try_catch)
 compile_erlang(test_fun_info)
 compile_erlang(test_func_info)
@@ -785,6 +786,7 @@ set(erlang_test_beams
     prime_smp.beam
     test_try_case_end.beam
     test_exception_classes.beam
+    test_erlang_builtins.beam
     test_recursion_and_try_catch.beam
     test_fun_info.beam
     test_func_info.beam
