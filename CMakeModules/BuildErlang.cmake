@@ -172,7 +172,7 @@ macro(pack_lib avm_name)
 
             add_custom_command(
                 OUTPUT ${avm_name}-${jit_target_arch_variant}.avm
-                DEPENDS ${pack_lib_${avm_name}_archive_targets} ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} PackBEAM
+                DEPENDS ${pack_lib_${avm_name}_archive_targets} ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} ${pack_lib_${avm_name}_archives} PackBEAM
                 COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create --lib ${INCLUDE_LINES} ${avm_name}-${jit_target_arch_variant}.avm ${pack_lib_${avm_name}_jit_archives_${jit_target_arch_variant}} ${pack_lib_${avm_name}_archives}
                 COMMENT "Packing lib ${avm_name}-${jit_target_arch_variant}.avm"
                 VERBATIM
@@ -336,7 +336,7 @@ macro(pack_test test_avm_name)
 
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm
-        DEPENDS ${pack_test_${test_avm_name}_archive_targets} PackBEAM tests.beam
+        DEPENDS ${pack_test_${test_avm_name}_archive_targets} ${pack_test_${test_avm_name}_archives} PackBEAM tests.beam
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_CURRENT_BINARY_DIR}/tests.beam ${pack_test_${test_avm_name}_archives}
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
@@ -376,7 +376,7 @@ macro(pack_eunit test_avm_name)
 
     add_custom_command(
         OUTPUT ${test_avm_name}.avm
-        DEPENDS ${pack_eunit_${test_avm_name}_archive_targets} PackBEAM ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
+        DEPENDS ${pack_eunit_${test_avm_name}_archive_targets} ${pack_eunit_${test_avm_name}_archives} PackBEAM ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam
         COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} ${CMAKE_CURRENT_BINARY_DIR}/${test_avm_name}.avm ${CMAKE_BINARY_DIR}/libs/etest/src/beams/eunit.beam ${pack_eunit_${test_avm_name}_archives}
         COMMENT "Packing runnable ${test_avm_name}.avm"
         VERBATIM
