@@ -68,7 +68,9 @@
     duplicate/2,
     sublist/2,
     append/1,
-    append/2
+    append/2,
+    min/1,
+    max/1
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -875,3 +877,49 @@ append([]) -> [].
     T :: term().
 
 append(L1, L2) -> L1 ++ L2.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a non-empty list of terms that can be compared
+%% @returns the minimum element of the list
+%% @doc     Returns the first element of `List' that compares less than or
+%%          equal to all other elements of `List'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec min(List) -> Min when
+    List :: [T, ...],
+    Min :: T,
+    T :: term().
+
+min([H | T]) ->
+    min_r(T, H).
+
+%% @private
+min_r([H | T], Acc) when H < Acc ->
+    min_r(T, H);
+min_r([_ | T], Acc) ->
+    min_r(T, Acc);
+min_r([], Acc) ->
+    Acc.
+
+%%-----------------------------------------------------------------------------
+%% @param   List a non-empty list of terms that can be compared
+%% @returns the maximum element of the list
+%% @doc     Returns the first element of `List' that compares greater than or
+%%          equal to all other elements of `List'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec max(List) -> Max when
+    List :: [T, ...],
+    Max :: T,
+    T :: term().
+
+max([H | T]) ->
+    max_r(T, H).
+
+%% @private
+max_r([H | T], Acc) when H > Acc ->
+    max_r(T, H);
+max_r([_ | T], Acc) ->
+    max_r(T, Acc);
+max_r([], Acc) ->
+    Acc.
