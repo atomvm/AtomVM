@@ -140,6 +140,13 @@ void context_destroy(Context *ctx)
     struct ListHead *processes_table_list = synclist_wrlock(&ctx->global->processes_table);
     UNUSED(processes_table_list);
 
+    // Remove from scheduling lists (waiting/ready/running).
+    // list_remove on a self-referential (already removed + re-initialized) node is a safe no-op.
+    SMP_SPINLOCK_LOCK(&ctx->global->processes_spinlock);
+    list_remove(&ctx->processes_list_head);
+    list_init(&ctx->processes_list_head);
+    SMP_SPINLOCK_UNLOCK(&ctx->global->processes_spinlock);
+
     list_remove(&ctx->processes_table_head);
 
     // Ensure process is not registered
