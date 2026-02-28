@@ -86,9 +86,9 @@ static int app_main()
 
     if (!avmpack_is_valid(MAIN_AVM, XIP_SRAM_BASE - (uintptr_t) MAIN_AVM)) {
         sleep_ms(5000);
-        fprintf(stderr, "Fatal error: invalid main.avm packbeam\n");
+        fprintf(stderr, "No application loaded. Please flash your application to get started.\n");
         if (avmpack_is_valid(LIB_AVM, (uintptr_t) MAIN_AVM - (uintptr_t) LIB_AVM)) {
-            fprintf(stderr, "Lib avm packbeam is valid, though\n");
+            fprintf(stderr, "Core libraries are loaded and ready.\n");
         }
         AVM_ABORT();
     }
