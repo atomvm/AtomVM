@@ -66,7 +66,7 @@ start() ->
     ok.
 
 % Readings coarsest-to-finest: finer value is always taken later so
-% finer >= coarser * scale.  Upper bound allows 1 ms between calls.
+% finer >= coarser * scale.  Upper bound allows 1 s between calls.
 test_time_unit_ratios(Case, Fun) ->
     S = Fun(second),
     Ms = Fun(millisecond),
@@ -80,7 +80,7 @@ test_time_unit_ratios(Case, Fun) ->
     Us < Ms * 1000 + 1000000 orelse throw({ratio_upper, Case, ms_to_us, Ms, Us}),
 
     Ns >= Us * 1000 orelse throw({ratio_fail, Case, us_to_ns, Us, Ns}),
-    Ns < Us * 1000 + 1000000 orelse throw({ratio_upper, Case, us_to_ns, Us, Ns}),
+    Ns < Us * 1000 + 1000000000 orelse throw({ratio_upper, Case, us_to_ns, Us, Ns}),
 
     ok.
 

@@ -40,6 +40,7 @@
     is_record/2,
     map_size/1,
     map_get/2,
+    monotonic_time/0,
     monotonic_time/1,
     min/2,
     max/2,
@@ -104,6 +105,7 @@
     exit/1,
     exit/2,
     open_port/2,
+    system_time/0,
     system_time/1,
     group_leader/0,
     group_leader/2,
@@ -568,6 +570,10 @@ memory(_Type) ->
 %% systems the value may vary among UNIX systems (e.g., Linux, macOS, FreeBSD).
 %% @end
 %%-----------------------------------------------------------------------------
+-spec monotonic_time() -> integer().
+monotonic_time() ->
+    erlang:nif_error(undefined).
+
 -spec monotonic_time(Unit :: time_unit()) -> integer().
 monotonic_time(_Unit) ->
     erlang:nif_error(undefined).
@@ -1248,6 +1254,15 @@ exit(_Process, _Reason) ->
 %%-----------------------------------------------------------------------------
 -spec open_port(PortName :: {spawn, iodata()}, Options :: [any()] | map()) -> port().
 open_port(_PortName, _Options) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns An integer representing system time.
+%% @doc     Returns the current Erlang system time in native time unit.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec system_time() -> integer().
+system_time() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

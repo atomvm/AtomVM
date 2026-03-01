@@ -1712,22 +1712,28 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
 term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
-    UNUSED(argc);
+
+    term unit;
+    if (argc == 0) {
+        unit = NATIVE_ATOM;
+    } else {
+        unit = argv[0];
+    }
 
     struct timespec ts;
     sys_monotonic_time(&ts);
 
-    if (argv[0] == SECOND_ATOM) {
+    if (unit == SECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ts.tv_sec);
 
-    } else if (argv[0] == MILLISECOND_ATOM) {
+    } else if (unit == MILLISECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
 
-    } else if (argv[0] == MICROSECOND_ATOM) {
+    } else if (unit == MICROSECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
 
-    } else if (argv[0] == NANOSECOND_ATOM || argv[0] == NATIVE_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000000ULL + ts.tv_nsec);
+    } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
@@ -1737,22 +1743,28 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 {
     UNUSED(ctx);
-    UNUSED(argc);
+
+    term unit;
+    if (argc == 0) {
+        unit = NATIVE_ATOM;
+    } else {
+        unit = argv[0];
+    }
 
     struct timespec ts;
     sys_time(&ts);
 
-    if (argv[0] == SECOND_ATOM) {
+    if (unit == SECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ts.tv_sec);
 
-    } else if (argv[0] == MILLISECOND_ATOM) {
+    } else if (unit == MILLISECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
 
-    } else if (argv[0] == MICROSECOND_ATOM) {
+    } else if (unit == MICROSECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
 
-    } else if (argv[0] == NANOSECOND_ATOM || argv[0] == NATIVE_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000000ULL + ts.tv_nsec);
+    } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
@@ -1883,8 +1895,8 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
         ts.tv_nsec = (value % 1000000) * 1000;
 
     } else if (argv[1] == NANOSECOND_ATOM || argv[1] == NATIVE_ATOM) {
-        ts.tv_sec = (time_t) (value / 1000000000);
-        ts.tv_nsec = (value % 1000000000) * 1;
+        ts.tv_sec = (time_t) (value / INT64_C(1000000000));
+        ts.tv_nsec = value % INT64_C(1000000000);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);

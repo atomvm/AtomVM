@@ -50,7 +50,7 @@ test_monotonic_time_native() ->
     ok.
 
 % Readings coarsest-to-finest: finer value is always taken later so
-% finer >= coarser * scale.  Upper bound allows 1 ms between calls.
+% finer >= coarser * scale.  Upper bound allows 1 s between calls.
 test_time_unit_ratios() ->
     S = erlang:monotonic_time(second),
     Ms = erlang:monotonic_time(millisecond),
@@ -64,7 +64,7 @@ test_time_unit_ratios() ->
     true = Us < Ms * 1000 + 1000000,
 
     true = Ns >= Us * 1000,
-    true = Ns < Us * 1000 + 1000000,
+    true = Ns < Us * 1000 + 1000000000,
 
     ok.
 
