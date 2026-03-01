@@ -213,7 +213,7 @@ term external_term_from_const_literal(const void *external_term, size_t size, Co
  *
  * @details Serialize a term in Erlang external term format, and store the result in
  * a binary term.  The heap from the context will be used to allocate the hydrated
- * terms.  This function is the complement of external_term_to_binary.
+ * terms.
  * WARNING: This function may call the GC, which may render the input binary invalid.
  * @param ctx the context that owns the memory that will be allocated.
  * @param t the term to return as binary.
@@ -257,7 +257,7 @@ external_term_write_result_t external_term_serialize_term_raw(term t, void *buf,
  * a serialized term in external term format.
  *
  * @param t the term for which size is calculated
- * @param size the required buffer size (tag excluded)
+ * @param size the required buffer size
  * @param glb the global context
  * @return \c ExternalTermWriteOk in case of success
  */
