@@ -25,8 +25,21 @@
 -define(BEFORE_START_DATE, 1693769340).
 
 start() ->
-    test_clock(system_time, fun() -> erlang:system_time(millisecond) end),
-    test_clock(monotonic_time, fun() -> erlang:monotonic_time(millisecond) end),
+    test_clock(system_time, fun() -> erlang:system_time(millisecond) end, 100, 500),
+    test_clock(monotonic_time, fun() -> erlang:monotonic_time(millisecond) end, 100, 500),
+    test_clock(
+        system_time_nanosecond, fun() -> erlang:system_time(nanosecond) end, 100000000, 500000000
+    ),
+    test_clock(
+        monotonic_time_nanosecond,
+        fun() -> erlang:monotonic_time(nanosecond) end,
+        100000000,
+        500000000
+    ),
+    test_clock(system_time_native, fun() -> erlang:system_time(native) end, 100000000, 500000000),
+    test_clock(
+        monotonic_time_native, fun() -> erlang:monotonic_time(native) end, 100000000, 500000000
+    ),
     Date = erlang:universaltime(),
     if
         Date < ?START_DATE ->
@@ -34,7 +47,9 @@ start() ->
         true ->
             ok
     end,
-    test_clock(system_time_after_set_rtc, fun() -> erlang:system_time(millisecond) end),
+    ok = test_time_unit_ratios(system_time, fun(Unit) -> erlang:system_time(Unit) end),
+    ok = test_time_unit_ratios(monotonic_time, fun(Unit) -> erlang:monotonic_time(Unit) end),
+    test_clock(system_time_after_set_rtc, fun() -> erlang:system_time(millisecond) end, 100, 500),
     NewDate = erlang:universaltime(),
     if
         NewDate >= ?START_DATE -> ok;
@@ -50,7 +65,26 @@ start() ->
     end,
     ok.
 
-test_clock(Case, Fun) ->
+% Readings coarsest-to-finest: finer value is always taken later so
+% finer >= coarser * scale.  Upper bound allows 1 ms between calls.
+test_time_unit_ratios(Case, Fun) ->
+    S = Fun(second),
+    Ms = Fun(millisecond),
+    Us = Fun(microsecond),
+    Ns = Fun(nanosecond),
+
+    Ms >= S * 1000 orelse throw({ratio_fail, Case, second_to_ms, S, Ms}),
+    Ms < S * 1000 + 1000 orelse throw({ratio_upper, Case, second_to_ms, S, Ms}),
+
+    Us >= Ms * 1000 orelse throw({ratio_fail, Case, ms_to_us, Ms, Us}),
+    Us < Ms * 1000 + 1000000 orelse throw({ratio_upper, Case, ms_to_us, Ms, Us}),
+
+    Ns >= Us * 1000 orelse throw({ratio_fail, Case, us_to_ns, Us, Ns}),
+    Ns < Us * 1000 + 1000000 orelse throw({ratio_upper, Case, us_to_ns, Us, Ns}),
+
+    ok.
+
+test_clock(Case, Fun, MinDelta, MaxDelta) ->
     StartTime = Fun(),
     receive
     after 100 -> ok
@@ -58,6 +92,6 @@ test_clock(Case, Fun) ->
     EndTime = Fun(),
     Delta = EndTime - StartTime,
     if
-        Delta >= 100 andalso Delta < 500 -> ok;
+        Delta >= MinDelta andalso Delta < MaxDelta -> ok;
         true -> throw({unexpected_delta, Delta, Case, StartTime, EndTime})
     end.

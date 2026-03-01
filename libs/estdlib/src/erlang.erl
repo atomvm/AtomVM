@@ -155,7 +155,7 @@
 -type atom_encoding() :: latin1 | utf8 | unicode.
 
 -type mem_type() :: binary.
--type time_unit() :: second | millisecond | microsecond.
+-type time_unit() :: second | millisecond | microsecond | nanosecond | native.
 -type timestamp() :: {
     MegaSecs :: non_neg_integer(), Secs :: non_neg_integer(), MicroSecs :: non_neg_integer
 }.

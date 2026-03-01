@@ -23,10 +23,50 @@
 
 start() ->
     ok = test_monotonic_time(),
+    ok = test_monotonic_time_nanosecond(),
+    ok = test_monotonic_time_native(),
+    ok = test_time_unit_ratios(),
     ok.
 
 test_monotonic_time() ->
     test_monotonic_time([500, 1000, 1500, 2500, 5000]).
+
+test_monotonic_time_nanosecond() ->
+    DelayMs = 200,
+    T1 = erlang:monotonic_time(nanosecond),
+    timer:sleep(DelayMs),
+    T2 = erlang:monotonic_time(nanosecond),
+    Diff = T2 - T1,
+    true = Diff >= DelayMs * 1000000,
+    ok.
+
+test_monotonic_time_native() ->
+    DelayMs = 200,
+    T1 = erlang:monotonic_time(native),
+    timer:sleep(DelayMs),
+    T2 = erlang:monotonic_time(native),
+    Diff = T2 - T1,
+    true = Diff >= DelayMs * 1000000,
+    ok.
+
+% Readings coarsest-to-finest: finer value is always taken later so
+% finer >= coarser * scale.  Upper bound allows 1 ms between calls.
+test_time_unit_ratios() ->
+    S = erlang:monotonic_time(second),
+    Ms = erlang:monotonic_time(millisecond),
+    Us = erlang:monotonic_time(microsecond),
+    Ns = erlang:monotonic_time(nanosecond),
+
+    true = Ms >= S * 1000,
+    true = Ms < S * 1000 + 1000,
+
+    true = Us >= Ms * 1000,
+    true = Us < Ms * 1000 + 1000000,
+
+    true = Ns >= Us * 1000,
+    true = Ns < Us * 1000 + 1000000,
+
+    ok.
 
 test_monotonic_time([]) ->
     ok;

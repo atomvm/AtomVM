@@ -1726,6 +1726,9 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
     } else if (argv[0] == MICROSECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
 
+    } else if (argv[0] == NANOSECOND_ATOM || argv[0] == NATIVE_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000000ULL + ts.tv_nsec);
+
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -1747,6 +1750,9 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 
     } else if (argv[0] == MICROSECOND_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
+
+    } else if (argv[0] == NANOSECOND_ATOM || argv[0] == NATIVE_ATOM) {
+        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000000ULL + ts.tv_nsec);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
@@ -1875,6 +1881,10 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
     } else if (argv[1] == MICROSECOND_ATOM) {
         ts.tv_sec = (time_t) (value / 1000000);
         ts.tv_nsec = (value % 1000000) * 1000;
+
+    } else if (argv[1] == NANOSECOND_ATOM || argv[1] == NATIVE_ATOM) {
+        ts.tv_sec = (time_t) (value / 1000000000);
+        ts.tv_nsec = (value % 1000000000) * 1;
 
     } else {
         RAISE_ERROR(BADARG_ATOM);

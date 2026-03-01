@@ -26,6 +26,10 @@ start() ->
     ok = test_system_time(second, 1001),
     ok = test_system_time(millisecond, 10),
     ok = test_system_time(microsecond, 1),
+    ok = test_system_time(nanosecond, 1),
+    ok = test_native_system_time(),
+
+    ok = test_time_unit_ratios(),
 
     ok = expect(fun() -> erlang:system_time(not_a_time_unit) end, badarg),
 
@@ -38,6 +42,34 @@ test_system_time(Unit, SleepMs) ->
     sleep(SleepMs),
     After = verify_system_time_value(erlang:system_time(Unit)),
     true = (After > Before),
+    ok.
+
+test_system_time_unit(_Name, Fun) ->
+    T = Fun(),
+    true = is_integer(T) andalso T > 0,
+    ok.
+
+% Readings are taken coarsest-to-finest so the finer value is always >= the
+% coarser value * its scale factor.  The upper-bound allows for at most 1 ms
+% of wall-clock time between consecutive calls.
+test_time_unit_ratios() ->
+    S = erlang:system_time(second),
+    Ms = erlang:system_time(millisecond),
+    Us = erlang:system_time(microsecond),
+    Ns = erlang:system_time(nanosecond),
+
+    true = Ms >= S * 1000,
+    % within 1 s of each other
+    true = Ms < S * 1000 + 1000,
+
+    true = Us >= Ms * 1000,
+    % within 1 ms
+    true = Us < Ms * 1000 + 1000000,
+
+    true = Ns >= Us * 1000,
+    % within 1 ms
+    true = Ns < Us * 1000 + 1000000,
+
     ok.
 
 verify_system_time_value(M) when is_integer(M) andalso M > 0 ->
@@ -76,4 +108,27 @@ test_system_time_to_universal_time() ->
 
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, second),
 
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, nanosecond),
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(1, nanosecond),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000000, nanosecond),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1001000000, nanosecond),
+    {{2023, 7, 8}, {20, 19, 39}} = calendar:system_time_to_universal_time(
+        1688847579000000000, nanosecond
+    ),
+
+    ok = test_native_universal_time(),
+
     ok.
+
+-if(?OTP_RELEASE >= 22).
+test_native_system_time() ->
+    ok = test_system_time(native, 1).
+
+test_native_universal_time() ->
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, native),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000000, native),
+    ok.
+-else.
+test_native_system_time() -> ok.
+test_native_universal_time() -> ok.
+-endif.

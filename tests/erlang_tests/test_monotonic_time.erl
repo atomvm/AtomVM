@@ -28,9 +28,33 @@ start() ->
     after 1 -> ok
     end,
     T2 = erlang:monotonic_time(millisecond),
-    test_diff(T2 - T1).
+    1 = test_diff(T2 - T1),
+
+    N1 = erlang:monotonic_time(nanosecond),
+    receive
+    after 1 -> ok
+    end,
+    N2 = erlang:monotonic_time(nanosecond),
+    true = is_integer(N2 - N1) andalso (N2 - N1) >= 0,
+
+    ok = test_native_monotonic_time(),
+
+    1.
 
 test_diff(X) when is_integer(X) andalso X >= 0 ->
     1;
 test_diff(X) when X < 0 ->
     0.
+
+-if(?OTP_RELEASE >= 22).
+test_native_monotonic_time() ->
+    Na1 = erlang:monotonic_time(native),
+    receive
+    after 1 -> ok
+    end,
+    Na2 = erlang:monotonic_time(native),
+    true = is_integer(Na2 - Na1) andalso (Na2 - Na1) >= 0,
+    ok.
+-else.
+test_native_monotonic_time() -> ok.
+-endif.

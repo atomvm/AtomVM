@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for ESP32 development builds to include NVS partition data at build time
 - Added missing `inet` functions: `ntoa/1`, `parse_address/1`, `parse_ipv4_address/1`,
 `parse_ipv4strict_address/1`
+- Added `nanosecond` and `native` time unit support to `erlang:system_time/1`, `erlang:monotonic_time/1`, and `calendar:system_time_to_universal_time/2`
 
 ### Changed
 
