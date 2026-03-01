@@ -139,7 +139,7 @@ term external_term_from_binary_with_roots(Context *ctx, size_t binary_ix, size_t
     }
 
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_usage, num_roots, roots, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        fprintf(stderr, "Unable to ensure %zu free words in heap\n", eterm_size);
+        fprintf(stderr, "Unable to ensure %i free words in heap\n", heap_usage);
         return term_invalid_term();
     }
     // Recompute external_term_buf
