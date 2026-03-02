@@ -31,6 +31,7 @@
     decode_hex/1,
     encode_hex/1, encode_hex/2,
     list_to_bin/1,
+    longest_common_prefix/1,
     part/3,
     split/2, split/3,
     match/2, match/3,
@@ -104,6 +105,17 @@ encode_hex(Data, uppercase) ->
     <<(integer_to_binary(B, 16)) || <<B:4>> <= Data>>;
 encode_hex(Data, lowercase) ->
     <<<<(hd(string:to_lower(integer_to_list(B, 16)))):8>> || <<B:4>> <= Data>>.
+
+%%-----------------------------------------------------------------------------
+%% @param   Binaries non-empty list of binaries
+%% @returns length of the longest common prefix of all binaries in the list
+%% @doc     Returns the length of the longest common prefix of the binaries in
+%%          the list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec longest_common_prefix(Binaries :: [binary(), ...]) -> non_neg_integer().
+longest_common_prefix(_Binaries) ->
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @equiv match(Binary, Pattern, [])

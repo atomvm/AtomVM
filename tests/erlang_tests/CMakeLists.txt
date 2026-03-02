@@ -354,6 +354,7 @@ compile_erlang(test_binary_split)
 compile_erlang(test_split_binary)
 compile_erlang(test_binary_replace)
 compile_erlang(test_binary_match)
+compile_erlang(test_binary_longest_common_prefix)
 
 compile_erlang(test_zlib_compress)
 
@@ -903,6 +904,7 @@ set(erlang_test_beams
     test_split_binary.beam
     test_binary_replace.beam
     test_binary_match.beam
+    test_binary_longest_common_prefix.beam
 
     test_zlib_compress.beam
 

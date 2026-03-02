@@ -158,6 +158,7 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[]);
 static term nif_binary_split(Context *ctx, int argc, term argv[]);
 static term nif_binary_replace(Context *ctx, int argc, term argv[]);
 static term nif_binary_match(Context *ctx, int argc, term argv[]);
+static term nif_binary_longest_common_prefix_1(Context *ctx, int argc, term argv[]);
 static term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[]);
 static term nif_os_getenv_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_delete_element_2(Context *ctx, int argc, term argv[]);
@@ -346,6 +347,11 @@ static const struct Nif binary_replace_nif = {
 static const struct Nif binary_match_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_binary_match
+};
+
+static const struct Nif binary_longest_common_prefix_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_binary_longest_common_prefix_1
 };
 
 static const struct Nif make_ref_nif = {
@@ -3705,6 +3711,42 @@ static term nif_binary_match(Context *ctx, int argc, term argv[])
     term_put_tuple_element(result_tuple, 0, term_from_int(match_slice.pos));
     term_put_tuple_element(result_tuple, 1, term_from_int(match_slice.len));
     return result_tuple;
+}
+
+static term nif_binary_longest_common_prefix_1(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term list = argv[0];
+    VALIDATE_VALUE(list, term_is_nonempty_list);
+
+    term first_term = term_get_list_head(list);
+    VALIDATE_VALUE(first_term, term_is_binary);
+
+    size_t prefix_len = term_binary_size(first_term);
+    const uint8_t *first_data = (const uint8_t *) term_binary_data(first_term);
+
+    term rest = term_get_list_tail(list);
+    while (term_is_nonempty_list(rest)) {
+        term bin_term = term_get_list_head(rest);
+        VALIDATE_VALUE(bin_term, term_is_binary);
+
+        size_t bin_size = term_binary_size(bin_term);
+        const uint8_t *bin_data = (const uint8_t *) term_binary_data(bin_term);
+        size_t max_common = (bin_size < prefix_len) ? bin_size : prefix_len;
+
+        size_t common = 0;
+        while (common < max_common && first_data[common] == bin_data[common]) {
+            common++;
+        }
+        prefix_len = common;
+
+        rest = term_get_list_tail(rest);
+    }
+
+    VALIDATE_VALUE(rest, term_is_nil);
+
+    return term_from_int(prefix_len);
 }
 
 static term nif_erlang_throw(Context *ctx, int argc, term argv[])
