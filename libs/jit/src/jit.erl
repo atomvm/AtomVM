@@ -1352,7 +1352,7 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                 MSt11 = MMod:sub(MSt10, SizeReg, BSOffsetReg1),
                 {MSt11, SizeReg};
             is_integer(Size) ->
-                % SizeReg is binary size
+                % SizeReg contains binary size in bytes as a term
                 MSt11 =
                     if
                         (Size * Unit) rem 8 =/= 0 ->
@@ -1360,7 +1360,8 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                                 ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                             ]);
                         true ->
-                            MMod:sub(MSt10, SizeReg, (Size * Unit) div 8)
+                            % Equivalent of SizeReg - (((Size * Unit) div 8) bsl 4)
+                            MMod:sub(MSt10, SizeReg, (Size * Unit) bsl 1)
                     end,
                 MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg1}, Fail, MMod, MSt11),
                 {MSt12, (Size * Unit) div 8};
