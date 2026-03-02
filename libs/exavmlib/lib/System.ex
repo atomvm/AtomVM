@@ -25,6 +25,21 @@ defmodule System do
           :second
           | :millisecond
           | :microsecond
+          | :nanosecond
+
+  @doc """
+  Returns the current monotonic time in the `:native` time unit.
+
+  This time is monotonically increasing and starts in an unspecified
+  point in time. This is not strictly monotonically increasing. Multiple
+  sequential calls of the function may return the same value.
+
+  Inlined by the compiler.
+  """
+  @spec monotonic_time() :: integer
+  def monotonic_time do
+    :erlang.monotonic_time()
+  end
 
   @doc """
   Returns the current monotonic time in the given time unit.
@@ -38,6 +53,20 @@ defmodule System do
   end
 
   @doc """
+  Returns the current system time in the `:native` time unit.
+
+  It is the VM view of the `os_time/0`. They may not match in
+  case of time warps although the VM works towards aligning
+  them. This time is not monotonic.
+
+  Inlined by the compiler.
+  """
+  @spec system_time() :: integer
+  def system_time do
+    :erlang.system_time()
+  end
+
+  @doc """
   Returns the current system time in the given time unit.
 
   It is the VM view of the `os_time/0`. They may not match in
@@ -47,5 +76,31 @@ defmodule System do
   @spec system_time(time_unit) :: integer
   def system_time(unit) do
     :erlang.system_time(unit)
+  end
+
+  @doc """
+  Returns the current operating system (OS) time.
+
+  The result is returned in the `:native` time unit.
+
+  This time may be adjusted forwards or backwards in time
+  with no limitation and is not monotonic.
+
+  Inlined by the compiler.
+  """
+  @spec os_time() :: integer
+  def os_time do
+    :os.system_time()
+  end
+
+  @doc """
+  Returns the current operating system (OS) time in the given time `unit`.
+
+  This time may be adjusted forwards or backwards in time
+  with no limitation and is not monotonic.
+  """
+  @spec os_time(time_unit | :native) :: integer
+  def os_time(unit) do
+    :os.system_time(unit)
   end
 end

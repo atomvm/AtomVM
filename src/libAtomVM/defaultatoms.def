@@ -97,6 +97,7 @@ X(ATOMVM_VERSION_ATOM, "\xE", "atomvm_version")
 X(SECOND_ATOM, "\x6", "second")
 X(MILLISECOND_ATOM, "\xB", "millisecond")
 X(MICROSECOND_ATOM, "\xB", "microsecond")
+X(NANOSECOND_ATOM, "\xA", "nanosecond")
 
 X(INFINITY_ATOM, "\x8", "infinity")
 X(TIMEOUT_VALUE_ATOM, "\xD", "timeout_value")

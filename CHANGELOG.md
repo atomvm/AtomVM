@@ -84,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for OTP-29
 - Added `base64:encode/2` and `base64:decode/2` functions, that take in addition also a map with
 encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have been added to `Base`.
+- Added `nanosecond` and `native` time unit support to `erlang:system_time/1`, `erlang:monotonic_time/1`, and `calendar:system_time_to_universal_time/2`
+- Added `erlang:system_time/0`, `erlang:monotonic_time/0`, and `os:system_time/0,1` NIFs
 
 ### Changed
 

@@ -679,20 +679,22 @@ Use [`erlang:timestamp/0`](./apidocs/erlang/estdlib/erlang.md#timestamp0) to get
 {MegaSecs, Secs, MicroSecs} = erlang:timestamp().
 ```
 
-Use [`erlang:system_time/1`](./apidocs/erlang/estdlib/erlang.md#system_time1) to obtain the seconds, milliseconds or microseconds since the UNIX epoch (Midnight, Jan 1, 1970, UTC):
+Use [`erlang:system_time/1`](./apidocs/erlang/estdlib/erlang.md#system_time1) to obtain the seconds, milliseconds, microseconds or nanoseconds since the UNIX epoch (Midnight, Jan 1, 1970, UTC):
 
 ```erlang
 Seconds = erlang:system_time(second).
 MilliSeconds = erlang:system_time(millisecond).
 MicroSeconds = erlang:system_time(microsecond).
+NanoSeconds = erlang:system_time(nanosecond).
 ```
 
-Use [`erlang:monotonic_time/1`](./apidocs/erlang/estdlib/erlang.md#monotonic_time1) to obtain a (possibly not strictly) monotonically increasing time measurement.  Use the same time units to convert to seconds, milliseconds, or microseconds:
+Use [`erlang:monotonic_time/1`](./apidocs/erlang/estdlib/erlang.md#monotonic_time1) to obtain a (possibly not strictly) monotonically increasing time measurement.  Use the same time units to convert to seconds, milliseconds, microseconds or nanoseconds:
 
 ```erlang
 Seconds = erlang:monotonic_time(second).
 MilliSeconds = erlang:monotonic_time(millisecond).
 MicroSeconds = erlang:monotonic_time(microsecond).
+NanoSeconds = erlang:monotonic_time(nanosecond).
 ```
 
 ```{caution}
@@ -722,7 +724,7 @@ permission to set the system time.
 
 On the ESP32 platform, you can use the Wifi network to set the system time automatically.  For information about how to set system time on the ESP32 using SNTP, see the [Network Programming Guide](./network-programming-guide.md).
 
-To convert a time (in seconds, milliseconds, or microseconds from the UNIX epoch) to a date-time, use the [`calendar:system_time_to_universal_time/2`](./apidocs/erlang/estdlib/calendar.md#system_time_to_universal_time2) function.  For example,
+To convert a time (in seconds, milliseconds, microseconds, or nanoseconds from the UNIX epoch) to a date-time, use the [`calendar:system_time_to_universal_time/2`](./apidocs/erlang/estdlib/calendar.md#system_time_to_universal_time2) function.  For example,
 
 ```erlang
 Milliseconds = ... %% get milliseconds from the UNIX epoch
@@ -731,7 +733,7 @@ Milliseconds = ... %% get milliseconds from the UNIX epoch
 } = calendar:system_time_to_universal_time(Milliseconds, millisecond).
 ```
 
-Valid time units are `second`, `millisecond`, and `microsecond`.
+Valid time units are `second`, `millisecond`, `microsecond`, and `nanosecond`.
 
 ### Date and Time
 
