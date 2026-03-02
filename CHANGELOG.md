@@ -82,6 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `parse_ipv4strict_address/1`
 - Added support for new `is_integer/3` BIF, introduced with OTP-29
 - Support for OTP-29
+- Added `base64:encode/2` and `base64:decode/2` functions, that take in addition also a map with
+encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have been added to `Base`.
 
 ### Changed
 

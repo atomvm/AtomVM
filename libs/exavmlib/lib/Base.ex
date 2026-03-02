@@ -225,4 +225,174 @@ defmodule Base do
       :lower -> :binary.encode_hex(data, :lowercase)
     end
   end
+
+  @doc """
+  Decodes a base 64 encoded string into a binary string.
+
+  `ignore: :whitespace` is not supported.
+
+  Accepts `padding: false` option which will ignore padding from
+  the input string.
+
+  ## Examples
+
+      iex> Base.decode64("Zm9vYmFy")
+      {:ok, "foobar"}
+
+      iex> Base.decode64("Zm9vYg==")
+      {:ok, "foob"}
+
+      iex> Base.decode64("Zm9vYg", padding: false)
+      {:ok, "foob"}
+
+  """
+  @spec decode64(binary, padding: boolean) :: {:ok, binary} | :error
+  def decode64(string, opts \\ []) when is_binary(string) do
+    {:ok, decode64!(string, opts)}
+  rescue
+    ArgumentError -> :error
+  end
+
+  @doc """
+  Decodes a base 64 encoded string into a binary string.
+
+  `ignore: :whitespace` is not supported.
+
+  Accepts `padding: false` option which will ignore padding from
+  the input string.
+
+  An `ArgumentError` exception is raised if the padding is incorrect or
+  a non-alphabet character is present in the string.
+
+  ## Examples
+
+      iex> Base.decode64!("Zm9vYmFy")
+      "foobar"
+
+      iex> Base.decode64!("Zm9vYg==")
+      "foob"
+
+      iex> Base.decode64!("Zm9vYg", padding: false)
+      "foob"
+
+  """
+  @spec decode64!(binary, padding: boolean) :: binary
+  def decode64!(string, opts \\ []) when is_binary(string) and is_list(opts) do
+    elixir_to_erlang_decode!(string, :standard, opts)
+  end
+
+  @doc """
+  Encodes a binary string into a base 64 encoded string.
+
+  Accepts `padding: false` option which will omit padding from
+  the output string.
+
+  ## Examples
+
+      iex> Base.encode64("foobar")
+      "Zm9vYmFy"
+
+      iex> Base.encode64("foob")
+      "Zm9vYg=="
+
+      iex> Base.encode64("foob", padding: false)
+      "Zm9vYg"
+
+  """
+  @spec encode64(binary, padding: boolean) :: binary
+  def encode64(data, opts \\ []) when is_binary(data) do
+    elixir_to_erlang_encode(data, :standard, opts)
+  end
+
+  @doc """
+  Encodes a binary string into a base 64 encoded string with URL and filename
+  safe alphabet.
+
+  Accepts `padding: false` option which will omit padding from
+  the output string.
+
+  ## Examples
+
+      iex> Base.url_encode64(<<255, 127, 254, 252>>)
+      "_3_-_A=="
+
+      iex> Base.url_encode64(<<255, 127, 254, 252>>, padding: false)
+      "_3_-_A"
+
+  """
+  @spec url_encode64(binary, padding: boolean) :: binary
+  def url_encode64(data, opts \\ []) when is_binary(data) and is_list(opts) do
+    elixir_to_erlang_encode(data, :urlsafe, opts)
+  end
+
+  @doc """
+  Decodes a base 64 encoded string with URL and filename safe alphabet
+  into a binary string.
+
+  `ignore: :whitespace` is not supported.
+
+  Accepts `padding: false` option which will ignore padding from
+  the input string.
+
+  An `ArgumentError` exception is raised if the padding is incorrect or
+  a non-alphabet character is present in the string.
+
+  ## Examples
+
+      iex> Base.url_decode64!("_3_-_A==")
+      <<255, 127, 254, 252>>
+
+      iex> Base.url_decode64!("_3_-_A", padding: false)
+      <<255, 127, 254, 252>>
+
+  """
+  @spec url_decode64!(binary, padding: boolean) :: binary
+  def url_decode64!(string, opts \\ []) when is_binary(string) do
+    elixir_to_erlang_decode!(string, :urlsafe, opts)
+  end
+
+  @doc """
+  Decodes a base 64 encoded string with URL and filename safe alphabet
+  into a binary string.
+
+  `ignore: :whitespace` is not supported.
+
+  Accepts `padding: false` option which will ignore padding from
+  the input string.
+
+  ## Examples
+
+      iex> Base.url_decode64("_3_-_A==")
+      {:ok, <<255, 127, 254, 252>>}
+
+      iex> Base.url_decode64("_3_-_A", padding: false)
+      {:ok, <<255, 127, 254, 252>>}
+
+  """
+  @spec url_decode64(binary, padding: boolean) :: {:ok, binary} | :error
+  def url_decode64(string, opts \\ []) when is_binary(string) do
+    {:ok, url_decode64!(string, opts)}
+  rescue
+    ArgumentError -> :error
+  end
+
+  defp elixir_to_erlang_decode!(string, mode, opts) do
+    padding =
+      case Keyword.get(opts, :padding, true) do
+        true -> true
+        false -> false
+      end
+
+    :base64.decode(string, %{mode: mode, padding: padding})
+  end
+
+  defp elixir_to_erlang_encode(data, mode, opts) do
+    padding =
+      case Keyword.get(opts, :padding, true) do
+        true -> true
+        false -> false
+      end
+
+    :base64.encode(data, %{mode: mode, padding: padding})
+  end
 end
