@@ -565,6 +565,7 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_create_bin),
 
     TEST_CASE(test_multi_value_comprehension),
+    TEST_CASE(test_is_integer_3),
 
     TEST_CASE(test_code_server_nifs),
 

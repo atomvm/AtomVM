@@ -48,6 +48,7 @@ typedef struct JITState JITState;
 typedef term (*BifImpl0)(Context *ctx);
 typedef term (*BifImpl1)(Context *ctx, uint32_t fail_label, term arg1);
 typedef term (*BifImpl2)(Context *ctx, uint32_t fail_label, term arg1, term arg2);
+typedef term (*BifImpl3)(Context *ctx, uint32_t fail_label, term arg1, term arg2, term arg3);
 
 typedef term (*GCBifImpl1)(Context *ctx, uint32_t fail_label, int live, term arg1);
 typedef term (*GCBifImpl2)(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2);
@@ -83,6 +84,7 @@ struct Bif
         BifImpl0 bif0_ptr;
         BifImpl1 bif1_ptr;
         BifImpl2 bif2_ptr;
+        BifImpl3 bif3_ptr;
     };
 };
 

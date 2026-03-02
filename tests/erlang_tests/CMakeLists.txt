@@ -637,6 +637,7 @@ compile_erlang(reraise_raiser)
 
 compile_erlang(stacktrace_function_args)
 compile_erlang(test_multi_value_comprehension)
+compile_erlang(test_is_integer_3)
 
 compile_erlang(test_inline_arith)
 
@@ -1189,6 +1190,7 @@ set(erlang_test_beams
     stacktrace_function_args.beam
 
     test_multi_value_comprehension.beam
+    test_is_integer_3.beam
 
     ${OTP23_OR_GREATER_TESTS}
     ${OTP25_OR_GREATER_TESTS}
