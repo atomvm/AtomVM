@@ -118,7 +118,7 @@ encode(Data, Options) when (is_binary(Data) orelse is_list(Data)) andalso is_map
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encode_to_string(Data :: binary() | iolist()) -> string().
-encode_to_string(Data) when is_binary(Data) ->
+encode_to_string(Data) when is_binary(Data) orelse is_list(Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -135,7 +135,9 @@ encode_to_string(Data) when is_binary(Data) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec encode_to_string(Data :: binary() | iolist(), Options :: encode_options()) -> string().
-encode_to_string(Data, Options) when is_binary(Data) andalso is_map(Options) ->
+encode_to_string(Data, Options) when
+    (is_binary(Data) orelse is_list(Data)) andalso is_map(Options)
+->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -184,7 +186,7 @@ decode(Data, Options) when (is_binary(Data) orelse is_list(Data)) andalso is_map
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decode_to_string(Data :: binary() | iolist()) -> string().
-decode_to_string(Data) when is_binary(Data) ->
+decode_to_string(Data) when is_binary(Data) orelse is_list(Data) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -207,5 +209,7 @@ decode_to_string(Data) when is_binary(Data) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec decode_to_string(Data :: binary() | iolist(), Options :: decode_options()) -> string().
-decode_to_string(Data, Options) when is_binary(Data) andalso is_map(Options) ->
+decode_to_string(Data, Options) when
+    (is_binary(Data) orelse is_list(Data)) andalso is_map(Options)
+->
     erlang:nif_error(undefined).
