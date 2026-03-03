@@ -67,8 +67,12 @@
     dropwhile/2,
     duplicate/2,
     sublist/2,
+    sublist/3,
+    droplast/1,
     append/1,
     append/2,
+    zip/2,
+    zipwith/3,
     min/1,
     max/1
 ]).
@@ -846,6 +850,33 @@ sublist0(_, 0) -> [];
 sublist0([H | Tail], Len) -> [H | sublist0(Tail, Len - 1)].
 
 %%-----------------------------------------------------------------------------
+%% @param   List  list to take the sublist from
+%% @param   Start 1-based start position
+%% @param   Len   maximum number of elements to return
+%% @returns a sublist of `List' starting at `Start' with at most `Len' elements
+%% @doc     Return a sublist starting at `Start' (1-based) with at most `Len' elements.
+%%          It is not an error for `Start+Len' to exceed the length of `List'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sublist(List :: [Elem], Start :: pos_integer(), Len :: non_neg_integer()) -> [Elem].
+sublist(List, 1, L) when is_list(List), is_integer(L), L >= 0 ->
+    sublist(List, L);
+sublist([], S, _L) when is_integer(S), S >= 2 ->
+    [];
+sublist([_H | T], S, L) when is_integer(S), S >= 2 ->
+    sublist(T, S - 1, L).
+
+%%-----------------------------------------------------------------------------
+%% @param   List a non-empty list
+%% @returns all elements of `List' except the last
+%% @doc     Drop the last element of a list.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec droplast(List :: nonempty_list(T)) -> [T].
+droplast([_]) -> [];
+droplast([H | T]) -> [H | droplast(T)].
+
+%%-----------------------------------------------------------------------------
 %% @param   ListOfLists a list of lists to make the general list from
 %% @returns a list made of the sublists of `ListOfLists'.
 %% @doc     Returns a list in which all the sublists of `ListOfLists' have been appended.
@@ -877,6 +908,45 @@ append([]) -> [].
     T :: term().
 
 append(L1, L2) -> L1 ++ L2.
+
+%%-----------------------------------------------------------------------------
+%% @param   List1 a list
+%% @param   List2 a list
+%% @returns a list of two-tuples combining corresponding elements of `List1' and `List2'
+%% @doc     Combine elements from two lists into a list of two-tuples.
+%%          Both lists must have equal length.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec zip(List1, List2) -> List3 when
+    List1 :: [A],
+    List2 :: [B],
+    List3 :: [{A, B}],
+    A :: term(),
+    B :: term().
+
+zip([A | As], [B | Bs]) -> [{A, B} | zip(As, Bs)];
+zip([], []) -> [].
+
+%%-----------------------------------------------------------------------------
+%% @param   Combine a function that takes elements from each list
+%% @param   List1 a list
+%% @param   List2 a list
+%% @returns a list of results from applying `Combine' to corresponding elements
+%% @doc     Combine elements from two lists using the given function.
+%%          Both lists must have equal length.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec zipwith(Combine, List1, List2) -> List3 when
+    Combine :: fun((X, Y) -> T),
+    List1 :: [X],
+    List2 :: [Y],
+    List3 :: [T],
+    X :: term(),
+    Y :: term(),
+    T :: term().
+
+zipwith(F, [A | As], [B | Bs]) -> [F(A, B) | zipwith(F, As, Bs)];
+zipwith(F, [], []) when is_function(F, 2) -> [].
 
 %%-----------------------------------------------------------------------------
 %% @param   List a non-empty list of terms that can be compared
