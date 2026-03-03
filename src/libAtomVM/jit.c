@@ -1533,8 +1533,30 @@ static int jit_bitstring_insert_utf16(term bin, size_t offset, int c, enum Bitst
 
 static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)
 {
-    avm_uint64_t int_value = term_maybe_unbox_int64(value);
-    return bitstring_insert_integer(bin, offset, int_value, n, flags);
+
+    if (term_is_int(value) || term_boxed_size(value) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+
+        avm_uint64_t int_value = term_maybe_unbox_int64(value);
+        return bitstring_insert_integer(bin, offset, int_value, n, flags);
+
+    } else {
+        const intn_digit_t *big_src_value = NULL;
+        size_t big_len = 0;
+        intn_integer_sign_t big_sign;
+
+        term_to_bigint(value, &big_src_value, &big_len, &big_sign);
+
+        // when building a binary, `signed` flag is implicit
+        intn_from_integer_options_t intn_flags = bitstring_flags_to_intn_opts(flags) | IntnSigned;
+        int byte_offset = offset / 8;
+        uint8_t *dst = (uint8_t *) term_binary_data(bin) + byte_offset;
+        size_t t_capacity = term_binary_size(bin);
+        size_t avail = t_capacity - byte_offset;
+
+        int written
+            = intn_to_integer_bytes(big_src_value, big_len, big_sign, intn_flags, dst, avail);
+        return written > 0;
+    }
 }
 
 static bool jit_bitstring_insert_float(term bin, size_t offset, term value, size_t n, enum BitstringFlags flags)

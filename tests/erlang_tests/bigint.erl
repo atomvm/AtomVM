@@ -42,7 +42,8 @@
     id/1,
     idB/1,
     t2/2,
-    fst/1
+    fst/1,
+    binint/1
 ]).
 
 %
@@ -74,6 +75,7 @@ start() ->
         to_external_term() +
         test_pattern_match() +
         test_pattern_match_u64() +
+        test_build_binary() +
         test_band() +
         test_bxor() +
         test_bor() +
@@ -2237,6 +2239,158 @@ test_pattern_match_u64() ->
     Expected_S = ?MODULE:id(erlang:binary_to_integer(?MODULE:id(<<"9223372036854775807">>))),
     Expected_S = S64,
     0.
+
+test_build_binary() ->
+    Int0 = ?MODULE:binint(<<"FEDCBDA9CAFE1234">>),
+    <<52, 18, 254, 202, 169, 189, 220, 254>> = ?MODULE:id(<<Int0:64/unsigned-little-integer>>),
+    <<254, 220, 189, 169, 202, 254, 18, 52>> = ?MODULE:id(<<Int0:64/unsigned-big-integer>>),
+
+    Int1 = ?MODULE:binint(<<"FEDCBDA9CAFE1234ABCD">>),
+    <<205, 171, 52, 18, 254, 202, 169, 189, 220, 254>> = ?MODULE:id(<<
+        Int1:80/unsigned-little-integer
+    >>),
+    <<254, 220, 189, 169, 202, 254, 18, 52, 171, 205>> = ?MODULE:id(<<Int1:80/unsigned-big-integer>>),
+
+    <<0, 0, 0, 0, 0, 254, 220, 189, 169, 202, 254, 18, 52>> = ?MODULE:id(<<
+        Int0:104/unsigned-big-integer
+    >>),
+    <<52, 18, 254, 202, 169, 189, 220, 254, 0, 0, 0, 0, 0>> = ?MODULE:id(<<
+        Int0:104/unsigned-little-integer
+    >>),
+    <<0, 0, 0, 254, 220, 189, 169, 202, 254, 18, 52, 171, 205>> = ?MODULE:id(<<
+        Int1:104/unsigned-big-integer
+    >>),
+    <<205, 171, 52, 18, 254, 202, 169, 189, 220, 254, 0, 0, 0>> = ?MODULE:id(<<
+        Int1:104/unsigned-little-integer
+    >>),
+
+    Int2 = ?MODULE:binint(<<"-FEDCBDA9CAFE1234ABCD">>),
+    <<255, 255, 1, 35, 66, 86, 53, 1, 237, 203, 84, 51>> = ?MODULE:id(<<Int2:96/signed-big-integer>>),
+    <<255, 1, 35, 66, 86, 53, 1, 237, 203, 84, 51>> = ?MODULE:id(<<Int2:88/signed-big-integer>>),
+    <<1, 35, 66, 86, 53, 1, 237, 203, 84, 51>> = ?MODULE:id(<<Int2:80/signed-big-integer>>),
+
+    <<51, 84, 203, 237, 1, 53, 86, 66, 35, 1, 255, 255>> = ?MODULE:id(<<
+        Int2:96/signed-little-integer
+    >>),
+    <<51, 84, 203, 237, 1, 53, 86, 66, 35, 1, 255>> = ?MODULE:id(<<Int2:88/signed-little-integer>>),
+    <<51, 84, 203, 237, 1, 53, 86, 66, 35, 1>> = ?MODULE:id(<<Int2:80/signed-little-integer>>),
+
+    Int3 = ?MODULE:binint(<<"-FEDCBDA9CAFE1234">>),
+    <<255, 255, 255, 255, 1, 35, 66, 86, 53, 1, 237, 204>> = ?MODULE:id(<<
+        Int3:96/signed-big-integer
+    >>),
+    <<255, 255, 255, 1, 35, 66, 86, 53, 1, 237, 204>> = ?MODULE:id(<<Int3:88/signed-big-integer>>),
+    <<255, 255, 1, 35, 66, 86, 53, 1, 237, 204>> = ?MODULE:id(<<Int3:80/signed-big-integer>>),
+
+    <<204, 237, 1, 53, 86, 66, 35, 1, 255, 255, 255, 255>> = ?MODULE:id(<<
+        Int3:96/signed-little-integer
+    >>),
+    <<204, 237, 1, 53, 86, 66, 35, 1, 255, 255, 255>> = ?MODULE:id(<<Int3:88/signed-little-integer>>),
+    <<204, 237, 1, 53, 86, 66, 35, 1, 255, 255>> = ?MODULE:id(<<Int3:80/signed-little-integer>>),
+
+    Int4 = ?MODULE:binint(<<"FFFFFFFFFFFFFFFF">>),
+    <<0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<
+        Int4:96/signed-big-integer
+    >>),
+    <<0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int4:88/signed-big-integer>>),
+    <<0, 0, 255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int4:80/signed-big-integer>>),
+    <<0, 255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int4:72/signed-big-integer>>),
+    <<255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int4:64/signed-big-integer>>),
+
+    <<255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0>> = ?MODULE:id(<<
+        Int4:96/signed-little-integer
+    >>),
+    <<255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0>> = ?MODULE:id(<<
+        Int4:88/signed-little-integer
+    >>),
+    <<255, 255, 255, 255, 255, 255, 255, 255, 0, 0>> = ?MODULE:id(<<Int4:80/signed-little-integer>>),
+    <<255, 255, 255, 255, 255, 255, 255, 255, 0>> = ?MODULE:id(<<Int4:72/signed-little-integer>>),
+    <<255, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int4:64/signed-little-integer>>),
+
+    Int5 = ?MODULE:binint(<<"-FFFFFFFFFFFFFFFF">>),
+    <<255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 1>> = ?MODULE:id(<<Int5:96/signed-big-integer>>),
+    <<255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 1>> = ?MODULE:id(<<Int5:88/signed-big-integer>>),
+    <<255, 255, 0, 0, 0, 0, 0, 0, 0, 1>> = ?MODULE:id(<<Int5:80/signed-big-integer>>),
+    <<255, 0, 0, 0, 0, 0, 0, 0, 1>> = ?MODULE:id(<<Int5:72/signed-big-integer>>),
+    <<0, 0, 0, 0, 0, 0, 0, 1>> = ?MODULE:id(<<Int5:64/signed-big-integer>>),
+
+    <<1, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255>> = ?MODULE:id(<<Int5:96/signed-little-integer>>),
+    <<1, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255>> = ?MODULE:id(<<Int5:88/signed-little-integer>>),
+    <<1, 0, 0, 0, 0, 0, 0, 0, 255, 255>> = ?MODULE:id(<<Int5:80/signed-little-integer>>),
+    <<1, 0, 0, 0, 0, 0, 0, 0, 255>> = ?MODULE:id(<<Int5:72/signed-little-integer>>),
+    <<1, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int5:64/signed-little-integer>>),
+
+    Int6 = ?MODULE:binint(<<"8000000000000000">>),
+    <<0, 0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:96/signed-big-integer>>),
+    <<0, 0, 0, 128, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:88/signed-big-integer>>),
+    <<0, 0, 128, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:80/signed-big-integer>>),
+    <<0, 128, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:72/signed-big-integer>>),
+    <<128, 0, 0, 0, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:64/signed-big-integer>>),
+
+    <<0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0, 0>> = ?MODULE:id(<<Int6:96/signed-little-integer>>),
+    <<0, 0, 0, 0, 0, 0, 0, 128, 0, 0, 0>> = ?MODULE:id(<<Int6:88/signed-little-integer>>),
+    <<0, 0, 0, 0, 0, 0, 0, 128, 0, 0>> = ?MODULE:id(<<Int6:80/signed-little-integer>>),
+    <<0, 0, 0, 0, 0, 0, 0, 128, 0>> = ?MODULE:id(<<Int6:72/signed-little-integer>>),
+    <<0, 0, 0, 0, 0, 0, 0, 128>> = ?MODULE:id(<<Int6:64/signed-little-integer>>),
+
+    Int7 = ?MODULE:binint(<<"-8000000000000001">>),
+    <<255, 255, 255, 255, 127, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<
+        Int7:96/signed-big-integer
+    >>),
+    <<255, 255, 255, 127, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<
+        Int7:88/signed-big-integer
+    >>),
+    <<255, 255, 127, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int7:80/signed-big-integer>>),
+    <<255, 127, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int7:72/signed-big-integer>>),
+    <<127, 255, 255, 255, 255, 255, 255, 255>> = ?MODULE:id(<<Int7:64/signed-big-integer>>),
+
+    <<255, 255, 255, 255, 255, 255, 255, 127, 255, 255, 255, 255>> = ?MODULE:id(<<
+        Int7:96/signed-little-integer
+    >>),
+    <<255, 255, 255, 255, 255, 255, 255, 127, 255, 255, 255>> = ?MODULE:id(<<
+        Int7:88/signed-little-integer
+    >>),
+    <<255, 255, 255, 255, 255, 255, 255, 127, 255, 255>> = ?MODULE:id(<<
+        Int7:80/signed-little-integer
+    >>),
+    <<255, 255, 255, 255, 255, 255, 255, 127, 255>> = ?MODULE:id(<<Int7:72/signed-little-integer>>),
+    <<255, 255, 255, 255, 255, 255, 255, 127>> = ?MODULE:id(<<Int7:64/signed-little-integer>>),
+
+    Int8 = ?MODULE:binint(<<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+    <<255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+        255>> = ?MODULE:id(<<Int8:256/unsigned-big-integer>>),
+
+    Int9 = ?MODULE:binint(<<"-FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>),
+    <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1>> = ?MODULE:id(<<Int9:256/signed-big-integer>>),
+
+    Int10 = ?MODULE:binint(<<"-588E20A239AD1D99185D05B3D1074BD1">>),
+    <<255, 167, 113, 223, 93, 198, 82, 226, 102, 231, 162, 250, 76, 46, 248, 180, 47>> = ?MODULE:id(
+        <<Int10:136/signed-big-integer>>
+    ),
+    <<47, 180, 248, 46, 76, 250, 162, 231, 102, 226, 82, 198, 93, 223, 113, 167>> = ?MODULE:id(<<
+        Int10:128/signed-little-integer
+    >>),
+
+    Int11 = ?MODULE:binint(<<"30F7C036785AA721D2C3BDB7E62721197DA206D1A712273B40B0C5A0A205AB">>),
+    <<48, 247, 192, 54, 120, 90, 167, 33, 210, 195, 189, 183, 230, 39, 33, 25, 125, 162, 6, 209,
+        167, 18, 39, 59, 64, 176, 197, 160, 162, 5,
+        171>> = ?MODULE:id(<<Int11:248/signed-big-integer>>),
+    <<0, 48, 247, 192, 54, 120, 90, 167, 33, 210, 195, 189, 183, 230, 39, 33, 25, 125, 162, 6, 209,
+        167, 18, 39, 59, 64, 176, 197, 160, 162, 5,
+        171>> = ?MODULE:id(<<Int11:256/signed-big-integer>>),
+    <<171, 5, 162, 160, 197, 176, 64, 59, 39, 18, 167, 209, 6, 162, 125, 25, 33, 39, 230, 183, 189,
+        195, 210, 33, 167, 90, 120, 54, 192, 247,
+        48>> = ?MODULE:id(<<Int11:248/signed-little-integer>>),
+    <<171, 5, 162, 160, 197, 176, 64, 59, 39, 18, 167, 209, 6, 162, 125, 25, 33, 39, 230, 183, 189,
+        195, 210, 33, 167, 90, 120, 54, 192, 247, 48,
+        0>> = ?MODULE:id(<<Int11:256/signed-little-integer>>),
+
+    0.
+
+binint(X) ->
+    ?MODULE:id(erlang:binary_to_integer(?MODULE:id(X), 16)).
 
 test_band() ->
     MaxPatternBin = <<"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF">>,

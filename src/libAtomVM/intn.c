@@ -1270,17 +1270,9 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
         filler = 0xFF;
         unsigned int carry = 1;
         for (size_t i = 0; i < copied_len; i++) {
-            unsigned int temp = ((int) (~out[i])) + carry;
+            unsigned int temp = ((uint8_t) (~out[i])) + carry;
             out[i] = temp & 0xFF;
             carry = temp >> 8;
-        }
-    }
-
-    if ((opts & IntnSigned) && (copied_len == out_len)) {
-        uint8_t last_byte = out[copied_len - 1];
-        if (UNLIKELY(
-                (negate && ((last_byte & 0x80) == 0)) || (!negate && ((last_byte & 0x80) != 0)))) {
-            return -1;
         }
     }
 
