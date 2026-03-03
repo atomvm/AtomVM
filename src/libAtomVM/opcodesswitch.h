@@ -5616,7 +5616,7 @@ wait_timeout_trap_handler:
                 #ifdef IMPL_EXECUTE_LOOP
                         bs_bin = x_regs[live];
 
-                        term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
+                        term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, size_val, &ctx->heap, ctx->global);
                         WRITE_REGISTER(dreg, t);
                     }
                 #endif
