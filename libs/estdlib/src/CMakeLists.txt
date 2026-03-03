@@ -36,6 +36,7 @@ set(ERLANG_MODULES
     erts_debug
     ets
     file
+    filename
     gen
     gen_event
     gen_server
@@ -60,7 +61,6 @@ set(ERLANG_MODULES
     net
     proc_lib
     sys
-    file
     logger
     logger_std_h
     proplists
