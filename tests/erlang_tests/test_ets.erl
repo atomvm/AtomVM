@@ -32,6 +32,7 @@ start() ->
     ok = isolated(fun test_insert/0),
     ok = isolated(fun test_insert_new/0),
     ok = isolated(fun test_update_counter/0),
+    ok = isolated(fun test_take/0),
     ok = isolated(fun test_delete/0),
     0.
 
@@ -523,6 +524,39 @@ test_update_counter() ->
     end),
 
     [{0, key, not_number}] = ets:lookup(TErr, key),
+
+    ok.
+
+test_take() ->
+    % Set
+    S1 = new_table([]),
+    [] = ets:take(S1, key_not_exist),
+
+    S2 = new_table([{key, value}, {key2, value2}]),
+    [{key, value}] = ets:take(S2, key),
+    [] = ets:lookup(S2, key),
+    [{key2, value2}] = ets:lookup(S2, key2),
+
+    % Bag
+    B1 = new_table(bag, []),
+    [] = ets:take(B1, key_not_exist),
+
+    B2 = new_table(bag, [{key, value}, {key, value2}, {key2, value3}]),
+    [{key, value}, {key, value2}] = ets:take(B2, key),
+    [] = ets:lookup(B2, key),
+    [{key2, value3}] = ets:lookup(B2, key2),
+
+    % Duplicate bag
+    DB1 = new_table(duplicate_bag, []),
+    [] = ets:take(DB1, key_not_exist),
+
+    DB2 = new_table(duplicate_bag, [{key, value}, {key, value}, {key2, value2}]),
+    [{key, value}, {key, value}] = ets:take(DB2, key),
+    [] = ets:lookup(DB2, key),
+    [{key2, value2}] = ets:lookup(DB2, key2),
+
+    % Badargs
+    assert_badarg(fun() -> ets:take(bad_table, key) end),
 
     ok.
 

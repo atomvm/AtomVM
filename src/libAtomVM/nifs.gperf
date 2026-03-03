@@ -165,6 +165,7 @@ ets:lookup_element/4, &ets_lookup_element_nif
 ets:member/2, &ets_member_nif
 ets:insert/2, &ets_insert_nif
 ets:insert_new/2, &ets_insert_new_nif
+ets:take/2, &ets_take_nif
 ets:delete/1, &ets_delete_nif
 ets:delete/2, &ets_delete_nif
 ets:update_counter/3, &ets_update_counter_nif

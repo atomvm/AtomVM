@@ -409,6 +409,29 @@ cleanup:
     return result;
 }
 
+ets_status_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
+{
+    struct EtsTable *table = get_table(
+        &ctx->global->ets,
+        name_or_ref,
+        ctx->process_id,
+        TableAccessWrite);
+
+    if (table == NULL) {
+        return EtsBadAccess;
+    }
+
+    ets_status_t result = lookup_select_maybe_gc(table, key, ETS_WHOLE_TUPLE, 1, &key, ret, ctx);
+
+    if (result == EtsOk) {
+        result = ets_multimap_remove(table->multimap, key, ctx->global);
+    }
+
+    SMP_UNLOCK(table);
+
+    return result;
+}
+
 ets_status_t ets_delete(term name_or_ref, term key, Context *ctx)
 {
     struct EtsTable *table = get_table(
