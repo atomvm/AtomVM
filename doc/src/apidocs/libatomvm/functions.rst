@@ -78,23 +78,11 @@ Functions
 .. doxygenfunction:: enif_select
 .. doxygenfunction:: event_listener_add_to_polling_set
 .. doxygenfunction:: event_listener_is_event
-.. doxygenfunction:: externalterm_from_binary
-.. doxygenfunction:: externalterm_to_binary
-.. TODO: figure out why  Doxgen cant find externalterm_to_term_internal in externalterm.c
-.. c:function:: static term externalterm_to_term_internal(const void *external_term, size_t size, Context *ctx, ExternalTermOpts opts, size_t *bytes_read, bool copy)
-
-   Copy an external term to internal storage.
-
-   :param external_term: buffer containing external term
-   :param size:          size of the external_term
-   :param ctx:           current context in which terms may be stored
-   :param opts:          additional opts, such as ExternalTermToHeapFragment for storing parsed
-                         terms in a heap fragment, otherwise terms are stored in the context heap.
-   :param bytes_read:    the number of bytes read off external_term in order to yield a term
-   :param copy:          whether to copy binary data and atom strings (pass `true`, unless
-                         `external_term` is a const binary and will not be deallocated)
-   :returns:             the parsed term
-
+.. doxygenfunction:: external_term_deserialize
+.. doxygenfunction:: external_term_deserialize_buf_raw
+.. doxygenfunction:: external_term_to_binary
+.. doxygenfunction:: external_term_validate_buf
+.. doxygenfunction:: external_term_validate_buf_raw
 .. doxygenfunction:: globalcontext_destroy
 .. doxygenfunction:: globalcontext_existing_term_from_atom_string
 .. doxygenfunction:: globalcontext_get_module

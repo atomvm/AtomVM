@@ -26,7 +26,7 @@
 #include "dictionary.h"
 #include "erl_nif.h"
 #include "erl_nif_priv.h"
-#include "externalterm.h"
+#include "external_term.h"
 #include "globalcontext.h"
 #include "scheduler.h"
 #include "utils.h"
@@ -482,12 +482,12 @@ void test_resource_binary(void)
     assert(memcmp(term_binary_data(binary), "hello", 5) == 0);
 
     // When serialized, a resource-managed binary appears becomes a regular binary
-    // There is no externalterm_to_binary_with_roots, so we use the process dictionary
+    // There is no external_term_to_binary_with_roots, so we use the process dictionary
     term old;
     DictionaryFunctionResult result = dictionary_put(&ctx->dictionary, BINARY_ATOM, binary, &old, ctx->global);
     assert(result == DictionaryOk);
 
-    term binary_ext = externalterm_to_binary(ctx, binary);
+    term binary_ext = external_term_to_binary(ctx, binary);
 
     result = dictionary_get(&ctx->dictionary, BINARY_ATOM, &binary, ctx->global);
     assert(result == DictionaryOk);
@@ -497,7 +497,7 @@ void test_resource_binary(void)
     term roots[2];
     roots[0] = binary_ext;
     roots[1] = binary;
-    term binary_unserialized = externalterm_from_binary_with_roots(ctx, 0, 0, &bytes_read, 2, roots);
+    term binary_unserialized = external_term_from_binary_with_roots(ctx, 0, 0, &bytes_read, 2, roots);
     binary_ext = roots[0];
     binary = roots[1];
 

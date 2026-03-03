@@ -26,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added support for list insertion in 'ets:insert/2'.
 - Support to OTP-28
 - Added `atomvm:subprocess/4` to perform pipe/fork/execve on POSIX platforms
-- Added `externalterm_to_term_with_roots` to efficiently preserve roots when allocating memory for external terms.
 - Added `erl_epmd` client implementation to epmd using `socket` module
 - Added support for socket asynchronous API for `recv`, `recvfrom` and `accept`.
 - Added support for UDP multicast with socket API.
@@ -89,7 +88,6 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 
 ### Changed
 
-- Removed `externalterm_to_term_copy` added in [0.6.5] and introduced flags to `externalterm_to_term` to perform copy.
 - Release images for ESP32 chips are built with ESP-IDF v5.5
 - Only support ESP32P4 on ESP-IDF v5.5.2, v5.4.4 and later.
 - ESP32: SPI peripheral defaults to `"spi2"` instead of deprecated `hspi`
@@ -115,6 +113,7 @@ allowing applications to use scan results or other means to decide when and wher
 table.
 - ESP32 ports now flash a complete working image using the `idf.py flash` task.
 - ESP32 platform now uses reproducible builds.
+- C API: `externalterm` module was renamed to `external_term` and it has a completely new API
 
 ### Fixed
 
