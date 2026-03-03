@@ -1865,17 +1865,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #endif
 
 #ifndef AVM_NO_EMU
-    static term extract_nbits_integer(Context *ctx, const uint8_t *bytes, size_t bytes_size, intn_from_integer_options_t opts)
+    static term make_bigint_from_digits(Context *ctx, intn_digit_t *bigint, intn_integer_sign_t sign, size_t count)
     {
-        intn_integer_sign_t sign;
-        intn_digit_t bigint[INTN_MAX_RES_LEN];
-        int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
-        if (UNLIKELY(count < 0)) {
-            // this is likely unreachable, compiler seem to generate an external term
-            // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
-            RAISE_ERROR_FROM_HELPER(OVERFLOW_ATOM);
-        }
-
         size_t intn_data_size;
         size_t rounded_res_len;
         term_bigint_size_requirements(count, &intn_data_size, &rounded_res_len);
@@ -1893,6 +1884,20 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         memory_heap_append_heap(&ctx->heap, &heap);
 
         return bigint_term;
+    }
+
+    static term extract_nbits_integer(Context *ctx, const uint8_t *bytes, size_t bytes_size, intn_from_integer_options_t opts)
+    {
+        intn_integer_sign_t sign;
+        intn_digit_t bigint[INTN_MAX_RES_LEN];
+        int count = intn_from_integer_bytes(bytes, bytes_size, opts, bigint, &sign);
+        if (UNLIKELY(count < 0)) {
+            // this is likely unreachable, compiler seem to generate an external term
+            // and to encode this as SMALL_BIG_EXT, so I don't think this code is executed
+            RAISE_ERROR_FROM_HELPER(OVERFLOW_ATOM);
+        }
+
+        return make_bigint_from_digits(ctx, bigint, sign, count);
     }
 
     static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
@@ -4816,15 +4821,45 @@ wait_timeout_trap_handler:
                     VERIFY_IS_ANY_INTEGER(src, "bs_put_integer", 0);
                     VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
 
-                    avm_int64_t src_value = term_maybe_unbox_int64(src);
                     avm_int_t size_value = term_to_int(size);
 
-                    TRACE("bs_put_integer/5, fail=%u size=" AVM_INT_FMT " unit=%u flags=%x src=%i\n", (unsigned) fail, size_value, (unsigned) unit, (int) flags_value, (unsigned int) src_value);
+                    if (term_is_int(src)
+                        || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+                        avm_int64_t src_value = term_maybe_unbox_int64(src);
 
-                    bool result = bitstring_insert_integer(ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
-                    if (UNLIKELY(!result)) {
-                        TRACE("bs_put_integer: Failed to insert integer into binary\n");
-                        RAISE_ERROR(BADARG_ATOM);
+                        TRACE("bs_put_integer/5, fail=%u size=" AVM_INT_FMT
+                              " unit=%u flags=%x src=%i\n",
+                            (unsigned) fail, size_value, (unsigned) unit, (int) flags_value,
+                            (unsigned int) src_value);
+
+                        bool result = bitstring_insert_integer(
+                            ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
+                        if (UNLIKELY(!result)) {
+                            TRACE("bs_put_integer: Failed to insert integer into binary\n");
+                            RAISE_ERROR(BADARG_ATOM);
+                        }
+                    } else {
+                        const intn_digit_t *big_src_value = NULL;
+                        size_t big_len = 0;
+                        intn_integer_sign_t big_sign;
+
+                        term_to_bigint(src, &big_src_value, &big_len, &big_sign);
+
+                        // when building a binary, `signed` flag is implicit
+                        intn_from_integer_options_t intn_flags
+                            = bitstring_flags_to_intn_opts(flags_value);
+                        int byte_offset = ctx->bs_offset / 8;
+                        uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs) + byte_offset;
+                        size_t t_capacity = term_binary_size(ctx->bs);
+                        size_t avail = t_capacity - byte_offset;
+
+                        int written = intn_to_integer_bytes(
+                            big_src_value, big_len, big_sign, intn_flags, dst, avail);
+                        if (UNLIKELY(written < 0)) {
+                            TRACE("bs_create_bin/6: Failed to insert integer into "
+                                  "binary\n");
+                            RAISE_ERROR(BADARG_ATOM);
+                        }
                     }
 
                     ctx->bs_offset += size_value * unit;
@@ -5443,7 +5478,15 @@ wait_timeout_trap_handler:
                         } else {
                             term_set_match_state_offset(src, bs_offset + increment);
 
-                            t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                            if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                                t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                            } else {
+                                intn_digit_t int_buf[INTN_UINT64_LEN];
+                                intn_from_uint64(value.u, int_buf);
+                                t = make_bigint_from_digits(
+                                    ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                            }
+
                             if (UNLIKELY(term_is_invalid_term(t))) {
                                 HANDLE_ERROR();
                             }
@@ -7159,6 +7202,9 @@ wait_timeout_trap_handler:
                         size_t segment_size;
                         avm_int_t flags_value = 0;
                         avm_int64_t src_value = 0;
+                        const intn_digit_t *big_src_value = NULL;
+                        size_t big_len = 0;
+                        intn_integer_sign_t big_sign = IntNPositiveInteger;
                         size_t size_value = 0;
                         switch (atom_type) {
                             case UTF16_ATOM:
@@ -7178,7 +7224,12 @@ wait_timeout_trap_handler:
                                 src_value = term_to_int(src);
                                 break;
                             case INTEGER_ATOM:
-                                src_value = term_maybe_unbox_int64(src);
+                                if (term_is_int(src)
+                                    || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+                                    src_value = term_maybe_unbox_int64(src);
+                                } else {
+                                    term_to_bigint(src, &big_src_value, &big_len, &big_sign);
+                                }
                                 break;
                             default:
                                 break;
@@ -7225,10 +7276,30 @@ wait_timeout_trap_handler:
                                 break;
                             }
                             case INTEGER_ATOM: {
-                                bool result = bitstring_insert_integer(t, offset, src_value, size_value * segment_unit, flags_value);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert integer into binary\n");
-                                    RAISE_ERROR(BADARG_ATOM);
+                                if (!big_src_value) {
+                                    bool result = bitstring_insert_integer(t, offset, src_value,
+                                        size_value * segment_unit, flags_value);
+                                    if (UNLIKELY(!result)) {
+                                        TRACE("bs_create_bin/6: Failed to insert integer into "
+                                              "binary\n");
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    }
+                                } else {
+                                    // when building a binary, `signed` flag is implicit
+                                    intn_from_integer_options_t intn_flags
+                                        = bitstring_flags_to_intn_opts(flags_value);
+                                    int byte_offset = offset / 8;
+                                    uint8_t *dst = (uint8_t *) term_binary_data(t) + byte_offset;
+                                    size_t t_capacity = term_binary_size(t);
+                                    size_t avail = t_capacity - byte_offset;
+
+                                    int written = intn_to_integer_bytes(
+                                        big_src_value, big_len, big_sign, intn_flags, dst, avail);
+                                    if (UNLIKELY(written < 0)) {
+                                        TRACE("bs_create_bin/6: Failed to insert integer into "
+                                              "binary\n");
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    }
                                 }
                                 segment_size = size_value * segment_unit;
                                 break;
@@ -7540,8 +7611,14 @@ wait_timeout_trap_handler:
                                         TRACE("bs_match/3: error extracting integer.\n");
                                         goto bs_match_jump_to_fail;
                                     }
-                                    //FIXME: handling of 64-bit unsigned integers is not reliable
-                                    t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                    if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                                        t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                    } else {
+                                        intn_digit_t int_buf[INTN_UINT64_LEN];
+                                        intn_from_uint64(value.u, int_buf);
+                                        t = make_bigint_from_digits(
+                                            ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                                    }
                                     if (UNLIKELY(term_is_invalid_term(t))) {
                                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                                     }
