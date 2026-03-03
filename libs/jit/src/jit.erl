@@ -1352,22 +1352,21 @@ first_pass(<<?OP_BS_GET_BINARY2, Rest0/binary>>, MMod, MSt0, State0) ->
                 MSt11 = MMod:sub(MSt10, SizeReg, BSOffsetReg1),
                 {MSt11, SizeReg};
             is_integer(Size) ->
-                % SizeReg contains binary size in bytes as a term
+                % SizeReg contains binary size in raw bytes (not a term)
                 % Size is a tagged integer: (N bsl 4) bor 0xF
-                % SizeBytes is the raw byte count
-                SizeBytes = Size bsr 4,
+                % SizeInUnits is the raw count in units
+                SizeInUnits = Size bsr 4,
                 MSt11 =
                     if
-                        (Size * Unit) rem 8 =/= 0 ->
+                        (SizeInUnits * Unit) rem 8 =/= 0 ->
                             MMod:call_primitive_last(MSt10, ?PRIM_RAISE_ERROR, [
                                 ctx, jit_state, offset, ?UNSUPPORTED_ATOM
                             ]);
                         true ->
-                            % Equivalent of SizeReg - (((SizeBytes * Unit) div 8) bsl 4)
-                            MMod:sub(MSt10, SizeReg, (SizeBytes * Unit) bsl 1)
+                            MMod:sub(MSt10, SizeReg, (SizeInUnits * Unit) div 8)
                     end,
                 MSt12 = cond_jump_to_label({{free, SizeReg}, '<', BSOffsetReg1}, Fail, MMod, MSt11),
-                {MSt12, (SizeBytes * Unit) div 8};
+                {MSt12, (SizeInUnits * Unit) div 8};
             true ->
                 {MSt11, SizeValReg} = MMod:move_to_native_register(MSt10, Size),
                 MSt12 = MMod:if_else_block(
