@@ -28,6 +28,7 @@ start() ->
     ok = isolated(fun test_keys/0),
     ok = isolated(fun test_keypos/0),
     ok = isolated(fun test_lookup_element/0),
+    ok = isolated(fun test_member/0),
     ok = isolated(fun test_insert/0),
     ok = isolated(fun test_insert_new/0),
     ok = isolated(fun test_update_counter/0),
@@ -204,6 +205,27 @@ test_lookup_element() ->
     AssertBadArgs(ets:new(test, [set])),
     AssertBadArgs(ets:new(test, [bag])),
     AssertBadArgs(ets:new(test, [duplicate_bag])),
+
+    ok.
+
+test_member() ->
+    % Set
+    S = new_table([{key, value}]),
+    true = ets:member(S, key),
+    false = ets:member(S, key_not_exist),
+
+    % Bag
+    B = new_table(bag, [{key, value}, {key, value2}]),
+    true = ets:member(B, key),
+    false = ets:member(B, key_not_exist),
+
+    % Duplicate bag
+    DB = new_table(duplicate_bag, [{key, value}, {key, value}]),
+    true = ets:member(DB, key),
+    false = ets:member(DB, key_not_exist),
+
+    % Badargs
+    assert_badarg(fun() -> ets:member(bad_table, key) end),
 
     ok.
 
