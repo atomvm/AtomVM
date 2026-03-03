@@ -61,6 +61,17 @@ enum
 _Static_assert(FALSE_ATOM == TERM_FROM_ATOM_INDEX(0), "FALSE_ATOM has an unexpected value");
 _Static_assert(TRUE_ATOM == TERM_FROM_ATOM_INDEX(1), "TRUE_ATOM has an unexpected value");
 
+/**
+ * @brief Check if a term is a boolean (the atom `true` or `false`)
+ *
+ * @param t the term that will be checked.
+ * @return \c true if check succeeds, \c false otherwise.
+ */
+static inline bool atom_is_boolean(term t)
+{
+    return (t == TRUE_ATOM || t == FALSE_ATOM);
+}
+
 void defaultatoms_init(GlobalContext *glb);
 
 void platform_defaultatoms_init(GlobalContext *glb);

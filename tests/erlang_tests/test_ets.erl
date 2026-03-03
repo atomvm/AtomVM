@@ -27,10 +27,11 @@ start() ->
     ok = isolated(fun test_permissions/0),
     ok = isolated(fun test_keys/0),
     ok = isolated(fun test_keypos/0),
-    ok = isolated(fun test_insert/0),
-    ok = isolated(fun test_delete/0),
     ok = isolated(fun test_lookup_element/0),
+    ok = isolated(fun test_insert/0),
+    ok = isolated(fun test_insert_new/0),
     ok = isolated(fun test_update_counter/0),
+    ok = isolated(fun test_delete/0),
     0.
 
 test_ets_new() ->
@@ -43,25 +44,23 @@ test_ets_new() ->
     true = assert_operation(named_test, insert, []),
     ets:new(named_test, []),
     assert_badarg(fun() -> ets:new(named_test, [named_table]) end),
+    assert_badarg(fun() -> ets:new(named_test, [{named_table, not_a_boolean}]) end),
 
     ets:new(keypos_test, [{keypos, 2}]),
     assert_badarg(fun() -> ets:new(keypos_test, [{keypos, 0}]) end),
     assert_badarg(fun() -> ets:new(keypos_test, [{keypos, -1}]) end),
 
     ets:new(type_test, [set]),
+    ets:new(type_test, [bag]),
+    ets:new(type_test, [duplicate_bag]),
 
     % Unimplemented
     ets:new(type_test, [ordered_set]),
-    ets:new(type_test, [bag]),
-    ets:new(type_test, [duplicate_bag]),
     ets:new(heir_test, [{heir, self(), []}]),
     ets:new(heir_test, [{heir, none}]),
     ets:new(write_conc_test, [{write_concurrency, true}]),
     ets:new(read_conc_test, [{read_concurrency, true}]),
-    case otp_version() of
-        OTP when OTP >= 23 -> ets:new(decent_counters_test, [{decentralized_counters, true}]);
-        _ -> ok
-    end,
+    if_otp_version(23, fun() -> ets:new(decent_counters_test, [{decentralized_counters, true}]) end),
     ets:new(compressed_test, [compressed]),
     ok.
 
@@ -124,6 +123,7 @@ test_keys() ->
     ok = assert_stored_key(T, <<"bin">>),
     ok = assert_stored_key(T, <<"">>),
     ok = assert_stored_key(T, {ok, 1}),
+    ok = assert_stored_key(T, []),
     ok = assert_stored_key(T, [x, self(), 1.0]),
     ok = assert_stored_key(T, [improper | list]),
     ok = assert_stored_key(T, #{
@@ -148,103 +148,424 @@ test_keypos() ->
     assert_badarg(fun() -> ets:insert(T, {value}) end),
     ok.
 
-test_insert() ->
-    T = ets:new(test, []),
-    [] = ets:lookup(T, key),
-    true = ets:insert(T, {key, value}),
-    [{key, value}] = ets:lookup(T, key),
-    % Overwrite
-    true = ets:insert(T, {key, new_value}),
-    [{key, new_value}] = ets:lookup(T, key),
-
-    TList = ets:new(test, []),
-    true = ets:insert(TList, []),
-    true = ets:insert(TList, [{key, value}, {key2, value2}]),
-    true = ets:insert(TList, [{key2, new_value2}, {key3, value3}]),
-    [{key, value}] = ets:lookup(TList, key),
-    [{key2, new_value2}] = ets:lookup(TList, key2),
-    [{key3, value3}] = ets:lookup(TList, key3),
-
-    TErr = ets:new(test, []),
-    assert_badarg(fun() -> ets:insert(TErr, {}) end),
-    assert_badarg(fun() -> ets:insert(TErr, [{}]) end),
-    assert_badarg(fun() -> ets:insert(TErr, [{key, value}, not_a_tuple]) end),
-    assert_badarg(fun() -> ets:insert(TErr, [{improper, true} | {list, true}]) end),
-    assert_badarg(fun() -> ets:insert(TErr, not_a_tuple) end),
-    assert_badarg(fun() -> ets:insert([not_a_ref], {key, value}) end),
-    [] = ets:lookup(TErr, key),
-    [] = ets:lookup(TErr, improper),
-    [] = ets:lookup(TErr, list),
-    ok.
-
-test_delete() ->
-    T = ets:new(test, []),
-
-    % Not existing
-    true = ets:delete(T, key),
-    [] = ets:lookup(T, key),
-
-    % Keep key2
-    true = ets:insert(T, {key, value}),
-    true = ets:insert(T, {key2, value2}),
-    [{key, value}] = ets:lookup(T, key),
-    true = ets:delete(T, key),
-    [] = ets:lookup(T, key),
-    [{key2, value2}] = ets:lookup(T, key2),
-
-    % Re-add key
-    true = ets:insert(T, {key, new_value}),
-    [{key, new_value}] = ets:lookup(T, key),
-
-    % Drop entire table
-    true = ets:delete(T),
-    assert_badarg(fun() -> ets:lookup(T, key) end),
-    assert_badarg(fun() -> ets:delete(T) end),
-    assert_badarg(fun() -> ets:delete(none) end),
-    ok.
-
 test_lookup_element() ->
-    T = ets:new(test, []),
-    true = ets:insert(T, {key, value}),
-    key = ets:lookup_element(T, key, 1),
-    value = ets:lookup_element(T, key, 2),
-    assert_badarg(fun() -> ets:lookup_element(T, none, 1) end),
-    assert_badarg(fun() -> ets:lookup_element(T, key, 3) end),
-    assert_badarg(fun() -> ets:lookup_element(T, key, 0) end),
-    assert_badarg(fun() -> ets:lookup_element(T, key, -1) end),
+    PosKey = 1,
+    PosValue = 2,
+
+    AssertBadArgs =
+        fun(Tab) ->
+            PosPastBounds = 3,
+            PosZero = 0,
+            PosNegative = -1,
+
+            assert_badarg(fun() -> ets:lookup_element(Tab, key_not_exist, PosKey) end),
+            assert_badarg(fun() -> ets:lookup_element(Tab, key, PosZero) end),
+            assert_badarg(fun() -> ets:lookup_element(Tab, key, PosPastBounds) end),
+            assert_badarg(fun() -> ets:lookup_element(Tab, key, PosNegative) end),
+            % lookup_element/4 with Default since OTP 26.0
+            if_otp_version(26, fun() ->
+                assert_badarg(fun() -> ets:lookup_element(Tab, key, PosNegative, default) end)
+            end)
+        end,
+
+    % Set
+    S = new_table([{key, value}]),
+    key = ets:lookup_element(S, key, PosKey),
+    value = ets:lookup_element(S, key, PosValue),
+    % lookup_element/4 with Default since OTP 26.0
+    if_otp_version(26, fun() -> default = ets:lookup_element(S, key_not_exist, PosKey, default) end),
+
+    % Bag
+    B = new_table(bag, [{key, value}, {key, value2}]),
+    [key, key] = ets:lookup_element(B, key, PosKey),
+    [value, value2] = ets:lookup_element(B, key, PosValue),
+    if_otp_version(26, fun() -> default = ets:lookup_element(B, key_not_exist, PosKey, default) end),
+
+    true = ets:insert(B, {key, value3}),
+    [key, key, key] = ets:lookup_element(B, key, PosKey),
+    [value, value2, value3] = ets:lookup_element(B, key, PosValue),
+
+    % Duplicate bag
+    DB = new_table(duplicate_bag, [{key, value}, {key, value}]),
+    [key, key] = ets:lookup_element(DB, key, PosKey),
+    [value, value] = ets:lookup_element(DB, key, PosValue),
+    if_otp_version(26, fun() -> default = ets:lookup_element(DB, key_not_exist, PosKey, default) end),
+
+    true = ets:insert(DB, {key, value2}),
+    [key, key, key] = ets:lookup_element(DB, key, PosKey),
+    [value, value, value2] = ets:lookup_element(DB, key, PosValue),
+
+    true = ets:insert(DB, {key2, value2}),
+    [key2] = ets:lookup_element(DB, key2, PosKey),
+    [value2] = ets:lookup_element(DB, key2, PosValue),
+
+    % Badargs
+    assert_badarg(fun() -> ets:lookup_element(bad_table, key, 1) end),
+    AssertBadArgs(ets:new(test, [set])),
+    AssertBadArgs(ets:new(test, [bag])),
+    AssertBadArgs(ets:new(test, [duplicate_bag])),
+
+    ok.
+
+test_insert() ->
+    % Set
+    S1 = ets:new(test, []),
+    [] = ets:lookup(S1, key),
+
+    % {Key, Value}
+    true = ets:insert(S1, {key, value}),
+    [{key, value}] = ets:lookup(S1, key),
+    true = ets:insert(S1, {key, new_value}),
+    [{key, new_value}] = ets:lookup(S1, key),
+
+    % [{Key, Value}, ...]
+    S2 = ets:new(test, []),
+    true = ets:insert(S2, []),
+    true = ets:insert(S2, [{key, value}, {key2, value2}]),
+    true = ets:insert(S2, [{key2, new_value2}, {key3, value3}]),
+    [{key, value}] = ets:lookup(S2, key),
+    [{key2, new_value2}] = ets:lookup(S2, key2),
+    [{key3, value3}] = ets:lookup(S2, key3),
+
+    % Bag
+    B1 = ets:new(test, [bag]),
+    [] = ets:lookup(B1, key),
+
+    % {Key, Value}
+    true = ets:insert(B1, {key, value}),
+    [{key, value}] = ets:lookup(B1, key),
+    true = ets:insert(B1, {key, new_value}),
+    [{key, value}, {key, new_value}] = ets:lookup(B1, key),
+    true = ets:insert(B1, {key, new_value}),
+    [{key, value}, {key, new_value}] = ets:lookup(B1, key),
+
+    % [{Key, Value}, ...]
+    B2 = ets:new(test, [bag]),
+    true = ets:insert(B2, []),
+    true = ets:insert(B2, [{key, value}, {key2, value2}]),
+    true = ets:insert(B2, [{key2, new_value2}, {key3, value3}]),
+    true = ets:insert(B2, [{key2, new_value2}, {key3, new_value3}]),
+    [{key, value}] = ets:lookup(B2, key),
+    [{key2, value2}, {key2, new_value2}] = ets:lookup(B2, key2),
+    [{key3, value3}, {key3, new_value3}] = ets:lookup(B2, key3),
+
+    % Duplicate bag
+    DB1 = ets:new(test, [duplicate_bag]),
+    [] = ets:lookup(DB1, key),
+
+    % {Key, Value}
+    true = ets:insert(DB1, {key, value}),
+    [{key, value}] = ets:lookup(DB1, key),
+    true = ets:insert(DB1, {key, new_value}),
+    [{key, value}, {key, new_value}] = ets:lookup(DB1, key),
+    true = ets:insert(DB1, {key, new_value}),
+    [{key, value}, {key, new_value}, {key, new_value}] = ets:lookup(DB1, key),
+
+    % [{Key, Value}, ...]
+    DB2 = ets:new(test, [duplicate_bag]),
+    true = ets:insert(DB2, []),
+    true = ets:insert(DB2, [{key, value}, {key2, value2}]),
+    true = ets:insert(DB2, [{key2, new_value2}, {key3, value3}]),
+    true = ets:insert(DB2, [{key2, new_value2}, {key3, new_value3}]),
+    [{key, value}] = ets:lookup(DB2, key),
+    [{key2, value2}, {key2, new_value2}, {key2, new_value2}] = ets:lookup(DB2, key2),
+    [{key3, value3}, {key3, new_value3}] = ets:lookup(DB2, key3),
+
+    % Badargs
+    assert_insert_badargs(ets:new(test, []), fun ets:insert/2),
+    assert_insert_badargs(ets:new(test, [bag]), fun ets:insert/2),
+    assert_insert_badargs(ets:new(test, [duplicate_bag]), fun ets:insert/2),
+
+    ok.
+
+test_insert_new() ->
+    % Set
+    S1 = ets:new(test, []),
+    [] = ets:lookup(S1, key),
+
+    % {Key, Value}
+    true = ets:insert_new(S1, {key, value}),
+    [{key, value}] = ets:lookup(S1, key),
+    false = ets:insert_new(S1, {key, new_value}),
+    [{key, value}] = ets:lookup(S1, key),
+
+    % [{Key, Value}, ...]
+    S2 = ets:new(test, []),
+    true = ets:insert_new(S2, []),
+    true = ets:insert_new(S2, [{key, value}, {key2, value2}]),
+    false = ets:insert_new(S2, [{key2, new_value2}, {key3, value3}]),
+    true = ets:insert_new(S2, [{key4, value4}, {key3, value3}, {key4, new_value4}]),
+    [{key, value}] = ets:lookup(S2, key),
+    [{key2, value2}] = ets:lookup(S2, key2),
+    [{key3, value3}] = ets:lookup(S2, key3),
+    [{key4, new_value4}] = ets:lookup(S2, key4),
+
+    % Regression: existing keys must not bypass validation of the rest of the list
+    S3 = new_table([{key, value}]),
+    assert_badarg(fun() -> ets:insert_new(S3, [{key, new_value}, not_a_tuple]) end),
+    [{key, value}] = ets:lookup(S3, key),
+
+    % Bag
+    B1 = ets:new(test, [bag]),
+    [] = ets:lookup(B1, key),
+
+    % {Key, Value}
+    true = ets:insert_new(B1, {key, value}),
+    [{key, value}] = ets:lookup(B1, key),
+    false = ets:insert_new(B1, {key, new_value}),
+    [{key, value}] = ets:lookup(B1, key),
+
+    % [{Key, Value}, ...]
+    B2 = ets:new(test, [bag]),
+    true = ets:insert_new(B2, []),
+    true = ets:insert_new(B2, [{key, value}, {key2, value2}]),
+    false = ets:insert_new(B2, [{key2, new_value2}, {key3, value3}]),
+    true = ets:insert_new(B2, [{key4, value4}, {key3, value3}, {key4, new_value4}]),
+    [{key, value}] = ets:lookup(B2, key),
+    [{key2, value2}] = ets:lookup(B2, key2),
+    [{key3, value3}] = ets:lookup(B2, key3),
+    [{key4, value4}, {key4, new_value4}] = ets:lookup(B2, key4),
+
+    % Regression: existing keys must not bypass validation of the rest of the list
+    B3 = new_table([{key, value}]),
+    assert_badarg(fun() -> ets:insert_new(B3, [{key, new_value}, not_a_tuple]) end),
+    [{key, value}] = ets:lookup(B3, key),
+
+    % Duplicate bag
+    DB1 = ets:new(test, [duplicate_bag]),
+    [] = ets:lookup(DB1, key),
+
+    % {Key, Value}
+    true = ets:insert_new(DB1, {key, value}),
+    [{key, value}] = ets:lookup(DB1, key),
+    false = ets:insert_new(DB1, {key, new_value}),
+    [{key, value}] = ets:lookup(DB1, key),
+
+    % [{Key, Value}, ...]
+    DB2 = ets:new(test, [duplicate_bag]),
+    true = ets:insert_new(DB2, []),
+    true = ets:insert_new(DB2, [{key, value}, {key2, value2}]),
+    false = ets:insert_new(DB2, [{key2, new_value2}, {key3, value3}]),
+    true = ets:insert_new(DB2, [{key4, value4}, {key3, value3}, {key4, value4}]),
+    [{key, value}] = ets:lookup(DB2, key),
+    [{key2, value2}] = ets:lookup(DB2, key2),
+    [{key3, value3}] = ets:lookup(DB2, key3),
+    [{key4, value4}, {key4, value4}] = ets:lookup(DB2, key4),
+
+    % Regression: existing keys must not bypass validation of the rest of the list
+    DB3 = new_table([{key, value}]),
+    assert_badarg(fun() -> ets:insert_new(DB3, [{key, new_value}, not_a_tuple]) end),
+    [{key, value}] = ets:lookup(DB3, key),
+
+    % Badargs
+    assert_insert_badargs(ets:new(test, []), fun ets:insert_new/2),
+    assert_insert_badargs(ets:new(test, [bag]), fun ets:insert_new/2),
+    assert_insert_badargs(ets:new(test, [duplicate_bag]), fun ets:insert_new/2),
+
     ok.
 
 test_update_counter() ->
-    T = ets:new(test, []),
-    true = ets:insert(T, {key, 10, 20, 30}),
     % Increment
-    15 = ets:update_counter(T, key, 5),
-    10 = ets:update_counter(T, key, -5),
-    % {Position, Increment}
-    25 = ets:update_counter(T, key, {3, 5}),
-    20 = ets:update_counter(T, key, {3, -5}),
-    % {Position, Increment, Threshold, SetValue}
-    31 = ets:update_counter(T, key, {4, 10, 39, 31}),
-    30 = ets:update_counter(T, key, {4, -10, 30, 30}),
+    S1 = new_table({key, 10, not_number, 30}),
+    15 = ets:update_counter(S1, key, 5),
+    [{key, 15, not_number, 30}] = ets:lookup(S1, key),
 
-    TErr = ets:new(test, []),
-    true = ets:insert(TErr, {key, 0, not_number}),
-    true = ets:insert(TErr, {not_number, ok}),
-    assert_badarg(fun() -> ets:update_counter(TErr, none, 10) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, not_number, 10) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, not_number, {1, 10}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, not_number, {1, 10, 100, 0}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {0, 10}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {-1, 10}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10}) end),
+    S2 = new_table(3, {not_number, 20, key, 30}),
+    -5 = ets:update_counter(S2, key, -35),
+    [{not_number, 20, key, -5}] = ets:lookup(S2, key),
+
+    % {Position, Increment}
+    S3 = new_table({key, 10, 20, not_number}),
+    25 = ets:update_counter(S3, key, {3, 5}),
+    [{key, 10, 25, not_number}] = ets:lookup(S3, key),
+
+    S4 = new_table({key, 10, not_number, 30}),
+    0 = ets:update_counter(S4, key, {2, -10}),
+    [{key, 0, not_number, 30}] = ets:lookup(S4, key),
+
+    % []
+    S5 = new_table({key, 10, not_number, 30}),
+    [] = ets:update_counter(S5, key, []),
+    [{key, 10, not_number, 30}] = ets:lookup(S5, key),
+
+    % [{Position, Increment}, ...]
+    S6 = new_table({key, 10, 20, not_number}),
+    [0, 5, 30] = ets:update_counter(S6, key, [{2, -10}, {2, 5}, {3, 10}]),
+    [{key, 5, 30, not_number}] = ets:lookup(S6, key),
+
+    % {Position, Increment, Threshold, SetValue}
+    S7 = new_table({key, not_number, 20, 30}),
+    31 = ets:update_counter(S7, key, {4, 10, 39, 31}),
+    [{key, not_number, 20, 31}] = ets:lookup(S7, key),
+
+    S8 = new_table({key, 10, not_number, 30}),
+    29 = ets:update_counter(S8, key, {4, -10, 21, 29}),
+    [{key, 10, not_number, 29}] = ets:lookup(S8, key),
+
+    % [{Position, Increment, Threshold, SetValue}, ...]
+    S9 = new_table({key, 10, 20, not_number}),
+    [20, 31, 26] = ets:update_counter(
+        S9,
+        key,
+        [{2, 10, 20, 21}, {2, 10, 29, 31}, {3, 5, 24, 26}]
+    ),
+    [{key, 31, 26, not_number}] = ets:lookup(S9, key),
+
+    % Default object
+    S10 = new_table({key, 10, 20, not_number}),
+    15 = ets:update_counter(S10, key_not_exist, {2, 5}, {key, 10, 20, 30}),
+    [{key, 10, 20, not_number}] = ets:lookup(S10, key),
+    [{key_not_exist, 15, 20, 30}] = ets:lookup(S10, key_not_exist),
+
+    % [] with default object
+    S11 = new_table({key, 10, 20, not_number}),
+    [] = ets:update_counter(S11, key_not_exist2, [], {key, 10, 20, 30}),
+    [{key, 10, 20, not_number}] = ets:lookup(S11, key),
+    [{key_not_exist2, 10, 20, 30}] = ets:lookup(S11, key_not_exist2),
+
+    % Badargs
+    % The table type is not set
+    TErrBag = ets:new(test, [bag]),
+    TErrDuplBag = ets:new(test, [duplicate_bag]),
+    assert_badarg(fun() -> ets:update_counter(TErrBag, key, 10) end),
+    assert_badarg(fun() -> ets:update_counter(TErrDuplBag, key, 10) end),
+    assert_badarg(fun() -> ets:update_counter(bad_table, key, 10) end),
+
+    TErr = new_table(2, {0, key, not_number}),
+
+    % Pos > KeyPos
+    TErrLastKey = new_table(2, {0, key}),
+    assert_badarg(fun() -> ets:update_counter(TErrLastKey, key, 10) end),
+
+    % No object with the correct key exists and no default object was supplied
+    assert_badarg(fun() -> ets:update_counter(TErr, key_not_exist, 10) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key_not_exist, {1, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key_not_exist, {1, 10, 20, 30}) end),
+
+    % The object has the wrong arity
+    % Pos > TupleArity
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {4, 10}) end),
+
+    % Default object arity < KeyPos
+    % NOTE: This fails on OTP, see https://github.com/erlang/otp/issues/10603
+    if_atomvm(fun() ->
+        assert_badarg(fun() -> ets:update_counter(TErr, key_not_exist, [{1, 10}], {10}) end)
+    end),
+
+    % Any field from the default object that is updated is not an integer
+    assert_badarg(fun() ->
+        ets:update_counter(
+            TErr, key_not_exist, {2, 10}, {0, key, not_number}
+        )
+    end),
+    assert_badarg(fun() ->
+        ets:update_counter(
+            TErr, key_not_exist, {3, 10}, {0, key, not_number}
+        )
+    end),
+
+    % The element to update is not an integer
+    assert_badarg(fun() -> ets:update_counter(TErr, key, 10) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {3, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, [{1, 10}, {3, 10}]) end),
+
+    % The element to update is also the key
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, [{1, 10}, {2, 10}]) end),
+
+    TErrIntKey = new_table(2, {10, 0}),
+    assert_badarg(fun() -> ets:update_counter(TErrIntKey, 0, {2, 10}) end),
+    assert_badarg(fun() -> ets:update_counter(TErrIntKey, 0, [{1, 10}, {2, 10}]) end),
+    [{10, 0}] = ets:lookup(TErrIntKey, 0),
+
+    Key = 10,
+    assert_badarg(fun() ->
+        ets:update_counter(
+            TErr, key_not_exist, {2, 10}, {0, Key, not_number}
+        )
+    end),
+
+    % Any of Pos, Incr, Threshold, or SetValue is not an integer
     assert_badarg(fun() -> ets:update_counter(TErr, key, not_number) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {1, not_number}) end),
     assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {not_number, 10, 100, 0}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, not_number, 100, 0}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, not_number, 0}) end),
-    assert_badarg(fun() -> ets:update_counter(TErr, key, {2, 10, 100, not_number}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, [{1, 10}, {1, not_number}]) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, [{1, 10}, {not_number, 10}]) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10, not_number, 30}) end),
+    assert_badarg(fun() -> ets:update_counter(TErr, key, {1, 10, 20, not_number}) end),
+    assert_badarg(fun() ->
+        ets:update_counter(TErr, key, [{1, 10, 20, 30}, {1, 10, not_number, 30}])
+    end),
+    assert_badarg(fun() ->
+        ets:update_counter(TErr, key, [{1, 10, 20, 30}, {1, 10, 20, not_number}])
+    end),
+
+    [{0, key, not_number}] = ets:lookup(TErr, key),
+
+    ok.
+
+test_delete() ->
+    % Set
+    S = new_table([{key, value}, {key2, value2}]),
+    true = ets:delete(S, key_not_exist),
+
+    true = ets:delete(S, key),
+    [] = ets:lookup(S, key),
+    [{key2, value2}] = ets:lookup(S, key2),
+
+    true = ets:delete(S, key2),
+    [] = ets:lookup(S, key2),
+
+    true = ets:delete(S, key2),
+    true = ets:delete(S),
+
+    % Bag
+    B = new_table(bag, [{key, value}, {key, value2}, {key2, value3}]),
+    true = ets:delete(B, key_not_exist),
+
+    true = ets:delete(B, key),
+    [] = ets:lookup(B, key),
+    [{key2, value3}] = ets:lookup(B, key2),
+
+    true = ets:delete(B, key2),
+    [] = ets:lookup(B, key2),
+
+    true = ets:delete(B, key2),
+    true = ets:delete(B),
+
+    % Duplicate bag
+    DB = new_table(duplicate_bag, [{key, value}, {key, value}, {key2, value2}]),
+    true = ets:delete(DB, key_not_exist),
+
+    true = ets:delete(DB, key),
+    [] = ets:lookup(DB, key),
+    [{key2, value2}] = ets:lookup(DB, key2),
+
+    true = ets:delete(DB, key2),
+    [] = ets:lookup(DB, key2),
+
+    true = ets:delete(DB, key2),
+    true = ets:delete(DB),
+
+    % Badargs
+    TErr = new_table(2, []),
+    true = ets:delete(TErr),
+    assert_badarg(fun() -> ets:delete(bad_table) end),
+    assert_badarg(fun() -> ets:lookup(TErr, key) end),
+    assert_badarg(fun() -> ets:delete(TErr) end),
+
+    ok.
+
+assert_insert_badargs(T, Insert) ->
+    assert_badarg(fun() -> Insert(T, {}) end),
+    assert_badarg(fun() -> Insert(T, [{}]) end),
+    assert_badarg(fun() -> Insert(T, [{key, value}, not_a_tuple]) end),
+    assert_badarg(fun() -> Insert(T, [{improper, true} | {list, true}]) end),
+    assert_badarg(fun() -> Insert(T, not_a_tuple) end),
+    assert_badarg(fun() -> Insert([not_a_ref], {key, value}) end),
+    [] = ets:lookup(T, key),
+    [] = ets:lookup(T, improper),
+    [] = ets:lookup(T, list),
     ok.
 
 %%-----------------------------------------------------------------------------
@@ -273,6 +594,18 @@ assert_stored_key(T, Key) ->
     true = ets:insert(T, {Key, value}),
     [{Key, value}] = ets:lookup(T, Key),
     ok.
+
+new_table(Tuples) ->
+    new_table([], Tuples).
+
+new_table(Type, Tuples) when is_atom(Type) ->
+    new_table([Type], Tuples);
+new_table(Keypos, Tuples) when is_integer(Keypos) ->
+    new_table([{keypos, Keypos}], Tuples);
+new_table(Opts, Tuples) when is_list(Opts) ->
+    T = ets:new(test, Opts),
+    true = ets:insert(T, Tuples),
+    T.
 
 isolated(Fun) ->
     Ref = make_ref(),
@@ -316,7 +649,7 @@ supports_v4_port_encoding() ->
             % small utf8 atom
             true;
         "BEAM" ->
-            OTP = otp_version(),
+            OTP = get_otp_version(),
             if
                 OTP < 24 -> false;
                 % v4 is supported but not the default
@@ -326,6 +659,21 @@ supports_v4_port_encoding() ->
             end
     end.
 
-otp_version() ->
-    OTPRelease = erlang:system_info(otp_release),
-    list_to_integer(OTPRelease).
+get_otp_version() ->
+    case erlang:system_info(machine) of
+        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
+        _ -> atomvm
+    end.
+
+if_otp_version(MinVersion, Fun) ->
+    case get_otp_version() of
+        atomvm -> Fun();
+        OTP when OTP >= MinVersion -> Fun();
+        _ -> ok
+    end.
+
+if_atomvm(Fun) ->
+    case get_otp_version() of
+        atomvm -> Fun();
+        _ -> ok
+    end.
