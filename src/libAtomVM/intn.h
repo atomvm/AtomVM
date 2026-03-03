@@ -807,7 +807,7 @@ int intn_from_integer_bytes(const uint8_t in[], size_t in_size, intn_from_intege
  * @param in Integer magnitude (must be normalized)
  * @param in_len Length of integer in digits
  * @param in_sign Sign of integer
- * @param opts Conversion options (endianness, signedness)
+ * @param opts Conversion options (just endianness)
  * @param[out] out Output byte buffer
  * @param out_len Size of output buffer in bytes
  * @return Number of bytes written, or negative on error (buffer too small)

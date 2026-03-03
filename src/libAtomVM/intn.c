@@ -1260,13 +1260,8 @@ int intn_to_integer_bytes(const intn_digit_t in[], size_t in_len, intn_integer_s
     }
     size_t copied_len = k;
 
-    bool negate = false;
-    if ((opts & IntnSigned) && (in_sign == IntNNegativeInteger)) {
-        negate = true;
-    }
-
     uint8_t filler = 0x00;
-    if (negate) {
+    if (in_sign == IntNNegativeInteger) {
         filler = 0xFF;
         unsigned int carry = 1;
         for (size_t i = 0; i < copied_len; i++) {

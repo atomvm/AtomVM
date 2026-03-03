@@ -4847,7 +4847,7 @@ wait_timeout_trap_handler:
 
                         // when building a binary, `signed` flag is implicit
                         intn_from_integer_options_t intn_flags
-                            = bitstring_flags_to_intn_opts(flags_value) | IntnSigned;
+                            = bitstring_flags_to_intn_opts(flags_value);
                         int byte_offset = ctx->bs_offset / 8;
                         uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs) + byte_offset;
                         size_t t_capacity = term_binary_size(ctx->bs);
@@ -7287,7 +7287,7 @@ wait_timeout_trap_handler:
                                 } else {
                                     // when building a binary, `signed` flag is implicit
                                     intn_from_integer_options_t intn_flags
-                                        = bitstring_flags_to_intn_opts(flags_value) | IntnSigned;
+                                        = bitstring_flags_to_intn_opts(flags_value);
                                     int byte_offset = offset / 8;
                                     uint8_t *dst = (uint8_t *) term_binary_data(t) + byte_offset;
                                     size_t t_capacity = term_binary_size(t);

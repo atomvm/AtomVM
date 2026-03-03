@@ -1547,7 +1547,7 @@ static bool jit_bitstring_insert_integer(term bin, size_t offset, term value, si
         term_to_bigint(value, &big_src_value, &big_len, &big_sign);
 
         // when building a binary, `signed` flag is implicit
-        intn_from_integer_options_t intn_flags = bitstring_flags_to_intn_opts(flags) | IntnSigned;
+        intn_from_integer_options_t intn_flags = bitstring_flags_to_intn_opts(flags);
         int byte_offset = offset / 8;
         uint8_t *dst = (uint8_t *) term_binary_data(bin) + byte_offset;
         size_t t_capacity = term_binary_size(bin);
