@@ -41,20 +41,27 @@ static ErlNifMonitor down_mon_two = { NULL, 0 };
 
 static int32_t lockable_pid = 0;
 
-// Helper to get the reference count.
-// Uses an internal API
-// Implementation should be updated shall resources be references instead of binaries.
-static uint32_t resource_ref_count(void *resource)
+// Helpers for resource ref_count sub-fields (packed layout).
+// Only valid for resources, not plain refc binaries.
+static size_t resource_ref_count(void *resource)
+{
+    return refc_binary_get_refcount(refc_binary_from_data(resource));
+}
+
+static size_t resource_monitor_refc(void *resource)
 {
     struct RefcBinary *refc = refc_binary_from_data(resource);
-    return refc->ref_count;
+    return (refc->ref_count & REFC_MONITOR_MASK) >> REFC_COUNT_BITS;
 }
+
+static uint32_t dtor_call_count = 0;
 
 static void resource_dtor(ErlNifEnv *env, void *resource)
 {
     UNUSED(env);
 
     cb_read_resource = *((uint32_t *) resource);
+    dtor_call_count++;
 }
 
 static void resource_down(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
@@ -73,6 +80,18 @@ static void resource_down_two(ErlNifEnv *env, void *resource, ErlNifPid *pid, Er
     cb_read_resource_two = *((uint32_t *) resource);
     down_pid_two = *pid;
     down_mon_two = *mon;
+}
+
+// Simulates the race: release resource from within the down handler.
+static void resource_down_releasing(ErlNifEnv *env, void *resource, ErlNifPid *pid, ErlNifMonitor *mon)
+{
+    UNUSED(env);
+
+    cb_read_resource = *((uint32_t *) resource);
+    down_pid = *pid;
+    down_mon = *mon;
+
+    enif_release_resource(resource);
 }
 
 // down handlers should be able to acquire the process tables lock, e.g. to send
@@ -249,18 +268,21 @@ void test_resource_monitor(void)
     cb_read_resource = 0;
     down_pid = 0;
     down_mon.ref_ticks = 0;
+    assert(resource_monitor_refc(ptr) == 0);
     ctx = context_new(glb);
     pid = ctx->process_id;
     monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
     assert(resource_ref_count(ptr) == 1);
+    assert(resource_monitor_refc(ptr) == 1);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 42);
     assert(down_pid == pid);
     assert(enif_compare_monitors(&mon, &down_mon) == 0);
     assert(resource_ref_count(ptr) == 1);
+    assert(resource_monitor_refc(ptr) == 0);
 
     // Monitor not called if demonitored
     cb_read_resource = 0;
@@ -272,10 +294,12 @@ void test_resource_monitor(void)
     assert(monitor_result == 0);
     assert(cb_read_resource == 0);
     assert(resource_ref_count(ptr) == 1);
+    assert(resource_monitor_refc(ptr) == 1);
 
     monitor_result = enif_demonitor_process(&env, ptr, &mon);
     assert(monitor_result == 0);
     assert(resource_ref_count(ptr) == 1);
+    assert(resource_monitor_refc(ptr) == 0);
 
     scheduler_terminate(ctx);
     assert(cb_read_resource == 0);
@@ -582,6 +606,99 @@ void test_resource_binaries(void)
     assert(cb_read_resource == 0);
 }
 
+void test_resource_release_in_down_handler(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+
+    ErlNifResourceTypeInit init;
+    init.members = 3;
+    init.dtor = resource_dtor;
+    init.stop = NULL;
+    init.down = resource_down_releasing;
+    ErlNifResourceFlags flags;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(&env, "test_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    cb_read_resource = 0;
+    dtor_call_count = 0;
+    down_pid = 0;
+    down_mon.ref_ticks = 0;
+
+    Context *ctx = context_new(glb);
+    int32_t pid = ctx->process_id;
+    ErlNifMonitor mon;
+    int monitor_result = enif_monitor_process(&env, ptr, &pid, &mon);
+    assert(monitor_result == 0);
+    assert(resource_ref_count(ptr) == 1);
+    assert(resource_monitor_refc(ptr) == 1);
+
+    scheduler_terminate(ctx);
+
+    assert(down_pid == pid);
+    assert(enif_compare_monitors(&mon, &down_mon) == 0);
+    assert(dtor_call_count == 1);
+    assert(cb_read_resource == 42);
+
+    globalcontext_destroy(glb);
+}
+
+void test_resource_release_in_down_handler_two_monitors(void)
+{
+    GlobalContext *glb = globalcontext_new();
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, glb);
+
+    ErlNifResourceTypeInit init;
+    init.members = 3;
+    init.dtor = resource_dtor;
+    init.stop = NULL;
+    init.down = resource_down_releasing;
+    ErlNifResourceFlags flags;
+
+    ErlNifResourceType *resource_type = enif_init_resource_type(&env, "test_resource", &init, ERL_NIF_RT_CREATE, &flags);
+    assert(resource_type != NULL);
+
+    void *ptr = enif_alloc_resource(resource_type, sizeof(uint32_t));
+    uint32_t *resource = (uint32_t *) ptr;
+    *resource = 42;
+
+    cb_read_resource = 0;
+    dtor_call_count = 0;
+    down_pid = 0;
+
+    Context *ctx1 = context_new(glb);
+    Context *ctx2 = context_new(glb);
+    int32_t pid1 = ctx1->process_id;
+    int32_t pid2 = ctx2->process_id;
+    ErlNifMonitor mon1, mon2;
+
+    int r = enif_monitor_process(&env, ptr, &pid1, &mon1);
+    assert(r == 0);
+    r = enif_monitor_process(&env, ptr, &pid2, &mon2);
+    assert(r == 0);
+    assert(resource_monitor_refc(ptr) == 2);
+
+    scheduler_terminate(ctx1);
+    assert(down_pid == pid1);
+    assert(dtor_call_count == 1);
+    assert(cb_read_resource == 42);
+
+    down_pid = 0;
+    dtor_call_count = 0;
+    scheduler_terminate(ctx2);
+    assert(down_pid == 0);
+    assert(dtor_call_count == 0);
+
+    globalcontext_destroy(glb);
+}
+
 int main(int argc, char **argv)
 {
     UNUSED(argc);
@@ -595,6 +712,8 @@ int main(int argc, char **argv)
     test_resource_monitor_two_resources_two_processes();
     test_resource_binary();
     test_resource_binaries();
+    test_resource_release_in_down_handler();
+    test_resource_release_in_down_handler_two_monitors();
 
     return EXIT_SUCCESS;
 }

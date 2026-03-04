@@ -1383,7 +1383,7 @@ term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t s
     boxed_value[3] = (term) refc;
     term ret = ((term) boxed_value) | TERM_PRIMARY_BOXED;
     // Add the resource to the mso list
-    refc->ref_count++;
+    refc_binary_add_refcount(refc, 1);
     heap->root->mso_list = term_list_init_prepend(boxed_value + REFC_BINARY_CONS_OFFSET, ret, heap->root->mso_list);
     refc_binary_increment_refcount(resource->managing_resource);
     return ret;
