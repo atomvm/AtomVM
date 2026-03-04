@@ -150,4 +150,38 @@ static inline bool smp_atomic_compare_exchange_weak_int(void *object, void *expe
     return result;
 }
 
+// fetch-and-modify helpers for size_t, used by refc_binary.h on RP2040 where
+// C11 _Atomic is not available. All three use the same critical section as the
+// CAS operations above to provide a coherent memory model across cores.
+// Only meaningful for SMP builds; in no-SMP builds the refc_binary.h helpers
+// use plain C operators instead of calling these functions.
+#ifndef AVM_NO_SMP
+static inline size_t smp_atomic_fetch_add_size(size_t *object, size_t delta)
+{
+    critical_section_enter_blocking(&atomic_cas_section);
+    size_t old = *object;
+    *object = old + delta;
+    critical_section_exit(&atomic_cas_section);
+    return old;
+}
+
+static inline size_t smp_atomic_fetch_sub_size(size_t *object, size_t delta)
+{
+    critical_section_enter_blocking(&atomic_cas_section);
+    size_t old = *object;
+    *object = old - delta;
+    critical_section_exit(&atomic_cas_section);
+    return old;
+}
+
+static inline size_t smp_atomic_fetch_or_size(size_t *object, size_t mask)
+{
+    critical_section_enter_blocking(&atomic_cas_section);
+    size_t old = *object;
+    *object = old | mask;
+    critical_section_exit(&atomic_cas_section);
+    return old;
+}
+#endif // AVM_NO_SMP
+
 #endif

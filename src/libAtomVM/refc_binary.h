@@ -55,11 +55,96 @@ typedef struct GlobalContext GlobalContext;
 struct RefcBinary
 {
     struct ListHead head;
+    // For resources (resource_type != NULL), this word is packed:
+    //   [dying:1 | monitor_refc:7/15 | ref_count:24/48]
+    // (7+24 on 32-bit, 15+48 on 64-bit).
     size_t ATOMIC ref_count;
     size_t size;
     struct ResourceType *resource_type; // Resource type or NULL for regular refc binaries.
     uint8_t data[];
 };
+
+#define REFC_COUNT_BITS (sizeof(size_t) * 6)
+#define REFC_COUNT_MASK (((size_t) 1 << REFC_COUNT_BITS) - 1)
+#define REFC_MONITOR_INC ((size_t) 1 << REFC_COUNT_BITS)
+#define REFC_DYING_FLAG ((size_t) 1 << (sizeof(size_t) * 8 - 1))
+#define REFC_MONITOR_MASK (~REFC_COUNT_MASK & ~REFC_DYING_FLAG)
+#define REFC_MONITOR_MAX ((REFC_DYING_FLAG >> REFC_COUNT_BITS) - 1)
+
+#ifndef __cplusplus
+#if !defined(AVM_NO_SMP) && !defined(HAVE_ATOMIC) && !defined(HAVE_PLATFORM_ATOMIC_H)
+#error "SMP build requires either C11 atomics (HAVE_ATOMIC) or a platform atomic header (HAVE_PLATFORM_ATOMIC_H)"
+#endif
+
+static inline size_t refc_binary_sub_refcount(struct RefcBinary *refc, size_t delta)
+{
+#if defined(AVM_NO_SMP)
+    return (refc->ref_count -= delta);
+#elif defined(HAVE_ATOMIC)
+    return atomic_fetch_sub(&refc->ref_count, delta) - delta;
+#else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
+    return smp_atomic_fetch_sub_size(&refc->ref_count, delta) - delta;
+#endif
+}
+
+static inline void refc_binary_add_refcount(struct RefcBinary *refc, size_t delta)
+{
+#if defined(AVM_NO_SMP)
+    refc->ref_count += delta;
+#elif defined(HAVE_ATOMIC)
+    atomic_fetch_add(&refc->ref_count, delta);
+#else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
+    smp_atomic_fetch_add_size(&refc->ref_count, delta);
+#endif
+}
+
+static inline void refc_binary_or_refcount(struct RefcBinary *refc, size_t mask)
+{
+#if defined(AVM_NO_SMP)
+    refc->ref_count |= mask;
+#elif defined(HAVE_ATOMIC)
+    atomic_fetch_or(&refc->ref_count, mask);
+#else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
+    smp_atomic_fetch_or_size(&refc->ref_count, mask);
+#endif
+}
+
+// Attempt to atomically transition ref_count from *expected to desired.
+// Returns true on success; on failure updates *expected to the current value.
+// Used to claim the sole right to call refc_binary_free_resource.
+static inline bool refc_binary_cas_refcount(struct RefcBinary *refc, size_t *expected, size_t desired)
+{
+#if defined(AVM_NO_SMP)
+    if (refc->ref_count == *expected) {
+        refc->ref_count = desired;
+        return true;
+    }
+    *expected = refc->ref_count;
+    return false;
+#elif defined(HAVE_ATOMIC)
+    return atomic_compare_exchange_strong(&refc->ref_count, expected, desired);
+#else // HAVE_PLATFORM_ATOMIC_H guaranteed by #error above
+    return ATOMIC_COMPARE_EXCHANGE_WEAK_INT(&refc->ref_count, expected, desired);
+#endif
+}
+#endif // __cplusplus
+
+// Return the user-visible reference count: lower REFC_COUNT_BITS bits for
+// resources (resource_type != NULL), full word for plain refc binaries.
+static inline size_t refc_binary_get_refcount(const struct RefcBinary *refc)
+{
+    return refc->resource_type ? (refc->ref_count & REFC_COUNT_MASK) : refc->ref_count;
+}
+
+/**
+ * @brief Unmark, remove from global list, and free a resource RefcBinary.
+ *
+ * @details Equivalent to resource_unmark_serialized + synclist_remove +
+ * refc_binary_destroy. Only valid when resource_type != NULL.
+ * @param refc the resource binary to free
+ * @param global the global context
+ */
+void refc_binary_free_resource(struct RefcBinary *refc, GlobalContext *global);
 
 /**
  * @brief Create a reference-counted resource object outside of the process heap
