@@ -31,6 +31,7 @@ start() ->
     ok = isolated(fun test_member/0),
     ok = isolated(fun test_insert/0),
     ok = isolated(fun test_insert_new/0),
+    ok = isolated(fun test_update_element/0),
     ok = isolated(fun test_update_counter/0),
     ok = isolated(fun test_take/0),
     ok = isolated(fun test_delete/0),
@@ -384,6 +385,92 @@ test_insert_new() ->
     assert_insert_badargs(ets:new(test, []), fun ets:insert_new/2),
     assert_insert_badargs(ets:new(test, [bag]), fun ets:insert_new/2),
     assert_insert_badargs(ets:new(test, [duplicate_bag]), fun ets:insert_new/2),
+
+    ok.
+
+test_update_element() ->
+    % {Position, Value}
+    S1 = new_table({key, value1, value2}),
+    true = ets:update_element(S1, key, {2, new_value1}),
+    [{key, new_value1, value2}] = ets:lookup(S1, key),
+
+    S2 = new_table({key, value1, value2}),
+    true = ets:update_element(S2, key, {3, new_value2}),
+    [{key, value1, new_value2}] = ets:lookup(S2, key),
+
+    S3 = new_table({key, value1, value2}),
+    false = ets:update_element(S3, key_not_exist, {2, new_value1}),
+    [{key, value1, value2}] = ets:lookup(S3, key),
+
+    % [{Position, Value}, ...]
+    S4 = new_table({key, value1, value2}),
+    true = ets:update_element(S4, key, [{3, new_value2}, {2, new_value1}, {3, new_last_value2}]),
+    [{key, new_value1, new_last_value2}] = ets:lookup(S4, key),
+
+    % Default object (since OTP 27.0)
+    if_otp_version(27, fun() ->
+        S5 = new_table({key, value1, value2}),
+        true = ets:update_element(S5, key_not_exist, {2, new_value1}, {key, value1, value2}),
+        [{key_not_exist, new_value1, value2}] = ets:lookup(S5, key_not_exist),
+
+        S6 = new_table({key, value1, value2}),
+        true = ets:update_element(
+            S6,
+            key_not_exist,
+            [{2, new_value1}, {3, new_value2}, {3, new_last_value2}],
+            {key, value1, value2}
+        ),
+        [{key_not_exist, new_value1, new_last_value2}] = ets:lookup(S6, key_not_exist)
+    end),
+
+    % Badargs
+    TErr = new_table(3, [{value1, value2, key}]),
+    OkDefault = {value, value, value},
+
+    % The table type is not set
+    TErrBag = ets:new(test, [bag]),
+    TErrDuplBag = ets:new(test, [duplicate_bag]),
+    assert_badarg(fun() -> ets:update_element(TErrBag, key, {1, value}) end),
+    assert_badarg(fun() -> ets:update_element(TErrDuplBag, key, {1, value}) end),
+    assert_badarg(fun() -> ets:update_element(bad_table, key, {2, value}) end),
+
+    % Pos < 1
+    assert_badarg(fun() -> ets:update_element(TErr, key, {-1, pos_neg}) end),
+    assert_badarg(fun() -> ets:update_element(TErr, key, {0, pos_zero}) end),
+    assert_badarg(fun() -> ets:update_element(TErr, key, [{1, pos_ok}, {0, pos_zero}]) end),
+
+    % Pos = KeyPos
+    assert_badarg(fun() -> ets:update_element(TErr, key, {3, pos_key}) end),
+    assert_badarg(fun() -> ets:update_element(TErr, key, [{1, pos_ok}, {3, pos_key}]) end),
+
+    % Pos > TupleArity
+    assert_badarg(fun() -> ets:update_element(TErr, key, {4, pos_past}) end),
+    assert_badarg(fun() -> ets:update_element(TErr, key, [{1, pos_ok}, {4, pos_past}]) end),
+
+    % 4-arg update_element/4 badargs (since OTP 27.0)
+    if_otp_version(27, fun() ->
+        assert_badarg(fun() ->
+            ets:update_element(TErr, key_not_exist, [{1, pos_ok}, {0, pos_zero}], OkDefault)
+        end),
+        assert_badarg(fun() ->
+            ets:update_element(TErr, key_not_exist, [{1, pos_ok}, {3, pos_key}], OkDefault)
+        end),
+        assert_badarg(fun() ->
+            ets:update_element(TErr, key_not_exist, [{1, pos_ok}, {4, pos_past}], OkDefault)
+        end)
+    end),
+
+    % Default object arity < KeyPos
+    % NOTE: This fails on OTP, see https://github.com/erlang/otp/issues/10603
+    if_atomvm(fun() ->
+        assert_badarg(fun() -> ets:update_element(TErr, key_not_exist, {1, pos_ok}, {value}) end),
+        assert_badarg(fun() ->
+            ets:update_element(TErr, key_not_exist, [{1, pos_ok}, {2, pos_ok}], {value, value})
+        end)
+    end),
+
+    [{value1, value2, key}] = ets:lookup(TErr, key),
+    [] = ets:lookup(TErr, key_not_exist),
 
     ok.
 

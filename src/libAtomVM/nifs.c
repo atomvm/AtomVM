@@ -226,6 +226,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_member(Context *ctx, int argc, term argv[]);
 static term nif_ets_insert(Context *ctx, int argc, term argv[]);
 static term nif_ets_insert_new(Context *ctx, int argc, term argv[]);
+static term nif_ets_update_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_update_counter(Context *ctx, int argc, term argv[]);
 static term nif_ets_take(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
@@ -754,6 +755,11 @@ static const struct Nif ets_lookup_element_nif = {
 static const struct Nif ets_member_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_member
+};
+
+static const struct Nif ets_update_element_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_update_element
 };
 
 static const struct Nif ets_update_counter_nif = {
@@ -3953,6 +3959,37 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
         case EtsTupleNotExists:
             return term_nil();
         case EtsBadAccess:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_ets_update_element(Context *ctx, int argc, term argv[])
+{
+    term name_or_ref = argv[0];
+    term key = argv[1];
+    term element_spec = argv[2];
+
+    VALIDATE_VALUE(name_or_ref, is_ets_table_id);
+
+    term default_tuple = term_invalid_term();
+    if (argc == 4) {
+        default_tuple = argv[3];
+        VALIDATE_VALUE(default_tuple, term_is_tuple);
+    }
+
+    ets_status_t result = ets_update_element(name_or_ref, key, element_spec, default_tuple, ctx);
+
+    switch (result) {
+        case EtsOk:
+            return TRUE_ATOM;
+        case EtsTupleNotExists:
+            return FALSE_ATOM;
+        case EtsBadAccess:
+        case EtsBadEntry:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationError:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
