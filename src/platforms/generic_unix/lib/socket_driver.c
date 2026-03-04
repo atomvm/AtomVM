@@ -47,6 +47,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+void sys_unregister_listener_nolock(GlobalContext *global, struct EventListener *listener);
+
 // #define ENABLE_TRACE
 #include "trace.h"
 
@@ -1194,31 +1196,26 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         TRACE("close\n");
         port_send_reply(ctx, pid, ref, OK_ATOM);
         SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
-        // Callbacks (active_recv_callback, passive_recv_callback) are called
-        // while glb->listeners lock is held. They may want to free the
-        // listener, causing a potential double free here.
-        // We acquire the lock on listeners here and set the listeners
-        // to NULL in the socket_data structure to prevent them from freeing
-        // the listeners.
+        // Callbacks (active_recv_callback, passive_recv_callback, accept_callback)
+        // are called while glb->listeners lock is held. They may free the
+        // listener and set the socket_data pointer to NULL.
+        // We must atomically detach the pointers AND unlink from the listeners
+        // list under the same lock hold, to prevent a race where the callback
+        // also unlinks the same listener node.
         synclist_wrlock(&glb->listeners);
         ActiveRecvListener *active_listener = socket_data->active_listener;
         PassiveRecvListener *passive_listener = socket_data->passive_listener;
         socket_data->active_listener = NULL;
         socket_data->passive_listener = NULL;
-        synclist_unlock(&glb->listeners);
         if (active_listener) {
-            // Then we unregister, which also acquires the lock. The callbacks
-            // may have returned NULL which means the listener would no longer
-            // be registered, but this will work.
-            sys_unregister_listener(glb, &active_listener->base);
-            // After the listener is unregistered, the callbacks can no longer
-            // be called, so we can eventually free the listener
-            free(active_listener);
+            sys_unregister_listener_nolock(glb, &active_listener->base);
         }
         if (passive_listener) {
-            sys_unregister_listener(glb, &passive_listener->base);
-            free(passive_listener);
+            sys_unregister_listener_nolock(glb, &passive_listener->base);
         }
+        synclist_unlock(&glb->listeners);
+        free(active_listener);
+        free(passive_listener);
         socket_driver_do_close(ctx);
         // We don't need to remove message.
         return NativeTerminate;
