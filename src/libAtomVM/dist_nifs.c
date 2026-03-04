@@ -746,12 +746,16 @@ term dist_send_message(term target, term payload, Context *ctx)
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
         if (dist_connection->node_atom_index == node_atom_index) {
             if (!term_is_invalid_term(registered_name_atom)) {
-                dist_enqueue_reg_send_message(ctx->process_id, registered_name_atom, payload, dist_connection, ctx->global);
+                enif_keep_resource(dist_connection);
                 synclist_unlock(&ctx->global->dist_connections);
+                dist_enqueue_reg_send_message(ctx->process_id, registered_name_atom, payload, dist_connection, ctx->global);
+                enif_release_resource(dist_connection);
                 return payload;
             } else if (dist_connection->node_creation == node_creation) {
-                dist_enqueue_send_sender_message(ctx->process_id, target, payload, dist_connection, ctx->global);
+                enif_keep_resource(dist_connection);
                 synclist_unlock(&ctx->global->dist_connections);
+                dist_enqueue_send_sender_message(ctx->process_id, target, payload, dist_connection, ctx->global);
+                enif_release_resource(dist_connection);
                 return payload;
             } else {
                 // creation doesn't match, but we don't need to connect
@@ -769,6 +773,9 @@ term dist_send_message(term target, term payload, Context *ctx)
         return term_invalid_term();
     }
 
+    // Keep resource ref before unlocking to prevent dtor from running
+    enif_keep_resource(new_conn_obj);
+
     // Enqueue message
     if (!term_is_external_pid(target)) {
         dist_enqueue_reg_send_message(ctx->process_id, registered_name_atom, payload, new_conn_obj, ctx->global);
@@ -781,6 +788,8 @@ term dist_send_message(term target, term payload, Context *ctx)
 
     // Eventually, tell kernel to connect
     dist_net_kernel_send_connect(net_kernel_proc, new_conn_obj, node_atom_index, ctx);
+
+    enif_release_resource(new_conn_obj);
 
     return payload;
 }
@@ -807,18 +816,25 @@ void dist_send_payload_exit(struct LinkRemoteMonitor *monitor, term reason, Cont
     int node_atom_index = term_to_atom_index(monitor->node);
     uint32_t node_creation = monitor->creation;
 
+    struct DistConnection *found_connection = NULL;
+
     // Search for dhandle.
     struct ListHead *dist_connections = synclist_rdlock(&ctx->global->dist_connections);
     struct ListHead *item;
     LIST_FOR_EACH (item, dist_connections) {
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
         if (dist_connection->node_atom_index == node_atom_index && dist_connection->node_creation == node_creation) {
-            dist_enqueue_exit_message(ctx->process_id, monitor, reason, dist_connection, ctx->global);
+            enif_keep_resource(dist_connection);
+            found_connection = dist_connection;
             break;
         }
     }
-
     synclist_unlock(&ctx->global->dist_connections);
+
+    if (found_connection) {
+        dist_enqueue_exit_message(ctx->process_id, monitor, reason, found_connection, ctx->global);
+        enif_release_resource(found_connection);
+    }
     // We're not connected to the node: link was broken.
 }
 
@@ -834,8 +850,10 @@ term dist_send_link(term from_pid, term to_pid, Context *ctx)
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
         if (dist_connection->node_atom_index == node_atom_index) {
             if (dist_connection->node_creation == node_creation) {
-                dist_enqueue_link_message(from_pid, to_pid, dist_connection, ctx->global);
+                enif_keep_resource(dist_connection);
                 synclist_unlock(&ctx->global->dist_connections);
+                dist_enqueue_link_message(from_pid, to_pid, dist_connection, ctx->global);
+                enif_release_resource(dist_connection);
                 return TRUE_ATOM;
             } else {
                 // Creation doesn't match, so pid no longer exists
@@ -852,6 +870,9 @@ term dist_send_link(term from_pid, term to_pid, Context *ctx)
         return term_invalid_term();
     }
 
+    // Keep resource ref before unlocking to prevent dtor from running
+    enif_keep_resource(new_conn_obj);
+
     // Enqueue message
     dist_enqueue_link_message(from_pid, to_pid, new_conn_obj, ctx->global);
 
@@ -861,6 +882,8 @@ term dist_send_link(term from_pid, term to_pid, Context *ctx)
     // Eventually, tell kernel to connect
     dist_net_kernel_send_connect(net_kernel_proc, new_conn_obj, node_atom_index, ctx);
 
+    enif_release_resource(new_conn_obj);
+
     return TRUE_ATOM;
 }
 
@@ -869,6 +892,8 @@ static void dist_send_unlink_id_or_ack(int operation, uint64_t unlink_id, term f
     int node_atom_index = term_to_atom_index(term_get_external_node(to_pid));
     uint32_t node_creation = term_get_external_node_creation(to_pid);
 
+    struct DistConnection *found_connection = NULL;
+
     // Search for dhandle.
     struct ListHead *dist_connections = synclist_rdlock(&ctx->global->dist_connections);
     struct ListHead *item;
@@ -876,14 +901,19 @@ static void dist_send_unlink_id_or_ack(int operation, uint64_t unlink_id, term f
         struct DistConnection *dist_connection = GET_LIST_ENTRY(item, struct DistConnection, head);
         if (dist_connection->node_atom_index == node_atom_index) {
             if (dist_connection->node_creation == node_creation) {
-                dist_enqueue_unlink_id_or_ack_message(operation, unlink_id, from_pid, to_pid, dist_connection, ctx->global);
+                enif_keep_resource(dist_connection);
+                found_connection = dist_connection;
             }
             // Creation doesn't match, so pid no longer exists
             break;
         }
     }
-
     synclist_unlock(&ctx->global->dist_connections);
+
+    if (found_connection) {
+        dist_enqueue_unlink_id_or_ack_message(operation, unlink_id, from_pid, to_pid, found_connection, ctx->global);
+        enif_release_resource(found_connection);
+    }
     // Silently do nothing if node is not connected
 }
 
