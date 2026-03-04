@@ -32,3 +32,6 @@ src/platforms/esp32/dependencies.lock
 .DS_Store
 .cache
 .clang-tidy
+build-nojit/
+build-jit/
+erl_crash.dump
