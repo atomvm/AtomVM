@@ -230,6 +230,7 @@ static term nif_ets_update_element(Context *ctx, int argc, term argv[]);
 static term nif_ets_update_counter(Context *ctx, int argc, term argv[]);
 static term nif_ets_take(Context *ctx, int argc, term argv[]);
 static term nif_ets_delete(Context *ctx, int argc, term argv[]);
+static term nif_ets_delete_object(Context *ctx, int argc, term argv[]);
 static term nif_erlang_pid_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_port_to_list(Context *ctx, int argc, term argv[]);
 static term nif_erlang_ref_to_list(Context *ctx, int argc, term argv[]);
@@ -775,6 +776,11 @@ static const struct Nif ets_take_nif = {
 static const struct Nif ets_delete_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_ets_delete
+};
+
+static const struct Nif ets_delete_object_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_ets_delete_object
 };
 
 static const struct Nif atomvm_add_avm_pack_binary_nif = {
@@ -4140,6 +4146,31 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
         case EtsOk:
             return TRUE_ATOM;
         case EtsBadAccess:
+            RAISE_ERROR(BADARG_ATOM);
+        case EtsAllocationError:
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        default:
+            UNREACHABLE();
+    }
+}
+
+static term nif_ets_delete_object(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term name_or_ref = argv[0];
+    term tuple = argv[1];
+
+    VALIDATE_VALUE(name_or_ref, is_ets_table_id);
+    VALIDATE_VALUE(tuple, term_is_tuple);
+
+    ets_status_t result = ets_delete_object(name_or_ref, tuple, ctx);
+
+    switch (result) {
+        case EtsOk:
+            return TRUE_ATOM;
+        case EtsBadAccess:
+        case EtsBadEntry:
             RAISE_ERROR(BADARG_ATOM);
         case EtsAllocationError:
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);

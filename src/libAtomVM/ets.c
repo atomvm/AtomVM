@@ -551,6 +551,25 @@ ets_status_t ets_delete_table(term name_or_ref, Context *ctx)
     return EtsOk;
 }
 
+ets_status_t ets_delete_object(term name_or_ref, term tuple, Context *ctx)
+{
+    struct EtsTable *table = get_table(
+        &ctx->global->ets,
+        name_or_ref,
+        ctx->process_id,
+        TableAccessWrite);
+
+    if (table == NULL) {
+        return EtsBadAccess;
+    }
+
+    ets_status_t result = ets_multimap_remove_tuple(table->multimap, tuple, ctx->global);
+
+    SMP_UNLOCK(table);
+
+    return result;
+}
+
 void ets_delete_owned_tables(Ets *ets, int32_t process_id, GlobalContext *global)
 {
     struct ListHead *ets_tables = synclist_wrlock(&ets->ets_tables);

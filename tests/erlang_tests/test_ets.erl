@@ -35,6 +35,7 @@ start() ->
     ok = isolated(fun test_update_counter/0),
     ok = isolated(fun test_take/0),
     ok = isolated(fun test_delete/0),
+    ok = isolated(fun test_delete_object/0),
     0.
 
 test_ets_new() ->
@@ -696,6 +697,59 @@ test_delete() ->
     assert_badarg(fun() -> ets:delete(bad_table) end),
     assert_badarg(fun() -> ets:lookup(TErr, key) end),
     assert_badarg(fun() -> ets:delete(TErr) end),
+
+    ok.
+
+test_delete_object() ->
+    % Set
+    S = new_table([{key, value}, {key2, value2}]),
+    true = ets:delete_object(S, {key_not_exist, value_not_exist}),
+
+    true = ets:delete_object(S, {key, value_not_exist}),
+    [{key, value}] = ets:lookup(S, key),
+
+    true = ets:delete_object(S, {key, value}),
+    [] = ets:lookup(S, key),
+
+    true = ets:delete_object(S, {key2, value2}),
+    [] = ets:lookup(S, key2),
+
+    % Bag
+    B = new_table(bag, [{key, value}, {key, value2}, {key2, value2}]),
+    true = ets:delete_object(B, {key_not_exist, value_not_exist}),
+
+    true = ets:delete_object(B, {key, value_not_exist}),
+    [{key, value}, {key, value2}] = ets:lookup(B, key),
+
+    true = ets:delete_object(B, {key, value}),
+    [{key, value2}] = ets:lookup(B, key),
+
+    true = ets:delete_object(B, {key, value2}),
+    [] = ets:lookup(B, key),
+
+    true = ets:delete_object(B, {key2, value2}),
+    [] = ets:lookup(B, key2),
+
+    % Duplicate bag
+    DB = new_table(duplicate_bag, [{key, value}, {key, value}, {key, value2}]),
+    true = ets:delete_object(DB, {key_not_exist, value_not_exist}),
+
+    true = ets:delete_object(DB, {key, value_not_exist}),
+    [{key, value}, {key, value}, {key, value2}] = ets:lookup(DB, key),
+
+    true = ets:delete_object(DB, {key, value}),
+    [{key, value2}] = ets:lookup(DB, key),
+
+    true = ets:delete_object(DB, {key, value2}),
+    [] = ets:lookup(DB, key),
+
+    % Badargs
+    TErr = new_table(2, []),
+    assert_badarg(fun() -> ets:delete_object(bad_table, {key, value}) end),
+    assert_badarg(fun() -> ets:delete_object(TErr, not_a_tuple) end),
+    assert_badarg(fun() -> ets:delete_object(TErr, [{key, value}, {key, value2}]) end),
+    assert_badarg(fun() -> ets:delete_object(TErr, {}) end),
+    assert_badarg(fun() -> ets:delete_object(TErr, {bad_keypos}) end),
 
     ok.
 
