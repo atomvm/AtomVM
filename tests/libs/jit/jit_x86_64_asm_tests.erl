@@ -258,6 +258,34 @@ movabsq_test_() ->
 
 movl_test_() ->
     [
+        % movl(Imm, DestReg) - immediate to register (5 bytes for low regs, 6 for high)
+        ?_assertAsmEqual(
+            <<16#BA, 16#04, 16#00, 16#00, 16#00>>,
+            "movl $0x4,%edx",
+            jit_x86_64_asm:movl(4, rdx)
+        ),
+        ?_assertAsmEqual(
+            <<16#B9, 16#09, 16#00, 16#00, 16#00>>,
+            "movl $0x9,%ecx",
+            jit_x86_64_asm:movl(9, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#B8, 16#78, 16#56, 16#34, 16#12>>,
+            "movl $0x12345678,%eax",
+            jit_x86_64_asm:movl(16#12345678, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#41, 16#B8, 16#78, 16#56, 16#34, 16#12>>,
+            "movl $0x12345678,%r8d",
+            jit_x86_64_asm:movl(16#12345678, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#41, 16#BB, 16#78, 16#56, 16#34, 16#12>>,
+            "movl $0x12345678,%r11d",
+            jit_x86_64_asm:movl(16#12345678, r11)
+        ),
+
+        % movl({0, SrcReg}, DestReg) - memory to register
         ?_assertAsmEqual(<<16#8b, 16#00>>, "movl (%rax),%eax", jit_x86_64_asm:movl({0, rax}, rax)),
         ?_assertAsmEqual(<<16#8b, 16#01>>, "movl (%rcx),%eax", jit_x86_64_asm:movl({0, rcx}, rax)),
         ?_assertAsmEqual(<<16#8b, 16#09>>, "movl (%rcx),%ecx", jit_x86_64_asm:movl({0, rcx}, rcx)),

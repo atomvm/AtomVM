@@ -278,6 +278,11 @@ movabsq(Imm, Reg) when is_atom(Reg) ->
         {1, Index} -> <<16#49, (16#B8 + Index), Imm:64/little>>
     end.
 
+movl(Imm, DestReg) when is_integer(Imm), is_atom(DestReg) ->
+    case x86_64_x_reg(DestReg) of
+        {0, Index} -> <<(16#B8 + Index), Imm:32/little>>;
+        {1, Index} -> <<16#41, (16#B8 + Index), Imm:32/little>>
+    end;
 movl({0, SrcReg}, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(SrcReg),
     {REX_R, MODRM_REG} = x86_64_x_reg(DestReg),
