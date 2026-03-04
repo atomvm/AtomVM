@@ -27,6 +27,7 @@
 test() ->
     ok = test_split(),
     ok = test_hex(),
+    ok = test_list_to_bin(),
     ok.
 
 test_split() ->
@@ -34,6 +35,12 @@ test_split() ->
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"ooz">>), [<<"foobar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>), [<<"f">>, <<"obar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>, [global]), [<<"f">>, <<>>, <<"bar">>]),
+    ok.
+
+test_list_to_bin() ->
+    ?ASSERT_MATCH(binary:list_to_bin([]), <<>>),
+    ?ASSERT_MATCH(binary:list_to_bin([104, 101, 108, 108, 111]), <<"hello">>),
+    ?ASSERT_MATCH(binary:list_to_bin([<<"hel">>, [108, 111]]), <<"hello">>),
     ok.
 
 test_hex() ->
