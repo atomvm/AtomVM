@@ -2171,6 +2171,282 @@ cleanup:
     return result;
 }
 
+struct PsaAeadParams
+{
+    AtomString atom_str;
+    psa_key_type_t key_type;
+    psa_algorithm_t algorithm;
+    uint16_t key_bits;
+    uint8_t default_tag_len;
+};
+
+static const struct PsaAeadParams psa_aead_table[] = {
+    { ATOM_STR("\xB", "aes_128_gcm"), PSA_KEY_TYPE_AES, PSA_ALG_GCM, 128, 16 },
+    { ATOM_STR("\xB", "aes_192_gcm"), PSA_KEY_TYPE_AES, PSA_ALG_GCM, 192, 16 },
+    { ATOM_STR("\xB", "aes_256_gcm"), PSA_KEY_TYPE_AES, PSA_ALG_GCM, 256, 16 },
+    { ATOM_STR("\xB", "aes_128_ccm"), PSA_KEY_TYPE_AES, PSA_ALG_CCM, 128, 16 },
+    { ATOM_STR("\xB", "aes_192_ccm"), PSA_KEY_TYPE_AES, PSA_ALG_CCM, 192, 16 },
+    { ATOM_STR("\xB", "aes_256_ccm"), PSA_KEY_TYPE_AES, PSA_ALG_CCM, 256, 16 },
+    { ATOM_STR("\x11", "chacha20_poly1305"), PSA_KEY_TYPE_CHACHA20, PSA_ALG_CHACHA20_POLY1305, 256,
+        16 },
+};
+
+#define PSA_AEAD_TABLE_LEN (sizeof(psa_aead_table) / sizeof(psa_aead_table[0]))
+
+static const struct PsaAeadParams *psa_aead_table_lookup(GlobalContext *glb, term cipher_atom)
+{
+    for (size_t i = 0; i < PSA_AEAD_TABLE_LEN; i++) {
+        AtomString atom_str = psa_aead_table[i].atom_str;
+        if (globalcontext_is_term_equal_to_atom_string(glb, cipher_atom, atom_str)) {
+            return &psa_aead_table[i];
+        }
+    }
+    return NULL;
+}
+
+static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
+{
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    term cipher_atom = argv[0];
+    const struct PsaAeadParams *aead_params = psa_aead_table_lookup(glb, cipher_atom);
+    if (IS_NULL_PTR(aead_params)) {
+        size_t needed = TUPLE_SIZE(2) + (strlen("Unknown cipher") * CONS_SIZE);
+        if (UNLIKELY(memory_ensure_free(ctx, needed) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        term desc = interop_bytes_to_list("Unknown cipher", strlen("Unknown cipher"), &ctx->heap);
+        term err_t = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(err_t, 0, BADARG_ATOM);
+        term_put_tuple_element(err_t, 1, desc);
+        RAISE_ERROR(err_t);
+    }
+
+    bool encrypting;
+    term enc_flag_term;
+    term tag_or_len_term = UNDEFINED_ATOM;
+
+    if (argc == 6) {
+        enc_flag_term = argv[5];
+    } else {
+        tag_or_len_term = argv[5];
+        enc_flag_term = argv[6];
+    }
+
+    if (enc_flag_term == TRUE_ATOM) {
+        encrypting = true;
+    } else if (enc_flag_term == FALSE_ATOM) {
+        encrypting = false;
+    } else {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "EncFlag must be a boolean", ctx));
+    }
+
+    size_t tag_len = aead_params->default_tag_len;
+    const void *tag_data = NULL;
+    size_t tag_data_len = 0;
+
+    if (argc == 7) {
+        if (encrypting) {
+            if (UNLIKELY(!term_is_int(tag_or_len_term))) {
+                RAISE_ERROR(
+                    make_crypto_error(__FILE__, __LINE__, "TagLength must be an integer", ctx));
+            }
+            avm_int_t requested = term_to_int(tag_or_len_term);
+            if (UNLIKELY(requested < 0)) {
+                RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad tag length", ctx));
+            }
+            tag_len = requested;
+        } else {
+            if (UNLIKELY(!term_is_binary(tag_or_len_term))) {
+                RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Tag must be a binary", ctx));
+            }
+            tag_data = term_binary_data(tag_or_len_term);
+            tag_data_len = term_binary_size(tag_or_len_term);
+            tag_len = tag_data_len;
+        }
+    }
+
+    psa_algorithm_t psa_algo;
+    if (tag_len != aead_params->default_tag_len) {
+        psa_algo = PSA_ALG_AEAD_WITH_SHORTENED_TAG(aead_params->algorithm, tag_len);
+    } else {
+        psa_algo = aead_params->algorithm;
+    }
+
+    term key_term = argv[1];
+    if (UNLIKELY(!term_is_binary(key_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad key", ctx));
+    }
+    size_t key_len = term_binary_size(key_term);
+    if (UNLIKELY(key_len != aead_params->key_bits / 8)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad key size", ctx));
+    }
+    const void *key_data = term_binary_data(key_term);
+
+    term iv_term = argv[2];
+    if (UNLIKELY(!term_is_binary(iv_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad iv", ctx));
+    }
+    const void *iv_data = term_binary_data(iv_term);
+    size_t iv_len = term_binary_size(iv_term);
+
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, aead_params->key_type);
+    psa_set_key_bits(&attr, aead_params->key_bits);
+    psa_set_key_usage_flags(&attr, encrypting ? PSA_KEY_USAGE_ENCRYPT : PSA_KEY_USAGE_DECRYPT);
+    psa_set_key_algorithm(&attr, psa_algo);
+
+    psa_key_id_t key_id = 0;
+    psa_status_t status = psa_import_key(&attr, key_data, key_len, &key_id);
+    psa_reset_key_attributes(&attr);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            RAISE_ERROR(
+                make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+        default:
+            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+    }
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *maybe_allocated_intext = NULL;
+    void *maybe_allocated_aad = NULL;
+    void *out_buf = NULL;
+    size_t out_buf_size = 0;
+
+    const void *intext_data;
+    size_t intext_len;
+    term iodata_result = handle_iodata(argv[3], &intext_data, &intext_len, &maybe_allocated_intext);
+    if (UNLIKELY(iodata_result != OK_ATOM)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
+    }
+
+    const void *aad_data;
+    size_t aad_len;
+    iodata_result = handle_iodata(argv[4], &aad_data, &aad_len, &maybe_allocated_aad);
+    if (UNLIKELY(iodata_result != OK_ATOM)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
+    }
+
+    if (encrypting) {
+        size_t out_size = PSA_AEAD_ENCRYPT_OUTPUT_SIZE(aead_params->key_type, psa_algo, intext_len);
+        out_buf_size = out_size;
+        out_buf = malloc(out_size);
+        if (IS_NULL_PTR(out_buf)) {
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+
+        size_t out_len = 0;
+        status = psa_aead_encrypt(key_id, psa_algo, iv_data, iv_len, aad_data, aad_len, intext_data,
+            intext_len, out_buf, out_size, &out_len);
+        switch (status) {
+            case PSA_SUCCESS:
+                break;
+            case PSA_ERROR_NOT_SUPPORTED:
+                result = make_crypto_error(
+                    __FILE__, __LINE__, "Unsupported algorithm or parameters", ctx);
+                goto cleanup;
+            case PSA_ERROR_INVALID_ARGUMENT:
+                result = make_crypto_error(__FILE__, __LINE__, "Invalid argument", ctx);
+                goto cleanup;
+            default:
+                result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+                goto cleanup;
+        }
+
+        size_t ct_len = out_len - tag_len;
+
+        if (UNLIKELY(
+                memory_ensure_free(ctx,
+                    TERM_BINARY_HEAP_SIZE(ct_len) + TERM_BINARY_HEAP_SIZE(tag_len) + TUPLE_SIZE(2))
+                != MEMORY_GC_OK)) {
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+
+        term ct_bin = term_from_literal_binary(out_buf, ct_len, &ctx->heap, glb);
+        term tag_bin
+            = term_from_literal_binary((uint8_t *) out_buf + ct_len, tag_len, &ctx->heap, glb);
+        success = true;
+        result = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result, 0, ct_bin);
+        term_put_tuple_element(result, 1, tag_bin);
+
+    } else {
+        size_t ct_len = intext_len;
+        size_t combined_len = ct_len + tag_data_len;
+        void *combined_buf = malloc(combined_len);
+        if (IS_NULL_PTR(combined_buf)) {
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+        memcpy(combined_buf, intext_data, ct_len);
+        memcpy((uint8_t *) combined_buf + ct_len, tag_data, tag_data_len);
+
+        size_t pt_size
+            = PSA_AEAD_DECRYPT_OUTPUT_SIZE(aead_params->key_type, psa_algo, combined_len);
+        out_buf_size = pt_size + 1;
+        out_buf = malloc(out_buf_size); // +1 to ensure valid malloc even for 0
+        if (IS_NULL_PTR(out_buf)) {
+            free(combined_buf);
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+
+        size_t pt_len = 0;
+        status = psa_aead_decrypt(key_id, psa_algo, iv_data, iv_len, aad_data, aad_len,
+            combined_buf, combined_len, out_buf, pt_size, &pt_len);
+        free(combined_buf);
+
+        switch (status) {
+            case PSA_SUCCESS:
+                break;
+            case PSA_ERROR_INVALID_SIGNATURE:
+                // Authentication failed, return atom `error`, no exception
+                success = true;
+                result = ERROR_ATOM;
+                goto cleanup;
+            case PSA_ERROR_NOT_SUPPORTED:
+                result = make_crypto_error(
+                    __FILE__, __LINE__, "Unsupported algorithm or parameters", ctx);
+                goto cleanup;
+            case PSA_ERROR_INVALID_ARGUMENT:
+                result = make_crypto_error(__FILE__, __LINE__, "Invalid argument", ctx);
+                goto cleanup;
+            default:
+                result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+                goto cleanup;
+        }
+
+        if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(pt_len)) != MEMORY_GC_OK)) {
+            result = OUT_OF_MEMORY_ATOM;
+            goto cleanup;
+        }
+
+        success = true;
+        result = term_from_literal_binary(out_buf, pt_len, &ctx->heap, glb);
+    }
+
+cleanup:
+    psa_destroy_key(key_id);
+    free(maybe_allocated_intext);
+    free(maybe_allocated_aad);
+    secure_free(out_buf, out_buf_size);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
 #endif
 
 // not static since we are using it elsewhere to provide backward compatibility
@@ -2323,6 +2599,10 @@ static const struct Nif crypto_crypto_final_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_crypto_final
 };
+static const struct Nif crypto_crypto_one_time_aead_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_crypto_one_time_aead
+};
 #endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
@@ -2401,6 +2681,14 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("crypto_final/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_crypto_final_nif;
+        }
+        if (strcmp("crypto_one_time_aead/6", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_crypto_one_time_aead_nif;
+        }
+        if (strcmp("crypto_one_time_aead/7", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_crypto_one_time_aead_nif;
         }
 #endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {

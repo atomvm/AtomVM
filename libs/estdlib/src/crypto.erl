@@ -27,6 +27,8 @@
     hash_final/1,
     crypto_one_time/4,
     crypto_one_time/5,
+    crypto_one_time_aead/6,
+    crypto_one_time_aead/7,
     crypto_init/3,
     crypto_init/4,
     crypto_update/2,
@@ -71,6 +73,15 @@
     | aes_128_ofb
     | aes_192_ofb
     | aes_256_ofb.
+
+-type cipher_aead() ::
+    aes_128_gcm
+    | aes_192_gcm
+    | aes_256_gcm
+    | aes_128_ccm
+    | aes_192_ccm
+    | aes_256_ccm
+    | chacha20_poly1305.
 
 -type padding() :: none | pkcs_padding.
 
@@ -209,6 +220,59 @@ crypto_one_time(_Cipher, _Key, _Data, _FlagOrOptions) ->
     FlagOrOptions :: crypto_opts()
 ) -> binary().
 crypto_one_time(_Cipher, _Key, _IV, _Data, _FlagOrOptions) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher an AEAD cipher
+%% @param   Key the encryption key
+%% @param   IV nonce / initialization vector
+%% @param   InText plaintext to encrypt (iodata)
+%% @param   AAD additional authenticated data (iodata)
+%% @param   EncFlag `true' for encryption
+%% @returns Returns `{CipherText, Tag}' on success.
+%% @doc     Encrypt data using an AEAD cipher with the default tag length.
+%%
+%%          Supported ciphers: `aes_128_gcm', `aes_192_gcm', `aes_256_gcm',
+%%          `aes_128_ccm', `aes_192_ccm', `aes_256_ccm', `chacha20_poly1305'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_one_time_aead(
+    Cipher :: cipher_aead(),
+    Key :: iodata(),
+    IV :: iodata(),
+    InText :: iodata(),
+    AAD :: iodata(),
+    EncFlag :: true
+) -> {binary(), binary()}.
+crypto_one_time_aead(_Cipher, _Key, _IV, _InText, _AAD, _EncFlag) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Cipher an AEAD cipher
+%% @param   Key the encryption / decryption key
+%% @param   IV nonce / initialization vector
+%% @param   InText plaintext (encrypt) or ciphertext (decrypt) (iodata)
+%% @param   AAD additional authenticated data (iodata)
+%% @param   TagOrTagLength integer tag length when encrypting, tag binary when decrypting
+%% @param   EncFlag `true' for encryption, `false' for decryption
+%% @returns Encryption: `{CipherText, Tag}'. Decryption: plaintext binary, or `error' on
+%%          authentication failure.
+%% @doc     Encrypt or decrypt data using an AEAD cipher.
+%%
+%%          When decrypting, authentication failure returns the atom `error'
+%%          rather than raising an exception, matching OTP behaviour.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crypto_one_time_aead(
+    Cipher :: cipher_aead(),
+    Key :: iodata(),
+    IV :: iodata(),
+    InText :: iodata(),
+    AAD :: iodata(),
+    TagOrTagLength :: non_neg_integer() | binary(),
+    EncFlag :: boolean()
+) -> {binary(), binary()} | binary() | error.
+crypto_one_time_aead(_Cipher, _Key, _IV, _InText, _AAD, _TagOrTagLength, _EncFlag) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
