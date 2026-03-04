@@ -55,7 +55,7 @@ call_primitive_0_test() ->
             "  18:  4632                lw  a2,12(sp)\n"
             "  1a:  0141                addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_1_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -78,7 +78,7 @@ call_primitive_1_test() ->
             "  18:  4632                lw  a2,12(sp)\n"
             "  1a:  0141                addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_2_args_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -104,7 +104,7 @@ call_primitive_2_args_test() ->
             "  24:  4632                lw  a2,12(sp)\n"
             "  26:  0141                addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_5_args_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -118,7 +118,7 @@ call_primitive_5_args_test() ->
             "   a:  4709                li  a4,2\n"
             "   c:  8f82                jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_6_args_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -159,7 +159,7 @@ call_primitive_6_args_test() ->
             "  3a:  4632                lw  a2,12(sp)\n"
             "  3c:  0141                addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_extended_regs_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -241,7 +241,7 @@ call_primitive_extended_regs_test() ->
         "  90:  02010113            addi    sp,sp,32\n"
         "  94:  01cea023            sw  t3,0(t4)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_few_free_regs_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -289,7 +289,7 @@ call_primitive_few_free_regs_test() ->
         "  3e:  4fe2                lw  t6,24(sp)\n"
         "  40:  02010113            addi    sp,sp,32"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_ext_only_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -314,7 +314,7 @@ call_ext_only_test() ->
         "  2c:  57fd                li  a5,-1\n"
         "  2e:  8f82                jr  t6"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_last_5_args_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -331,7 +331,7 @@ call_primitive_last_5_args_test() ->
         "   e: 877e                mv  a4,t6\n"
         "  10: 8f02                jr  t5"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_ext_last_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -356,7 +356,7 @@ call_ext_last_test() ->
         "   2c:    47a9                    li  a5,10\n"
         "   2e:    8f82                    jr  t6"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_primitive_last_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -368,7 +368,7 @@ call_primitive_last_test() ->
             "   4: 02a00613            li  a2,42\n"
             "   8: 8f82                    jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 return_if_not_equal_to_ctx_test_() ->
     {setup,
@@ -405,7 +405,7 @@ return_if_not_equal_to_ctx_test_() ->
                             "  20:  857e                mv  a0,t6\n"
                             "  22:  8082                ret"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 ?_test(begin
                     {State1, ResultReg} = ?BACKEND:call_primitive(
@@ -438,7 +438,7 @@ return_if_not_equal_to_ctx_test_() ->
                             "  22:  857a                mv  a0,t5\n"
                             "  24:  8082                ret"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end)
             ]
         end}.
@@ -453,7 +453,7 @@ move_to_cp_test() ->
             "   4:  000f2f83            lw  t6,0(t5)\n"
             "   8:  05f52e23            sw  t6,92(a0)"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 increment_sp_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -465,7 +465,7 @@ increment_sp_test() ->
             "   4: 0ff1                addi    t6,t6,28\n"
             "   6: 01f52a23            sw  t6,20(a0)"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 if_block_test_() ->
     {setup,
@@ -492,7 +492,7 @@ if_block_test_() ->
                         "   8:  000fd363            bgez    t6,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -510,7 +510,7 @@ if_block_test_() ->
                         "   8:  01efd363            bge t6,t5,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -529,7 +529,7 @@ if_block_test_() ->
                         "   c:  01dfd363            bge t6,t4,0x12\n"
                         "  10:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -550,7 +550,7 @@ if_block_test_() ->
                         "  10:  0f09                addi    t5,t5,2\n"
                         "  12:  a0fd                j   0x100"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -568,7 +568,7 @@ if_block_test_() ->
                         "   8:  000f9363            bnez    t6,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -586,7 +586,7 @@ if_block_test_() ->
                         "   8:  000f9363            bnez    t6,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -605,7 +605,7 @@ if_block_test_() ->
                         "   a:  01df9363            bne t6,t4,0x10\n"
                         "   e:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -623,7 +623,7 @@ if_block_test_() ->
                         "   8:  000f9363            bnez    t6,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -641,7 +641,7 @@ if_block_test_() ->
                         "   8:  000f9363            bnez    t6,0xe\n"
                         "   c:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -660,7 +660,7 @@ if_block_test_() ->
                         "   c:  01df8363            beq t6,t4,0x12\n"
                         "  10:  0f09                addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -679,7 +679,7 @@ if_block_test_() ->
                         "      c:   01df8363            beq t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -698,7 +698,7 @@ if_block_test_() ->
                         "      c:   01df8363            beq t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -720,7 +720,7 @@ if_block_test_() ->
                         "     10:   0f05                    addi    t5,t5,1\n"
                         "     12:   a0fd                    j   0x100"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 ?_test(begin
                     State1 = ?BACKEND:if_block(
@@ -738,7 +738,7 @@ if_block_test_() ->
                         "      c:   01df8363            beq t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -757,7 +757,7 @@ if_block_test_() ->
                         "      c:   01df9363            bne t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -776,7 +776,7 @@ if_block_test_() ->
                         "      c:   01df9363            bne t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -795,7 +795,7 @@ if_block_test_() ->
                         "      c:   01df9363            bne t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -814,7 +814,7 @@ if_block_test_() ->
                         "      c:   01df9363            bne t6,t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -833,7 +833,7 @@ if_block_test_() ->
                         "      c:   000ec363            bltz    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -852,7 +852,7 @@ if_block_test_() ->
                         "      c:   000ec363            bltz    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -871,7 +871,7 @@ if_block_test_() ->
                         "      c:   000ed363            bgez    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -890,7 +890,7 @@ if_block_test_() ->
                         "      c:   000ed363            bgez    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -909,7 +909,7 @@ if_block_test_() ->
                         "      c:   000e8363            beqz    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -928,7 +928,7 @@ if_block_test_() ->
                         "      c:   000e8363            beqz    t4,0x12\n"
                         "     10:   0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -947,7 +947,7 @@ if_block_test_() ->
                         "   c:  000e8363            beqz    t4,0x12\n"
                         "  10:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -967,7 +967,7 @@ if_block_test_() ->
                         "      e:   000e8363            beqz    t4,0x14\n"
                         "      12:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -987,7 +987,7 @@ if_block_test_() ->
                         "   e:  000f8363            beqz    t6,0x14\n"
                         "  12:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1009,7 +1009,7 @@ if_block_test_() ->
                         "  14:  01ce8363            beq t4,t3,0x1a\n"
                         "  18:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1027,7 +1027,7 @@ if_block_test_() ->
                         "   8:  01efd363            bge t6,t5,0xe\n"
                         "   c:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1054,7 +1054,7 @@ if_block_test_() ->
                         "      12:  01df8363            beq t6,t4,0x18\n"
                         "      16:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 %% Test {RegA, '&', 16#3, '!=', 0} using ANDI instruction
@@ -1074,7 +1074,7 @@ if_block_test_() ->
                         "      c:   000e8363            beqz    t4,0x12\n"
                         "      10:  0f09                    addi    t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1093,7 +1093,7 @@ if_block_test_() ->
                         "   c:	01fed363          	bge	t4,t6,0x12\n"
                         "  10:	0f09                	addi	t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1112,7 +1112,7 @@ if_block_test_() ->
                         "   c:	01fed363          	bge	t4,t6,0x12\n"
                         "  10:	0f09                	addi	t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1131,7 +1131,7 @@ if_block_test_() ->
                         "   c:	01fed363          	bge	t4,t6,0x12\n"
                         "  10:	0f09                	addi	t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB, RegA], ?BACKEND:used_regs(State1))
                 end),
                 ?_test(begin
@@ -1150,7 +1150,7 @@ if_block_test_() ->
                         "   c:	01fed363          	bge	t4,t6,0x12\n"
                         "  10:	0f09                	addi	t5,t5,2"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
                 end)
             ]
@@ -1181,7 +1181,7 @@ if_else_block_test() ->
             "12:    a011                    j   0x16\n"
             "14:    0f11                    addi    t5,t5,4"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 shift_right_test_() ->
     [
@@ -1195,7 +1195,7 @@ shift_right_test_() ->
                     "   0:  01852f83            lw  t6,24(a0)\n"
                     "   4:  003fdf93            srli    t6,t6,0x3"
                 >>,
-            ?assertEqual(dump_to_bin(Dump), Stream)
+            jit_tests_common:assert_stream(riscv32, Dump, Stream)
         end),
         ?_test(begin
             State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1208,7 +1208,7 @@ shift_right_test_() ->
                     "   0:  01852f83            lw  t6,24(a0)\n"
                     "   4:  003fdf13            srli    t5,t6,0x3"
                 >>,
-            ?assertEqual(dump_to_bin(Dump), Stream)
+            jit_tests_common:assert_stream(riscv32, Dump, Stream)
         end)
     ].
 
@@ -1222,7 +1222,7 @@ shift_left_test() ->
             "0: 01852f83            lw  t6,24(a0)\n"
             "4: 0f8e                    slli    t6,t6,0x3"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_only_or_schedule_next_and_label_relocation_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1262,7 +1262,7 @@ call_only_or_schedule_next_and_label_relocation_test() ->
             "  46:  00462f83            lw  t6,4(a2)\n"
             "  4a:  8f82                    jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_only_or_schedule_next_known_label_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1298,7 +1298,7 @@ call_only_or_schedule_next_known_label_test() ->
             "  3c:  00462f83            lw  t6,4(a2)\n"
             "  40:  8f82                    jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test with large gap (256+ bytes) to force mov_immediate path
 call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
@@ -1345,7 +1345,7 @@ call_only_or_schedule_next_and_label_relocation_large_gap_test() ->
         "  32:  8f82                    jr  t6"
     >>,
     {_, RelevantBinary} = split_binary(Stream, 16#118),
-    ?assertEqual(dump_to_bin(Dump), RelevantBinary).
+    jit_tests_common:assert_stream(riscv32, Dump, RelevantBinary).
 
 call_bif_with_large_literal_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1417,7 +1417,7 @@ call_bif_with_large_literal_integer_test() ->
             "     76:   8f82                    jr  t6\n"
             "     78:   01f52c23            sw  t6,24(a0)"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 get_list_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1441,7 +1441,7 @@ get_list_test() ->
             "1e:    01452f03            lw  t5,20(a0)\n"
             "22:    01df2023            sw  t4,0(t5)"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 is_integer_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1504,7 +1504,7 @@ is_integer_test() ->
             "  52:  0001                nop\n"
             "  54:  00000013            nop"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 cond_jump_to_label(Cond, Label, MMod, MSt0) ->
     MMod:if_block(MSt0, Cond, fun(BSt0) ->
@@ -1578,7 +1578,7 @@ is_number_test() ->
             "  62:  0001                nop\n"
             "  64:  00000013            nop"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 is_boolean_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1611,7 +1611,7 @@ is_boolean_test() ->
         "  24:  0001                nop\n"
         "  26:  00000013            nop"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 is_boolean_far_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1644,7 +1644,7 @@ is_boolean_far_test() ->
             "  22:  7df0006f            j   0x1000\n"
             "  26:  00000013            nop"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 is_boolean_far_known_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -1677,7 +1677,7 @@ is_boolean_far_known_test() ->
             "  22:  00001f17            auipc   t5,0x1\n"
             "  26:  fdef0067            jr  -34(t5) # 0x1000"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test OP_WAIT_TIMEOUT pattern that uses set_continuation_to_offset and continuation_entry_point
 wait_timeout_test() ->
@@ -1754,7 +1754,7 @@ wait_timeout_test() ->
             "  6e:  02a00613            li  a2,42\n"
             "  72:  8f82                    jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test OP_WAIT pattern that uses set_continuation_to_label
 wait_test() ->
@@ -1797,7 +1797,7 @@ wait_test() ->
             "  3c:  07462f83            lw  t6,116(a2)\n"
             "  40:  8f82                jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test set_continuation_to_label with known label
 wait_known_test() ->
@@ -1840,7 +1840,7 @@ wait_known_test() ->
             "  3c:  07462f83            lw  t6,116(a2)\n"
             "  40:  8f82                jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test return_labels_and_lines/2 function
 return_labels_and_lines_test() ->
@@ -1890,7 +1890,7 @@ return_labels_and_lines_test() ->
             "  3a:  0000                unimp\n"
             "  3c:  2000                fld fs0,0(s0)"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test call_primitive with {free, {x_reg, X}}
 gc_bif2_test() ->
@@ -1936,7 +1936,7 @@ gc_bif2_test() ->
             "  44:  4632                    lw  a2,12(sp)\n"
             "  46:  0141                    addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test case where parameter value is in a1
 memory_ensure_free_with_roots_test() ->
@@ -1968,7 +1968,7 @@ memory_ensure_free_with_roots_test() ->
             "  26:  4632                    lw  a2,12(sp)\n"
             "  28:  0141                    addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_ext_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -2001,7 +2001,7 @@ call_ext_test() ->
             "  42:  577d                    li  a4,-1\n"
             "  44:  8f82                    jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 call_fun_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -2084,13 +2084,13 @@ call_fun_test() ->
             "  98:  4681                    li  a3,0\n"
             "  9a:  8f02                    jr  t5"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
     Stream = ?BACKEND:stream(State2),
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 move_to_vm_register_test_() ->
     {setup,
@@ -2355,7 +2355,7 @@ move_to_vm_register_test_() ->
 move_array_element_test0(State, Reg, Index, Dest, Dump) ->
     State1 = ?BACKEND:move_array_element(State, Reg, Index, Dest),
     Stream = ?BACKEND:stream(State1),
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 move_array_element_test_() ->
     {setup,
@@ -2467,7 +2467,7 @@ get_array_element_test_() ->
                     Dump = <<
                         "   0:  010e2f83            lw  t6,16(t3)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual(t6, Reg)
                 end)
             ]
@@ -2488,7 +2488,7 @@ move_to_array_element_test_() ->
                         "   0:  01852f83            lw  t6,24(a0)\n"
                         "   4:  01f6a423            sw  t6,8(a3)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/4: x_reg to reg[reg]
                 ?_test(begin
@@ -2501,7 +2501,7 @@ move_to_array_element_test_() ->
                         "   8:  01e68f33            add t5,a3,t5\n"
                         "   c:  01ff2023            sw  t6,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/4: ptr to reg[reg]
                 ?_test(begin
@@ -2514,7 +2514,7 @@ move_to_array_element_test_() ->
                         "   8:  01e68f33            add t5,a3,t5\n"
                         "   c:  01ff2023            sw  t6,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/4: y_reg to reg[reg]
                 ?_test(begin
@@ -2528,7 +2528,7 @@ move_to_array_element_test_() ->
                         "   c:  01e68f33            add t5,a3,t5\n"
                         "  10:  01ff2023            sw  t6,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
@@ -2538,7 +2538,7 @@ move_to_array_element_test_() ->
                         "   0:  01852f83            lw  t6,24(a0)\n"
                         "   4:  01f6a423            sw  t6,8(a3)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/5: x_reg to reg[x+offset]
                 ?_test(begin
@@ -2554,7 +2554,7 @@ move_to_array_element_test_() ->
                         "   a:  01e68f33            add t5,a3,t5\n"
                         "   e:  01ff2023            sw  t6,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_array_element/5: imm to reg[x+offset]
                 ?_test(begin
@@ -2570,7 +2570,7 @@ move_to_array_element_test_() ->
                         "      a:   01e68f33            add t5,a3,t5\n"
                         "      e:   01ff2023            sw  t6,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end)
             ]
         end}.
@@ -2590,7 +2590,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  02a00f93            li  t6,42"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: negative value
                 ?_test(begin
@@ -2600,7 +2600,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  fd600f93            li  t6,-42"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: -255 (boundary case)
                 ?_test(begin
@@ -2610,7 +2610,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  f0100f93            li  t6,-255"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: -256 (boundary case, fits in immediate for RISC-V)
                 ?_test(begin
@@ -2622,7 +2622,7 @@ move_to_native_register_test_() ->
                         "   0:  f0000f93            li  t6,-256\n"
                         "   4:  a8f5                    j   0x100"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: {ptr, reg}
                 ?_test(begin
@@ -2632,7 +2632,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  000f2f03            lw  t5,0(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: {x_reg, N}
                 ?_test(begin
@@ -2642,7 +2642,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  02c52f83            lw  t6,44(a0)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/2: {y_reg, N}
                 ?_test(begin
@@ -2653,7 +2653,7 @@ move_to_native_register_test_() ->
                         "   0:  01452f03            lw  t5,20(a0)\n"
                         "   4:  00cf2f83            lw  t6,12(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/3: imm to reg
                 ?_test(begin
@@ -2662,7 +2662,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  02a00f13            li  t5,42"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/3: reg to reg
                 ?_test(begin
@@ -2671,7 +2671,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  8efe                    mv  t4,t6"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/3: {ptr, reg} to reg
                 ?_test(begin
@@ -2680,7 +2680,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  000fae03            lw  t3,0(t6)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/3: {x_reg, x} to reg[reg]
                 ?_test(begin
@@ -2689,7 +2689,7 @@ move_to_native_register_test_() ->
                     Dump = <<
                         "   0:  5114                    lw  a3,32(a0)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% move_to_native_register/3: {y_reg, y} to reg[reg]
                 ?_test(begin
@@ -2699,7 +2699,7 @@ move_to_native_register_test_() ->
                         "   0:  01452f83            lw  t6,20(a0)\n"
                         "   4:  008fa583            lw  a1,8(t6)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 %% Test: ptr with offset to fp_reg (term_to_float)
                 ?_test(begin
@@ -2716,7 +2716,7 @@ move_to_native_register_test_() ->
                         "  10:  008fae83            lw  t4,8(t6)\n"
                         "  14:  01df2e23            sw  t4,28(t5)"
                     >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end)
             ]
         end}.
@@ -2726,7 +2726,7 @@ add_test0(State0, Reg, Imm, Dump) ->
     % Force emission of literal pool
     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
     Stream = ?BACKEND:stream(State2),
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 add_test_() ->
     {setup,
@@ -2762,7 +2762,7 @@ sub_test0(State0, Reg, Imm, Dump) ->
     % Force emission of literal pool
     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
     Stream = ?BACKEND:stream(State2),
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 sub_test_() ->
     {setup,
@@ -2796,7 +2796,7 @@ sub_test_() ->
 mul_test0(State0, Reg, Imm, Dump) ->
     State1 = ?BACKEND:mul(State0, Reg, Imm),
     Stream = ?BACKEND:stream(State1),
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 mul_test_() ->
     {setup,
@@ -2900,7 +2900,7 @@ set_args1_y_reg_test() ->
         "  28:  4632                    lw  a2,12(sp)\n"
         "  2a:  0141                    addi    sp,sp,16"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test large Y register read (Y=123, offset=492, exceeds immediate limit)
 large_y_reg_read_test() ->
@@ -2915,7 +2915,7 @@ large_y_reg_read_test() ->
         "   8:  9ffa                    add t6,t6,t5\n"
         "   a:  000faf83            lw  t6,0(t6)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream),
+    jit_tests_common:assert_stream(riscv32, Dump, Stream),
     ?assertEqual(t6, Reg).
 
 %% Test large Y register write with immediate value
@@ -2932,7 +2932,7 @@ large_y_reg_write_test() ->
         "   c:  9efe                    add t4,t4,t6\n"
         "   e:  01eea023            sw  t5,0(t4)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test large Y register read with limited registers (uses IP_REG fallback)
 large_y_reg_read_register_exhaustion_test() ->
@@ -2958,7 +2958,7 @@ large_y_reg_read_register_exhaustion_test() ->
         "  1c:  9316                    add t1,t1,t0\n"
         "  1e:  00032303            lw  t1,0(t1)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream),
+    jit_tests_common:assert_stream(riscv32, Dump, Stream),
     ?assertEqual(t1, ResultReg).
 
 %% Test large Y register write with register exhaustion (uses t1/t0 fallback)
@@ -2986,7 +2986,7 @@ large_y_reg_write_register_exhaustion_test() ->
         "     1c:   929a                    add t0,t0,t1\n"
         "     1e:   01f2a023            sw  t6,0(t0)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test boundary case: Y=31 (124 bytes, exactly at limit, should use direct addressing)
 y_reg_boundary_direct_test() ->
@@ -2998,7 +2998,7 @@ y_reg_boundary_direct_test() ->
         "   0:  01452f03            lw  t5,20(a0)\n"
         "   4:  07cf2f83            lw  t6,124(t5)"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream),
+    jit_tests_common:assert_stream(riscv32, Dump, Stream),
     ?assertEqual(t6, Reg).
 
 %% Test debugger function
@@ -3009,7 +3009,7 @@ debugger_test() ->
     Dump = <<
         "      0:   9002                    ebreak"
     >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 and_register_exhaustion_negative_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -3034,7 +3034,7 @@ and_register_exhaustion_negative_test() ->
         "     1a:   fff2c293            not t0,t0\n"
         "     1e:   005fffb3            and t6,t6,t0"
     >>,
-    ?assertEqual(dump_to_bin(ExpectedDump), Stream).
+    jit_tests_common:assert_stream(riscv32, ExpectedDump, Stream).
 
 and_register_exhaustion_positive_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -3058,7 +3058,7 @@ and_register_exhaustion_positive_test() ->
         "  18:  03f00293            li  t0,63\n"
         "  1c:  005fffb3            and t6,t6,t0"
     >>,
-    ?assertEqual(dump_to_bin(ExpectedDump), Stream).
+    jit_tests_common:assert_stream(riscv32, ExpectedDump, Stream).
 
 jump_table_large_labels_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -3092,7 +3092,7 @@ alloc_boxed_integer_fragment_small_test() ->
             "     1e:   4632                    lw  a2,12(sp)\n"
             "     20:   0141                    addi    sp,sp,16"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 alloc_boxed_integer_fragment_large_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
@@ -3130,7 +3130,7 @@ alloc_boxed_integer_fragment_large_test() ->
             "     38:   877e                    mv  a4,t6\n"
             "     3a:   8f02                    jr  t5"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test for stack alignment issue in call_func_ptr
 %% RISC-V maintains 16-byte stack alignment (RISC-V calling convention)
@@ -3168,7 +3168,7 @@ call_func_ptr_stack_alignment_test() ->
             "     34:   4fe2                    lw  t6,24(sp)\n"
             "     36:   02010113            addi    sp,sp,32"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
 %% Test for register exhaustion issue in call_func_ptr with 5+ arguments
 %% When all registers are used and we call a function with 5+ args,
@@ -3228,7 +3228,7 @@ call_func_ptr_register_exhaustion_test_() ->
                             "     42:   4ff2                    lw  t6,28(sp)\n"
                             "     44:   02010113            addi    sp,sp,32"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 ?_test(begin
                     {State7, _ResultReg} = ?BACKEND:call_func_ptr(
@@ -3269,7 +3269,7 @@ call_func_ptr_register_exhaustion_test_() ->
                             "     42:   4ff2                    lw  t6,28(sp)\n"
                             "     44:   02010113            addi    sp,sp,32"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 ?_test(begin
                     {State7, ResultReg} = ?BACKEND:call_func_ptr(
@@ -3310,7 +3310,7 @@ call_func_ptr_register_exhaustion_test_() ->
                             "     42:   4ff2                    lw  t6,28(sp)\n"
                             "     44:   02010113            addi    sp,sp,32"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream),
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual(t5, ResultReg)
                 end),
                 ?_test(begin
@@ -3356,7 +3356,7 @@ call_func_ptr_register_exhaustion_test_() ->
                             "  4c:  5f92                lw  t6,36(sp)\n"
                             "  4e:  03010113            addi    sp,sp,48"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
                 ?_test(begin
                     {State7, ResultReg} = ?BACKEND:call_func_ptr(
@@ -3400,7 +3400,7 @@ call_func_ptr_register_exhaustion_test_() ->
                             "  4a:  5f82                lw  t6,32(sp)\n"
                             "  4c:  03010113            addi    sp,sp,48"
                         >>,
-                    ?assertEqual(dump_to_bin(Dump), Stream)
+                    jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end)
             ]
         end}.
@@ -3420,7 +3420,7 @@ jump_to_continuation_test_() ->
                     "   4:  9faa                add t6,t6,a0\n"
                     "   6:  8f82                jr  t6"
                 >>,
-            ?assertEqual(dump_to_bin(Dump), Stream)
+            jit_tests_common:assert_stream(riscv32, Dump, Stream)
         end),
         ?_test(begin
             % Test 2: jump_to_continuation after jump table (non-zero relative address)
@@ -3446,7 +3446,7 @@ jump_to_continuation_test_() ->
                     "  26:  9faa                add t6,t6,a0\n"
                     "  28:  8f82                jr  t6"
                 >>,
-            ?assertEqual(dump_to_bin(Dump), Stream)
+            jit_tests_common:assert_stream(riscv32, Dump, Stream)
         end)
     ].
 
@@ -3566,75 +3566,4 @@ add_beam_test() ->
             "  e0:  00462f83            lw  t6,4(a2)\n"
             "  e4:  8f82                jr  t6"
         >>,
-    ?assertEqual(dump_to_bin(Dump), Stream).
-
-dump_to_bin(Dump) ->
-    dump_to_bin0(Dump, addr, []).
-
--define(IS_HEX_DIGIT(C),
-    ((C >= $0 andalso C =< $9) orelse (C >= $a andalso C =< $f) orelse (C >= $A andalso C =< $F))
-).
-
-dump_to_bin0(<<N, $:, Tail/binary>>, addr, Acc) when ?IS_HEX_DIGIT(N) ->
-    dump_to_bin0(Tail, hex, Acc);
-dump_to_bin0(<<N, Tail/binary>>, addr, Acc) when ?IS_HEX_DIGIT(N) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<$\n, Tail/binary>>, addr, Acc) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<$\s, Tail/binary>>, addr, Acc) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<$\t, Tail/binary>>, addr, Acc) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<$\s, Tail/binary>>, hex, Acc) ->
-    dump_to_bin0(Tail, hex, Acc);
-dump_to_bin0(<<$\t, Tail/binary>>, hex, Acc) ->
-    dump_to_bin0(Tail, hex, Acc);
-%% Handle RISC-V 32-bit instructions (8 consecutive hex digits)
-dump_to_bin0(<<H1, H2, H3, H4, H5, H6, H7, H8, Sp, Rest/binary>>, hex, Acc) when
-    (Sp =:= $\t orelse Sp =:= $\s) andalso
-        ?IS_HEX_DIGIT(H1) andalso
-        ?IS_HEX_DIGIT(H2) andalso
-        ?IS_HEX_DIGIT(H3) andalso
-        ?IS_HEX_DIGIT(H4) andalso
-        ?IS_HEX_DIGIT(H5) andalso
-        ?IS_HEX_DIGIT(H6) andalso
-        ?IS_HEX_DIGIT(H7) andalso
-        ?IS_HEX_DIGIT(H8)
-->
-    %% RISC-V instructions are 32-bit little-endian
-    Instr = list_to_integer([H1, H2, H3, H4, H5, H6, H7, H8], 16),
-    dump_to_bin0(Rest, instr, [<<Instr:32/little>> | Acc]);
-%% Handle 32-bits undefined instruction (ARM format with space: "1234 5678")
-dump_to_bin0(<<H1, H2, H3, H4, $\s, H5, H6, H7, H8, Sp, Rest/binary>>, hex, Acc) when
-    (Sp =:= $\t orelse Sp =:= $\s) andalso
-        ?IS_HEX_DIGIT(H1) andalso
-        ?IS_HEX_DIGIT(H2) andalso
-        ?IS_HEX_DIGIT(H3) andalso
-        ?IS_HEX_DIGIT(H4) andalso
-        ?IS_HEX_DIGIT(H5) andalso
-        ?IS_HEX_DIGIT(H6) andalso
-        ?IS_HEX_DIGIT(H7) andalso
-        ?IS_HEX_DIGIT(H8)
-->
-    InstrA = list_to_integer([H1, H2, H3, H4], 16),
-    InstrB = list_to_integer([H5, H6, H7, H8], 16),
-    dump_to_bin0(Rest, instr, [<<InstrB:16/little>>, <<InstrA:16/little>> | Acc]);
-%% Handle 16-bit ARM32 Thumb instructions (4 hex digits)
-dump_to_bin0(<<H1, H2, H3, H4, Sp, Rest/binary>>, hex, Acc) when
-    (Sp =:= $\t orelse Sp =:= $\s) andalso
-        ?IS_HEX_DIGIT(H1) andalso
-        ?IS_HEX_DIGIT(H2) andalso
-        ?IS_HEX_DIGIT(H3) andalso
-        ?IS_HEX_DIGIT(H4)
-->
-    %% Parse 4 hex digits (ARM32 Thumb 16-bit instruction)
-    Instr = list_to_integer([H1, H2, H3, H4], 16),
-    dump_to_bin0(Rest, instr, [<<Instr:16/little>> | Acc]);
-dump_to_bin0(<<$\n, Tail/binary>>, hex, Acc) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<$\n, Tail/binary>>, instr, Acc) ->
-    dump_to_bin0(Tail, addr, Acc);
-dump_to_bin0(<<_Other, Tail/binary>>, instr, Acc) ->
-    dump_to_bin0(Tail, instr, Acc);
-dump_to_bin0(<<>>, _, Acc) ->
-    list_to_binary(lists:reverse(Acc)).
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
