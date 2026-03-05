@@ -116,10 +116,7 @@ struct ClientData
     uint32_t port_process_id;
     uint32_t owner_process_id;
     uint64_t ref_ticks;
-<<<<<<< HEAD
     bool managed;
-=======
->>>>>>> f036397d (Revert ref_data back to ref_ticks in drivers)
 };
 
 static inline term make_atom(GlobalContext *global, AtomString atom_str)
