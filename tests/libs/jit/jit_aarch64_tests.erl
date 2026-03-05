@@ -20,9 +20,7 @@
 
 -module(jit_aarch64_tests).
 
--ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
 -include("jit/include/jit.hrl").
 -include("jit/src/term.hrl").
@@ -245,7 +243,7 @@ call_ext_only_test() ->
         "  1c:	d61f00e0 	br	x7\n"
         "  20:	f9401047 	ldr	x7, [x2, #32]\n"
         "  24:	d2800042 	mov	x2, #0x2                   	// #2\n"
-        "  28:	d2800043 	mov	x3, #0x2                   	// #2\n"
+        "  28:	aa0203e3 	mov	x3, x2\n"
         "  2c:	92800004 	mov	x4, #0xffffffffffffffff    	// #-1\n"
         "  30:	d61f00e0 	br	x7"
     >>,
@@ -284,7 +282,7 @@ call_ext_last_test() ->
         "  1c:	d61f00e0 	br	x7\n"
         "  20:	f9401047 	ldr	x7, [x2, #32]\n"
         "  24:	d2800042 	mov	x2, #0x2                   	// #2\n"
-        "  28:	d2800043 	mov	x3, #0x2                   	// #2\n"
+        "  28:	aa0203e3 	mov	x3, x2\n"
         "  2c:	d2800144 	mov	x4, #0xa                   	// #10\n"
         "  30:	d61f00e0 	br	x7"
     >>,
@@ -2238,5 +2236,18 @@ jump_to_continuation_test() ->
             "   0:	10000007 	adr	x7, 0x0\n"
             "   4:	8b0000e7 	add	x7, x7, x0\n"
             "   8:	d61f00e0 	br	x7"
+        >>,
+    jit_tests_common:assert_stream(aarch64, Dump, Stream).
+
+%% After freeing a register, cache is preserved so reload is elided
+cached_load_after_free_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [r7]),
+    {State3, r7} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State3),
+    Dump =
+        <<
+            "   0:	f9401807 	ldr	x7, [x0, #48]"
         >>,
     jit_tests_common:assert_stream(aarch64, Dump, Stream).

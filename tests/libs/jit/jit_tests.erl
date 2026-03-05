@@ -191,41 +191,40 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     ),
 
     % Check call to bs_start_match3 is followed by a skip of verify_is_boxed
-    %  100:	48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %  104:	48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
-    %  10b:	ff d0                	callq  *%rax
-    %  10d:	5a                   	pop    %rdx
-    %  10e:	5e                   	pop    %rsi
-    %  10f:	5f                   	pop    %rdi
-    %  110:	48 89 47 40          	mov    %rax,0x40(%rdi)
-    %  114:	48 8b 47 40          	mov    0x40(%rdi),%rax
-    %  118:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
+    % The register value cache eliminates the redundant load after the store,
+    % since %rax already holds the value.
+    %   48 8b 77 30          	mov    0x30(%rdi),%rsi
+    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   ff d0                	callq  *%rax
+    %   5a                   	pop    %rdx
+    %   5e                   	pop    %rsi
+    %   5f                   	pop    %rdi
+    %   48 89 47 40          	mov    %rax,0x40(%rdi)
+    %   48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
 
-    % As opposed to:
-    %  100:	48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %  104:	48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
-    %  10b:	ff d0                	callq  *%rax
-    %  10d:	5a                   	pop    %rdx
-    %  10e:	5e                   	pop    %rsi
-    %  10f:	5f                   	pop    %rdi
-    %  110:	48 89 47 40          	mov    %rax,0x40(%rdi)
-    %  114:	48 8b 47 40          	mov    0x40(%rdi),%rax
-    %  118:	49 89 c3             	mov    %rax,%r11
-    %  11b:	41 80 e3 03          	and    $0x3,%r11b
-    %  11f:	41 80 fb 02          	cmp    $0x2,%r11b
-    %  123:	74 13                	je     0x138
-    %  125:	48 8b 02             	mov    (%rdx),%rax
-    %  128:	48 c7 c2 28 01 00 00 	mov    $0x128,%rdx
-    %  12f:	48 c7 c1 0b 01 00 00 	mov    $0x10b,%rcx
-    %  136:	ff e0                	jmpq   *%rax
-    %  138:	48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
+    % As opposed to (without typed optimization, verify_is_boxed would be emitted):
+    %   48 8b 77 30          	mov    0x30(%rdi),%rsi
+    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   ff d0                	callq  *%rax
+    %   5a                   	pop    %rdx
+    %   5e                   	pop    %rsi
+    %   5f                   	pop    %rdi
+    %   48 89 47 40          	mov    %rax,0x40(%rdi)
+    %   49 89 c3             	mov    %rax,%r11
+    %   41 80 e3 03          	and    $0x3,%r11b
+    %   41 80 fb 02          	cmp    $0x2,%r11b
+    %   74 0f                	je     <skip>
+    %   48 8b 02             	mov    (%rdx),%rax
+    %   ba xx xx 00 00       	mov    $0x...,%edx
+    %   b9 xx xx 00 00       	mov    $0x...,%ecx
+    %   ff e0                	jmpq   *%rax
+    %   48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
     ?assertMatch(
-        {_, 28},
+        {_, 24},
         binary:match(
             CompiledCode,
             <<16#48, 16#8b, 16#77, 16#30, 16#48, 16#c7, 16#c2, 16#00, 16#00, 16#00, 16#00, 16#ff,
-                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#40, 16#48, 16#8b, 16#47, 16#40,
-                16#48, 16#83, 16#e0, 16#fc>>
+                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
         )
     ),
 

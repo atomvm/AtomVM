@@ -75,6 +75,14 @@ asm(Arch, Bin, Str) ->
 %% Helper function to find available binutils for a given architecture
 -spec find_binutils(atom()) -> {ok, string(), string()} | false.
 find_binutils(Arch) ->
+    case erlang:system_info(machine) of
+        "ATOM" ->
+            false;
+        _ ->
+            find_binutils_beam(Arch)
+    end.
+
+find_binutils_beam(Arch) ->
     Prefixes0 = toolchain_prefixes(Arch),
     Prefixes =
         case Arch of
