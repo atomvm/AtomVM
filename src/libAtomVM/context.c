@@ -805,7 +805,8 @@ static struct Monitor *context_monitors_handle_terminate(Context *ctx)
                 break;
             }
             case CONTEXT_MONITOR_ALIAS: {
-                free(monitor);
+                struct MonitorAlias *alias = CONTAINER_OF(monitor, struct MonitorAlias, monitor);
+                free(alias);
                 break;
             }
         }
@@ -1150,7 +1151,7 @@ void context_unalias(struct MonitorAlias *alias)
     TERM_DEBUG_ASSERT(alias != NULL);
     struct Monitor *monitor = &alias->monitor;
     list_remove(&monitor->monitor_list_head);
-    free(monitor);
+    free(alias);
 }
 
 term context_get_monitor_pid(Context *ctx, uint64_t ref_ticks, bool *is_monitoring)
