@@ -100,6 +100,8 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`
 - Added support for Ed25519 curve when libsodium support is enabled at build time
 (`AVM_USE_LIBSODIUM=ON`)
+- Added support for `bag` and `duplicate_bag` table types in `ets`
+- Added `ets:insert_new/2`, `ets:member/2`, `ets:lookup_element/4`, `ets:delete_object/2`, `ets:take/2`, `ets:update_element/3` and `ets:update_element/4`
 
 ### Changed
 
