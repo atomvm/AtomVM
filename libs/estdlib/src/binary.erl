@@ -30,6 +30,7 @@
     copy/1, copy/2,
     decode_hex/1,
     encode_hex/1, encode_hex/2,
+    list_to_bin/1,
     part/3,
     split/2, split/3,
     match/2, match/3,
@@ -130,6 +131,17 @@ match(_Binary, _Pattern) ->
     {non_neg_integer(), non_neg_integer()} | nomatch.
 match(_Binary, _Pattern, _Options) ->
     erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   ByteList iolist to convert to binary
+%% @returns binary representation of ByteList
+%% @doc     Works exactly as {@link erlang:list_to_binary/1}.
+%%          This function is provided for completeness.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec list_to_bin(ByteList :: iolist()) -> binary().
+list_to_bin(_ByteList) ->
+    erlang:nif_error(undef).
 
 %%-----------------------------------------------------------------------------
 %% @param   Binary binary to extract a subbinary from
