@@ -530,9 +530,9 @@ struct Monitor *monitor_link_new(term link_pid);
  * @param is_monitoring if ctx is the monitoring process
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_new(term monitor_pid, RefData ref_data, bool is_monitoring);
+struct Monitor *monitor_new(term monitor_pid, RefData *ref_data, bool is_monitoring);
 
-struct Monitor *monitor_alias_new(RefData ref_data, enum ContextMonitorAliasType alias_type);
+struct Monitor *monitor_alias_new(RefData *ref_data, enum ContextMonitorAliasType alias_type);
 
 /**
  * @brief Create a monitor on a process by registered name.
@@ -542,7 +542,7 @@ struct Monitor *monitor_alias_new(RefData ref_data, enum ContextMonitorAliasType
  * @param ref_data reference of the monitor
  * @return the allocated monitor or NULL if allocation failed
  */
-struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData ref_data);
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData *ref_data);
 
 /**
  * @brief Create a resource monitor.
@@ -601,17 +601,15 @@ void context_demonitor(Context *ctx, uint64_t ref_ticks);
 
 /**
  * @brief Find a process alias
- * @details Called within the process only
  *
  * @param ctx the context being executed
- * @param ref_ticks reference of the alias to remove
+ * @param ref_ticks reference of the alias to find
  * @return found alias or NULL
  */
 struct MonitorAlias *context_find_alias(Context *ctx, uint64_t ref_ticks);
 
 /**
  * @brief Remove an alias of a process
- * @details Called within the process only
  *
  * @param alias The alias to remove, can be obtained using context_find_alias
  */

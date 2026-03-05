@@ -1366,6 +1366,8 @@ static int calculate_heap_usage(const uint8_t *external_term_buf, size_t remaini
                 if (external_term_buf[4] == strlen("nonode@nohost") && memcmp(external_term_buf + 5, "nonode@nohost", strlen("nonode@nohost")) == 0) {
                     if (len == 2) {
                         heap_size = TERM_BOXED_REFERENCE_SHORT_SIZE;
+                    } else if (len == 3) {
+                        heap_size = TERM_BOXED_REFERENCE_PROCESS_SIZE;
                     } else if (len == 4) {
                         heap_size = TERM_BOXED_REFERENCE_RESOURCE_SIZE;
                     }

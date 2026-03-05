@@ -1624,7 +1624,7 @@ raise(_Class, _Reason, _Stacktrace) ->
 
 %%-----------------------------------------------------------------------------
 %% @returns A reference aliasing the calling process.
-%% @doc     Creates an alias for the callling process. The alias can be used
+%% @doc     Creates an alias for the calling process. The alias can be used
 %%          to send messages to the process like the PID. The alias can also be
 %%          created along with a monitor - see `monitor/3'. The alias can be
 %%          removed by calling `unalias/1'.

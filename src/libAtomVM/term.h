@@ -191,10 +191,10 @@ _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZ
 #define REFERENCE_RESOURCE_CONS_OFFSET 2
 
 #if TERM_BYTES == 4
-#define REFERENCE_PROCESS_PID_OFFSET 2
+#define REFERENCE_PROCESS_PID_OFFSET 3
 
 #elif TERM_BYTES == 8
-#define REFERENCE_PROCESS_PID_OFFSET 1
+#define REFERENCE_PROCESS_PID_OFFSET 2
 #endif
 
 #define LIST_SIZE(num_elements, element_size) ((num_elements) * ((element_size) + CONS_SIZE))
@@ -204,6 +204,8 @@ _Static_assert(TERM_BOXED_REFERENCE_PROCESS_SIZE <= TERM_BOXED_REFERENCE_MAX_SIZ
 
 #define LIST_HEAD_INDEX 1
 #define LIST_TAIL_INDEX 0
+
+#define INVALID_PROCESS_ID 0
 
 #define TERM_BINARY_SIZE_IS_HEAP(size) ((size) < REFC_BINARY_MIN)
 
@@ -280,31 +282,11 @@ enum RefType
     RefTypeExternal
 };
 
-struct ProcessRefData
-{
-    uint64_t ref_ticks;
-    int32_t process_id;
-};
-
-struct ExternalRefData
-{
-    term node;
-    uint32_t creation;
-    uint16_t len;
-    const uint32_t *words;
-};
-
 typedef struct RefData RefData;
 struct RefData
 {
-    enum RefType type;
-    union
-    {
-        uint64_t ref_ticks;
-        struct ProcessRefData process;
-        void *resource;
-        struct ExternalRefData external;
-    };
+    uint64_t ref_ticks;
+    int32_t process_id;
 };
 
 typedef struct PrinterFun PrinterFun;
@@ -3124,27 +3106,10 @@ static inline term term_from_resource(void *resource, Heap *heap)
 
 static inline term term_from_ref_data(RefData *ref_data, Heap *heap)
 {
-    switch (ref_data->type) {
-        case RefTypeShort: {
-            return term_from_ref_ticks(ref_data->ref_ticks, heap);
-        }
-        case RefTypeProcess: {
-            return term_make_process_reference(ref_data->process.process_id, ref_data->ref_ticks, heap);
-        }
-        case RefTypeResource: {
-            return term_from_resource(ref_data->resource, heap);
-        }
-        case RefTypeExternal: {
-            return term_make_external_reference(
-                ref_data->external.node,
-                ref_data->external.len,
-                ref_data->external.words,
-                ref_data->external.creation,
-                heap);
-        }
-        default: {
-            UNREACHABLE();
-        }
+    if (ref_data->process_id == INVALID_PROCESS_ID) {
+        return term_from_ref_ticks(ref_data->ref_ticks, heap);
+    } else {
+        return term_make_process_reference(ref_data->process_id, ref_data->ref_ticks, heap);
     }
 }
 

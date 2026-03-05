@@ -847,7 +847,7 @@ struct Monitor *monitor_link_new(term link_pid)
     }
 }
 
-struct Monitor *monitor_new(term monitor_pid, RefData ref_data, bool is_monitoring)
+struct Monitor *monitor_new(term monitor_pid, RefData *ref_data, bool is_monitoring)
 {
     struct MonitorLocalMonitor *monitor = malloc(sizeof(struct MonitorLocalMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -859,12 +859,12 @@ struct Monitor *monitor_new(term monitor_pid, RefData ref_data, bool is_monitori
         monitor->monitor.monitor_type = CONTEXT_MONITOR_MONITORED_LOCAL;
     }
     monitor->monitor_obj = monitor_pid;
-    monitor->ref_data = ref_data;
+    monitor->ref_data = *ref_data;
 
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData ref_data)
+struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, term monitor_name, RefData *ref_data)
 {
     struct MonitorLocalRegisteredNameMonitor *monitor = malloc(sizeof(struct MonitorLocalRegisteredNameMonitor));
     if (IS_NULL_PTR(monitor)) {
@@ -873,19 +873,19 @@ struct Monitor *monitor_registeredname_monitor_new(int32_t monitor_process_id, t
     monitor->monitor.monitor_type = CONTEXT_MONITOR_MONITORING_LOCAL_REGISTEREDNAME;
     monitor->monitor_process_id = monitor_process_id;
     monitor->monitor_name = monitor_name;
-    monitor->ref_data = ref_data;
+    monitor->ref_data = *ref_data;
 
     return &monitor->monitor;
 }
 
-struct Monitor *monitor_alias_new(RefData ref_data, enum ContextMonitorAliasType alias_type)
+struct Monitor *monitor_alias_new(RefData *ref_data, enum ContextMonitorAliasType alias_type)
 {
     struct MonitorAlias *monitor = malloc(sizeof(struct MonitorAlias));
     if (IS_NULL_PTR(monitor)) {
         return NULL;
     }
     monitor->monitor.monitor_type = CONTEXT_MONITOR_ALIAS;
-    monitor->ref_data = ref_data;
+    monitor->ref_data = *ref_data;
     monitor->alias_type = alias_type;
 
     return &monitor->monitor;
