@@ -151,10 +151,6 @@ insert(_Table, _Entry) ->
 %% @param   Entry the entry or list of entries to insert
 %% @returns true if all entries were inserted; false if any key already exists
 %% @doc Insert an entry into an ets table only if the key does not already exist.
-%%
-%% Returns `false' without inserting any entries if any of the given objects
-%% have a key that already exists in the table. For `bag' and `duplicate_bag'
-%% table types, returns `false' if an identical object already exists.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec insert_new(Table :: table(), Entry :: tuple() | [tuple()]) -> boolean().
