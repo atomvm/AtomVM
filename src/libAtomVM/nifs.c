@@ -5600,8 +5600,16 @@ static term nif_code_all_available(Context *ctx, int argc, term argv[])
     }
     synclist_unlock(&ctx->global->avmpack_data);
 
-    for (size_t ix = 0; ix < available_count - acc.acc_count; ix++) {
+    size_t loaded_count = ctx->global->loaded_modules_count;
+    size_t max_loaded = (acc.acc_count <= available_count) ? available_count - acc.acc_count : 0;
+    if (loaded_count < max_loaded) {
+        max_loaded = loaded_count;
+    }
+    for (size_t ix = 0; ix < max_loaded; ix++) {
         Module *module = globalcontext_get_module_by_index(ctx->global, ix);
+        if (IS_NULL_PTR(module)) {
+            continue;
+        }
         term module_tuple = term_alloc_tuple(3, &ctx->heap);
         term module_atom = module_get_name(module);
         atom_index_t module_atom_ix = term_to_atom_index(module_atom);
