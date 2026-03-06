@@ -53,6 +53,11 @@
 #include <psa/crypto.h>
 #endif
 
+#ifdef MBEDTLS_PKCS5_C
+#include <mbedtls/md.h>
+#include <mbedtls/pkcs5.h>
+#endif
+
 // #define ENABLE_TRACE
 #include "trace.h"
 
@@ -2449,6 +2454,126 @@ cleanup:
 
 #endif
 
+#ifdef MBEDTLS_PKCS5_C
+static const AtomStringIntPair md_hash_algorithm_table[] = {
+    { ATOM_STR("\x3", "sha"), MBEDTLS_MD_SHA1 },
+    { ATOM_STR("\x6", "sha224"), MBEDTLS_MD_SHA224 },
+    { ATOM_STR("\x6", "sha256"), MBEDTLS_MD_SHA256 },
+    { ATOM_STR("\x6", "sha384"), MBEDTLS_MD_SHA384 },
+    { ATOM_STR("\x6", "sha512"), MBEDTLS_MD_SHA512 },
+    { ATOM_STR("\x3", "md5"), MBEDTLS_MD_MD5 },
+    { ATOM_STR("\x9", "ripemd160"), MBEDTLS_MD_RIPEMD160 },
+
+    SELECT_INT_DEFAULT(MBEDTLS_MD_NONE)
+};
+
+static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    GlobalContext *glb = ctx->global;
+
+    term digest_type_term = argv[0];
+    // argv[1] is password, argv[2] is salt, argv[3] is iterations, argv[4] is key_len
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *maybe_allocated_password = NULL;
+    void *maybe_allocated_salt = NULL;
+    void *derived_key = NULL;
+    avm_int_t derived_key_len = 0;
+
+    mbedtls_md_type_t md_type
+        = interop_atom_term_select_int(md_hash_algorithm_table, digest_type_term, glb);
+    if (UNLIKELY(md_type == MBEDTLS_MD_NONE)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
+    }
+
+    term password_term = argv[1];
+    const void *password;
+    size_t password_len;
+    term iodata_handle_result
+        = handle_iodata(password_term, &password, &password_len, &maybe_allocated_password);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+    }
+
+    term salt_term = argv[2];
+    const void *salt;
+    size_t salt_len;
+    iodata_handle_result = handle_iodata(salt_term, &salt, &salt_len, &maybe_allocated_salt);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
+    }
+
+    term iterations_term = argv[3];
+    if (UNLIKELY(!term_is_uint32(iterations_term))) {
+        result
+            = make_crypto_error(__FILE__, __LINE__, "Iterations must be a positive integer", ctx);
+        goto cleanup;
+    }
+    uint32_t iterations = term_to_uint32(iterations_term);
+
+    term key_len_term = argv[4];
+    if (UNLIKELY(!term_is_pos_int(key_len_term))) {
+        result = make_crypto_error(__FILE__, __LINE__, "KeyLen must be a positive integer", ctx);
+        goto cleanup;
+    }
+    derived_key_len = term_to_int(key_len_term);
+
+    derived_key = malloc(derived_key_len);
+    if (IS_NULL_PTR(derived_key)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+#if MBEDTLS_VERSION_NUMBER >= 0x03030000
+    // mbedtls_pkcs5_pbkdf2_hmac_ext is available since 3.3.0
+    int ret = mbedtls_pkcs5_pbkdf2_hmac_ext(
+        md_type, password, password_len, salt, salt_len, iterations, derived_key_len, derived_key);
+#else
+    const mbedtls_md_info_t *md_info = mbedtls_md_info_from_type(md_type);
+    int ret;
+    if (UNLIKELY(md_info == NULL)) {
+        ret = MBEDTLS_ERR_PKCS5_BAD_INPUT_DATA;
+    } else {
+        mbedtls_md_context_t md_ctx;
+        mbedtls_md_init(&md_ctx);
+        ret = mbedtls_md_setup(&md_ctx, md_info, 1);
+        if (ret == 0) {
+            ret = mbedtls_pkcs5_pbkdf2_hmac(&md_ctx, password, password_len, salt, salt_len,
+                iterations, derived_key_len, derived_key);
+        }
+        mbedtls_md_free(&md_ctx);
+    }
+#endif
+    if (UNLIKELY(ret != 0)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(derived_key_len)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_literal_binary(derived_key, derived_key_len, &ctx->heap, glb);
+
+cleanup:
+    secure_free(derived_key, derived_key_len);
+    secure_free(maybe_allocated_password, password_len);
+    secure_free(maybe_allocated_salt, salt_len);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+#endif
+
 // not static since we are using it elsewhere to provide backward compatibility
 term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
 {
@@ -2604,6 +2729,12 @@ static const struct Nif crypto_crypto_one_time_aead_nif = {
     .nif_ptr = nif_crypto_crypto_one_time_aead
 };
 #endif
+#ifdef MBEDTLS_PKCS5_C
+static const struct Nif crypto_pbkdf2_hmac_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_pbkdf2_hmac
+};
+#endif
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_strong_rand_bytes
@@ -2689,6 +2820,12 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("crypto_one_time_aead/7", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_crypto_one_time_aead_nif;
+        }
+#endif
+#ifdef MBEDTLS_PKCS5_C
+        if (strcmp("pbkdf2_hmac/5", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_pbkdf2_hmac_nif;
         }
 #endif
         if (strcmp("strong_rand_bytes/1", rest) == 0) {

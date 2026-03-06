@@ -38,6 +38,7 @@
     sign/4,
     verify/5,
     mac/4,
+    pbkdf2_hmac/5,
     strong_rand_bytes/1,
     info_lib/0
 ]).
@@ -485,6 +486,28 @@ verify(_Algorithm, _DigestType, _Data, _Signature, _Key) ->
     Data :: iodata()
 ) -> binary().
 mac(_Type, _SubType, _Key, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   DigestType hash algorithm (`sha', `sha256', etc.)
+%% @param   Password   password bytes (iodata)
+%% @param   Salt       salt bytes (iodata)
+%% @param   Iterations iteration count (positive integer)
+%% @param   KeyLen     desired output length in bytes (positive integer)
+%% @returns Returns the derived key as a binary of `KeyLen' bytes.
+%% @doc     Derive a key using PBKDF2-HMAC (RFC 8018 §5.2).
+%%
+%%          Supported digest types are the same as for `hash/2'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec pbkdf2_hmac(
+    DigestType :: hash_algorithm(),
+    Password :: iodata(),
+    Salt :: iodata(),
+    Iterations :: pos_integer(),
+    KeyLen :: pos_integer()
+) -> binary().
+pbkdf2_hmac(_DigestType, _Password, _Salt, _Iterations, _KeyLen) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

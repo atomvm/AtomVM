@@ -632,6 +632,7 @@ struct Test tests[] = {
     TEST_CASE(test_crypto_hash_update),
     TEST_CASE(test_crypto_crypto),
     TEST_CASE(test_crypto_aead),
+    TEST_CASE(test_crypto_pbkdf2_hmac),
 
     // TEST CRASHES HERE: TEST_CASE(memlimit),
 
