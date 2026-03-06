@@ -286,10 +286,16 @@ macro(pack_runnable avm_name main)
         set(INCLUDE_LINES "")
     endif()
 
+    if(Elixir_FOUND AND "${avm_name}" STREQUAL "elixir_esp32boot")
+        set(PRUNE_OPTION "")
+    else()
+        set(PRUNE_OPTION "-p")
+    endif()
+
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${main}.beam ${pack_runnable_${avm_name}_archives} ${pack_runnable_${avm_name}_archive_targets} PackBEAM
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${PRUNE_OPTION} -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${main}.beam ${pack_runnable_${avm_name}_archives}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
