@@ -328,6 +328,7 @@ struct Test tests[] = {
     TEST_CASE(test_split_binary),
     TEST_CASE(test_binary_replace),
     TEST_CASE(test_binary_match),
+    TEST_CASE(test_binary_longest_common_prefix),
 
     TEST_CASE(test_zlib_compress),
 
