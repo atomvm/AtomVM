@@ -58,6 +58,13 @@
 #include <mbedtls/pkcs5.h>
 #endif
 
+// mbedtls_ct_memcmp is available in 2.28.x+ and 3.1.x+ (absent in 3.0.x)
+#if (MBEDTLS_VERSION_NUMBER >= 0x021C0000 && MBEDTLS_VERSION_NUMBER < 0x03000000) \
+    || MBEDTLS_VERSION_NUMBER >= 0x03010000
+#include <mbedtls/constant_time.h>
+#define AVM_HAVE_MBEDTLS_CT_MEMCMP 1
+#endif
+
 // #define ENABLE_TRACE
 #include "trace.h"
 
@@ -2454,6 +2461,47 @@ cleanup:
 
 #endif
 
+static term nif_crypto_hash_equals(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term mac1_term = argv[0];
+    term mac2_term = argv[1];
+
+    if (UNLIKELY(!term_is_binary(mac1_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary", ctx));
+    }
+    if (UNLIKELY(!term_is_binary(mac2_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary", ctx));
+    }
+
+    size_t mac1_len = term_binary_size(mac1_term);
+    size_t mac2_len = term_binary_size(mac2_term);
+
+    if (UNLIKELY(mac1_len != mac2_len)) {
+        RAISE_ERROR(
+            make_crypto_error(__FILE__, __LINE__, "Binaries must have the same length", ctx));
+    }
+
+    const void *mac1 = term_binary_data(mac1_term);
+    const void *mac2 = term_binary_data(mac2_term);
+
+#ifdef AVM_HAVE_MBEDTLS_CT_MEMCMP
+    int cmp = mbedtls_ct_memcmp(mac1, mac2, mac1_len);
+#else
+    // Constant-time fallback for older mbedTLS (< 2.28.0 or 3.0.x)
+    const unsigned char *pa = mac1;
+    const unsigned char *pb = mac2;
+    unsigned char diff = 0;
+    for (size_t i = 0; i < mac1_len; i++) {
+        diff |= (unsigned char) (pa[i] ^ pb[i]);
+    }
+    int cmp = diff;
+#endif
+
+    return cmp == 0 ? TRUE_ATOM : FALSE_ATOM;
+}
+
 #ifdef MBEDTLS_PKCS5_C
 static const AtomStringIntPair md_hash_algorithm_table[] = {
     { ATOM_STR("\x3", "sha"), MBEDTLS_MD_SHA1 },
@@ -2735,6 +2783,10 @@ static const struct Nif crypto_pbkdf2_hmac_nif = {
     .nif_ptr = nif_crypto_pbkdf2_hmac
 };
 #endif
+static const struct Nif crypto_hash_equals_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_hash_equals
+};
 static const struct Nif crypto_strong_rand_bytes_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_strong_rand_bytes
@@ -2828,6 +2880,10 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
             return &crypto_pbkdf2_hmac_nif;
         }
 #endif
+        if (strcmp("hash_equals/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_hash_equals_nif;
+        }
         if (strcmp("strong_rand_bytes/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_strong_rand_bytes_nif;

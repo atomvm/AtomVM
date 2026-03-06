@@ -39,6 +39,7 @@
     verify/5,
     mac/4,
     pbkdf2_hmac/5,
+    hash_equals/2,
     strong_rand_bytes/1,
     info_lib/0
 ]).
@@ -508,6 +509,21 @@ mac(_Type, _SubType, _Key, _Data) ->
     KeyLen :: pos_integer()
 ) -> binary().
 pbkdf2_hmac(_DigestType, _Password, _Salt, _Iterations, _KeyLen) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Mac1 first MAC or hash binary
+%% @param   Mac2 second MAC or hash binary
+%% @returns Returns `true' if the two binaries are equal, `false' otherwise.
+%% @doc     Compare two MACs or hashes for equality in constant time.
+%%
+%%          Both arguments must be binaries of the same length; otherwise
+%%          an error is raised. The comparison is performed in constant time
+%%          to prevent timing side-channel attacks.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec hash_equals(Mac1 :: binary(), Mac2 :: binary()) -> boolean().
+hash_equals(_Mac1, _Mac2) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

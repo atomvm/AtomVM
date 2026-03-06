@@ -92,7 +92,7 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `crypto:crypto_init/3`, `crypto:crypto_init/4`, `crypto:crypto_update/2` and
 `crypto:crypto_final/1`
 - Added `crypto:crypto_one_time_aead/6` and `crypto:crypto_one_time_aead/7`
-- Added `crypto:pbkdf2_hmac/5`
+- Added `crypto:pbkdf2_hmac/5` and `crypto:hash_equals/2`
 - Added `crypto:info_lib/0`
 
 ### Changed

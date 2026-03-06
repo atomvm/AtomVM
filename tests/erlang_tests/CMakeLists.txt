@@ -666,6 +666,7 @@ compile_erlang(test_crypto_mac)
 compile_erlang(test_crypto_hash_update)
 compile_erlang(test_crypto_crypto)
 compile_erlang(test_crypto_pbkdf2_hmac)
+compile_erlang(test_crypto_misc)
 compile_erlang(test_crypto_aead)
 
 set(erlang_test_beams
@@ -1211,6 +1212,7 @@ set(erlang_test_beams
     test_crypto_hash_update.beam
     test_crypto_crypto.beam
     test_crypto_pbkdf2_hmac.beam
+    test_crypto_misc.beam
     test_crypto_aead.beam
 )
 
