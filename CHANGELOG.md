@@ -87,12 +87,14 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `nanosecond` and `native` time unit support to `erlang:system_time/1`, `erlang:monotonic_time/1`, and `calendar:system_time_to_universal_time/2`
 - Added `erlang:system_time/0`, `erlang:monotonic_time/0`, and `os:system_time/0,1` NIFs
 - Added `filename:join/1` and `filename:split/1`
-- Added `crypto:generate_key/2`, `crypto:compute_key/4`, `crypto:sign/4`, `crypto:verify/5` and `crypto:mac/4`
+- Added `crypto:generate_key/2`, `crypto:compute_key/4`, `crypto:sign/4` and `crypto:verify/5`
 - Added `crypto:hash_init/1`, `crypto:hash_update/2` and `crypto:hash_final/1`
 - Added `crypto:crypto_init/3`, `crypto:crypto_init/4`, `crypto:crypto_update/2` and
 `crypto:crypto_final/1`
 - Added `crypto:crypto_one_time_aead/6` and `crypto:crypto_one_time_aead/7`
 - Added `crypto:pbkdf2_hmac/5` and `crypto:hash_equals/2`
+- Added `crypto:mac/4`, `crypto:mac_init/3`, `crypto:mac_update/2`, `crypto:mac_final/1` and
+`crypto:mac_finalN/2`
 - Added `crypto:info_lib/0`
 
 ### Changed

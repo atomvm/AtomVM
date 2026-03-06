@@ -27,6 +27,7 @@
 #include <globalcontext.h>
 #include <interop.h>
 #include <nifs.h>
+#include <smp.h>
 #include <sys_mbedtls.h>
 #include <term.h>
 #include <term_typedef.h>
@@ -1532,6 +1533,304 @@ const ErlNifResourceTypeInit psa_hash_op_resource_type_init = {
     .dtor = psa_hash_op_dtor
 };
 
+struct MacState
+{
+    psa_mac_operation_t psa_op;
+    psa_key_id_t key_id;
+    psa_algorithm_t psa_algo;
+    psa_key_type_t psa_key_type;
+    size_t key_bit_size;
+#ifndef AVM_NO_SMP
+    Mutex *mutex;
+#endif
+};
+
+static void psa_mac_op_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+
+    struct MacState *mac_state = (struct MacState *) obj;
+    psa_mac_abort(&mac_state->psa_op);
+    psa_destroy_key(mac_state->key_id);
+#ifndef AVM_NO_SMP
+    smp_mutex_destroy(mac_state->mutex);
+#endif
+}
+
+const ErlNifResourceTypeInit psa_mac_op_resource_type_init = {
+    .members = 1,
+    .dtor = psa_mac_op_dtor
+};
+
+static term nif_crypto_mac_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    term mac_type_term = argv[0];
+    term sub_type_term = argv[1];
+    // argv[2] is key
+
+    bool success = false;
+    term result = ERROR_ATOM;
+    void *maybe_allocated_key = NULL;
+    struct MacState *mac_obj = NULL;
+
+    term key_term = argv[2];
+    const void *key;
+    size_t key_len;
+    term iodata_handle_result = handle_iodata(key_term, &key, &key_len, &maybe_allocated_key);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+    }
+
+    psa_key_type_t psa_key_type = interop_atom_term_select_int(mac_key_table, mac_type_term, glb);
+    psa_algorithm_t psa_key_algo;
+    psa_key_bits_t key_bit_size;
+    switch (psa_key_type) {
+        case PSA_KEY_TYPE_AES:
+            psa_key_algo = PSA_ALG_CMAC;
+            key_bit_size
+                = interop_atom_term_select_int(cmac_algorithm_bits_table, sub_type_term, glb);
+            if (UNLIKELY(key_bit_size == 0)) {
+                result = make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx);
+                goto cleanup;
+            }
+            if (UNLIKELY(key_bit_size != key_len * 8)) {
+                result = make_crypto_error(__FILE__, __LINE__, "Bad key size", ctx);
+                goto cleanup;
+            }
+            break;
+        case PSA_KEY_TYPE_HMAC: {
+            psa_algorithm_t sub_type_algo
+                = interop_atom_term_select_int(psa_hash_algorithm_table, sub_type_term, glb);
+            if (UNLIKELY(sub_type_algo == PSA_ALG_NONE)) {
+                result
+                    = make_crypto_error(__FILE__, __LINE__, "Bad digest algorithm for HMAC", ctx);
+                goto cleanup;
+            }
+            psa_key_algo = PSA_ALG_HMAC(sub_type_algo);
+            key_bit_size = key_len * 8;
+        } break;
+        default:
+            result = make_crypto_error(__FILE__, __LINE__, "Unknown mac algorithm", ctx);
+            goto cleanup;
+    }
+
+    psa_key_id_t key_id = 0;
+    psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
+    psa_set_key_type(&attr, psa_key_type);
+    psa_set_key_bits(&attr, key_bit_size);
+    psa_set_key_usage_flags(&attr, PSA_KEY_USAGE_SIGN_MESSAGE);
+    psa_set_key_algorithm(&attr, psa_key_algo);
+
+    psa_status_t status = psa_import_key(&attr, key, key_len, &key_id);
+    psa_reset_key_attributes(&attr);
+    switch (status) {
+        case PSA_SUCCESS:
+            break;
+        case PSA_ERROR_NOT_SUPPORTED:
+            result = make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx);
+            goto cleanup;
+        default:
+            result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+            goto cleanup;
+    }
+
+    mac_obj = enif_alloc_resource(glb->psa_mac_op_resource_type, sizeof(struct MacState));
+    if (IS_NULL_PTR(mac_obj)) {
+        psa_destroy_key(key_id);
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+    memset(mac_obj, 0, sizeof(struct MacState));
+    mac_obj->key_id = key_id;
+    mac_obj->psa_algo = psa_key_algo;
+    mac_obj->psa_key_type = psa_key_type;
+    mac_obj->key_bit_size = key_bit_size;
+#ifndef AVM_NO_SMP
+    mac_obj->mutex = smp_mutex_create();
+    if (IS_NULL_PTR(mac_obj->mutex)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+#endif
+
+    status = psa_mac_sign_setup(&mac_obj->psa_op, key_id, psa_key_algo);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_resource(mac_obj, &ctx->heap);
+
+cleanup:
+    if (mac_obj) {
+        enif_release_resource(mac_obj);
+    }
+    secure_free(maybe_allocated_key, key_len);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_mac_update(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    void *psa_mac_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_mac_op_resource_type, &psa_mac_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad ref", ctx));
+    }
+    struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
+
+    void *maybe_allocated_data = NULL;
+    size_t data_len;
+    term data_term = argv[1];
+    const void *data;
+    term iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
+        free(maybe_allocated_data);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad text", ctx));
+    }
+
+    SMP_MUTEX_LOCK(mac_state->mutex);
+    psa_status_t status = psa_mac_update(&mac_state->psa_op, data, data_len);
+    SMP_MUTEX_UNLOCK(mac_state->mutex);
+    free(maybe_allocated_data);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+    }
+
+    return argv[0];
+}
+
+static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    void *psa_mac_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_mac_op_resource_type, &psa_mac_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad ref", ctx));
+    }
+    struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
+
+    bool success = false;
+    term result = ERROR_ATOM;
+
+    size_t mac_size
+        = PSA_MAC_LENGTH(mac_state->psa_key_type, mac_state->key_bit_size, mac_state->psa_algo);
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(mac_size)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term mac_bin = term_create_uninitialized_binary(mac_size, &ctx->heap, glb);
+    void *mac_buf = (void *) term_binary_data(mac_bin);
+
+    size_t mac_len = 0;
+    SMP_MUTEX_LOCK(mac_state->mutex);
+    psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    SMP_MUTEX_UNLOCK(mac_state->mutex);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    success = true;
+    result = mac_bin;
+
+cleanup:
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
+static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    do_psa_init();
+
+    GlobalContext *glb = ctx->global;
+
+    void *psa_mac_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0],
+            glb->psa_mac_op_resource_type, &psa_mac_obj_ptr))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad ref", ctx));
+    }
+    struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
+
+    avm_int_t requested_len;
+    if (UNLIKELY(!term_is_integer(argv[1]))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad length", ctx));
+    }
+    requested_len = term_to_int(argv[1]);
+    if (UNLIKELY(requested_len <= 0)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad length", ctx));
+    }
+
+    bool success = false;
+    term result = ERROR_ATOM;
+
+    size_t mac_size
+        = PSA_MAC_LENGTH(mac_state->psa_key_type, mac_state->key_bit_size, mac_state->psa_algo);
+    uint8_t *mac_buf = malloc(mac_size);
+    if (IS_NULL_PTR(mac_buf)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    size_t mac_len = 0;
+    SMP_MUTEX_LOCK(mac_state->mutex);
+    psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    SMP_MUTEX_UNLOCK(mac_state->mutex);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+        goto cleanup;
+    }
+
+    size_t out_len = (size_t) requested_len < mac_len ? (size_t) requested_len : mac_len;
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(out_len)) != MEMORY_GC_OK)) {
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
+    }
+
+    success = true;
+    result = term_from_literal_binary(mac_buf, out_len, &ctx->heap, glb);
+
+cleanup:
+    secure_free(mac_buf, mac_size);
+
+    if (UNLIKELY(!success)) {
+        RAISE_ERROR(result);
+    }
+
+    return result;
+}
+
 static term nif_crypto_hash_init(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -2748,6 +3047,22 @@ static const struct Nif crypto_mac_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_mac
 };
+static const struct Nif crypto_mac_init_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_mac_init
+};
+static const struct Nif crypto_mac_update_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_mac_update
+};
+static const struct Nif crypto_mac_final_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_mac_final
+};
+static const struct Nif crypto_mac_finalN_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_crypto_mac_finalN
+};
 static const struct Nif crypto_hash_init_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_hash_init
@@ -2840,6 +3155,22 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
         if (strcmp("mac/4", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_mac_nif;
+        }
+        if (strcmp("mac_init/3", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_mac_init_nif;
+        }
+        if (strcmp("mac_update/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_mac_update_nif;
+        }
+        if (strcmp("mac_final/1", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_mac_final_nif;
+        }
+        if (strcmp("mac_finalN/2", rest) == 0) {
+            TRACE("Resolved platform nif %s ...\n", nifname);
+            return &crypto_mac_finalN_nif;
         }
         if (strcmp("hash_init/1", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);

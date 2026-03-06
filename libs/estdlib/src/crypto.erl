@@ -38,6 +38,10 @@
     sign/4,
     verify/5,
     mac/4,
+    mac_init/3,
+    mac_update/2,
+    mac_final/1,
+    mac_finalN/2,
     pbkdf2_hmac/5,
     hash_equals/2,
     strong_rand_bytes/1,
@@ -131,6 +135,8 @@
     | aes_256_ecb.
 
 -type mac_subtype() :: cmac_subtype() | hash_algorithm() | ripemd160.
+
+-opaque mac_state() :: reference().
 
 %%-----------------------------------------------------------------------------
 %% @param   Type the hash algorithm
@@ -487,6 +493,50 @@ verify(_Algorithm, _DigestType, _Data, _Signature, _Key) ->
     Data :: iodata()
 ) -> binary().
 mac(_Type, _SubType, _Key, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Type    MAC algorithm family (`cmac' or `hmac')
+%% @param   SubType MAC subtype (cipher for CMAC, digest for HMAC)
+%% @param   Key     MAC key bytes (iodata)
+%% @returns Returns an opaque MAC state for use with mac_update/2 and mac_final/1.
+%% @doc     Initialize a streaming MAC operation.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mac_init(Type :: mac_type(), SubType :: mac_subtype(), Key :: iodata()) -> mac_state().
+mac_init(_Type, _SubType, _Key) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State MAC state from mac_init/3 or a previous mac_update/2
+%% @param   Data  data to add (iodata)
+%% @returns Returns an updated MAC state.
+%% @doc     Add data to a streaming MAC calculation.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mac_update(State :: mac_state(), Data :: iodata()) -> mac_state().
+mac_update(_State, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State MAC state from mac_init/3 or mac_update/2
+%% @returns Returns the computed MAC as a binary.
+%% @doc     Finalize a streaming MAC operation and return the MAC value.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mac_final(State :: mac_state()) -> binary().
+mac_final(_State) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   State     MAC state from mac_init/3 or mac_update/2
+%% @param   MacLength desired output length in bytes
+%% @returns Returns the computed MAC truncated to MacLength bytes.
+%% @doc     Finalize a streaming MAC operation with a custom output length.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec mac_finalN(State :: mac_state(), MacLength :: pos_integer()) -> binary().
+mac_finalN(_State, _MacLength) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
