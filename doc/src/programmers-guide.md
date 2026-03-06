@@ -1400,7 +1400,7 @@ Use the [`esp:deep_sleep/1`](./apidocs/erlang/eavmlib/esp.md#deep_sleep1) functi
 esp:deep_sleep(60*1000).
 ```
 
-Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_get_wakeup_cause0) function to inspect the reason for a wakeup.  Possible return values include:
+For ESP-IDF 5.5 compatibility, use [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_get_wakeup_cause0) to inspect a single wakeup reason. Possible values include:
 
 * `sleep_wakeup_ext0`
 * `sleep_wakeup_ext1`
@@ -1411,7 +1411,7 @@ Use the [`esp:sleep_get_wakeup_cause/0`](./apidocs/erlang/eavmlib/esp.md#sleep_g
 * `sleep_wakeup_uart`
 * `sleep_wakeup_wifi`
 * `sleep_wakeup_cocpu`
-* `sleep_wakeup_cocpu_trag_trig`
+* `sleep_wakeup_cocpu_trap_trig`
 * `sleep_wakeup_bt`
 * `undefined` (no sleep wakeup)
 * `error` (unknown other reason)
@@ -1428,6 +1428,20 @@ case esp:sleep_get_wakeup_cause() of
         io:format("Woke up from ext1~n");
     _ ->
         io:format("Woke up for some other reason~n")
+end.
+```
+
+For ESP-IDF 6+, use [`esp:sleep_get_wakeup_causes/0`](./apidocs/erlang/eavmlib/esp.md#sleep_get_wakeup_causes0) to inspect all wakeup reasons. This function returns a list, since a wakeup may have multiple causes.
+
+The values match the semantics of [`esp_sleep_get_wakeup_causes`](https://docs.espressif.com/projects/esp-idf/en/release-v6.0/esp32/api-reference/system/sleep_modes.html).
+
+```erlang
+WakeupCauses = esp:sleep_get_wakeup_causes(),
+case WakeupCauses of
+    [] ->
+        io:format("No wakeup cause available~n");
+    _ ->
+        io:format("Wakeup causes: ~p~n", [WakeupCauses])
 end.
 ```
 
