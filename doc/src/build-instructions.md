@@ -782,8 +782,9 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
   * `void <moniker>_init(GlobalContext *global);`
     * This function will be called once, when the application is started.
   * `Context *<moniker>_create_port(GlobalContext *global, term opts);`
-    * This function will be called to locate the Nif during a function call.
-    Example:
+    * This function is called when the `erlang:open_port/2` function is called with your
+    port name.  For example: `open_port({spawn, "my_port"}, []).`
+    * `<moniker>_init` and `<moniker>_create_port` function declarations:
 
     ```c
         void my_port_init(GlobalContext *global);
@@ -794,10 +795,10 @@ To add support for a new peripheral or protocol using an AtomVM port, you need t
     Instructions for implementing Ports is outside of the scope of this document.
     ```
 
-* Add the `REGISTER_PORT_COLLECTION` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `RESOLVE_NIF_CB` macro to the end of your nif code. Example:
+* Add the `REGISTER_PORT_DRIVER` using the parameters `NAME`, `INIT_CB`, `DESTROY_CB`, `CREATE_PORT_CB` macro to the end of your port code. Example:
 
     ```c
-        REGISTER_PORT_COLLECTION(my_port, my_port_init, NULL, my_port_create_port);
+        REGISTER_PORT_DRIVER(my_port, my_port_init, NULL, my_port_create_port);
     ```
 
 
