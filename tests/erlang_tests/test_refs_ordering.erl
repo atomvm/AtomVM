@@ -20,17 +20,17 @@
 
 -module(test_refs_ordering).
 
--export([start/0, sort/1, insert/2, check/2, get_ref/2]).
+-export([start/0, sort/1, insert/2, check/2, get_ref/3, make_alias_ref/0]).
 
 start() ->
-    A = get_ref(3, []),
-    B = get_ref(7, []),
-    C = get_ref(1, []),
-    D = get_ref(3, []),
-    E = get_ref(4, []),
+    A = get_ref(3, [], fun make_ref/0),
+    B = get_ref(7, [], fun make_alias_ref/0),
+    C = get_ref(1, [], fun make_ref/0),
+    D = get_ref(3, [], fun make_alias_ref/0),
+    E = get_ref(4, [], fun make_ref/0),
     Sorted = sort([E, C, D, A, B]),
-    check(Sorted, [A, B, C, D, E]) +
-        bool_to_n(Sorted < [make_ref()]) * 2 +
+    check(Sorted, [A, C, E, B, D]) +
+        bool_to_n(Sorted < [make_alias_ref()]) * 2 +
         bool_to_n(Sorted > {make_ref()}) * 4.
 
 sort(L) ->
@@ -57,12 +57,25 @@ check(T, Expected) when T == Expected ->
 check(T, Expected) when T /= Expected ->
     0.
 
-get_ref(0, Acc) ->
+get_ref(0, Acc, _Generator) ->
     Acc;
-get_ref(N, _Acc) ->
-    get_ref(N - 1, make_ref()).
+get_ref(N, _Acc, Generator) ->
+    get_ref(N - 1, Generator(), Generator).
 
 bool_to_n(true) ->
     1;
 bool_to_n(false) ->
     0.
+
+make_alias_ref() ->
+    AliasesAvailable =
+        case erlang:system_info(machine) of
+            "ATOM" -> true;
+            "BEAM" -> erlang:system_info(otp_release) >= "24"
+        end,
+    if
+        AliasesAvailable ->
+            erlang:alias();
+        true ->
+            {mock_alias_ref, make_ref()}
+    end.
