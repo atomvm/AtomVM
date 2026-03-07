@@ -94,7 +94,7 @@ macro(pack_runnable avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${ARCHIVES}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s Elixir.${main} ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -s Elixir.${main} ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
