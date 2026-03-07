@@ -59,6 +59,10 @@ macro(pack_gleam_runnable avm_name main)
     else()
         set(INCLUDE_LINES "")
     endif()
+    set(PACKBEAM_PRUNE_ARGS "")
+    if(AVM_PRUNE_RUNNABLES)
+        set(PACKBEAM_PRUNE_ARGS "-p")
+    endif()
 
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "gleam_avm")
@@ -75,7 +79,7 @@ macro(pack_gleam_runnable avm_name main)
         COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/gleam.toml ${CMAKE_CURRENT_SOURCE_DIR}/manifest.toml ${CMAKE_CURRENT_BINARY_DIR}/
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/src
         COMMAND gleam export erlang-shipment
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -p -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS} ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${PACKBEAM_PRUNE_ARGS} -s ${main} ${INCLUDE_LINES} ${avm_name}.avm ${BEAMS} ${ARCHIVES}
         COMMENT "Packing gleam runnable ${avm_name}.avm"
     )
 
