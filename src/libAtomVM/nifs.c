@@ -265,6 +265,7 @@ static term nif_code_server_type_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_import_resolver(Context *ctx, int argc, term argv[]);
 static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[]);
 #endif
+static term nif_erlang_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[]);
 static term nif_erlang_nif_error(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
@@ -849,6 +850,10 @@ static const struct Nif code_server_set_native_code_nif = {
     .nif_ptr = nif_code_server_set_native_code
 };
 #endif
+static const struct Nif erlang_loaded_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_loaded
+};
 
 static const struct Nif module_loaded_nif = {
     .base.type = NIFFunctionType,
@@ -5945,6 +5950,25 @@ static term nif_code_server_set_native_code(Context *ctx, int argc, term argv[])
     return OK_ATOM;
 }
 #endif
+
+static term nif_erlang_loaded(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+    term result = term_nil();
+    int loaded_modules_count = ctx->global->loaded_modules_count;
+    if (UNLIKELY(memory_ensure_free(ctx, LIST_SIZE(loaded_modules_count, 0)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    for (int ix = 0; ix < loaded_modules_count; ix++) {
+        Module *module = globalcontext_get_module_by_index(ctx->global, ix);
+        result = term_list_prepend(module_get_name(module), result, &ctx->heap);
+    }
+
+    return result;
+}
 
 static term nif_erlang_module_loaded(Context *ctx, int argc, term argv[])
 {
