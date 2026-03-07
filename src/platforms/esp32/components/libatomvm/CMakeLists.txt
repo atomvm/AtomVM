@@ -18,7 +18,12 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
-idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM")
+if (AVM_USE_LIBSODIUM)
+    set(LIBSODIUM_REQUIRE "espressif__libsodium")
+endif()
+
+idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM"
+    REQUIRES ${LIBSODIUM_REQUIRE})
 
 # GCC complains about "warning: #include_next is a GCC extension" when using pedantic flag
 # "pedantic" flag should be disabled rather poluting diagnostics with warnings caused from 3rd party
@@ -40,6 +45,13 @@ else()
 endif()
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
+
+if (AVM_USE_LIBSODIUM)
+    # ESP-IDF always ships mbedTLS with PSA Crypto support, so no compile check
+    # is needed here (unlike generic_unix where the system mbedTLS may vary).
+    target_link_libraries(libAtomVM PUBLIC idf::espressif__libsodium)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_LIBSODIUM)
+endif()
 
 include(../../GetBootAVM.cmake)
 partition_table_get_partition_info(boot_offset "--partition-name boot.avm" "offset")

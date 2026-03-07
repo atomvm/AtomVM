@@ -94,25 +94,8 @@
 -type crypto_opt() :: {encrypt, boolean()} | {padding, padding()}.
 -type crypto_opts() :: boolean() | [crypto_opt()].
 
--type pk_type() :: eddh | eddsa | ecdh.
-
-%% Curves/params accepted by the current AtomVM implementation.
-%% Note: not all combinations are supported by every function (see docs below).
--type pk_param() ::
-    x25519
-    | x448
-    | ed25519
-    | ed448
-    | secp256r1
-    | secp384r1
-    | secp521r1
-    | secp256k1
-    | brainpoolP256r1
-    | brainpoolP384r1
-    | brainpoolP512r1.
-
-%% ECDSA is currently supported only on short Weierstrass secp* and brainpool curves.
--type ecdsa_curve() ::
+%% Named elliptic curves supported by AtomVM (subset of OTP's ec_named_curve()).
+-type ec_named_curve() ::
     secp256k1
     | secp256r1
     | secp384r1
@@ -121,8 +104,22 @@
     | brainpoolP384r1
     | brainpoolP512r1.
 
--type ecdsa_private_key() :: [binary() | ecdsa_curve()].
--type ecdsa_public_key() :: [binary() | ecdsa_curve()].
+-type edwards_curve_dh() :: x25519.
+%% Supported EdDSA curve (Ed25519 via libsodium when AVM_USE_LIBSODIUM is enabled).
+-type edwards_curve_ed() :: ed25519.
+
+-type ecdh_params() :: ec_named_curve() | edwards_curve_dh().
+-type ecdsa_params() :: ec_named_curve().
+-type eddsa_params() :: edwards_curve_ed().
+
+-type ecdsa_private() :: binary().
+-type ecdsa_public() :: binary().
+-type eddsa_private() :: binary().
+-type eddsa_public() :: binary().
+
+-type sha1() :: sha.
+-type sha2() :: sha224 | sha256 | sha384 | sha512.
+-type ecdsa_digest_type() :: sha1() | sha2().
 
 -type mac_type() :: cmac | hmac.
 
@@ -378,12 +375,12 @@ crypto_final(_State) ->
 %% @doc     Generate a public/private key pair.
 %%
 %%          Supported forms:
-%%          * `eddh' with `x25519 | x448'
-%%          * `ecdh' with `x25519 | x448 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
-%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
-%%          * `eddsa' with `ed25519 | ed448' (availability depends on the underlying mbedTLS build)
+%%          * `eddh' with `x25519'
+%%          * `ecdh' with `x25519 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
+%%          * `eddsa' with `ed25519'
 %%
-%%          Keys are returned as **raw exported key material**, not PEM, DER, or `public_key'
+%%          Keys are returned as raw key material, not PEM, DER, or `public_key'
 %%          records.
 %%
 %%          Key generation draws from the platform entropy source.  Consult
@@ -391,7 +388,10 @@ crypto_final(_State) ->
 %%          seeded before generating keys.
 %% @end
 %%-----------------------------------------------------------------------------
--spec generate_key(Type :: pk_type(), Param :: pk_param()) -> {binary(), binary()}.
+-spec generate_key(
+    Type :: ecdh | eddh | eddsa,
+    Param :: ecdh_params() | eddsa_params()
+) -> {binary(), binary()}.
 generate_key(_Type, _Param) ->
     erlang:nif_error(undefined).
 
@@ -404,29 +404,32 @@ generate_key(_Type, _Param) ->
 %% @doc     Compute a shared secret.
 %%
 %%          Supported forms:
-%%          * `eddh' with `x25519 | x448'
-%%          * `ecdh' with `x25519 | x448 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
-%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
+%%          * `eddh' with `x25519'
+%%          * `ecdh' with `x25519 | secp256k1 | secp256r1 | secp384r1 | secp521r1 |
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
 %%
 %%          The public/private key binaries must be in the same format as returned by
 %%          `generate_key/2'.
+%%
+%%          For `x25519', the returned value is the raw shared secret. Applications
+%%          should derive a symmetric key from it with a KDF before use.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec compute_key(
-    Type :: pk_type(),
+    Type :: ecdh | eddh,
     OtherPublicKey :: binary(),
     MyPrivateKey :: binary(),
-    Param :: pk_param()
+    Param :: ecdh_params()
 ) -> binary().
 compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Algorithm signing algorithm (AtomVM supports `ecdsa')
-%% @param   DigestType hash algorithm identifier
-%% @param   Data message bytes (iodata)
+%% @param   Algorithm signing algorithm (`ecdsa' or `eddsa')
+%% @param   DigestType hash algorithm identifier for `ecdsa', or `none' for `eddsa'
+%% @param   Msg message bytes (iodata)
 %% @param   Key signing key material
-%% @returns Returns a DER-encoded signature as a binary.
+%% @returns Returns the signature as a binary.
 %% @doc     Create a digital signature.
 %%
 %%          AtomVM currently supports:
@@ -434,8 +437,12 @@ compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
 %%          * `Key = [PrivateKeyBin, Curve]' where `Curve' is one of
 %%            `secp256k1 | secp256r1 | secp384r1 | secp521r1 |
 %%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
+%%          * `Algorithm = eddsa' (requires build with libsodium support)
+%%          * `Key = [PrivateKeyBin, ed25519]' and `DigestType = none'
 %%
-%%          The signature is returned in **DER** form.
+%%          Signature encoding depends on `Algorithm':
+%%          * `ecdsa' returns a DER-encoded signature
+%%          * `eddsa' with `ed25519' returns a raw 64-byte Ed25519 signature
 %%
 %%          ECDSA signing requires a random nonce internally.  The quality of
 %%          this nonce depends on the platform entropy source.  Consult your
@@ -444,19 +451,19 @@ compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sign(
-    Algorithm :: ecdsa,
-    DigestType :: hash_algorithm(),
-    Data :: iodata(),
-    Key :: ecdsa_private_key()
+    Algorithm :: ecdsa | eddsa,
+    DigestType :: ecdsa_digest_type() | none,
+    Msg :: iodata(),
+    Key :: [ecdsa_private() | ecdsa_params()] | [eddsa_private() | eddsa_params()]
 ) -> binary().
 sign(_Algorithm, _DigestType, _Data, _Key) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   Algorithm verification algorithm (AtomVM supports `ecdsa')
-%% @param   DigestType hash algorithm identifier
-%% @param   Data message bytes (iodata)
-%% @param   Signature DER-encoded signature
+%% @param   Algorithm verification algorithm (`ecdsa' or `eddsa')
+%% @param   DigestType hash algorithm identifier for `ecdsa', or `none' for `eddsa'
+%% @param   Msg message bytes (iodata)
+%% @param   Signature signature to verify
 %% @param   Key verification key material
 %% @returns Returns `true' if the signature is valid, otherwise `false'.
 %% @doc     Verify a digital signature.
@@ -465,17 +472,23 @@ sign(_Algorithm, _DigestType, _Data, _Key) ->
 %%          * `Algorithm = ecdsa'
 %%          * `Key = [PublicKeyBin, Curve]' where `Curve' is one of
 %%            `secp256k1 | secp256r1 | secp384r1 | secp521r1 |
-%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1`
+%%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
+%%          * `Algorithm = eddsa' (requires build with libsodium support)
+%%          * `Key = [PublicKeyBin, ed25519]' and `DigestType = none'
 %%
-%%          Invalid DER signatures yield `false' (not an exception).
+%%          Signature encoding depends on `Algorithm':
+%%          * `ecdsa' expects a DER-encoded signature
+%%          * `eddsa' with `ed25519' expects a raw 64-byte Ed25519 signature
+%%
+%%          Invalid signatures yield `false' (not an exception).
 %% @end
 %%-----------------------------------------------------------------------------
 -spec verify(
-    Algorithm :: ecdsa,
-    DigestType :: hash_algorithm(),
-    Data :: iodata(),
+    Algorithm :: ecdsa | eddsa,
+    DigestType :: ecdsa_digest_type() | none,
+    Msg :: iodata(),
     Signature :: binary(),
-    Key :: ecdsa_public_key()
+    Key :: [ecdsa_public() | ecdsa_params()] | [eddsa_public() | eddsa_params()]
 ) -> boolean().
 verify(_Algorithm, _DigestType, _Data, _Signature, _Key) ->
     erlang:nif_error(undefined).
@@ -603,14 +616,17 @@ strong_rand_bytes(_N) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @returns Returns a list of tuples describing the crypto library name, version number,
-%%          and version string.
+%% @returns Returns a list of tuples describing the crypto libraries used by crypto.
 %% @doc     Get the name and version of the libraries used by crypto.
 %%
-%%          Returns a list containing a single tuple `{Name, VerNum, VerStr}' where:
-%%          * `Name' is the library name as a binary (e.g., `<<"mbedtls">>')
+%%          Returns a list of one or more tuples `{Name, VerNum, VerStr}' where:
+%%          * `Name' is the library name as a binary (for example, `<<"mbedtls">>'
+%%            or `<<"libsodium">>')
 %%          * `VerNum' is the numeric version according to the library's versioning scheme
 %%          * `VerStr' is the version string as a binary
+%%
+%%          AtomVM may return multiple entries, for example one for Mbed TLS and one
+%%          for libsodium.
 %%
 %%          Example: `[{<<"mbedtls">>, 50790144, <<"Mbed TLS 3.6.1">>}]'
 %% @end

@@ -59,6 +59,10 @@
 #include <mbedtls/pkcs5.h>
 #endif
 
+#ifdef HAVE_LIBSODIUM
+#include <sodium.h>
+#endif
+
 // mbedtls_ct_memcmp is available in 2.28.x+ and 3.1.x+ (absent in 3.0.x)
 #if (MBEDTLS_VERSION_NUMBER >= 0x021C0000 && MBEDTLS_VERSION_NUMBER < 0x03000000) \
     || MBEDTLS_VERSION_NUMBER >= 0x03010000
@@ -72,6 +76,16 @@
 #if MBEDTLS_VERSION_NUMBER > 0x03060100
 #define HAVE_MBEDTLS_ECDSA_RAW_TO_DER 1
 #define HAVE_MBEDTLS_ECDSA_DER_TO_RAW 1
+#endif
+
+#if defined(HAVE_MBEDTLS_ECDSA_RAW_TO_DER) \
+    || (defined(HAVE_LIBSODIUM) && defined(MBEDTLS_PSA_CRYPTO_C))
+#define CRYPTO_SIGN_AVAILABLE 1
+#endif
+
+#if defined(HAVE_MBEDTLS_ECDSA_DER_TO_RAW) \
+    || (defined(HAVE_LIBSODIUM) && defined(MBEDTLS_PSA_CRYPTO_C))
+#define CRYPTO_VERIFY_AVAILABLE 1
 #endif
 
 #define MAX_MD_SIZE 64
@@ -672,16 +686,312 @@ static void do_psa_init(void)
     }
 }
 
+// TODO: MbedTLS PSA Crypto API is expected to add Ed25519/X25519 support in a future version.
+// Once that version is widely adopted, we may be able to replace the libsodium backend with
+// pure PSA API calls.
+#ifdef HAVE_LIBSODIUM
+static void do_sodium_init(void)
+{
+    if (UNLIKELY(sodium_init() < 0)) {
+        abort();
+    }
+}
+
+static term sodium_try_generate_key(
+    Context *ctx, enum pk_type_t key_type, enum pk_param_t pk_param, bool *is_handled)
+{
+    GlobalContext *glb = ctx->global;
+
+    if (key_type == Eddsa && pk_param == Ed25519) {
+        *is_handled = true;
+
+        unsigned char seed[crypto_sign_SEEDBYTES];
+        unsigned char pk[crypto_sign_PUBLICKEYBYTES];
+        unsigned char sk[crypto_sign_SECRETKEYBYTES];
+
+        do_sodium_init();
+        randombytes_buf(seed, sizeof seed);
+
+        if (UNLIKELY(crypto_sign_seed_keypair(pk, sk, seed) != 0)) {
+            sodium_memzero(seed, sizeof seed);
+            sodium_memzero(sk, sizeof sk);
+            RAISE_ERROR(
+                make_crypto_error(__FILE__, __LINE__, "libsodium Ed25519 keygen failed", ctx));
+        }
+
+        if (UNLIKELY(memory_ensure_free(ctx,
+                         TERM_BINARY_HEAP_SIZE(sizeof pk) + TERM_BINARY_HEAP_SIZE(sizeof seed)
+                             + TUPLE_SIZE(2))
+                != MEMORY_GC_OK)) {
+            sodium_memzero(seed, sizeof seed);
+            sodium_memzero(sk, sizeof sk);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        term pub_term = term_from_literal_binary(pk, sizeof pk, &ctx->heap, glb);
+        term priv_term = term_from_literal_binary(seed, sizeof seed, &ctx->heap, glb);
+
+        term result = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result, 0, pub_term);
+        term_put_tuple_element(result, 1, priv_term);
+
+        sodium_memzero(seed, sizeof seed);
+        sodium_memzero(sk, sizeof sk);
+        return result;
+    }
+
+    if ((key_type == Eddh || key_type == Ecdh) && pk_param == X25519) {
+        *is_handled = true;
+
+        unsigned char sk[crypto_scalarmult_SCALARBYTES];
+        unsigned char pk[crypto_scalarmult_BYTES];
+
+        do_sodium_init();
+        randombytes_buf(sk, sizeof sk);
+
+        if (UNLIKELY(crypto_scalarmult_base(pk, sk) != 0)) {
+            sodium_memzero(sk, sizeof sk);
+            RAISE_ERROR(
+                make_crypto_error(__FILE__, __LINE__, "libsodium X25519 keygen failed", ctx));
+        }
+
+        if (UNLIKELY(memory_ensure_free(ctx,
+                         TERM_BINARY_HEAP_SIZE(sizeof pk) + TERM_BINARY_HEAP_SIZE(sizeof sk)
+                             + TUPLE_SIZE(2))
+                != MEMORY_GC_OK)) {
+            sodium_memzero(sk, sizeof sk);
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+
+        term pub_term = term_from_literal_binary(pk, sizeof pk, &ctx->heap, glb);
+        term priv_term = term_from_literal_binary(sk, sizeof sk, &ctx->heap, glb);
+
+        term result = term_alloc_tuple(2, &ctx->heap);
+        term_put_tuple_element(result, 0, pub_term);
+        term_put_tuple_element(result, 1, priv_term);
+
+        sodium_memzero(sk, sizeof sk);
+        return result;
+    }
+
+    *is_handled = false;
+    return term_invalid_term();
+}
+
+static term sodium_try_compute_key(Context *ctx, enum pk_type_t key_type, enum pk_param_t pk_param,
+    term pub_key_term, term priv_key_term, bool *is_handled)
+{
+    GlobalContext *glb = ctx->global;
+
+    if (!((key_type == Eddh || key_type == Ecdh) && pk_param == X25519)) {
+        *is_handled = false;
+        return term_invalid_term();
+    }
+
+    *is_handled = true;
+
+    if (UNLIKELY(!term_is_binary(pub_key_term) || !term_is_binary(priv_key_term))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    const void *pub = term_binary_data(pub_key_term);
+    size_t pub_len = term_binary_size(pub_key_term);
+    const void *priv = term_binary_data(priv_key_term);
+    size_t priv_len = term_binary_size(priv_key_term);
+
+    if (UNLIKELY(pub_len != crypto_scalarmult_BYTES || priv_len != crypto_scalarmult_SCALARBYTES)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    unsigned char shared[crypto_scalarmult_BYTES];
+
+    do_sodium_init();
+    if (UNLIKELY(crypto_scalarmult(shared, priv, pub) != 0)) {
+        sodium_memzero(shared, sizeof shared);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Invalid X25519 public key", ctx));
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(sizeof shared)) != MEMORY_GC_OK)) {
+        sodium_memzero(shared, sizeof shared);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term result = term_from_literal_binary(shared, sizeof shared, &ctx->heap, glb);
+    sodium_memzero(shared, sizeof shared);
+    return result;
+}
+
+static term sodium_try_sign(
+    Context *ctx, term alg_term, term digest_term, term data_term, term key_term, bool *is_handled)
+{
+    GlobalContext *glb = ctx->global;
+
+    *is_handled = false;
+
+    if (!globalcontext_is_term_equal_to_atom_string(glb, alg_term, ATOM_STR("\x5", "eddsa"))) {
+        return term_invalid_term();
+    }
+
+    // Ed25519 is a PureEdDSA scheme with its own internal hashing,
+    // so the digest parameter is ignored (matching OTP behavior).
+    UNUSED(digest_term);
+
+    // Extract curve to decide whether sodium handles this (ed25519) or should
+    // fall through to the PSA path (e.g. ed448). If the key is too malformed
+    // to extract a curve, claim *is_handled since the PSA path cannot produce
+    // a meaningful eddsa error.
+    if (UNLIKELY(!term_is_nonempty_list(key_term))) {
+        *is_handled = true;
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA private key", ctx));
+    }
+
+    term priv_term = term_get_list_head(key_term);
+    term tail = term_get_list_tail(key_term);
+    if (UNLIKELY(!term_is_nonempty_list(tail))) {
+        *is_handled = true;
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA private key", ctx));
+    }
+
+    term curve_term = term_get_list_head(tail);
+    if (!globalcontext_is_term_equal_to_atom_string(glb, curve_term, ATOM_STR("\x7", "ed25519"))) {
+        return term_invalid_term();
+    }
+
+    *is_handled = true;
+
+    if (UNLIKELY(!term_is_binary(priv_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA private key", ctx));
+    }
+
+    const void *seed = term_binary_data(priv_term);
+    size_t seed_len = term_binary_size(priv_term);
+    if (UNLIKELY(seed_len != crypto_sign_SEEDBYTES)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA private key", ctx));
+    }
+
+    void *maybe_allocated_data = NULL;
+    const void *data = NULL;
+    size_t data_len = 0;
+    term iodata_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_result != OK_ATOM)) {
+        free(maybe_allocated_data);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+    }
+
+    unsigned char pk[crypto_sign_PUBLICKEYBYTES];
+    unsigned char sk[crypto_sign_SECRETKEYBYTES];
+    unsigned char sig[crypto_sign_BYTES];
+    unsigned long long sig_len = 0;
+
+    do_sodium_init();
+
+    if (UNLIKELY(crypto_sign_seed_keypair(pk, sk, seed) != 0
+            || crypto_sign_detached(sig, &sig_len, data, data_len, sk) != 0)) {
+        free(maybe_allocated_data);
+        sodium_memzero(sk, sizeof sk);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "libsodium Ed25519 sign failed", ctx));
+    }
+
+    free(maybe_allocated_data);
+    sodium_memzero(sk, sizeof sk);
+
+    if (UNLIKELY(
+            memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(crypto_sign_BYTES)) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    return term_from_literal_binary(sig, crypto_sign_BYTES, &ctx->heap, glb);
+}
+
+static term sodium_try_verify(Context *ctx, term alg_term, term digest_term, term data_term,
+    term sig_term, term key_term, bool *is_handled)
+{
+    GlobalContext *glb = ctx->global;
+
+    *is_handled = false;
+
+    if (!globalcontext_is_term_equal_to_atom_string(glb, alg_term, ATOM_STR("\x5", "eddsa"))) {
+        return term_invalid_term();
+    }
+
+    // Ed25519 is a PureEdDSA scheme with its own internal hashing,
+    // so the digest parameter is ignored (matching OTP behavior).
+    UNUSED(digest_term);
+
+    // Extract curve to decide whether sodium handles this (ed25519) or should
+    // fall through to the PSA path (e.g. ed448). If the key is too malformed
+    // to extract a curve, claim *is_handled since the PSA path cannot produce
+    // a meaningful eddsa error.
+    if (UNLIKELY(!term_is_nonempty_list(key_term))) {
+        *is_handled = true;
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA public key", ctx));
+    }
+
+    term pub_term = term_get_list_head(key_term);
+    term tail = term_get_list_tail(key_term);
+    if (UNLIKELY(!term_is_nonempty_list(tail))) {
+        *is_handled = true;
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA public key", ctx));
+    }
+
+    term curve_term = term_get_list_head(tail);
+    if (!globalcontext_is_term_equal_to_atom_string(glb, curve_term, ATOM_STR("\x7", "ed25519"))) {
+        return term_invalid_term();
+    }
+
+    *is_handled = true;
+
+    if (UNLIKELY(!term_is_binary(sig_term) || term_binary_size(sig_term) != crypto_sign_BYTES)) {
+        return FALSE_ATOM;
+    }
+
+    if (UNLIKELY(!term_is_binary(pub_term))) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA public key", ctx));
+    }
+
+    const void *pub = term_binary_data(pub_term);
+    size_t pub_len = term_binary_size(pub_term);
+    if (UNLIKELY(pub_len != crypto_sign_PUBLICKEYBYTES)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Couldn't get EDDSA public key", ctx));
+    }
+
+    void *maybe_allocated_data = NULL;
+    const void *data = NULL;
+    size_t data_len = 0;
+    term iodata_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
+    if (UNLIKELY(iodata_result != OK_ATOM)) {
+        free(maybe_allocated_data);
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+    }
+
+    const void *sig = term_binary_data(sig_term);
+
+    do_sodium_init();
+    int rc = crypto_sign_verify_detached(sig, data, data_len, pub);
+
+    free(maybe_allocated_data);
+    return (rc == 0) ? TRUE_ATOM : FALSE_ATOM;
+}
+#endif /* HAVE_LIBSODIUM */
+
 static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
-
-    do_psa_init();
 
     GlobalContext *glb = ctx->global;
 
     enum pk_type_t key_type = interop_atom_term_select_int(pk_type_table, argv[0], glb);
     enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, argv[1], glb);
+
+#ifdef HAVE_LIBSODIUM
+    bool sodium_handled;
+    term sodium_result = sodium_try_generate_key(ctx, key_type, pk_param, &sodium_handled);
+    if (sodium_handled) {
+        return sodium_result;
+    }
+#endif
+
+    do_psa_init();
 
     psa_key_type_t psa_key_type;
     size_t psa_key_bits;
@@ -840,12 +1150,21 @@ static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
-    do_psa_init();
-
     GlobalContext *glb = ctx->global;
 
     enum pk_type_t key_type = interop_atom_term_select_int(pk_type_table, argv[0], glb);
     enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, argv[3], glb);
+
+#ifdef HAVE_LIBSODIUM
+    bool sodium_handled;
+    term sodium_result
+        = sodium_try_compute_key(ctx, key_type, pk_param, argv[1], argv[2], &sodium_handled);
+    if (sodium_handled) {
+        return sodium_result;
+    }
+#endif
+
+    do_psa_init();
 
     psa_algorithm_t psa_algo;
     psa_key_type_t psa_key_type;
@@ -1007,14 +1326,21 @@ static const AtomStringIntPair psa_hash_algorithm_table[] = {
     SELECT_INT_DEFAULT(PSA_ALG_NONE)
 };
 
-#ifdef HAVE_MBEDTLS_ECDSA_RAW_TO_DER
-
-#define CRYPTO_SIGN_AVAILABLE 1
+#ifdef CRYPTO_SIGN_AVAILABLE
 
 static term nif_crypto_sign(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+#ifdef HAVE_LIBSODIUM
+    bool sodium_handled;
+    term sodium_result = sodium_try_sign(ctx, argv[0], argv[1], argv[2], argv[3], &sodium_handled);
+    if (sodium_handled) {
+        return sodium_result;
+    }
+#endif
+
+#ifdef HAVE_MBEDTLS_ECDSA_RAW_TO_DER
     do_psa_init();
 
     GlobalContext *glb = ctx->global;
@@ -1194,18 +1520,29 @@ cleanup:
     }
 
     return result;
+#else
+    RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+#endif /* HAVE_MBEDTLS_ECDSA_RAW_TO_DER */
 }
 
-#endif
+#endif /* CRYPTO_SIGN_AVAILABLE */
 
-#ifdef HAVE_MBEDTLS_ECDSA_DER_TO_RAW
-
-#define CRYPTO_VERIFY_AVAILABLE 1
+#ifdef CRYPTO_VERIFY_AVAILABLE
 
 static term nif_crypto_verify(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
 
+#ifdef HAVE_LIBSODIUM
+    bool sodium_handled;
+    term sodium_result
+        = sodium_try_verify(ctx, argv[0], argv[1], argv[2], argv[3], argv[4], &sodium_handled);
+    if (sodium_handled) {
+        return sodium_result;
+    }
+#endif
+
+#ifdef HAVE_MBEDTLS_ECDSA_DER_TO_RAW
     do_psa_init();
 
     GlobalContext *glb = ctx->global;
@@ -1375,9 +1712,12 @@ cleanup:
     }
 
     return result;
+#else
+    RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unsupported key type or parameter", ctx));
+#endif /* HAVE_MBEDTLS_ECDSA_DER_TO_RAW */
 }
 
-#endif
+#endif /* CRYPTO_VERIFY_AVAILABLE */
 
 static const AtomStringIntPair cmac_algorithm_bits_table[] = {
     { ATOM_STR("\xB", "aes_128_cbc"), 128 },
@@ -3050,12 +3390,31 @@ term nif_crypto_info_lib(Context *ctx, int argc, term argv[])
         = get_mbedtls_version_string_full(version_string_buf, sizeof(version_string_buf));
     size_t version_string_len = strlen(version_string);
 
+#ifdef HAVE_LIBSODIUM
+    const char *libsodium_str = "libsodium";
+    size_t libsodium_len = strlen("libsodium");
+    const char *libsodium_version_str = sodium_version_string();
+    size_t libsodium_version_len = strlen(libsodium_version_str);
+    int libsodium_major = sodium_library_version_major();
+    int libsodium_minor = sodium_library_version_minor();
+    int64_t libsodium_version_number = (int64_t) libsodium_major * 10000 + libsodium_minor;
+
+    if (UNLIKELY(memory_ensure_free(ctx,
+                     LIST_SIZE(2, TUPLE_SIZE(3)) + TERM_BINARY_HEAP_SIZE(mbedtls_len)
+                         + TERM_BINARY_HEAP_SIZE(version_string_len) + BOXED_INT64_SIZE
+                         + TERM_BINARY_HEAP_SIZE(libsodium_len)
+                         + TERM_BINARY_HEAP_SIZE(libsodium_version_len) + BOXED_INT64_SIZE)
+            != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+#else
     if (UNLIKELY(memory_ensure_free(ctx,
                      LIST_SIZE(1, TUPLE_SIZE(3)) + TERM_BINARY_HEAP_SIZE(mbedtls_len)
                          + TERM_BINARY_HEAP_SIZE(version_string_len) + BOXED_INT64_SIZE)
             != MEMORY_GC_OK)) {
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+#endif
 
     term mbedtls_term = term_from_literal_binary(mbedtls_str, mbedtls_len, &ctx->heap, ctx->global);
     term version_term = term_make_maybe_boxed_int64(MBEDTLS_VERSION_NUMBER, &ctx->heap);
@@ -3067,7 +3426,23 @@ term nif_crypto_info_lib(Context *ctx, int argc, term argv[])
     term_put_tuple_element(mbedtls_tuple, 1, version_term);
     term_put_tuple_element(mbedtls_tuple, 2, version_string_term);
 
+#ifdef HAVE_LIBSODIUM
+    term libsodium_term
+        = term_from_literal_binary(libsodium_str, libsodium_len, &ctx->heap, ctx->global);
+    term libsodium_version_term = term_make_maybe_boxed_int64(libsodium_version_number, &ctx->heap);
+    term libsodium_version_string_term = term_from_literal_binary(
+        libsodium_version_str, libsodium_version_len, &ctx->heap, ctx->global);
+
+    term libsodium_tuple = term_alloc_tuple(3, &ctx->heap);
+    term_put_tuple_element(libsodium_tuple, 0, libsodium_term);
+    term_put_tuple_element(libsodium_tuple, 1, libsodium_version_term);
+    term_put_tuple_element(libsodium_tuple, 2, libsodium_version_string_term);
+
+    term list = term_list_prepend(mbedtls_tuple, term_nil(), &ctx->heap);
+    return term_list_prepend(libsodium_tuple, list, &ctx->heap);
+#else
     return term_list_prepend(mbedtls_tuple, term_nil(), &ctx->heap);
+#endif
 }
 
 static const struct Nif crypto_hash_nif = {
