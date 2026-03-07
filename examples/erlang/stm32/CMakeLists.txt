@@ -22,6 +22,9 @@ project(examples_erlang_stm32)
 
 include(BuildErlang)
 
+# STM32 examples bundle runtime libs in the same AVM and targets are flash-constrained.
+set(AVM_PRUNE_RUNNABLES ON)
+
 pack_runnable(blink_weact_studio_blackpill blink_weact_studio_blackpill eavmlib)
 pack_runnable(blink_weact_studio_h562 blink_weact_studio_h562 eavmlib)
 pack_runnable(blink_weact_studio_h743 blink_weact_studio_h743 eavmlib)

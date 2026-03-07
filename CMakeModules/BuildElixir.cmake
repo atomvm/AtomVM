@@ -81,6 +81,10 @@ macro(pack_runnable avm_name main)
     else()
         set(INCLUDE_LINES "")
     endif()
+    set(PACKBEAM_PRUNE_ARGS "")
+    if(AVM_PRUNE_RUNNABLES)
+        set(PACKBEAM_PRUNE_ARGS "-p")
+    endif()
 
     foreach(archive_name ${ARGN})
         if(${archive_name} STREQUAL "exavmlib")
@@ -94,7 +98,7 @@ macro(pack_runnable avm_name main)
     add_custom_command(
         OUTPUT ${avm_name}.avm
         DEPENDS ${avm_name}_main ${ARCHIVE_TARGETS} PackBEAM Elixir.${main}.beam ${ARCHIVES}
-        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create -s Elixir.${main} ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
+        COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${PACKBEAM_PRUNE_ARGS} -s Elixir.${main} ${INCLUDE_LINES} ${avm_name}.avm Elixir.${main}.beam ${ARCHIVES}
         COMMENT "Packing runnable ${avm_name}.avm"
         VERBATIM
     )
