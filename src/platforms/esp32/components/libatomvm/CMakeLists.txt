@@ -29,6 +29,9 @@ idf_component_register(INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../lib
 # "pedantic" flag should be disabled rather poluting diagnostics with warnings caused from 3rd party
 option(AVM_PEDANTIC_WARNINGS "Pedantic compiler warnings" OFF)
 
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_OS esp_idf)
+
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../libAtomVM" "libAtomVM")
 
 # Add directory with platform_atomic.h if we mean to use it

@@ -33,7 +33,10 @@ start() ->
             % beam returns a list and probably so should AtomVM.
             assert(is_list(erlang:system_info(system_architecture)));
         _ ->
-            assert(is_binary(erlang:system_info(system_architecture)))
+            SystemArchitecture = erlang:system_info(system_architecture),
+            assert(is_binary(SystemArchitecture)),
+            2 = count_hyphens(SystemArchitecture),
+            false = starts_with_known_os(SystemArchitecture)
     end,
     SystemVersion = erlang:system_info(system_version),
     true = is_list(SystemVersion),
@@ -73,6 +76,16 @@ loop(Pid) ->
     loop(undefined).
 
 assert(true) -> ok.
+
+count_hyphens(<<>>) -> 0;
+count_hyphens(<<"-", Rest/binary>>) -> 1 + count_hyphens(Rest);
+count_hyphens(<<_, Rest/binary>>) -> count_hyphens(Rest).
+
+starts_with_known_os(<<"Darwin-", _/binary>>) -> true;
+starts_with_known_os(<<"Linux-", _/binary>>) -> true;
+starts_with_known_os(<<"FreeBSD-", _/binary>>) -> true;
+starts_with_known_os(<<"DragonFly-", _/binary>>) -> true;
+starts_with_known_os(_) -> false.
 
 test_port_count("BEAM") ->
     N = erlang:system_info(port_count),
