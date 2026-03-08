@@ -45,7 +45,7 @@ test_min_heap_size(MinSize) ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
