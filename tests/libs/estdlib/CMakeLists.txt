@@ -52,6 +52,7 @@ set(ERLANG_MODULES
     test_supervisor
     test_lists_subtraction
     test_file
+    test_filename
     test_tcp_socket
     test_udp_socket
     notify_init_server
