@@ -120,6 +120,9 @@ int enif_release_resource(void *resource)
     return true;
 }
 
+// Suppress deprecation warning for the implementation
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
 {
     if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
@@ -127,6 +130,7 @@ ERL_NIF_TERM enif_make_resource(ErlNifEnv *env, void *obj)
     }
     return term_from_resource(obj, &env->heap);
 }
+#pragma GCC diagnostic pop
 
 static void enif_select_event_message_dispose(Message *message, GlobalContext *global, bool from_task)
 {
@@ -663,16 +667,13 @@ const ErlNifResourceTypeInit resource_binary_resource_type_init = {
     .dtor = resource_binary_dtor,
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 ERL_NIF_TERM enif_make_resource_binary(ErlNifEnv *env, void *obj, const void *data, size_t size)
 {
-    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_erl_nif_env_ensure_free(env, TERM_BOXED_REFC_BINARY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    struct ResourceBinary *resource_binary = enif_alloc_resource(env->global->resource_binary_resource_type, sizeof(struct ResourceBinary));
-    resource_binary->managing_resource = refc_binary_from_data(obj);
-    resource_binary->data = data;
-
-    term result = term_from_resource_binary_pointer(resource_binary, size, &env->heap);
-    refc_binary_decrement_refcount(refc_binary_from_data(resource_binary), env->global);
-    return result;
+    return term_from_resource_binary(obj, data, size, &env->heap, env->global);
 }
+#pragma GCC diagnostic pop

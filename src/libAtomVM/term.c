@@ -1373,9 +1373,13 @@ term term_from_resource_type_and_serialize_ref(uint64_t resource_type_ptr, uint6
     return term_from_ref_ticks(ref_ticks, heap);
 }
 
-term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t size, Heap *heap)
+term term_from_resource_binary(void *obj, const void *data, size_t size, Heap *heap, GlobalContext *glb)
 {
-    struct RefcBinary *refc = refc_binary_from_data(resource);
+    struct ResourceBinary *resource_binary = enif_alloc_resource(glb->resource_binary_resource_type, sizeof(struct ResourceBinary));
+    resource_binary->managing_resource = refc_binary_from_data(obj);
+    resource_binary->data = data;
+
+    struct RefcBinary *refc = refc_binary_from_data(resource_binary);
     term *boxed_value = memory_heap_alloc(heap, TERM_BOXED_REFC_BINARY_SIZE);
     boxed_value[0] = ((TERM_BOXED_REFC_BINARY_SIZE - 1) << 6) | TERM_BOXED_REFC_BINARY;
     boxed_value[1] = (term) size;
@@ -1385,6 +1389,8 @@ term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t s
     // Add the resource to the mso list
     refc_binary_add_refcount(refc, 1);
     heap->root->mso_list = term_list_init_prepend(boxed_value + REFC_BINARY_CONS_OFFSET, ret, heap->root->mso_list);
-    refc_binary_increment_refcount(resource->managing_resource);
+    refc_binary_increment_refcount(resource_binary->managing_resource);
+
+    refc_binary_decrement_refcount(refc, glb);
     return ret;
 }

@@ -3012,14 +3012,14 @@ term term_from_resource_type_and_serialize_ref(uint64_t resource_type_ptr, uint6
  * @details Increment reference count of resource and create a refc binary for
  * the pointer and size.
  *
- * @param resource the resource managing the binary
+ * @param obj the managing resource object
  * @param data the pointer to the data
  * @param size the size of the binary
  * @param heap the heap to allocate memory in
  * @param glb the global context
- * @return a refc binary
+ * @return a binary term managed by obj
  */
-term term_from_resource_binary_pointer(struct ResourceBinary *resource, size_t size, Heap *heap);
+term term_from_resource_binary(void *obj, const void *data, size_t size, Heap *heap, GlobalContext *glb);
 
 #ifdef __cplusplus
 }

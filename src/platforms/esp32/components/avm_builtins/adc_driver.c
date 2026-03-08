@@ -348,7 +348,7 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
         ESP_LOGE(TAG, "failed to allocate memory for resource: %s:%i.", __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    ERL_NIF_TERM unit_obj = enif_make_resource(erl_nif_env_from_context(ctx), unit_rsrc);
+    ERL_NIF_TERM unit_obj = term_from_resource(unit_rsrc, &ctx->heap);
     enif_release_resource(unit_rsrc); // decrement refcount after enif_alloc_resource
 
     // {ok, {'$adc', Unit :: resource(), ref()}}
@@ -500,7 +500,7 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    term chan_obj = enif_make_resource(erl_nif_env_from_context(ctx), chan_rsrc);
+    term chan_obj = term_from_resource(chan_rsrc, &ctx->heap);
     enif_release_resource(chan_rsrc); // decrement refcount after enif_alloc_resource
 
     // {ok, {'$adc', resource(), ref()}}

@@ -682,7 +682,11 @@ static EM_BOOL html5api_touch_callback(int eventType, const EmscriptenTouchEvent
             enif_release_resource(resource);                                                                                                                                             \
             return term_from_emscripten_result(result, ctx);                                                                                                                             \
         }                                                                                                                                                                                \
-        term resource_term = enif_make_resource(erl_nif_env_from_context(ctx), resource);                                                                                                \
+        if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {                                                                                     \
+            enif_release_resource(resource);                                                                                                                                             \
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                                                                                             \
+        }                                                                                                                                                                                \
+        term resource_term = term_from_resource(resource, &ctx->heap);                                                                                                                   \
         enif_release_resource(resource);                                                                                                                                                 \
         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(3), 1, &resource_term, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {                                                         \
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);                                                                                                                                             \

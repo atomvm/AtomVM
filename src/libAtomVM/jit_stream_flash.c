@@ -535,7 +535,11 @@ static term nif_jit_stream_flash_new(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    term obj = enif_make_resource(erl_nif_env_from_context(ctx), js);
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        enif_release_resource(js);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term obj = term_from_resource(js, &ctx->heap);
     enif_release_resource(js); // decrement refcount after enif_alloc_resource
     return obj;
 }
