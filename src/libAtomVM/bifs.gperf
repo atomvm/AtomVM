@@ -18,6 +18,11 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+/**
+ * When adding a new function here, add also doc + typespec + function stub that
+ * calls erlang:nif_error(undefined).
+ */
+
 %readonly-tables
 
 %{
