@@ -343,21 +343,18 @@ static term nif_adc_init(Context *ctx, int argc, term argv[])
     }
 #endif
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
-        enif_release_resource(unit_rsrc);
-        ESP_LOGE(TAG, "failed to allocate memory for resource: %s:%i.", __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
-    ERL_NIF_TERM unit_obj = term_from_resource(unit_rsrc, &ctx->heap);
-    enif_release_resource(unit_rsrc); // decrement refcount after enif_alloc_resource
-
     // {ok, {'$adc', Unit :: resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
     ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &unit_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
+        enif_release_resource(unit_rsrc);
         ESP_LOGE(TAG, "failed to allocate tuple memory size %u: %s:%i.", requested_size, __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
+
+    term unit_obj = term_from_resource(unit_rsrc, &ctx->heap);
+    enif_release_resource(unit_rsrc); // decrement refcount after enif_alloc_resource
+
     term unit_resource = term_alloc_tuple(3, &ctx->heap);
     term_put_tuple_element(unit_resource, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "$adc")));
     term_put_tuple_element(unit_resource, 1, unit_obj);
@@ -494,22 +491,17 @@ static term nif_adc_acquire(Context *ctx, int argc, term argv[])
     chan_rsrc->channel = adc_channel;
     chan_rsrc->calibration = calibration;
 
-    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE != MEMORY_GC_OK))) {
+    // {ok, {'$adc', resource(), ref()}}
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE + TERM_BOXED_REFERENCE_RESOURCE_SIZE;
+    ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
+    if (UNLIKELY(memory_ensure_free(ctx, requested_size) != MEMORY_GC_OK)) {
         enif_release_resource(chan_rsrc);
-        ESP_LOGE(TAG, "failed to allocate memory for resource: %s:%i.", __FILE__, __LINE__);
+        ESP_LOGE(TAG, "failed to allocate tuple memory size %u: %s:%i.", requested_size, __FILE__, __LINE__);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term chan_obj = term_from_resource(chan_rsrc, &ctx->heap);
     enif_release_resource(chan_rsrc); // decrement refcount after enif_alloc_resource
-
-    // {ok, {'$adc', resource(), ref()}}
-    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(3) + REF_SIZE;
-    ESP_LOGD(TAG, "Requesting memory size %u for return message", requested_size);
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &chan_obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        ESP_LOGE(TAG, "failed to allocate tuple memory size %u: %s:%i.", requested_size, __FILE__, __LINE__);
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-    }
 
     term chan_resource = term_alloc_tuple(3, &ctx->heap);
     term_put_tuple_element(chan_resource, 0, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "$adc")));
