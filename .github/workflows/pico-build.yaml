@@ -84,6 +84,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: build-atomvmlib
     strategy:
+      fail-fast: false
       matrix:
         board: ["pico", "pico_w", "pico2", "pico2_w"]
         platform: [""]
