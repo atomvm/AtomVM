@@ -3134,7 +3134,10 @@ do_get_tail(
 ) ->
     MSt1 = cond_raise_badarg({BSOffsetReg, '&', 2#111, '!=', 0}, MMod, MSt0),
     {MSt2, BSOffseBytesReg} = MMod:shift_right(MSt1, BSOffsetReg, 3),
-    {MSt3, TailBytesReg0} = MMod:get_array_element(MSt2, BSBinaryReg, 1),
+    % BSBinaryReg is a tagged binary term from the match state;
+    % untag it before using as a pointer for get_array_element
+    {MSt2b, BSBinaryPtrReg} = MMod:and_(MSt2, BSBinaryReg, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt3, TailBytesReg0} = MMod:get_array_element(MSt2b, {free, BSBinaryPtrReg}, 1),
     MSt4 = MMod:sub(MSt3, TailBytesReg0, BSOffseBytesReg),
     {MSt5, HeapSizeReg} = MMod:call_primitive(MSt4, ?PRIM_TERM_SUB_BINARY_HEAP_SIZE, [
         BSBinaryReg, {free, TailBytesReg0}
