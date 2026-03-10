@@ -113,9 +113,11 @@ jobs:
     - name: "Rename and write sha256sum"
       working-directory: build
       run: |
-        ATOMVMLIB_FILE=atomvmlib-${{ github.ref_name }}.avm
-        mv libs/atomvmlib.avm "libs/${ATOMVMLIB_FILE}" &&
-        sha256sum "libs/${ATOMVMLIB_FILE}" > "libs/${ATOMVMLIB_FILE}.sha256"
+        for variant in atomvmlib atomvmlib-esp32 atomvmlib-rp2 atomvmlib-stm32 atomvmlib-emscripten; do
+          VARIANT_FILE="${variant}-${{ github.ref_name }}.avm"
+          mv "libs/${variant}.avm" "libs/${VARIANT_FILE}" &&
+          sha256sum "libs/${VARIANT_FILE}" > "libs/${VARIANT_FILE}.sha256"
+        done
         HELLO_WORLD_FILE=hello_world-${{ github.ref_name }}.avm
         mv examples/erlang/hello_world.avm "examples/erlang/${HELLO_WORLD_FILE}"
         sha256sum "examples/erlang/${HELLO_WORLD_FILE}" > "examples/erlang/${HELLO_WORLD_FILE}.sha256"
@@ -129,5 +131,13 @@ jobs:
         files: |
           build/libs/atomvmlib-${{ github.ref_name }}.avm
           build/libs/atomvmlib-${{ github.ref_name }}.avm.sha256
+          build/libs/atomvmlib-esp32-${{ github.ref_name }}.avm
+          build/libs/atomvmlib-esp32-${{ github.ref_name }}.avm.sha256
+          build/libs/atomvmlib-rp2-${{ github.ref_name }}.avm
+          build/libs/atomvmlib-rp2-${{ github.ref_name }}.avm.sha256
+          build/libs/atomvmlib-stm32-${{ github.ref_name }}.avm
+          build/libs/atomvmlib-stm32-${{ github.ref_name }}.avm.sha256
+          build/libs/atomvmlib-emscripten-${{ github.ref_name }}.avm
+          build/libs/atomvmlib-emscripten-${{ github.ref_name }}.avm.sha256
           build/examples/erlang/hello_world-${{ github.ref_name }}.avm
           build/examples/erlang/hello_world-${{ github.ref_name }}.avm.sha256

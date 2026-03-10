@@ -22,8 +22,8 @@ project(examples_emscripten)
 
 include(BuildErlang)
 
-pack_runnable(run_script run_script estdlib eavmlib)
-pack_runnable(call_cast call_cast eavmlib)
-pack_runnable(html5_events html5_events estdlib eavmlib)
-pack_runnable(echo_websocket echo_websocket estdlib eavmlib)
-pack_runnable(wasm_webserver wasm_webserver estdlib eavmlib)
+pack_runnable(run_script run_script estdlib eavmlib avm_emscripten)
+pack_runnable(call_cast call_cast eavmlib avm_emscripten)
+pack_runnable(html5_events html5_events estdlib eavmlib avm_emscripten)
+pack_runnable(echo_websocket echo_websocket estdlib eavmlib avm_emscripten)
+pack_runnable(wasm_webserver wasm_webserver estdlib eavmlib avm_network avm_emscripten)
