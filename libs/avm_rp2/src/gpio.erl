@@ -65,7 +65,7 @@
 -type low_level() :: low | 0.
 -type high_level() :: high | 1.
 -type level() :: low_level() | high_level().
-%% Valid pin levels can be atom or binary representation.
+%% Valid pin levels can be atom or integer representation.
 -type gpio() :: pid().
 %% This is the pid returned by `gpio:start/0'. Unlike ESP32 and STM32, this
 %% is not a real port but a process wrapping NIF calls.
@@ -118,6 +118,8 @@ close(GPIO) ->
     GPIO ! {'$call', {self(), Ref}, {close}},
     receive
         {Ref, Result} -> Result
+    after 5000 ->
+        {error, timeout}
     end.
 
 %%-----------------------------------------------------------------------------
@@ -227,7 +229,7 @@ remove_int(_GPIO, _Pin) ->
 %%-----------------------------------------------------------------------------
 -spec init(Pin :: pin()) -> ok.
 init(_Pin) ->
-    ok.
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to deinitialize
@@ -237,7 +239,7 @@ init(_Pin) ->
 %%-----------------------------------------------------------------------------
 -spec deinit(Pin :: pin()) -> ok.
 deinit(_Pin) ->
-    ok.
+    erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
 %% @param   Pin number to set operational mode

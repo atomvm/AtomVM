@@ -56,7 +56,7 @@
 %% a list of pin numbers, or the atom `all'.
 -type gpio_bank() :: a | b | c | d | e | f | g | h | i | j | k.
 %% STM32 gpio banks vary by board, some only break out `a' thru `h'.
--type direction() :: input | output | output_od | mode_config().
+-type direction() :: input | output | output_od.
 %% The direction is used to set the mode of operation for a GPIO pin, either as an input, an output, or output with open drain.
 %% Pull mode and output_speed must be set at the same time as direction. See @type mode_config()
 -type mode_config() :: {direction(), pull()} | {output, pull(), output_speed()}.
@@ -68,7 +68,7 @@
 -type low_level() :: low | 0.
 -type high_level() :: high | 1.
 -type level() :: low_level() | high_level().
-%% Valid pin levels can be atom or binary representation.
+%% Valid pin levels can be atom or integer representation.
 -type gpio() :: port().
 %% This is the port returned by `gpio:start/0'.
 -type trigger() :: none | rising | falling | both | low | high.
@@ -79,7 +79,7 @@
 %% @doc     Start the GPIO driver port
 %%
 %%          Returns the port of the active GPIO port driver, otherwise the GPIO
-%%          port driver will be stared and registered as `gpio'. The use of
+%%          port driver will be started and registered as `gpio'. The use of
 %%          `gpio:open/0' or `gpio:start/0' is required before using any functions
 %%          that require a GPIO port as a parameter.
 %% @end
@@ -97,7 +97,7 @@ start() ->
 %% @returns Port | error | {error, Reason}
 %% @doc     Start the GPIO driver port
 %%
-%%          The GPIO port driver will be stared and registered as `gpio'. If the
+%%          The GPIO port driver will be started and registered as `gpio'. If the
 %%          port has already been started through the `gpio:open/0' or
 %%          `gpio:start/0' the command will fail. The use of `gpio:open/0' or
 %%          `gpio:start/0' is required before using any functions that require a
@@ -163,7 +163,7 @@ read(GPIO, Pin) ->
 %%          Pins can be used for input, output, or output with open drain.
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_direction(GPIO :: gpio(), Pin :: pin(), Direction :: direction()) ->
+-spec set_direction(GPIO :: gpio(), Pin :: pin(), Direction :: direction() | mode_config()) ->
     ok | {error, Reason :: atom()} | error.
 set_direction(GPIO, Pin, Direction) ->
     port:call(GPIO, {set_direction, Pin, Direction}).
@@ -274,7 +274,7 @@ deinit(_Pin) ->
 %% </pre>
 %% @end
 %%-----------------------------------------------------------------------------
--spec set_pin_mode(Pin :: pin(), Direction :: direction()) ->
+-spec set_pin_mode(Pin :: pin(), Direction :: direction() | mode_config()) ->
     ok | {error, Reason :: atom()} | error.
 set_pin_mode(_Pin, _Mode) ->
     erlang:nif_error(undefined).
