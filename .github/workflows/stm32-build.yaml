@@ -128,11 +128,12 @@ jobs:
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
 
     - name: "Initialize CodeQL"
+      if: matrix.device == 'stm32f407vgt6'
       uses: github/codeql-action/init@v4
       with:
         languages: 'cpp'
         build-mode: manual
-        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql,./code-queries/allocations-exceeding-ensure-free.ql
+        queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql,./code-queries/allocations-exceeding-ensure-free.ql,./code-queries/allocations-without-ensure-free.ql
 
     - name: "Build for ${{ matrix.device }}"
       shell: bash
@@ -145,6 +146,7 @@ jobs:
         cmake --build .
 
     - name: "Perform CodeQL Analysis"
+      if: matrix.device == 'stm32f407vgt6'
       uses: github/codeql-action/analyze@v4
 
     - name: "Check firmware size for ${{ matrix.device }}"

@@ -137,57 +137,95 @@ predicate directParamPlusConstAlloc(Function f, int paramIndex, int constPart) {
 }
 
 /**
- * Computes the constant allocation size for a call to a function that
- * transitively calls `memory_heap_alloc` without its own ensure_free.
- *
- * Case 1: The callee has a direct `memory_heap_alloc` with a fully constant size.
- * Case 2: The callee has `memory_heap_alloc(heap, constant + param)` and the
- *         caller passes a constant for that parameter.
- * Case 3: Wrapper function -- the callee doesn't directly call `memory_heap_alloc`
- *         but calls another function that does, and we can compute its size
- *         via a function-level summary (avoids recursing over calls).
+ * Holds if `leafCall` is a call reachable from function `f` (through wrapper
+ * functions that don't call ensure_free) to a function that directly calls
+ * `memory_heap_alloc`. This is a monotonic reachability predicate that avoids
+ * non-monotonic recursion through aggregation.
  */
-pragma[noinline]
-int getConstAllocSize(FunctionCall call) {
-    exists(Function callee | callee = call.getTarget() |
-        // Case 1: Direct memory_heap_alloc with fully constant size
-        directlyCallsHeapAlloc(callee) and
-        not callsEnsureFree(callee) and
-        result = directFullyConstAllocSize(callee) and
-        // Ensure there's no parameter-dependent alloc (avoid double-counting)
-        not directParamPlusConstAlloc(callee, _, _)
-        or
-        // Case 2: Direct memory_heap_alloc with constant + param, caller passes constant
-        exists(int paramIndex, int constPart, int paramVal |
-            directlyCallsHeapAlloc(callee) and
-            not callsEnsureFree(callee) and
-            directParamPlusConstAlloc(callee, paramIndex, constPart) and
-            paramVal = constExprValue(call.getArgument(paramIndex)) and
-            result = constPart + paramVal
-        )
-        or
-        // Case 3: Wrapper function -- use function-level summary
-        not directlyCallsHeapAlloc(callee) and
-        not callsEnsureFree(callee) and
-        transitivelyCallsHeapAllocWithoutEnsureFree(callee) and
-        result = funcConstAllocSize(callee)
+pragma[nomagic]
+predicate reachableLeafAllocCall(Function f, FunctionCall leafCall) {
+    // Base: f directly contains a call to a wrapper that directly allocates
+    leafCall.getEnclosingFunction() = f and
+    not isEnsureFreeCall(leafCall) and
+    not leafCall.getTarget().hasName("memory_heap_alloc") and
+    directlyCallsHeapAlloc(leafCall.getTarget()) and
+    not callsEnsureFree(leafCall.getTarget())
+    or
+    // Recursive: f calls wrapper g which has reachable leaf alloc calls
+    exists(FunctionCall callToG, Function g |
+        callToG.getEnclosingFunction() = f and
+        g = callToG.getTarget() and
+        not callsEnsureFree(g) and
+        not isEnsureFreeCall(callToG) and
+        not g.hasName("memory_heap_alloc") and
+        reachableLeafAllocCall(g, leafCall)
     )
 }
 
 /**
- * Gets the constant allocation size reachable within function `f`
- * (through inner calls that allocate without their own ensure_free).
- * This is a function-level summary that avoids per-call recursion.
- * May return multiple values; callers use maxConstAllocSize to take the max.
+ * Gets the constant allocation size for a call to a function that directly
+ * calls `memory_heap_alloc` (a leaf wrapper). Non-recursive: only considers
+ * the direct `memory_heap_alloc` calls within the callee.
  */
-pragma[nomagic]
-int funcConstAllocSize(Function f) {
-    exists(FunctionCall innerCall |
-        innerCall.getEnclosingFunction() = f and
-        transitivelyCallsHeapAllocWithoutEnsureFree(innerCall.getTarget()) and
-        not isEnsureFreeCall(innerCall) and
-        not innerCall.getTarget().hasName("memory_heap_alloc") and
-        result = getConstAllocSize(innerCall)
+pragma[noinline]
+int leafAllocSize(FunctionCall call) {
+    exists(Function callee | callee = call.getTarget() |
+        directlyCallsHeapAlloc(callee) and
+        not callsEnsureFree(callee) and
+        result =
+            sum(int s | s = directFullyConstAllocSize(callee) | s)
+            +
+            sum(int paramIndex, int constPart |
+                directParamPlusConstAlloc(callee, paramIndex, constPart) and
+                exists(constExprValue(call.getArgument(paramIndex)))
+            | constPart + constExprValue(call.getArgument(paramIndex)))
+    )
+}
+
+/**
+ * Computes the total constant allocation size for a call to a function that
+ * transitively calls `memory_heap_alloc` without its own ensure_free.
+ *
+ * Aggregates all applicable constant contributions from the callee:
+ * - All fully-constant direct `memory_heap_alloc` sizes
+ * - All `memory_heap_alloc(heap, constant + param)` where the caller passes
+ *   a constant for that parameter
+ * - All transitive wrapper function contributions (via reachableLeafAllocCall)
+ */
+pragma[noinline]
+int getConstAllocSize(FunctionCall call) {
+    exists(Function callee | callee = call.getTarget() |
+        not callsEnsureFree(callee) and
+        transitivelyCallsHeapAllocWithoutEnsureFree(callee) and
+        // At least one constant contribution must exist
+        (
+            exists(directFullyConstAllocSize(callee))
+            or
+            exists(int pi, int cp |
+                directParamPlusConstAlloc(callee, pi, cp) and
+                exists(constExprValue(call.getArgument(pi)))
+            )
+            or
+            exists(FunctionCall leafCall |
+                reachableLeafAllocCall(callee, leafCall) and
+                exists(leafAllocSize(leafCall))
+            )
+        ) and
+        result =
+            // Sum all fully-constant direct allocations
+            sum(int s | s = directFullyConstAllocSize(callee) | s)
+            +
+            // Sum all param+const allocations where caller passes a constant
+            sum(int paramIndex, int constPart |
+                directParamPlusConstAlloc(callee, paramIndex, constPart) and
+                exists(constExprValue(call.getArgument(paramIndex)))
+            | constPart + constExprValue(call.getArgument(paramIndex)))
+            +
+            // Sum transitive wrapper contributions via reachable leaf calls
+            sum(FunctionCall leafCall, int leafSize |
+                reachableLeafAllocCall(callee, leafCall) and
+                leafSize = leafAllocSize(leafCall)
+            | leafSize)
     )
 }
 
