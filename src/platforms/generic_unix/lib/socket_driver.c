@@ -255,8 +255,8 @@ static term init_udp_socket(Context *ctx, SocketDriverData *socket_data, term pa
             listener->base.handler = active_recvfrom_callback;
             listener->buf_size = socket_data->buffer;
             listener->process_id = ctx->process_id;
-            sys_register_listener(glb, &listener->base);
             socket_data->active_listener = listener;
+            sys_register_listener(glb, &listener->base);
         }
     }
     return ret;
@@ -340,8 +340,8 @@ static term init_client_tcp_socket(Context *ctx, SocketDriverData *socket_data, 
             listener->base.handler = active_recv_callback;
             listener->buf_size = socket_data->buffer;
             listener->process_id = ctx->process_id;
-            sys_register_listener(glb, &listener->base);
             socket_data->active_listener = listener;
+            sys_register_listener(glb, &listener->base);
         }
     }
     return ret;
@@ -1017,8 +1017,8 @@ static void do_recv(Context *ctx, term pid, term ref, term length, term timeout,
     listener->length = term_to_int(length);
     listener->buffer = socket_data->buffer;
     listener->ref_ticks = term_to_ref_ticks(ref);
-    sys_register_listener(glb, &listener->base);
     socket_data->passive_listener = listener;
+    sys_register_listener(glb, &listener->base);
 }
 
 void socket_driver_do_recvfrom(Context *ctx, term pid, term ref, term length, term timeout)
@@ -1119,8 +1119,8 @@ void socket_driver_do_accept(Context *ctx, term pid, term ref, term timeout)
     listener->length = 0;
     listener->buffer = 0;
     listener->ref_ticks = term_to_ref_ticks(ref);
-    sys_register_listener(glb, &listener->base);
     socket_data->passive_listener = listener;
+    sys_register_listener(glb, &listener->base);
 }
 
 static NativeHandlerResult socket_consume_mailbox(Context *ctx)
