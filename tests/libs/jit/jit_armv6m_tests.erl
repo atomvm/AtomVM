@@ -723,7 +723,7 @@ if_block_test_() ->
                         "   8:	d000      	beq.n	0xc\n"
                         "   a:	3601      	adds	r6, #1\n"
                         "   c:	e078      	b.n	0x100\n"
-                        "   e:	0000      	movs	r0, r0\n"
+                        "   e:	ffff      	.short	0xffff\n"
                         "  10:	07cb      	lsls	r3, r1, #31\n"
                         "  12:	0000      	movs	r0, r0"
                     >>,
@@ -1168,7 +1168,7 @@ if_block_test_() ->
                         "   8:	dd00      	ble.n	0xc\n"
                         "   a:	3602      	adds	r6, #2\n"
                         "   c:	e078      	b.n	0x100\n"
-                        "   e:	0000      	movs	r0, r0\n"
+                        "   e:	ffff      	.short	0xffff\n"
                         "  10:	03ff      	lsls	r7, r7, #15\n"
                         "  12:	0000      	movs	r0, r0"
                     >>,
@@ -1193,7 +1193,7 @@ if_block_test_() ->
                         "   8:	dd00      	ble.n	0xc\n"
                         "   a:	3602      	adds	r6, #2\n"
                         "   c:	e078      	b.n	0x100\n"
-                        "   e:	0000      	movs	r0, r0\n"
+                        "   e:	ffff      	.short	0xffff\n"
                         "  10:	03ff      	lsls	r7, r7, #15\n"
                         "  12:	0000      	movs	r0, r0"
                     >>,
@@ -1671,7 +1671,7 @@ call_bif_with_large_literal_integer_test() ->
             "  38:	9705      	str	r7, [sp, #20]\n"
             "  3a:	46b6      	mov	lr, r6\n"
             "  3c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
-            "  3e:	0000      	movs	r0, r0\n"
+            "  3e:	ffff      	.short	0xffff\n"
             "  40:	e895 3b7f 	ldmia.w	r5, {r0, r1, r2, r3, r4, r5, r6, r8, r9, fp, ip, sp}\n"
             "  44:	6187      	str	r7, [r0, #24]"
         >>,
@@ -2653,7 +2653,7 @@ move_to_vm_register_test_() ->
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   2:	6187      	str	r7, [r0, #24]\n"
                         "   4:	e07c      	b.n	0x100\n"
-                        "   6:	0000      	movs	r0, r0\n"
+                        "   6:	ffff      	.short	0xffff\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
                         "   a:	1234      	asrs	r4, r6, #8"
                     >>)
@@ -2681,7 +2681,7 @@ move_to_vm_register_test_() ->
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   2:	6587      	str	r7, [r0, #88]	; 0x58\n"
                         "   4:	e07c      	b.n	0x100\n"
-                        "   6:	0000      	movs	r0, r0\n"
+                        "   6:	ffff      	.short	0xffff\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
                         "   a:	1234      	asrs	r4, r6, #8"
                     >>)
@@ -2712,7 +2712,7 @@ move_to_vm_register_test_() ->
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   2:	601f      	str	r7, [r3, #0]\n"
                         "   4:	e07c      	b.n	0x100\n"
-                        "   6:	0000      	movs	r0, r0\n"
+                        "   6:	ffff      	.short	0xffff\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
                         "   a:	1234      	asrs	r4, r6, #8"
                     >>)
@@ -3304,7 +3304,7 @@ add_test_() ->
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   2:	19d2      	adds	r2, r2, r7\n"
                         "   4:	e07c      	b.n	0x100\n"
-                        "   6:	0000      	movs	r0, r0\n"
+                        "   6:	ffff      	.short	0xffff\n"
                         "   8:	2345      	movs	r3, #69	; 0x45\n"
                         "   a:	0001      	movs	r1, r0"
                     >>)
@@ -3361,7 +3361,7 @@ sub_test_() ->
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
                         "   2:	1bd2      	subs	r2, r2, r7\n"
                         "   4:	e07c      	b.n	0x100\n"
-                        "   6:	0000      	movs	r0, r0\n"
+                        "   6:	ffff      	.short	0xffff\n"
                         "   8:	bcde      	pop	{r1, r2, r3, r4, r6, r7, pc}\n"
                         "   a:	000a      	movs	r2, r1"
                     >>)
@@ -4063,3 +4063,148 @@ add_beam_test() ->
             "  e8:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Test that literal pool entries accumulated before an if_block are flushed
+%% in the dead space after terminal instructions, constrained by BCC range.
+if_block_literal_pool_flush_test_() ->
+    {setup,
+        fun() ->
+            ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0))
+        end,
+        fun(State0) ->
+            [
+                ?_test(begin
+                    State1 = ?BACKEND:move_to_native_register(State0, 16#12345678, r5),
+                    State2 = ?BACKEND:move_to_native_register(State1, 16#ABCD1234, r5),
+                    State3 = ?BACKEND:if_block(
+                        State2,
+                        {r5, '==', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:jump_to_offset(BSt0, 16#100)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State3),
+                    Dump = <<
+                        "   0:	4d02      	ldr	r5, [pc, #8]	; (0xc)\n"
+                        "   2:	4d03      	ldr	r5, [pc, #12]	; (0x10)\n"
+                        "   4:	2d00      	cmp	r5, #0\n"
+                        "   6:	d105      	bne.n	0x14\n"
+                        "   8:	e07a      	b.n	0x100\n"
+                        "   a:	ffff      	.short	0xffff\n"
+                        "   c:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "   e:	1234      	asrs	r4, r6, #8\n"
+                        "  10:	1234      	asrs	r4, r6, #8\n"
+                        "  12:	abcd      	add	r3, sp, #820	; 0x334"
+                    >>,
+                    jit_tests_common:assert_stream(arm, Dump, Stream)
+                end),
+                ?_test(begin
+                    % Stress test: accumulate 70 literal pool entries, then
+                    % if_block with terminal. This exercises partial flushing
+                    % since 70 entries (280 bytes) exceed BCC range (~254 bytes
+                    % available after block code).
+                    State1 = lists:foldl(
+                        fun(I, AccState) ->
+                            ?BACKEND:move_to_native_register(
+                                AccState, 16#10000000 + I, r5
+                            )
+                        end,
+                        State0,
+                        lists:seq(1, 70)
+                    ),
+                    State2 = ?BACKEND:if_block(
+                        State1,
+                        {r5, '==', 0},
+                        fun(BSt0) ->
+                            ?BACKEND:jump_to_offset(BSt0, 16#400)
+                        end
+                    ),
+                    % Flush remaining entries
+                    State3 = ?BACKEND:flush(State2),
+                    Stream = ?BACKEND:stream(State3),
+                    % 70 LDR placeholders (140) + CMP+BCC (4) + B (2) +
+                    % alignment (2) + 70 literals (280) = 428
+                    ?assertEqual(428, byte_size(Stream)),
+                    % BCC at offset 142, patched to offset 400 (distance 258,
+                    % exactly the max BCC forward range)
+                    <<_:142/binary, BccInstr:16/little, _/binary>> = Stream,
+                    % bne with offset 258: adjusted = 258-4 = 254, /2 = 127
+                    ?assertEqual(16#D100 bor (1 bsl 8) bor 127, BccInstr)
+                end),
+                ?_test(begin
+                    % Nested if_blocks: inner gets disabled, outer controls flush.
+                    State1 = ?BACKEND:move_to_native_register(State0, 16#12345678, r5),
+                    State2 = ?BACKEND:move_to_native_register(State1, 16#ABCD1234, r5),
+                    State3 = ?BACKEND:if_block(
+                        State2,
+                        {r5, '==', 0},
+                        fun(BSt0) ->
+                            BSt1 = ?BACKEND:if_block(
+                                BSt0,
+                                {r5, '!=', 42},
+                                fun(BSt2) ->
+                                    ?BACKEND:jump_to_offset(BSt2, 16#200)
+                                end
+                            ),
+                            ?BACKEND:jump_to_offset(BSt1, 16#300)
+                        end
+                    ),
+                    Stream = ?BACKEND:stream(State3),
+                    Dump = <<
+                        "   0:	4d03      	ldr	r5, [pc, #12]	; (0x10)\n"
+                        "   2:	4d04      	ldr	r5, [pc, #16]	; (0x14)\n"
+                        "   4:	2d00      	cmp	r5, #0\n"
+                        "   6:	d107      	bne.n	0x18\n"
+                        "   8:	2d2a      	cmp	r5, #42	; 0x2a\n"
+                        "   a:	d000      	beq.n	0xe\n"
+                        "   c:	e0f8      	b.n	0x200\n"
+                        "   e:	e177      	b.n	0x300\n"
+                        "  10:	5678      	ldrsb	r0, [r7, r1]\n"
+                        "  12:	1234      	asrs	r4, r6, #8\n"
+                        "  14:	1234      	asrs	r4, r6, #8\n"
+                        "  16:	abcd      	add	r3, sp, #820	; 0x334"
+                    >>,
+                    jit_tests_common:assert_stream(arm, Dump, Stream)
+                end),
+                ?_test(begin
+                    % Regression: literal pool entries accumulated inside nested
+                    % if_blocks (where flushing is disabled) could drift beyond
+                    % the 1020-byte LDR range. After exiting, maybe_flush_literal_pool
+                    % must flush them.
+                    State1 = lists:foldl(
+                        fun(I, AccState) ->
+                            ?BACKEND:move_to_native_register(
+                                AccState, 16#10000000 + I, r5
+                            )
+                        end,
+                        State0,
+                        lists:seq(1, 60)
+                    ),
+                    State2 = ?BACKEND:if_block(
+                        State1,
+                        {r5, '==', 0},
+                        fun(BSt0) ->
+                            BSt1 = ?BACKEND:if_block(
+                                BSt0,
+                                {r5, '!=', 42},
+                                fun(BSt2) ->
+                                    lists:foldl(
+                                        fun(I, AccState) ->
+                                            ?BACKEND:move_to_native_register(
+                                                AccState, 16#20000000 + I, r5
+                                            )
+                                        end,
+                                        BSt2,
+                                        lists:seq(1, 10)
+                                    )
+                                end
+                            ),
+                            BSt1
+                        end
+                    ),
+                    State3 = ?BACKEND:flush(State2),
+                    Stream = ?BACKEND:stream(State3),
+                    ?assert(byte_size(Stream) > 0)
+                end)
+            ]
+        end}.

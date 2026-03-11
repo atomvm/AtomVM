@@ -139,7 +139,8 @@
     used_regs :: non_neg_integer(),
     labels :: [{integer() | reference(), integer()}],
     variant :: non_neg_integer(),
-    literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}]
+    literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}],
+    literal_pool_max_offset :: unbound | disabled | non_neg_integer()
 }).
 
 -type state() :: #state{}.
@@ -278,7 +279,8 @@ new(Variant, StreamModule, Stream) ->
         used_regs = 0,
         labels = [],
         variant = Variant,
-        literal_pool = []
+        literal_pool = [],
+        literal_pool_max_offset = unbound
     }.
 
 %%-----------------------------------------------------------------------------
@@ -1009,7 +1011,7 @@ branch_to_label_code(#state{available_regs = 0}, _Offset, _Label, _LabelLookup) 
 %%-----------------------------------------------------------------------------
 -spec if_block(state(), condition() | {'and', [condition()]}, fun((state()) -> state())) -> state().
 if_block(
-    #state{stream_module = StreamModule} = State0,
+    #state{stream_module = StreamModule, literal_pool_max_offset = PrevMaxOffset} = State0,
     {'and', CondList},
     BlockFn
 ) ->
@@ -1022,7 +1024,10 @@ if_block(
         {[], State0},
         CondList
     ),
-    State2 = BlockFn(State1),
+    %% The first BCC (last in reversed Replacements) has the tightest constraint
+    {FirstBccOffset, _} = lists:last(Replacements),
+    NewMaxOffset = if_block_max_offset(PrevMaxOffset, FirstBccOffset),
+    State2 = BlockFn(State1#state{literal_pool_max_offset = NewMaxOffset}),
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
     Stream3 = lists:foldl(
@@ -1034,22 +1039,40 @@ if_block(
         Stream2,
         Replacements
     ),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs);
+    State3 = merge_used_regs(
+        State2#state{stream = Stream3, literal_pool_max_offset = PrevMaxOffset},
+        State1#state.used_regs
+    ),
+    maybe_flush_literal_pool(State3);
 if_block(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    #state{stream_module = StreamModule, literal_pool_max_offset = PrevMaxOffset} = State0,
     Cond,
     BlockFn
 ) ->
-    Offset = StreamModule:offset(Stream0),
+    Offset = StreamModule:offset(State0#state.stream),
     {State1, CC, BranchInstrOffset} = if_block_cond(State0, Cond),
-    State2 = BlockFn(State1),
+    BccOffset = Offset + BranchInstrOffset,
+    NewMaxOffset = if_block_max_offset(PrevMaxOffset, BccOffset),
+    State2 = BlockFn(State1#state{literal_pool_max_offset = NewMaxOffset}),
     Stream2 = State2#state.stream,
     OffsetAfter = StreamModule:offset(Stream2),
     %% Patch the conditional branch instruction to jump to the end of the block
-    BranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
+    BranchOffset = OffsetAfter - BccOffset,
     NewBranchInstr = jit_armv6m_asm:bcc(CC, BranchOffset),
-    Stream3 = StreamModule:replace(Stream2, Offset + BranchInstrOffset, NewBranchInstr),
-    merge_used_regs(State2#state{stream = Stream3}, State1#state.used_regs).
+    Stream3 = StreamModule:replace(Stream2, BccOffset, NewBranchInstr),
+    State3 = merge_used_regs(
+        State2#state{stream = Stream3, literal_pool_max_offset = PrevMaxOffset},
+        State1#state.used_regs
+    ),
+    maybe_flush_literal_pool(State3).
+
+%% When entering an if_block, compute the literal_pool_max_offset for BlockFn.
+%% If we're already inside a conditional (not unbound), disable flushing entirely
+%% so only the outermost if_block controls the literal pool.
+if_block_max_offset(unbound, BccOffset) ->
+    BccOffset + 258;
+if_block_max_offset(_AlreadySet, _BccOffset) ->
+    disabled.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if else block, i.e. emit a test of a condition and
@@ -1064,31 +1087,36 @@ if_block(
 -spec if_else_block(state(), condition(), fun((state()) -> state()), fun((state()) -> state())) ->
     state().
 if_else_block(
-    #state{stream_module = StreamModule, stream = Stream0} = State0,
+    #state{stream_module = StreamModule, literal_pool_max_offset = PrevMaxOffset} = State0,
     Cond,
     BlockTrueFn,
     BlockFalseFn
 ) ->
-    Offset = StreamModule:offset(Stream0),
+    Offset = StreamModule:offset(State0#state.stream),
     {State1, CC, BranchInstrOffset} = if_block_cond(State0, Cond),
-    State2 = BlockTrueFn(State1),
+    BccOffset = Offset + BranchInstrOffset,
+    NewMaxOffset = if_block_max_offset(PrevMaxOffset, BccOffset),
+    State2 = BlockTrueFn(State1#state{literal_pool_max_offset = NewMaxOffset}),
     Stream2 = State2#state.stream,
     %% Emit unconditional branch to skip the else block (will be replaced)
     ElseJumpOffset = StreamModule:offset(Stream2),
     ?ASSERT(byte_size(jit_armv6m_asm:b(0)) =:= 2),
     ElseJumpInstr = <<16#FFFF:16>>,
     Stream3 = StreamModule:append(Stream2, ElseJumpInstr),
-    %% Else block starts here.
-    OffsetAfter = StreamModule:offset(Stream3),
-    %% Patch the conditional branch to jump to the else block
-    ElseBranchOffset = OffsetAfter - (Offset + BranchInstrOffset),
+    %% Flush literal pool in dead space between B and else block
+    State2a = flush_literal_pool(State2#state{stream = Stream3}),
+    Stream3a = State2a#state.stream,
+    %% Else block starts here — patch the conditional branch
+    OffsetAfter = StreamModule:offset(Stream3a),
+    ElseBranchOffset = OffsetAfter - BccOffset,
     NewBranchInstr = jit_armv6m_asm:bcc(CC, ElseBranchOffset),
-    Stream4 = StreamModule:replace(Stream3, Offset + BranchInstrOffset, NewBranchInstr),
-    %% Build the else block
-    StateElse = State2#state{
+    Stream4 = StreamModule:replace(Stream3a, BccOffset, NewBranchInstr),
+    %% Build the else block (restore previous max_offset)
+    StateElse = State2a#state{
         stream = Stream4,
         used_regs = State1#state.used_regs,
-        available_regs = State1#state.available_regs
+        available_regs = State1#state.available_regs,
+        literal_pool_max_offset = PrevMaxOffset
     },
     State3 = BlockFalseFn(StateElse),
     Stream5 = State3#state.stream,
@@ -1097,7 +1125,8 @@ if_else_block(
     FinalJumpOffset = OffsetFinal - ElseJumpOffset,
     NewElseJumpInstr = jit_armv6m_asm:b(FinalJumpOffset),
     Stream6 = StreamModule:replace(Stream5, ElseJumpOffset, NewElseJumpInstr),
-    merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs).
+    State4 = merge_used_regs(State3#state{stream = Stream6}, State2#state.used_regs),
+    maybe_flush_literal_pool(State4).
 
 -spec if_block_cond(state(), condition()) ->
     {
@@ -3201,35 +3230,107 @@ maybe_flush_literal_pool(
     % bigint.beam currently requires 663 or lower to compile.
     if
         Offset - Addr > 512 ->
-            NbLiterals = length(LP),
-            Continuation = NbLiterals * 4 + 4 - (Offset rem 4),
-            Stream1 = StreamModule:append(Stream0, jit_armv6m_asm:b(Continuation)),
-            Stream2 =
-                if
-                    Offset rem 4 =:= 0 ->
-                        StreamModule:append(Stream1, <<16#FFFF:16>>);
-                    true ->
-                        Stream1
-                end,
-            flush_literal_pool(State#state{stream = Stream2});
+            flush_literal_pool_with_branch_over(State);
         true ->
             State
     end.
 
+-spec flush_literal_pool_with_branch_over(state()) -> state().
+flush_literal_pool_with_branch_over(#state{literal_pool = []} = State) ->
+    State;
+flush_literal_pool_with_branch_over(#state{literal_pool_max_offset = disabled} = State) ->
+    State;
+flush_literal_pool_with_branch_over(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        literal_pool = LP,
+        literal_pool_max_offset = MaxOffset
+    } = State
+) ->
+    Offset = StreamModule:offset(Stream0),
+    AlignPadding =
+        if
+            Offset rem 4 =:= 0 -> 2;
+            true -> 0
+        end,
+    PoolStart = Offset + 2 + AlignPadding,
+    NbToFlush =
+        case MaxOffset of
+            unbound ->
+                length(LP);
+            MaxOff when is_integer(MaxOff) ->
+                NbCanFlush = (MaxOff - PoolStart) div 4,
+                if
+                    NbCanFlush =< 0 -> 0;
+                    true -> min(NbCanFlush, length(LP))
+                end
+        end,
+    case NbToFlush of
+        0 ->
+            State;
+        _ ->
+            BranchAddr = Offset,
+            Stream1 = StreamModule:append(Stream0, <<16#FFFF:16>>),
+            Stream2 =
+                if
+                    AlignPadding > 0 ->
+                        StreamModule:append(Stream1, <<16#FFFF:16>>);
+                    true ->
+                        Stream1
+                end,
+            State1 = flush_literal_pool(State#state{stream = Stream2}),
+            Stream3 = State1#state.stream,
+            OffsetAfter = StreamModule:offset(Stream3),
+            BranchOffset = OffsetAfter - BranchAddr,
+            BranchInstr = jit_armv6m_asm:b(BranchOffset),
+            Stream4 = StreamModule:replace(Stream3, BranchAddr, BranchInstr),
+            State1#state{stream = Stream4}
+    end.
+
 flush_literal_pool(#state{literal_pool = []} = State) ->
     State;
+flush_literal_pool(#state{literal_pool_max_offset = disabled} = State) ->
+    State;
 flush_literal_pool(
-    #state{stream_module = StreamModule, stream = Stream0, literal_pool = LP} = State
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        literal_pool = LP,
+        literal_pool_max_offset = MaxOffset
+    } = State
 ) ->
-    % Align
     Offset = StreamModule:offset(Stream0),
-    Stream1 =
-        if
-            Offset rem 4 =:= 0 -> Stream0;
-            true -> StreamModule:append(Stream0, <<0:16>>)
-        end,
-    % Lay all values and update ldr instructions
-    Stream2 = lists:foldl(
+    case MaxOffset of
+        unbound ->
+            Stream1 = align_stream_for_literal_pool(StreamModule, Stream0, Offset),
+            Stream2 = flush_literal_entries(StreamModule, Stream1, lists:reverse(LP)),
+            State#state{stream = Stream2, literal_pool = []};
+        MaxOff when is_integer(MaxOff) ->
+            AlignPadding = (Offset rem 4),
+            NbCanFlush = (MaxOff - Offset - AlignPadding) div 4,
+            if
+                NbCanFlush =< 0 ->
+                    State;
+                true ->
+                    ReversedLP = lists:reverse(LP),
+                    {ToFlush, ToKeep} = lists:split(
+                        min(NbCanFlush, length(ReversedLP)), ReversedLP
+                    ),
+                    Stream1 = align_stream_for_literal_pool(StreamModule, Stream0, Offset),
+                    Stream2 = flush_literal_entries(StreamModule, Stream1, ToFlush),
+                    State#state{stream = Stream2, literal_pool = lists:reverse(ToKeep)}
+            end
+    end.
+
+align_stream_for_literal_pool(StreamModule, Stream, Offset) ->
+    if
+        Offset rem 4 =:= 0 -> Stream;
+        true -> StreamModule:append(Stream, <<16#FFFF:16>>)
+    end.
+
+flush_literal_entries(StreamModule, Stream, Entries) ->
+    lists:foldl(
         fun({LdrInstructionAddr, Reg, Val}, AccStream) ->
             LiteralPosition = StreamModule:offset(AccStream),
             LdrPC = (LdrInstructionAddr band (bnot 3)) + 4,
@@ -3240,10 +3341,9 @@ flush_literal_pool(
                 AccStream1, LdrInstructionAddr, LdrInstruction
             )
         end,
-        Stream1,
-        lists:reverse(LP)
-    ),
-    State#state{stream = Stream2, literal_pool = []}.
+        Stream,
+        Entries
+    ).
 
 sub(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     (Val >= 0 andalso Val =< 255) orelse is_atom(Val)
@@ -3348,7 +3448,10 @@ mul(
 -spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 decrement_reductions_and_maybe_schedule_next(
     #state{
-        stream_module = StreamModule, stream = Stream0, available_regs = Avail
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = Avail,
+        literal_pool_max_offset = PrevMaxOffset
     } = State0
 ) ->
     Temp = first_avail(Avail),
@@ -3361,6 +3464,7 @@ decrement_reductions_and_maybe_schedule_next(
     I2 = jit_armv6m_asm:subs(Temp, Temp, 1),
     % Store back the decremented value
     I3 = jit_armv6m_asm:str(Temp, ?JITSTATE_REDUCTIONCOUNT(TempJitState)),
+    Stream0 = State0#state.stream,
     Stream1 = StreamModule:append(Stream0, <<I0/binary, I1/binary, I2/binary, I3/binary>>),
     BNEOffset = StreamModule:offset(Stream1),
     % Branch if reduction count is not zero
@@ -3374,7 +3478,8 @@ decrement_reductions_and_maybe_schedule_next(
     I7 = jit_armv6m_asm:str(Temp, ?JITSTATE_CONTINUATION(TempJitState)),
     % Append the instructions to the stream
     Stream2 = StreamModule:append(Stream1, <<I4/binary, I5/binary, I6/binary, I7/binary>>),
-    State1 = State0#state{stream = Stream2},
+    NewMaxOffset = if_block_max_offset(PrevMaxOffset, BNEOffset),
+    State1 = State0#state{stream = Stream2, literal_pool_max_offset = NewMaxOffset},
     State2 = call_primitive_last(State1, ?PRIM_SCHEDULE_NEXT_CP, [ctx, jit_state]),
     % Add the prolog at the continuation point (where scheduled execution resumes)
     #state{stream = Stream3} = State2,
@@ -3406,7 +3511,11 @@ decrement_reductions_and_maybe_schedule_next(
     Stream5 = StreamModule:replace(
         Stream4, BNEOffset, <<NewI4/binary, NewI5/binary>>
     ),
-    merge_used_regs(State2#state{stream = Stream5}, State1#state.used_regs).
+    State3 = merge_used_regs(
+        State2#state{stream = Stream5, literal_pool_max_offset = PrevMaxOffset},
+        State1#state.used_regs
+    ),
+    maybe_flush_literal_pool(State3).
 
 -spec call_or_schedule_next(state(), non_neg_integer()) -> state().
 call_or_schedule_next(State0, Label) ->
