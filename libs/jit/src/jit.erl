@@ -3149,7 +3149,7 @@ do_get_tail(
     MSt10 = MMod:free_native_registers(MSt9, [MatchStateReg0]),
     {MSt11, BSBinaryReg} = MMod:and_(MSt10, {free, BSBinaryReg}, ?TERM_PRIMARY_CLEAR_MASK),
     {MSt12, TailBytesReg1} = MMod:get_array_element(MSt11, BSBinaryReg, 1),
-    MSt13 = MMod:sub(MSt12, TailBytesReg0, BSOffseBytesReg),
+    MSt13 = MMod:sub(MSt12, TailBytesReg1, BSOffseBytesReg),
     MSt14 = MMod:add(MSt13, BSBinaryReg, ?TERM_PRIMARY_BOXED),
     {MSt15, ResultTerm} = MMod:call_primitive(MSt14, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
         ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg1
