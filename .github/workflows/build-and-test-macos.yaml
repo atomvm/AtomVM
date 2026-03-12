@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
-        otp: ["24", "25", "26", "27", "28"]
+        otp: ["25", "26", "27", "28"]
         mbedtls: ["mbedtls@3"]
         cmake_opts_other: [""]
 
@@ -66,22 +66,27 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: "Install deps"
-      if: matrix.otp != '24' && matrix.otp != '25'
-      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }} rebar3
+    - name: "Normalize ImageOS for setup-beam"
+      if: matrix.os == 'macos-26'
+      run: echo "ImageOS=macos15" >> "$GITHUB_ENV"
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp }}
+        rebar3-version: ${{ fromJSON('{"25":"3.24.0","26":"3.25.1","27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "Install deps"
-      if: matrix.otp == '24' || matrix.otp == '25'
+      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen ${{ matrix.mbedtls }}
+
+    - name: "Install Gleam"
       run: |
-        brew update
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen erlang@${{ matrix.otp }} gleam ${{ matrix.mbedtls }}
-        wget https://github.com/erlang/rebar3/releases/download/3.23.0/rebar3
-        chmod +x rebar3
-        for bin_dir in {/usr/local,/opt/homebrew}/opt/erlang@{24,25}/bin/ ; do
-            if [ -e ${bin_dir} ]; then
-                sudo cp rebar3 ${bin_dir}
-            fi
-        done
+        # Reuse the OTP/rebar3 installed by setup-beam instead of Homebrew dependencies.
+        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --ignore-dependencies gleam
+        gleam --version
 
     - name: "Workaround for nxdomain random issues"
       run: |
@@ -126,20 +131,15 @@ jobs:
     - name: "Build: run cmake"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         cmake -DAVM_WARNINGS_ARE_ERRORS=ON ${MBEDTLS_PREFIX:+-DCMAKE_PREFIX_PATH="$MBEDTLS_PREFIX"} ${{ matrix.cmake_opts_other }} -G Ninja ..
 
     - name: "Build: run ninja"
       working-directory: build
-      run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        ninja
+      run: ninja
 
     - name: "Build: run dialyzer"
       working-directory: build
-      run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
-        ninja dialyzer
+      run: ninja dialyzer
 
     # Test
     - name: "Test: test-erlang"
@@ -202,7 +202,6 @@ jobs:
     - name: "Install and smoke test"
       working-directory: build
       run: |
-        export PATH="/usr/local/opt/erlang@${{ matrix.otp }}/bin:/opt/homebrew/opt/erlang@${{ matrix.otp }}/bin:$PATH"
         sudo ninja install
         atomvm examples/erlang/hello_world.avm
         atomvm -v
