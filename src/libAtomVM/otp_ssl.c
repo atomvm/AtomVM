@@ -39,7 +39,7 @@
 #include <mbedtls/entropy.h>
 #include <mbedtls/ssl.h>
 
-#if defined(MBEDTLS_PSA_CRYPTO_C)
+#if defined(HAVE_PSA_CRYPTO)
 #include <psa/crypto.h>
 #endif
 
@@ -315,7 +315,7 @@ static term nif_ssl_init(Context *ctx, int argc, term argv[])
 
     mbedtls_ssl_init(&rsrc_obj->context);
 
-#if defined(MBEDTLS_PSA_CRYPTO_C)
+#if defined(HAVE_PSA_CRYPTO)
     psa_status_t status = psa_crypto_init();
     if (UNLIKELY(status != PSA_SUCCESS)) {
         AVM_LOGW(TAG, "Failed to initialize PSA %s:%i.\n", __FILE__, __LINE__);

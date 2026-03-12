@@ -48,7 +48,7 @@
 #include <mbedtls/version.h>
 #endif
 
-#ifdef MBEDTLS_PSA_CRYPTO_C
+#ifdef HAVE_PSA_CRYPTO
 #include <mbedtls/psa_util.h>
 #include <psa/crypto.h>
 #endif
@@ -597,7 +597,7 @@ mbed_error:
     RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
 }
 
-#ifdef MBEDTLS_PSA_CRYPTO_C
+#ifdef HAVE_PSA_CRYPTO
 
 enum pk_type_t
 {
@@ -1791,7 +1791,7 @@ static const struct Nif crypto_crypto_one_time_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_crypto_one_time
 };
-#ifdef MBEDTLS_PSA_CRYPTO_C
+#ifdef HAVE_PSA_CRYPTO
 static const struct Nif crypto_generate_key_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_generate_key
@@ -1858,7 +1858,7 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_crypto_one_time_nif;
         }
-#ifdef MBEDTLS_PSA_CRYPTO_C
+#ifdef HAVE_PSA_CRYPTO
         if (strcmp("generate_key/2", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_generate_key_nif;
