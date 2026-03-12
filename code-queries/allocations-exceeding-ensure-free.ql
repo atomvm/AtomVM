@@ -182,6 +182,121 @@ int leafAllocSize(FunctionCall call) {
     )
 }
 
+// ============================================================
+// Branch resolution: when the caller passes a constant, determine
+// which branch of a conditional in the callee is actually taken,
+// so that allocations on the not-taken branch are excluded.
+// ============================================================
+
+/**
+ * Holds if `predFunc` is a simple threshold predicate function: it has
+ * a single return statement of the form `param < THRESHOLD`, returning
+ * true when the parameter is below the threshold.
+ */
+pragma[noinline]
+predicate isLTThresholdPredicate(Function predFunc, int paramIndex, int threshold) {
+    exists(ReturnStmt ret, LTExpr lt |
+        strictcount(ReturnStmt r | r.getEnclosingFunction() = predFunc) = 1 and
+        ret.getEnclosingFunction() = predFunc and
+        (
+            lt = ret.getExpr()
+            or
+            lt = ret.getExpr().(Conversion).getExpr()
+        ) and
+        lt.getLeftOperand().(VariableAccess).getTarget() = predFunc.getParameter(paramIndex) and
+        threshold = constExprValue(lt.getRightOperand())
+    )
+}
+
+/**
+ * Holds if function `wrapper` directly passes its parameter `wrapperParamIdx`
+ * as argument `calleeParamIdx` in a call to `callee`.
+ */
+pragma[noinline]
+predicate paramPassthrough(Function wrapper, int wrapperParamIdx, Function callee, int calleeParamIdx) {
+    exists(FunctionCall directCall |
+        directCall.getEnclosingFunction() = wrapper and
+        directCall.getTarget() = callee and
+        directCall.getArgument(calleeParamIdx).(VariableAccess).getTarget() =
+            wrapper.getParameter(wrapperParamIdx)
+    )
+}
+
+/**
+ * Gets the constant value that `targetFunc.getParameter(targetParamIdx)`
+ * receives when `outerCall` is invoked, tracing constants through up to
+ * two levels of wrapper functions that pass the parameter through.
+ */
+pragma[noinline]
+int resolvedParamValue(FunctionCall outerCall, Function targetFunc, int targetParamIdx) {
+    // Direct: targetFunc is the immediate callee
+    targetFunc = outerCall.getTarget() and
+    result = constExprValue(outerCall.getArgument(targetParamIdx))
+    or
+    // One level deep: outerCallee passes through to targetFunc
+    exists(Function outerCallee, int outerParamIdx |
+        outerCallee = outerCall.getTarget() and
+        paramPassthrough(outerCallee, outerParamIdx, targetFunc, targetParamIdx) and
+        result = constExprValue(outerCall.getArgument(outerParamIdx))
+    )
+    or
+    // Two levels deep: outerCallee -> intermediate -> targetFunc
+    exists(
+        Function outerCallee, Function intermediate, int outerParamIdx, int intermediateParamIdx
+    |
+        outerCallee = outerCall.getTarget() and
+        paramPassthrough(outerCallee, outerParamIdx, intermediate, intermediateParamIdx) and
+        paramPassthrough(intermediate, intermediateParamIdx, targetFunc, targetParamIdx) and
+        result = constExprValue(outerCall.getArgument(outerParamIdx))
+    )
+}
+
+/**
+ * Holds if `leafCall` in function `leafFunc` is on a branch that is provably
+ * not taken when the outer call `outerCall` passes constant arguments.
+ *
+ * Detects the pattern: if (predicateFunc(param)) { ... } else { ... }
+ * where predicateFunc is a simple `param < THRESHOLD` function, and the
+ * constant value of param resolves the condition.
+ */
+pragma[noinline]
+predicate leafOnResolvedNotTakenBranch(FunctionCall outerCall, FunctionCall leafCall) {
+    exists(
+        Function leafFunc, IfStmt ifStmt, FunctionCall condCall, Function condFunc,
+        int condFuncParamIdx, int threshold, int leafFuncParamIdx, int paramValue,
+        BasicBlock condBB, BasicBlock notTakenBB
+    |
+        leafCall.getEnclosingFunction() = leafFunc and
+        ifStmt.getEnclosingFunction() = leafFunc and
+        // The condition is a call to a simple threshold predicate
+        (
+            condCall = ifStmt.getCondition()
+            or
+            condCall = ifStmt.getCondition().(Conversion).getExpr()
+        ) and
+        condFunc = condCall.getTarget() and
+        isLTThresholdPredicate(condFunc, condFuncParamIdx, threshold) and
+        // The predicate receives a parameter of leafFunc
+        condCall.getArgument(condFuncParamIdx).(VariableAccess).getTarget() =
+            leafFunc.getParameter(leafFuncParamIdx) and
+        // Resolve the constant value from the outer call
+        paramValue = resolvedParamValue(outerCall, leafFunc, leafFuncParamIdx) and
+        condBB = condCall.getBasicBlock() and
+        // Determine which branch is NOT taken
+        (
+            // param < threshold is TRUE → false branch not taken
+            paramValue < threshold and
+            notTakenBB = condBB.getAFalseSuccessor()
+            or
+            // param < threshold is FALSE → true branch not taken
+            paramValue >= threshold and
+            notTakenBB = condBB.getATrueSuccessor()
+        ) and
+        // The leaf call is on the not-taken branch
+        bbDominates(notTakenBB, leafCall.getBasicBlock())
+    )
+}
+
 /**
  * Computes the total constant allocation size for a call to a function that
  * transitively calls `memory_heap_alloc` without its own ensure_free.
@@ -190,7 +305,9 @@ int leafAllocSize(FunctionCall call) {
  * - All fully-constant direct `memory_heap_alloc` sizes
  * - All `memory_heap_alloc(heap, constant + param)` where the caller passes
  *   a constant for that parameter
- * - All transitive wrapper function contributions (via reachableLeafAllocCall)
+ * - All transitive wrapper function contributions (via reachableLeafAllocCall),
+ *   excluding leaf calls on branches that are provably not taken given the
+ *   caller's constant arguments
  */
 pragma[noinline]
 int getConstAllocSize(FunctionCall call) {
@@ -208,7 +325,8 @@ int getConstAllocSize(FunctionCall call) {
             or
             exists(FunctionCall leafCall |
                 reachableLeafAllocCall(callee, leafCall) and
-                exists(leafAllocSize(leafCall))
+                exists(leafAllocSize(leafCall)) and
+                not leafOnResolvedNotTakenBranch(call, leafCall)
             )
         ) and
         result =
@@ -221,10 +339,12 @@ int getConstAllocSize(FunctionCall call) {
                 exists(constExprValue(call.getArgument(paramIndex)))
             | constPart + constExprValue(call.getArgument(paramIndex)))
             +
-            // Sum transitive wrapper contributions via reachable leaf calls
+            // Sum transitive wrapper contributions via reachable leaf calls,
+            // excluding those on provably not-taken branches
             sum(FunctionCall leafCall, int leafSize |
                 reachableLeafAllocCall(callee, leafCall) and
-                leafSize = leafAllocSize(leafCall)
+                leafSize = leafAllocSize(leafCall) and
+                not leafOnResolvedNotTakenBranch(call, leafCall)
             | leafSize)
     )
 }
