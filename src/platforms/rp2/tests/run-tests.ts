@@ -89,7 +89,12 @@ mcu.uart[0].onByte = (value) => {
   if (char === "\n") {
     if (currentLine === "OK" || currentLine === "OK\r") {
       process.exit(0);
-    } else if (currentLine === "FAIL" || currentLine === "FAIL\r") {
+    } else if (
+      currentLine === "FAIL" ||
+      currentLine === "FAIL\r" ||
+      currentLine === "*** PANIC ***" ||
+      currentLine === "*** PANIC ***\r"
+    ) {
       process.exit(1);
     }
     currentLine = "";
