@@ -20,9 +20,7 @@
 
 -module(jit_riscv32_tests).
 
--ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
 -include("jit/include/jit.hrl").
 -include("jit/src/term.hrl").
@@ -134,30 +132,28 @@ call_primitive_6_args_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:  01852f83            lw  t6,24(a0)\n"
-            "   4:  4f0d                li  t5,3\n"
-            "   6:  ffff4f13            not t5,t5\n"
-            "   a:  01efffb3            and t6,t6,t5\n"
-            "   e:  01c52f03            lw  t5,28(a0)\n"
-            "  12:  0b800e93            li  t4,184\n"
-            "  16:  9eb2                add t4,t4,a2\n"
-            "  18:  000eae83            lw  t4,0(t4)\n"
-            "  1c:  1141                addi    sp,sp,-16\n"
-            "  1e:  c006                sw  ra,0(sp)\n"
-            "  20:  c22a                sw  a0,4(sp)\n"
-            "  22:  c42e                sw  a1,8(sp)\n"
-            "  24:  c632                sw  a2,12(sp)\n"
-            "  26:  867e                mv  a2,t6\n"
-            "  28:  04000693            li  a3,64\n"
-            "  2c:  4721                li  a4,8\n"
-            "  2e:  87fa                mv  a5,t5\n"
-            "  30:  9e82                jalr    t4\n"
-            "  32:  8eaa                mv  t4,a0\n"
-            "  34:  4082                lw  ra,0(sp)\n"
-            "  36:  4512                lw  a0,4(sp)\n"
-            "  38:  45a2                lw  a1,8(sp)\n"
-            "  3a:  4632                lw  a2,12(sp)\n"
-            "  3c:  0141                addi    sp,sp,16"
+            "   0:	01852f83          	lw	t6,24(a0)\n"
+            "   4:  ffcfff93            andi    t6,t6,-4\n"
+            "   8:  01c52f03          	lw	t5,28(a0)\n"
+            "   c:  0b800e93            li  t4,184\n"
+            "  10:  9eb2                add t4,t4,a2\n"
+            "  12:  000eae83            lw  t4,0(t4)\n"
+            "  16:  1141                addi    sp,sp,-16\n"
+            "  18:  c006                sw  ra,0(sp)\n"
+            "  1a:  c22a                sw  a0,4(sp)\n"
+            "  1c:  c42e                sw  a1,8(sp)\n"
+            "  1e:  c632                sw  a2,12(sp)\n"
+            "  20:  867e                mv  a2,t6\n"
+            "  22:  04000693            li  a3,64\n"
+            "  26:  4721                li  a4,8\n"
+            "  28:  87fa                mv  a5,t5\n"
+            "  2a:  9e82                jalr    t4\n"
+            "  2c:  8eaa                mv  t4,a0\n"
+            "  2e:  4082                lw  ra,0(sp)\n"
+            "  30:  4512                lw  a0,4(sp)\n"
+            "  32:  45a2                lw  a1,8(sp)\n"
+            "  34:  4632                lw  a2,12(sp)\n"
+            "  36:  0141                addi    sp,sp,16"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
@@ -1003,11 +999,10 @@ if_block_test_() ->
                         "   0:  01852f83            lw  t6,24(a0)\n"
                         "   4:  01c52f03            lw  t5,28(a0)\n"
                         "   8:  8efe                    mv  t4,t6\n"
-                        "   a:  03f00e13            li  t3,63\n"
-                        "   e:  01cefeb3            and t4,t4,t3\n"
-                        "  12:  4e21                    li  t3,8\n"
-                        "  14:  01ce8363            beq t4,t3,0x1a\n"
-                        "  18:  0f09                    addi    t5,t5,2"
+                        "   a:  03fefe93            andi    t4,t4,63\n"
+                        "   e:  4e21                    li  t3,8\n"
+                        "  10:  01ce8363            beq t4,t3,0x16\n"
+                        "  14:  0f09                    addi    t5,t5,2"
                     >>,
                     jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegA, RegB], ?BACKEND:used_regs(State1))
@@ -1047,12 +1042,11 @@ if_block_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
                         "      0:   01852f83            lw  t6,24(a0)\n"
-                        "      4:   01c52f03            lw  t5,28(a0)\n"
-                        "      8:   03f00e93            li  t4,63\n"
-                        "      c:   01dfffb3            and t6,t6,t4\n"
-                        "      10:  4ea1                    li  t4,8\n"
-                        "      12:  01df8363            beq t6,t4,0x18\n"
-                        "      16:  0f09                    addi    t5,t5,2"
+                        "      4:   01c52f03          	lw	t5,28(a0)\n"
+                        "      8:   03ffff93            andi    t6,t6,63\n"
+                        "      c:   4ea1                    li  t4,8\n"
+                        "      e:   01df8363            beq t6,t4,0x14\n"
+                        "      12:  0f09                    addi    t5,t5,2"
                     >>,
                     jit_tests_common:assert_stream(riscv32, Dump, Stream),
                     ?assertEqual([RegB], ?BACKEND:used_regs(State1))
@@ -1430,16 +1424,14 @@ get_list_test() ->
     Stream = ?BACKEND:stream(State5),
     Dump =
         <<
-            "0: 01852f83            lw  t6,24(a0)\n"
-            "4: 4f0d                    li  t5,3\n"
-            "6: ffff4f13            not t5,t5\n"
-            "a: 01efffb3            and t6,t6,t5\n"
-            "e: 004fae83            lw  t4,4(t6)\n"
-            "12:    01452f03            lw  t5,20(a0)\n"
-            "16:    01df2223            sw  t4,4(t5)\n"
-            "1a:    000fae83            lw  t4,0(t6)\n"
-            "1e:    01452f03            lw  t5,20(a0)\n"
-            "22:    01df2023            sw  t4,0(t5)"
+            "0:	01852f83          	lw	t6,24(a0)\n"
+            "4: ffcfff93            andi    t6,t6,-4\n"
+            "8: 004fae83            lw  t4,4(t6)\n"
+            "c:	01452f03          	lw	t5,20(a0)\n"
+            "10:    01df2223            sw  t4,4(t5)\n"
+            "14:    000fae83            lw  t4,0(t6)\n"
+            "18:	01452f03          	lw	t5,20(a0)\n"
+            "1c:    01df2023            sw  t4,0(t5)"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
@@ -1483,26 +1475,22 @@ is_integer_test() ->
             "  10:  01852f83            lw  t6,24(a0)\n"
             "  14:  ffffcf13            not t5,t6\n"
             "  18:  0f72                slli    t5,t5,0x1c\n"
-            "  1a:  020f0f63            beqz    t5,0x58\n"
+            "  1a:  020f0963            beqz    t5,0x4c\n"
             "  1e:  8f7e                mv  t5,t6\n"
-            "  20:  4e8d                li  t4,3\n"
-            "  22:  01df7f33            and t5,t5,t4\n"
-            "  26:  4e89                li  t4,2\n"
-            "  28:  01df0663            beq t5,t4,0x34\n"
-            "  2c:  a8d1                j   0x100\n"
-            "  2e:  0001                nop\n"
-            "  30:  00000013            nop\n"
-            "  34:  4f0d                li  t5,3\n"
-            "  36:  ffff4f13            not t5,t5\n"
-            "  3a:  01efffb3            and t6,t6,t5\n"
-            "  3e:  000faf83            lw  t6,0(t6)\n"
-            "  42:  03f00f13            li  t5,63\n"
-            "  46:  01efffb3            and t6,t6,t5\n"
-            "  4a:  4f21                li  t5,8\n"
-            "  4c:  01ef8663            beq t6,t5,0x58\n"
-            "  50:  a845                j   0x100\n"
-            "  52:  0001                nop\n"
-            "  54:  00000013            nop"
+            "  20:  003f7f13            andi    t5,t5,3\n"
+            "  24:  4e89                li  t4,2\n"
+            "  26:  01df0663            beq t5,t4,0x32\n"
+            "  2a:  a8d9                j   0x100\n"
+            "  2c:  0001                nop\n"
+            "  2e:  00000013            nop\n"
+            "  32:  ffcfff93            andi    t6,t6,-4\n"
+            "  36:  000faf83            lw  t6,0(t6)\n"
+            "  3a:  03ffff93            andi    t6,t6,63\n"
+            "  3e:  4f21                li  t5,8\n"
+            "  40:  01ef8663            beq t6,t5,0x4c\n"
+            "  44:  a875                j   0x100\n"
+            "  46:  0001                nop\n"
+            "  48:  00000013            nop"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
@@ -1552,31 +1540,26 @@ is_number_test() ->
             "  10:  01852f83            lw  t6,24(a0)\n"
             "  14:  ffffcf13            not t5,t6\n"
             "  18:  0f72                slli    t5,t5,0x1c\n"
-            "  1a:  040f0763            beqz    t5,0x68\n"
+            "  1a:  020f0f63            beqz    t5,0x58\n"
             "  1e:  8f7e                mv  t5,t6\n"
-            "  20:  4e8d                li  t4,3\n"
-            "  22:  01df7f33            and t5,t5,t4\n"
-            "  26:  4e89                li  t4,2\n"
-            "  28:  01df0663            beq t5,t4,0x34\n"
-            "  2c:  a8d1                j   0x100\n"
-            "  2e:  0001                nop\n"
-            "  30:  00000013            nop\n"
-            "  34:  4f0d                li  t5,3\n"
-            "  36:  ffff4f13            not t5,t5\n"
-            "  3a:  01efffb3            and t6,t6,t5\n"
-            "  3e:  000faf83            lw  t6,0(t6)\n"
-            "  42:  8f7e                mv  t5,t6\n"
-            "  44:  03f00e93            li  t4,63\n"
-            "  48:  01df7f33            and t5,t5,t4\n"
-            "  4c:  4ea1                li  t4,8\n"
-            "  4e:  01df0d63            beq t5,t4,0x68\n"
-            "  52:  03f00f13            li  t5,63\n"
-            "  56:  01efffb3            and t6,t6,t5\n"
-            "  5a:  4f61                li  t5,24\n"
-            "  5c:  01ef8663            beq t6,t5,0x68\n"
-            "  60:  a045                j   0x100\n"
-            "  62:  0001                nop\n"
-            "  64:  00000013            nop"
+            "  20:  003f7f13            andi    t5,t5,3\n"
+            "  24:  4e89                li  t4,2\n"
+            "  26:  01df0663            beq t5,t4,0x32\n"
+            "  2a:  a8d9                j   0x100\n"
+            "  2c:  0001                nop\n"
+            "  2e:  00000013            nop\n"
+            "  32:  ffcfff93            andi    t6,t6,-4\n"
+            "  36:  000faf83            lw  t6,0(t6)\n"
+            "  3a:  8f7e                mv  t5,t6\n"
+            "  3c:  03ff7f13            andi    t5,t5,63\n"
+            "  40:  4ea1                li  t4,8\n"
+            "  42:  01df0b63            beq t5,t4,0x58\n"
+            "  46:  03ffff93            andi    t6,t6,63\n"
+            "  4a:  4f61                li  t5,24\n"
+            "  4c:  01ef8663            beq t6,t5,0x58\n"
+            "  50:  a845                j   0x100\n"
+            "  52:  0001                nop\n"
+            "  54:  00000013            nop"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
@@ -2047,42 +2030,38 @@ call_fun_test() ->
             "  20:  01852f83            lw  t6,24(a0)\n"
             "  24:  8f7e                    mv  t5,t6\n"
             "  26:  8efa                    mv  t4,t5\n"
-            "  28:  4e0d                    li  t3,3\n"
-            "  2a:  01cefeb3            and t4,t4,t3\n"
-            "  2e:  4e09                    li  t3,2\n"
-            "  30:  01ce8a63            beq t4,t3,0x44\n"
-            "  34:  04c62f83            lw  t6,76(a2)\n"
-            "  38:  03800613            li  a2,56\n"
-            "  3c:  18b00693            li  a3,395\n"
-            "  40:  877a                    mv  a4,t5\n"
-            "  42:  8f82                    jr  t6\n"
-            "  44:  4e8d                    li  t4,3\n"
-            "  46:  fffece93            not t4,t4\n"
-            "  4a:  01df7f33            and t5,t5,t4\n"
-            "  4e:  000f2f03            lw  t5,0(t5)\n"
-            "  52:  8efa                    mv  t4,t5\n"
-            "  54:  03f00e13            li  t3,63\n"
-            "  58:  01cefeb3            and t4,t4,t3\n"
-            "  5c:  4e51                    li  t3,20\n"
-            "  5e:  01ce8a63            beq t4,t3,0x72\n"
-            "  62:  04c62f83            lw  t6,76(a2)\n"
-            "  66:  06600613            li  a2,102\n"
-            "  6a:  18b00693            li  a3,395\n"
-            "  6e:  877a                    mv  a4,t5\n"
-            "  70:  8f82                    jr  t6\n"
-            "  72:  0005ae83            lw  t4,0(a1)\n"
-            "  76:  000eae83            lw  t4,0(t4)\n"
-            "  7a:  0ee2                    slli    t4,t4,0x18\n"
-            "  7c:  27000f13            li  t5,624\n"
-            "  80:  00000013            nop\n"
-            "  84:  01eeeeb3            or  t4,t4,t5\n"
-            "  88:  05d52e23            sw  t4,92(a0)\n"
-            "  8c:  08000f13            li  t5,128\n"
-            "  90:  9f32                    add t5,t5,a2\n"
-            "  92:  000f2f03            lw  t5,0(t5)\n"
-            "  96:  867e                    mv  a2,t6\n"
-            "  98:  4681                    li  a3,0\n"
-            "  9a:  8f02                    jr  t5"
+            "  28:  003efe93            andi    t4,t4,3\n"
+            "  2c:  4e09                    li  t3,2\n"
+            "  2e:  01ce8a63            beq t4,t3,0x42\n"
+            "  32:  04c62f83            lw  t6,76(a2)\n"
+            "  36:  03600613            li  a2,54\n"
+            "  3a:  18b00693            li  a3,395\n"
+            "  3e:  877a                    mv  a4,t5\n"
+            "  40:  8f82                    jr  t6\n"
+            "  42:  ffcf7f13            andi    t5,t5,-4\n"
+            "  46:  000f2f03            lw  t5,0(t5)\n"
+            "  4a:  8efa                    mv  t4,t5\n"
+            "  4c:  03fefe93            andi    t4,t4,63\n"
+            "  50:  4e51                    li  t3,20\n"
+            "  52:  01ce8a63            beq t4,t3,0x66\n"
+            "  56:  04c62f83            lw  t6,76(a2)\n"
+            "  5a:  05a00613            li  a2,90\n"
+            "  5e:  18b00693            li  a3,395\n"
+            "  62:  877a                    mv  a4,t5\n"
+            "  64:  8f82                    jr  t6\n"
+            "  66:  0005ae83            lw  t4,0(a1)\n"
+            "  6a:  000eae83            lw  t4,0(t4)\n"
+            "  6e:  0ee2                    slli    t4,t4,0x18\n"
+            "  70:  24000f13            li  t5,576\n"
+            "  74:  00000013            nop\n"
+            "  78:  01eeeeb3            or  t4,t4,t5\n"
+            "  7c:	05d52e23          	sw	t4,92(a0)\n"
+            "  80:  08000f13            li  t5,128\n"
+            "  84:  9f32                    add t5,t5,a2\n"
+            "  86:  000f2f03            lw  t5,0(t5)\n"
+            "  8a:  867e                    mv  a2,t6\n"
+            "  8c:  4681                    li  a3,0\n"
+            "  8e:  8f02                    jr  t5"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).
 
@@ -2644,7 +2623,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(t6, Reg),
                     Dump = <<
-                        "   0:  02c52f83            lw  t6,44(a0)"
+                        "   0:	02c52f83          	lw	t6,44(a0)"
                     >>,
                     jit_tests_common:assert_stream(riscv32, Dump, Stream)
                 end),
@@ -3024,19 +3003,17 @@ and_register_exhaustion_negative_test() ->
     {State4, t3} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
     {State5, t2} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
     {StateNoRegs, t1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
-    % Test negative immediate (-4) which should use NOT+AND with t0 as temp
+    % Test negative immediate (-4) which now uses ANDI directly (no temp needed)
     {StateResult, t6} = ?BACKEND:and_(StateNoRegs, {free, t6}, -4),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
-        "      0:   01852f83            lw  t6,24(a0)\n"
-        "      4:   01c52f03            lw  t5,28(a0)\n"
-        "      8:   02052e83            lw  t4,32(a0)\n"
-        "      c:   02452e03            lw  t3,36(a0)\n"
-        "     10:   02852383            lw  t2,40(a0)\n"
-        "     14:   02c52303            lw  t1,44(a0)\n"
-        "     18:   428d                    li  t0,3\n"
-        "     1a:   fff2c293            not t0,t0\n"
-        "     1e:   005fffb3            and t6,t6,t0"
+        "      0:	01852f83          	lw	t6,24(a0)\n"
+        "      4:   01c52f03          	lw	t5,28(a0)\n"
+        "      8:	02052e83          	lw	t4,32(a0)\n"
+        "      c:	02452e03          	lw	t3,36(a0)\n"
+        "     10:	02852383          	lw	t2,40(a0)\n"
+        "     14:	02c52303          	lw	t1,44(a0)\n"
+        "     18:   ffcfff93            andi    t6,t6,-4"
     >>,
     jit_tests_common:assert_stream(riscv32, ExpectedDump, Stream).
 
@@ -3049,18 +3026,17 @@ and_register_exhaustion_positive_test() ->
     {State4, t3} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
     {State5, t2} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
     {StateNoRegs, t1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
-    % Test positive immediate (0x3F) which should use AND with t0 as temp
+    % Test positive immediate (0x3F) which now uses ANDI directly (no temp needed)
     {StateResult, t6} = ?BACKEND:and_(StateNoRegs, {free, t6}, 16#3F),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
-        "   0:  01852f83            lw  t6,24(a0)\n"
-        "   4:  01c52f03            lw  t5,28(a0)\n"
-        "   8:  02052e83            lw  t4,32(a0)\n"
-        "   c:  02452e03            lw  t3,36(a0)\n"
-        "  10:  02852383            lw  t2,40(a0)\n"
-        "  14:  02c52303            lw  t1,44(a0)\n"
-        "  18:  03f00293            li  t0,63\n"
-        "  1c:  005fffb3            and t6,t6,t0"
+        "   0:	01852f83          	lw	t6,24(a0)\n"
+        "   4:	01c52f03          	lw	t5,28(a0)\n"
+        "   8:	02052e83          	lw	t4,32(a0)\n"
+        "   c:	02452e03          	lw	t3,36(a0)\n"
+        "  10:	02852383          	lw	t2,40(a0)\n"
+        "  14:	02c52303          	lw	t1,44(a0)\n"
+        "  18:  03ffff93            andi    t6,t6,63"
     >>,
     jit_tests_common:assert_stream(riscv32, ExpectedDump, Stream).
 
@@ -3569,5 +3545,127 @@ add_beam_test() ->
             % label 0
             "  e0:  00462f83            lw  t6,4(a2)\n"
             "  e4:  8f82                jr  t6"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+%% After freeing a register, cache is preserved so reload is elided
+cached_load_after_free_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [t6]),
+    {State3, t6} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State3),
+    Dump =
+        <<
+            "   0:  01852f83          	lw	t6,24(a0)"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+%% Verify that and_ with a large positive immediate invalidates the Temp
+%% register cache entry. Before the fix, the Temp register (used to hold the
+%% and mask) kept a stale cache entry, causing a subsequent
+%% move_to_native_register for the same VM register to skip the load.
+and_positive_imm_invalidates_temp_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, t5} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:free_native_registers(State2, [t5]),
+    % and_ with 0x3F00 (> 2047) picks t5 as Temp, loads mask into it
+    {State4, t6} = ?BACKEND:and_(State3, {free, t6}, 16#3F00),
+    % This must emit a lw to reload x_reg 1, not use stale cache
+    {State5, t5} = ?BACKEND:move_to_native_register(State4, {x_reg, 1}),
+    Stream = ?BACKEND:stream(State5),
+    Dump =
+        <<
+            "   0:  01852f83          	lw	t6,24(a0)\n"
+            "   4:	01c52f03          	lw	t5,28(a0)\n"
+            "   8:  6f11                lui t5,0x4\n"
+            "   a:  f00f0f13            addi    t5,t5,-256\n"
+            "   e:  01efffb3            and t6,t6,t5\n"
+            "  12:  01c52f03          	lw	t5,28(a0)"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+if_block_cond_free_reg_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, t5} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:if_block(
+        State2,
+        {{free, t6}, '&', 16#F, '!=', 16#F},
+        fun(BSt0) -> ?BACKEND:add(BSt0, t5, 2) end
+    ),
+    {State4, t6} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:  01852f83          	lw	t6,24(a0)\n"
+            "   4:	01c52f03          	lw	t5,28(a0)\n"
+            "   8:  ffffcf93            not t6,t6\n"
+            "   c:  0ff2                slli    t6,t6,0x1c\n"
+            "   e:  000f8363            beqz    t6,0x14\n"
+            "  12:  0f09                addi    t5,t5,2\n"
+            "  14:  01852f83          	lw	t6,24(a0)"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+jump_to_label_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [t6]),
+    State3 = ?BACKEND:jump_to_label(State2, 42),
+    {State4, t6} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:	01852f83          	lw	t6,24(a0)\n"
+            "   4:  ffff                .insn   2, 0xffff\n"
+            "   6:  ffff                .insn   2, 0xffff\n"
+            "   8:  ffff                .insn   2, 0xffff\n"
+            "   a:  ffff                .insn   2, 0xffff\n"
+            "   c:	01852f83          	lw	t6,24(a0)"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+ldr_y_reg_invalidates_hidden_temp_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, t5} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, t4} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    State4 = ?BACKEND:free_native_registers(State3, [t5, t4]),
+    {State5, t5} = ?BACKEND:move_to_native_register(State4, {y_reg, 0}),
+    {State6, t4} = ?BACKEND:move_to_native_register(State5, {x_reg, 2}),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	01852f83          	lw	t6,24(a0)\n"
+            "   4:	01c52f03          	lw	t5,28(a0)\n"
+            "   8:	02052e83          	lw	t4,32(a0)\n"
+            "   c:	01452e83          	lw	t4,20(a0)\n"
+            "  10:  000eaf03            lw  t5,0(t4)\n"
+            "  14:	02052e83          	lw	t4,32(a0)"
+        >>,
+    jit_tests_common:assert_stream(riscv32, Dump, Stream).
+
+y_reg_load_last_available_register_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, t5} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, t4} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, t3} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+    {State5, t2} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+    {State6, t1} = ?BACKEND:move_to_native_register(State5, {x_reg, 5}),
+    {State7, t0} = ?BACKEND:move_to_native_register(State6, {y_reg, 0}),
+    Stream = ?BACKEND:stream(State7),
+    Dump =
+        <<
+            "    0:	01852f83          	lw	t6,24(a0)\n"
+            "    4:	01c52f03          	lw	t5,28(a0)\n"
+            "    8:	02052e83          	lw	t4,32(a0)\n"
+            "    c:	02452e03          	lw	t3,36(a0)\n"
+            "   10:	02852383          	lw	t2,40(a0)\n"
+            "   14:	02c52303          	lw	t1,44(a0)\n"
+            "   18:	01452283          	lw	t0,20(a0)\n"
+            "  1c:  0002a283            lw  t0,0(t0)"
         >>,
     jit_tests_common:assert_stream(riscv32, Dump, Stream).

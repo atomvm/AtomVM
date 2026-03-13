@@ -20,9 +20,7 @@
 
 -module(jit_armv6m_tests).
 
--ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
 -include("jit/include/jit.hrl").
 -include("jit/src/term.hrl").
@@ -1378,19 +1376,19 @@ call_only_or_schedule_next_and_label_relocation_test() ->
             "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   4:	449f      	add	pc, r3\n"
             "   6:	46c0      	nop			; (mov r8, r8)\n"
-            "   8:	0054      	lsls	r4, r2, #1\n"
+            "   8:	0055      	lsls	r5, r2, #1\n"
             "   a:	0000      	movs	r0, r0\n"
             "   c:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
             "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  10:	449f      	add	pc, r3\n"
             "  12:	46c0      	nop			; (mov r8, r8)\n"
-            "  14:	0010      	movs	r0, r2\n"
+            "  14:	0011      	movs	r1, r2\n"
             "  16:	0000      	movs	r0, r0\n"
             "  18:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
             "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  1c:	449f      	add	pc, r3\n"
             "  1e:	46c0      	nop			; (mov r8, r8)\n"
-            "  20:	0030      	movs	r0, r6\n"
+            "  20:	0031      	movs	r1, r6\n"
             "  22:	0000      	movs	r0, r0\n"
             "  24:	9e00      	ldr	r6, [sp, #0]\n"
             "  26:	68b7      	ldr	r7, [r6, #8]\n"
@@ -1450,19 +1448,19 @@ call_only_or_schedule_next_and_label_relocation_unaligned_test() ->
             "   4:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   6:	449f      	add	pc, r3\n"
             "   8:	46c0      	nop			; (mov r8, r8)\n"
-            "   a:	0056      	lsls	r6, r2, #1\n"
+            "   a:	0057      	lsls	r7, r2, #1\n"
             "   c:	0000      	movs	r0, r0\n"
             "   e:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
             "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  12:	449f      	add	pc, r3\n"
             "  14:	46c0      	nop			; (mov r8, r8)\n"
-            "  16:	0012      	movs	r2, r2\n"
+            "  16:	0013      	movs	r3, r2\n"
             "  18:	0000      	movs	r0, r0\n"
             "  1a:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
             "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  1e:	449f      	add	pc, r3\n"
             "  20:	46c0      	nop			; (mov r8, r8)\n"
-            "  22:	0032      	movs	r2, r6\n"
+            "  22:	0033      	movs	r3, r6\n"
             "  24:	0000      	movs	r0, r0\n"
             "  26:	46c0      	nop			; (mov r8, r8)\n"
             "  28:	9e00      	ldr	r6, [sp, #0]\n"
@@ -1853,7 +1851,7 @@ is_boolean_test() ->
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop\n"
-        "  14:	00ec      	lsls	r4, r5, #3\n"
+        "  14:	00ed      	lsls	r5, r5, #3\n"
         "  16:	0000      	movs	r0, r0\n"
         "  18:	6987      	ldr	r7, [r0, #24]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
@@ -1894,7 +1892,7 @@ is_boolean_far_test() ->
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop\n"
-        "  14:	0fec      	lsrs	r4, r5, #31\n"
+        "  14:	0fed      	lsrs	r5, r5, #31\n"
         "  16:	0000      	movs	r0, r0\n"
         "  18:	6987      	ldr	r7, [r0, #24]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
@@ -1971,7 +1969,7 @@ is_boolean_far_known_test() ->
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop\n"
-        "  14:	0fec      	lsrs	r4, r5, #31\n"
+        "  14:	0fed      	lsrs	r5, r5, #31\n"
         "  16:	0000      	movs	r0, r0\n"
         "  18:	6987      	ldr	r7, [r0, #24]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
@@ -2019,7 +2017,7 @@ is_boolean_far_known_unaligned_test() ->
         "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  12:	449f      	add	pc, r3\n"
         "  14:	46c0      	nop\n"
-        "  16:	0fea      	lsrs	r2, r5, #31\n"
+        "  16:	0feb      	lsrs	r3, r5, #31\n"
         "  18:	0000      	movs	r0, r0\n"
         "  1a:	6987      	ldr	r7, [r0, #24]\n"
         "  1c:	2f4b      	cmp	r7, #75\n"
@@ -2124,19 +2122,19 @@ wait_test() ->
         "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "   4:	449f      	add	pc, r3\n"
         "   6:	46c0      	nop			; (mov r8, r8)\n"
-        "   8:	0034      	movs	r4, r6\n"
+        "   8:	0035      	movs	r5, r6\n"
         "   a:	0000      	movs	r0, r0\n"
         "   c:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop			; (mov r8, r8)\n"
-        "  14:	0010      	movs	r0, r2\n"
+        "  14:	0011      	movs	r1, r2\n"
         "  16:	0000      	movs	r0, r0\n"
         "  18:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
         "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  1c:	449f      	add	pc, r3\n"
         "  1e:	46c0      	nop			; (mov r8, r8)\n"
-        "  20:	001c      	movs	r4, r3\n"
+        "  20:	001d      	movs	r5, r3\n"
         "  22:	0000      	movs	r0, r0\n"
         "  24:	a700      	add	r7, pc, #0	; (adr r7, 0x28)\n"
         "  26:	260f      	movs	r6, #15\n"
@@ -2185,13 +2183,13 @@ return_labels_and_lines_test() ->
         "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  10:	449f      	add	pc, r3\n"
         "  12:	46c0      	nop\n"
-        "  14:	fffc      	.short	0xfffc\n"
+        "  14:	fffd      	.short	0xfffd\n"
         "  16:	ffff      	.short	0xffff\n"
         "  18:	4b01      	ldr	r3, [pc, #4]\n"
         "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  1c:	449f      	add	pc, r3\n"
         "  1e:	46c0      	nop\n"
-        "  20:	0000      	movs	r0, r0\n"
+        "  20:	0001      	movs	r1, r0\n"
         "  22:	0000      	movs	r0, r0\n"
         "  24:	a000      	add	r0, pc, #0\n"
         "  26:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
@@ -2244,13 +2242,13 @@ return_labels_and_lines_unaligned_test() ->
         "  10:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  12:	449f      	add	pc, r3\n"
         "  14:	46c0      	nop\n"
-        "  16:	fffa      	.short	0xfffa\n"
+        "  16:	fffb      	.short	0xfffb\n"
         "  18:	ffff      	.short	0xffff\n"
         "  1a:	4b01      	ldr	r3, [pc, #4]\n"
         "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
         "  1e:	449f      	add	pc, r3\n"
         "  20:	46c0      	nop\n"
-        "  22:	fffe      	.short	0xfffe\n"
+        "  22:	ffff      	.short	0xffff\n"
         "  24:	ffff      	.short	0xffff\n"
         "  26:	a001      	add	r0, pc, #4\n"
         "  28:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
@@ -3935,25 +3933,25 @@ add_beam_test() ->
             "   2:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "   4:	449f      	add	pc, r3\n"
             "   6:	46c0      	nop			; (mov r8, r8)\n"
-            "   8:	00d8      	lsls	r0, r3, #3\n"
+            "   8:	00d9      	lsls	r1, r3, #3\n"
             "   a:	0000      	movs	r0, r0\n"
             "   c:	4b01      	ldr	r3, [pc, #4]	; (0x14)\n"
             "   e:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  10:	449f      	add	pc, r3\n"
             "  12:	46c0      	nop			; (mov r8, r8)\n"
-            "  14:	001c      	movs	r4, r3\n"
+            "  14:	001d      	movs	r5, r3\n"
             "  16:	0000      	movs	r0, r0\n"
             "  18:	4b01      	ldr	r3, [pc, #4]	; (0x20)\n"
             "  1a:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  1c:	449f      	add	pc, r3\n"
             "  1e:	46c0      	nop			; (mov r8, r8)\n"
-            "  20:	0044      	lsls	r4, r0, #1\n"
+            "  20:	0045      	lsls	r5, r0, #1\n"
             "  22:	0000      	movs	r0, r0\n"
             "  24:	4b01      	ldr	r3, [pc, #4]	; (0x2c)\n"
             "  26:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
             "  28:	449f      	add	pc, r3\n"
             "  2a:	46c0      	nop			; (mov r8, r8)\n"
-            "  2c:	00a8      	lsls	r0, r5, #2\n"
+            "  2c:	00a9      	lsls	r1, r5, #2\n"
             "  2e:	0000      	movs	r0, r0\n"
             % label 1
             % {move,{integer,9},{x,1}}.
@@ -4061,5 +4059,176 @@ add_beam_test() ->
             "  e4:	9705      	str	r7, [sp, #20]\n"
             "  e6:	46b6      	mov	lr, r6\n"
             "  e8:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% After freeing a register, cache is preserved so reload is elided
+cached_load_after_free_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [r7]),
+    {State3, r7} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State3),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify that and_ with a negative immediate invalidates the Temp register
+%% cache entry. Before the fix, the Temp register (used to hold the bics mask)
+%% kept a stale cache entry, causing a subsequent move_to_native_register for
+%% the same VM register to skip the load.
+and_negative_imm_invalidates_temp_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:free_native_registers(State2, [r6]),
+    % and_ with -4 picks r6 as Temp (first available), loads 3 into it, bics
+    {State4, r7} = ?BACKEND:and_(State3, {free, r7}, -4),
+    % This must emit a ldr to reload x_reg 1, not use stale cache
+    {State5, r6} = ?BACKEND:move_to_native_register(State4, {x_reg, 1}),
+    Stream = ?BACKEND:stream(State5),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	2603      	movs	r6, #3\n"
+            "   6:	43b7      	bics	r7, r6\n"
+            "   8:	69c6      	ldr	r6, [r0, #28]"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Same test but with a positive immediate, exercising the ands path.
+and_positive_imm_invalidates_temp_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:free_native_registers(State2, [r6]),
+    {State4, r7} = ?BACKEND:and_(State3, {free, r7}, 16#3F),
+    {State5, r6} = ?BACKEND:move_to_native_register(State4, {x_reg, 1}),
+    Stream = ?BACKEND:stream(State5),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	263f      	movs	r6, #63	; 0x3f\n"
+            "   6:	4037      	ands	r7, r6\n"
+            "   8:	69c6      	ldr	r6, [r0, #28]"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify if_block_cond invalidates register cache for destructive {free, Reg}
+%% operations. The {{free, Reg}, '&', 0xF, '!=', 0xF} condition uses mvns+lsls
+%% which clobbers Reg, but before the fix the cache was not invalidated.
+if_block_cond_free_reg_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    State3 = ?BACKEND:if_block(
+        State2,
+        {{free, r7}, '&', 16#F, '!=', 16#F},
+        fun(BSt0) -> ?BACKEND:add(BSt0, r6, 2) end
+    ),
+    {State4, r7} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	43ff      	mvns	r7, r7\n"
+            "   6:	073f      	lsls	r7, r7, #28\n"
+            "   8:	d000      	beq.n	0xc\n"
+            "   a:	3602      	adds	r6, #2\n"
+            "   c:	6987      	ldr	r7, [r0, #24]"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify jump_to_label invalidates all register caching. After an unconditional
+%% jump, register contents are unknown. Before the fix, stale cache entries
+%% survived and caused skipped loads via jit_regs:merge in if_block.
+jump_to_label_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [r7]),
+    State3 = ?BACKEND:jump_to_label(State2, 42),
+    {State4, r7} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	ffff ffff 			; <UNDEFINED> instruction: 0xffffffff\n"
+            "   6:	ffff ffff 			; <UNDEFINED> instruction: 0xffffffff\n"
+            "   a:	ffff 6987 	vtbl.8	d22, {d31-<overflow reg d32}, d7"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify move_array_element to {x_reg, X} invalidates the vm_loc cache entry.
+%% Before the fix, a register caching {x_reg, X} would still be considered
+%% valid after move_array_element overwrote {x_reg, X} in memory.
+move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    S3 = ?BACKEND:move_array_element(State2, r6, 0, {x_reg, 5}),
+    {S4, _} = ?BACKEND:move_to_native_register(S3, {x_reg, 5}),
+    Stream = ?BACKEND:stream(S4),
+    Dump =
+        <<
+            "   0:	6ac7      	ldr	r7, [r0, #44]	; 0x2c\n"
+            "   2:	6986      	ldr	r6, [r0, #24]\n"
+            "   4:	6835      	ldr	r5, [r6, #0]\n"
+            "   6:	62c5      	str	r5, [r0, #44]	; 0x2c\n"
+            "   8:	6ac5      	ldr	r5, [r0, #44]	; 0x2c"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify ldr_y_reg invalidates its hidden temp register's cache entry.
+%% ldr_y_reg uses first_avail(AvailT) as a scratch register to load the
+%% Y_REGS pointer, but before the fix this temp was not invalidated.
+ldr_y_reg_invalidates_hidden_temp_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    State4 = ?BACKEND:free_native_registers(State3, [r6, r5]),
+    % y_reg load: Reg=r6 (first avail), hidden temp=r5 (first avail of remaining)
+    {State5, r6} = ?BACKEND:move_to_native_register(State4, {y_reg, 0}),
+    % r5 was hidden temp - if not invalidated, cache still says r5={x_reg,2}
+    {State6, r5} = ?BACKEND:move_to_native_register(State5, {x_reg, 2}),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+            "   6:	6945      	ldr	r5, [r0, #20]\n"
+            "   8:	682e      	ldr	r6, [r5, #0]\n"
+            "   a:	6a05      	ldr	r5, [r0, #32]"
+        >>,
+    jit_tests_common:assert_stream(arm, Dump, Stream).
+
+%% Verify move_to_native_register for y_reg does not crash with function_clause
+%% when all other registers are exhausted (AvailT=0). Before the fix,
+%% first_avail(0) was called in the invalidation code.
+y_reg_load_last_available_register_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r5} = ?BACKEND:move_to_native_register(State2, {x_reg, 2}),
+    {State4, r4} = ?BACKEND:move_to_native_register(State3, {x_reg, 3}),
+    {State5, r3} = ?BACKEND:move_to_native_register(State4, {x_reg, 4}),
+    % r1 is the last available register
+    {State6, r1} = ?BACKEND:move_to_native_register(State5, {y_reg, 0}),
+    Stream = ?BACKEND:stream(State6),
+    Dump =
+        <<
+            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
+            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
+            "   a:	6941      	ldr	r1, [r0, #20]\n"
+            "   c:	6809      	ldr	r1, [r1, #0]"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).

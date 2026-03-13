@@ -20,9 +20,7 @@
 
 -module(jit_x86_64_tests).
 
--ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
--endif.
 
 -include("jit/include/jit.hrl").
 -include("jit/src/term.hrl").
@@ -232,9 +230,9 @@ call_ext_only_test() ->
             "  14:	ff e0                	jmpq   *%rax\n"
             "  16:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
             "  1a:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
-            "  21:	48 c7 c1 02 00 00 00 	mov    $0x2,%rcx\n"
-            "  28:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8\n"
-            "  2f:	ff e0                	jmpq   *%rax\n"
+            "  21:	48 89 d1             	mov    %rdx,%rcx\n"
+            "  24:	49 c7 c0 ff ff ff ff 	mov    $0xffffffffffffffff,%r8\n"
+            "  2b:	ff e0                	jmpq   *%rax\n"
         >>,
     jit_tests_common:assert_stream(x86_64, Dump, Stream).
 
@@ -253,9 +251,9 @@ call_ext_last_test() ->
             "  14:	ff e0                	jmpq   *%rax\n"
             "  16:	48 8b 42 20          	mov    0x20(%rdx),%rax\n"
             "  1a:	48 c7 c2 02 00 00 00 	mov    $0x2,%rdx\n"
-            "  21:	48 c7 c1 02 00 00 00 	mov    $0x2,%rcx\n"
-            "  28:	49 c7 c0 0a 00 00 00 	mov    $0xa,%r8\n"
-            "  2f:	ff e0                	jmpq   *%rax\n"
+            "  21:	48 89 d1             	mov    %rdx,%rcx\n"
+            "  24:	49 c7 c0 0a 00 00 00 	mov    $0xa,%r8\n"
+            "  2b:	ff e0                	jmpq   *%rax\n"
         >>,
     jit_tests_common:assert_stream(x86_64, Dump, Stream).
 
@@ -1851,5 +1849,56 @@ wait_known_test() ->
             "  25:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
             "  29:	48 8b 82 e8 00 00 00 	mov    0xe8(%rdx),%rax\n"
             "  30:	ff e0                	jmpq   *%rax"
+        >>,
+    jit_tests_common:assert_stream(x86_64, Dump, Stream).
+
+%% Loading the same x_reg twice should skip the second load
+cached_load_same_xreg_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State2),
+    Dump =
+        <<
+            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax"
+        >>,
+    jit_tests_common:assert_stream(x86_64, Dump, Stream).
+
+%% Loading a different x_reg should emit a load, loading same again should skip
+cached_load_different_xreg_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    {State2, r11} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    {State3, r11} = ?BACKEND:move_to_native_register(State2, {x_reg, 1}),
+    Stream = ?BACKEND:stream(State3),
+    Dump =
+        <<
+            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+            "   4:	4c 8b 5f 38          	mov    0x38(%rdi),%r11"
+        >>,
+    jit_tests_common:assert_stream(x86_64, Dump, Stream).
+
+%% Loading cp twice should skip the second load
+cached_load_cp_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, cp),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, cp),
+    Stream = ?BACKEND:stream(State2),
+    Dump =
+        <<
+            "   0:	48 8b 87 b8 00 00 00 	mov    0xb8(%rdi),%rax"
+        >>,
+    jit_tests_common:assert_stream(x86_64, Dump, Stream).
+
+%% After freeing a register, cache is preserved so reload is elided
+cached_load_after_free_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [rax]),
+    {State3, rax} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State3),
+    Dump =
+        <<
+            "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax"
         >>,
     jit_tests_common:assert_stream(x86_64, Dump, Stream).
