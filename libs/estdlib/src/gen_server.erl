@@ -125,22 +125,22 @@ init_it(Starter, Name, Module, Args, Options) ->
             init_it(Starter, Module, Args, Options)
     catch
         error:badarg:S ->
-            ErrorT =
-                case whereis(Name) of
-                    undefined ->
-                        badarg;
-                    Pid when is_pid(Pid) ->
-                        {already_started, Pid}
-                end,
-            crash_report(
-                io_lib:format("gen_server:init_it/5: Error initializing module ~p under name ~p", [
-                    Module, Name
-                ]),
-                Starter,
-                ErrorT,
-                S
-            ),
-            proc_lib:init_ack(Starter, {error, ErrorT})
+            case whereis(Name) of
+                undefined ->
+                    crash_report(
+                        io_lib:format(
+                            "gen_server:init_it/5: Error initializing module ~p under name ~p", [
+                                Module, Name
+                            ]
+                        ),
+                        Starter,
+                        badarg,
+                        S
+                    ),
+                    proc_lib:init_ack(Starter, {error, badarg});
+                Pid when is_pid(Pid) ->
+                    proc_lib:init_ack(Starter, {error, {already_started, Pid}})
+            end
     end.
 
 init_it(Starter, Module, Args, Options) ->
