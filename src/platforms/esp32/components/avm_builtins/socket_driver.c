@@ -188,6 +188,10 @@ struct SocketData
     bool active : 1;
     bool binary : 1;
     bool read_condition : 1;
+    bool connect_in_progress : 1;
+
+    int32_t connect_receiver_process_pid;
+    uint64_t connect_ref_ticks;
 };
 
 struct TCPClientSocketData
@@ -221,6 +225,7 @@ struct UDPSocketData
 struct NetconnEvent
 {
     struct netconn *netconn;
+    enum netconn_evt evt;
     u16_t len;
 };
 
@@ -254,14 +259,18 @@ void IRAM_ATTR socket_callback(struct netconn *netconn, enum netconn_evt evt, u1
 {
     TRACE("socket_callback netconn=%p, evt=%d, len=%d\n", (void *) netconn, evt, len);
 
-    // We only listen to NETCONN_EVT_RCVPLUS events
-    // NETCONN_EVT_RCVPLUS means it's safe to perform a potentially call once
-    // more. However, two data events (with len > 0) may be processed by a single
-    // netconn_recv. So we're sending len as well to address the case where len
-    // is equal to 0 and netconn_recv will return an error.
-    if (evt == NETCONN_EVT_RCVPLUS) {
+    // NETCONN_EVT_RCVPLUS means it's safe to perform a potentially blocking
+    // read call once more. However, two data events (with len > 0) may be
+    // processed by a single netconn_recv. So we're sending len as well to
+    // address the case where len is equal to 0 and netconn_recv will return an
+    // error.
+    //
+    // TCP connect completion is reported through SENDPLUS / ERROR events when
+    // using lwIP's non-blocking connect path.
+    if (evt == NETCONN_EVT_RCVPLUS || evt == NETCONN_EVT_SENDPLUS || evt == NETCONN_EVT_ERROR) {
         struct NetconnEvent event;
         event.netconn = netconn;
+        event.evt = evt;
         event.len = len;
 
         BaseType_t xHigherPriorityTaskWoken;
@@ -315,10 +324,11 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
         synclist_unlock(&platform->sockets);
 
         if (socket != NULL) {
-            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(2), heap)
-            term message = term_alloc_tuple(2, &heap);
+            BEGIN_WITH_STACK_HEAP(TUPLE_SIZE(3), heap)
+            term message = term_alloc_tuple(3, &heap);
             term_put_tuple_element(message, 0, globalcontext_make_atom(glb, netconn_event_internal));
-            term_put_tuple_element(message, 1, term_from_int(event.len));
+            term_put_tuple_element(message, 1, term_from_int(event.evt));
+            term_put_tuple_element(message, 2, term_from_int(event.len));
             globalcontext_send_message(glb, socket->process_id, message);
             END_WITH_STACK_HEAP(heap, glb)
         }
@@ -388,6 +398,9 @@ static void socket_data_init(struct SocketData *data, Context *ctx, struct netco
     data->active = true;
     data->binary = true;
     data->read_condition = false;
+    data->connect_in_progress = false;
+    data->connect_receiver_process_pid = 0;
+    data->connect_ref_ticks = 0;
     data->buffer = 512;
 
     list_append(sockets, &data->sockets_head);
@@ -422,6 +435,37 @@ static struct TCPClientSocketData *tcp_client_socket_data_new(Context *ctx, stru
     tcp_data->socket_data.controlling_process_pid = controlling_process_pid;
 
     return tcp_data;
+}
+
+static bool socket_data_is_connecting(const struct SocketData *socket_data)
+{
+    return !IS_NULL_PTR(socket_data) && socket_data->type == TCPClientSocket && socket_data->connect_in_progress;
+}
+
+static void socket_data_clear_connect_reply(struct SocketData *socket_data)
+{
+    socket_data->connect_in_progress = false;
+    socket_data->connect_receiver_process_pid = 0;
+    socket_data->connect_ref_ticks = 0;
+}
+
+static void socket_data_remove(Context *ctx, struct SocketData *socket_data)
+{
+    struct ESP32PlatformData *platform = ctx->global->platform_data;
+    synclist_remove(&platform->sockets, &socket_data->sockets_head);
+}
+
+static void tcp_client_cleanup_connect_failure(Context *ctx, struct TCPClientSocketData *tcp_data)
+{
+    socket_data_remove(ctx, &tcp_data->socket_data);
+    if (!IS_NULL_PTR(tcp_data->socket_data.conn)) {
+        if (UNLIKELY(netconn_delete(tcp_data->socket_data.conn) != ERR_OK)) {
+            TRACE("tcp_client_cleanup_connect_failure: netconn_delete failed\n");
+        }
+        tcp_data->socket_data.conn = NULL;
+    }
+    ctx->platform_data = NULL;
+    free(tcp_data);
 }
 
 static struct UDPSocketData *udp_socket_data_new(Context *ctx, struct netconn *conn,
@@ -459,18 +503,30 @@ static term lwip_error_atom(GlobalContext *glb, err_t status)
             return globalcontext_make_atom(glb, ATOM_STR("\x7", "err_buf"));
         case ERR_TIMEOUT:
             return globalcontext_make_atom(glb, ATOM_STR("\x9", "etimedout"));
+        case ERR_RTE:
+            return globalcontext_make_atom(glb, ATOM_STR("\xB", "enetunreach"));
+        case ERR_INPROGRESS:
+            return globalcontext_make_atom(glb, ATOM_STR("\xB", "einprogress"));
+        case ERR_VAL:
+            return globalcontext_make_atom(glb, ATOM_STR("\x6", "einval"));
         case ERR_WOULDBLOCK:
             return globalcontext_make_atom(glb, ATOM_STR("\xB", "ewouldblock"));
         case ERR_USE:
             return globalcontext_make_atom(glb, ATOM_STR("\xA", "eaddrinuse"));
         case ERR_ALREADY:
             return globalcontext_make_atom(glb, ATOM_STR("\x8", "ealready"));
+        case ERR_ISCONN:
+            return globalcontext_make_atom(glb, ATOM_STR("\x7", "eisconn"));
         case ERR_CONN:
             return globalcontext_make_atom(glb, ATOM_STR("\x8", "enotconn"));
+        case ERR_IF:
+            return globalcontext_make_atom(glb, ATOM_STR("\x8", "enetdown"));
         case ERR_ABRT:
             return globalcontext_make_atom(glb, ATOM_STR("\xC", "econnaborted"));
         case ERR_RST:
             return globalcontext_make_atom(glb, ATOM_STR("\xA", "econnreset"));
+        case ERR_CLSD:
+            return CLOSED_ATOM;
         case ERR_ARG:
             return BADARG_ATOM;
         default:
@@ -543,7 +599,7 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     new_tcp_data->socket_data.binary = tcp_data->socket_data.binary;
     new_tcp_data->socket_data.buffer = tcp_data->socket_data.buffer;
 
-    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE + TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+    if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE + TUPLE_SIZE(3)) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
     term result_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -551,9 +607,10 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     term_put_tuple_element(result_tuple, 1, socket_pid);
 
     if (is_ready) {
-        term message = term_alloc_tuple(2, &ctx->heap);
+        term message = term_alloc_tuple(3, &ctx->heap);
         term_put_tuple_element(message, 0, globalcontext_make_atom(glb, netconn_event_internal));
-        term_put_tuple_element(message, 1, term_from_int(ready_len));
+        term_put_tuple_element(message, 1, term_from_int(NETCONN_EVT_RCVPLUS));
+        term_put_tuple_element(message, 2, term_from_int(ready_len));
         globalcontext_send_message(glb, new_ctx->process_id, message);
     }
 
@@ -827,10 +884,58 @@ static NativeHandlerResult do_data_netconn_event(Context *ctx, int len)
     return do_receive_data(ctx);
 }
 
-static NativeHandlerResult do_netconn_event(Context *ctx, int len)
+static NativeHandlerResult do_connect_netconn_event(Context *ctx, enum netconn_evt evt, int len)
+{
+    struct TCPClientSocketData *tcp_data = ctx->platform_data;
+    struct SocketData *socket_data = &tcp_data->socket_data;
+
+    if (evt == NETCONN_EVT_RCVPLUS) {
+        socket_data->avail_bytes += len;
+        if (len == 0) {
+            socket_data->read_condition = true;
+        }
+    }
+
+    if (IS_NULL_PTR(socket_data->conn) || socket_data->conn->state == NETCONN_CONNECT) {
+        return NativeContinue;
+    }
+
+    int32_t pid = socket_data->connect_receiver_process_pid;
+    uint64_t ref_ticks = socket_data->connect_ref_ticks;
+    err_t status = netconn_err(socket_data->conn);
+    socket_data_clear_connect_reply(socket_data);
+
+    if (UNLIKELY(status != ERR_OK)) {
+        tcp_client_cleanup_connect_failure(ctx, tcp_data);
+        do_send_error_reply(ctx, status, ref_ticks, pid);
+        return NativeContinue;
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+        AVM_ABORT();
+    }
+    do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
+
+    if (socket_data->active && (socket_data->avail_bytes > 0 || socket_data->read_condition)) {
+        return do_receive_data(ctx);
+    }
+
+    return NativeContinue;
+}
+
+static NativeHandlerResult do_netconn_event(Context *ctx, enum netconn_evt evt, int len)
 {
     NativeHandlerResult result = NativeContinue;
     struct SocketData *socket_data = ctx->platform_data;
+    if (IS_NULL_PTR(socket_data)) {
+        return NativeContinue;
+    }
+    if (socket_data_is_connecting(socket_data)) {
+        return do_connect_netconn_event(ctx, evt, len);
+    }
+    if (evt != NETCONN_EVT_RCVPLUS) {
+        return NativeContinue;
+    }
     if (socket_data->type == TCPServerSocket) {
         do_tcp_server_netconn_event(ctx);
     } else {
@@ -899,10 +1004,6 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
         return;
     }
 
-    if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
-        AVM_ABORT();
-    }
-
     TRACE("tcp: connecting to: %s\n", address_string);
 
     ip_addr_t remote_ip;
@@ -919,22 +1020,16 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
 
     free(address_string);
 
-    // Lock list of sockets before the event callback is called
-    struct ListHead *sockets = socket_data_preinit(platform);
     struct netconn *conn = netconn_new_with_proto_and_callback(NETCONN_TCP, 0, socket_callback);
     if (IS_NULL_PTR(conn)) {
         AVM_ABORT();
     }
 
-    status = netconn_connect(conn, &remote_ip, port);
-    if (UNLIKELY(status != ERR_OK)) {
-        TRACE("tcp: failed connect: %i\n", status);
-        do_send_error_reply(ctx, status, ref_ticks, pid);
-        return;
-    }
+    netconn_set_nonblocking(conn, true);
 
-    TRACE("tcp: connected.\n");
-
+    // Register the socket before starting the connect so callbacks can still
+    // be routed while the connection is pending.
+    struct ListHead *sockets = socket_data_preinit(platform);
     struct TCPClientSocketData *tcp_data = tcp_client_socket_data_new(ctx, conn, sockets, controlling_process_pid);
     socket_data_postinit(platform);
     if (IS_NULL_PTR(tcp_data)) {
@@ -942,7 +1037,28 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     }
     tcp_data->socket_data.active = active;
     tcp_data->socket_data.binary = binary;
+    tcp_data->socket_data.connect_in_progress = true;
+    tcp_data->socket_data.connect_receiver_process_pid = pid;
+    tcp_data->socket_data.connect_ref_ticks = ref_ticks;
 
+    status = netconn_connect(conn, &remote_ip, port);
+    netconn_set_nonblocking(conn, false);
+    if (status == ERR_INPROGRESS) {
+        TRACE("tcp: connect in progress.\n");
+        return;
+    }
+    if (UNLIKELY(status != ERR_OK)) {
+        TRACE("tcp: failed connect: %i\n", status);
+        tcp_client_cleanup_connect_failure(ctx, tcp_data);
+        do_send_error_reply(ctx, status, ref_ticks, pid);
+        return;
+    }
+
+    TRACE("tcp: connected.\n");
+    socket_data_clear_connect_reply(&tcp_data->socket_data);
+    if (UNLIKELY(memory_ensure_free(ctx, REPLY_SIZE) != MEMORY_GC_OK)) {
+        AVM_ABORT();
+    }
     do_send_reply(ctx, OK_ATOM, ref_ticks, pid);
 }
 
@@ -1250,17 +1366,21 @@ static void do_close(Context *ctx, const GenMessage *gen_message)
     if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2) + REPLY_SIZE) != MEMORY_GC_OK)) {
         AVM_ABORT();
     }
-    err_t close_disconnect_res = 0;
+    if (IS_NULL_PTR(socket_data) || IS_NULL_PTR(socket_data->conn)) {
+        do_send_error_reply(ctx, ERR_ARG, ref_ticks, pid);
+        return;
+    }
+
+    err_t close_disconnect_res = ERR_OK;
     if (socket_data->type == UDPSocket) {
         close_disconnect_res = netconn_disconnect(socket_data->conn);
-    } else if (socket_data->type == TCPClientSocket) {
+    } else if (socket_data->type == TCPClientSocket && !socket_data->connect_in_progress) {
         close_disconnect_res = netconn_close(socket_data->conn);
     }
     err_t delete_res = netconn_delete(socket_data->conn);
 
     socket_data->conn = NULL;
-    struct ESP32PlatformData *platform = ctx->global->platform_data;
-    synclist_remove(&platform->sockets, &socket_data->sockets_head);
+    socket_data_remove(ctx, socket_data);
 
     if (UNLIKELY(close_disconnect_res != ERR_OK)) {
         do_send_error_reply(ctx, close_disconnect_res, ref_ticks, pid);
@@ -1423,9 +1543,11 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         #endif
         TRACE("\n");
 
-        if (term_is_tuple(msg) && term_get_tuple_element(msg, 0) == globalcontext_make_atom(glb, netconn_event_internal)) {
-            int len = term_to_int32(term_get_tuple_element(msg, 1));
-            NativeHandlerResult result = do_netconn_event(ctx, len);
+        if (term_is_tuple(msg) && term_get_tuple_arity(msg) == 3
+            && term_get_tuple_element(msg, 0) == globalcontext_make_atom(glb, netconn_event_internal)) {
+            enum netconn_evt evt = term_to_int32(term_get_tuple_element(msg, 1));
+            int len = term_to_int32(term_get_tuple_element(msg, 2));
+            NativeHandlerResult result = do_netconn_event(ctx, evt, len);
             if (result == NativeTerminate) {
                 // We don't need to remove message.
                 return NativeTerminate;
@@ -1443,6 +1565,17 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         }
 
         term cmd_name = term_get_tuple_element(gen_message.req, 0);
+
+        if (cmd_name != INIT_ATOM && cmd_name != CLOSE_ATOM && IS_NULL_PTR(ctx->platform_data)) {
+            do_send_error_reply(ctx, ERR_ARG, term_to_ref_ticks(gen_message.ref), term_to_local_process_id(gen_message.pid));
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            continue;
+        }
+        if (cmd_name == INIT_ATOM && !IS_NULL_PTR(ctx->platform_data)) {
+            do_send_error_reply(ctx, ERR_ALREADY, term_to_ref_ticks(gen_message.ref), term_to_local_process_id(gen_message.pid));
+            mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+            continue;
+        }
 
         switch (cmd_name) {
             //TODO: remove this

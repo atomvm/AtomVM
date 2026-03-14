@@ -30,6 +30,7 @@ start() ->
     {ok, UDPAddr} = test_udp(false, 2024),
     ok = test_tcp_server(true, 10080),
     ok = test_tcp_server(false, 10081),
+    ok = test_pending_connect_does_not_stall(),
     0.
 
 test_tcp_client(Active, BinaryOpt) ->
@@ -325,6 +326,78 @@ tcp_client(Active, Port) ->
                     end
         end,
     ok.
+
+test_pending_connect_does_not_stall() ->
+    Parent = self(),
+    Connector = spawn(fun() -> pending_connect(Parent) end),
+    Port =
+        receive
+            {pending_connect_port, Connector, PendingPort} when is_port(PendingPort) ->
+                PendingPort;
+            UnexpectedPortMessage ->
+                {unexpected_pending_connect_port_message, UnexpectedPortMessage}
+        after 5000 ->
+            {pending_connect_port, timeout}
+        end,
+    true = is_port(Port),
+    true = is_process_alive(Connector),
+    spawn(fun() -> tick(Parent, 5) end),
+    ok = wait_for_ticks(Connector, 5),
+    true = is_process_alive(Connector),
+    ok =
+        case call(Port, {close}, 5000) of
+            ok -> ok;
+            {error, noproc} -> ok;
+            UnexpectedCloseResult -> {unexpected_pending_connect_close, UnexpectedCloseResult}
+        end,
+    ok =
+        receive
+            {pending_connect_result, Connector, {error, noproc}} ->
+                ok;
+            {pending_connect_result, Connector, {error, closed}} ->
+                ok;
+            {pending_connect_result, Connector, UnexpectedConnectResult} ->
+                {unexpected_pending_connect_result, UnexpectedConnectResult}
+        after 5000 ->
+            {pending_connect_result, timeout}
+        end,
+    ok.
+
+pending_connect(Parent) ->
+    Port = open_port({spawn, "socket"}, []),
+    Parent ! {pending_connect_port, self(), Port},
+    Params = [
+        {proto, tcp},
+        {connect, true},
+        {controlling_process, self()},
+        {address, "10.0.2.123"},
+        {port, 65000},
+        {active, false},
+        binary
+    ],
+    Parent ! {pending_connect_result, self(), call(Port, {init, Params}, 30000)}.
+
+tick(_Parent, 0) ->
+    ok;
+tick(Parent, N) ->
+    Parent ! pending_connect_tick,
+    receive after 100 -> ok end,
+    tick(Parent, N - 1).
+
+wait_for_ticks(_Connector, 0) ->
+    ok;
+wait_for_ticks(Connector, N) ->
+    receive
+        pending_connect_tick ->
+            true = is_process_alive(Connector),
+            wait_for_ticks(Connector, N - 1);
+        {pending_connect_result, Connector, Result} ->
+            {unexpected_pending_connect_completion, Result};
+        UnexpectedTickMessage ->
+            {unexpected_pending_connect_tick_message, UnexpectedTickMessage}
+    after 5000 ->
+        {pending_connect_tick, timeout, N}
+    end.
 
 call(DriverPid, Msg) ->
     call(DriverPid, Msg, 5000).
