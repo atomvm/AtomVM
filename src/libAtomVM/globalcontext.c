@@ -32,6 +32,7 @@
 #include "interop.h"
 #include "list.h"
 #include "mailbox.h"
+#include "otp_crypto.h"
 #include "posix_nifs.h"
 #include "refc_binary.h"
 #include "resources.h"
@@ -151,6 +152,50 @@ GlobalContext *globalcontext_new(void)
     erl_nif_env_partial_init_from_globalcontext(&dir_env, glb);
     glb->posix_dir_resource_type = enif_init_resource_type(&env, "posix_dir", &posix_dir_resource_type_init, ERL_NIF_RT_CREATE, NULL);
     if (IS_NULL_PTR(glb->posix_dir_resource_type)) {
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        atom_table_destroy(glb->atom_table);
+        free(glb);
+        return NULL;
+    }
+#endif
+
+#ifdef HAVE_PSA_CRYPTO
+    glb->psa_hash_op_resource_type = enif_init_resource_type(&env, "psa_hash_op", &psa_hash_op_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->psa_hash_op_resource_type)) {
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        atom_table_destroy(glb->atom_table);
+        free(glb);
+        return NULL;
+    }
+    glb->psa_cipher_op_resource_type = enif_init_resource_type(
+        &env, "psa_cipher_op", &psa_cipher_op_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->psa_cipher_op_resource_type)) {
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
+#ifndef AVM_NO_SMP
+        smp_rwlock_destroy(glb->modules_lock);
+#endif
+        free(glb->modules_table);
+        atom_table_destroy(glb->atom_table);
+        free(glb);
+        return NULL;
+    }
+    glb->psa_mac_op_resource_type = enif_init_resource_type(
+        &env, "psa_mac_op", &psa_mac_op_resource_type_init, ERL_NIF_RT_CREATE, NULL);
+    if (IS_NULL_PTR(glb->psa_mac_op_resource_type)) {
+#if HAVE_OPEN && HAVE_CLOSE
+        resource_type_destroy(glb->posix_fd_resource_type);
+#endif
 #ifndef AVM_NO_SMP
         smp_rwlock_destroy(glb->modules_lock);
 #endif

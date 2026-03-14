@@ -54,6 +54,7 @@ idf_component_register(
 )
 
 target_compile_features(${COMPONENT_LIB} INTERFACE c_std_11)
+target_compile_definitions(${COMPONENT_LIB} PUBLIC ATOMVM_HAS_MBEDTLS)
 
 idf_component_get_property(soc_dir soc COMPONENT_DIR)
 idf_component_get_property(soc_include_dirs soc INCLUDE_DIRS)
@@ -71,12 +72,16 @@ idf_component_get_property(pthread_dir pthread COMPONENT_DIR)
 idf_component_get_property(pthread_include_dirs pthread INCLUDE_DIRS)
 idf_component_get_property(pthread_srcs pthread SRCS)
 
+idf_component_get_property(mbedtls_dir mbedtls COMPONENT_DIR)
+idf_component_get_property(mbedtls_include_dirs mbedtls INCLUDE_DIRS)
+list(TRANSFORM mbedtls_include_dirs PREPEND ${mbedtls_dir}/)
+
 set(soc_target_include_dir ${soc_dir}/${target}/include)
 list(TRANSFORM soc_include_dirs PREPEND ${soc_dir}/)
 list(TRANSFORM newlib_include_dirs PREPEND ${newlib_dir}/)
 list(TRANSFORM pthread_include_dirs PREPEND ${pthread_dir}/)
 
-set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${soc_target_include_dir} ${soc_include_dirs} ${newlib_include_dirs} ${pthread_include_dirs} ${CMAKE_BINARY_DIR}/config/)
+set(CMAKE_REQUIRED_INCLUDES ${CMAKE_REQUIRED_INCLUDES} ${soc_target_include_dir} ${soc_include_dirs} ${newlib_include_dirs} ${pthread_include_dirs} ${mbedtls_include_dirs} ${CMAKE_BINARY_DIR}/config/)
 
 include(CheckSymbolExists)
 include(CheckCSourceCompiles)
@@ -109,4 +114,17 @@ check_c_source_compiles("
 " HAVE_SOC_CPU_CORES_NUM)
 if(HAVE_SOC_CPU_CORES_NUM)
     target_compile_definitions(${COMPONENT_LIB} INTERFACE HAVE_SOC_CPU_CORES_NUM)
+endif()
+
+check_c_source_compiles("
+    #include <mbedtls/version.h>
+    #ifndef MBEDTLS_PSA_CRYPTO_C
+    #error PSA Crypto not available
+    #endif
+    #include <psa/crypto.h>
+    int main() { psa_crypto_init(); return 0; }
+" HAVE_PSA_CRYPTO)
+if(HAVE_PSA_CRYPTO)
+    target_compile_definitions(${COMPONENT_LIB} PUBLIC HAVE_PSA_CRYPTO)
+    target_compile_definitions(libAtomVM PUBLIC HAVE_PSA_CRYPTO)
 endif()

@@ -53,6 +53,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_MBEDTLS)
 target_link_libraries(
     libAtomVM${PLATFORM_LIB_SUFFIX}
     PUBLIC

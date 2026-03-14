@@ -46,4 +46,20 @@ add_library(libAtomVM${PLATFORM_LIB_SUFFIX} ${SOURCE_FILES} ${HEADER_FILES})
 target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
+target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_MBEDTLS)
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedcrypto)
+include(CheckCSourceCompiles)
+get_target_property(_mbedcrypto_includes MbedTLS::mbedcrypto INTERFACE_INCLUDE_DIRECTORIES)
+set(CMAKE_REQUIRED_INCLUDES ${_mbedcrypto_includes})
+check_c_source_compiles("
+    #include <mbedtls/version.h>
+    #ifndef MBEDTLS_PSA_CRYPTO_C
+    #error PSA Crypto not available
+    #endif
+    int main(void) { return 0; }
+" HAVE_PSA_CRYPTO)
+unset(CMAKE_REQUIRED_INCLUDES)
+unset(_mbedcrypto_includes)
+if (HAVE_PSA_CRYPTO)
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_PSA_CRYPTO)
+endif()

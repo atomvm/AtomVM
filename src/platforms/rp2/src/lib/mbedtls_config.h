@@ -96,3 +96,6 @@
 
 // Uncomment for debugging SSL otp_ssl.c
 // #define MBEDTLS_DEBUG_C
+
+// Make sure this is defined so otp_crypto.c doesn't fail at linking time
+#define MBEDTLS_VERSION_C
