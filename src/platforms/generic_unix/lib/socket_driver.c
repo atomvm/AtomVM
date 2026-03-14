@@ -1046,6 +1046,13 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
     socklen_t clientlen = sizeof(clientaddr);
     int fd = accept(listener->base.fd, (struct sockaddr *) &clientaddr, &clientlen);
     Context *ctx = globalcontext_get_process_lock(glb, listener->process_id);
+    if (UNLIKELY(ctx == NULL)) {
+        if (fd != -1) {
+            close(fd);
+        }
+        free(listener);
+        return NULL;
+    }
     SocketDriverData *socket_data = (SocketDriverData *) ctx->platform_data;
     EventListener *result = NULL;
     if (fd == -1) {
