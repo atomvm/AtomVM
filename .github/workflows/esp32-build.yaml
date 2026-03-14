@@ -210,6 +210,15 @@ jobs:
         idf.py clean
         cp sdkconfig.defaults.backup sdkconfig.defaults
 
+    - name: Upload ESP32 tests ELF artifact with memory checks build
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: failure() && matrix.esp-idf-target != 'esp32p4'
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}-memcheck.elf
+        path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
+        if-no-files-found: error
+
     - name: Build ESP32 tests using idf.py
       # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
       if: matrix.esp-idf-target != 'esp32p4'
@@ -232,3 +241,12 @@ jobs:
         . $IDF_PATH/export.sh
         export PATH=/opt/qemu/bin:${PATH}
         pytest --target=${{matrix.esp-idf-target}} --embedded-services=idf,qemu -s
+
+    - name: Upload ESP32 tests ELF artifact
+      # TODO: remove the following exclusion when ESP32P4 support is added to espressif/qemu
+      if: failure() && matrix.esp-idf-target != 'esp32p4'
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-esp32-test-${{ matrix.esp-idf-target }}-${{ matrix.idf-version }}.elf
+        path: ./src/platforms/esp32/test/build/atomvm-esp32-test.elf
+        if-no-files-found: error
