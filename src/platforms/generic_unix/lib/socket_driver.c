@@ -1060,6 +1060,21 @@ static EventListener *accept_callback(GlobalContext *glb, EventListener *base_li
         TRACE("socket_driver|accept_callback: accepted connection.  fd: %i\n", fd);
 
         term pid = listener->pid;
+        if (UNLIKELY(fcntl(fd, F_SETFL, O_NONBLOCK) == -1)) {
+            int err = errno;
+            close(fd);
+            BEGIN_WITH_STACK_HEAP(12, heap);
+            term ref = term_from_ref_ticks(listener->ref_ticks, &heap);
+            term reply = port_heap_create_reply(&heap, ref, port_heap_create_sys_error_tuple(&heap, FCNTL_ATOM, err));
+            port_send_message_nolock(glb, pid, reply);
+            END_WITH_STACK_HEAP(heap, glb);
+            globalcontext_get_process_unlock(glb, ctx);
+            if (socket_data->passive_listener) {
+                socket_data->passive_listener = NULL;
+                free(listener);
+            }
+            return NULL;
+        }
         SocketDriverData *new_socket_data = socket_driver_create_data();
         new_socket_data->sockfd = fd;
         new_socket_data->proto = socket_data->proto;
