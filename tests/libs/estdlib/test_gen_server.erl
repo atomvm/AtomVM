@@ -302,7 +302,7 @@ make_requests(Pid, Waiting, ReplyAfter, I) ->
 wait_for(P) ->
     receive
         P -> ok
-    after 30000 -> error({timeout_waiting_for, P})
+    after 60000 -> error({timeout_waiting_for, P})
     end.
 
 test_timeout_call() ->

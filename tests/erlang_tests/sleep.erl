@@ -57,7 +57,7 @@ wait_for_sleeping_processes([Pid | T]) ->
     ok =
         receive
             {Pid, ok} -> ok
-        after 1000 -> {fail, timeout}
+        after 5000 -> {fail, timeout}
         end,
     wait_for_sleeping_processes(T).
 

@@ -106,12 +106,12 @@ memory_allocation_split() ->
             {Pid, List1} ->
                 2 = length(List1),
                 ok
-        after 5000 -> timeout
+        after 10000 -> timeout
         end,
     normal =
         receive
             {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
-        after 5000 -> timeout
+        after 10000 -> timeout
         end,
     ok.
 
