@@ -929,6 +929,8 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     status = netconn_connect(conn, &remote_ip, port);
     if (UNLIKELY(status != ERR_OK)) {
         TRACE("tcp: failed connect: %i\n", status);
+        netconn_delete(conn);
+        socket_data_postinit(platform);
         do_send_error_reply(ctx, status, ref_ticks, pid);
         return;
     }

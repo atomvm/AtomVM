@@ -30,6 +30,7 @@ start() ->
     {ok, UDPAddr} = test_udp(false, 2024),
     ok = test_tcp_server(true, 10080),
     ok = test_tcp_server(false, 10081),
+    ok = test_connect_to_unreachable_recovers(),
     0.
 
 test_tcp_client(Active, BinaryOpt) ->
@@ -324,6 +325,22 @@ tcp_client(Active, Port) ->
                         UnexpectedCloseResult -> {unexpected_close_result, UnexpectedCloseResult}
                     end
         end,
+    ok.
+
+test_connect_to_unreachable_recovers() ->
+    Port = open_port({spawn, "socket"}, []),
+    Params = [
+        {proto, tcp},
+        {connect, true},
+        {controlling_process, self()},
+        {address, "10.0.2.123"},
+        {port, 65000},
+        {active, false},
+        binary
+    ],
+    {error, _} = call(Port, {init, Params}, 120000),
+    Port2 = open_port({spawn, "socket"}, []),
+    true = is_port(Port2),
     ok.
 
 call(DriverPid, Msg) ->
