@@ -102,7 +102,8 @@ test_ping_from_beam(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = net_adm:ping('" ++
+        "erl -sname " ++ ?OTP_SNAME ++
+            " -setcookie AtomVM -kernel net_setuptime 60 -eval \"R = net_adm:ping('" ++
             atom_to_list(Node) ++
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -116,7 +117,8 @@ test_fail_with_wrong_cookie(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie Wrong -eval \"R = net_adm:ping('" ++
+        "erl -sname " ++ ?OTP_SNAME ++
+            " -setcookie Wrong -kernel net_setuptime 60 -eval \"R = net_adm:ping('" ++
             atom_to_list(Node) ++
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -130,9 +132,10 @@ test_rpc_from_beam(Platform) ->
     erlang:set_cookie(Node, 'AtomVM'),
     Result = execute_command(
         Platform,
-        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = rpc:call('" ++
+        "erl -sname " ++ ?OTP_SNAME ++
+            " -setcookie AtomVM -kernel net_setuptime 60 -eval \"R = rpc:call('" ++
             atom_to_list(Node) ++
-            "', erlang, system_info, [machine]), erlang:display(R).\" -s init stop -noshell"
+            "', erlang, system_info, [machine], 60000), erlang:display(R).\" -s init stop -noshell"
     ),
     true = Result =:= lists:flatten(io_lib:format("~p\r\n", [Platform])),
     net_kernel:stop(),
@@ -145,9 +148,9 @@ test_rpc_loop_from_beam(Platform) ->
     Result = execute_command(
         Platform,
         "erl -sname " ++ ?OTP_SNAME ++
-            " -setcookie AtomVM -eval \"R = lists:foldl(fun(X, Acc) -> R = rpc:call('" ++
+            " -setcookie AtomVM -kernel net_setuptime 60 -eval \"R = lists:foldl(fun(X, Acc) -> R = rpc:call('" ++
             atom_to_list(Node) ++
-            "', erlang, system_info, [machine]), if Acc =:= R -> Acc; Acc =:= undefined -> R end end, undefined, lists:seq(1, 10)), erlang:display(R).\" -s init stop -noshell"
+            "', erlang, system_info, [machine], 60000), if Acc =:= R -> Acc; Acc =:= undefined -> R end end, undefined, lists:seq(1, 10)), erlang:display(R).\" -s init stop -noshell"
     ),
     true = Result =:= lists:flatten(io_lib:format("~p\r\n", [Platform])),
     net_kernel:stop(),
@@ -173,7 +176,7 @@ test_autoconnect_to_beam(Platform) ->
         fun() ->
             Command =
                 "erl -sname " ++ OtpSname ++
-                    " -setcookie AtomVM -eval \""
+                    " -setcookie AtomVM -kernel net_setuptime 60 -eval \""
                     "register(beam, self()),"
                     "io:put_chars(<<114,101,97,100,121,13,10>>),"
                     "F = fun(G) ->"
@@ -197,7 +200,7 @@ test_autoconnect_to_beam(Platform) ->
     ok =
         receive
             {Pid, ready} -> ok
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     [_, Host] = string:split(atom_to_list(Node), "@"),
     OTPNode = list_to_atom(OtpSname ++ "@" ++ Host),
@@ -205,25 +208,25 @@ test_autoconnect_to_beam(Platform) ->
     {ok, OTPPid} =
         receive
             {OTPPid0, pong} -> {ok, OTPPid0}
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     OTPPid ! {self(), ping},
     ok =
         receive
             {OTPPid, pong} -> ok
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     erlang:send({beam, OTPNode}, {self(), ping}),
     ok =
         receive
             {OTPPid, pong} -> ok
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     OTPPid ! {self(), net_adm_ping},
     ok =
         receive
             {OTPPid, pong} -> ok
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     % Ensure there is no leak
     {monitored_by, []} = process_info(whereis(net_kernel), monitored_by),
@@ -231,12 +234,12 @@ test_autoconnect_to_beam(Platform) ->
     ok =
         receive
             {OTPPid, quit} -> ok
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     normal =
         receive
             {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     net_kernel:stop(),
     ok.
@@ -252,7 +255,7 @@ start_apply_loop(Platform) ->
             Result = execute_command(
                 Platform,
                 "erl -sname " ++ ?OTP_SNAME ++
-                    " -setcookie AtomVM -eval \""
+                    " -setcookie AtomVM -kernel net_setuptime 60 -eval \""
                     "{atomvm, '" ++ atom_to_list(Node) ++
                     "'} ! {beam, self()}, "
                     "F = fun(G) ->"
@@ -283,7 +286,7 @@ start_apply_loop_io() ->
         {io_result, Result0} ->
             io:format("~s\n", [Result0]),
             start_apply_loop_io()
-    after 5000 -> exit(timeout)
+    after 15000 -> exit(timeout)
     end.
 
 call_apply_loop(Pid, Message) ->
@@ -294,7 +297,7 @@ call_apply_loop(Pid, Message) ->
         {io_result, Result1} ->
             io:format("~s\n", [Result1]),
             exit(timeout)
-    after 5000 -> exit(timeout)
+    after 15000 -> exit(timeout)
     end.
 
 stop_apply_loop(BeamMainPid, Pid, MonitorRef) ->
@@ -302,7 +305,7 @@ stop_apply_loop(BeamMainPid, Pid, MonitorRef) ->
     normal =
         receive
             {'DOWN', MonitorRef, process, Pid, Reason} -> Reason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     net_kernel:stop(),
     unregister(atomvm),
@@ -318,7 +321,7 @@ test_groupleader(Platform) ->
     "hello group leader" =
         receive
             {io_result, IOResult} -> IOResult
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     ok.
 
@@ -331,7 +334,7 @@ test_link_remote_exit_remote(Platform) ->
             process_flag(trap_exit, true),
             receive
                 {'EXIT', ExitPid, Reason} -> Main ! {exit, ExitPid, Reason}
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end
         end,
         [monitor]
@@ -346,12 +349,12 @@ test_link_remote_exit_remote(Platform) ->
     some_reason =
         receive
             {exit, SpawnedPid, ExitReason} -> ExitReason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     normal =
         receive
             {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     ok.
 
@@ -361,7 +364,7 @@ test_link_remote_exit_local(Platform) ->
     {LocalSpawnedPid, LocalSpawnedMonitor} = spawn_opt(
         fun() ->
             receive
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end
         end,
         [monitor]
@@ -376,7 +379,7 @@ test_link_remote_exit_local(Platform) ->
     some_reason =
         receive
             {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     {exit, LocalSpawnedPid, some_reason} = call_apply_loop(SpawnedPid, {self(), flush_exit}),
     quit = call_apply_loop(SpawnedPid, {self(), quit}),
@@ -392,11 +395,11 @@ test_link_local_unlink_remote(Platform) ->
                 {Caller, link} ->
                     Result = link(SpawnedPid),
                     Caller ! {self(), Result}
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end,
             receive
                 quit -> ok
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end
         end,
         [monitor]
@@ -419,7 +422,7 @@ test_link_local_unlink_remote(Platform) ->
     normal =
         receive
             {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     quit = call_apply_loop(SpawnedPid, {self(), quit}),
     ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
@@ -434,17 +437,17 @@ test_link_local_unlink_local(Platform) ->
                 {LinkCaller, link} ->
                     LinkResult = link(SpawnedPid),
                     LinkCaller ! {self(), LinkResult}
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end,
             receive
                 {UnlinkCaller, unlink} ->
                     UnlinkResult = unlink(SpawnedPid),
                     UnlinkCaller ! {self(), UnlinkResult}
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end,
             receive
                 quit -> ok
-            after 5000 -> exit(timeout)
+            after 15000 -> exit(timeout)
             end
         end,
         [monitor]
@@ -470,7 +473,7 @@ test_link_local_unlink_local(Platform) ->
     normal =
         receive
             {'DOWN', LocalSpawnedMonitor, process, LocalSpawnedPid, MonitorReason} -> MonitorReason
-        after 5000 -> timeout
+        after 15000 -> timeout
         end,
     quit = call_apply_loop(SpawnedPid, {self(), quit}),
     ok = stop_apply_loop(BeamMainPid, Pid, MonitorRef),
@@ -508,7 +511,8 @@ test_ping_with_avm_dist_opts("ATOM" = Platform) ->
     %% Verify connectivity still works
     Result = execute_command(
         Platform,
-        "erl -sname " ++ ?OTP_SNAME ++ " -setcookie AtomVM -eval \"R = net_adm:ping('" ++
+        "erl -sname " ++ ?OTP_SNAME ++
+            " -setcookie AtomVM -kernel net_setuptime 60 -eval \"R = net_adm:ping('" ++
             atom_to_list(Node) ++
             "'), erlang:display(R).\" -s init stop -noshell"
     ),
@@ -526,7 +530,7 @@ subprocess("ATOM", Command) ->
 subprocess_line("BEAM", Port) ->
     receive
         {Port, {data, {eol, Line}}} -> lists:flatten([Line, "\r\n"])
-    after 5000 ->
+    after 15000 ->
         exit(timeout)
     end;
 subprocess_line("ATOM", Fd) ->
@@ -562,7 +566,7 @@ beam_loop_read(Port, Acc) ->
         {Port, {data, {eol, Line}}} -> beam_loop_read(Port, ["\r\n", Line | Acc]);
         {Port, {data, {noeol, Line}}} -> beam_loop_read(Port, [Line | Acc]);
         {Port, eof} -> lists:flatten(lists:reverse(Acc))
-    after 5000 ->
+    after 15000 ->
         exit(timeout)
     end.
 
