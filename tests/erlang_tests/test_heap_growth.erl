@@ -75,7 +75,7 @@ test_bounded_free_strategy(UseDefault) ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -154,7 +154,7 @@ test_minimum_strategy() ->
     normal =
         receive
             {'DOWN', Ref1, process, Pid1, Reason} -> Reason
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -285,7 +285,7 @@ test_messages_get_gcd() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         if

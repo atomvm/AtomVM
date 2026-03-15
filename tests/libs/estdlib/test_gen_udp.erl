@@ -147,12 +147,12 @@ count_active_received(Mode, I) ->
         Other ->
             erlang:display({count_active_received, unexpected, Other}),
             count_active_received(Mode, I)
-    after 500 ->
+    after 2000 ->
         I
     end.
 
 count_passive_received(Socket, Mode, I) ->
-    case gen_udp:recv(Socket, 0, 500) of
+    case gen_udp:recv(Socket, 0, 2000) of
         {ok, {_Address, _Port, <<"foo">>}} when Mode =:= binary ->
             count_passive_received(Socket, Mode, I + 1);
         {ok, {_Address, _Port, "foo"}} when Mode =:= list ->

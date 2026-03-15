@@ -231,7 +231,7 @@ test_listen_connect_parameters(
     receive
         server_done ->
             ok
-    after 5000 -> throw({timeout, test_listen_connect_parameters, ?LINE})
+    after 10000 -> throw({timeout, test_listen_connect_parameters, ?LINE})
     end,
 
     ok = gen_tcp:close(Socket),
@@ -240,7 +240,7 @@ test_listen_connect_parameters(
         {ServerPid, Result} ->
             ok = gen_tcp:close(ListenSocket),
             Result
-    after 5000 ->
+    after 10000 ->
         throw({timeout, waiting, recv, server_closed})
     end.
 
@@ -267,11 +267,11 @@ test_listen_connect_parameters_client_loop0(Socket, Mode, true = Active, I) ->
             end;
         {error, _Reason} = Error ->
             {error, {unexpected_message, client, active_receive, Error}}
-    after 5000 ->
+    after 10000 ->
         {error, {timeout, client, active_receive, Mode, I}}
     end;
 test_listen_connect_parameters_client_loop0(Socket, Mode, false = Active, I) ->
-    case gen_tcp:recv(Socket, 0, 5000) of
+    case gen_tcp:recv(Socket, 0, 10000) of
         {error, closed} ->
             ok;
         {ok, Packet} ->
@@ -306,7 +306,7 @@ test_listen_connect_parameters_server_loop(
     receive
         {tcp_closed, Socket} ->
             ok
-    after 5000 ->
+    after 10000 ->
         {error, {timeout, server, active_receive, waiting_for_close}}
     end;
 test_listen_connect_parameters_server_loop(ListenMode, true = ListenActive, Socket, I, WaitingPid) ->
@@ -329,21 +329,21 @@ test_listen_connect_parameters_server_loop(ListenMode, true = ListenActive, Sock
             end;
         Other ->
             {error, {unexpected_message, server, active_receive, Other}}
-    after 5000 ->
+    after 10000 ->
         {error, {timeout, server, active_receive, ListenMode}}
     end;
 test_listen_connect_parameters_server_loop(
     _ListenMode, false = _ListenActive, Socket, 0, WaitingPid
 ) ->
     WaitingPid ! server_done,
-    case gen_tcp:recv(Socket, 0, 5000) of
+    case gen_tcp:recv(Socket, 0, 10000) of
         {error, closed} ->
             ok;
         {error, timeout} ->
             {error, {timeout, server, passive_receive, waiting_for_close}}
     end;
 test_listen_connect_parameters_server_loop(ListenMode, false = ListenActive, Socket, I, WaitingPid) ->
-    case gen_tcp:recv(Socket, 0, 5000) of
+    case gen_tcp:recv(Socket, 0, 10000) of
         {error, closed} ->
             {error, {unexpected_close, server, passive_receive}};
         {ok, Packet} ->

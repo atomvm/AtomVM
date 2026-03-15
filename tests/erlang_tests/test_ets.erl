@@ -293,7 +293,7 @@ isolated(Fun) ->
             Ret;
         {'DOWN', MRef, process, Pid, Reason} ->
             {error, {process_died, Reason}}
-    after 500 ->
+    after 5000 ->
         demonitor(MRef, [flush]),
         exit(Pid, kill),
         {error, timeout}

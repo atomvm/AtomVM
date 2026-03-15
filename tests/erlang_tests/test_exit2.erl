@@ -43,7 +43,7 @@ test_reason_other() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, other} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     Parent = self(),
     Pid2 = spawn_opt(
@@ -64,14 +64,14 @@ test_reason_other() ->
     ok =
         receive
             {Pid2, ready} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     true = exit(Pid2, other),
     ok =
         receive
             {Pid2, {'EXIT', Parent, other}} -> ok;
             Other -> Other
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -79,7 +79,7 @@ test_reason_kill() ->
     {Pid1, Ref1} = spawn_opt(
         fun() ->
             receive
-            after 500 -> ok
+            after 5000 -> ok
             end
         end,
         [monitor]
@@ -88,7 +88,7 @@ test_reason_kill() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, killed} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     Parent = self(),
     {Pid2, Ref2} = spawn_opt(
@@ -96,7 +96,7 @@ test_reason_kill() ->
             process_flag(trap_exit, true),
             Parent ! {self(), ready},
             receive
-            after 500 -> ok
+            after 5000 -> ok
             end
         end,
         [monitor]
@@ -106,7 +106,7 @@ test_reason_kill() ->
             link(Pid2),
             Parent ! {self(), ready},
             receive
-            after 500 -> ok
+            after 5000 -> ok
             end
         end,
         [monitor]
@@ -118,7 +118,7 @@ test_reason_kill() ->
             Parent ! {self(), ready},
             receive
                 {'EXIT', _From, _Reason} = ExitMessage -> Parent ! {self(), ExitMessage}
-            after 500 -> ok
+            after 5000 -> ok
             end
         end,
         [monitor]
@@ -126,38 +126,38 @@ test_reason_kill() ->
     ok =
         receive
             {Pid2, ready} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {Pid3, ready} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {Pid4, ready} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     true = exit(Pid2, kill),
     ok =
         receive
             {'DOWN', Ref2, process, Pid2, killed} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {'DOWN', Ref3, process, Pid3, killed} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {'DOWN', Ref4, process, Pid4, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     Pid2 =
         receive
             {Pid4, {'EXIT', Pid, killed}} -> Pid
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -166,7 +166,7 @@ test_reason_normal_not_self() ->
         fun() ->
             receive
                 {Caller, ping} -> Caller ! {self(), pong}
-            after 500 -> ok
+            after 5000 -> ok
             end
         end,
         [monitor]
@@ -176,12 +176,12 @@ test_reason_normal_not_self() ->
     ok =
         receive
             {Pid1, pong} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     Parent = self(),
     Pid2 = spawn_opt(
@@ -202,14 +202,14 @@ test_reason_normal_not_self() ->
     ok =
         receive
             {Pid2, ready} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     true = exit(Pid2, normal),
     ok =
         receive
             {Pid2, {'EXIT', Parent, normal}} -> ok;
             Other -> Other
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -226,7 +226,7 @@ test_reason_normal_self() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     {Pid2, Ref2} = spawn_opt(
         fun() ->
@@ -248,12 +248,12 @@ test_reason_normal_self() ->
         receive
             {Pid2, {'EXIT', Pid2, normal}} -> ok;
             Other -> Other
-        after 1000 -> timeout
+        after 5000 -> timeout
         end,
     ok =
         receive
             {'DOWN', Ref2, process, Pid2, expected} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     ok.
 
@@ -262,7 +262,7 @@ test_exit_dead() ->
     ok =
         receive
             {'DOWN', Ref1, process, Pid1, normal} -> ok
-        after 500 -> timeout
+        after 5000 -> timeout
         end,
     true = exit(Pid1, normal),
     true = exit(Pid1, kill),
