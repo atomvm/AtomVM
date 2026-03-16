@@ -56,6 +56,11 @@ set(HAVE_UNLINK "" CACHE INTERNAL "Have symbol unlink" FORCE)
 set(HAVE_EXECVE "" CACHE INTERNAL "Have symbol execve" FORCE)
 # getcwd is defined in newlib header but not implemented
 set(HAVE_GETCWD "" CACHE INTERNAL "Have symbol getcwd" FORCE)
+# pread, pwrite, fsync and ftruncate are declared in newlib headers but not implemented
+set(HAVE_PREAD "" CACHE INTERNAL "Have symbol pread" FORCE)
+set(HAVE_PWRITE "" CACHE INTERNAL "Have symbol pwrite" FORCE)
+set(HAVE_FSYNC "" CACHE INTERNAL "Have symbol fsync" FORCE)
+set(HAVE_FTRUNCATE "" CACHE INTERNAL "Have symbol ftruncate" FORCE)
 
 # Options that make sense for this platform
 option(AVM_ENABLE_OLD_OTP_VERSIONS "Enable OTP version < 26" OFF)

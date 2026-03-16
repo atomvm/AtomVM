@@ -100,6 +100,9 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`
 - Added support for Ed25519 curve when libsodium support is enabled at build time
 (`AVM_USE_LIBSODIUM=ON`)
+- Added POSIX file functions: `atomvm:posix_seek/3`, `atomvm:posix_pread/3`,
+`atomvm:posix_pwrite/3`, `atomvm:posix_fsync/1`, `atomvm:posix_ftruncate/2`,
+`atomvm:posix_rename/2`, `atomvm:posix_stat/1`, `atomvm:posix_fstat/1`
 
 ### Changed
 

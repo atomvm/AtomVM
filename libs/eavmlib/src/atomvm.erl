@@ -40,6 +40,14 @@
     posix_close/1,
     posix_read/2,
     posix_write/2,
+    posix_seek/3,
+    posix_pread/3,
+    posix_pwrite/3,
+    posix_fsync/1,
+    posix_ftruncate/2,
+    posix_rename/2,
+    posix_stat/1,
+    posix_fstat/1,
     posix_clock_settime/2,
     posix_opendir/1,
     posix_closedir/1,
@@ -51,6 +59,8 @@
 -export_type([
     posix_fd/0,
     posix_open_flag/0,
+    posix_whence/0,
+    posix_stat_info/0,
     posix_dir/0
 ]).
 
@@ -89,6 +99,22 @@
 -type posix_error() ::
     atom()
     | integer().
+-type posix_whence() ::
+    seek_set
+    | seek_cur
+    | seek_end.
+-type posix_stat_info() :: #{
+    st_dev := integer(),
+    st_ino := integer(),
+    st_mode := integer(),
+    st_nlink := integer(),
+    st_uid := integer(),
+    st_gid := integer(),
+    st_size := integer(),
+    st_atime_s := integer(),
+    st_mtime_s := integer(),
+    st_ctime_s := integer()
+}.
 
 -opaque posix_dir() :: binary().
 
@@ -280,6 +306,105 @@ posix_read(_File, _Count) ->
 -spec posix_write(File :: posix_fd(), Data :: binary()) ->
     {ok, non_neg_integer()} | {error, posix_error()}.
 posix_write(_File, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Offset  Offset in bytes
+%% @param   Whence  Reference point for the offset
+%% @returns a tuple with the resulting absolute offset or an error tuple
+%% @doc     Reposition the file cursor using `lseek(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_seek(File :: posix_fd(), Offset :: integer(), Whence :: posix_whence()) ->
+    {ok, integer()} | {error, posix_error()}.
+posix_seek(_File, _Offset, _Whence) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Count   Maximum number of bytes to read
+%% @param   Offset  Offset in bytes from the start of the file
+%% @returns a tuple with read bytes, `eof' or an error tuple
+%% @doc     Read at most `Count' bytes from a file at a given offset using
+%% `pread(2)'. The file cursor is not modified.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_pread(File :: posix_fd(), Count :: non_neg_integer(), Offset :: non_neg_integer()) ->
+    {ok, binary()} | eof | {error, posix_error()}.
+posix_pread(_File, _Count, _Offset) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Data    Data to write
+%% @param   Offset  Offset in bytes from the start of the file
+%% @returns a tuple with the number of written bytes or an error tuple
+%% @doc     Write data to a file at a given offset using `pwrite(2)'.
+%% The file cursor is not modified.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_pwrite(File :: posix_fd(), Data :: binary(), Offset :: non_neg_integer()) ->
+    {ok, non_neg_integer()} | {error, posix_error()}.
+posix_pwrite(_File, _Data, _Offset) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @returns `ok' or an error tuple
+%% @doc     Flush file data to storage using `fsync(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_fsync(File :: posix_fd()) -> ok | {error, posix_error()}.
+posix_fsync(_File) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @param   Length  Desired file length in bytes
+%% @returns `ok' or an error tuple
+%% @doc     Truncate a file to a specified length using `ftruncate(2)'.
+%% If the file is larger than `Length', the extra data is lost. If the file
+%% is shorter, it is extended with null bytes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_ftruncate(File :: posix_fd(), Length :: non_neg_integer()) ->
+    ok | {error, posix_error()}.
+posix_ftruncate(_File, _Length) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   OldPath Current path of the file
+%% @param   NewPath New path for the file
+%% @returns `ok' or an error tuple
+%% @doc     Rename a file using `rename(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_rename(OldPath :: iodata(), NewPath :: iodata()) ->
+    ok | {error, posix_error()}.
+posix_rename(_OldPath, _NewPath) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the file
+%% @returns a tuple with a map of file information or an error tuple
+%% @doc     Get file status using `stat(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_stat(Path :: iodata()) ->
+    {ok, posix_stat_info()} | {error, posix_error()}.
+posix_stat(_Path) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   File    Descriptor to an open file
+%% @returns a tuple with a map of file information or an error tuple
+%% @doc     Get file status from a file descriptor using `fstat(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_fstat(File :: posix_fd()) ->
+    {ok, posix_stat_info()} | {error, posix_error()}.
+posix_fstat(_File) ->
     erlang:nif_error(undefined).
 
 %%
