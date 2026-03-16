@@ -679,6 +679,39 @@ static const AtomStringIntPair pk_param_table[] = {
     SELECT_INT_DEFAULT(InvalidPkParam)
 };
 
+struct PsaEccCurveParams
+{
+    enum pk_param_t pk_param;
+    psa_ecc_family_t family;
+    size_t key_bits;
+};
+
+static const struct PsaEccCurveParams psa_ecc_curve_table[] = {
+    { X25519, PSA_ECC_FAMILY_MONTGOMERY, 255 },
+    { X448, PSA_ECC_FAMILY_MONTGOMERY, 448 },
+    { Ed25519, PSA_ECC_FAMILY_TWISTED_EDWARDS, 255 },
+    { Ed448, PSA_ECC_FAMILY_TWISTED_EDWARDS, 448 },
+    { Secp256k1, PSA_ECC_FAMILY_SECP_K1, 256 },
+    { Secp256r1, PSA_ECC_FAMILY_SECP_R1, 256 },
+    { Secp384r1, PSA_ECC_FAMILY_SECP_R1, 384 },
+    { Secp521r1, PSA_ECC_FAMILY_SECP_R1, 521 },
+    { BrainpoolP256r1, PSA_ECC_FAMILY_BRAINPOOL_P_R1, 256 },
+    { BrainpoolP384r1, PSA_ECC_FAMILY_BRAINPOOL_P_R1, 384 },
+    { BrainpoolP512r1, PSA_ECC_FAMILY_BRAINPOOL_P_R1, 512 },
+};
+
+#define PSA_ECC_CURVE_TABLE_LEN (sizeof(psa_ecc_curve_table) / sizeof(psa_ecc_curve_table[0]))
+
+static const struct PsaEccCurveParams *psa_ecc_curve_table_lookup(enum pk_param_t pk_param)
+{
+    for (size_t i = 0; i < PSA_ECC_CURVE_TABLE_LEN; i++) {
+        if (psa_ecc_curve_table[i].pk_param == pk_param) {
+            return &psa_ecc_curve_table[i];
+        }
+    }
+    return NULL;
+}
+
 static void do_psa_init(void)
 {
     if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
@@ -993,82 +1026,37 @@ static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
 
     do_psa_init();
 
-    psa_key_type_t psa_key_type;
-    size_t psa_key_bits;
+    const struct PsaEccCurveParams *curve = psa_ecc_curve_table_lookup(pk_param);
+    if (IS_NULL_PTR(curve)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Validate curve is acceptable for this key type
+    // eddh: Montgomery only (x25519, x448)
+    // eddsa: Twisted Edwards only (ed25519, ed448)
+    // ecdh: Montgomery + Weierstrass (not Twisted Edwards)
     switch (key_type) {
         case Eddh:
-            // In OTP context: Eddh is Ecdh only on Montgomery curves
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-            switch (pk_param) {
-                case X25519:
-                    psa_key_bits = 255;
-                    break;
-                case X448:
-                    psa_key_bits = 448;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+            if (curve->family != PSA_ECC_FAMILY_MONTGOMERY) {
+                RAISE_ERROR(BADARG_ATOM);
             }
             break;
         case Eddsa:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_TWISTED_EDWARDS);
-            switch (pk_param) {
-                case Ed25519:
-                    psa_key_bits = 255;
-                    break;
-                case Ed448:
-                    psa_key_bits = 448;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+            if (curve->family != PSA_ECC_FAMILY_TWISTED_EDWARDS) {
+                RAISE_ERROR(BADARG_ATOM);
             }
             break;
         case Ecdh:
-            switch (pk_param) {
-                case X25519:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-                    psa_key_bits = 255;
-                    break;
-                case X448:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-                    psa_key_bits = 448;
-                    break;
-                case Secp256k1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_K1);
-                    psa_key_bits = 256;
-                    break;
-                case Secp256r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 256;
-                    break;
-                case Secp384r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 384;
-                    break;
-                case Secp521r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 521;
-                    break;
-                case BrainpoolP256r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 256;
-                    break;
-                case BrainpoolP384r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 384;
-                    break;
-                case BrainpoolP512r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 512;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+            if (curve->family == PSA_ECC_FAMILY_TWISTED_EDWARDS) {
+                RAISE_ERROR(BADARG_ATOM);
             }
             break;
-
         default:
             RAISE_ERROR(BADARG_ATOM);
     }
+
+    psa_key_type_t psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(curve->family);
+    size_t psa_key_bits = curve->key_bits;
 
     psa_key_attributes_t attributes = PSA_KEY_ATTRIBUTES_INIT;
     psa_set_key_usage_flags(&attributes, PSA_KEY_USAGE_EXPORT);
@@ -1166,73 +1154,30 @@ static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
 
     do_psa_init();
 
-    psa_algorithm_t psa_algo;
-    psa_key_type_t psa_key_type;
-    size_t psa_key_bits;
+    const struct PsaEccCurveParams *curve = psa_ecc_curve_table_lookup(pk_param);
+    if (IS_NULL_PTR(curve)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 
+    // compute_key only supports key agreement: eddh (Montgomery only) and ecdh (not Twisted Edwards)
     switch (key_type) {
         case Eddh:
-            // In OTP context: Eddh is Ecdh only on Montgomery curves
-            psa_algo = PSA_ALG_ECDH;
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-            switch (pk_param) {
-                case X25519:
-                    psa_key_bits = 255;
-                    break;
-                case X448:
-                    psa_key_bits = 448;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+            if (curve->family != PSA_ECC_FAMILY_MONTGOMERY) {
+                RAISE_ERROR(BADARG_ATOM);
             }
             break;
         case Ecdh:
-            psa_algo = PSA_ALG_ECDH;
-            switch (pk_param) {
-                case X25519:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-                    psa_key_bits = 255;
-                    break;
-                case X448:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
-                    psa_key_bits = 448;
-                    break;
-                case Secp256k1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_K1);
-                    psa_key_bits = 256;
-                    break;
-                case Secp256r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 256;
-                    break;
-                case Secp384r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 384;
-                    break;
-                case Secp521r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-                    psa_key_bits = 521;
-                    break;
-                case BrainpoolP256r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 256;
-                    break;
-                case BrainpoolP384r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 384;
-                    break;
-                case BrainpoolP512r1:
-                    psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-                    psa_key_bits = 512;
-                    break;
-                default:
-                    RAISE_ERROR(BADARG_ATOM);
+            if (curve->family == PSA_ECC_FAMILY_TWISTED_EDWARDS) {
+                RAISE_ERROR(BADARG_ATOM);
             }
             break;
-
         default:
             RAISE_ERROR(BADARG_ATOM);
     }
+
+    psa_algorithm_t psa_algo = PSA_ALG_ECDH;
+    psa_key_type_t psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(curve->family);
+    size_t psa_key_bits = curve->key_bits;
 
     term pub_key_term = argv[1];
     VALIDATE_VALUE(pub_key_term, term_is_binary);
@@ -1381,42 +1326,18 @@ static term nif_crypto_sign(Context *ctx, int argc, term argv[])
     term priv_param_term = term_get_list_head(key_list_term_tail);
 
     enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, priv_param_term, glb);
-    psa_key_type_t psa_key_type;
-    size_t psa_key_bits;
 
-    switch (pk_param) {
-        case Secp256k1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_K1);
-            psa_key_bits = 256;
-            break;
-        case Secp256r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 256;
-            break;
-        case Secp384r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 384;
-            break;
-        case Secp521r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 521;
-            break;
-        case BrainpoolP256r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 256;
-            break;
-        case BrainpoolP384r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 384;
-            break;
-        case BrainpoolP512r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 512;
-            break;
-        default:
-            RAISE_ERROR(
-                make_crypto_error(__FILE__, __LINE__, "Couldn't get ECDSA private key", ctx));
+    // ECDSA sign: only Weierstrass curves
+    const struct PsaEccCurveParams *curve = psa_ecc_curve_table_lookup(pk_param);
+    if (IS_NULL_PTR(curve)
+        || curve->family == PSA_ECC_FAMILY_MONTGOMERY
+        || curve->family == PSA_ECC_FAMILY_TWISTED_EDWARDS) {
+        RAISE_ERROR(
+            make_crypto_error(__FILE__, __LINE__, "Couldn't get ECDSA private key", ctx));
     }
+
+    psa_key_type_t psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(curve->family);
+    size_t psa_key_bits = curve->key_bits;
 
     if (UNLIKELY(priv_len != PSA_BITS_TO_BYTES(psa_key_bits))) {
         // OTP even accepts empty binaries as keys, PSA API doesn't like it
@@ -1588,42 +1509,18 @@ static term nif_crypto_verify(Context *ctx, int argc, term argv[])
     term priv_param_term = term_get_list_head(key_list_term_tail);
 
     enum pk_param_t pk_param = interop_atom_term_select_int(pk_param_table, priv_param_term, glb);
-    psa_key_type_t psa_key_type;
-    size_t psa_key_bits;
 
-    switch (pk_param) {
-        case Secp256k1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_K1);
-            psa_key_bits = 256;
-            break;
-        case Secp256r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 256;
-            break;
-        case Secp384r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 384;
-            break;
-        case Secp521r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1);
-            psa_key_bits = 521;
-            break;
-        case BrainpoolP256r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 256;
-            break;
-        case BrainpoolP384r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 384;
-            break;
-        case BrainpoolP512r1:
-            psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_BRAINPOOL_P_R1);
-            psa_key_bits = 512;
-            break;
-        default:
-            RAISE_ERROR(
-                make_crypto_error(__FILE__, __LINE__, "Couldn't get ECDSA public key", ctx));
+    // ECDSA verify: only Weierstrass curves, uses public key type
+    const struct PsaEccCurveParams *curve = psa_ecc_curve_table_lookup(pk_param);
+    if (IS_NULL_PTR(curve)
+        || curve->family == PSA_ECC_FAMILY_MONTGOMERY
+        || curve->family == PSA_ECC_FAMILY_TWISTED_EDWARDS) {
+        RAISE_ERROR(
+            make_crypto_error(__FILE__, __LINE__, "Couldn't get ECDSA public key", ctx));
     }
+
+    psa_key_type_t psa_key_type = PSA_KEY_TYPE_ECC_PUBLIC_KEY(curve->family);
+    size_t psa_key_bits = curve->key_bits;
 
     psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
     psa_set_key_type(&attr, psa_key_type);
