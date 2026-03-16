@@ -468,17 +468,17 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     void *allocated_key_data = NULL;
     void *allocated_iv_data = NULL;
     void *allocated_data_data = NULL;
+    size_t data_size = 0;
+    const void *iv_data = NULL;
+    size_t iv_len = 0;
 
     const void *key_data;
-    size_t key_len;
+    size_t key_len = 0;
     term result_t = handle_iodata(key, &key_data, &key_len, &allocated_key_data);
     if (UNLIKELY(result_t != OK_ATOM)) {
         error_atom = result_t;
         goto raise_error;
     }
-
-    const void *iv_data = NULL;
-    size_t iv_len = 0;
     if (has_iv) {
         result_t = handle_iodata(iv, &iv_data, &iv_len, &allocated_iv_data);
         if (UNLIKELY(result_t != OK_ATOM)) {
@@ -488,7 +488,6 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     }
 
     const void *data_data;
-    size_t data_size;
     result_t = handle_iodata(data, &data_data, &data_size, &allocated_data_data);
     if (UNLIKELY(result_t != OK_ATOM)) {
         error_atom = result_t;
@@ -534,6 +533,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     mbedtls_cipher_init(&cipher_ctx);
 
     void *temp_buf = NULL;
+    size_t temp_buf_capacity = 0;
 
     int source_line;
     int result = mbedtls_cipher_setup(&cipher_ctx, cipher_info);
@@ -561,8 +561,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     unsigned int block_size = mbedtls_cipher_get_block_size(&cipher_ctx);
 
-    size_t temp_buf_size = data_size + block_size;
-    temp_buf = malloc(temp_buf_size);
+    temp_buf_capacity = data_size + block_size;
+    temp_buf = malloc(temp_buf_capacity);
     if (IS_NULL_PTR(temp_buf)) {
         error_atom = OUT_OF_MEMORY_ATOM;
         goto raise_error;
@@ -570,6 +570,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     // from this point onward use `mbed_error` in order to raise and free all buffers
 
+    size_t temp_buf_size = temp_buf_capacity;
     result = mbedtls_cipher_crypt(
         &cipher_ctx, iv_data, iv_len, data_data, data_size, temp_buf, &temp_buf_size);
     if (result != 0 && result != MBEDTLS_ERR_CIPHER_FULL_BLOCK_EXPECTED) {
@@ -578,8 +579,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     }
     mbedtls_cipher_free(&cipher_ctx);
 
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
 
     int ensure_size = term_binary_heap_size(temp_buf_size);
@@ -595,17 +596,17 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     return out;
 
 raise_error:
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
     RAISE_ERROR(error_atom);
 
 mbed_error:
     mbedtls_cipher_free(&cipher_ctx);
-    free(temp_buf);
-    free(allocated_key_data);
-    free(allocated_iv_data);
-    free(allocated_data_data);
+    secure_free(temp_buf, temp_buf_capacity);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
+    secure_free(allocated_data_data, data_size);
 
     char err_msg[24];
     snprintf(err_msg, sizeof(err_msg), "Error %x", -result);
