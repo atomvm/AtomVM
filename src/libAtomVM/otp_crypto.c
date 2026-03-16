@@ -659,7 +659,7 @@ static const AtomStringIntPair pk_param_table[] = {
     { ATOM_STR("\xF", "brainpoolP384r1"), BrainpoolP384r1 },
     { ATOM_STR("\xF", "brainpoolP512r1"), BrainpoolP512r1 },
 
-    SELECT_INT_DEFAULT(InvalidPkType)
+    SELECT_INT_DEFAULT(InvalidPkParam)
 };
 
 static void do_psa_init(void)
@@ -684,7 +684,7 @@ static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
     size_t psa_key_bits;
     switch (key_type) {
         case Eddh:
-            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            // In OTP context: Eddh is Ecdh only on Montgomery curves
             psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
             switch (pk_param) {
                 case X25519:
@@ -847,7 +847,7 @@ static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
 
     switch (key_type) {
         case Eddh:
-            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            // In OTP context: Eddh is Ecdh only on Montgomery curves
             psa_algo = PSA_ALG_ECDH;
             psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
             switch (pk_param) {
@@ -1394,7 +1394,7 @@ static term nif_crypto_mac(Context *ctx, int argc, term argv[])
     term mac_type_term = argv[0];
     term sub_type_term = argv[1];
 
-    // argv[2] is key, will handle here bellow
+    // argv[2] is key, will handle here below
     // argv[3] is data, will handle it later
 
     bool success = false;
@@ -1553,7 +1553,9 @@ static void psa_mac_op_dtor(ErlNifEnv *caller_env, void *obj)
     psa_mac_abort(&mac_state->psa_op);
     psa_destroy_key(mac_state->key_id);
 #ifndef AVM_NO_SMP
-    smp_mutex_destroy(mac_state->mutex);
+    if (mac_state->mutex) {
+        smp_mutex_destroy(mac_state->mutex);
+    }
 #endif
 }
 
@@ -2029,6 +2031,11 @@ static void psa_cipher_op_dtor(ErlNifEnv *caller_env, void *obj)
     struct CipherState *cipher_state = (struct CipherState *) obj;
     psa_cipher_abort(&cipher_state->psa_op);
     psa_destroy_key(cipher_state->key_id);
+#ifndef AVM_NO_SMP
+    if (cipher_state->mutex) {
+        smp_mutex_destroy(cipher_state->mutex);
+    }
+#endif
 }
 
 const ErlNifResourceTypeInit psa_cipher_op_resource_type_init = {
