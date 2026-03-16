@@ -119,6 +119,9 @@
     binary_to_term/1,
     term_to_binary/1,
     split_binary/2,
+    crc32/1,
+    crc32/2,
+    crc32_combine/3,
     timestamp/0,
     universaltime/0,
     localtime/0,
@@ -1447,6 +1450,43 @@ term_to_binary(_Term) ->
 %%-----------------------------------------------------------------------------
 -spec split_binary(Bin :: binary(), Pos :: non_neg_integer()) -> {binary(), binary()}.
 split_binary(_Bin, _Pos) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Data iodata to compute the CRC32 checksum of
+%% @returns the CRC32 checksum as a non-negative integer
+%% @doc Computes the CRC32 (IEEE 802.3) checksum for `Data'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crc32(Data :: iodata()) -> non_neg_integer().
+crc32(_Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   OldCrc a previously computed CRC32 checksum
+%% @param   Data iodata to update the checksum with
+%% @returns the updated CRC32 checksum as a non-negative integer
+%% @doc Continues computing a CRC32 checksum by combining a previous checksum
+%% with the checksum of new data.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crc32(OldCrc :: non_neg_integer(), Data :: iodata()) -> non_neg_integer().
+crc32(_OldCrc, _Data) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   FirstCrc CRC32 checksum of the first data block
+%% @param   SecondCrc CRC32 checksum of the second data block
+%% @param   SecondSize byte size of the second data block
+%% @returns the combined CRC32 checksum as a non-negative integer
+%% @doc Combines two previously computed CRC32 checksums. This is equivalent
+%% to computing the CRC32 of the concatenation of the two data blocks.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec crc32_combine(
+    FirstCrc :: non_neg_integer(), SecondCrc :: non_neg_integer(), SecondSize :: non_neg_integer()
+) -> non_neg_integer().
+crc32_combine(_FirstCrc, _SecondCrc, _SecondSize) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

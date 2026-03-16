@@ -57,6 +57,9 @@ os:system_time/1, &system_time_nif
 erlang:atom_to_binary/1, &atom_to_binary_nif
 erlang:atom_to_binary/2, &atom_to_binary_nif
 erlang:atom_to_list/1, &atom_to_list_nif
+erlang:crc32/1, &crc32_1_nif
+erlang:crc32/2, &crc32_2_nif
+erlang:crc32_combine/3, &crc32_combine_nif
 erlang:binary_to_atom/1, &binary_to_atom_1_nif
 erlang:binary_to_float/1, &binary_to_float_nif
 erlang:binary_to_integer/1, &binary_to_integer_nif
