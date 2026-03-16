@@ -608,11 +608,14 @@ TEST_CASE("test_rtc_slow", "[test_run]")
 
 // Only test wifi on simulator, not on QEMU
 #if !CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32H2 && !CONFIG_IDF_TARGET_ESP32P4
+// We avoid test_wifi_example on low sram boards
+#if !CONFIG_IDF_TARGET_ESP32S2 && !CONFIG_IDF_TARGET_ESP32C61
 TEST_CASE("test_wifi_example", "[test_run]")
 {
     term ret_value = avm_test_case("test_wifi_example.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
+#endif
 
 TEST_CASE("test_wifi_managed", "[test_run]")
 {
