@@ -5400,8 +5400,9 @@ wait_timeout_trap_handler:
 
                     TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
 
+                    term bs_bin = term_get_match_state_binary(src);
                     avm_int_t bs_offset = term_get_match_state_offset(src);
-                    if ((term_binary_size(src) * 8 - bs_offset) % unit != 0) {
+                    if ((term_binary_size(bs_bin) * 8 - bs_offset) % unit != 0) {
                         TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }

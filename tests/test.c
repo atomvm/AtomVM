@@ -564,6 +564,7 @@ struct Test tests[] = {
     TEST_CASE(erlang_module_loaded),
 
     TEST_CASE(test_op_bs_start_match),
+    TEST_CASE(test_op_bs_test_unit),
     TEST_CASE(test_op_bs_create_bin),
 
     TEST_CASE(test_multi_value_comprehension),
