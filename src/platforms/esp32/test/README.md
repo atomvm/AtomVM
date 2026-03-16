@@ -40,10 +40,11 @@ The `WOKWI_CLI_TOKEN` needs to be set in your `Repository secrets` Settings -> A
 
    ```shell
    $ pip install pytest==8.3.3 \
-   pytest-embedded==1.11.5 \
-   pytest-embedded-serial-esp==1.11.5 \
-   pytest-embedded-idf==1.11.5 \
-   pytest-embedded-wokwi==1.11.5
+   esptool==5.2.0 \
+   pytest-embedded==2.7.0 \
+   pytest-embedded-serial-esp==2.7.0 \
+   pytest-embedded-idf==2.7.0 \
+   pytest-embedded-wokwi==2.7.0
    ```
 
 4. The ESP-IDF build environment must be installed and available:

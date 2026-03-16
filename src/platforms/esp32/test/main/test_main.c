@@ -192,9 +192,8 @@ TEST_CASE("test_esp_timer_get_time", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
-// SDMMC works all esp-idf versions for esp32 - still no support c3.
-// only run in QEMU (eg. OPENETH configured)
-#if !CONFIG_IDF_TARGET_ESP32C3 && CONFIG_ETH_USE_OPENETH
+// SDMMC is currently only exercised on the ESP32 QEMU target.
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_ETH_USE_OPENETH
 TEST_CASE("test_file", "[test_run]")
 {
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
@@ -331,15 +330,12 @@ TEST_CASE("test_monotonic_time", "[test_run]")
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 
-#if !CONFIG_IDF_TARGET_ESP32C3 && CONFIG_ETH_USE_OPENETH
-// this test is failing on v5.0.7 due to some kind of problem with atomvm:posix_open
-#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0))
+#if CONFIG_IDF_TARGET_ESP32 && CONFIG_ETH_USE_OPENETH
 TEST_CASE("test_mount", "[test_run]")
 {
     term ret_value = avm_test_case("test_mount.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
-#endif
 #endif
 
 struct pipefs_global_ctx
