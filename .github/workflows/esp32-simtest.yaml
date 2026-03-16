@@ -80,27 +80,23 @@ jobs:
             "esp32c6",
             "esp32h2"
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.1.7", "v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["v5.5.3"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["v5.5.3"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.1.7"
-          - esp-idf-target: "esp32p4"
             idf-version: "v5.2.6"
           - esp-idf-target: "esp32h2"
-            idf-version: "v5.1.7"
-          - esp-idf-target: "esp32h2"
             idf-version: "v5.2.6"
-          - esp-idf-target: "esp32c5"
-            idf-version: "v5.1.7"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.2.6"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.3.4"
           - esp-idf-target: "esp32c5"
             idf-version: "v5.4.3"
-        # CI now uses chip revision 3 that is currently only available in 5.5.2
+        # CI now uses chip revision 3 that is currently only available since 5.5.2
         include:
           - esp-idf-target: "esp32p4"
+            idf-version: "v5.5.3"
+          - esp-idf-target: "esp32c61"
             idf-version: "v5.5.3"
 
     steps:
@@ -136,10 +132,11 @@ jobs:
           set -e
           . $IDF_PATH/export.sh
           pip install pytest==8.3.4 \
-              pytest-embedded==1.12.1 \
-              pytest-embedded-idf==1.12.1 \
-              pytest-embedded-qemu==1.12.1 \
-              pytest-embedded-wokwi==1.12.1
+              esptool==5.2.0 \
+              pytest-embedded==2.7.0 \
+              pytest-embedded-idf==2.7.0 \
+              pytest-embedded-qemu==2.7.0 \
+              pytest-embedded-wokwi==2.7.0
 
       - name: Set SDKCONFIG_DEFAULTS and Build ESP32-sim tests using idf.py
         working-directory: ./src/platforms/esp32/test/
@@ -162,4 +159,4 @@ jobs:
         run: |
           set -e
           . $IDF_PATH/export.sh
-          pytest --embedded-services=idf,wokwi --wokwi-timeout=240000 --target=${{ matrix.esp-idf-target }} --wokwi-diagram=sim_boards/diagram.${{ matrix.esp-idf-target }}.json -s
+          pytest --embedded-services=idf,wokwi --target=${{ matrix.esp-idf-target }} --wokwi-diagram=sim_boards/diagram.${{ matrix.esp-idf-target }}.json -s

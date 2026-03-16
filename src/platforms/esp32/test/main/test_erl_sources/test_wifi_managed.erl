@@ -144,5 +144,6 @@ wait_for_disconnect(Timeout) ->
             io:format("STA disconnected.~n"),
             ok
     after Timeout ->
+        io:format("wait_for_disconnect timeout.~n"),
         {error, timeout}
     end.
