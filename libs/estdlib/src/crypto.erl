@@ -384,6 +384,10 @@ crypto_final(_State) ->
 %%
 %%          Keys are returned as **raw exported key material**, not PEM, DER, or `public_key'
 %%          records.
+%%
+%%          Key generation draws from the platform entropy source.  Consult
+%%          your platform documentation to ensure the hardware RNG is properly
+%%          seeded before generating keys.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec generate_key(Type :: pk_type(), Param :: pk_param()) -> {binary(), binary()}.
@@ -431,6 +435,11 @@ compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
 %%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
 %%
 %%          The signature is returned in **DER** form.
+%%
+%%          ECDSA signing requires a random nonce internally.  The quality of
+%%          this nonce depends on the platform entropy source.  Consult your
+%%          platform documentation to ensure the hardware RNG is properly
+%%          seeded; a predictable nonce can lead to private key recovery.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sign(
@@ -581,6 +590,11 @@ hash_equals(_Mac1, _Mac2) ->
 %% @returns Returns Cryptographically secure random data of length `N'
 %% @doc     Generate N cryptographically secure random octets
 %%          and return the result in a binary.
+%%
+%%          The quality of the output depends on the platform entropy source.
+%%          Consult your platform documentation to ensure the hardware RNG is
+%%          properly seeded before using this function for key material or
+%%          other security-sensitive purposes.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec strong_rand_bytes(N :: non_neg_integer()) -> binary().

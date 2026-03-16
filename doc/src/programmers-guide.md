@@ -1140,6 +1140,21 @@ Note: mbedTLS doesn't support padding for ciphers other than CCB, so block size 
 will be truncated.
 ```
 
+```{warning}
+**ESP32 entropy source.**
+All cryptographic operations that require randomness (`crypto:strong_rand_bytes/1`, `crypto:generate_key/2`,
+ECDSA signing via `crypto:sign/4`) ultimately draw entropy from the hardware RNG through mbedTLS.
+
+On the ESP32, the hardware RNG produces true random numbers **only when the RF subsystem (Wi-Fi or Bluetooth) is
+active**.  When RF is disabled, `esp_fill_random()` falls back to a pseudo-random source that is **not suitable
+for cryptographic key material, nonces, or IVs**.  In particular, predictable ECDSA nonces can lead to private key
+recovery.
+
+Consult the [ESP-IDF Random Number Generation documentation](https://docs.espressif.com/projects/esp-idf/en/release-v5.5/esp32/api-reference/system/random.html)
+for details on how to ensure the entropy source is properly initialized before performing any security-sensitive
+cryptographic operations.
+```
+
 ## ESP32-specific APIs
 
 Certain APIs are specific to and only supported on the ESP32 platform.  This section describes these APIs.
