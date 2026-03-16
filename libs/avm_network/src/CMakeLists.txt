@@ -28,7 +28,6 @@ set(ERLANG_MODULES
     http_server
     mdns
     network
-    network_fsm
 )
 
 pack_archive(avm_network ${ERLANG_MODULES})

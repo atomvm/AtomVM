@@ -143,6 +143,9 @@ table.
 - Fixed a bug in `OP_BS_CREATE_BIN`
 - Fix re-raise behavior by implementing `erlang:raise/3` 3rd argument support
 
+### Removed
+- Removed deprecated `network_fsm`
+
 ## [0.6.7] - Unreleased
 
 ### Added
