@@ -582,6 +582,39 @@ static inline bool term_is_sub_binary(term t)
 }
 
 /**
+ * @brief Extract \c avm_int_t value from unboxed integer term
+ *
+ * Extracts the \c avm_int_t value from a term that contains an unboxed
+ * integer. An unboxed integer is an integer value stored directly within
+ * the term itself, not as a separate allocation on the heap.
+ *
+ * @param t Term containing unboxed integer
+ * @return The extracted \c avm_int_t value
+ *
+ * @pre \c term_is_int(t) must be true
+ * @warning Undefined behavior if called on non-integer or boxed integer terms
+ *
+ * @note This function performs no type checking - validation must be done
+ *       by caller using \c term_is_int()
+ * @note Only extracts from unboxed integers (28-bit on 32-bit builds,
+ *       60-bit on 64-bit builds)
+ * @note Safe conversions: \c size_t s = term_to_int(t) is valid for
+ *       non-negative values (check with \c term_is_non_neg_int() first)
+ * @warning Unsafe conversions on 64-bit builds: \c int or \c int32_t may overflow
+ *          since \c avm_int_t can hold 60-bit values
+ *
+ * @see term_is_int() to validate term before extraction
+ * @see term_unbox_int() for extracting boxed integers
+ * @see term_maybe_unbox_int() for extracting from either unboxed or boxed integers
+ */
+static inline avm_int_t term_to_int(term t)
+{
+    TERM_DEBUG_ASSERT(term_is_integer(t));
+
+    return ((avm_int_t) t) >> 4;
+}
+
+/**
  * @brief Check if term is an integer within platform-specific \c avm_int_t range
  *
  * Tests whether a term represents an integer stored directly in the term
@@ -675,7 +708,12 @@ static inline bool term_is_any_integer(term t)
 static inline bool term_is_int32(term t)
 {
     if (term_is_int(t)) {
+#if MAX_NOT_BOXED_INT <= INT32_MAX
         return true;
+#else
+        avm_int_t as_int = term_to_int(t);
+        return (as_int >= INT32_MIN) && (as_int <= INT32_MAX);
+#endif
     } else if (term_is_boxed_integer(t) && (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT)) {
 #if BOXED_TERMS_REQUIRED_FOR_INT < BOXED_TERMS_REQUIRED_FOR_INT64
         // just a boxed term that is a single 32 bit word
@@ -1031,38 +1069,6 @@ static inline uint8_t term_to_uint8(term t)
     TERM_DEBUG_ASSERT(term_is_uint8(t));
 
     return ((uint16_t) t) >> 4;
-}
-
-/**
- * @brief Extract \c avm_int_t value from unboxed integer term
- *
- * Extracts the \c avm_int_t value from a term that contains an unboxed
- * integer. An unboxed integer is an integer value stored directly within
- * the term itself, not as a separate allocation on the heap.
- *
- * @param t Term containing unboxed integer
- * @return The extracted \c avm_int_t value
- *
- * @pre \c term_is_int(t) must be true
- * @warning Undefined behavior if called on non-integer or boxed integer terms
- *
- * @note This function performs no type checking - validation must be done
- *       by caller using \c term_is_int()
- * @note Only extracts from unboxed integers (28-bit on 32-bit builds,
- *       60-bit on 64-bit builds)
- * @note Safe conversions: \c size_t s = term_to_int(t) is always valid
- * @warning Unsafe conversions on 64-bit builds: \c int or \c int32_t may overflow
- *          since \c avm_int_t can hold 60-bit values
- *
- * @see term_is_int() to validate term before extraction
- * @see term_unbox_int() for extracting boxed integers
- * @see term_maybe_unbox_int() for extracting from either unboxed or boxed integers
- */
-static inline avm_int_t term_to_int(term t)
-{
-    TERM_DEBUG_ASSERT(term_is_integer(t));
-
-    return ((avm_int_t) t) >> 4;
 }
 
 static inline int term_to_catch_label_and_module(term t, int *module_index)
@@ -1690,10 +1696,16 @@ static inline bool term_is_uint32(term t)
 #endif
         }
 
-        return false;
-    } else {
+    } else if (term_is_int(t)) {
+#if MAX_NOT_BOXED_INT <= INT32_MAX
         return term_is_non_neg_int(t);
+#else
+        avm_int_t as_int = term_to_int(t);
+        return (as_int >= 0) && (as_int <= UINT32_MAX);
+#endif
     }
+
+    return false;
 }
 
 /**
