@@ -531,6 +531,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     const mbedtls_cipher_info_t *cipher_info = mbedtls_cipher_info_from_type(cipher);
 
     mbedtls_cipher_context_t cipher_ctx;
+    mbedtls_cipher_init(&cipher_ctx);
 
     void *temp_buf = NULL;
 
@@ -600,6 +601,7 @@ raise_error:
     RAISE_ERROR(error_atom);
 
 mbed_error:
+    mbedtls_cipher_free(&cipher_ctx);
     free(temp_buf);
     free(allocated_key_data);
     free(allocated_iv_data);
