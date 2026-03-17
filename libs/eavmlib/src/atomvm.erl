@@ -45,6 +45,8 @@
     posix_pwrite/3,
     posix_fsync/1,
     posix_ftruncate/2,
+    posix_mkdir/2,
+    posix_rmdir/1,
     posix_rename/2,
     posix_stat/1,
     posix_fstat/1,
@@ -374,11 +376,28 @@ posix_ftruncate(_File, _Length) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
-%% @param   OldPath Current path of the file
-%% @param   NewPath New path for the file
+%% @param   Path    Path to the directory to create
+%% @param   Mode    Permission bits for the new directory
 %% @returns `ok' or an error tuple
-%% @doc     Rename a file using `rename(2)'.
+%% @doc     Create a directory using `mkdir(2)'.
 %% @end
+%%-----------------------------------------------------------------------------
+-spec posix_mkdir(Path :: iodata(), Mode :: non_neg_integer()) ->
+    ok | {error, posix_error()}.
+posix_mkdir(_Path, _Mode) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the directory to remove
+%% @returns ok or an error tuple
+%% @doc     Remove an empty directory using `rmdir(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_rmdir(Path :: iodata()) ->
+    ok | {error, posix_error()}.
+posix_rmdir(_Path) ->
+    erlang:nif_error(undefined).
+
 %%-----------------------------------------------------------------------------
 -spec posix_rename(OldPath :: iodata(), NewPath :: iodata()) ->
     ok | {error, posix_error()}.

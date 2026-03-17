@@ -40,6 +40,7 @@ test() ->
     ok = test_rename(),
     ok = test_stat(),
     ok = test_fstat(),
+    ok = test_mkdir_rmdir(),
     ok = test_validation(),
     ok = test_subprocess(HasExecve),
     ok.
@@ -449,6 +450,24 @@ test_fstat() ->
     {ok, #{st_ino := Ino, st_dev := Dev}} = atomvm:posix_stat(Path),
     ok = atomvm:posix_close(Fd),
     ok = atomvm:posix_unlink(Path).
+
+test_mkdir_rmdir() ->
+    Base = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Dir = Base ++ ".dir",
+    ok = atomvm:posix_mkdir(Dir, 8#755),
+    {ok, #{st_mode := _}} = atomvm:posix_stat(Dir),
+    ok = atomvm:posix_rmdir(Dir),
+    {error, enoent} = atomvm:posix_stat(Dir),
+    ok = atomvm:posix_mkdir(Dir, 8#755),
+    {error, eexist} = atomvm:posix_mkdir(Dir, 8#755),
+    Path = Dir ++ "/file",
+    {ok, Fd} = atomvm:posix_open(Path, [o_wronly, o_creat], 8#644),
+    ok = atomvm:posix_close(Fd),
+    {error, enotempty} = atomvm:posix_rmdir(Dir),
+    ok = atomvm:posix_unlink(Path),
+    ok = atomvm:posix_rmdir(Dir),
+    {error, enoent} = atomvm:posix_rmdir(Dir),
+    ok.
 
 test_validation() ->
     Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),

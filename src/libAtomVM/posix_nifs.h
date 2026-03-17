@@ -65,8 +65,14 @@ extern const struct Nif atomvm_posix_ftruncate_nif;
 #if HAVE_MKFIFO
 extern const struct Nif atomvm_posix_mkfifo_nif;
 #endif
+#if HAVE_MKDIR
+extern const struct Nif atomvm_posix_mkdir_nif;
+#endif
 #if HAVE_UNLINK
 extern const struct Nif atomvm_posix_unlink_nif;
+#endif
+#if HAVE_RMDIR
+extern const struct Nif atomvm_posix_rmdir_nif;
 #endif
 #if HAVE_RENAME
 extern const struct Nif atomvm_posix_rename_nif;

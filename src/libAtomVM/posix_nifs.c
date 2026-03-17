@@ -26,13 +26,13 @@
 #if HAVE_OPEN && HAVE_CLOSE
 #include <fcntl.h>
 #endif
-#if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
+#if HAVE_OPEN && HAVE_CLOSE || HAVE_RMDIR || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 #include <unistd.h>
 #endif
 #if HAVE_RENAME
 #include <stdio.h>
 #endif
-#if HAVE_MKFIFO || HAVE_STAT || HAVE_FSTAT
+#if HAVE_MKFIFO || HAVE_MKDIR || HAVE_STAT || HAVE_FSTAT
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
@@ -978,6 +978,31 @@ static term nif_atomvm_posix_mkfifo(Context *ctx, int argc, term argv[])
 }
 #endif
 
+#if HAVE_MKDIR
+static term nif_atomvm_posix_mkdir(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term path_term = argv[0];
+    term mode_term = argv[1];
+    VALIDATE_VALUE(mode_term, term_is_non_neg_int);
+
+    int ok;
+    char *path = interop_term_to_string(path_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    mode_t mode = (mode_t) term_to_int(mode_term);
+
+    int res = mkdir(path, mode);
+    free(path);
+    if (res < 0) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+    return OK_ATOM;
+}
+#endif
+
 #if HAVE_UNLINK
 static term nif_atomvm_posix_unlink(Context *ctx, int argc, term argv[])
 {
@@ -994,6 +1019,27 @@ static term nif_atomvm_posix_unlink(Context *ctx, int argc, term argv[])
     free((void *) path);
     if (res < 0) {
         // Return an error.
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+    return OK_ATOM;
+}
+#endif
+
+#if HAVE_RMDIR
+static term nif_atomvm_posix_rmdir(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term path_term = argv[0];
+
+    int ok;
+    char *path = interop_term_to_string(path_term, &ok);
+    if (UNLIKELY(!ok)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    int res = rmdir(path);
+    free(path);
+    if (res < 0) {
         return errno_to_error_tuple_maybe_gc(ctx);
     }
     return OK_ATOM;
@@ -1458,10 +1504,22 @@ const struct Nif atomvm_posix_mkfifo_nif = {
     .nif_ptr = nif_atomvm_posix_mkfifo
 };
 #endif
+#if HAVE_MKDIR
+const struct Nif atomvm_posix_mkdir_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_mkdir
+};
+#endif
 #if HAVE_UNLINK
 const struct Nif atomvm_posix_unlink_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_atomvm_posix_unlink
+};
+#endif
+#if HAVE_RMDIR
+const struct Nif atomvm_posix_rmdir_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_rmdir
 };
 #endif
 #if HAVE_RENAME

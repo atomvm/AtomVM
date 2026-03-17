@@ -126,6 +126,8 @@ set(HAVE_FTRUNCATE "" CACHE INTERNAL "Have symbol ftruncate" FORCE)
 set(HAVE_RENAME "" CACHE INTERNAL "Have symbol rename" FORCE)
 set(HAVE_STAT "" CACHE INTERNAL "Have symbol stat" FORCE)
 set(HAVE_FSTAT "" CACHE INTERNAL "Have symbol fstat" FORCE)
+set(HAVE_MKDIR "" CACHE INTERNAL "Have symbol mkdir" FORCE)
+set(HAVE_RMDIR "" CACHE INTERNAL "Have symbol rmdir" FORCE)
 
 # Include device detection (sets STM32_FAMILY, CPU flags, HAL defines, etc.)
 include(cmake/stm32_device.cmake)

@@ -1012,10 +1012,20 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_MKFIFO(expr) NULL
 #endif
+#if HAVE_MKDIR
+#define IF_HAVE_MKDIR(expr) (expr)
+#else
+#define IF_HAVE_MKDIR(expr) NULL
+#endif
 #if HAVE_UNLINK
 #define IF_HAVE_UNLINK(expr) (expr)
 #else
 #define IF_HAVE_UNLINK(expr) NULL
+#endif
+#if HAVE_RMDIR
+#define IF_HAVE_RMDIR(expr) (expr)
+#else
+#define IF_HAVE_RMDIR(expr) NULL
 #endif
 #if HAVE_RENAME
 #define IF_HAVE_RENAME(expr) (expr)
