@@ -625,6 +625,7 @@ compile_assembler(test_op_bs_create_bin_asm)
 
 compile_erlang(test_op_bs_test_unit)
 compile_assembler(test_op_bs_test_unit_asm)
+compile_erlang(test_bs_match_ensure_at_least)
 
 compile_assembler(bs_get_binary2_all_asm)
 
@@ -1195,6 +1196,7 @@ set(erlang_test_beams
 
     test_op_bs_start_match.beam
     test_op_bs_test_unit.beam
+    test_bs_match_ensure_at_least.beam
     test_op_bs_create_bin.beam
 
     bigint.beam

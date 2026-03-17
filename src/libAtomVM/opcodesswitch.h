@@ -7547,7 +7547,7 @@ wait_timeout_trap_handler:
                             int stride;
                             DECODE_LITERAL(stride, pc);
                             j++;
-                            int unit; // TODO: check use of unit here
+                            int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
                             #ifdef IMPL_EXECUTE_LOOP
@@ -7556,7 +7556,8 @@ wait_timeout_trap_handler:
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
                                 size_t unsigned_stride = (size_t) stride;
-                                if ((bs_bin_size * 8) - bs_offset < unsigned_stride) {
+                                size_t remaining = (bs_bin_size * 8) - bs_offset;
+                                if (remaining < unsigned_stride || (remaining - unsigned_stride) % unit != 0) {
                                     TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
                                     goto bs_match_jump_to_fail;
                                 }
