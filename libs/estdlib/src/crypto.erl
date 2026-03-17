@@ -92,7 +92,7 @@
 -type padding() :: none | pkcs_padding.
 
 -type crypto_opt() :: {encrypt, boolean()} | {padding, padding()}.
--type crypto_opts() :: [crypto_opt()].
+-type crypto_opts() :: boolean() | [crypto_opt()].
 
 -type pk_type() :: eddh | eddsa | ecdh.
 
@@ -136,6 +136,7 @@
 
 -type mac_subtype() :: cmac_subtype() | hash_algorithm() | ripemd160.
 
+-export_type([mac_state/0]).
 -opaque mac_state() :: reference().
 
 %%-----------------------------------------------------------------------------
@@ -299,7 +300,7 @@ crypto_one_time_aead(_Cipher, _Key, _IV, _InText, _AAD, _TagOrTagLength, _EncFla
 -spec crypto_init(
     Cipher :: cipher_no_iv(),
     Key :: iodata(),
-    FlagOrOptions :: boolean() | crypto_opts()
+    FlagOrOptions :: crypto_opts()
 ) -> crypto_state().
 crypto_init(Cipher, Key, FlagOrOptions) ->
     crypto_init(Cipher, Key, <<>>, FlagOrOptions).
@@ -330,7 +331,7 @@ crypto_init(Cipher, Key, FlagOrOptions) ->
     Cipher :: cipher_no_iv() | cipher_iv(),
     Key :: iodata(),
     IV :: iodata(),
-    FlagOrOptions :: boolean() | crypto_opts()
+    FlagOrOptions :: crypto_opts()
 ) -> crypto_state().
 crypto_init(_Cipher, _Key, _IV, _FlagOrOptions) ->
     erlang:nif_error(undefined).
