@@ -1717,7 +1717,11 @@ static term nif_crypto_sign(Context *ctx, int argc, term argv[])
 
     size_t sig_raw_size = PSA_ECDSA_SIGNATURE_SIZE(psa_key_bits);
     uint8_t *sig_raw = NULL;
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    size_t sig_der_size = MBEDTLS_ECDSA_DER_MAX_SIG_LEN(psa_key_bits);
+#else
     size_t sig_der_size = MBEDTLS_ECDSA_MAX_SIG_LEN(psa_key_bits);
+#endif
     void *sig_der = NULL;
     void *maybe_allocated_data = NULL;
 
