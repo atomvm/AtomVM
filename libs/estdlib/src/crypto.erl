@@ -92,7 +92,7 @@
 -type padding() :: none | pkcs_padding.
 
 -type crypto_opt() :: {encrypt, boolean()} | {padding, padding()}.
--type crypto_opts() :: [crypto_opt()].
+-type crypto_opts() :: boolean() | [crypto_opt()].
 
 -type pk_type() :: eddh | eddsa | ecdh.
 
@@ -136,6 +136,7 @@
 
 -type mac_subtype() :: cmac_subtype() | hash_algorithm() | ripemd160.
 
+-export_type([mac_state/0]).
 -opaque mac_state() :: reference().
 
 %%-----------------------------------------------------------------------------
@@ -299,7 +300,7 @@ crypto_one_time_aead(_Cipher, _Key, _IV, _InText, _AAD, _TagOrTagLength, _EncFla
 -spec crypto_init(
     Cipher :: cipher_no_iv(),
     Key :: iodata(),
-    FlagOrOptions :: boolean() | crypto_opts()
+    FlagOrOptions :: crypto_opts()
 ) -> crypto_state().
 crypto_init(Cipher, Key, FlagOrOptions) ->
     crypto_init(Cipher, Key, <<>>, FlagOrOptions).
@@ -330,7 +331,7 @@ crypto_init(Cipher, Key, FlagOrOptions) ->
     Cipher :: cipher_no_iv() | cipher_iv(),
     Key :: iodata(),
     IV :: iodata(),
-    FlagOrOptions :: boolean() | crypto_opts()
+    FlagOrOptions :: crypto_opts()
 ) -> crypto_state().
 crypto_init(_Cipher, _Key, _IV, _FlagOrOptions) ->
     erlang:nif_error(undefined).
@@ -384,6 +385,10 @@ crypto_final(_State) ->
 %%
 %%          Keys are returned as **raw exported key material**, not PEM, DER, or `public_key'
 %%          records.
+%%
+%%          Key generation draws from the platform entropy source.  Consult
+%%          your platform documentation to ensure the hardware RNG is properly
+%%          seeded before generating keys.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec generate_key(Type :: pk_type(), Param :: pk_param()) -> {binary(), binary()}.
@@ -431,6 +436,11 @@ compute_key(_Type, _OtherPublicKey, _MyPrivateKey, _Param) ->
 %%            brainpoolP256r1 | brainpoolP384r1 | brainpoolP512r1'
 %%
 %%          The signature is returned in **DER** form.
+%%
+%%          ECDSA signing requires a random nonce internally.  The quality of
+%%          this nonce depends on the platform entropy source.  Consult your
+%%          platform documentation to ensure the hardware RNG is properly
+%%          seeded; a predictable nonce can lead to private key recovery.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec sign(
@@ -581,6 +591,11 @@ hash_equals(_Mac1, _Mac2) ->
 %% @returns Returns Cryptographically secure random data of length `N'
 %% @doc     Generate N cryptographically secure random octets
 %%          and return the result in a binary.
+%%
+%%          The quality of the output depends on the platform entropy source.
+%%          Consult your platform documentation to ensure the hardware RNG is
+%%          properly seeded before using this function for key material or
+%%          other security-sensitive purposes.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec strong_rand_bytes(N :: non_neg_integer()) -> binary().

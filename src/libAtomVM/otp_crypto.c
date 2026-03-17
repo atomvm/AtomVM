@@ -468,17 +468,17 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     void *allocated_key_data = NULL;
     void *allocated_iv_data = NULL;
     void *allocated_data_data = NULL;
+    size_t data_size = 0;
+    const void *iv_data = NULL;
+    size_t iv_len = 0;
 
     const void *key_data;
-    size_t key_len;
+    size_t key_len = 0;
     term result_t = handle_iodata(key, &key_data, &key_len, &allocated_key_data);
     if (UNLIKELY(result_t != OK_ATOM)) {
         error_atom = result_t;
         goto raise_error;
     }
-
-    const void *iv_data = NULL;
-    size_t iv_len = 0;
     if (has_iv) {
         result_t = handle_iodata(iv, &iv_data, &iv_len, &allocated_iv_data);
         if (UNLIKELY(result_t != OK_ATOM)) {
@@ -488,7 +488,6 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     }
 
     const void *data_data;
-    size_t data_size;
     result_t = handle_iodata(data, &data_data, &data_size, &allocated_data_data);
     if (UNLIKELY(result_t != OK_ATOM)) {
         error_atom = result_t;
@@ -531,8 +530,10 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     const mbedtls_cipher_info_t *cipher_info = mbedtls_cipher_info_from_type(cipher);
 
     mbedtls_cipher_context_t cipher_ctx;
+    mbedtls_cipher_init(&cipher_ctx);
 
     void *temp_buf = NULL;
+    size_t temp_buf_capacity = 0;
 
     int source_line;
     int result = mbedtls_cipher_setup(&cipher_ctx, cipher_info);
@@ -560,8 +561,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     unsigned int block_size = mbedtls_cipher_get_block_size(&cipher_ctx);
 
-    size_t temp_buf_size = data_size + block_size;
-    temp_buf = malloc(temp_buf_size);
+    temp_buf_capacity = data_size + block_size;
+    temp_buf = malloc(temp_buf_capacity);
     if (IS_NULL_PTR(temp_buf)) {
         error_atom = OUT_OF_MEMORY_ATOM;
         goto raise_error;
@@ -569,6 +570,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     // from this point onward use `mbed_error` in order to raise and free all buffers
 
+    size_t temp_buf_size = temp_buf_capacity;
     result = mbedtls_cipher_crypt(
         &cipher_ctx, iv_data, iv_len, data_data, data_size, temp_buf, &temp_buf_size);
     if (result != 0 && result != MBEDTLS_ERR_CIPHER_FULL_BLOCK_EXPECTED) {
@@ -577,8 +579,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     }
     mbedtls_cipher_free(&cipher_ctx);
 
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
 
     int ensure_size = term_binary_heap_size(temp_buf_size);
@@ -594,16 +596,17 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     return out;
 
 raise_error:
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
     RAISE_ERROR(error_atom);
 
 mbed_error:
-    free(temp_buf);
-    free(allocated_key_data);
-    free(allocated_iv_data);
-    free(allocated_data_data);
+    mbedtls_cipher_free(&cipher_ctx);
+    secure_free(temp_buf, temp_buf_capacity);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
+    secure_free(allocated_data_data, data_size);
 
     char err_msg[24];
     snprintf(err_msg, sizeof(err_msg), "Error %x", -result);
@@ -659,7 +662,7 @@ static const AtomStringIntPair pk_param_table[] = {
     { ATOM_STR("\xF", "brainpoolP384r1"), BrainpoolP384r1 },
     { ATOM_STR("\xF", "brainpoolP512r1"), BrainpoolP512r1 },
 
-    SELECT_INT_DEFAULT(InvalidPkType)
+    SELECT_INT_DEFAULT(InvalidPkParam)
 };
 
 static void do_psa_init(void)
@@ -684,7 +687,7 @@ static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
     size_t psa_key_bits;
     switch (key_type) {
         case Eddh:
-            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            // In OTP context: Eddh is Ecdh only on Montgomery curves
             psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
             switch (pk_param) {
                 case X25519:
@@ -782,6 +785,9 @@ static term nif_crypto_generate_key(Context *ctx, int argc, term argv[])
     uint8_t *exported_priv = NULL;
     size_t exported_pub_size = PSA_KEY_EXPORT_ECC_PUBLIC_KEY_MAX_SIZE(psa_key_bits);
     uint8_t *exported_pub = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     exported_priv = malloc(exported_priv_size);
     exported_pub = malloc(exported_pub_size);
     if (UNLIKELY(exported_priv == NULL || exported_pub == NULL)) {
@@ -847,7 +853,7 @@ static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
 
     switch (key_type) {
         case Eddh:
-            // In OTP cotext: Eddh is Ecdh only on Montgomery curves
+            // In OTP context: Eddh is Ecdh only on Montgomery curves
             psa_algo = PSA_ALG_ECDH;
             psa_key_type = PSA_KEY_TYPE_ECC_KEY_PAIR(PSA_ECC_FAMILY_MONTGOMERY);
             switch (pk_param) {
@@ -942,7 +948,11 @@ static term nif_crypto_compute_key(Context *ctx, int argc, term argv[])
     term result = ERROR_ATOM;
 
     size_t shared_out_size = PSA_RAW_KEY_AGREEMENT_OUTPUT_SIZE(psa_key_type, psa_key_bits);
-    uint8_t *shared_out = malloc(shared_out_size);
+    uint8_t *shared_out = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
+    shared_out = malloc(shared_out_size);
     if (IS_NULL_PTR(shared_out)) {
         result = OUT_OF_MEMORY_ATOM;
         goto cleanup;
@@ -1115,6 +1125,8 @@ static term nif_crypto_sign(Context *ctx, int argc, term argv[])
     size_t sig_der_size = MBEDTLS_ECDSA_MAX_SIG_LEN(psa_key_bits);
     void *sig_der = NULL;
     void *maybe_allocated_data = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     term data_term = argv[2];
     const void *data;
@@ -1304,6 +1316,8 @@ static term nif_crypto_verify(Context *ctx, int argc, term argv[])
     void *sig_raw = NULL;
     void *maybe_allocated_data = NULL;
 
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     term data_term = argv[2];
     const void *data;
     size_t data_len;
@@ -1394,23 +1408,27 @@ static term nif_crypto_mac(Context *ctx, int argc, term argv[])
     term mac_type_term = argv[0];
     term sub_type_term = argv[1];
 
-    // argv[2] is key, will handle here bellow
+    // argv[2] is key, will handle here below
     // argv[3] is data, will handle it later
 
     bool success = false;
     term result = ERROR_ATOM;
+
     psa_key_id_t key_id = 0;
     void *maybe_allocated_key = NULL;
+    size_t key_len = 0;
     void *maybe_allocated_data = NULL;
     size_t mac_out_size = 0;
     void *mac_out = NULL;
 
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     term key_term = argv[2];
     const void *key;
-    size_t key_len;
     term iodata_handle_result = handle_iodata(key_term, &key, &key_len, &maybe_allocated_key);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
     }
 
     psa_key_type_t psa_key_type = interop_atom_term_select_int(mac_key_table, mac_type_term, glb);
@@ -1459,9 +1477,11 @@ static term nif_crypto_mac(Context *ctx, int argc, term argv[])
         case PSA_SUCCESS:
             break;
         case PSA_ERROR_NOT_SUPPORTED:
-            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx));
+            result = make_crypto_error(__FILE__, __LINE__, "Unsupported algorithm", ctx);
+            goto cleanup;
         default:
-            RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
+            result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
+            goto cleanup;
     }
 
     term data_term = argv[3];
@@ -1553,7 +1573,9 @@ static void psa_mac_op_dtor(ErlNifEnv *caller_env, void *obj)
     psa_mac_abort(&mac_state->psa_op);
     psa_destroy_key(mac_state->key_id);
 #ifndef AVM_NO_SMP
-    smp_mutex_destroy(mac_state->mutex);
+    if (mac_state->mutex) {
+        smp_mutex_destroy(mac_state->mutex);
+    }
 #endif
 }
 
@@ -1576,15 +1598,19 @@ static term nif_crypto_mac_init(Context *ctx, int argc, term argv[])
 
     bool success = false;
     term result = ERROR_ATOM;
+
     void *maybe_allocated_key = NULL;
+    size_t key_len = 0;
     struct MacState *mac_obj = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     term key_term = argv[2];
     const void *key;
-    size_t key_len;
     term iodata_handle_result = handle_iodata(key_term, &key, &key_len, &maybe_allocated_key);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
+        result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
+        goto cleanup;
     }
 
     psa_key_type_t psa_key_type = interop_atom_term_select_int(mac_key_table, mac_type_term, glb);
@@ -1740,6 +1766,8 @@ static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
     bool success = false;
     term result = ERROR_ATOM;
 
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     size_t mac_size
         = PSA_MAC_LENGTH(mac_state->psa_key_type, mac_state->key_bit_size, mac_state->psa_algo);
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(mac_size)) != MEMORY_GC_OK)) {
@@ -1798,9 +1826,14 @@ static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
 
     size_t mac_size
         = PSA_MAC_LENGTH(mac_state->psa_key_type, mac_state->key_bit_size, mac_state->psa_algo);
-    uint8_t *mac_buf = malloc(mac_size);
+    uint8_t *mac_buf = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
+    mac_buf = malloc(mac_size);
     if (IS_NULL_PTR(mac_buf)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        result = OUT_OF_MEMORY_ATOM;
+        goto cleanup;
     }
 
     size_t mac_len = 0;
@@ -1892,8 +1925,11 @@ static term nif_crypto_hash_update(Context *ctx, int argc, term argv[])
 
     bool success = false;
     term result = ERROR_ATOM;
+
     void *maybe_allocated_data = NULL;
     struct HashState *new_hash_obj = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     size_t data_len;
     term data_term = argv[1];
@@ -1964,6 +2000,9 @@ static term nif_crypto_hash_final(Context *ctx, int argc, term argv[])
 
     psa_algorithm_t psa_algo = hash_state->psa_algo;
     psa_hash_operation_t psa_op = PSA_HASH_OPERATION_INIT;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     psa_status_t status = psa_hash_clone(&hash_state->psa_op, &psa_op);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2029,6 +2068,11 @@ static void psa_cipher_op_dtor(ErlNifEnv *caller_env, void *obj)
     struct CipherState *cipher_state = (struct CipherState *) obj;
     psa_cipher_abort(&cipher_state->psa_op);
     psa_destroy_key(cipher_state->key_id);
+#ifndef AVM_NO_SMP
+    if (cipher_state->mutex) {
+        smp_mutex_destroy(cipher_state->mutex);
+    }
+#endif
 }
 
 const ErlNifResourceTypeInit psa_cipher_op_resource_type_init = {
@@ -2210,8 +2254,11 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
     /* 5. Import key via PSA */
     bool success = false;
     term result = ERROR_ATOM;
+
     psa_key_id_t key_id = 0;
     struct CipherState *cipher_obj = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
     psa_set_key_type(&attr, cipher_params->key_type);
@@ -2248,6 +2295,7 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
     }
 #endif
     cipher_obj->key_id = key_id;
+    key_id = 0; // ownership transferred to resource immediately
     cipher_obj->psa_algo = effective_algo;
     cipher_obj->key_type = cipher_params->key_type;
     cipher_obj->encrypting = encrypting;
@@ -2256,9 +2304,9 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
 
     /* 7. Set up the cipher operation */
     if (encrypting) {
-        status = psa_cipher_encrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+        status = psa_cipher_encrypt_setup(&cipher_obj->psa_op, cipher_obj->key_id, effective_algo);
     } else {
-        status = psa_cipher_decrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+        status = psa_cipher_decrypt_setup(&cipher_obj->psa_op, cipher_obj->key_id, effective_algo);
     }
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2274,10 +2322,6 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
             goto cleanup;
         }
     }
-
-    /* 9. Transfer key ownership to the resource (cleared so cleanup won't
-     *    destroy it - the destructor now owns it). */
-    key_id = 0;
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         result = OUT_OF_MEMORY_ATOM;
@@ -2327,8 +2371,11 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
 
     bool success = false;
     term result = ERROR_ATOM;
+
     void *maybe_allocated_data = NULL;
     void *out_buf = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     /* 2. Handle iodata input */
     const void *data;
@@ -2410,7 +2457,10 @@ static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
 
     bool success = false;
     term result = ERROR_ATOM;
+
     void *out_buf = NULL;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     /* 2. Finalise via PSA - this terminates the operation */
     size_t out_size = PSA_CIPHER_FINISH_OUTPUT_MAX_SIZE;
@@ -2624,10 +2674,13 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
 
     bool success = false;
     term result = ERROR_ATOM;
+
     void *maybe_allocated_intext = NULL;
     void *maybe_allocated_aad = NULL;
     void *out_buf = NULL;
     size_t out_buf_size = 0;
+
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     const void *intext_data;
     size_t intext_len;
@@ -2823,31 +2876,34 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
     term digest_type_term = argv[0];
     // argv[1] is password, argv[2] is salt, argv[3] is iterations, argv[4] is key_len
 
-    bool success = false;
-    term result = ERROR_ATOM;
-    void *maybe_allocated_password = NULL;
-    void *maybe_allocated_salt = NULL;
-    void *derived_key = NULL;
-    avm_int_t derived_key_len = 0;
-
     mbedtls_md_type_t md_type
         = interop_atom_term_select_int(md_hash_algorithm_table, digest_type_term, glb);
     if (UNLIKELY(md_type == MBEDTLS_MD_NONE)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
     }
 
+    bool success = false;
+    term result = ERROR_ATOM;
+
+    void *maybe_allocated_password = NULL;
+    size_t password_len = 0;
+    void *maybe_allocated_salt = NULL;
+    size_t salt_len = 0;
+    void *derived_key = NULL;
+    avm_int_t derived_key_len = 0;
+
     term password_term = argv[1];
     const void *password;
-    size_t password_len;
     term iodata_handle_result
         = handle_iodata(password_term, &password, &password_len, &maybe_allocated_password);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx));
     }
 
+    // from this point onward use `goto cleanup` in order to raise and free all buffers
+
     term salt_term = argv[2];
     const void *salt;
-    size_t salt_len;
     iodata_handle_result = handle_iodata(salt_term, &salt, &salt_len, &maybe_allocated_salt);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);

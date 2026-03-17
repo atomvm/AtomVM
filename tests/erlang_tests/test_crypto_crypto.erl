@@ -26,6 +26,7 @@
     test_decrypt_aes128_cbc/0,
     test_encrypt_aes128_cbc_bool/0,
     test_use_after_final/0,
+    test_use_after_final_cbc/0,
     test_ecb_less_than_one_block/0,
     test_cbc_final_padding/0,
     test_ecb_final_no_padding/0,
@@ -51,6 +52,7 @@ start() ->
             ok = mbedtls_conditional_run(test_decrypt_aes128_cbc, 16#03000000),
             ok = mbedtls_conditional_run(test_encrypt_aes128_cbc_bool, 16#03000000),
             ok = mbedtls_conditional_run(test_use_after_final, 16#03000000),
+            ok = mbedtls_conditional_run(test_use_after_final_cbc, 16#03000000),
             ok = mbedtls_conditional_run(test_ecb_less_than_one_block, 16#03000000),
             ok = mbedtls_conditional_run(test_cbc_final_padding, 16#03000000),
             ok = mbedtls_conditional_run(test_ecb_final_no_padding, 16#03000000),
@@ -195,6 +197,53 @@ test_use_after_final() ->
                 catch
                     error:{badarg, {File2, Line2},
                         "Bad state: AtomVM does not allow calling crypto_final more than once"} when
+                        is_list(File2) andalso is_integer(Line2)
+                    ->
+                        exp_err
+                end,
+
+            ok
+    end.
+
+%% Like test_use_after_final but with CBC + PKCS7 padding, where crypto_final
+%% produces real output (the padded last block).  Verifies that calling
+%% crypto_final a second time or crypto_update after crypto_final raises badarg.
+%%
+%% On the BEAM, reuse after final is allowed, so this test is skipped there.
+test_use_after_final_cbc() ->
+    case erlang:system_info(machine) of
+        "BEAM" ->
+            ok;
+        "ATOM" ->
+            Key = <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
+            IV = <<0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15>>,
+            State = crypto:crypto_init(aes_128_cbc, Key, IV, [
+                {padding, pkcs_padding}, {encrypt, true}
+            ]),
+            <<"">> = crypto:crypto_update(State, <<"1234567">>),
+            <<"">> = crypto:crypto_update(State, <<"89ABCDE">>),
+            <<45, 86, 231, 103, 240, 183, 169, 144, 1, 145, 121, 129, 65, 23, 60, 94>> =
+                crypto:crypto_final(State),
+
+            %% crypto_final called twice must fail
+            exp_err =
+                try
+                    crypto:crypto_final(State)
+                catch
+                    error:{badarg, {File1, Line1},
+                        "Bad state: AtomVM does not allow calling crypto_final more than once"} when
+                        is_list(File1) andalso is_integer(Line1)
+                    ->
+                        exp_err
+                end,
+
+            %% crypto_update after crypto_final must fail
+            exp_err =
+                try
+                    crypto:crypto_update(State, <<"more data">>)
+                catch
+                    error:{badarg, {File2, Line2},
+                        "Bad state: AtomVM does not allow operations after crypto_final"} when
                         is_list(File2) andalso is_integer(Line2)
                     ->
                         exp_err

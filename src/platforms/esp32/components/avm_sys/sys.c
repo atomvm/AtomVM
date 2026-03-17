@@ -798,6 +798,11 @@ mbedtls_entropy_context *sys_mbedtls_get_entropy_context_lock(GlobalContext *glo
         // mbedtls_entropy_init will gather entropy for us using esp_fill_random()
         // however it will be pseudorandom when wifi/bluetooth/RF is not enabled.
         //
+        // WARNING: when RF is off, esp_fill_random() output is NOT cryptographically
+        // secure.  All operations that depend on this CSPRNG (strong_rand_bytes,
+        // generate_key, ECDSA signing) will use weak entropy.  Predictable ECDSA
+        // nonces can lead to private key recovery.
+        //
         // TODO: when radio is not active bootloader_random_enable() must be enabled for gathering
         // entropy. However, "enable function is not safe to use if any other subsystem is
         // accessing the RF subsystem or the ADC at the same time".
