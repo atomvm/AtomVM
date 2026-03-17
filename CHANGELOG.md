@@ -96,6 +96,7 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 - Added `crypto:mac/4`, `crypto:mac_init/3`, `crypto:mac_update/2`, `crypto:mac_final/1` and
 `crypto:mac_finalN/2`
 - Added `crypto:info_lib/0`
+- Added `erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`
 
 ### Changed
 

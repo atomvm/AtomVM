@@ -26,6 +26,7 @@
 
 #include <errno.h>
 #include <fenv.h>
+#include <limits.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -281,6 +282,8 @@ static term nif_maps_next(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_list(Context *ctx, int argc, term argv[]);
 static term nif_unicode_characters_to_binary(Context *ctx, int argc, term argv[]);
 static term nif_erlang_lists_subtract(Context *ctx, int argc, term argv[]);
+static term nif_erlang_crc32(Context *ctx, int argc, term argv[]);
+static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[]);
 static term nif_zlib_compress_1(Context *ctx, int argc, term argv[]);
 
 #define DECLARE_MATH_NIF_FUN(moniker) \
@@ -915,6 +918,18 @@ static const struct Nif lists_keyfind_nif = {
 static const struct Nif list_to_bitstring_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_list_to_bitstring_1
+};
+static const struct Nif crc32_1_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_crc32
+};
+static const struct Nif crc32_2_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_crc32
+};
+static const struct Nif crc32_combine_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_crc32_combine_3
 };
 static const struct Nif zlib_compress_nif = {
     .base.type = NIFFunctionType,
@@ -6617,6 +6632,184 @@ static term nif_erlang_list_to_bitstring_1(Context *ctx, int argc, term argv[])
 {
     //  TODO: implement proper list_to_bitstring function when the bitstrings are supported
     return nif_erlang_list_to_binary_1(ctx, argc, argv);
+}
+
+#ifndef WITH_ZLIB
+static uint32_t crc32_uint(uint32_t crc, const uint8_t *data, size_t len)
+{
+    crc = ~crc;
+    for (size_t i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (int j = 0; j < 8; j++) {
+            crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        }
+    }
+    return ~crc;
+}
+
+static uint32_t crc32_combine_uint(uint32_t crc1, uint32_t crc2, size_t len2)
+{
+    uint32_t even[32];
+    uint32_t odd[32];
+
+    if (len2 == 0) {
+        return crc1;
+    }
+
+    odd[0] = 0xEDB88320;
+    uint32_t row = 1;
+    for (int n = 1; n < 32; n++) {
+        odd[n] = row;
+        row <<= 1;
+    }
+
+    for (int n = 0; n < 32; n++) {
+        even[n] = 0;
+        for (int k = 0; k < 32; k++) {
+            if (odd[n] & ((uint32_t) 1 << k)) {
+                even[n] ^= odd[k];
+            }
+        }
+    }
+
+    for (int n = 0; n < 32; n++) {
+        odd[n] = 0;
+        for (int k = 0; k < 32; k++) {
+            if (even[n] & ((uint32_t) 1 << k)) {
+                odd[n] ^= even[k];
+            }
+        }
+    }
+
+    do {
+        for (int n = 0; n < 32; n++) {
+            even[n] = 0;
+            for (int k = 0; k < 32; k++) {
+                if (odd[n] & ((uint32_t) 1 << k)) {
+                    even[n] ^= odd[k];
+                }
+            }
+        }
+        if (len2 & 1) {
+            uint32_t tmp = 0;
+            for (int k = 0; k < 32; k++) {
+                if (crc1 & ((uint32_t) 1 << k)) {
+                    tmp ^= even[k];
+                }
+            }
+            crc1 = tmp;
+        }
+        len2 >>= 1;
+
+        if (len2 == 0) {
+            break;
+        }
+
+        for (int n = 0; n < 32; n++) {
+            odd[n] = 0;
+            for (int k = 0; k < 32; k++) {
+                if (even[n] & ((uint32_t) 1 << k)) {
+                    odd[n] ^= even[k];
+                }
+            }
+        }
+        if (len2 & 1) {
+            uint32_t tmp = 0;
+            for (int k = 0; k < 32; k++) {
+                if (crc1 & ((uint32_t) 1 << k)) {
+                    tmp ^= odd[k];
+                }
+            }
+            crc1 = tmp;
+        }
+        len2 >>= 1;
+    } while (len2 != 0);
+
+    return crc1 ^ crc2;
+}
+#endif
+
+static term nif_erlang_crc32(Context *ctx, int argc, term argv[])
+{
+    uint32_t old_crc_val = 0;
+    term data;
+
+    if (argc == 2) {
+        term old_crc_term = argv[0];
+        VALIDATE_VALUE(old_crc_term, term_is_uint32);
+        old_crc_val = term_to_uint32(old_crc_term);
+        data = argv[1];
+    } else {
+        data = argv[0];
+    }
+
+    const void *data_ptr;
+    size_t data_size;
+    char *alloc_ptr = NULL;
+
+    if (LIKELY(term_is_binary(data))) {
+        data_ptr = term_binary_data(data);
+        data_size = term_binary_size(data);
+
+    } else if (LIKELY(term_is_list(data) || term_is_nil(data))) {
+        char *buf = NULL;
+        term status = iolist_to_buffer(data, &buf, &data_size);
+        if (UNLIKELY(status != OK_ATOM)) {
+            RAISE_ERROR(status);
+        }
+        data_ptr = buf;
+        alloc_ptr = buf;
+
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+#ifdef WITH_ZLIB
+    uLong zcrc = old_crc_val;
+    const Bytef *p = (const Bytef *) data_ptr;
+    size_t remaining = data_size;
+
+    while (remaining > UINT_MAX) {
+        zcrc = crc32(zcrc, p, UINT_MAX);
+        p += UINT_MAX;
+        remaining -= UINT_MAX;
+    }
+    uint32_t crc = (uint32_t) crc32(zcrc, p, (uInt) remaining);
+#else
+    uint32_t crc = crc32_uint(old_crc_val, data_ptr, data_size);
+#endif
+    free(alloc_ptr);
+
+    return make_maybe_boxed_int64(ctx, crc);
+}
+
+static term nif_erlang_crc32_combine_3(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term crc1_term = argv[0];
+    term crc2_term = argv[1];
+    term size2_term = argv[2];
+
+    VALIDATE_VALUE(crc1_term, term_is_uint32);
+    VALIDATE_VALUE(crc2_term, term_is_uint32);
+    uint32_t crc1_val = term_to_uint32(crc1_term);
+    uint32_t crc2_val = term_to_uint32(crc2_term);
+
+#ifdef WITH_ZLIB
+    VALIDATE_VALUE(size2_term, term_is_int64);
+    int64_t size2_val = term_to_int64(size2_term);
+    if (UNLIKELY(size2_val < 0)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uLong crc = crc32_combine(crc1_val, crc2_val, (z_off_t) size2_val);
+#else
+    VALIDATE_VALUE(size2_term, term_is_uint32);
+    uint32_t size2_val = term_to_uint32(size2_term);
+    uint32_t crc = crc32_combine_uint(crc1_val, crc2_val, size2_val);
+#endif
+
+    return make_maybe_boxed_int64(ctx, crc);
 }
 
 #ifdef WITH_ZLIB
