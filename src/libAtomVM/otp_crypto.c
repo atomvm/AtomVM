@@ -2295,6 +2295,7 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
     }
 #endif
     cipher_obj->key_id = key_id;
+    key_id = 0; // ownership transferred to resource immediately
     cipher_obj->psa_algo = effective_algo;
     cipher_obj->key_type = cipher_params->key_type;
     cipher_obj->encrypting = encrypting;
@@ -2303,9 +2304,9 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
 
     /* 7. Set up the cipher operation */
     if (encrypting) {
-        status = psa_cipher_encrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+        status = psa_cipher_encrypt_setup(&cipher_obj->psa_op, cipher_obj->key_id, effective_algo);
     } else {
-        status = psa_cipher_decrypt_setup(&cipher_obj->psa_op, key_id, effective_algo);
+        status = psa_cipher_decrypt_setup(&cipher_obj->psa_op, cipher_obj->key_id, effective_algo);
     }
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2321,10 +2322,6 @@ static term nif_crypto_crypto_init(Context *ctx, int argc, term argv[])
             goto cleanup;
         }
     }
-
-    /* 9. Transfer key ownership to the resource (cleared so cleanup won't
-     *    destroy it - the destructor now owns it). */
-    key_id = 0;
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         result = OUT_OF_MEMORY_ATOM;
