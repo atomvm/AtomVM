@@ -68,76 +68,115 @@ term posix_errno_to_term(int err, GlobalContext *glb)
 {
 #if HAVE_OPEN && HAVE_CLOSE || defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
     // These are defined in SUSv1
+    term result;
     switch (err) {
         case EACCES:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "eacces"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eacces"));
+            break;
         case EAGAIN:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "eagain"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eagain"));
+            break;
         case EBADF:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "ebadf"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "ebadf"));
+            break;
         case EBUSY:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "ebusy"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "ebusy"));
+            break;
         case EDQUOT:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "edquot"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "edquot"));
+            break;
         case EEXIST:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "eexist"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eexist"));
+            break;
         case EFAULT:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "efault"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "efault"));
+            break;
         case EFBIG:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "efbig"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "efbig"));
+            break;
         case EINTR:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "eintr"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "eintr"));
+            break;
         case EINVAL:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "einval"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "einval"));
+            break;
         case EIO:
-            return globalcontext_make_atom(glb, ATOM_STR("\x3", "eio"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x3", "eio"));
+            break;
         case EISDIR:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "eisdir"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "eisdir"));
+            break;
         case ELOOP:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "eloop"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "eloop"));
+            break;
         case EMFILE:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "emfile"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "emfile"));
+            break;
         case EMLINK:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "emlink"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "emlink"));
+            break;
         case ENAMETOOLONG:
-            return globalcontext_make_atom(glb, ATOM_STR("\xC", "enametoolong"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\xC", "enametoolong"));
+            break;
         case ENFILE:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "enfile"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "enfile"));
+            break;
         case ENODEV:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "enodev"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "enodev"));
+            break;
         case ENOENT:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "enoent"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "enoent"));
+            break;
         case ENOMEM:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "enomem"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "enomem"));
+            break;
         case ENOSPC:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "enospc"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "enospc"));
+            break;
         case ENOTDIR:
-            return globalcontext_make_atom(glb, ATOM_STR("\x7", "enotdir"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x7", "enotdir"));
+            break;
         case ENXIO:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "enxio"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "enxio"));
+            break;
         case EPERM:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "eperm"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "eperm"));
+            break;
         case EPIPE:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "epipe"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "epipe"));
+            break;
         case EROFS:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "erofs"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "erofs"));
+            break;
         case ESPIPE:
-            return globalcontext_make_atom(glb, ATOM_STR("\x6", "espipe"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x6", "espipe"));
+            break;
         case ESRCH:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "esrch"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "esrch"));
+            break;
         case EXDEV:
-            return globalcontext_make_atom(glb, ATOM_STR("\x5", "exdev"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x5", "exdev"));
+            break;
         case EPROTOTYPE:
-            return globalcontext_make_atom(glb, ATOM_STR("\xA", "eprototype"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\xA", "eprototype"));
+            break;
         case ENOTCONN:
-            return globalcontext_make_atom(glb, ATOM_STR("\x8", "enotconn"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\x8", "enotconn"));
+            break;
         case EOPNOTSUPP:
-            return globalcontext_make_atom(glb, ATOM_STR("\xA", "eopnotsupp"));
+            result = globalcontext_make_atom(glb, ATOM_STR("\xA", "eopnotsupp"));
+            break;
+        default:
+            return term_from_int(err);
     }
+    if (UNLIKELY(term_is_invalid_term(result))) {
+        return term_from_int(err);
+    }
+    return result;
 #else
     UNUSED(glb);
-#endif
     return term_from_int(err);
+#endif
 }
 
 static term error_tuple_maybe_gc(int err, Context *ctx)
@@ -418,7 +457,11 @@ static term nif_atomvm_posix_read(Context *ctx, int argc, term argv[])
         return errno_to_error_tuple_maybe_gc(ctx);
     }
     if (res == 0) {
-        return globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        term eof_atom = globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        if (UNLIKELY(term_is_invalid_term(eof_atom))) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return eof_atom;
     }
     if (res < count) {
         bin_term = term_alloc_sub_binary(bin_term, 0, res, &ctx->heap);
@@ -573,7 +616,11 @@ static term nif_atomvm_posix_pread(Context *ctx, int argc, term argv[])
         return errno_to_error_tuple_maybe_gc(ctx);
     }
     if (res == 0) {
-        return globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        term eof_atom = globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        if (UNLIKELY(term_is_invalid_term(eof_atom))) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return eof_atom;
     }
     if ((size_t) res < count) {
         bin_term = term_alloc_sub_binary(bin_term, 0, res, &ctx->heap);
@@ -1264,7 +1311,11 @@ static term nif_atomvm_posix_readdir(Context *ctx, int argc, term argv[])
             return errno_to_error_tuple_maybe_gc(ctx);
         }
 
-        return globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        term eof_atom = globalcontext_make_atom(glb, ATOM_STR("\x3", "eof"));
+        if (UNLIKELY(term_is_invalid_term(eof_atom))) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return eof_atom;
     }
 
     size_t name_len = strlen(dir_result->d_name);
