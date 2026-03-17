@@ -59,13 +59,17 @@
 #include <psa/crypto.h>
 #endif
 
-#ifdef MBEDTLS_PKCS5_C
+#if MBEDTLS_VERSION_NUMBER < 0x04000000 && defined(MBEDTLS_PKCS5_C)
 #include <mbedtls/md.h>
 #include <mbedtls/pkcs5.h>
 #endif
 
 #ifdef HAVE_LIBSODIUM
 #include <sodium.h>
+#endif
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000 || defined(MBEDTLS_PKCS5_C)
+#define AVM_HAVE_PBKDF2_HMAC 1
 #endif
 
 // mbedtls_ct_memcmp is available in 2.28.x+ and 3.1.x+ (absent in 3.0.x)
@@ -301,6 +305,11 @@ static psa_algorithm_t atom_to_psa_hash_alg(term type, GlobalContext *global)
     if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha512"))) {
         return PSA_ALG_SHA_512;
     }
+#ifdef PSA_ALG_RIPEMD160
+    if (type == globalcontext_make_atom(global, ATOM_STR("\x9", "ripemd160"))) {
+        return PSA_ALG_RIPEMD160;
+    }
+#endif
     return PSA_ALG_NONE;
 }
 
@@ -3427,7 +3436,8 @@ static term nif_crypto_hash_equals(Context *ctx, int argc, term argv[])
     return cmp == 0 ? TRUE_ATOM : FALSE_ATOM;
 }
 
-#ifdef MBEDTLS_PKCS5_C
+#ifdef AVM_HAVE_PBKDF2_HMAC
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 static const AtomStringIntPair md_hash_algorithm_table[] = {
     { ATOM_STR("\x3", "sha"), MBEDTLS_MD_SHA1 },
     { ATOM_STR("\x6", "sha224"), MBEDTLS_MD_SHA224 },
@@ -3439,6 +3449,7 @@ static const AtomStringIntPair md_hash_algorithm_table[] = {
 
     SELECT_INT_DEFAULT(MBEDTLS_MD_NONE)
 };
+#endif
 
 static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
 {
@@ -3458,6 +3469,19 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
     size_t salt_len = 0;
     void *derived_key = NULL;
     avm_int_t derived_key_len = 0;
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_algorithm_t hash_alg = atom_to_psa_hash_alg(digest_type_term, glb);
+    if (UNLIKELY(hash_alg == PSA_ALG_NONE)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
+    }
+#else
+    mbedtls_md_type_t md_type
+        = interop_atom_term_select_int(md_hash_algorithm_table, digest_type_term, glb);
+    if (UNLIKELY(md_type == MBEDTLS_MD_NONE)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
+    }
+#endif
 
     term password_term = argv[1];
     const void *password;
@@ -3484,6 +3508,11 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
         goto cleanup;
     }
     uint32_t iterations = term_to_uint32(iterations_term);
+    if (UNLIKELY(iterations == 0)) {
+        result
+            = make_crypto_error(__FILE__, __LINE__, "Iterations must be a positive integer", ctx);
+        goto cleanup;
+    }
 
     term key_len_term = argv[4];
     if (UNLIKELY(!term_is_pos_int(key_len_term))) {
@@ -3498,6 +3527,52 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
         goto cleanup;
     }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_key_derivation_operation_t operation = PSA_KEY_DERIVATION_OPERATION_INIT;
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "PSA init failed", ctx);
+        goto cleanup;
+    }
+
+    status = psa_key_derivation_setup(&operation, PSA_ALG_PBKDF2_HMAC(hash_alg));
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_key_derivation_abort(&operation);
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+
+    status = psa_key_derivation_input_integer(
+        &operation, PSA_KEY_DERIVATION_INPUT_COST, iterations);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_key_derivation_abort(&operation);
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+
+    status = psa_key_derivation_input_bytes(
+        &operation, PSA_KEY_DERIVATION_INPUT_SALT, salt, salt_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_key_derivation_abort(&operation);
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+
+    status = psa_key_derivation_input_bytes(
+        &operation, PSA_KEY_DERIVATION_INPUT_PASSWORD, password, password_len);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_key_derivation_abort(&operation);
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+
+    status = psa_key_derivation_output_bytes(&operation, derived_key, derived_key_len);
+    psa_key_derivation_abort(&operation);
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
+        goto cleanup;
+    }
+#else
 #if MBEDTLS_VERSION_NUMBER >= 0x03030000
     // mbedtls_pkcs5_pbkdf2_hmac_ext is available since 3.3.0
     int ret = mbedtls_pkcs5_pbkdf2_hmac_ext(
@@ -3522,6 +3597,7 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
         result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
         goto cleanup;
     }
+#endif
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(derived_key_len)) != MEMORY_GC_OK)) {
         result = OUT_OF_MEMORY_ATOM;
@@ -3762,7 +3838,7 @@ static const struct Nif crypto_crypto_one_time_aead_nif = {
     .nif_ptr = nif_crypto_crypto_one_time_aead
 };
 #endif
-#ifdef MBEDTLS_PKCS5_C
+#ifdef AVM_HAVE_PBKDF2_HMAC
 static const struct Nif crypto_pbkdf2_hmac_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_crypto_pbkdf2_hmac
@@ -3875,7 +3951,7 @@ const struct Nif *otp_crypto_nif_get_nif(const char *nifname)
             return &crypto_crypto_one_time_aead_nif;
         }
 #endif
-#ifdef MBEDTLS_PKCS5_C
+#ifdef AVM_HAVE_PBKDF2_HMAC
         if (strcmp("pbkdf2_hmac/5", rest) == 0) {
             TRACE("Resolved platform nif %s ...\n", nifname);
             return &crypto_pbkdf2_hmac_nif;
