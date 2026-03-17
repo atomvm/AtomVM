@@ -228,7 +228,7 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     % The register value cache eliminates the redundant load after the store,
     % since %rax already holds the value.
     %   48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   31 d2                	xor    %edx,%edx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
@@ -238,7 +238,7 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
 
     % As opposed to (without typed optimization, verify_is_boxed would be emitted):
     %   48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   31 d2                	xor    %edx,%edx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
@@ -254,11 +254,11 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     %   ff e0                	jmpq   *%rax
     %   48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
     ?assertMatch(
-        {_, 24},
+        {_, 19},
         binary:match(
             CompiledCode,
-            <<16#48, 16#8b, 16#77, 16#30, 16#48, 16#c7, 16#c2, 16#00, 16#00, 16#00, 16#00, 16#ff,
-                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
+            <<16#48, 16#8b, 16#77, 16#30, 16#31, 16#d2, 16#ff, 16#d0, 16#5a, 16#5e, 16#5f, 16#48,
+                16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
         )
     ),
 
