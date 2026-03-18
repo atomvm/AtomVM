@@ -98,6 +98,8 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 `crypto:mac_finalN/2`
 - Added `crypto:info_lib/0`
 - Added `erlang:crc32/1`, `erlang:crc32/2` and `erlang:crc32_combine/3`
+- Added support for Ed25519 curve when libsodium support is enabled at build time
+(`AVM_USE_LIBSODIUM=ON`)
 
 ### Changed
 

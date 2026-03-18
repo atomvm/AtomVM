@@ -59,6 +59,9 @@ jobs:
           idf-version: 'v5.5.3'
         - esp-idf-target: "esp32s3"
           idf-version: 'v5.5.3'
+        - esp-idf-target: "esp32"
+          idf-version: 'v5.4.3'
+          libsodium: 'ON'
 
     steps:
     - name: Checkout repo
@@ -74,6 +77,13 @@ jobs:
         build-mode: manual
         queries: +./code-queries/term-to-non-term-func.ql,./code-queries/non-term-to-term-func.ql,./code-queries/mismatched-atom-string-length.ql,./code-queries/mismatched-free-type.ql,./code-queries/term-use-after-gc.ql,./code-queries/allocations-exceeding-ensure-free.ql,./code-queries/allocations-without-ensure-free.ql
 
+    - name: Add libsodium dependency
+      if: matrix.libsodium == 'ON'
+      working-directory: ./src/platforms/esp32/
+      run: |
+        . $IDF_PATH/export.sh
+        idf.py add-dependency "espressif/libsodium^1.0.20~4"
+
     - name: Build with idf.py
       shell: bash
       working-directory: ./src/platforms/esp32/
@@ -81,7 +91,7 @@ jobs:
         . $IDF_PATH/export.sh
         export IDF_TARGET=${{matrix.esp-idf-target}}
         idf.py set-target ${{matrix.esp-idf-target}}
-        idf.py build
+        idf.py ${{ matrix.libsodium == 'ON' && '-DAVM_USE_LIBSODIUM=ON' || '' }} build
         idf.py size
 
     - name: Print component size info with idf.py

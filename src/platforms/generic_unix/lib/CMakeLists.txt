@@ -107,6 +107,20 @@ else()
     message("WARNING:  Could NOT find MbedTLS, ssl and crypto modules will not be supported. Install MbedTLS 3.x or try to set MBEDTLS_ROOT_DIR to installation prefix of MbedTLS 2.x")
 endif()
 
+if (AVM_USE_LIBSODIUM)
+    if (NOT HAVE_PSA_CRYPTO)
+        message(FATAL_ERROR "AVM_USE_LIBSODIUM=ON requires MbedTLS with PSA Crypto support (MBEDTLS_PSA_CRYPTO_C). "
+            "Either install a MbedTLS build with PSA Crypto enabled or disable AVM_USE_LIBSODIUM.")
+    endif()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBSODIUM REQUIRED libsodium)
+
+    target_include_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_INCLUDE_DIRS})
+    target_link_directories(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARY_DIRS})
+    target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${LIBSODIUM_LIBRARIES})
+    target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_LIBSODIUM)
+endif()
+
 # enable by default dynamic loading on unix
 target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC DYNLOAD_PORT_DRIVERS)
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ${CMAKE_DL_LIBS})
