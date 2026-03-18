@@ -1379,17 +1379,15 @@ static inline int64_t term_to_int64(term t)
 
     if (term_is_boxed(t)) {
 #if BOXED_TERMS_REQUIRED_FOR_INT != BOXED_TERMS_REQUIRED_FOR_INT64
-        if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT) {
-            return term_unbox_int(t);
-        } else if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT64) {
+        if (term_boxed_size(t) == BOXED_TERMS_REQUIRED_FOR_INT64) {
             return term_unbox_int64(t);
         }
+        return term_unbox_int(t);
 #else
         return term_unbox_int(t);
 #endif
-    } else {
-        return term_to_int(t);
     }
+    return term_to_int(t);
 }
 
 static inline term_integer_sign_t term_integer_sign_from_int(avm_int_t value)
