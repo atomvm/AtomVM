@@ -39,6 +39,13 @@ def pytest_generate_tests(metafunc):
                 '-nic user,model=open_eth -drive file=sd_image.bin,if=sd,format=raw'
             ],indirect=True
         )
+    if option_value == 'esp32s3':
+        metafunc.parametrize(
+            'qemu_extra_args',
+            [
+                '-nic user,model=open_eth -drive file=qemu_esp32s3_efuse.bin,if=none,format=raw,id=efuse -global driver=nvram.esp32s3.efuse,property=drive,value=efuse'
+            ],indirect=True
+        )
     if option_value == 'esp32c3':
         metafunc.parametrize(
             'qemu_extra_args',
