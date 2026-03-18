@@ -205,6 +205,13 @@ orrs_test_() ->
         ?_assertAsmEqual(<<16#431a:16/little>>, "orrs r2, r3", jit_armv6m_asm:orrs(r2, r3))
     ].
 
+eors_test_() ->
+    [
+        ?_assertAsmEqual(<<16#4048:16/little>>, "eors r0, r1", jit_armv6m_asm:eors(r0, r1)),
+        ?_assertAsmEqual(<<16#4051:16/little>>, "eors r1, r2", jit_armv6m_asm:eors(r1, r2)),
+        ?_assertAsmEqual(<<16#405a:16/little>>, "eors r2, r3", jit_armv6m_asm:eors(r2, r3))
+    ].
+
 bics_test_() ->
     [
         ?_assertAsmEqual(<<16#4391:16/little>>, "bics r1, r2", jit_armv6m_asm:bics(r1, r2)),

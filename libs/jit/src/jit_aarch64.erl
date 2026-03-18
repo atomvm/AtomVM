@@ -70,7 +70,8 @@
     call_func_ptr/3,
     return_labels_and_lines/2,
     add_label/2,
-    add_label/3
+    add_label/3,
+    xor_/3
 ]).
 
 -include_lib("jit.hrl").
@@ -2458,6 +2459,18 @@ or_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
     State#state{stream = Stream1, regs = Regs1};
 or_(#state{regs = Regs0} = State, Reg, Val) ->
     NewState = op_imm(State, orr, Reg, Reg, Val),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    NewState#state{regs = Regs1}.
+
+xor_(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, SrcReg) when
+    is_atom(SrcReg)
+->
+    I1 = jit_aarch64_asm:eor(Reg, Reg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State#state{stream = Stream1, regs = Regs1};
+xor_(#state{regs = Regs0} = State, Reg, Val) ->
+    NewState = op_imm(State, eor, Reg, Reg, Val),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     NewState#state{regs = Regs1}.
 

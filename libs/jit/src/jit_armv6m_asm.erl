@@ -39,6 +39,7 @@
     negs/2,
     rsbs/3,
     orrs/2,
+    eors/2,
     ldr/2,
     lsls/2,
     lsls/3,
@@ -482,6 +483,17 @@ orrs(Rd, Rm) when
     RmNum = reg_to_num(Rm),
     %% Thumb ORRS (2-operand): 0100001100mmmddd
     <<(16#4300 bor (RmNum bsl 3) bor RdNum):16/little>>.
+
+%% ARMv6-M Thumb EORS instruction (exclusive OR, register only - sets flags)
+-spec eors(arm_gpr_register(), arm_gpr_register()) -> binary().
+eors(Rd, Rm) when
+    ?IS_LOW_REGISTER(Rd),
+    ?IS_LOW_REGISTER(Rm)
+->
+    RdNum = reg_to_num(Rd),
+    RmNum = reg_to_num(Rm),
+    %% Thumb EORS (2-operand): 0100000001mmmddd
+    <<(16#4040 bor (RmNum bsl 3) bor RdNum):16/little>>.
 
 %% ARMv6-M Thumb logical shift left (LSLS) instructions
 -spec lsls(arm_gpr_register(), arm_gpr_register(), integer()) -> binary().

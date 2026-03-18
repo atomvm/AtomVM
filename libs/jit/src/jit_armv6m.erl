@@ -70,7 +70,8 @@
     call_func_ptr/3,
     return_labels_and_lines/2,
     add_label/2,
-    add_label/3
+    add_label/3,
+    xor_/3
 ]).
 
 -include_lib("jit.hrl").
@@ -3345,7 +3346,7 @@ or_(
     #state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} = State0,
     Reg,
     Val
-) ->
+) when Avail =/= 0 ->
     Temp = first_avail(Avail),
     AT = Avail band (bnot reg_bit(Temp)),
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
@@ -3353,7 +3354,64 @@ or_(
     I = jit_armv6m_asm:orrs(Reg, Temp),
     Stream2 = StreamModule:append(Stream1, I),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
-    State1#state{available_regs = Avail, stream = Stream2, regs = Regs1}.
+    State1#state{available_regs = Avail, stream = Stream2, regs = Regs1};
+or_(
+    #state{stream_module = StreamModule, available_regs = 0, regs = Regs0} = State0,
+    Reg,
+    Val
+) ->
+    % No available registers, use r0 as temp and save it to r12
+    Stream0 = State0#state.stream,
+    Save = jit_armv6m_asm:mov(?IP_REG, r0),
+    Stream1 = StreamModule:append(Stream0, Save),
+    State1 = mov_immediate(State0#state{stream = Stream1}, r0, Val),
+    Stream2 = State1#state.stream,
+    I = jit_armv6m_asm:orrs(Reg, r0),
+    Stream3 = StreamModule:append(Stream2, I),
+    Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
+    Stream4 = StreamModule:append(Stream3, Restore),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State0#state{stream = Stream4, regs = Regs1}.
+
+xor_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State0, Reg, SrcReg
+) when
+    is_atom(SrcReg)
+->
+    I = jit_armv6m_asm:eors(Reg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State0#state{stream = Stream1, regs = Regs1};
+xor_(
+    #state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} = State0,
+    Reg,
+    Val
+) when Avail =/= 0 ->
+    Temp = first_avail(Avail),
+    AT = Avail band (bnot reg_bit(Temp)),
+    State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
+    Stream1 = State1#state.stream,
+    I = jit_armv6m_asm:eors(Reg, Temp),
+    Stream2 = StreamModule:append(Stream1, I),
+    Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
+    State1#state{available_regs = Avail, stream = Stream2, regs = Regs1};
+xor_(
+    #state{stream_module = StreamModule, available_regs = 0, regs = Regs0} = State0,
+    Reg,
+    Val
+) ->
+    % No available registers, use r0 as temp and save it to r12
+    Stream0 = State0#state.stream,
+    Save = jit_armv6m_asm:mov(?IP_REG, r0),
+    Stream1 = StreamModule:append(Stream0, Save),
+    State1 = mov_immediate(State0#state{stream = Stream1}, r0, Val),
+    Stream2 = State1#state.stream,
+    I = jit_armv6m_asm:eors(Reg, r0),
+    Stream3 = StreamModule:append(Stream2, I),
+    Restore = jit_armv6m_asm:mov(r0, ?IP_REG),
+    Stream4 = StreamModule:append(Stream3, Restore),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State0#state{stream = Stream4, regs = Regs1}.
 
 add(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State0, Reg, Val) when
     (Val >= 0 andalso Val =< 255) orelse is_atom(Val)

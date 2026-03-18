@@ -170,6 +170,7 @@ struct Test tests[] = {
     TEST_CASE(test_bitshift),
     TEST_CASE_EXPECTED(test_bitwise, -4),
     TEST_CASE(test_bitwise2),
+    TEST_CASE(test_bitwise_large),
     TEST_CASE(test_boolean),
     TEST_CASE_EXPECTED(test_gt_and_le, 255),
     TEST_CASE_EXPECTED(test_tuple_size, 6),

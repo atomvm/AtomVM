@@ -451,6 +451,22 @@ andq_test_() ->
             <<72, 131, 167, 144, 0, 0, 0, 0>>,
             "andq $0x0,0x90(%rdi)",
             jit_x86_64_asm:andq(0, {16#90, rdi})
+        ),
+        % andq reg, reg
+        ?_assertAsmEqual(
+            <<16#48, 16#21, 16#C8>>,
+            "and %rcx,%rax",
+            jit_x86_64_asm:andq(rcx, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#4C, 16#21, 16#C0>>,
+            "and %r8,%rax",
+            jit_x86_64_asm:andq(r8, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#21, 16#C0>>,
+            "and %rax,%r8",
+            jit_x86_64_asm:andq(rax, r8)
         )
     ].
 
@@ -736,6 +752,134 @@ orq_test_() ->
             <<16#49, 16#81, 16#C8, 16#12345678:32/little>>,
             "orq $0x12345678,%r8",
             jit_x86_64_asm:orq(16#12345678, r8)
+        ),
+        % orq reg, reg
+        ?_assertAsmEqual(
+            <<16#48, 16#09, 16#C8>>,
+            "or %rcx,%rax",
+            jit_x86_64_asm:orq(rcx, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#4C, 16#09, 16#C0>>,
+            "or %r8,%rax",
+            jit_x86_64_asm:orq(r8, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#09, 16#C0>>,
+            "or %rax,%r8",
+            jit_x86_64_asm:orq(rax, r8)
+        )
+    ].
+
+xorq_test_() ->
+    [
+        % xorq imm8, reg
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#F0, 16#0F>>,
+            "xor $0xf,%rax",
+            jit_x86_64_asm:xorq(16#0F, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#F0, 16#0F>>,
+            "xor $0xf,%r8",
+            jit_x86_64_asm:xorq(16#0F, r8)
+        ),
+        % xorq negative imm8 (sign-extended)
+        ?_assertAsmEqual(
+            <<16#48, 16#83, 16#F0, 16#F0>>,
+            "xor $0xfffffffffffffff0,%rax",
+            jit_x86_64_asm:xorq(-16, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#83, 16#F3, 16#F0>>,
+            "xor $0xfffffffffffffff0,%r11",
+            jit_x86_64_asm:xorq(-16, r11)
+        ),
+        % xorq imm32, rax (short encoding)
+        ?_assertAsmEqual(
+            <<16#48, 16#35, 16#78, 16#56, 16#34, 16#12>>,
+            "xor $0x12345678,%rax",
+            jit_x86_64_asm:xorq(16#12345678, rax)
+        ),
+        % xorq imm32, reg (general encoding)
+        ?_assertAsmEqual(
+            <<16#49, 16#81, 16#F3, 16#78, 16#56, 16#34, 16#12>>,
+            "xor $0x12345678,%r11",
+            jit_x86_64_asm:xorq(16#12345678, r11)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#81, 16#F1, 16#78, 16#56, 16#34, 16#12>>,
+            "xor $0x12345678,%rcx",
+            jit_x86_64_asm:xorq(16#12345678, rcx)
+        ),
+        % xorq uint32 immediates (0x80000000-0xFFFFFFFF, previously rejected by IS_SINT32_T)
+        ?_assertAsmEqual(
+            <<16#48, 16#35, 16#00, 16#00, 16#00, 16#80>>,
+            "xor $0x80000000,%rax",
+            jit_x86_64_asm:xorq(16#80000000, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#81, 16#F1, 16#FF, 16#FF, 16#FF, 16#FF>>,
+            "xor $0xffffffff,%rcx",
+            jit_x86_64_asm:xorq(16#FFFFFFFF, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#81, 16#F3, 16#00, 16#00, 16#00, 16#80>>,
+            "xor $0x80000000,%r11",
+            jit_x86_64_asm:xorq(16#80000000, r11)
+        ),
+        % xorq reg, reg
+        ?_assertAsmEqual(
+            <<16#48, 16#31, 16#C8>>,
+            "xor %rcx,%rax",
+            jit_x86_64_asm:xorq(rcx, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#4C, 16#31, 16#C0>>,
+            "xor %r8,%rax",
+            jit_x86_64_asm:xorq(r8, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#31, 16#C0>>,
+            "xor %rax,%r8",
+            jit_x86_64_asm:xorq(rax, r8)
+        )
+    ].
+
+xorl_test_() ->
+    [
+        % xorl reg, reg (rax-rdi: 2 bytes, no REX)
+        ?_assertAsmEqual(
+            <<16#31, 16#C0>>,
+            "xor %eax,%eax",
+            jit_x86_64_asm:xorl(rax, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#31, 16#C9>>,
+            "xor %ecx,%ecx",
+            jit_x86_64_asm:xorl(rcx, rcx)
+        ),
+        % xorl with r8-r15 (3 bytes, needs REX)
+        ?_assertAsmEqual(
+            <<16#45, 16#31, 16#C0>>,
+            "xor %r8d,%r8d",
+            jit_x86_64_asm:xorl(r8, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#45, 16#31, 16#DB>>,
+            "xor %r11d,%r11d",
+            jit_x86_64_asm:xorl(r11, r11)
+        ),
+        % cross-register xorl
+        ?_assertAsmEqual(
+            <<16#31, 16#C8>>,
+            "xor %ecx,%eax",
+            jit_x86_64_asm:xorl(rcx, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#44, 16#31, 16#C0>>,
+            "xor %r8d,%eax",
+            jit_x86_64_asm:xorl(r8, rax)
         )
     ].
 

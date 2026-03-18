@@ -487,6 +487,30 @@ and_test_() ->
         )
     ].
 
+eor_test_() ->
+    [
+        % EOR reg, reg, reg
+        ?_assertAsmEqual(
+            <<16#CA010020:32/little>>, "eor x0, x1, x1", jit_aarch64_asm:eor(r0, r1, r1)
+        ),
+        ?_assertAsmEqual(
+            <<16#CA030041:32/little>>, "eor x1, x2, x3", jit_aarch64_asm:eor(r1, r2, r3)
+        ),
+        % EOR reg, reg, imm
+        ?_assertAsmEqual(
+            <<16#D27A0420:32/little>>, "eor x0, x1, #0xc0", jit_aarch64_asm:eor(r0, r1, 192)
+        ),
+        ?_assertAsmEqual(
+            <<16#D2400000:32/little>>,
+            "eor x0, x0, #0x1",
+            jit_aarch64_asm:eor(r0, r0, 1)
+        ),
+        %% Test eor with unencodable immediate
+        ?_assertError(
+            {unencodable_immediate, 16#123456}, jit_aarch64_asm:eor(r0, r0, 16#123456)
+        )
+    ].
+
 lsl_test_() ->
     [
         ?_assertAsmEqual(
