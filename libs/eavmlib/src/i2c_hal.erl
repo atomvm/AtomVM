@@ -97,8 +97,8 @@
 %% On ESP32, this is either a port (port driver mode) or a resource
 %% tuple (NIF mode).
 
--type address() :: non_neg_integer().
-%% I2C device address (typically 7-bit, e.g. `16#68').
+-type address() :: 0..127.
+%% 7-bit I2C device address (e.g. `16#68').
 
 -type register() :: non_neg_integer().
 %% Register address within an I2C device.

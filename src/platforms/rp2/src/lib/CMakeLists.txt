@@ -31,6 +31,7 @@ set(HEADER_FILES
 
 set(SOURCE_FILES
     gpiodriver.c
+    i2cdriver.c
     networkdriver.c
     otp_crypto_platform.c
     platform_defaultatoms.c
@@ -58,6 +59,7 @@ target_link_libraries(
     libAtomVM${PLATFORM_LIB_SUFFIX}
     PUBLIC
         hardware_gpio
+        hardware_i2c
         hardware_sync
         pico_float
         pico_mbedtls
@@ -122,4 +124,4 @@ if (NOT AVM_DISABLE_JIT)
     target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,jit_stream_flash_get_nif")
 endif()
 
-target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif -Wl,-u -Wl,otp_crypto_nif")
+target_link_options(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC "SHELL:-Wl,-u -Wl,gpio_nif -Wl,-u -Wl,i2c_nif -Wl,-u -Wl,otp_crypto_nif")
