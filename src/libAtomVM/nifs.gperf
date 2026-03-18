@@ -152,6 +152,7 @@ erlang:setnode/3, &setnode_3_nif
 erlang:dist_ctrl_get_data_notification/1, &dist_ctrl_get_data_notification_nif
 erlang:dist_ctrl_get_data/1, &dist_ctrl_get_data_nif
 erlang:dist_ctrl_put_data/2, &dist_ctrl_put_data_nif
+erlang:loaded/0, &erlang_loaded_nif
 erlang:module_loaded/1,&module_loaded_nif
 erlang:nif_error/1,&nif_error_nif
 erlang:list_to_bitstring/1, &list_to_bitstring_nif

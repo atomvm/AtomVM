@@ -52,6 +52,7 @@
     erase/0,
     erase/1,
     function_exported/3,
+    loaded/0,
     module_loaded/1,
     display/1,
     list_to_atom/1,
@@ -671,6 +672,15 @@ erase(_Key) ->
 %%-----------------------------------------------------------------------------
 -spec function_exported(Module :: module(), Function :: atom(), Arity :: arity()) -> boolean().
 function_exported(_Module, _Function, _Arity) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns list of loaded modules
+%% @doc     Returns all loaded modules.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec loaded() -> [module()].
+loaded() ->
     erlang:nif_error(undefined).
 
 %% @param   Module name of module

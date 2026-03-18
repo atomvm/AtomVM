@@ -590,6 +590,7 @@ compile_erlang(test_close_avm_pack DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load
 
 compile_erlang(test_module_info)
 compile_erlang(erlang_module_loaded)
+compile_erlang(test_erlang_loaded)
 
 compile_erlang(int64_build_binary)
 
@@ -1158,6 +1159,7 @@ set(erlang_test_beams
 
     test_module_info.beam
     erlang_module_loaded.beam
+    test_erlang_loaded.beam
 
     int64_build_binary.beam
 

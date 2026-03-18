@@ -562,6 +562,7 @@ struct Test tests[] = {
 
     TEST_CASE(test_module_info),
     TEST_CASE(erlang_module_loaded),
+    TEST_CASE(test_erlang_loaded),
 
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_test_unit),
