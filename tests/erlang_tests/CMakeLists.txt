@@ -625,7 +625,7 @@ compile_erlang(test_op_bs_create_bin)
 compile_assembler(test_op_bs_create_bin_asm)
 
 compile_erlang(test_op_bs_test_unit)
-compile_assembler(test_op_bs_test_unit_asm)
+compile_erlang(test_bs_match_ensure_at_least)
 
 compile_assembler(bs_get_binary2_all_asm)
 
@@ -650,7 +650,6 @@ compile_erlang(test_inline_arith)
 if(Erlang_VERSION VERSION_GREATER_EQUAL "23")
     set(OTP23_OR_GREATER_TESTS
         test_op_bs_start_match_asm.beam
-        test_op_bs_test_unit_asm.beam
         bs_get_binary2_all_asm.beam
     )
 else()
@@ -1198,6 +1197,7 @@ set(erlang_test_beams
 
     test_op_bs_start_match.beam
     test_op_bs_test_unit.beam
+    test_bs_match_ensure_at_least.beam
     test_op_bs_create_bin.beam
 
     bigint.beam

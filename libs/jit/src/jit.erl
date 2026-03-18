@@ -2998,17 +2998,26 @@ first_pass_bs_match_ensure_at_least(
             ]),
             {J0, Rest0, MatchState, BSOffsetReg, MSt1};
         true ->
-            % TODO: check use of unit here (TODO is the same in opcodeswitch.h)
-            {_Unit, Rest2} = decode_literal(Rest1),
-            ?TRACE("{ensure_at_least,~p,~p},", [Stride, _Unit]),
+            {Unit, Rest2} = decode_literal(Rest1),
+            ?TRACE("{ensure_at_least,~p,~p},", [Stride, Unit]),
             {MSt1, Reg} = MMod:get_array_element(MSt0, BSBinaryReg, 1),
             MSt2 = MMod:shift_left(MSt1, Reg, 3),
-            % Reg is bs_bin_size * 8 (use unit instead ??)
+            % Reg is bs_bin_size * 8
             MSt3 = MMod:sub(MSt2, Reg, BSOffsetReg),
-            % Reg is (bs_bin_size * 8) - bs_offset
+            % Reg is (bs_bin_size * 8) - bs_offset = remaining bits
             MSt4 = cond_jump_to_label({Reg, '<', Stride}, Fail, MMod, MSt3),
-            MSt5 = MMod:free_native_registers(MSt4, [Reg]),
-            {J0 - 2, Rest2, MatchState, BSOffsetReg, MSt5}
+            % Also check unit alignment: (remaining - stride) % unit == 0
+            MSt7 =
+                if
+                    Unit > 1 ->
+                        MSt4b = MMod:sub(MSt4, Reg, Stride),
+                        {MSt5, UnitReg} = MMod:and_(MSt4b, {free, Reg}, Unit - 1),
+                        MSt6 = cond_jump_to_label({{free, UnitReg}, '!=', 0}, Fail, MMod, MSt5),
+                        MSt6;
+                    true ->
+                        MMod:free_native_registers(MSt4, [Reg])
+                end,
+            {J0 - 2, Rest2, MatchState, BSOffsetReg, MSt7}
     end.
 
 first_pass_bs_match_ensure_exactly(
