@@ -174,11 +174,11 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     ),
 
     % Check the reading of x[1] is immediatly followed by a shift right.
-    % 15c:	4c 8b 5f 38          	mov    0x38(%rdi),%r11
+    % 15c:	4c 8b 5f 60          	mov    0x60(%rdi),%r11
     % 160:	49 c1 eb 04          	shr    $0x4,%r11
 
     % As opposed to testing its type
-    % 15c:	4c 8b 5f 38          	mov    0x38(%rdi),%r11
+    % 15c:	4c 8b 5f 60          	mov    0x60(%rdi),%r11
     % 160:	4d 89 da             	mov    %r11,%r10
     % 163:	41 80 e2 0f          	and    $0xf,%r10b
     % 167:	41 80 fa 0f          	cmp    $0xf,%r10b
@@ -187,29 +187,29 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     % 172:	49 c1 eb 04          	shr    $0x4,%r11
     ?assertMatch(
         {_, 8},
-        binary:match(CompiledCode, <<16#4c, 16#8b, 16#5f, 16#38, 16#49, 16#c1, 16#eb, 16#04>>)
+        binary:match(CompiledCode, <<16#4c, 16#8b, 16#5f, 16#60, 16#49, 16#c1, 16#eb, 16#04>>)
     ),
 
     % Check call to bs_start_match3 is followed by a skip of verify_is_boxed
     % The register value cache eliminates the redundant load after the store,
     % since %rax already holds the value.
-    %   48 8b 77 30          	mov    0x30(%rdi),%rsi
+    %   48 8b 77 58          	mov    0x58(%rdi),%rsi
     %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
     %   5f                   	pop    %rdi
-    %   48 89 47 40          	mov    %rax,0x40(%rdi)
+    %   48 89 47 68          	mov    %rax,0x68(%rdi)
     %   48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
 
     % As opposed to (without typed optimization, verify_is_boxed would be emitted):
-    %   48 8b 77 30          	mov    0x30(%rdi),%rsi
+    %   48 8b 77 58          	mov    0x58(%rdi),%rsi
     %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
     %   5f                   	pop    %rdi
-    %   48 89 47 40          	mov    %rax,0x40(%rdi)
+    %   48 89 47 68          	mov    %rax,0x68(%rdi)
     %   49 89 c3             	mov    %rax,%r11
     %   41 80 e3 03          	and    $0x3,%r11b
     %   41 80 fb 02          	cmp    $0x2,%r11b
@@ -223,8 +223,8 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
         {_, 24},
         binary:match(
             CompiledCode,
-            <<16#48, 16#8b, 16#77, 16#30, 16#48, 16#c7, 16#c2, 16#00, 16#00, 16#00, 16#00, 16#ff,
-                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
+            <<16#48, 16#8b, 16#77, 16#58, 16#48, 16#c7, 16#c2, 16#00, 16#00, 16#00, 16#00, 16#ff,
+                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#68, 16#48, 16#83, 16#e0, 16#fc>>
         )
     ),
 
@@ -239,7 +239,7 @@ verify_is_function_typed_optimization_x86_64_test() ->
     % for call
     % b6:	48 8b 42 10          	mov    0x10(%rdx),%rax
     % ba:	ff e0                	jmpq   *%rax
-    % bc:	48 8b 47 38          	mov    0x38(%rdi),%rax
+    % bc:	48 8b 47 60          	mov    0x60(%rdi),%rax
     % c0:	4c 8b 1e             	mov    (%rsi),%r11
     % c3:	45 8b 1b             	mov    (%r11),%r11d
     % c6:	49 c1 e3 18          	shl    $0x18,%r11
@@ -248,7 +248,7 @@ verify_is_function_typed_optimization_x86_64_test() ->
     % As opposed to:
     % b6:	48 8b 42 10          	mov    0x10(%rdx),%rax
     % ba:	ff e0                	jmpq   *%rax
-    % bc:	48 8b 47 38          	mov    0x38(%rdi),%rax
+    % bc:	48 8b 47 60          	mov    0x60(%rdi),%rax
     % c0:	49 89 c3             	mov    %rax,%r11
     % c3:	4d 89 da             	mov    %r11,%r10
     % c6:	41 80 e2 03          	and    $0x3,%r10b
@@ -279,7 +279,7 @@ verify_is_function_typed_optimization_x86_64_test() ->
         {_, 20},
         binary:match(
             CompiledCode,
-            <<16#48, 16#8b, 16#42, 16#10, 16#ff, 16#e0, 16#48, 16#8b, 16#47, 16#38, 16#4c, 16#8b,
+            <<16#48, 16#8b, 16#42, 16#10, 16#ff, 16#e0, 16#48, 16#8b, 16#47, 16#60, 16#4c, 16#8b,
                 16#1e, 16#45, 16#8b, 16#1b, 16#49, 16#c1, 16#e3, 16#18>>
         )
     ),
