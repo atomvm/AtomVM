@@ -298,6 +298,88 @@ predicate leafOnResolvedNotTakenBranch(FunctionCall outerCall, FunctionCall leaf
 }
 
 /**
+ * Holds if two function calls within the same function are on mutually
+ * exclusive control-flow branches (different successors of the same
+ * branch point dominate each call, so they cannot both execute).
+ */
+pragma[inline]
+predicate mutuallyExclusiveInFunction(FunctionCall call1, FunctionCall call2) {
+    call1.getEnclosingFunction() = call2.getEnclosingFunction() and
+    call1 != call2 and
+    exists(BasicBlock branchBB, BasicBlock succ1, BasicBlock succ2 |
+        succ1 = branchBB.getASuccessor() and
+        succ2 = branchBB.getASuccessor() and
+        succ1 != succ2 and
+        bbDominates(succ1, call1.getBasicBlock()) and
+        bbDominates(succ2, call2.getBasicBlock())
+    )
+}
+
+/**
+ * Holds if all reachable leaf allocating calls from `callee` are direct
+ * (within the callee itself) and pairwise mutually exclusive. In this case,
+ * the worst-case allocation is the max across branches, not the sum.
+ *
+ * This handles functions like `term_make_maybe_boxed_int64` which call
+ * different allocating functions on exclusive branches (e.g.,
+ * `term_make_boxed_int64` OR `term_make_boxed_int`, never both).
+ */
+pragma[nomagic]
+predicate allLeafCallsDirectAndExclusive(Function callee) {
+    // All reachable leaf calls must be directly within the callee
+    forex(FunctionCall leaf |
+        reachableLeafAllocCall(callee, leaf)
+    |
+        leaf.getEnclosingFunction() = callee
+    ) and
+    // All pairs of distinct leaf calls must be mutually exclusive
+    forall(FunctionCall leaf1, FunctionCall leaf2 |
+        reachableLeafAllocCall(callee, leaf1) and
+        reachableLeafAllocCall(callee, leaf2) and
+        leaf1 != leaf2
+    |
+        mutuallyExclusiveInFunction(leaf1, leaf2)
+    )
+}
+
+/**
+ * Gets the leaf allocation contribution for a call, considering mutual
+ * exclusivity. When all reachable leaf calls are direct children on
+ * mutually exclusive branches, takes the max (worst-case branch) instead
+ * of the sum. Falls back to sum (conservative) otherwise.
+ */
+pragma[noinline]
+int leafAllocContribution(FunctionCall call, Function callee) {
+    // When all leaf calls are direct and mutually exclusive, take the max
+    allLeafCallsDirectAndExclusive(callee) and
+    (
+        result =
+            max(FunctionCall leafCall, int leafSize |
+                reachableLeafAllocCall(callee, leafCall) and
+                leafSize = leafAllocSize(leafCall) and
+                not leafOnResolvedNotTakenBranch(call, leafCall)
+            | leafSize)
+        or
+        // All leaf calls are on not-taken branches
+        not exists(FunctionCall leafCall |
+            reachableLeafAllocCall(callee, leafCall) and
+            exists(leafAllocSize(leafCall)) and
+            not leafOnResolvedNotTakenBranch(call, leafCall)
+        ) and
+        result = 0
+    )
+    or
+    // Default: sum all leaf contributions (conservative)
+    not allLeafCallsDirectAndExclusive(callee) and
+    result =
+        sum(FunctionCall leafCall, int leafSize |
+            reachableLeafAllocCall(callee, leafCall) and
+            leafSize = leafAllocSize(leafCall) and
+            not leafOnResolvedNotTakenBranch(call, leafCall)
+        | leafSize)
+}
+
+/**
  * Computes the total constant allocation size for a call to a function that
  * transitively calls `memory_heap_alloc` without its own ensure_free.
  *
@@ -306,8 +388,7 @@ predicate leafOnResolvedNotTakenBranch(FunctionCall outerCall, FunctionCall leaf
  * - All `memory_heap_alloc(heap, constant + param)` where the caller passes
  *   a constant for that parameter
  * - All transitive wrapper function contributions (via reachableLeafAllocCall),
- *   excluding leaf calls on branches that are provably not taken given the
- *   caller's constant arguments
+ *   using max for mutually exclusive branches, sum otherwise
  */
 pragma[noinline]
 int getConstAllocSize(FunctionCall call) {
@@ -339,13 +420,9 @@ int getConstAllocSize(FunctionCall call) {
                 exists(constExprValue(call.getArgument(paramIndex)))
             | constPart + constExprValue(call.getArgument(paramIndex)))
             +
-            // Sum transitive wrapper contributions via reachable leaf calls,
-            // excluding those on provably not-taken branches
-            sum(FunctionCall leafCall, int leafSize |
-                reachableLeafAllocCall(callee, leafCall) and
-                leafSize = leafAllocSize(leafCall) and
-                not leafOnResolvedNotTakenBranch(call, leafCall)
-            | leafSize)
+            // Transitive wrapper contributions via reachable leaf calls,
+            // using max for mutually exclusive branches, sum otherwise
+            leafAllocContribution(call, callee)
     )
 }
 
