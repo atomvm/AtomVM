@@ -91,7 +91,7 @@ void ets_multimap_delete(EtsMultimap *multimap, GlobalContext *global);
  * @warning The caller is responsible for freeing the memory pointed to by `tuples`
  *          using `free()`. When count is zero, memory is not allocated.
  */
-ets_status_t ets_multimap_lookup(
+ets_result_t ets_multimap_lookup(
     EtsMultimap *multimap,
     term key,
     term **tuples,
@@ -108,7 +108,7 @@ ets_status_t ets_multimap_lookup(
  *
  * @note Terms passed to this function will be copied to the ETS heap.
  */
-ets_status_t ets_multimap_insert(
+ets_result_t ets_multimap_insert(
     EtsMultimap *multimap,
     term *tuples,
     size_t count,
@@ -122,7 +122,7 @@ ets_status_t ets_multimap_insert(
  * @param global the global context
  * @return EtsOk on success, otherwise an error status
  */
-ets_status_t ets_multimap_remove(
+ets_result_t ets_multimap_remove(
     EtsMultimap *multimap,
     term key,
     GlobalContext *global);
@@ -135,7 +135,7 @@ ets_status_t ets_multimap_remove(
  * @param global the global context
  * @return EtsOk on success, otherwise an error status
  */
-ets_status_t ets_multimap_remove_tuple(
+ets_result_t ets_multimap_remove_tuple(
     EtsMultimap *multimap,
     term tuple,
     GlobalContext *global);

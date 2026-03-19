@@ -3870,7 +3870,7 @@ static term nif_ets_new(Context *ctx, int argc, term argv[])
 
     term table = term_invalid_term();
 
-    ets_status_t result = ets_create_table_maybe_gc(
+    ets_result_t result = ets_create_table_maybe_gc(
         name,
         is_named,
         type,
@@ -3905,7 +3905,7 @@ static term nif_ets_insert(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(name_or_ref, is_ets_table_id);
 
-    ets_status_t result = ets_insert(name_or_ref, entry, false, ctx);
+    ets_result_t result = ets_insert(name_or_ref, entry, false, ctx);
 
     switch (result) {
         case EtsOk:
@@ -3929,7 +3929,7 @@ static term nif_ets_insert_new(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(name_or_ref, is_ets_table_id);
 
-    ets_status_t result = ets_insert(name_or_ref, entry, true, ctx);
+    ets_result_t result = ets_insert(name_or_ref, entry, true, ctx);
 
     switch (result) {
         case EtsOk:
@@ -3957,7 +3957,7 @@ static term nif_ets_lookup(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
 
-    ets_status_t result = ets_lookup_maybe_gc(name_or_ref, key, &ret, ctx);
+    ets_result_t result = ets_lookup_maybe_gc(name_or_ref, key, &ret, ctx);
 
     switch (result) {
         case EtsOk:
@@ -3987,7 +3987,7 @@ static term nif_ets_update_element(Context *ctx, int argc, term argv[])
         VALIDATE_VALUE(default_tuple, term_is_tuple);
     }
 
-    ets_status_t result = ets_update_element(name_or_ref, key, element_spec, default_tuple, ctx);
+    ets_result_t result = ets_update_element(name_or_ref, key, element_spec, default_tuple, ctx);
 
     switch (result) {
         case EtsOk:
@@ -4020,7 +4020,7 @@ static term nif_ets_update_counter(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
 
-    ets_status_t result = ets_update_counter_maybe_gc(name_or_ref, key, operation, default_tuple, &ret, ctx);
+    ets_result_t result = ets_update_counter_maybe_gc(name_or_ref, key, operation, default_tuple, &ret, ctx);
 
     switch (result) {
         case EtsOk:
@@ -4049,7 +4049,7 @@ static term nif_ets_take(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
 
-    ets_status_t result = ets_take_maybe_gc(name_or_ref, key, &ret, ctx);
+    ets_result_t result = ets_take_maybe_gc(name_or_ref, key, &ret, ctx);
 
     switch (result) {
         case EtsOk:
@@ -4083,7 +4083,7 @@ static term nif_ets_lookup_element(Context *ctx, int argc, term argv[])
 
     term ret = term_invalid_term();
 
-    ets_status_t result = ets_lookup_element_maybe_gc(name_or_ref, key, index, &ret, ctx);
+    ets_result_t result = ets_lookup_element_maybe_gc(name_or_ref, key, index, &ret, ctx);
 
     switch (result) {
         case EtsOk:
@@ -4112,7 +4112,7 @@ static term nif_ets_member(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(name_or_ref, is_ets_table_id);
 
-    ets_status_t result = ets_member(name_or_ref, key, ctx);
+    ets_result_t result = ets_member(name_or_ref, key, ctx);
 
     switch (result) {
         case EtsOk:
@@ -4134,7 +4134,7 @@ static term nif_ets_delete(Context *ctx, int argc, term argv[])
 
     VALIDATE_VALUE(name_or_ref, is_ets_table_id);
 
-    ets_status_t result;
+    ets_result_t result;
 
     if (argc == 1) {
         result = ets_delete_table(name_or_ref, ctx);
@@ -4164,7 +4164,7 @@ static term nif_ets_delete_object(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(name_or_ref, is_ets_table_id);
     VALIDATE_VALUE(tuple, term_is_tuple);
 
-    ets_status_t result = ets_delete_object(name_or_ref, tuple, ctx);
+    ets_result_t result = ets_delete_object(name_or_ref, tuple, ctx);
 
     switch (result) {
         case EtsOk:

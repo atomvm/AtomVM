@@ -35,7 +35,7 @@ static EtsMultimapEntry *entry_new(term tuple);
 static void entry_delete(EtsMultimapEntry *entry, GlobalContext *global);
 static EtsMultimapNode *node_new(EtsMultimapNode *next, EtsMultimapEntry *entries);
 static void node_delete(EtsMultimapNode *node, GlobalContext *global);
-static ets_status_t node_find(
+static ets_result_t node_find(
     EtsMultimap *multimap,
     term key,
     EtsMultimapNode **out_node,
@@ -47,7 +47,7 @@ static void insert_revert(
     EtsMultimapEntry **entries,
     size_t count,
     GlobalContext *global);
-static ets_status_t tuple_exists(
+static ets_result_t tuple_exists(
     EtsMultimapNode *node,
     term tuple,
     bool *exists,
@@ -83,7 +83,7 @@ void ets_multimap_delete(EtsMultimap *multimap, GlobalContext *global)
     free(multimap);
 }
 
-ets_status_t ets_multimap_lookup(
+ets_result_t ets_multimap_lookup(
     EtsMultimap *multimap,
     term key,
     term **tuples,
@@ -95,7 +95,7 @@ ets_status_t ets_multimap_lookup(
     *count = 0;
 
     EtsMultimapNode *node;
-    ets_status_t result = node_find(multimap, key, &node, global);
+    ets_result_t result = node_find(multimap, key, &node, global);
     if (UNLIKELY(result == EtsAllocationError)) {
         return result;
     }
@@ -129,7 +129,7 @@ ets_status_t ets_multimap_lookup(
     return EtsOk;
 }
 
-ets_status_t ets_multimap_insert(
+ets_result_t ets_multimap_insert(
     EtsMultimap *multimap,
     term *tuples,
     size_t count,
@@ -155,7 +155,7 @@ ets_status_t ets_multimap_insert(
         }
     }
 
-    ets_status_t status = EtsOk;
+    ets_result_t status = EtsOk;
 
     for (size_t i = 0; i < count; i++) {
         EtsMultimapEntry *entry = entries[i];
@@ -214,7 +214,7 @@ ets_status_t ets_multimap_insert(
     return status;
 }
 
-ets_status_t ets_multimap_remove(
+ets_result_t ets_multimap_remove(
     EtsMultimap *multimap,
     term key,
     GlobalContext *global)
@@ -253,7 +253,7 @@ ets_status_t ets_multimap_remove(
     return EtsOk;
 }
 
-ets_status_t ets_multimap_remove_tuple(
+ets_result_t ets_multimap_remove_tuple(
     EtsMultimap *multimap,
     term tuple,
     GlobalContext *global)
@@ -360,7 +360,7 @@ ets_status_t ets_multimap_remove_tuple(
     return EtsOk;
 }
 
-static ets_status_t node_find(
+static ets_result_t node_find(
     EtsMultimap *multimap,
     term key,
     EtsMultimapNode **out_node,
@@ -453,7 +453,7 @@ static void multimap_to_single(EtsMultimap *multimap, GlobalContext *global)
     }
 }
 
-static ets_status_t tuple_exists(
+static ets_result_t tuple_exists(
     EtsMultimapNode *node,
     term tuple,
     bool *exists,

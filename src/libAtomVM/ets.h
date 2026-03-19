@@ -61,7 +61,7 @@ typedef enum
     EtsBadIndex,
     EtsAllocationError,
     EtsOverflow
-} ets_status_t;
+} ets_result_t;
 
 typedef struct Ets
 {
@@ -71,7 +71,7 @@ typedef struct Ets
 void ets_init(Ets *ets);
 void ets_destroy(Ets *ets, GlobalContext *global);
 
-ets_status_t ets_create_table_maybe_gc(
+ets_result_t ets_create_table_maybe_gc(
     term name,
     bool named,
     ets_table_type_t type,
@@ -81,16 +81,16 @@ ets_status_t ets_create_table_maybe_gc(
     Context *ctx);
 void ets_delete_owned_tables(Ets *ets, int32_t process_id, GlobalContext *global);
 
-ets_status_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
-ets_status_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t index, term *ret, Context *ctx);
-ets_status_t ets_member(term name_or_ref, term key, Context *ctx);
-ets_status_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx);
-ets_status_t ets_update_element(term name_or_ref, term key, term element_spec, term default_tuple, Context *ctx);
-ets_status_t ets_update_counter_maybe_gc(term name_or_ref, term key, term op, term default_tuple, term *ret, Context *ctx);
-ets_status_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
-ets_status_t ets_delete(term name_or_ref, term key, Context *ctx);
-ets_status_t ets_delete_table(term name_or_ref, Context *ctx);
-ets_status_t ets_delete_object(term name_or_ref, term tuple, Context *ctx);
+ets_result_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
+ets_result_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t index, term *ret, Context *ctx);
+ets_result_t ets_member(term name_or_ref, term key, Context *ctx);
+ets_result_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx);
+ets_result_t ets_update_element(term name_or_ref, term key, term element_spec, term default_tuple, Context *ctx);
+ets_result_t ets_update_counter_maybe_gc(term name_or_ref, term key, term op, term default_tuple, term *ret, Context *ctx);
+ets_result_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
+ets_result_t ets_delete(term name_or_ref, term key, Context *ctx);
+ets_result_t ets_delete_table(term name_or_ref, Context *ctx);
+ets_result_t ets_delete_object(term name_or_ref, term tuple, Context *ctx);
 
 #ifdef __cplusplus
 }

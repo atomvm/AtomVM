@@ -78,20 +78,20 @@ static struct EtsTable *get_table(
     term name_or_ref,
     int32_t process_id,
     TableAccess access);
-static ets_status_t add_table(Ets *ets, struct EtsTable *table);
+static ets_result_t add_table(Ets *ets, struct EtsTable *table);
 static void delete_all_tables(Ets *ets, GlobalContext *global);
 static void table_destroy(struct EtsTable *table, GlobalContext *global);
-static ets_status_t insert_one(
+static ets_result_t insert_one(
     struct EtsTable *table,
     term tuple,
     bool as_new,
     Context *ctx);
-static ets_status_t insert_many(
+static ets_result_t insert_many(
     struct EtsTable *table,
     term tuples,
     bool as_new,
     Context *ctx);
-static ets_status_t lookup_select_maybe_gc(
+static ets_result_t lookup_select_maybe_gc(
     struct EtsTable *table,
     term key,
     size_t index,
@@ -99,15 +99,15 @@ static ets_status_t lookup_select_maybe_gc(
     term *roots,
     term *ret,
     Context *ctx);
-static ets_status_t lookup_or_default(
+static ets_result_t lookup_or_default(
     struct EtsTable *table,
     term key,
     term default_tuple,
     Heap *ret_heap,
     term *ret,
     Context *ctx);
-static ets_status_t apply_spec(term tuple, term spec, size_t key_index);
-static ets_status_t apply_op(term tuple, term opt, avm_int_t *ret, size_t key_index);
+static ets_result_t apply_spec(term tuple, term spec, size_t key_index);
+static ets_result_t apply_op(term tuple, term opt, avm_int_t *ret, size_t key_index);
 
 void ets_init(Ets *ets)
 {
@@ -120,7 +120,7 @@ void ets_destroy(Ets *ets, GlobalContext *global)
     synclist_destroy(&ets->ets_tables);
 }
 
-ets_status_t ets_create_table_maybe_gc(
+ets_result_t ets_create_table_maybe_gc(
     term name,
     bool named,
     ets_table_type_t type,
@@ -191,7 +191,7 @@ ets_status_t ets_create_table_maybe_gc(
         *ret = term_from_ref_ticks(table->ref_ticks, &ctx->heap);
     }
 
-    ets_status_t result = add_table(&ctx->global->ets, table);
+    ets_result_t result = add_table(&ctx->global->ets, table);
     if (UNLIKELY(result == EtsTableNameExists)) {
         ets_multimap_delete(multimap, ctx->global);
 #ifndef AVM_NO_SMP
@@ -204,7 +204,7 @@ ets_status_t ets_create_table_maybe_gc(
     return EtsOk;
 }
 
-ets_status_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
+ets_result_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
     assert(ret != NULL);
 
@@ -218,14 +218,14 @@ ets_status_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context 
         return EtsBadAccess;
     }
 
-    ets_status_t result = lookup_select_maybe_gc(table, key, ETS_WHOLE_TUPLE, 0, NULL, ret, ctx);
+    ets_result_t result = lookup_select_maybe_gc(table, key, ETS_WHOLE_TUPLE, 0, NULL, ret, ctx);
 
     SMP_UNLOCK(table);
 
     return result;
 }
 
-ets_status_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t index, term *ret, Context *ctx)
+ets_result_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t index, term *ret, Context *ctx)
 {
     assert(ret != NULL);
 
@@ -239,14 +239,14 @@ ets_status_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t inde
         return EtsBadAccess;
     }
 
-    ets_status_t result = lookup_select_maybe_gc(table, key, index, 0, NULL, ret, ctx);
+    ets_result_t result = lookup_select_maybe_gc(table, key, index, 0, NULL, ret, ctx);
 
     SMP_UNLOCK(table);
 
     return result;
 }
 
-ets_status_t ets_member(term name_or_ref, term key, Context *ctx)
+ets_result_t ets_member(term name_or_ref, term key, Context *ctx)
 {
     struct EtsTable *table = get_table(
         &ctx->global->ets,
@@ -259,7 +259,7 @@ ets_status_t ets_member(term name_or_ref, term key, Context *ctx)
     }
 
     size_t count;
-    ets_status_t result = ets_multimap_lookup(table->multimap, key, NULL, &count, ctx->global);
+    ets_result_t result = ets_multimap_lookup(table->multimap, key, NULL, &count, ctx->global);
 
     if (result == EtsOk && count == 0) {
         result = EtsTupleNotExists;
@@ -270,7 +270,7 @@ ets_status_t ets_member(term name_or_ref, term key, Context *ctx)
     return result;
 }
 
-ets_status_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx)
+ets_result_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx)
 {
     struct EtsTable *table = get_table(
         &ctx->global->ets,
@@ -282,7 +282,7 @@ ets_status_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx)
         return EtsBadAccess;
     }
 
-    ets_status_t result = EtsBadEntry;
+    ets_result_t result = EtsBadEntry;
 
     if (term_is_tuple(entry)) {
         result = insert_one(table, entry, as_new, ctx);
@@ -295,7 +295,7 @@ ets_status_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx)
     return result;
 }
 
-ets_status_t ets_update_element(
+ets_result_t ets_update_element(
     term name_or_ref,
     term key,
     term element_spec,
@@ -314,7 +314,7 @@ ets_status_t ets_update_element(
 
     Heap insert_heap;
     term insert_tuple;
-    ets_status_t result = lookup_or_default(table, key, default_tuple, &insert_heap, &insert_tuple, ctx);
+    ets_result_t result = lookup_or_default(table, key, default_tuple, &insert_heap, &insert_tuple, ctx);
     if (result != EtsOk) {
         SMP_UNLOCK(table);
         return result;
@@ -352,7 +352,7 @@ cleanup:
     return result;
 }
 
-ets_status_t ets_update_counter_maybe_gc(
+ets_result_t ets_update_counter_maybe_gc(
     term name_or_ref,
     term key,
     term op,
@@ -372,7 +372,7 @@ ets_status_t ets_update_counter_maybe_gc(
 
     Heap insert_heap;
     term insert_tuple;
-    ets_status_t result = lookup_or_default(table, key, default_tuple, &insert_heap, &insert_tuple, ctx);
+    ets_result_t result = lookup_or_default(table, key, default_tuple, &insert_heap, &insert_tuple, ctx);
     if (result != EtsOk) {
         SMP_UNLOCK(table);
         return result;
@@ -467,7 +467,7 @@ cleanup:
     return result;
 }
 
-ets_status_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
+ets_result_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx)
 {
     struct EtsTable *table = get_table(
         &ctx->global->ets,
@@ -479,7 +479,7 @@ ets_status_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *c
         return EtsBadAccess;
     }
 
-    ets_status_t result = lookup_select_maybe_gc(table, key, ETS_WHOLE_TUPLE, 1, &key, ret, ctx);
+    ets_result_t result = lookup_select_maybe_gc(table, key, ETS_WHOLE_TUPLE, 1, &key, ret, ctx);
 
     if (result == EtsOk) {
         result = ets_multimap_remove(table->multimap, key, ctx->global);
@@ -490,7 +490,7 @@ ets_status_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *c
     return result;
 }
 
-ets_status_t ets_delete(term name_or_ref, term key, Context *ctx)
+ets_result_t ets_delete(term name_or_ref, term key, Context *ctx)
 {
     struct EtsTable *table = get_table(
         &ctx->global->ets,
@@ -502,14 +502,14 @@ ets_status_t ets_delete(term name_or_ref, term key, Context *ctx)
         return EtsBadAccess;
     }
 
-    ets_status_t result = ets_multimap_remove(table->multimap, key, ctx->global);
+    ets_result_t result = ets_multimap_remove(table->multimap, key, ctx->global);
 
     SMP_UNLOCK(table);
 
     return result;
 }
 
-ets_status_t ets_delete_table(term name_or_ref, Context *ctx)
+ets_result_t ets_delete_table(term name_or_ref, Context *ctx)
 {
     struct ListHead *ets_tables = synclist_wrlock(&ctx->global->ets.ets_tables);
 
@@ -551,7 +551,7 @@ ets_status_t ets_delete_table(term name_or_ref, Context *ctx)
     return EtsOk;
 }
 
-ets_status_t ets_delete_object(term name_or_ref, term tuple, Context *ctx)
+ets_result_t ets_delete_object(term name_or_ref, term tuple, Context *ctx)
 {
     struct EtsTable *table = get_table(
         &ctx->global->ets,
@@ -563,7 +563,7 @@ ets_status_t ets_delete_object(term name_or_ref, term tuple, Context *ctx)
         return EtsBadAccess;
     }
 
-    ets_status_t result = ets_multimap_remove_tuple(table->multimap, tuple, ctx->global);
+    ets_result_t result = ets_multimap_remove_tuple(table->multimap, tuple, ctx->global);
 
     SMP_UNLOCK(table);
 
@@ -614,7 +614,7 @@ static void delete_all_tables(Ets *ets, GlobalContext *global)
     synclist_unlock(&ets->ets_tables);
 }
 
-static ets_status_t add_table(Ets *ets, struct EtsTable *table)
+static ets_result_t add_table(Ets *ets, struct EtsTable *table)
 {
     struct ListHead *tables = synclist_wrlock(&ets->ets_tables);
 
@@ -679,7 +679,7 @@ static struct EtsTable *get_table(
     return ret;
 }
 
-static ets_status_t insert_one(
+static ets_result_t insert_one(
     struct EtsTable *table,
     term tuple,
     bool as_new,
@@ -687,7 +687,7 @@ static ets_status_t insert_one(
 {
     assert(term_is_tuple(tuple));
 
-    ets_status_t result = EtsOk;
+    ets_result_t result = EtsOk;
 
     if (table->key_index >= (size_t) term_get_tuple_arity(tuple)) {
         return EtsBadEntry;
@@ -710,7 +710,7 @@ static ets_status_t insert_one(
     return result;
 }
 
-static ets_status_t insert_many(
+static ets_result_t insert_many(
     struct EtsTable *table,
     term tuples,
     bool as_new,
@@ -718,7 +718,7 @@ static ets_status_t insert_many(
 {
     assert(term_is_list(tuples));
 
-    ets_status_t result = EtsOk;
+    ets_result_t result = EtsOk;
     bool key_exists = false;
 
     size_t count = 0;
@@ -771,7 +771,7 @@ static ets_status_t insert_many(
     return result;
 }
 
-static ets_status_t lookup_select_maybe_gc(
+static ets_result_t lookup_select_maybe_gc(
     struct EtsTable *table,
     term key,
     size_t index,
@@ -787,7 +787,7 @@ static ets_status_t lookup_select_maybe_gc(
     term *tuples = NULL;
 
     size_t count;
-    ets_status_t result = ets_multimap_lookup(table->multimap, key, &tuples, &count, ctx->global);
+    ets_result_t result = ets_multimap_lookup(table->multimap, key, &tuples, &count, ctx->global);
     if (UNLIKELY(result == EtsAllocationError)) {
         return EtsAllocationError;
     }
@@ -856,7 +856,7 @@ static ets_status_t lookup_select_maybe_gc(
     return EtsOk;
 }
 
-static ets_status_t lookup_or_default(
+static ets_result_t lookup_or_default(
     struct EtsTable *table,
     term key,
     term default_tuple,
@@ -870,7 +870,7 @@ static ets_status_t lookup_or_default(
 
     term *tuple = NULL;
     size_t count;
-    ets_status_t result = ets_multimap_lookup(table->multimap, key, &tuple, &count, ctx->global);
+    ets_result_t result = ets_multimap_lookup(table->multimap, key, &tuple, &count, ctx->global);
     if (result != EtsOk) {
         return result;
     }
@@ -909,7 +909,7 @@ static ets_status_t lookup_or_default(
     return EtsOk;
 }
 
-static ets_status_t apply_spec(term tuple, term spec, size_t key_index)
+static ets_result_t apply_spec(term tuple, term spec, size_t key_index)
 {
     if (!term_is_tuple(spec) || term_get_tuple_arity(spec) != 2) {
         return EtsBadEntry;
@@ -937,7 +937,7 @@ static ets_status_t apply_spec(term tuple, term spec, size_t key_index)
     return EtsOk;
 }
 
-static ets_status_t apply_op(term tuple, term op, avm_int_t *ret, size_t key_index)
+static ets_result_t apply_op(term tuple, term op, avm_int_t *ret, size_t key_index)
 {
     assert(term_is_tuple(op));
 
