@@ -47,11 +47,41 @@ extern const struct Nif atomvm_posix_select_stop_nif;
 extern const struct Nif atomvm_subprocess_nif;
 #endif
 #endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
+extern const struct Nif atomvm_posix_seek_nif;
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_PREAD
+extern const struct Nif atomvm_posix_pread_nif;
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_PWRITE
+extern const struct Nif atomvm_posix_pwrite_nif;
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FSYNC
+extern const struct Nif atomvm_posix_fsync_nif;
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FTRUNCATE
+extern const struct Nif atomvm_posix_ftruncate_nif;
+#endif
 #if HAVE_MKFIFO
 extern const struct Nif atomvm_posix_mkfifo_nif;
 #endif
+#if HAVE_MKDIR
+extern const struct Nif atomvm_posix_mkdir_nif;
+#endif
 #if HAVE_UNLINK
 extern const struct Nif atomvm_posix_unlink_nif;
+#endif
+#if HAVE_RMDIR
+extern const struct Nif atomvm_posix_rmdir_nif;
+#endif
+#if HAVE_RENAME
+extern const struct Nif atomvm_posix_rename_nif;
+#endif
+#if HAVE_STAT
+extern const struct Nif atomvm_posix_stat_nif;
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FSTAT
+extern const struct Nif atomvm_posix_fstat_nif;
 #endif
 #if defined(HAVE_CLOCK_SETTIME) || defined(HAVE_SETTIMEOFDAY)
 extern const struct Nif atomvm_posix_clock_settime_nif;

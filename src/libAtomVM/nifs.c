@@ -1012,15 +1012,65 @@ DEFINE_MATH_NIF(tanh)
 #define IF_HAVE_OPEN_CLOSE(expr) NULL
 #define IF_HAVE_EXECVE(expr) NULL
 #endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_LSEEK
+#define IF_HAVE_LSEEK(expr) (expr)
+#else
+#define IF_HAVE_LSEEK(expr) NULL
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_PREAD
+#define IF_HAVE_PREAD(expr) (expr)
+#else
+#define IF_HAVE_PREAD(expr) NULL
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_PWRITE
+#define IF_HAVE_PWRITE(expr) (expr)
+#else
+#define IF_HAVE_PWRITE(expr) NULL
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FSYNC
+#define IF_HAVE_FSYNC(expr) (expr)
+#else
+#define IF_HAVE_FSYNC(expr) NULL
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FTRUNCATE
+#define IF_HAVE_FTRUNCATE(expr) (expr)
+#else
+#define IF_HAVE_FTRUNCATE(expr) NULL
+#endif
 #if HAVE_MKFIFO
 #define IF_HAVE_MKFIFO(expr) (expr)
 #else
 #define IF_HAVE_MKFIFO(expr) NULL
 #endif
+#if HAVE_MKDIR
+#define IF_HAVE_MKDIR(expr) (expr)
+#else
+#define IF_HAVE_MKDIR(expr) NULL
+#endif
 #if HAVE_UNLINK
 #define IF_HAVE_UNLINK(expr) (expr)
 #else
 #define IF_HAVE_UNLINK(expr) NULL
+#endif
+#if HAVE_RMDIR
+#define IF_HAVE_RMDIR(expr) (expr)
+#else
+#define IF_HAVE_RMDIR(expr) NULL
+#endif
+#if HAVE_RENAME
+#define IF_HAVE_RENAME(expr) (expr)
+#else
+#define IF_HAVE_RENAME(expr) NULL
+#endif
+#if HAVE_STAT
+#define IF_HAVE_STAT(expr) (expr)
+#else
+#define IF_HAVE_STAT(expr) NULL
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_FSTAT
+#define IF_HAVE_FSTAT(expr) (expr)
+#else
+#define IF_HAVE_FSTAT(expr) NULL
 #endif
 #if HAVE_CLOCK_SETTIME
 #define IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(expr) (expr)

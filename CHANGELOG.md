@@ -102,6 +102,10 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 (`AVM_USE_LIBSODIUM=ON`)
 - Added support for `bag` and `duplicate_bag` table types in `ets`
 - Added `ets:insert_new/2`, `ets:member/2`, `ets:lookup_element/4`, `ets:delete_object/2`, `ets:take/2`, `ets:update_element/3` and `ets:update_element/4`
+- Added POSIX file functions: `atomvm:posix_seek/3`, `atomvm:posix_pread/3`,
+`atomvm:posix_pwrite/3`, `atomvm:posix_fsync/1`, `atomvm:posix_ftruncate/2`,
+`atomvm:posix_rename/2`, `atomvm:posix_stat/1`, `atomvm:posix_fstat/1`
+- Added POSIX directory functions: `atomvm:posix_mkdir/1`, `atomvm:posix_rmdir/1`,
 
 ### Changed
 

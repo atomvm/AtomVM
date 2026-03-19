@@ -33,6 +33,15 @@ test() ->
     ok = test_crash_no_leak(HasSelect),
     ok = test_select_with_gone_process(HasSelect),
     ok = test_select_with_listeners(HasSelect),
+    ok = test_seek(),
+    ok = test_pread_pwrite(),
+    ok = test_fsync(),
+    ok = test_ftruncate(),
+    ok = test_rename(),
+    ok = test_stat(),
+    ok = test_fstat(),
+    ok = test_mkdir_rmdir(),
+    ok = test_validation(),
     ok = test_subprocess(HasExecve),
     ok.
 
@@ -313,6 +322,174 @@ test_select_with_listeners(_HasSelect) ->
         after 200 -> fail
         end,
     ok.
+
+test_seek() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    {ok, <<"Hello">>} = atomvm:posix_read(Fd, 10),
+    {ok, 2} = atomvm:posix_seek(Fd, 2, seek_set),
+    {ok, <<"llo">>} = atomvm:posix_read(Fd, 10),
+    {ok, 5} = atomvm:posix_seek(Fd, 0, seek_end),
+    eof = atomvm:posix_read(Fd, 10),
+    {ok, 3} = atomvm:posix_seek(Fd, -2, seek_end),
+    {ok, <<"lo">>} = atomvm:posix_read(Fd, 10),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    {ok, 2} = atomvm:posix_seek(Fd, 2, seek_cur),
+    {ok, <<"llo">>} = atomvm:posix_read(Fd, 10),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+test_pread_pwrite() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
+    {ok, <<"He">>} = atomvm:posix_pread(Fd, 2, 0),
+    {ok, <<"llo">>} = atomvm:posix_pread(Fd, 10, 2),
+    eof = atomvm:posix_pread(Fd, 10, 5),
+    {ok, 6} = atomvm:posix_pwrite(Fd, <<" World">>, 5),
+    {ok, <<"Hello World">>} = atomvm:posix_pread(Fd, 20, 0),
+    %% Verify that pread/pwrite did not move the file cursor
+    {ok, 5} = atomvm:posix_seek(Fd, 0, seek_cur),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+test_fsync() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
+    ok = atomvm:posix_fsync(Fd),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+test_ftruncate() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
+    %% Truncate to shorter length
+    ok = atomvm:posix_ftruncate(Fd, 5),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    {ok, <<"Hello">>} = atomvm:posix_read(Fd, 20),
+    eof = atomvm:posix_read(Fd, 1),
+    %% Extend with null bytes
+    ok = atomvm:posix_ftruncate(Fd, 8),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    {ok, <<"Hello", 0, 0, 0>>} = atomvm:posix_read(Fd, 20),
+    %% Truncate to zero
+    ok = atomvm:posix_ftruncate(Fd, 0),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    eof = atomvm:posix_read(Fd, 1),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+test_rename() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    NewPath = Path ++ ".renamed",
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
+    ok = atomvm:posix_close(Fd),
+    %% Rename the file
+    ok = atomvm:posix_rename(Path, NewPath),
+    %% Old path should not exist
+    {error, enoent} = atomvm:posix_open(Path, [o_rdonly]),
+    %% New path should have the content
+    {ok, Fd2} = atomvm:posix_open(NewPath, [o_rdonly]),
+    {ok, <<"Hello">>} = atomvm:posix_read(Fd2, 10),
+    ok = atomvm:posix_close(Fd2),
+    %% Rename non-existent file should fail
+    {error, enoent} = atomvm:posix_rename(Path, NewPath),
+    ok = atomvm:posix_unlink(NewPath).
+
+test_stat() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
+    ok = atomvm:posix_close(Fd),
+    {ok, #{
+        st_size := 11,
+        st_dev := Dev,
+        st_ino := Ino,
+        st_mode := Mode,
+        st_nlink := Nlink,
+        st_uid := Uid,
+        st_gid := Gid,
+        st_atime_s := Atime,
+        st_mtime_s := Mtime,
+        st_ctime_s := Ctime
+    }} = atomvm:posix_stat(Path),
+    true = is_integer(Dev),
+    true = is_integer(Ino),
+    true = is_integer(Mode),
+    true = is_integer(Nlink),
+    true = is_integer(Uid),
+    true = is_integer(Gid),
+    true = is_integer(Atime),
+    true = is_integer(Mtime),
+    true = is_integer(Ctime),
+    {error, enoent} = atomvm:posix_stat(Path ++ ".nonexistent"),
+    ok = atomvm:posix_unlink(Path).
+
+test_fstat() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 11} = atomvm:posix_write(Fd, <<"Hello World">>),
+    {ok, #{
+        st_size := 11,
+        st_dev := Dev,
+        st_ino := Ino,
+        st_mode := _Mode,
+        st_nlink := _Nlink,
+        st_uid := _Uid,
+        st_gid := _Gid,
+        st_atime_s := _Atime,
+        st_mtime_s := _Mtime,
+        st_ctime_s := _Ctime
+    }} = atomvm:posix_fstat(Fd),
+    %% stat and fstat should agree
+    {ok, #{st_ino := Ino, st_dev := Dev}} = atomvm:posix_stat(Path),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+test_mkdir_rmdir() ->
+    Base = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    Dir = Base ++ ".dir",
+    ok = atomvm:posix_mkdir(Dir, 8#755),
+    {ok, #{st_mode := _}} = atomvm:posix_stat(Dir),
+    ok = atomvm:posix_rmdir(Dir),
+    {error, enoent} = atomvm:posix_stat(Dir),
+    ok = atomvm:posix_mkdir(Dir, 8#755),
+    {error, eexist} = atomvm:posix_mkdir(Dir, 8#755),
+    Path = Dir ++ "/file",
+    {ok, Fd} = atomvm:posix_open(Path, [o_wronly, o_creat], 8#644),
+    ok = atomvm:posix_close(Fd),
+    {error, enotempty} = atomvm:posix_rmdir(Dir),
+    ok = atomvm:posix_unlink(Path),
+    ok = atomvm:posix_rmdir(Dir),
+    {error, enoent} = atomvm:posix_rmdir(Dir),
+    ok.
+
+test_validation() ->
+    Path = "/tmp/atomvm.tmp." ++ integer_to_list(erlang:system_time(millisecond)),
+    {ok, Fd} = atomvm:posix_open(Path, [o_rdwr, o_creat], 8#644),
+    {ok, 5} = atomvm:posix_write(Fd, <<"Hello">>),
+    ok = expect_badarg(fun() -> atomvm:posix_read(Fd, -1) end),
+    ok = expect_badarg(fun() -> atomvm:posix_pread(Fd, -1, 0) end),
+    ok = expect_badarg(fun() -> atomvm:posix_pread(Fd, 5, -1) end),
+    ok = expect_badarg(fun() -> atomvm:posix_pwrite(Fd, <<"x">>, -1) end),
+    ok = expect_badarg(fun() -> atomvm:posix_ftruncate(Fd, -1) end),
+    {ok, 0} = atomvm:posix_seek(Fd, 0, seek_set),
+    eof = atomvm:posix_pread(Fd, 0, 0),
+    ok = atomvm:posix_close(Fd),
+    ok = atomvm:posix_unlink(Path).
+
+expect_badarg(Fun) ->
+    try
+        Fun(),
+        {error, no_exception}
+    catch
+        error:badarg -> ok
+    end.
 
 test_subprocess(false) ->
     ok;
