@@ -2,6 +2,7 @@
  * This file is part of AtomVM.
  *
  * Copyright 2024 Fred Dushin <fred@dushin.net>
+ * Copyright 2025 Mateusz Furga <mateusz.furga@swmansion.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,10 +22,11 @@
 #ifndef _ETS_H_
 #define _ETS_H_
 
-struct Context;
-struct GlobalContext;
+#include <stdbool.h>
 
-#include "list.h"
+struct GlobalContext;
+struct Context;
+
 #include "synclist.h"
 #include "term.h"
 
@@ -32,55 +34,66 @@ struct GlobalContext;
 extern "C" {
 #endif
 
-// N.B. Only EtsTableSet currently supported
-typedef enum EtsTableType
+// NOTE: Ordered set is not currently supported
+typedef enum
 {
     EtsTableSet,
     EtsTableOrderedSet,
     EtsTableBag,
     EtsTableDuplicateBag
-} EtsTableType;
+} ets_table_type_t;
 
-typedef enum EtsAccessType
+typedef enum
 {
-    EtsAccessPrivate,
-    EtsAccessProtected,
-    EtsAccessPublic
-} EtsAccessType;
+    EtsTableAccessPrivate,
+    EtsTableAccessProtected,
+    EtsTableAccessPublic
+} ets_table_access_t;
 
-typedef enum EtsErrorCode
+typedef enum
 {
     EtsOk,
-    EtsBadAccess,
-    EtsTableNameInUse,
+    EtsKeyExists,
+    EtsTableNameExists,
+    EtsTupleNotExists,
     EtsBadEntry,
-    EtsAllocationFailure,
-    EtsEntryNotFound,
-    EtsBadPosition,
+    EtsBadAccess,
+    EtsBadIndex,
+    EtsAllocationError,
     EtsOverflow
-} EtsErrorCode;
-struct Ets
+} ets_result_t;
+
+typedef struct Ets
 {
-    // TODO Using a list imposes O(len(ets_tables)) cost
-    // on lookup, so in the future we may want to consider
-    // a table or map instead of a list.
     struct SyncList ets_tables;
-};
+} Ets;
 
-void ets_init(struct Ets *ets);
-void ets_destroy(struct Ets *ets, GlobalContext *global);
+void ets_init(Ets *ets);
+void ets_destroy(Ets *ets, GlobalContext *global);
 
-EtsErrorCode ets_create_table_maybe_gc(term name, bool is_named, EtsTableType table_type, EtsAccessType access_type, size_t keypos, term *ret, Context *ctx);
-void ets_delete_owned_tables(struct Ets *ets, int32_t process_id, GlobalContext *global);
+ets_result_t ets_create_table_maybe_gc(
+    term name,
+    bool named,
+    ets_table_type_t type,
+    ets_table_access_t access,
+    size_t index,
+    term *ret,
+    Context *ctx);
+void ets_delete_owned_tables(Ets *ets, int32_t process_id, GlobalContext *global);
 
-EtsErrorCode ets_insert(term ref, term entry, Context *ctx);
-EtsErrorCode ets_lookup_maybe_gc(term ref, term key, term *ret, Context *ctx);
-EtsErrorCode ets_lookup_element_maybe_gc(term ref, term key, size_t pos, term *ret, Context *ctx);
-EtsErrorCode ets_delete(term ref, term key, term *ret, Context *ctx);
-EtsErrorCode ets_update_counter_maybe_gc(term ref, term key, term value, term pos, term *ret, Context *ctx);
-EtsErrorCode ets_drop_table(term ref, term *ret, Context *ctx);
+ets_result_t ets_lookup_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
+ets_result_t ets_lookup_element_maybe_gc(term name_or_ref, term key, size_t index, term *ret, Context *ctx);
+ets_result_t ets_member(term name_or_ref, term key, Context *ctx);
+ets_result_t ets_insert(term name_or_ref, term entry, bool as_new, Context *ctx);
+ets_result_t ets_update_element(term name_or_ref, term key, term element_spec, term default_tuple, Context *ctx);
+ets_result_t ets_update_counter_maybe_gc(term name_or_ref, term key, term op, term default_tuple, term *ret, Context *ctx);
+ets_result_t ets_take_maybe_gc(term name_or_ref, term key, term *ret, Context *ctx);
+ets_result_t ets_delete(term name_or_ref, term key, Context *ctx);
+ets_result_t ets_delete_table(term name_or_ref, Context *ctx);
+ets_result_t ets_delete_object(term name_or_ref, term tuple, Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif // _ETS_H_

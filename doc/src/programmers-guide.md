@@ -868,9 +868,13 @@ The `packbeam` tool does include file and line information in the AVM files it c
 
 AtomVM includes a limited implementation of the Erlang [`ets`](https://www.erlang.org/doc/man/ets) interface, allowing applications to efficiently store term data in a potentially shared key-value store.  Conceptually, and ETS table is a collection of key-value pairs (represented as Erlang tuples), which can be efficiently stored, retrieved, and deleted using insertion, lookup, and deletion functions across processes.  Storage and retrieval of data in ETS tables is typically faster than communicating with a process which stores state, but still comes at a cost of copying data in and out of the ETS tables.
 
-The current AtomVM implementation of ETS is limited to the `set` table type, meaning that all entries in an ETS table are unique, and that the entries in the ETS table are unordered, when enumerated.
+AtomVM supports the `set`, `bag`, and `duplicate_bag` table types:
 
-> The `ordered_set`, `bag`, and `duplicate_bag` OTP ETS types are not currently supported.
+- `set` (default): Each key is unique; inserting an object with an existing key overwrites the previous entry.
+- `bag`: Multiple objects with the same key are allowed, but identical objects (same key and values) are not duplicated.
+- `duplicate_bag`: Multiple objects with the same key are allowed, including identical duplicates.
+
+> The `ordered_set` OTP ETS type is not currently supported.
 
 The lifecycle of an ETS table is associated with the lifecycle of the Erlang process that created it.  An Erlang process may create as many ETS tables as memory permits, but ETS tables are automatically destroyed when the process with which they are associated terminates.
 
@@ -888,8 +892,11 @@ The process that creates an ETS table becomes the "owner" of the ETS table. ETS 
 
 The following configuration options are supported:
 
-| Access Type | Description |
-|-------------|-------------|
+| Option | Description |
+|--------|-------------|
+| `set` | Each key is unique; inserting with an existing key overwrites.  This is the default table type. |
+| `bag` | Multiple objects per key are allowed; identical objects are not duplicated. |
+| `duplicate_bag` | Multiple objects per key are allowed, including identical duplicates. |
 | `named_table` | If set, the table name is registered internally and can be used as the table id for subsequent ETS operations.  If this option is set, the return value from `ets:new/2` is the table name specified in the first parameter.  By default, ETS tables are not named. |
 | `{keypos, K}` | The position of the key field in table entries (Erlang tuples).  Key position values should be in the range `{1..n}`, where `n` is the minimum arity of any entry in the table.  If unspecified, the default key position is `1`.  An attempt to insert an entry into a ETS table whose arity is less than the specified key position will result in a `badarg` error. |
 | `private`   | Only the owning process may read from or write to the ETS table. |
@@ -912,26 +919,47 @@ If the arity of the supplied tuple entry is less than the configured key positio
 
 > Note that the fields of a tuple entry, whether they are designated key fields or arbitrary data, can be any term type, not just atoms, as in this example.
 
-If an entry already exists with the same key field, the entry will be over-written in the table.
+For `set` tables, if an entry already exists with the same key field, the entry will be over-written in the table.  For `bag` tables, duplicate entries (same key and values) are silently ignored.  For `duplicate_bag` tables, all entries including duplicates are stored.
 
 The return type from this function is the atom `true`.  Any errors in insertion will resulting in raising an `error` with an appropriate reason, e.g., `badarg`.
 
 > Note that a process may only insert values into an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `public`.
+
+To insert an entry only if the key does not already exist, use the `ets:insert_new/2` function:
+
+```erlang
+true = ets:insert_new(TableId, {foo, bar})
+```
+
+This function returns `false` without inserting if any of the given objects already have a matching key in the table.
 
 To retrieve an entry from an ETS table, use the `ets:lookup/2` function:
 
 ```erlang
 [{foo, bar}] = ets:lookup(TableId, foo)
 ```
+
 Specify the table identifier returned from `ets:new/2`, as well as a key with which you would like to search the table.  This function will search the ETS table using the `keypos`'th field of tuples in the ETS table for retrieval.
 
-The return value is a list containing the found object(s).  An empty list (`[]`) indicates that there is no such entry in the specified ETS table.
-
-> Note.  Since the only table type currently supported is `set`, the return value will only contain a singleton value, if an entry exists in the table under the specified key.
+The return value is a list containing the found object(s).  An empty list (`[]`) indicates that there is no such entry in the specified ETS table.  For `set` tables, the list will contain at most one element.  For `bag` and `duplicate_bag` tables, the list may contain multiple elements.
 
 > Note that a process may only look up values from an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `protected` or `public`.
 
-To delete an entry from an ETS table, use the `ets:delete/2` function:
+To check if a key exists in an ETS table without retrieving the full object, use `ets:member/2`:
+
+```erlang
+true = ets:member(TableId, foo)
+```
+
+To retrieve a specific element from a matching entry, use `ets:lookup_element/3,4`:
+
+```erlang
+bar = ets:lookup_element(TableId, foo, 2)
+```
+
+The third argument is the 1-based position of the element to return.  `ets:lookup_element/3` raises `badarg` if the key does not exist; `ets:lookup_element/4` accepts a default value to return instead.
+
+To delete all entries with a given key from an ETS table, use the `ets:delete/2` function:
 
 ```erlang
 true = ets:delete(Table, foo)
@@ -942,6 +970,30 @@ Specify the table identifier returned from `ets:new/2`, as well as a key with wh
 The return value from this function is the atom `true`, regardless of whether the entry existed previously.  Any errors in deletion will resulting in raising an `error` with an appropriate reason, e.g., `badarg`.
 
 > Note that a process may only delete values from an ETS table if they are permitted; i.e., either they are the owner of the table, or if the table is `public`.
+
+To delete a specific object (rather than all objects matching a key), use `ets:delete_object/2`:
+
+```erlang
+true = ets:delete_object(Table, {foo, bar})
+```
+
+This is primarily useful for `bag` and `duplicate_bag` tables where multiple objects may share the same key.
+
+To atomically look up and remove all entries with a given key, use `ets:take/2`:
+
+```erlang
+[{foo, bar}] = ets:take(TableId, foo)
+```
+
+This is equivalent to `ets:lookup/2` followed by `ets:delete/2`, but performed atomically.  Returns an empty list if no matching entries exist.
+
+To update one or more elements of an existing entry in-place, use `ets:update_element/3,4`:
+
+```erlang
+true = ets:update_element(TableId, foo, {2, new_value})
+```
+
+The third argument is a `{Pos, Value}` tuple or a list of such tuples, specifying which positions (1-based) to update.  Returns `false` if no entry with the given key exists.  `ets:update_element/4` accepts a default tuple to insert if the key is not found.
 
 ### Reading data from AVM files
 

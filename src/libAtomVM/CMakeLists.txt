@@ -36,7 +36,7 @@ set(HEADER_FILES
     erl_nif.h
     erl_nif_priv.h
     ets.h
-    ets_hashtable.h
+    ets_multimap.h
     exportedfunction.h
     external_term.h
     globalcontext.h
@@ -86,7 +86,7 @@ set(SOURCE_FILES
     dictionary.c
     dist_nifs.c
     ets.c
-    ets_hashtable.c
+    ets_multimap.c
     external_term.c
     globalcontext.c
     iff.c
