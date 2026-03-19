@@ -166,6 +166,9 @@ term posix_errno_to_term(int err, GlobalContext *glb)
         case EOPNOTSUPP:
             result = globalcontext_make_atom(glb, ATOM_STR("\xA", "eopnotsupp"));
             break;
+        case ENOTEMPTY:
+            result = globalcontext_make_atom(glb, ATOM_STR("\x9", "enotempty"));
+            break;
         default:
             return term_from_int(err);
     }
