@@ -954,7 +954,7 @@ static term nif_atomvm_posix_mkfifo(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     term path_term = argv[0];
     term mode_term = argv[1];
-    VALIDATE_VALUE(mode_term, term_is_integer);
+    VALIDATE_VALUE(mode_term, term_is_non_neg_int);
 
     int ok;
     const char *path = interop_term_to_string(path_term, &ok);

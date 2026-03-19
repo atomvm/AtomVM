@@ -45,6 +45,7 @@
     posix_pwrite/3,
     posix_fsync/1,
     posix_ftruncate/2,
+    posix_mkfifo/2,
     posix_mkdir/2,
     posix_rmdir/1,
     posix_rename/2,
@@ -373,6 +374,18 @@ posix_fsync(_File) ->
 -spec posix_ftruncate(File :: posix_fd(), Length :: non_neg_integer()) ->
     ok | {error, posix_error()}.
 posix_ftruncate(_File, _Length) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Path    Path to the new FIFO special file
+%% @param   Mode    Permission bits for the new FIFO
+%% @returns `ok' or an error tuple
+%% @doc     Create a FIFO special file (named pipe) using `mkfifo(2)'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec posix_mkfifo(Path :: iodata(), Mode :: non_neg_integer()) ->
+    ok | {error, posix_error()}.
+posix_mkfifo(_Path, _Mode) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
