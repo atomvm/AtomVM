@@ -436,8 +436,8 @@ static term nif_atomvm_posix_read(Context *ctx, int argc, term argv[])
     GlobalContext *glb = ctx->global;
     UNUSED(argc);
     term count_term = argv[1];
-    VALIDATE_VALUE(count_term, term_is_integer);
-    avm_int_t count = term_to_int(count_term);
+    VALIDATE_VALUE(count_term, term_is_non_neg_int);
+    size_t count = term_to_int(count_term);
 
     size_t size = term_binary_data_size_in_terms(count) + BINARY_HEADER_SIZE + TERM_BOXED_SUB_BINARY_SIZE + TUPLE_SIZE(2);
     if (UNLIKELY(memory_ensure_free_with_roots(ctx, size, argc, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -463,7 +463,7 @@ static term nif_atomvm_posix_read(Context *ctx, int argc, term argv[])
         }
         return eof_atom;
     }
-    if (res < count) {
+    if ((size_t) res < count) {
         bin_term = term_alloc_sub_binary(bin_term, 0, res, &ctx->heap);
     }
     term result = term_alloc_tuple(2, &ctx->heap);
