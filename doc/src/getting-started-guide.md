@@ -304,11 +304,11 @@ This image will generally take the form:
 
 For example:
 
->`Atomvm-pico-v0.7.0.uf2`
+>`Atomvm-pico-v0.8.0.uf2`
 
 or
 
->`Atomvm-pico2-v0.7.0.uf2`
+>`Atomvm-pico2-v0.8.0.uf2`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
@@ -320,7 +320,7 @@ This library will generally take the form:
 
 For example:
 
->`atomvmlib-pico-v0.7.0.uf2`
+>`atomvmlib-pico-v0.8.0.uf2`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
@@ -350,7 +350,7 @@ total 16
 -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
 -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
 
-$ cp ~/Downloads/AtomVM-pico-v0.7.0.uf2 /Volumes/RPI-RP2/.
+$ cp ~/Downloads/AtomVM-pico-v0.8.0.uf2 /Volumes/RPI-RP2/.
 ```
 
 ... at this point, the device will auto-unmount.
@@ -365,7 +365,7 @@ total 16
 -rwxrwxrwx  1 joe  staff  241 Sep  5  2008 INDEX.HTM*
 -rwxrwxrwx  1 joe  staff   62 Sep  5  2008 INFO_UF2.TXT*
 
-$ cp ~/Downloads/atomvmlib-pico-v0.7.0.uf2 /Volumes/RPI-RP2/.
+$ cp ~/Downloads/atomvmlib-pico-v0.8.0.uf2 /Volumes/RPI-RP2/.
 ```
 
 ... and again, at this point, the device will auto-unmount.
