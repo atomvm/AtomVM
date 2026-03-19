@@ -1,0 +1,116 @@
+#
+#  Copyright 2026 AtomVM Contributors
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+# Maintainer notes:
+# - Requires RELEASE_TAG_PUSH_TOKEN (a fine-grained PAT).
+# - GitHub: Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens.
+# - Grant it Contents: Read and write on atomvm/AtomVM.
+# - Add it with: gh secret set RELEASE_TAG_PUSH_TOKEN --repo atomvm/AtomVM
+# - Manual run: gh workflow run nightly-release-tags.yaml --repo atomvm/AtomVM --ref main
+# - Only if cleanup is needed, delete the stale release/tag and rerun:
+#   gh release delete main-latest --repo atomvm/AtomVM --yes
+#   Only for a complete cleanup, also delete the tag:
+#   gh api -X DELETE repos/atomvm/AtomVM/git/refs/tags/main-latest
+
+name: Nightly Release Tags
+
+on:
+  schedule:
+    # Avoid the top of the hour when GitHub Actions is most congested.
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  update-nightly-tags:
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Add one entry per branch that should publish a moving nightly tag.
+          - branch: main
+            tag: main-latest
+          - branch: release-0.7
+            tag: release-0.7-latest
+
+    env:
+      # Use a PAT or GitHub App token that can push tags.
+      # We intentionally do not use GITHUB_TOKEN here because downstream
+      # release workflows should run when the nightly tag moves.
+      TAG_PUSH_TOKEN: ${{ secrets.RELEASE_TAG_PUSH_TOKEN }}
+
+    steps:
+      # In the official repository we fail fast if the secret is missing, so
+      # nightly releases do not silently stop updating.
+      - name: Require nightly tag token in official repository
+        if: github.repository == 'atomvm/AtomVM' && env.TAG_PUSH_TOKEN == ''
+        run: |
+          echo "::error::Missing RELEASE_TAG_PUSH_TOKEN secret. Configure a token that can push tags and trigger downstream workflows."
+          exit 1
+
+      # Forks can run this workflow manually without configuring the secret.
+      # That makes it easier to verify the workflow wiring before enabling
+      # real nightly tag updates in a test repository.
+      - name: Skip nightly tag updates without token in forks
+        if: github.repository != 'atomvm/AtomVM' && env.TAG_PUSH_TOKEN == ''
+        run: echo "::warning::Skipping nightly tag update because RELEASE_TAG_PUSH_TOKEN is not configured in this fork."
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check remote branch exists
+        id: branch
+        shell: bash
+        run: |
+          if git ls-remote --exit-code origin "refs/heads/${{ matrix.branch }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Skipping missing branch ${{ matrix.branch }}"
+          fi
+
+      - name: Update nightly tag
+        if: env.TAG_PUSH_TOKEN != '' && steps.branch.outputs.exists == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ matrix.branch }}" --force
+          git checkout --detach FETCH_HEAD
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          BRANCH_HEAD="$(git rev-parse HEAD)"
+          EXISTING_TAG="$(git ls-remote --tags origin "refs/tags/${{ matrix.tag }}^{}" | awk '{print $1}')"
+          # Fall back to lightweight tag if the dereferenced form is missing.
+          if [ -z "$EXISTING_TAG" ]; then
+            EXISTING_TAG="$(git ls-remote --tags origin "refs/tags/${{ matrix.tag }}" | awk '{print $1}')"
+          fi
+
+          if [ "$BRANCH_HEAD" = "$EXISTING_TAG" ]; then
+            echo "Tag ${{ matrix.tag }} already points at ${BRANCH_HEAD:0:12} – nothing to do."
+            exit 0
+          fi
+
+          git tag -fa "${{ matrix.tag }}" -F - <<EOF
+          Nightly build for ${{ matrix.branch }}
+
+          Commit: [${BRANCH_HEAD:0:12}](https://github.com/${{ github.repository }}/commit/${BRANCH_HEAD})
+          Change log: [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${BRANCH_HEAD}/CHANGELOG.md)
+          Branch history: [${{ matrix.branch }}](https://github.com/${{ github.repository }}/commits/${{ matrix.branch }})
+          EOF
+
+          git remote set-url origin "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin "refs/tags/${{ matrix.tag }}" --force
