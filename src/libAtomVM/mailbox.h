@@ -137,12 +137,21 @@ struct ImmediateSignal
     term immediate;
 };
 
-struct BuiltInAtomRequestSignal
+typedef enum
+{
+    PROCESS_INFO_SINGLE,
+    PROCESS_INFO_LIST,
+    PROCESS_INFO_LIST_OMIT_UNREGISTERED,
+} process_info_mode_t;
+
+struct ProcessInfoRequestSignal
 {
     MailboxMessage base;
 
     int32_t sender_pid;
-    term atom;
+    process_info_mode_t mode;
+    size_t len;
+    term atoms[];
 };
 
 struct RefSignal
@@ -248,15 +257,16 @@ void mailbox_send_term_signal(Context *c, enum MessageType type, term t);
 void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immediate);
 
 /**
- * @brief Sends a built-in atom-based request signal to a certain mailbox.
+ * @brief Sends a process info request signal to a certain mailbox.
  *
  * @param c the process context.
- * @param type the type of the signal
  * @param sender_pid the sender of the signal (to get the answer)
- * @param atom the built-in atom
+ * @param mode controls result shape and registered_name handling
+ * @param atoms array of atom terms to query
+ * @param len number of atoms in the array
  */
-void mailbox_send_built_in_atom_request_signal(
-    Context *c, enum MessageType type, int32_t sender_pid, term atom);
+void mailbox_send_process_info_request_signal(
+    Context *c, int32_t sender_pid, process_info_mode_t mode, const term *atoms, size_t len);
 
 /**
  * @brief Sends a ref signal to a certain mailbox.
