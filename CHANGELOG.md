@@ -106,6 +106,7 @@ encoding/decoding options, also Elixir `(url_)encode64`/`(url_)decode64` have be
 `atomvm:posix_pwrite/3`, `atomvm:posix_fsync/1`, `atomvm:posix_ftruncate/2`,
 `atomvm:posix_rename/2`, `atomvm:posix_stat/1`, `atomvm:posix_fstat/1`
 - Added POSIX directory functions: `atomvm:posix_mkdir/1`, `atomvm:posix_rmdir/1`,
+- Added support for `process_info/1` and `process_info/2` with list argument
 
 ### Changed
 

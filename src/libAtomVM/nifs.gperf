@@ -125,6 +125,7 @@ erlang:timestamp/0, &timestamp_nif
 erlang:process_flag/2, &process_flag_nif
 erlang:process_flag/3, &process_flag_nif
 erlang:processes/0, &processes_nif
+erlang:process_info/1, &process_info_nif
 erlang:process_info/2, &process_info_nif
 erlang:get/0, &get_0_nif
 erlang:put/2, &put_nif

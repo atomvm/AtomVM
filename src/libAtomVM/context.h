@@ -430,10 +430,10 @@ void context_process_kill_signal(Context *ctx, struct TermSignal *signal);
  * @brief Process a process info request signal.
  *
  * @param ctx the context being executed
- * @param signal the process info signal
+ * @param signal the process info request signal
  * @param process_table_locked whether process table is already locked
  */
-void context_process_process_info_request_signal(Context *ctx, struct BuiltInAtomRequestSignal *signal, bool process_table_locked);
+void context_process_process_info_request_signal(Context *ctx, struct ProcessInfoRequestSignal *signal, bool process_table_locked);
 
 /**
  * @brief Process a trap answer signal.

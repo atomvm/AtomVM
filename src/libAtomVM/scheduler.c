@@ -90,8 +90,8 @@ static void scheduler_process_native_signal_messages(Context *ctx)
                 break;
             }
             case ProcessInfoRequestSignal: {
-                struct BuiltInAtomRequestSignal *request_signal
-                    = CONTAINER_OF(signal_message, struct BuiltInAtomRequestSignal, base);
+                struct ProcessInfoRequestSignal *request_signal
+                    = CONTAINER_OF(signal_message, struct ProcessInfoRequestSignal, base);
                 context_process_process_info_request_signal(ctx, request_signal, false);
                 break;
             }
