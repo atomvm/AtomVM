@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
+- Added support for `process_info/1` and `process_info/2` with list argument
 
 ### Changed
 
