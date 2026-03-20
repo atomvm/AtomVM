@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added USB CDC port drivers for ESP32, RP2, and STM32 platforms
 - Added a Linux `gpio` driver for the generic_unix port (in `avm_unix`) using sysfs
 - Added `console:print_err/1` to write to standard error
+- Added support for `process_info/1` and `process_info/2` with list argument
 - Added `erlang:term_to_binary/2`, `erlang:is_builtin/3` and `erlang:bitstring_to_list/1`
 - Added `lists:mapfoldr/3`
 

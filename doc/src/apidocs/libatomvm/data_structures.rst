@@ -23,7 +23,7 @@ Data Structures
    :allow-dot-graphs:
 .. doxygenstruct:: AVMPackData
    :allow-dot-graphs:
-.. doxygenstruct:: BuiltInAtomRequestSignal
+.. doxygenstruct:: ProcessInfoRequestSignal
    :allow-dot-graphs:
 .. doxygenstruct:: BuiltInAtomSignal
    :allow-dot-graphs:
