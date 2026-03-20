@@ -105,6 +105,7 @@ start() ->
 
     ok = test_bs_variable_size_bitstring(),
     ok = test_float(),
+    ok = test_bs_match_bitstring_modifier(),
 
     0.
 
@@ -701,6 +702,60 @@ test_integer_outside_float_limits() ->
 
 create_float_binary(Value, Size) ->
     <<Value:Size/float>>.
+test_bs_match_bitstring_modifier() ->
+    ok =
+        try
+            bitstring_match(id(<<123, 234, 245>>), id(15)),
+            case erlang:system_info(machine) of
+                "BEAM" -> ok;
+                "ATOM" -> unexpected
+            end
+        catch
+            error:unsupported -> ok
+        end,
+
+    {<<123, 234>>, <<245>>} = bitstring_match(id(<<123, 234, 245>>), id(16)),
+
+    %% Non-zero offset + dynamic size
+    {<<234, 245>>, <<>>} = bitstring_match_offset(id(<<123, 234, 245>>), id(16)),
+
+    %% Size=0 — matched should be empty binary
+    {<<>>, <<1, 2, 3>>} = bitstring_match(id(<<1, 2, 3>>), id(0)),
+
+    %% Negative dynamic size — should raise an error
+    ok =
+        try
+            bitstring_match(id(<<1, 2, 3>>), id(-1)),
+            unexpected
+        catch
+            error:{badmatch, _} -> ok;
+            error:badarg -> ok;
+            error:unsupported -> ok
+        end,
+
+    %% Constant size with unit=1, byte-aligned (compile-time)
+    {<<1, 2>>, <<3>>} = bitstring_match_const_16(id(<<1, 2, 3>>)),
+
+    %% Non-zero offset + constant size
+    {<<2, 3>>, <<4>>} = bitstring_match_offset_const(id(<<1, 2, 3, 4>>)),
+
+    ok.
+
+bitstring_match(BS, Size) ->
+    <<Matched:Size/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
+
+bitstring_match_offset(BS, Size) ->
+    <<_Skip:8, Matched:Size/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
+
+bitstring_match_const_16(BS) ->
+    <<Matched:16/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
+
+bitstring_match_offset_const(BS) ->
+    <<_Skip:8, Matched:16/bitstring, Rest/bits>> = BS,
+    {Matched, Rest}.
 
 check_x86_64_jt(<<>>) -> ok;
 check_x86_64_jt(<<16#e9, _Offset:32/little, Tail/binary>>) -> check_x86_64_jt(Tail);
