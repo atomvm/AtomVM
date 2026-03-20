@@ -3173,13 +3173,11 @@ static term nif_erlang_system_info(Context *ctx, int argc, term argv[])
         return term_from_int11(sizeof(avm_float_t));
     }
     if (key == SYSTEM_ARCHITECTURE_ATOM) {
-        char buf[128];
-        snprintf(buf, 128, "%s-%s-%s", SYSTEM_NAME, SYSTEM_VERSION, SYSTEM_ARCHITECTURE);
-        size_t len = strnlen(buf, 128);
+        size_t len = sizeof(SYSTEM_ARCHITECTURE_STRING) - 1;
         if (memory_ensure_free_opt(ctx, term_binary_heap_size(len), MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
         }
-        return term_from_literal_binary((const uint8_t *) buf, len, &ctx->heap, ctx->global);
+        return term_from_literal_binary((const uint8_t *) SYSTEM_ARCHITECTURE_STRING, len, &ctx->heap, ctx->global);
     }
     if (key == ATOMVM_VERSION_ATOM) {
         size_t len = strlen(ATOMVM_VERSION);
