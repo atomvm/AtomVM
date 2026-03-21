@@ -3588,6 +3588,7 @@ sub(#state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} =
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
     State1#state{available_regs = Avail, stream = Stream2, regs = Regs1}.
 
+-spec mul(state(), armv6m_register(), integer() | armv6m_register()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -3647,7 +3648,7 @@ mul(
     #state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} = State0,
     Reg,
     Val
-) ->
+) when is_integer(Val) ->
     Temp = first_avail(Avail),
     TempBit = reg_bit(Temp),
     AT = Avail band (bnot TempBit),
@@ -3658,7 +3659,14 @@ mul(
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Temp), Reg),
     State1#state{
         stream = Stream2, available_regs = State1#state.available_regs bor TempBit, regs = Regs1
-    }.
+    };
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, DestReg, SrcReg
+) when is_atom(SrcReg) ->
+    I = jit_armv6m_asm:muls(DestReg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DestReg),
+    State#state{stream = Stream1, regs = Regs1}.
 
 %%
 %% Analysis of AArch64 pattern and ARM Thumb mapping:

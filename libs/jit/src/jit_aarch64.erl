@@ -2515,10 +2515,10 @@ sub(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
 %% @end
 %% @param State current backend state
 %% @param Reg register to multiply
-%% @param Val constant multiplier (non-negative integer)
+%% @param Val multiplier (an integer constant or a register)
 %% @return Updated backend state
 %%-----------------------------------------------------------------------------
--spec mul(state(), aarch64_register(), non_neg_integer()) -> state().
+-spec mul(state(), aarch64_register(), integer() | aarch64_register()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -2579,12 +2579,19 @@ mul(
         State,
     Reg,
     Val
-) ->
+) when is_integer(Val) ->
     Temp = first_avail(Avail),
     I1 = jit_aarch64_asm:mov(Temp, Val),
     I2 = jit_aarch64_asm:mul(Reg, Reg, Temp),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Temp), Reg),
+    State#state{stream = Stream1, regs = Regs1};
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, DestReg, SrcReg
+) when is_atom(SrcReg) ->
+    I1 = jit_aarch64_asm:mul(DestReg, DestReg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DestReg),
     State#state{stream = Stream1, regs = Regs1}.
 
 %%-----------------------------------------------------------------------------
