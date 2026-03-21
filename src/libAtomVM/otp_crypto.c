@@ -2153,7 +2153,10 @@ static void psa_mac_op_dtor(ErlNifEnv *caller_env, void *obj)
 
     struct MacState *mac_state = (struct MacState *) obj;
     psa_mac_abort(&mac_state->psa_op);
-    psa_destroy_key(mac_state->key_id);
+    if (mac_state->key_id != 0) {
+        psa_destroy_key(mac_state->key_id);
+        mac_state->key_id = 0;
+    }
 #ifndef AVM_NO_SMP
     if (mac_state->mutex) {
         smp_mutex_destroy(mac_state->mutex);
@@ -2362,6 +2365,8 @@ static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
     size_t mac_len = 0;
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    psa_destroy_key(mac_state->key_id);
+    mac_state->key_id = 0;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2421,6 +2426,8 @@ static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
     size_t mac_len = 0;
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    psa_destroy_key(mac_state->key_id);
+    mac_state->key_id = 0;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2649,7 +2656,10 @@ static void psa_cipher_op_dtor(ErlNifEnv *caller_env, void *obj)
 
     struct CipherState *cipher_state = (struct CipherState *) obj;
     psa_cipher_abort(&cipher_state->psa_op);
-    psa_destroy_key(cipher_state->key_id);
+    if (cipher_state->key_id != 0) {
+        psa_destroy_key(cipher_state->key_id);
+        cipher_state->key_id = 0;
+    }
 #ifndef AVM_NO_SMP
     if (cipher_state->mutex) {
         smp_mutex_destroy(cipher_state->mutex);
@@ -3059,6 +3069,8 @@ static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
     size_t out_len = 0;
     psa_status_t status = psa_cipher_finish(&cipher_state->psa_op, out_buf, out_size, &out_len);
     cipher_state->finalized = true;
+    psa_destroy_key(cipher_state->key_id);
+    cipher_state->key_id = 0;
     SMP_MUTEX_UNLOCK(cipher_state->mutex);
 
     if (status == PSA_SUCCESS) {
