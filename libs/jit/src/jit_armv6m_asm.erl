@@ -45,6 +45,7 @@
     lsls/3,
     lsrs/2,
     lsrs/3,
+    asrs/3,
     mov/2,
     movs/2,
     mvns/2,
@@ -551,6 +552,26 @@ lsrs(Rdn, Rm) when
     RmNum = reg_to_num(Rm),
     %% Thumb LSRS register: 0100000011mmmddd
     <<(16#40C0 bor (RmNum bsl 3) bor RdnNum):16/little>>.
+
+%% ARMv6-M Thumb arithmetic shift right (ASRS) instructions
+-spec asrs(arm_gpr_register(), arm_gpr_register(), integer()) -> binary().
+%% ASRS Rd, Rm, #imm5 - immediate shift (1-32)
+asrs(Rd, Rm, Imm) when
+    ?IS_LOW_REGISTER(Rd),
+    ?IS_LOW_REGISTER(Rm),
+    is_integer(Imm),
+    Imm >= 1,
+    Imm =< 32
+->
+    RdNum = reg_to_num(Rd),
+    RmNum = reg_to_num(Rm),
+    %% Thumb ASRS immediate: 00010iiiiimmmddd (imm5=0 means shift by 32)
+    Imm5 =
+        if
+            Imm =:= 32 -> 0;
+            true -> Imm
+        end,
+    <<(16#1000 bor (Imm5 bsl 6) bor (RmNum bsl 3) bor RdNum):16/little>>.
 
 %% ARMv6-M Thumb TST instruction (register only)
 -spec tst(arm_gpr_register(), arm_gpr_register()) -> binary().
