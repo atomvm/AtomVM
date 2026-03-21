@@ -3534,6 +3534,11 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
         goto cleanup;
     }
     uint32_t iterations = term_to_uint32(iterations_term);
+    if (UNLIKELY(iterations == 0)) {
+        result
+            = make_crypto_error(__FILE__, __LINE__, "Iterations must be a positive integer", ctx);
+        goto cleanup;
+    }
 
     term key_len_term = argv[4];
     if (UNLIKELY(!term_is_pos_int(key_len_term))) {
