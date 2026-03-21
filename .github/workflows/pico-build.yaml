@@ -240,7 +240,7 @@ jobs:
       if: matrix.platform == '' && matrix.jit == ''
       shell: bash
       run: |
-        ATOMVM_COMBINED_FILE=AtomVM-combined-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
+        ATOMVM_COMBINED_FILE=AtomVM-${{ matrix.board }}-combined-${{env.AVM_REF_NAME}}.uf2
         ./uf2tool join -o "${ATOMVM_COMBINED_FILE}" src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2 build/libs/atomvmlib-rp2-${{ matrix.board }}-${{env.AVM_REF_NAME}}.uf2
         sha256sum "${ATOMVM_COMBINED_FILE}" > "${ATOMVM_COMBINED_FILE}.sha256"
         echo "ATOMVM_COMBINED_FILE=${ATOMVM_COMBINED_FILE}" >> $GITHUB_ENV
