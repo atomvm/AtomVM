@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic
+- Changed ESP32-C5 IDF logging to V2 to reduce the compiled size
 
 ### Fixed
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
