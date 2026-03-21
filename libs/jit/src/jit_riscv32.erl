@@ -82,7 +82,8 @@
     dwarf_opcode/2,
     dwarf_label/2,
     dwarf_function/3,
-    dwarf_line/2
+    dwarf_line/2,
+    dwarf_ctx_register/0
 ]).
 -endif.
 
@@ -92,6 +93,10 @@
 
 -include("primitives.hrl").
 -include("term.hrl").
+
+-ifdef(JIT_DWARF).
+-include("jit_dwarf.hrl").
+-endif.
 
 -define(ASSERT(Expr), true = Expr).
 
@@ -256,6 +261,8 @@
     (?REG_BIT_T6 bor ?REG_BIT_T5 bor ?REG_BIT_T4 bor ?REG_BIT_T3 bor
         ?REG_BIT_T2 bor ?REG_BIT_T1 bor ?REG_BIT_T0)
 ).
+
+-include("jit_backend_dwarf_impl.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
@@ -3798,3 +3805,32 @@ add_label(
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
+
+-ifdef(JIT_DWARF).
+%%-----------------------------------------------------------------------------
+%% @doc Return the DWARF register number for the ctx parameter
+%% @returns The DWARF register number where ctx is passed (a0 in RISC-V)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec dwarf_ctx_register() -> non_neg_integer().
+dwarf_ctx_register() ->
+    ?DWARF_A0_REG_RISCV32.
+
+%% RISC-V DWARF register numbers: a0-a7 = 10-17, t0-t6 = 5-7,28-31
+-spec dwarf_register_number(atom()) -> non_neg_integer().
+dwarf_register_number(a0) -> 10;
+dwarf_register_number(a1) -> 11;
+dwarf_register_number(a2) -> 12;
+dwarf_register_number(a3) -> 13;
+dwarf_register_number(a4) -> 14;
+dwarf_register_number(a5) -> 15;
+dwarf_register_number(a6) -> 16;
+dwarf_register_number(a7) -> 17;
+dwarf_register_number(t0) -> 5;
+dwarf_register_number(t1) -> 6;
+dwarf_register_number(t2) -> 7;
+dwarf_register_number(t3) -> 28;
+dwarf_register_number(t4) -> 29;
+dwarf_register_number(t5) -> 30;
+dwarf_register_number(t6) -> 31.
+-endif.

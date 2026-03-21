@@ -27,13 +27,19 @@ macro(jit_precompile module_name)
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
         )
+        if (NOT AVM_DISABLE_JIT_DWARF)
+            set(jit_precompile_dwarf_flag "dwarf")
+        else()
+            set(jit_precompile_dwarf_flag "")
+        endif()
         add_custom_command(
             OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
             COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
-                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${jit_precompile_dwarf_flag} ${module_name}.beam
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam ${jit_compiler_modules} jit
             COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
             VERBATIM

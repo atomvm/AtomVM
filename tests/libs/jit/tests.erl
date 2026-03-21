@@ -27,6 +27,7 @@
 start() ->
     etest:test([
         jit_tests,
+        jit_dwarf_tests,
         jit_aarch64_tests,
         jit_aarch64_asm_tests,
         jit_armv6m_tests,

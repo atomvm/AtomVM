@@ -32,6 +32,7 @@ AtomVM includes many advanced features, including process spawning, monitoring, 
    differences-with-beam
    stubbed-functions
    build-instructions
+   jit
    atomvm-internals
    memory-management
    packbeam-format
