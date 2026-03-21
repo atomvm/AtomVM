@@ -786,11 +786,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
             psa_cipher_abort(&operation);
             psa_destroy_key(key_id);
             free(temp_buf);
-            if (allocated_key_data) {
-                memset(allocated_key_data, 0, key_len);
-            }
-            free(allocated_key_data);
-            free(allocated_iv_data);
+            secure_free(allocated_key_data, key_len);
+            secure_free(allocated_iv_data, iv_len);
             free(allocated_data_data);
             // Return empty binary
             if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(0)) != MEMORY_GC_OK)) {
@@ -821,11 +818,8 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     psa_destroy_key(key_id);
 
-    if (allocated_key_data) {
-        memset(allocated_key_data, 0, key_len);
-    }
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
 
     int ensure_size = term_binary_heap_size(output_len);
@@ -844,9 +838,6 @@ psa_error:
         psa_destroy_key(key_id);
     }
     free(temp_buf);
-    if (allocated_key_data) {
-        memset(allocated_key_data, 0, key_len);
-    }
     goto raise_error;
 #else
     mbedtls_operation_t operation;
@@ -968,11 +959,13 @@ mbed_error:
     RAISE_ERROR(make_crypto_error(__FILE__, source_line, err_msg, ctx));
 #endif
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
 raise_error:
-    free(allocated_key_data);
-    free(allocated_iv_data);
+    secure_free(allocated_key_data, key_len);
+    secure_free(allocated_iv_data, iv_len);
     free(allocated_data_data);
     RAISE_ERROR(error_atom);
+#endif
 }
 
 #ifdef HAVE_PSA_CRYPTO
@@ -3466,12 +3459,6 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
 
     term digest_type_term = argv[0];
     // argv[1] is password, argv[2] is salt, argv[3] is iterations, argv[4] is key_len
-
-    mbedtls_md_type_t md_type
-        = interop_atom_term_select_int(md_hash_algorithm_table, digest_type_term, glb);
-    if (UNLIKELY(md_type == MBEDTLS_MD_NONE)) {
-        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
-    }
 
     bool success = false;
     term result = ERROR_ATOM;
