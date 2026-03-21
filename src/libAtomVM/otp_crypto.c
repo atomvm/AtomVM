@@ -2324,11 +2324,16 @@ static term nif_crypto_mac_update(Context *ctx, int argc, term argv[])
 
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_update(&mac_state->psa_op, data, data_len);
-    SMP_MUTEX_UNLOCK(mac_state->mutex);
-    free(maybe_allocated_data);
     if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_mac_abort(&mac_state->psa_op);
+        psa_destroy_key(mac_state->key_id);
+        mac_state->key_id = 0;
+        SMP_MUTEX_UNLOCK(mac_state->mutex);
+        secure_free(maybe_allocated_data, data_len);
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
     }
+    SMP_MUTEX_UNLOCK(mac_state->mutex);
+    secure_free(maybe_allocated_data, data_len);
 
     return argv[0];
 }
@@ -2999,11 +3004,16 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
     size_t out_len = 0;
     psa_status_t status
         = psa_cipher_update(&cipher_state->psa_op, data, data_len, out_buf, out_size, &out_len);
-    SMP_MUTEX_UNLOCK(cipher_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_cipher_abort(&cipher_state->psa_op);
+        psa_destroy_key(cipher_state->key_id);
+        cipher_state->key_id = 0;
+        cipher_state->finalized = true;
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
         goto cleanup;
     }
+    SMP_MUTEX_UNLOCK(cipher_state->mutex);
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(out_len)) != MEMORY_GC_OK)) {
         result = OUT_OF_MEMORY_ATOM;
