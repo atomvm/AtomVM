@@ -785,10 +785,10 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
             // No complete blocks to process
             psa_cipher_abort(&operation);
             psa_destroy_key(key_id);
-            free(temp_buf);
+            secure_free(temp_buf, output_size);
             secure_free(allocated_key_data, key_len);
             secure_free(allocated_iv_data, iv_len);
-            free(allocated_data_data);
+            secure_free(allocated_data_data, data_size);
             // Return empty binary
             if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(0)) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -820,16 +820,16 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     secure_free(allocated_key_data, key_len);
     secure_free(allocated_iv_data, iv_len);
-    free(allocated_data_data);
+    secure_free(allocated_data_data, data_size);
 
     int ensure_size = term_binary_heap_size(output_len);
     if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
-        free(temp_buf);
+        secure_free(temp_buf, output_size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term out = term_from_literal_binary(temp_buf, output_len, &ctx->heap, ctx->global);
-    free(temp_buf);
+    secure_free(temp_buf, output_size);
     return out;
 
 psa_error:
@@ -837,7 +837,7 @@ psa_error:
     if (key_id != 0) {
         psa_destroy_key(key_id);
     }
-    free(temp_buf);
+    secure_free(temp_buf, output_size);
     goto raise_error;
 #else
     mbedtls_operation_t operation;
@@ -963,7 +963,7 @@ mbed_error:
 raise_error:
     secure_free(allocated_key_data, key_len);
     secure_free(allocated_iv_data, iv_len);
-    free(allocated_data_data);
+    secure_free(allocated_data_data, data_size);
     RAISE_ERROR(error_atom);
 #endif
 }
@@ -3014,8 +3014,8 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
     result = term_from_literal_binary(out_buf, out_len, &ctx->heap, glb);
 
 cleanup:
-    free(maybe_allocated_data);
-    free(out_buf);
+    secure_free(maybe_allocated_data, data_len);
+    secure_free(out_buf, out_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -3117,7 +3117,7 @@ static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
     }
 
 cleanup:
-    free(out_buf);
+    secure_free(out_buf, out_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -3394,7 +3394,7 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
 
 cleanup:
     psa_destroy_key(key_id);
-    free(maybe_allocated_intext);
+    secure_free(maybe_allocated_intext, intext_len);
     free(maybe_allocated_aad);
     secure_free(out_buf, out_buf_size);
 
