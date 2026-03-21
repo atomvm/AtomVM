@@ -98,6 +98,15 @@
 
 #define MAX_MD_SIZE 64
 
+#if defined(HAVE_PSA_CRYPTO) || defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+static void do_psa_init(void)
+{
+    if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
+        abort();
+    }
+}
+#endif
+
 enum crypto_algorithm
 {
     CryptoInvalidAlgorithm = 0,
@@ -345,6 +354,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     size_t digest_len = 0;
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_algorithm_t alg = atom_to_psa_hash_alg(type, ctx->global);
     if (alg == PSA_ALG_NONE) {
         TRACE("crypto:hash unknown algorithm\n");
@@ -631,6 +641,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     term cipher_term = argv[0];
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_key_type_t key_type;
     size_t key_bits;
     psa_algorithm_t alg = atom_to_psa_cipher_alg(cipher_term, ctx->global, &key_type, &key_bits);
@@ -1051,13 +1062,6 @@ static const struct PsaEccCurveParams *psa_ecc_curve_table_lookup(enum pk_param_
         }
     }
     return NULL;
-}
-
-static void do_psa_init(void)
-{
-    if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
-        abort();
-    }
 }
 
 // TODO: MbedTLS PSA Crypto API is expected to add Ed25519/X25519 support in a future version.
@@ -3545,14 +3549,10 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
     }
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_key_derivation_operation_t operation = PSA_KEY_DERIVATION_OPERATION_INIT;
-    psa_status_t status = psa_crypto_init();
-    if (UNLIKELY(status != PSA_SUCCESS)) {
-        result = make_crypto_error(__FILE__, __LINE__, "PSA init failed", ctx);
-        goto cleanup;
-    }
 
-    status = psa_key_derivation_setup(&operation, PSA_ALG_PBKDF2_HMAC(hash_alg));
+    psa_status_t status = psa_key_derivation_setup(&operation, PSA_ALG_PBKDF2_HMAC(hash_alg));
     if (UNLIKELY(status != PSA_SUCCESS)) {
         psa_key_derivation_abort(&operation);
         result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
@@ -3655,6 +3655,7 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     }
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
     unsigned char *out = (unsigned char *) term_binary_data(out_bin);
 
