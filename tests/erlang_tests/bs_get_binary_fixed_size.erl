@@ -21,12 +21,9 @@
 -module(bs_get_binary_fixed_size).
 
 %% Force the compiler to use bs_get_binary2 opcode instead of the
-%% newer bs_match opcode (OTP 25+). On older OTP this is ignored.
-%% The no_bs_match option was removed in OTP 29.
--ifdef(OTP_RELEASE).
+%% newer bs_match opcode. The no_bs_match option was removed in OTP 29.
 -if(?OTP_RELEASE =< 28).
 -compile([no_bs_match]).
--endif.
 -endif.
 
 -export([start/0]).
@@ -35,19 +32,7 @@ start() ->
     Bin = id(<<1, 2, 3, 4, 5, 6, 7, 8>>),
     ok = test_match_4(Bin),
     ok = test_match_3(Bin),
-    %% bs_get_binary2_all_asm uses bs_start_match4 which requires OTP 23+
-    HasAsmModule =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "23";
-            "ATOM" ->
-                ?OTP_RELEASE >= 23
-        end,
-    ok =
-        if
-            HasAsmModule -> test_match_all(Bin);
-            true -> ok
-        end,
+    ok = test_match_all(Bin),
     ok = test_match_fail(Bin),
     0.
 

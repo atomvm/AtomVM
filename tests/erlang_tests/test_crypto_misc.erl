@@ -22,29 +22,18 @@
 -export([start/0, get_bad/0]).
 
 start() ->
-    case otp_version() =:= atomvm orelse erlang:function_exported(crypto, hash_equals, 2) of
-        true ->
-            ok = test_hash_equals_equal(),
-            ok = test_hash_equals_not_equal(),
-            ok = test_hash_equals_empty(),
-            ok = test_hash_equals_single_byte_equal(),
-            ok = test_hash_equals_single_byte_not_equal(),
-            ok = test_hash_equals_differs_at_start(),
-            ok = test_hash_equals_differs_at_end(),
-            ok = test_hash_equals_returns_bool(),
-            ok = test_hash_equals_bad_first_arg(),
-            ok = test_hash_equals_bad_second_arg(),
-            ok = test_hash_equals_different_lengths();
-        false ->
-            ok
-    end,
+    ok = test_hash_equals_equal(),
+    ok = test_hash_equals_not_equal(),
+    ok = test_hash_equals_empty(),
+    ok = test_hash_equals_single_byte_equal(),
+    ok = test_hash_equals_single_byte_not_equal(),
+    ok = test_hash_equals_differs_at_start(),
+    ok = test_hash_equals_differs_at_end(),
+    ok = test_hash_equals_returns_bool(),
+    ok = test_hash_equals_bad_first_arg(),
+    ok = test_hash_equals_bad_second_arg(),
+    ok = test_hash_equals_different_lengths(),
     0.
-
-otp_version() ->
-    case erlang:system_info(machine) of
-        "ATOM" -> atomvm;
-        _ -> list_to_integer(erlang:system_info(otp_release))
-    end.
 
 test_hash_equals_equal() ->
     true = crypto:hash_equals(

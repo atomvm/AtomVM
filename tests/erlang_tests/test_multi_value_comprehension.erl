@@ -24,10 +24,8 @@
 
 %% Test multi-valued comprehensions (EEP 78, OTP 29+)
 
--ifdef(OTP_RELEASE).
 -if(?OTP_RELEASE >= 29).
 -define(OTP29_OR_LATER, true).
--endif.
 -endif.
 
 -ifdef(OTP29_OR_LATER).

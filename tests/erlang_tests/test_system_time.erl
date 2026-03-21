@@ -132,7 +132,6 @@ test_system_time_to_universal_time() ->
 
     ok.
 
--if(?OTP_RELEASE >= 22).
 test_nanosecond_system_time() ->
     ok = test_system_time(nanosecond, 1).
 
@@ -166,11 +165,3 @@ test_native_universal_time() ->
     {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, native),
     {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000000, native),
     ok.
--else.
-test_nanosecond_system_time() -> ok.
-test_native_system_time() -> ok.
-test_os_system_time_native() -> ok.
-test_ns_ratio() -> ok.
-test_nanosecond_universal_time() -> ok.
-test_native_universal_time() -> ok.
--endif.

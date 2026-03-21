@@ -495,9 +495,6 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             break;
         }
         case BIFFunctionType: {
-            // Support compilers < OTP26 that generate CALL_EXT_ONLY or CALL_EXT_LAST
-            // for min/2 and max/2
-            // These are safe regarding otp issue #7152
             if (n_words >= 0) {
                 ctx->cp = ctx->e[n_words];
                 ctx->e += (n_words + 1);

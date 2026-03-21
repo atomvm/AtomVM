@@ -23,13 +23,8 @@
 -export([start/0, do_error/0]).
 
 start() ->
-    start(?OTP_RELEASE).
-
-start(OTPVersion) when OTPVersion >= 23 ->
     test_reraise_raise_3_nif(),
     test_reraise_preserves_stacktrace(),
-    0;
-start(_) ->
     0.
 
 test_reraise_raise_3_nif() ->

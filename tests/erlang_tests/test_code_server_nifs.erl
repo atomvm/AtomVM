@@ -23,18 +23,11 @@
 -export([start/0, test_literals/0]).
 
 start() ->
+    ok = test_is_loaded(),
     case erlang:system_info(machine) of
         "BEAM" ->
-            OTPRelease = erlang:system_info(otp_release),
-            if
-                OTPRelease >= "26" ->
-                    ok = test_is_loaded();
-                true ->
-                    ok
-            end,
             ok;
         "ATOM" ->
-            ok = test_is_loaded(),
             case erlang:system_info(emu_flavor) of
                 jit ->
                     ok = test_atom_resolver(),
