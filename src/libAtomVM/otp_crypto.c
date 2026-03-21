@@ -98,6 +98,15 @@
 
 #define MAX_MD_SIZE 64
 
+#if defined(HAVE_PSA_CRYPTO) || defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+static void do_psa_init(void)
+{
+    if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
+        abort();
+    }
+}
+#endif
+
 enum crypto_algorithm
 {
     CryptoInvalidAlgorithm = 0,
@@ -345,6 +354,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
     size_t digest_len = 0;
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_algorithm_t alg = atom_to_psa_hash_alg(type, ctx->global);
     if (alg == PSA_ALG_NONE) {
         TRACE("crypto:hash unknown algorithm\n");
@@ -631,6 +641,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     term cipher_term = argv[0];
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_key_type_t key_type;
     size_t key_bits;
     psa_algorithm_t alg = atom_to_psa_cipher_alg(cipher_term, ctx->global, &key_type, &key_bits);
@@ -785,10 +796,10 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
             // No complete blocks to process
             psa_cipher_abort(&operation);
             psa_destroy_key(key_id);
-            free(temp_buf);
+            secure_free(temp_buf, output_size);
             secure_free(allocated_key_data, key_len);
             secure_free(allocated_iv_data, iv_len);
-            free(allocated_data_data);
+            secure_free(allocated_data_data, data_size);
             // Return empty binary
             if (UNLIKELY(memory_ensure_free(ctx, term_binary_heap_size(0)) != MEMORY_GC_OK)) {
                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
@@ -820,16 +831,16 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
     secure_free(allocated_key_data, key_len);
     secure_free(allocated_iv_data, iv_len);
-    free(allocated_data_data);
+    secure_free(allocated_data_data, data_size);
 
     int ensure_size = term_binary_heap_size(output_len);
     if (UNLIKELY(memory_ensure_free(ctx, ensure_size) != MEMORY_GC_OK)) {
-        free(temp_buf);
+        secure_free(temp_buf, output_size);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
     term out = term_from_literal_binary(temp_buf, output_len, &ctx->heap, ctx->global);
-    free(temp_buf);
+    secure_free(temp_buf, output_size);
     return out;
 
 psa_error:
@@ -837,7 +848,7 @@ psa_error:
     if (key_id != 0) {
         psa_destroy_key(key_id);
     }
-    free(temp_buf);
+    secure_free(temp_buf, output_size);
     goto raise_error;
 #else
     mbedtls_operation_t operation;
@@ -963,7 +974,7 @@ mbed_error:
 raise_error:
     secure_free(allocated_key_data, key_len);
     secure_free(allocated_iv_data, iv_len);
-    free(allocated_data_data);
+    secure_free(allocated_data_data, data_size);
     RAISE_ERROR(error_atom);
 #endif
 }
@@ -1051,13 +1062,6 @@ static const struct PsaEccCurveParams *psa_ecc_curve_table_lookup(enum pk_param_
         }
     }
     return NULL;
-}
-
-static void do_psa_init(void)
-{
-    if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
-        abort();
-    }
 }
 
 // TODO: MbedTLS PSA Crypto API is expected to add Ed25519/X25519 support in a future version.
@@ -2153,7 +2157,10 @@ static void psa_mac_op_dtor(ErlNifEnv *caller_env, void *obj)
 
     struct MacState *mac_state = (struct MacState *) obj;
     psa_mac_abort(&mac_state->psa_op);
-    psa_destroy_key(mac_state->key_id);
+    if (mac_state->key_id != 0) {
+        psa_destroy_key(mac_state->key_id);
+        mac_state->key_id = 0;
+    }
 #ifndef AVM_NO_SMP
     if (mac_state->mutex) {
         smp_mutex_destroy(mac_state->mutex);
@@ -2321,11 +2328,16 @@ static term nif_crypto_mac_update(Context *ctx, int argc, term argv[])
 
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_update(&mac_state->psa_op, data, data_len);
-    SMP_MUTEX_UNLOCK(mac_state->mutex);
-    free(maybe_allocated_data);
     if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_mac_abort(&mac_state->psa_op);
+        psa_destroy_key(mac_state->key_id);
+        mac_state->key_id = 0;
+        SMP_MUTEX_UNLOCK(mac_state->mutex);
+        secure_free(maybe_allocated_data, data_len);
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
     }
+    SMP_MUTEX_UNLOCK(mac_state->mutex);
+    secure_free(maybe_allocated_data, data_len);
 
     return argv[0];
 }
@@ -2362,6 +2374,8 @@ static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
     size_t mac_len = 0;
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    psa_destroy_key(mac_state->key_id);
+    mac_state->key_id = 0;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2421,6 +2435,8 @@ static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
     size_t mac_len = 0;
     SMP_MUTEX_LOCK(mac_state->mutex);
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
+    psa_destroy_key(mac_state->key_id);
+    mac_state->key_id = 0;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2649,7 +2665,10 @@ static void psa_cipher_op_dtor(ErlNifEnv *caller_env, void *obj)
 
     struct CipherState *cipher_state = (struct CipherState *) obj;
     psa_cipher_abort(&cipher_state->psa_op);
-    psa_destroy_key(cipher_state->key_id);
+    if (cipher_state->key_id != 0) {
+        psa_destroy_key(cipher_state->key_id);
+        cipher_state->key_id = 0;
+    }
 #ifndef AVM_NO_SMP
     if (cipher_state->mutex) {
         smp_mutex_destroy(cipher_state->mutex);
@@ -2989,11 +3008,16 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
     size_t out_len = 0;
     psa_status_t status
         = psa_cipher_update(&cipher_state->psa_op, data, data_len, out_buf, out_size, &out_len);
-    SMP_MUTEX_UNLOCK(cipher_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
+        psa_cipher_abort(&cipher_state->psa_op);
+        psa_destroy_key(cipher_state->key_id);
+        cipher_state->key_id = 0;
+        cipher_state->finalized = true;
+        SMP_MUTEX_UNLOCK(cipher_state->mutex);
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
         goto cleanup;
     }
+    SMP_MUTEX_UNLOCK(cipher_state->mutex);
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BINARY_HEAP_SIZE(out_len)) != MEMORY_GC_OK)) {
         result = OUT_OF_MEMORY_ATOM;
@@ -3004,8 +3028,8 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
     result = term_from_literal_binary(out_buf, out_len, &ctx->heap, glb);
 
 cleanup:
-    free(maybe_allocated_data);
-    free(out_buf);
+    secure_free(maybe_allocated_data, data_len);
+    secure_free(out_buf, out_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -3059,6 +3083,8 @@ static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
     size_t out_len = 0;
     psa_status_t status = psa_cipher_finish(&cipher_state->psa_op, out_buf, out_size, &out_len);
     cipher_state->finalized = true;
+    psa_destroy_key(cipher_state->key_id);
+    cipher_state->key_id = 0;
     SMP_MUTEX_UNLOCK(cipher_state->mutex);
 
     if (status == PSA_SUCCESS) {
@@ -3105,7 +3131,7 @@ static term nif_crypto_crypto_final(Context *ctx, int argc, term argv[])
     }
 
 cleanup:
-    free(out_buf);
+    secure_free(out_buf, out_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -3382,7 +3408,7 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
 
 cleanup:
     psa_destroy_key(key_id);
-    free(maybe_allocated_intext);
+    secure_free(maybe_allocated_intext, intext_len);
     free(maybe_allocated_aad);
     secure_free(out_buf, out_buf_size);
 
@@ -3528,14 +3554,10 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
     }
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     psa_key_derivation_operation_t operation = PSA_KEY_DERIVATION_OPERATION_INIT;
-    psa_status_t status = psa_crypto_init();
-    if (UNLIKELY(status != PSA_SUCCESS)) {
-        result = make_crypto_error(__FILE__, __LINE__, "PSA init failed", ctx);
-        goto cleanup;
-    }
 
-    status = psa_key_derivation_setup(&operation, PSA_ALG_PBKDF2_HMAC(hash_alg));
+    psa_status_t status = psa_key_derivation_setup(&operation, PSA_ALG_PBKDF2_HMAC(hash_alg));
     if (UNLIKELY(status != PSA_SUCCESS)) {
         psa_key_derivation_abort(&operation);
         result = make_crypto_error(__FILE__, __LINE__, "Key derivation failed", ctx);
@@ -3638,6 +3660,7 @@ term nif_crypto_strong_rand_bytes(Context *ctx, int argc, term argv[])
     }
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    do_psa_init();
     term out_bin = term_create_uninitialized_binary(out_len, &ctx->heap, ctx->global);
     unsigned char *out = (unsigned char *) term_binary_data(out_bin);
 
