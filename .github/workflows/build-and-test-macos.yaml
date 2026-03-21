@@ -59,6 +59,12 @@ jobs:
           mbedtls: "mbedtls@3"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
 
+        # JIT + DWARF build (macOS aarch64)
+        - os: "macos-15"
+          otp: "28"
+          mbedtls: "mbedtls@3"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF"
+
     steps:
     # Setup
     - name: "Checkout repo"

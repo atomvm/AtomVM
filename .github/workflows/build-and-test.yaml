@@ -322,6 +322,17 @@ jobs:
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
           jit_target_arch: "x86_64"
 
+        # JIT + DWARF build (x86_64)
+        - os: "ubuntu-24.04"
+          cc: "cc"
+          cxx: "c++"
+          cflags: ""
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF"
+          jit_target_arch: "x86_64"
+
         # arm64 builds
         - os: "ubuntu-24.04-arm"
           cc: "cc"
@@ -340,6 +351,17 @@ jobs:
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
+          jit_target_arch: "aarch64"
+
+        # JIT + DWARF build (aarch64)
+        - os: "ubuntu-24.04-arm"
+          cc: "cc"
+          cxx: "c++"
+          cflags: ""
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF"
           jit_target_arch: "aarch64"
 
         # armhf builds
@@ -367,6 +389,20 @@ jobs:
           elixir_version: "1.17"
           rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=armv6m -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
+          arch: "armhf"
+          library-arch: arm-linux-gnueabihf
+          jit_target_arch: "armv6m"
+
+        # JIT + DWARF build (armv6m)
+        - os: "ubuntu-24.04"
+          cc: "arm-linux-gnueabihf-gcc"
+          cxx: "arm-linux-gnueabihf-g++"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -mthumb -mthumb-interwork -D_FILE_OFFSET_BITS=64"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF -DAVM_JIT_TARGET_ARCH=armv6m -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
           compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
           arch: "armhf"
           library-arch: arm-linux-gnueabihf
@@ -424,6 +460,20 @@ jobs:
           rebar3_version: "3.24.0"
           cmake_opts_other: "-DAVM_USE_LIBSODIUM=ON"
           compiler_pkgs: "libsodium-dev"
+
+        # JIT + DWARF build (riscv32)
+        - os: "ubuntu-24.04"
+          cc: "riscv32-unknown-linux-gnu-gcc"
+          cxx: "riscv32-unknown-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF -DAVM_JIT_TARGET_ARCH=riscv32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv32_ilp32_toolchain.cmake"
+          compiler_pkgs: "qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv32"
+          library-arch: riscv32-linux-gnu-ilp32
+          jit_target_arch: "riscv32"
 
     env:
       ImageOS: ${{ matrix.container == 'ubuntu:20.04' && 'ubuntu20' || matrix.os == 'ubuntu-20.04' && 'ubuntu20' || matrix.os == 'ubuntu-22.04' && 'ubuntu22' || matrix.os == 'ubuntu-24.04' && 'ubuntu24' || 'ubuntu24' }}
@@ -626,7 +676,7 @@ jobs:
       id: cache
       with:
         path: 'build/tests/**/*.beam'
-        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}
+        key: ${{ matrix.otp }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}-${{ contains(matrix.cmake_opts_other, 'AVM_DISABLE_JIT_DWARF=OFF') && 'dwarf' || 'nodwarf' }}
 
     - name: "Build: run cmake"
       working-directory: build
