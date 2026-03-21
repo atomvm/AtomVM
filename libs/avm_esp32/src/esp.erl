@@ -30,6 +30,7 @@
     restart/0,
     reset_reason/0,
     sleep_get_wakeup_cause/0,
+    sleep_get_wakeup_causes/0,
     sleep_enable_ext0_wakeup/2,
     sleep_enable_ext1_wakeup/2,
     sleep_enable_ext1_wakeup_io/2,
@@ -172,6 +173,15 @@ reset_reason() ->
 %%-----------------------------------------------------------------------------
 -spec sleep_get_wakeup_cause() -> undefined | esp_wakeup_cause() | error.
 sleep_get_wakeup_cause() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @returns wakeup causes for the previous sleep operation
+%% @doc     Returns all causes for the wakeup
+%% @end
+%%-----------------------------------------------------------------------------
+-spec sleep_get_wakeup_causes() -> [esp_wakeup_cause()].
+sleep_get_wakeup_causes() ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

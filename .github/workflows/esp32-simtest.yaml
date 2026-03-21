@@ -12,7 +12,7 @@ on:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
       - "CMakeLists.txt"
-      - 'CMakeModules/**'
+      - "CMakeModules/**"
       - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
@@ -22,7 +22,7 @@ on:
     paths:
       - ".github/workflows/esp32-simtest.yaml"
       - "CMakeLists.txt"
-      - 'CMakeModules/**'
+      - "CMakeModules/**"
       - "libs/**"
       - "src/platforms/esp32/**"
       - "src/platforms/esp32/**/**"
@@ -78,9 +78,9 @@ jobs:
             "esp32c3",
             "esp32c5",
             "esp32c6",
-            "esp32h2"
+            "esp32h2",
           ]
-        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["v5.5.3"]') }}
+        idf-version: ${{ ((contains(github.event.head_commit.message, 'full_sim_test')||contains(github.event.pull_request.title, 'full_sim_test')) &&  fromJSON('["v5.2.6", "v5.3.4", "v5.4.3", "v5.5.3"]')) || fromJSON('["release-v6.0"]') }}
         exclude:
           - esp-idf-target: "esp32p4"
             idf-version: "v5.2.6"
@@ -95,7 +95,7 @@ jobs:
         # CI now uses chip revision 3 that is currently only available since 5.5.2
         include:
           - esp-idf-target: "esp32p4"
-            idf-version: "v5.5.3"
+            idf-version: "release-v6.0"
           - esp-idf-target: "esp32c61"
             idf-version: "v5.5.3"
 

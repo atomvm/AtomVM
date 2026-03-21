@@ -971,7 +971,7 @@ static void sta_connect(Context *ctx, term pid, term ref, term config)
     //
     // Set up STA mode
     //
-    if ((err = esp_wifi_set_config(ESP_IF_WIFI_STA, sta_wifi_config)) != ESP_OK) {
+    if ((err = esp_wifi_set_config(WIFI_IF_STA, sta_wifi_config)) != ESP_OK) {
         ESP_LOGE(TAG, "Error setting STA mode config %d", err);
         free(sta_wifi_config);
         port_ensure_available(ctx, tuple_reply_size);
