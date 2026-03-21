@@ -18,22 +18,22 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(tests).
+-ifdef(JIT_DWARF).
 
--export([start/0]).
+dwarf_opcode(#state{stream = Stream0} = State, OpCode) ->
+    Stream1 = jit_dwarf:opcode(Stream0, OpCode),
+    State#state{stream = Stream1}.
 
-% Module is used when running tests with BEAM.
-% When running tests with AtomVM, eunit:start/0 is used instead.
-start() ->
-    etest:test([
-        jit_tests,
-        jit_dwarf_tests,
-        jit_aarch64_tests,
-        jit_aarch64_asm_tests,
-        jit_armv6m_tests,
-        jit_armv6m_asm_tests,
-        jit_riscv32_tests,
-        jit_riscv32_asm_tests,
-        jit_x86_64_tests,
-        jit_x86_64_asm_tests
-    ]).
+dwarf_label(#state{stream = Stream0} = State, Label) ->
+    Stream1 = jit_dwarf:label(Stream0, Label),
+    State#state{stream = Stream1}.
+
+dwarf_line(#state{stream = Stream0} = State, Line) ->
+    Stream1 = jit_dwarf:line(Stream0, Line),
+    State#state{stream = Stream1}.
+
+dwarf_function(#state{stream = Stream0} = State, FunctionName, Arity) ->
+    Stream1 = jit_dwarf:function(Stream0, FunctionName, Arity),
+    State#state{stream = Stream1}.
+
+-endif.
