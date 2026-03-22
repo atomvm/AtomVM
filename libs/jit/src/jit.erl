@@ -1463,30 +1463,20 @@ first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt10),
     first_pass(Rest3, MMod, MSt10, State0);
 % 124
-first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(
+    <<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, #state{import_resolver = ImportResolver} = State0
+) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
-    {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
-    MSt2 = MMod:free_native_registers(MSt1, [TrimResultReg]),
-    CappedLive =
-        if
-            Live > ?MAX_REG -> ?MAX_REG;
-            true -> Live
-        end,
     {Bif, Rest3} = decode_literal(Rest2),
-    {MSt3, FuncPtr} = MMod:call_primitive(MSt2, ?PRIM_GET_IMPORTED_BIF, [
-        jit_state, Bif
-    ]),
-    {MSt4, Arg, Rest4} = decode_compact_term(Rest3, MMod, MSt3, State0),
-    {MSt5, Dest, Rest5} = decode_dest(Rest4, MMod, MSt4),
+    {MSt1, Arg, Rest4} = decode_typed_compact_term(Rest3, MMod, MSt0, State0),
+    {MSt2, Dest, Rest5} = decode_dest(Rest4, MMod, MSt1),
+    {BifModule, BifFunName, 1} = ImportResolver(Bif),
     ?TRACE("OP_GC_BIF1 ~p, ~p, ~p, ~p, ~p\n", [FailLabel, Live, Bif, Arg, Dest]),
-    {MSt6, ResultReg} = MMod:call_func_ptr(MSt5, {free, FuncPtr}, [
-        ctx, FailLabel, CappedLive, {free, Arg}
-    ]),
-    MSt7 = bif_faillabel_test(FailLabel, MMod, MSt6, {free, ResultReg}, {free, Dest}),
-    ?ASSERT_ALL_NATIVE_FREE(MSt7),
-    first_pass(Rest5, MMod, MSt7, State0);
+    MSt3 = op_gc_bif1(MMod, MSt2, FailLabel, Live, Bif, BifModule, BifFunName, Arg, Dest),
+    ?ASSERT_ALL_NATIVE_FREE(MSt3),
+    first_pass(Rest5, MMod, MSt3, State0);
 % 125
 first_pass(
     <<?OP_GC_BIF2, Rest0/binary>>, MMod, MSt0, #state{import_resolver = ImportResolver} = State0
@@ -3231,6 +3221,53 @@ first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     MSt1 = MMod:add(MSt0, BSOffsetReg, Stride),
     ?TRACE("{skip,~p},", [Stride]),
     {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt1}.
+
+% byte_size on a known binary - inline
+op_gc_bif1(MMod, MSt0, FailLabel, Live, Bif, erlang, 'byte_size', Arg, Dest) ->
+    case is_known_binary(MMod, MSt0, Arg) of
+        true ->
+            op_gc_bif1_byte_size_binary(MMod, MSt0, unwrap_typed(Arg), Dest);
+        false ->
+            op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, unwrap_typed(Arg), Dest)
+    end;
+% Default: call BIF via function pointer
+op_gc_bif1(MMod, MSt0, FailLabel, Live, Bif, _Module, _Function, Arg, Dest) ->
+    op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, unwrap_typed(Arg), Dest).
+
+op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, Arg, Dest) ->
+    {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
+    MSt2 = MMod:free_native_registers(MSt1, [TrimResultReg]),
+    CappedLive =
+        if
+            Live > ?MAX_REG -> ?MAX_REG;
+            true -> Live
+        end,
+    {MSt3, FuncPtr} = MMod:call_primitive(MSt2, ?PRIM_GET_IMPORTED_BIF, [
+        jit_state, Bif
+    ]),
+    {MSt4, ResultReg} = MMod:call_func_ptr(MSt3, {free, FuncPtr}, [
+        ctx, FailLabel, CappedLive, {free, Arg}
+    ]),
+    bif_faillabel_test(FailLabel, MMod, MSt4, {free, ResultReg}, {free, Dest}).
+
+% Inline byte_size for a known binary
+% Binary layout: boxed_value[0] = header, boxed_value[1] = byte size (raw integer)
+op_gc_bif1_byte_size_binary(MMod, MSt0, Arg, Dest) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg),
+    % Strip primary tag to get raw pointer
+    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    % Read byte size from boxed_value[1]
+    MSt3 = MMod:move_array_element(MSt2, Reg, 1, Reg),
+    % Encode as tagged integer: (size << 4) | 0xF
+    MSt4 = MMod:shift_left(MSt3, Reg, 4),
+    MSt5 = MMod:or_(MSt4, Reg, ?TERM_INTEGER_TAG),
+    MSt6 = MMod:move_to_vm_register(MSt5, Reg, Dest),
+    MMod:free_native_registers(MSt6, [Reg, Dest]).
+
+is_known_binary(_MMod, _MSt, {typed, _Arg, {t_bs_matchable, Unit}}) when Unit rem 8 =:= 0 ->
+    true;
+is_known_binary(_MMod, _MSt, _) ->
+    false.
 
 op_gc_bif2(
     MMod,

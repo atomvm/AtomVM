@@ -149,6 +149,11 @@ backend_to_arch(jit_aarch64) -> ?JIT_ARCH_AARCH64;
 backend_to_arch(jit_armv6m) -> ?JIT_ARCH_ARMV6M.
 
 compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
+    compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, fun(_) ->
+        {test, test, 2}
+    end).
+
+compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, ImportResolver) ->
     Stream0 = jit_stream_binary:new(0),
     <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
     Arch = backend_to_arch(Backend),
@@ -160,7 +165,6 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     AtomResolver = jit_precompile:atom_resolver(AtomChunk),
     LiteralResolver = fun(_) -> test_literal end,
     TypeResolver = jit_precompile:type_resolver(TypeChunk),
-    ImportResolver = fun(_) -> {test, test, 2} end,
 
     % Compile with typed register support
     {LabelsCount, Stream3} = jit:compile(
@@ -364,3 +368,62 @@ is_small_integer_range_test_() ->
             )
         )
     ].
+
+% Code chunk for byte_size inline test.
+% Equivalent to: f(X) when is_binary(X) -> byte_size(X).
+%
+% Bytecodes:
+%   label 1
+%   line 0
+%   func_info atom_1, atom_2, 1
+%   label 2
+%   is_binary label_1, x[0]
+%   gc_bif1 label_0, 1, 0, typed_x[0]:t_bitstring(8), x[0]
+%   return
+%   int_call_end
+-define(CODE_CHUNK_4,
+    <<0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 182, 0, 0, 0, 2, 0, 0, 0, 1, 1, 16, 153, 0, 2, 18, 34, 16,
+        1, 32, 53, 21, 3, 124, 5, 16, 0, 16#57, 3, 0, 3, 19, 3>>
+).
+-define(ATU8_CHUNK_4,
+    <<255, 255, 255, 254, 224, 116, 101, 115, 116, 95, 98, 121, 116, 101, 95, 115, 105, 122, 101,
+        16, 102>>
+).
+% Type chunk for byte_size inline test.
+% Version 3, 1 entry: t_bitstring with unit=8
+-define(TYPE_CHUNK_4,
+    <<0, 0, 0, 3, 0, 0, 0, 1, 16#40, 16#02, 7>>
+).
+
+byte_size_inline_binary_x86_64_test() ->
+    CompiledCode = compile_stream_for_backend(
+        jit_x86_64,
+        ?CODE_CHUNK_4,
+        ?ATU8_CHUNK_4,
+        ?TYPE_CHUNK_4,
+        fun(_) -> {erlang, byte_size, 1} end
+    ),
+
+    % When is_binary guard precedes gc_bif1 byte_size, the JIT inlines
+    % the operation. The inline code:
+    %   1. Strips the primary tag (and $0xfc)
+    %   2. Reads boxed_value[1] (the byte size)
+    %   3. Encodes as tagged integer (shl $4, or $0xf)
+    %
+    % The shl $4 + or $0xf pattern is distinctive to the inline path.
+    % In the non-inlined path, a function pointer call would appear instead.
+    %
+    % Inline sequence on rax:
+    %   48 83 e0 fc    and    $0xfffffffffffffffc,%rax
+    %   48 8b 40 08    mov    0x8(%rax),%rax
+    %   48 c1 e0 04    shl    $0x4,%rax
+    %   48 83 c8 0f    or     $0xf,%rax
+    ?assertMatch(
+        {_, 16},
+        binary:match(
+            CompiledCode,
+            <<16#48, 16#83, 16#e0, 16#fc, 16#48, 16#8b, 16#40, 16#08, 16#48, 16#c1, 16#e0, 16#04,
+                16#48, 16#83, 16#c8, 16#0f>>
+        )
+    ),
+    ok.
