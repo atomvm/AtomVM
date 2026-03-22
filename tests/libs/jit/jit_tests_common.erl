@@ -20,7 +20,7 @@
 
 -module(jit_tests_common).
 
--export([asm/3, assert_stream/3]).
+-export([asm/3, assert_stream/3, assert_stream/5]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -122,6 +122,8 @@ get_asm_header(aarch64) ->
 get_asm_header(x86_64) ->
     ".text\n";
 get_asm_header(riscv32) ->
+    ".text\n";
+get_asm_header(riscv64) ->
     ".text\n".
 
 %% Get architecture-specific assembler flags
@@ -133,7 +135,9 @@ get_as_flags(aarch64) ->
 get_as_flags(x86_64) ->
     "--64";
 get_as_flags(riscv32) ->
-    "-march=rv32imac".
+    "-march=rv32imac";
+get_as_flags(riscv64) ->
+    "-march=rv64imac -mabi=lp64".
 
 %% Parse objdump output lines and extract binary data
 -spec asm_lines([binary()], binary(), atom()) -> binary().
@@ -188,6 +192,25 @@ assert_stream(Arch, Dump, Stream) ->
         false ->
             diff_disasm(Arch, Expected, Stream),
             ?assertEqual(Expected, Stream)
+    end.
+
+%% Assert that Stream matches the expected objdump output Dump.
+%% On BEAM, if UPDATE_JIT_TESTS environment variable is set, update the source
+%% file with the correct objdump output instead of failing.
+-spec assert_stream(atom(), binary(), binary(), string(), pos_integer()) -> ok.
+assert_stream(Arch, Dump, Stream, File, _Line) ->
+    Expected = dump_to_bin(Dump),
+    case Expected =:= Stream of
+        true ->
+            ok;
+        false ->
+            case {erlang:system_info(machine), os:getenv("UPDATE_JIT_TESTS")} of
+                {"BEAM", Value} when Value =/= false ->
+                    update_test_source(Arch, Dump, Stream, File);
+                _ ->
+                    diff_disasm(Arch, Expected, Stream),
+                    ?assertEqual(Expected, Stream)
+            end
     end.
 
 -define(IS_HEX_DIGIT(C),
@@ -303,4 +326,132 @@ get_objdump_flags(aarch64) ->
 get_objdump_flags(x86_64) ->
     "-m i386:x86-64";
 get_objdump_flags(riscv32) ->
-    "-m riscv:rv32".
+    "-m riscv:rv32";
+get_objdump_flags(riscv64) ->
+    "-m riscv:rv64".
+
+%% Update the test source file when a stream assertion fails.
+-spec update_test_source(atom(), binary(), binary(), string()) -> ok.
+update_test_source(Arch, OldDump, ActualStream, File) ->
+    case find_binutils(Arch) of
+        false ->
+            io:format("Cannot update: no binutils found for ~p~n", [Arch]);
+        {ok, _AsCmd, ObjdumpCmd} ->
+            NewDump = disassemble_stream(ObjdumpCmd, Arch, ActualStream),
+            replace_dump_in_source(File, OldDump, NewDump)
+    end.
+
+%% Disassemble a binary stream into the objdump format used by test dumps.
+-spec disassemble_stream(string(), atom(), binary()) -> string().
+disassemble_stream(ObjdumpCmd, Arch, Stream) ->
+    TmpFile = "jit_update_" ++ integer_to_list(erlang:unique_integer([positive])) ++ ".bin",
+    try
+        ok = file:write_file(TmpFile, Stream),
+        ObjdumpFlags = get_objdump_flags(Arch),
+        Cleanup =
+            "grep '^ '"
+            " | sed -e 's/[[:space:]]*;.*$//' -e 's/[[:space:]]*\\/\\/.*$//'",
+        Cmd = lists:flatten(
+            io_lib:format(
+                "~s -b binary ~s -D -z ~s | ~s",
+                [ObjdumpCmd, ObjdumpFlags, TmpFile, Cleanup]
+            )
+        ),
+        os:cmd(Cmd)
+    after
+        file:delete(TmpFile)
+    end.
+
+%% Replace the Dump = <<...>> block in a source file by scanning the source
+%% with erl_scan, finding the binary whose string content matches OldDump,
+%% and replacing it with the new objdump output.
+-spec replace_dump_in_source(string(), binary(), string()) -> ok.
+replace_dump_in_source(File, OldDump, NewDumpRaw) ->
+    {ok, Content} = file:read_file(File),
+    {ok, Tokens, _} = erl_scan:string(binary_to_list(Content), 1, [return]),
+    %% Find the token range for the binary matching OldDump
+    case find_dump_tokens(Tokens, OldDump) of
+        {StartLine, EndLine} ->
+            Lines = binary:split(Content, <<"\n">>, [global]),
+            %% Get indent from the first string line (StartLine + 1 is first content)
+            FirstContentLine = lists:nth(StartLine + 1, Lines),
+            Indent = get_indent(FirstContentLine),
+            NewDumpLines = format_dump_lines(NewDumpRaw, Indent),
+            %% Replace: keep lines up to StartLine (the << line),
+            %% insert new content, keep from EndLine (the >> line) onward
+            Before = lists:sublist(Lines, 1, StartLine),
+            After = lists:nthtail(EndLine - 1, Lines),
+            NewLines = Before ++ NewDumpLines ++ After,
+            NewContent = iolist_to_binary(lists:join(<<"\n">>, NewLines)),
+            ok = file:write_file(File, NewContent),
+            io:format("Updated ~s at line ~p~n", [File, StartLine]),
+            ok;
+        not_found ->
+            io:format("WARNING: Could not find old dump in ~s~n", [File]),
+            ok
+    end.
+
+%% Scan tokens to find a binary expression (between << and >>) whose
+%% concatenated string content equals OldDump.
+find_dump_tokens(Tokens, OldDump) ->
+    find_dump_tokens(Tokens, OldDump, []).
+
+find_dump_tokens([], _OldDump, _) ->
+    not_found;
+find_dump_tokens([{'<<', Anno} | Rest], OldDump, _) ->
+    StartLine = erl_anno:line(Anno),
+    case collect_bin_strings(Rest, []) of
+        {Strings, [{'>>', EndAnno} | Tail]} ->
+            EndLine = erl_anno:line(EndAnno),
+            BinContent = list_to_binary(Strings),
+            case BinContent =:= OldDump of
+                true -> {StartLine, EndLine};
+                false -> find_dump_tokens(Tail, OldDump, [])
+            end;
+        _ ->
+            find_dump_tokens(Rest, OldDump, [])
+    end;
+find_dump_tokens([_ | Rest], OldDump, Acc) ->
+    find_dump_tokens(Rest, OldDump, Acc).
+
+%% Collect consecutive string tokens from inside a << >> expression,
+%% skipping whitespace and comment tokens between strings.
+collect_bin_strings([{string, _, S} | Rest], Acc) ->
+    collect_bin_strings(Rest, [S | Acc]);
+collect_bin_strings([{white_space, _, _} | Rest], Acc) ->
+    collect_bin_strings(Rest, Acc);
+collect_bin_strings([{comment, _, _} | Rest], Acc) ->
+    collect_bin_strings(Rest, Acc);
+collect_bin_strings(Rest, Acc) ->
+    {lists:reverse(Acc), Rest}.
+
+%% Get leading whitespace from a binary line
+get_indent(Line) ->
+    get_indent(Line, <<>>).
+
+get_indent(<<C, Rest/binary>>, Acc) when C =:= $\s; C =:= $\t ->
+    get_indent(Rest, <<Acc/binary, C>>);
+get_indent(_, Acc) ->
+    Acc.
+
+%% Format objdump output into dump lines with proper indentation and quoting.
+format_dump_lines(DumpRaw, Indent) ->
+    RawLines0 = string:split(DumpRaw, "\n", all),
+    % Remove empty trailing lines
+    RawLines = lists:reverse(
+        lists:dropwhile(
+            fun(L) -> string:trim(L) =:= "" end,
+            lists:reverse(RawLines0)
+        )
+    ),
+    format_dump_lines(RawLines, Indent, []).
+
+format_dump_lines([], _Indent, Acc) ->
+    lists:reverse(Acc);
+format_dump_lines([Line], Indent, Acc) ->
+    %% Last line: no trailing \n
+    Formatted = iolist_to_binary([Indent, $", Line, $"]),
+    lists:reverse([Formatted | Acc]);
+format_dump_lines([Line | Rest], Indent, Acc) ->
+    Formatted = iolist_to_binary([Indent, $", Line, "\\n", $"]),
+    format_dump_lines(Rest, Indent, [Formatted | Acc]).
