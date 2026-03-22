@@ -692,6 +692,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     bool encrypt = true;
     bool padding_pkcs7 = false;
     psa_key_id_t key_id = 0;
+    size_t output_size = 0;
     void *temp_buf = NULL;
     psa_cipher_operation_t operation = PSA_CIPHER_OPERATION_INIT;
 
@@ -751,7 +752,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
         goto psa_error;
     }
 
-    size_t output_size = PSA_CIPHER_ENCRYPT_OUTPUT_SIZE(key_type, alg, data_size);
+    output_size = PSA_CIPHER_ENCRYPT_OUTPUT_SIZE(key_type, alg, data_size);
     if (!encrypt) {
         output_size = PSA_CIPHER_DECRYPT_OUTPUT_SIZE(key_type, alg, data_size);
     }
@@ -2975,12 +2976,13 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
 
     void *maybe_allocated_data = NULL;
     void *out_buf = NULL;
+    size_t data_len = 0;
+    size_t out_size = 0;
 
     // from this point onward use `goto cleanup` in order to raise and free all buffers
 
     /* 2. Handle iodata input */
     const void *data;
-    size_t data_len;
     term iodata_result = handle_iodata(argv[1], &data, &data_len, &maybe_allocated_data);
     if (UNLIKELY(iodata_result == BADARG_ATOM)) {
         SMP_MUTEX_UNLOCK(cipher_state->mutex);
@@ -2994,7 +2996,7 @@ static term nif_crypto_crypto_update(Context *ctx, int argc, term argv[])
     }
 
     /* 3. Encrypt/decrypt via PSA - PSA handles internal block buffering */
-    size_t out_size = PSA_CIPHER_UPDATE_OUTPUT_MAX_SIZE(data_len);
+    out_size = PSA_CIPHER_UPDATE_OUTPUT_MAX_SIZE(data_len);
     if (out_size == 0) {
         out_size = 1; /* ensure valid malloc even for zero-length input */
     }
