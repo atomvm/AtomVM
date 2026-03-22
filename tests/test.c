@@ -755,6 +755,11 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
             perror("Error: cannot find riscv32 directory");
             return EXIT_FAILURE;
         }
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV64
+        if (chdir("riscv64") != 0) {
+            perror("Error: cannot find riscv64 directory");
+            return EXIT_FAILURE;
+        }
 #else
 #error Unknown JIT target
 #endif

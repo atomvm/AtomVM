@@ -604,8 +604,8 @@ branch_to_label_code(
     Reloc = {Label, Offset, {far_branch, t6}},
     State1 = State0#state{branches = [Reloc | Branches]},
     {State1, CodeBlock};
-branch_to_label_code(#state{available_regs = 0}, _Offset, _Label, _LabelLookup) ->
-    error({no_available_registers, _LabelLookup}).
+branch_to_label_code(#state{available_regs = 0}, _Offset, _Label, LabelLookup) ->
+    error({no_available_registers, LabelLookup}).
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit an if block, i.e. emit a test of a condition and conditionally

@@ -147,17 +147,17 @@ _Static_assert(
     CALL_EXT_NO_DEALLOC_MFA == -2, "CALL_EXT_NO_DEALLOC_MFA is -2 in libs/jit/src/primitives.hrl");
 
 // Verify offsets in jit_x86_64.erl
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
-_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_{aarch64,x86_64}.erl");
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64 || JIT_ARCH_TARGET == JIT_ARCH_RISCV64
+_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 
-_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64}.erl");
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_armv6m.erl");
