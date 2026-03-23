@@ -332,7 +332,7 @@ static int32_t write_exponent(int32_t exp, char *dst)
 
 #endif /* FLOAT_UTILS_ENABLE_DOUBLE_API && !AVM_USE_RYU — Grisu3 internals */
 
-#if defined(FLOAT_UTILS_ENABLE_FLOAT_API) || !defined(AVM_USE_RYU)
+#ifndef AVM_USE_RYU
 /*
  * Post-process %g output to match Erlang/OTP short format:
  *  - Ensure decimal point with at least one fractional digit
@@ -396,7 +396,7 @@ static int fixup_g_format(char *buf, int len)
 
     return len;
 }
-#endif /* FLOAT_UTILS_ENABLE_FLOAT_API || !AVM_USE_RYU */
+#endif /* !AVM_USE_RYU */
 
 #if defined(FLOAT_UTILS_ENABLE_DOUBLE_API) && !defined(AVM_USE_RYU)
 static int32_t dtoa_grisu3(double v, char *dst)
@@ -591,6 +591,7 @@ int double_write_to_ascii_buf(double value, float_format_t format, int precision
 
 #ifdef FLOAT_UTILS_ENABLE_FLOAT_API
 
+#ifndef AVM_USE_RYU
 #define F32_SIGN UINT32_C(0x80000000)
 
 static inline uint32_t cast_u32(float f)
@@ -631,6 +632,7 @@ static int ftoa_short(float value, char *buf)
     slen = fixup_g_format(s, slen);
     return (s - buf) + slen;
 }
+#endif /* !AVM_USE_RYU */
 
 int float_write_to_ascii_buf(float value, float_format_t format, int precision, char *buf)
 {
@@ -638,7 +640,16 @@ int float_write_to_ascii_buf(float value, float_format_t format, int precision, 
 
     switch (format) {
         case FloatFormatShort:
+#ifdef AVM_USE_RYU
+            ret = f2s_buffered_n(value, buf);
+            if (ret < 0 || ret >= DOUBLE_WRITE_TO_ASCII_BUF_LEN) {
+                return -1;
+            }
+            buf[ret] = '\0';
+            return ret;
+#else
             return ftoa_short(value, buf);
+#endif
 
         case FloatFormatScientific:
             ret = unlocalized_snprintf(

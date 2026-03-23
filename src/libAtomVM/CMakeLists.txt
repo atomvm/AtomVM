@@ -59,13 +59,6 @@ set(HEADER_FILES
     posix_nifs.h
     refc_binary.h
     resources.h
-    ryu/common.h
-    ryu/d2s_full_table.h
-    ryu/d2s_small_table.h
-    ryu/d2s_intrinsics.h
-    ryu/digit_table.h
-    ryu/ryu.h
-    ryu/to_chars.h
     scheduler.h
     smp.h
     synclist.h
@@ -121,13 +114,35 @@ set(SOURCE_FILES
 )
 
 if (AVM_USE_RYU)
-    set(HEADER_FILES ${HEADER_FILES}
+    set(RYU_HEADER_FILES
         ryu/LICENSE-Apache2
         ryu/LICENSE-Boost
+        ryu/common.h
+        ryu/digit_table.h
+        ryu/ryu.h
     )
-    set(SOURCE_FILES ${SOURCE_FILES}
-        ryu/d2s.c
-    )
+    if (AVM_USE_32BIT_FLOAT)
+        list(APPEND RYU_HEADER_FILES
+            ryu/f2s_full_table.h
+            ryu/f2s_intrinsics.h
+            ryu/to_chars32.h
+        )
+        list(APPEND RYU_SOURCE_FILES
+            ryu/f2s.c
+        )
+    else()
+        list(APPEND RYU_HEADER_FILES
+            ryu/d2s_full_table.h
+            ryu/d2s_small_table.h
+            ryu/d2s_intrinsics.h
+            ryu/to_chars.h
+        )
+        list(APPEND RYU_SOURCE_FILES
+            ryu/d2s.c
+        )
+    endif()
+    set(HEADER_FILES ${HEADER_FILES} ${RYU_HEADER_FILES})
+    set(SOURCE_FILES ${SOURCE_FILES} ${RYU_SOURCE_FILES})
 endif()
 
 if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
@@ -164,7 +179,9 @@ endif()
 
 if (AVM_USE_RYU)
     target_compile_definitions(libAtomVM PUBLIC AVM_USE_RYU)
-    if (AVM_RYU_OPTIMIZE_SIZE)
+    if (AVM_USE_32BIT_FLOAT)
+        set_source_files_properties(ryu/f2s.c PROPERTIES COMPILE_DEFINITIONS RYU_FLOAT_FULL_TABLE)
+    elseif (AVM_RYU_OPTIMIZE_SIZE)
         set_source_files_properties(ryu/d2s.c PROPERTIES COMPILE_DEFINITIONS RYU_OPTIMIZE_SIZE)
     endif()
 endif()
