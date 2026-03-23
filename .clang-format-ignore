@@ -7,6 +7,7 @@
 # We have a number of existing files that are quite "re-format unfriendly"
 # Let's ignore all of them
 src/libAtomVM/opcodesswitch.h
+src/libAtomVM/ryu/*
 src/platforms/esp32/build/*
 src/platforms/esp32/components/*
 src/platforms/stm32/build/*

@@ -5,3 +5,20 @@ Source: https://github.com/atomvm/AtomVM
 Files: CHANGELOG.md
 Copyright: AtomVM Contributors
 License: CC0-1.0
+
+Files:
+ src/libAtomVM/ryu/common.h
+ src/libAtomVM/ryu/d2s.c
+ src/libAtomVM/ryu/d2s_full_table.h
+ src/libAtomVM/ryu/d2s_intrinsics.h
+ src/libAtomVM/ryu/d2s_small_table.h
+ src/libAtomVM/ryu/digit_table.h
+ src/libAtomVM/ryu/ryu.h
+Copyright: 2018 Ulf Adams
+License: Apache-2.0 OR BSL-1.0
+
+Files: src/libAtomVM/ryu/to_chars.h
+Copyright:
+ Copyright (c) Microsoft Corporation.
+ 2018 Ulf Adams
+License: Apache-2.0 WITH LLVM-exception AND BSL-1.0

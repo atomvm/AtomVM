@@ -27,6 +27,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 # Options that make sense for this platform
 option(AVM_USE_32BIT_FLOAT "Use 32 bit floats." ON)
+option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
 option(AVM_VERBOSE_ABORT "Print module and line number on VM abort" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_LOG_DISABLE "Disable log output" OFF)
@@ -46,6 +47,7 @@ endif()
 
 set(AVM_DISABLE_SMP ON FORCE)
 set(AVM_DISABLE_TASK_DRIVER ON FORCE)
+set(AVM_RYU_OPTIMIZE_SIZE ON)
 
 if (AVM_CONFIG_REBOOT_ON_NOT_OK)
     add_compile_definitions(CONFIG_REBOOT_ON_NOT_OK)

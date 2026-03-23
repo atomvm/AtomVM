@@ -101,6 +101,9 @@ else()
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults.in ${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig.defaults @ONLY)
 endif()
 
+option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
+set(AVM_RYU_OPTIMIZE_SIZE ON)
+
 project(atomvm-esp32)
 
 # JIT configuration is handled in components/libatomvm/CMakeLists.txt after

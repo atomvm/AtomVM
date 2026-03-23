@@ -88,6 +88,9 @@ endif()
 # JIT configuration is handled in components/libatomvm/CMakeLists.txt after
 # idf_component_register, where CONFIG_* variables are available.
 
+option(AVM_USE_RYU "Enable vendored Ryu backend for short float formatting." OFF)
+set(AVM_RYU_OPTIMIZE_SIZE ON)
+
 project(atomvm-esp32-test)
 
 # esp-idf does not use compile_feature but instead sets version in

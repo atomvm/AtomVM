@@ -49,6 +49,18 @@ else()
     set(host_atomvm_cmake_args "")
     set(host_atomvm_extra_targets "")
 endif()
+if(DEFINED CONFIG_AVM_USE_RYU)
+    if(CONFIG_AVM_USE_RYU)
+        set(host_atomvm_use_ryu ON)
+    else()
+        set(host_atomvm_use_ryu OFF)
+    endif()
+elseif(DEFINED AVM_USE_RYU)
+    set(host_atomvm_use_ryu ${AVM_USE_RYU})
+else()
+    set(host_atomvm_use_ryu OFF)
+endif()
+list(APPEND host_atomvm_cmake_args "-DAVM_USE_RYU:BOOL=${host_atomvm_use_ryu}")
 ExternalProject_Add(HostAtomVM
     SOURCE_DIR ../../../../../../../../
     CMAKE_ARGS ${host_atomvm_cmake_args}
@@ -102,6 +114,7 @@ compile_erlang(test_esp_timer_get_time)
 compile_erlang(test_file)
 compile_erlang(test_i2c)
 compile_erlang(test_uart_mode)
+compile_erlang(test_float_short)
 compile_erlang(test_wifi_example)
 compile_erlang(test_wifi_managed)
 compile_erlang(test_wifi_teardown)
@@ -136,6 +149,7 @@ set(erlang_test_beams
     test_file.beam
     test_i2c.beam
     test_uart_mode.beam
+    test_float_short.beam
     test_wifi_example.beam
     test_wifi_managed.beam
     test_wifi_teardown.beam

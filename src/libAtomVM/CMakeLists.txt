@@ -59,6 +59,13 @@ set(HEADER_FILES
     posix_nifs.h
     refc_binary.h
     resources.h
+    ryu/common.h
+    ryu/d2s_full_table.h
+    ryu/d2s_small_table.h
+    ryu/d2s_intrinsics.h
+    ryu/digit_table.h
+    ryu/ryu.h
+    ryu/to_chars.h
     scheduler.h
     smp.h
     synclist.h
@@ -113,6 +120,16 @@ set(SOURCE_FILES
     valueshashtable.c
 )
 
+if (AVM_USE_RYU)
+    set(HEADER_FILES ${HEADER_FILES}
+        ryu/LICENSE-Apache2
+        ryu/LICENSE-Boost
+    )
+    set(SOURCE_FILES ${SOURCE_FILES}
+        ryu/d2s.c
+    )
+endif()
+
 if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
     set(HEADER_FILES ${HEADER_FILES}
         jit.h
@@ -143,6 +160,13 @@ endif()
 
 if (ENABLE_REALLOC_GC)
     target_compile_definitions(libAtomVM PUBLIC ENABLE_REALLOC_GC)
+endif()
+
+if (AVM_USE_RYU)
+    target_compile_definitions(libAtomVM PUBLIC AVM_USE_RYU)
+    if (AVM_RYU_OPTIMIZE_SIZE)
+        set_source_files_properties(ryu/d2s.c PROPERTIES COMPILE_DEFINITIONS RYU_OPTIMIZE_SIZE)
+    endif()
 endif()
 
 # AtomVM options used in libAtomVM

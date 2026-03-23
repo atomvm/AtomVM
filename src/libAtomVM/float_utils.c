@@ -38,6 +38,10 @@
 #include "unlocalized.h"
 #include "utils.h"
 
+#ifdef AVM_USE_RYU
+#include "ryu/ryu.h"
+#endif
+
 #ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
 _Static_assert(sizeof(double) == sizeof(uint64_t), "double must be 64 bits");
 _Static_assert(DBL_MANT_DIG == 53, "double must be IEEE 754 binary64");
@@ -47,7 +51,7 @@ _Static_assert(DBL_MANT_DIG == 53, "double must be IEEE 754 binary64");
 #pragma warning(disable : 4204)
 #endif
 
-#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
+#if defined(FLOAT_UTILS_ENABLE_DOUBLE_API) && !defined(AVM_USE_RYU)
 
 /* ------------------------------------------------------------------ */
 /*  Grisu3 internals                                                  */
@@ -326,8 +330,9 @@ static int32_t write_exponent(int32_t exp, char *dst)
     return (int32_t) exp_len;
 }
 
-#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API — Grisu3 internals */
+#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API && !AVM_USE_RYU — Grisu3 internals */
 
+#if defined(FLOAT_UTILS_ENABLE_FLOAT_API) || !defined(AVM_USE_RYU)
 /*
  * Post-process %g output to match Erlang/OTP short format:
  *  - Ensure decimal point with at least one fractional digit
@@ -391,8 +396,9 @@ static int fixup_g_format(char *buf, int len)
 
     return len;
 }
+#endif /* FLOAT_UTILS_ENABLE_FLOAT_API || !AVM_USE_RYU */
 
-#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
+#if defined(FLOAT_UTILS_ENABLE_DOUBLE_API) && !defined(AVM_USE_RYU)
 static int32_t dtoa_grisu3(double v, char *dst)
 {
     int32_t d_exp, len, success, decimals, i;
@@ -488,7 +494,7 @@ static int32_t dtoa_grisu3(double v, char *dst)
     s2[len] = '\0';
     return (int32_t) (s2 + len - dst);
 }
-#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API — Grisu3 formatting */
+#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API && !AVM_USE_RYU — Grisu3 formatting */
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                        */
@@ -536,7 +542,16 @@ int double_write_to_ascii_buf(double value, float_format_t format, int precision
 
     switch (format) {
         case FloatFormatShort:
+#ifdef AVM_USE_RYU
+            ret = d2s_buffered_n(value, buf);
+            if (ret < 0 || ret >= DOUBLE_WRITE_TO_ASCII_BUF_LEN) {
+                return -1;
+            }
+            buf[ret] = '\0';
+            return ret;
+#else
             return dtoa_grisu3(value, buf);
+#endif
 
         case FloatFormatScientific:
             ret = unlocalized_snprintf(

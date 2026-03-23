@@ -45,6 +45,13 @@ menu "AtomVM configuration"
          default n
          help
              Enable Just in time compilation, or just execution of precompiled native code
+
+    config AVM_USE_RYU
+        bool "Enable vendored Ryu backend for short float formatting"
+        default n
+        help
+            Use the vendored erlang/ryu backend for the `short` float formatting option.
+            When disabled, the lower-flash Grisu3/printf fallback formatting path is used.
              
     config AVM_CREATE_STACKTRACES
         bool  "Create BEAM stack traces."
