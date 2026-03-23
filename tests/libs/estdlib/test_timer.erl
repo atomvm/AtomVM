@@ -29,6 +29,9 @@ test() ->
     ok = test_timer_loop(),
     ok = test_timer_badargs(),
     ok = test_infinity(),
+    ok = test_send_after_2(),
+    ok = test_send_after_3(),
+    ok = test_apply_after(),
     ok.
 
 test_timer() ->
@@ -79,4 +82,33 @@ test_infinity() ->
     receive
         ok ->
             ok = etest:assert_true(erlang:is_process_alive(Pid))
+    end.
+
+test_send_after_2() ->
+    {ok, TRef} = timer:send_after(50, hello),
+    ok = etest:assert_true(is_reference(TRef)),
+    receive
+        hello -> ok
+    after 500 ->
+        {error, timeout}
+    end.
+
+test_send_after_3() ->
+    Self = self(),
+    {ok, TRef} = timer:send_after(50, Self, hello_dest),
+    ok = etest:assert_true(is_reference(TRef)),
+    receive
+        hello_dest -> ok
+    after 500 ->
+        {error, timeout}
+    end.
+
+test_apply_after() ->
+    Self = self(),
+    {ok, TRef} = timer:apply_after(50, erlang, send, [Self, apply_result]),
+    ok = etest:assert_true(is_reference(TRef)),
+    receive
+        apply_result -> ok
+    after 500 ->
+        {error, timeout}
     end.
