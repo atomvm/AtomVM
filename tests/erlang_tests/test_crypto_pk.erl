@@ -38,13 +38,8 @@
 ]).
 
 start() ->
-    case at_least(24) of
-        true ->
-            ok = mbedtls_conditional_run(test_generate_and_compute_key, 16#03000000),
-            ok = mbedtls_conditional_run(test_sign_and_verify, 16#03060100);
-        false ->
-            ok
-    end,
+    ok = mbedtls_conditional_run(test_generate_and_compute_key, 16#03000000),
+    ok = mbedtls_conditional_run(test_sign_and_verify, 16#03060100),
     case at_least(27) of
         true ->
             ok = mbedtls_conditional_run(test_sign_bad_algorithm, 16#03060100),
@@ -54,19 +49,14 @@ start() ->
         false ->
             ok
     end,
-    case at_least(25) of
-        true ->
-            ok = libsodium_conditional_run(test_ed25519_generate_key),
-            ok = libsodium_conditional_run(test_ed25519_sign_and_verify),
-            ok = libsodium_conditional_run(test_ed25519_verify_bad_sig),
-            ok = libsodium_conditional_run(test_ed25519_sign_malformed_key),
-            ok = libsodium_conditional_run(test_ed25519_verify_malformed_key),
-            ok = libsodium_conditional_run(test_ed25519_sign_bad_digest),
-            ok = libsodium_conditional_run(test_ed25519_verify_bad_digest),
-            ok = libsodium_conditional_run(test_x25519_mutual_key_agreement);
-        false ->
-            ok
-    end,
+    ok = libsodium_conditional_run(test_ed25519_generate_key),
+    ok = libsodium_conditional_run(test_ed25519_sign_and_verify),
+    ok = libsodium_conditional_run(test_ed25519_verify_bad_sig),
+    ok = libsodium_conditional_run(test_ed25519_sign_malformed_key),
+    ok = libsodium_conditional_run(test_ed25519_verify_malformed_key),
+    ok = libsodium_conditional_run(test_ed25519_sign_bad_digest),
+    ok = libsodium_conditional_run(test_ed25519_verify_bad_digest),
+    ok = libsodium_conditional_run(test_x25519_mutual_key_agreement),
     0.
 
 otp_version() ->

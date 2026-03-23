@@ -45,41 +45,26 @@
 ]).
 
 start() ->
-    case at_least(24) of
-        true ->
-            ok = mbedtls_conditional_run(test_encrypt_aes128_ctr, 16#03000000),
-            ok = mbedtls_conditional_run(test_encrypt_aes128_ctr_list, 16#03000000),
-            ok = mbedtls_conditional_run(test_decrypt_aes128_cbc, 16#03000000),
-            ok = mbedtls_conditional_run(test_encrypt_aes128_cbc_bool, 16#03000000),
-            ok = mbedtls_conditional_run(test_use_after_final, 16#03000000),
-            ok = mbedtls_conditional_run(test_use_after_final_cbc, 16#03000000),
-            ok = mbedtls_conditional_run(test_ecb_less_than_one_block, 16#03000000),
-            ok = mbedtls_conditional_run(test_cbc_final_padding, 16#03000000),
-            ok = mbedtls_conditional_run(test_ecb_final_no_padding, 16#03000000),
-            ok = mbedtls_conditional_run(test_encrypt_aes256_ecb, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_key_size, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_iv_size, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_algo, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_key, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_iv, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_opt, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_padding_ecb, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_state, 16#03000000),
-            ok = mbedtls_conditional_run(test_bad_data, 16#03000000);
-        false ->
-            ok
-    end,
+    ok = mbedtls_conditional_run(test_encrypt_aes128_ctr, 16#03000000),
+    ok = mbedtls_conditional_run(test_encrypt_aes128_ctr_list, 16#03000000),
+    ok = mbedtls_conditional_run(test_decrypt_aes128_cbc, 16#03000000),
+    ok = mbedtls_conditional_run(test_encrypt_aes128_cbc_bool, 16#03000000),
+    ok = mbedtls_conditional_run(test_use_after_final, 16#03000000),
+    ok = mbedtls_conditional_run(test_use_after_final_cbc, 16#03000000),
+    ok = mbedtls_conditional_run(test_ecb_less_than_one_block, 16#03000000),
+    ok = mbedtls_conditional_run(test_cbc_final_padding, 16#03000000),
+    ok = mbedtls_conditional_run(test_ecb_final_no_padding, 16#03000000),
+    ok = mbedtls_conditional_run(test_encrypt_aes256_ecb, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_key_size, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_iv_size, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_algo, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_key, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_iv, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_opt, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_padding_ecb, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_state, 16#03000000),
+    ok = mbedtls_conditional_run(test_bad_data, 16#03000000),
     0.
-
-otp_version() ->
-    case erlang:system_info(machine) of
-        "ATOM" -> atomvm;
-        _ -> list_to_integer(erlang:system_info(otp_release))
-    end.
-
-at_least(Min) ->
-    V = otp_version(),
-    V =:= atomvm orelse V >= Min.
 
 mbedtls_conditional_run(F, RVer) ->
     Info = crypto:info_lib(),

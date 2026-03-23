@@ -136,6 +136,10 @@ table.
 - ESP32 platform now uses reproducible builds.
 - C API: `externalterm` module was renamed to `external_term` and it has a completely new API
 
+### Removed
+
+- Removed support for OTP versions < 26
+
 ### Fixed
 
 - ESP32: improved sntp sync speed from a cold boot.

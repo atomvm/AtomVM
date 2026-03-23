@@ -46,7 +46,6 @@ test_diff(X) when is_integer(X) andalso X >= 0 ->
 test_diff(X) when X < 0 ->
     0.
 
--if(?OTP_RELEASE >= 22).
 test_native_monotonic_time() ->
     Na1 = erlang:monotonic_time(native),
     receive
@@ -55,6 +54,3 @@ test_native_monotonic_time() ->
     Na2 = erlang:monotonic_time(native),
     true = is_integer(Na2 - Na1) andalso (Na2 - Na1) >= 0,
     ok.
--else.
-test_native_monotonic_time() -> ok.
--endif.

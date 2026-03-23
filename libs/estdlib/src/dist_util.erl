@@ -47,9 +47,8 @@
 % Required include headers
 -include_lib("kernel/include/dist_util.hrl").
 
-% Because this module can be compiled with OTP21 headers, we need to define
-% flags that we support and that OTP-21 doesn't know. For this reason, we don't
-% include dist.hrl but instead define the flags here.
+% We don't include dist.hrl but instead define the flags here, so they are
+% available regardless of the OTP version used to compile this module.
 
 % OTP-21:
 -define(DFLAG_PUBLISHED, 1).

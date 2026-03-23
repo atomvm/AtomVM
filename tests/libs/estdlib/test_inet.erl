@@ -50,24 +50,11 @@ test_ntoa() ->
     "192.168.0.1" = inet:ntoa({192, 168, 0, 1}),
     "0.0.0.0" = inet:ntoa({0, 0, 0, 0}),
     "255.255.255.255" = inet:ntoa({255, 255, 255, 255}),
-    case get_otp_version() of
-        OTPVersion when
-            (is_integer(OTPVersion) andalso OTPVersion >= 24) orelse OTPVersion == atomvm
-        ->
-            {error, einval} = inet:ntoa({256, 0, 0, 1}),
-            {error, einval} = inet:ntoa({0, 0, 0, -1}),
-            {error, einval} = inet:ntoa({1, 2, 3}),
-            {error, einval} = inet:ntoa(not_an_address);
-        _ ->
-            ok
-    end,
+    {error, einval} = inet:ntoa({256, 0, 0, 1}),
+    {error, einval} = inet:ntoa({0, 0, 0, -1}),
+    {error, einval} = inet:ntoa({1, 2, 3}),
+    {error, einval} = inet:ntoa(not_an_address),
     ok.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
-        _ -> atomvm
-    end.
 
 test_parse_address() ->
     {ok, {127, 0, 0, 1}} = inet:parse_address("127.0.0.1"),
