@@ -23,23 +23,9 @@
 -export([start/0]).
 
 start() ->
-    HasBSStartMatch4 =
-        case erlang:system_info(machine) of
-            "BEAM" ->
-                erlang:system_info(otp_release) >= "23";
-            "ATOM" ->
-                % If code was compiled with OTP < 23, we won't have bs_start_match asm file
-                ?OTP_RELEASE >= 23
-        end,
-    ok =
-        if
-            HasBSStartMatch4 ->
-                ok = test_bs_start_match3_fail_label(),
-                ok = test_bs_start_match4_fail_label(),
-                ok = test_bs_start_match4_nofail_resume();
-            true ->
-                ok
-        end,
+    ok = test_bs_start_match3_fail_label(),
+    ok = test_bs_start_match4_fail_label(),
+    ok = test_bs_start_match4_nofail_resume(),
     0.
 
 test_bs_start_match3_fail_label() ->

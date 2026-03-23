@@ -20,10 +20,8 @@
 
 -module(test_is_integer_3).
 
--ifdef(OTP_RELEASE).
 -if(?OTP_RELEASE >= 29).
 -define(OTP29_OR_LATER, true).
--endif.
 -endif.
 
 -ifdef(OTP29_OR_LATER).

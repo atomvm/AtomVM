@@ -57,7 +57,10 @@
     ldp/4,
     subs/3,
     adr/2,
-    eor/3
+    eor/3,
+    asr/3,
+    sdiv/3,
+    msub/4
 ]).
 
 -export_type([
@@ -1020,3 +1023,35 @@ madd(Rd, Rn, Rm, Ra) when is_atom(Rd), is_atom(Rn), is_atom(Rm), is_atom(Ra) ->
         (16#9B000000 bor (RmNum bsl 16) bor (RaNum bsl 10) bor (RnNum bsl 5) bor
             RdNum):32/little
     >>.
+
+%% MSUB Rd, Rn, Rm, Ra: Rd = Ra - (Rn * Rm)
+-spec msub(
+    aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register()
+) -> binary().
+msub(Rd, Rn, Rm, Ra) when is_atom(Rd), is_atom(Rn), is_atom(Rm), is_atom(Ra) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    RaNum = reg_to_num(Ra),
+    <<
+        (16#9B008000 bor (RmNum bsl 16) bor (RaNum bsl 10) bor (RnNum bsl 5) bor
+            RdNum):32/little
+    >>.
+
+%% ASR (immediate): Arithmetic shift right
+%% This is SBFM Rd, Rn, #shift, #63
+-spec asr(aarch64_gpr_register(), aarch64_gpr_register(), integer()) -> binary().
+asr(Rd, Rn, Shift) when is_atom(Rd), is_atom(Rn), is_integer(Shift), Shift >= 0, Shift =< 63 ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    <<
+        (16#9340FC00 bor ((Shift band 16#3F) bsl 16) bor (RnNum bsl 5) bor RdNum):32/little
+    >>.
+
+%% SDIV Rd, Rn, Rm: Signed divide Rd = Rn / Rm
+-spec sdiv(aarch64_gpr_register(), aarch64_gpr_register(), aarch64_gpr_register()) -> binary().
+sdiv(Rd, Rn, Rm) when is_atom(Rd), is_atom(Rn), is_atom(Rm) ->
+    RdNum = reg_to_num(Rd),
+    RnNum = reg_to_num(Rn),
+    RmNum = reg_to_num(Rm),
+    <<(16#9AC00C00 bor (RmNum bsl 16) bor (RnNum bsl 5) bor RdNum):32/little>>.

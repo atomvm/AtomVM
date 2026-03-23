@@ -55,7 +55,18 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build erlang rebar3
+      run: sudo apt install -y cmake gperf zlib1g-dev ninja-build
+
+    - uses: erlef/setup-beam@v1
+      with:
+        otp-version: "28"
+        elixir-version: "1.19"
+        rebar3-version: "3.25.1"
+        gleam-version: "1.11.1"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "Checkout repository"
       uses: actions/checkout@v4

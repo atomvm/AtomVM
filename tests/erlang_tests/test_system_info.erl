@@ -46,7 +46,7 @@ start() ->
     OTPRelease = erlang:system_info(otp_release),
     true = is_list(OTPRelease),
     OTPReleaseInt = list_to_integer(OTPRelease),
-    true = OTPReleaseInt > 20,
+    true = OTPReleaseInt >= 26,
     case Machine of
         "BEAM" ->
             % beam raises badarg, and probably so should AtomVM.

@@ -82,20 +82,12 @@ start() ->
             <<1, 2, 3, 4, 5, 6>> = base64:decode(["AQ", "ID", <<"BAUG">>])
     end,
 
-    test_padding_option(get_otp_version()),
-    test_urlsafe_mode(get_otp_version()),
+    test_padding_option(),
+    test_urlsafe_mode(),
 
     0.
 
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
-        _ -> atomvm
-    end.
-
-test_padding_option(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 26) orelse OTPVersion == atomvm
-->
+test_padding_option() ->
     %% encode/2 with padding => true behaves identically to encode/1
     <<"AQID">> = base64:encode(<<1, 2, 3>>, #{padding => true}),
     <<"AQIDBA==">> = base64:encode(<<1, 2, 3, 4>>, #{padding => true}),
@@ -152,16 +144,12 @@ test_padding_option(OTPVersion) when
      || I <- lists_seq(0, 20) ++ [50, 100, 131, 147, 200, 201]
     ],
 
-    ok;
-test_padding_option(_OTPVersion) ->
     ok.
 
 lists_seq(0, 20) ->
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].
 
-test_urlsafe_mode(OTPVersion) when
-    (is_integer(OTPVersion) andalso OTPVersion >= 26) orelse OTPVersion == atomvm
-->
+test_urlsafe_mode() ->
     %% Known vectors: bytes that produce + or / in standard mode
     %% Generated via OTP: base64:encode(Bin, #{mode => urlsafe})
     UrlsafeVectors = [
@@ -239,8 +227,6 @@ test_urlsafe_mode(OTPVersion) when
     %% round-trip with mode => urlsafe for various sizes
     [verify_b64_urlsafe(rand_bytes(I)) || I <- lists_seq(0, 20) ++ [50, 100, 131]],
 
-    ok;
-test_urlsafe_mode(_OTPVersion) ->
     ok.
 
 verify_b64_urlsafe(Input) ->

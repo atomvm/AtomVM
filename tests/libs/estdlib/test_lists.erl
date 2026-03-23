@@ -521,13 +521,7 @@ test_sublist3() ->
     ?ASSERT_MATCH(lists:sublist([], 1, 0), []),
     ?ASSERT_ERROR(lists:sublist([a, b, c], 0, 1), function_clause),
     ?ASSERT_ERROR(lists:sublist([a, b, c], 1, -1), function_clause),
-    case get_otp_version() > 22 of
-        true ->
-            ?ASSERT_MATCH(lists:sublist([a, b, c], 5, 1), []);
-        false ->
-            % Can we get rid of OTP21 and 22 compatibility please?
-            ok
-    end,
+    ?ASSERT_MATCH(lists:sublist([a, b, c], 5, 1), []),
     ok.
 
 test_droplast() ->
@@ -556,9 +550,3 @@ test_zipwith() ->
 
 id(X) ->
     X.
-
-get_otp_version() ->
-    case erlang:system_info(machine) of
-        "BEAM" -> list_to_integer(erlang:system_info(otp_release));
-        _ -> atomvm
-    end.

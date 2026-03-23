@@ -43,6 +43,7 @@
     if_block/3,
     if_else_block/4,
     shift_right/3,
+    shift_right_arith/3,
     shift_left/3,
     move_to_vm_register/3,
     move_to_native_register/2,
@@ -64,6 +65,8 @@
     add/3,
     sub/3,
     mul/3,
+    div_/3,
+    rem_/3,
     decrement_reductions_and_maybe_schedule_next/1,
     call_or_schedule_next/2,
     call_only_or_schedule_next/2,
@@ -1096,6 +1099,53 @@ shift_right(
     Bit = reg_bit(ResultReg),
     I1 = jit_x86_64_asm:movq(Reg, ResultReg),
     I2 = jit_x86_64_asm:shrq(Shift, ResultReg),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
+    Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
+    {
+        State#state{
+            stream = Stream1,
+            available_regs = Avail band (bnot Bit),
+            used_regs = UR bor Bit,
+            regs = Regs1
+        },
+        ResultReg
+    }.
+
+%%-----------------------------------------------------------------------------
+%% @doc Emit an arithmetic shift right by a fixed number of bits (sign-preserving).
+%% @param State current state
+%% @param Reg register to shift
+%% @param Shift number of bits to shift
+%% @return new state
+%%-----------------------------------------------------------------------------
+-spec shift_right_arith(#state{}, maybe_free_x86_64_register(), non_neg_integer()) ->
+    {#state{}, x86_64_register()}.
+shift_right_arith(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {free, Reg}, Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I = jit_x86_64_asm:sarq(Shift, Reg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    {State#state{stream = Stream1, regs = Regs1}, Reg};
+shift_right_arith(
+    #state{
+        stream_module = StreamModule,
+        available_regs = Avail,
+        used_regs = UR,
+        stream = Stream0,
+        regs = Regs0
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    ResultReg = first_avail(Avail),
+    Bit = reg_bit(ResultReg),
+    I1 = jit_x86_64_asm:movq(Reg, ResultReg),
+    I2 = jit_x86_64_asm:sarq(Shift, ResultReg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
     {
@@ -2564,6 +2614,7 @@ sub(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State#state{stream = Stream1, regs = Regs1}.
 
+-spec mul(state(), x86_64_register(), integer() | x86_64_register()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -2584,22 +2635,120 @@ mul(
     } = State,
     Reg,
     Val
-) when Val < -16#80000000 orelse Val > 16#7FFFFFFF ->
+) when is_integer(Val), (Val < -16#80000000 orelse Val > 16#7FFFFFFF) ->
     TempReg = first_avail(Avail),
     I1 = jit_x86_64_asm:movabsq(Val, TempReg),
     I2 = jit_x86_64_asm:imulq(TempReg, Reg),
     Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, TempReg), Reg),
     State#state{stream = Stream1, regs = Regs1};
-mul(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) ->
+mul(#state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, Reg, Val) when
+    is_integer(Val)
+->
     I1 = jit_x86_64_asm:imulq(Val, Reg),
     Stream1 = StreamModule:append(Stream0, I1),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    State#state{stream = Stream1, regs = Regs1};
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, DestReg, SrcReg
+) when is_atom(SrcReg) ->
+    I1 = jit_x86_64_asm:imulq(SrcReg, DestReg),
+    Stream1 = StreamModule:append(Stream0, I1),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DestReg),
     State#state{stream = Stream1, regs = Regs1}.
 
 %% Signed integer division: quotient = DividendReg / DivisorReg
 %% Uses idivq which divides rdx:rax by operand, quotient in rax.
 %% rdx is the native interface pointer and must be saved/restored.
+-spec div_(state(), x86_64_register(), x86_64_register()) -> {state(), rax}.
+div_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0, available_regs = Avail} =
+        State,
+    DividendReg,
+    DivisorReg
+) ->
+    %% DivisorReg must not be rax (clobbered by dividend move) or rdx (clobbered by cqo).
+    %% If DivisorReg is rax, move it to a temp register first.
+    {I0, ActualDivisor, Regs1} =
+        case DivisorReg of
+            rax ->
+                Temp = first_avail(Avail band (bnot reg_bit(DividendReg))),
+                {jit_x86_64_asm:movq(rax, Temp), Temp, jit_regs:invalidate_reg(Regs0, Temp)};
+            rdx ->
+                Temp = first_avail(Avail band (bnot reg_bit(DividendReg))),
+                {jit_x86_64_asm:movq(rdx, Temp), Temp, jit_regs:invalidate_reg(Regs0, Temp)};
+            _ ->
+                {<<>>, DivisorReg, Regs0}
+        end,
+    I1 =
+        case DividendReg of
+            rax -> <<>>;
+            _ -> jit_x86_64_asm:movq(DividendReg, rax)
+        end,
+    I2 = jit_x86_64_asm:pushq(rdx),
+    I3 = jit_x86_64_asm:cqo(),
+    I4 = jit_x86_64_asm:idivq(ActualDivisor),
+    I5 = jit_x86_64_asm:popq(rdx),
+    Code = <<I0/binary, I1/binary, I2/binary, I3/binary, I4/binary, I5/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    Regs2 = jit_regs:invalidate_reg(Regs1, rax),
+    {State#state{stream = Stream1, regs = Regs2}, rax}.
+
+%% Signed integer remainder: remainder = DividendReg rem DivisorReg
+%% Uses idivq which divides rdx:rax by operand, remainder in rdx.
+%% rdx is the native interface pointer and must be saved/restored.
+-spec rem_(state(), x86_64_register(), x86_64_register()) -> {state(), x86_64_register()}.
+rem_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0, available_regs = Avail} =
+        State,
+    DividendReg,
+    DivisorReg
+) ->
+    %% We need a temp register to save the remainder (rdx) before restoring rdx.
+    %% This temp must not be rax (quotient) or the DivisorReg.
+    RemTemp = first_avail(
+        Avail band (bnot reg_bit(rax)) band (bnot reg_bit(DivisorReg)) band
+            (bnot reg_bit(DividendReg))
+    ),
+    {I0, ActualDivisor, Regs1} =
+        case DivisorReg of
+            rax ->
+                Temp = first_avail(
+                    Avail band (bnot reg_bit(DividendReg)) band (bnot reg_bit(RemTemp))
+                ),
+                {jit_x86_64_asm:movq(rax, Temp), Temp, jit_regs:invalidate_reg(Regs0, Temp)};
+            rdx ->
+                Temp = first_avail(
+                    Avail band (bnot reg_bit(DividendReg)) band (bnot reg_bit(RemTemp))
+                ),
+                {jit_x86_64_asm:movq(rdx, Temp), Temp, jit_regs:invalidate_reg(Regs0, Temp)};
+            _ ->
+                {<<>>, DivisorReg, Regs0}
+        end,
+    I1 =
+        case DividendReg of
+            rax -> <<>>;
+            _ -> jit_x86_64_asm:movq(DividendReg, rax)
+        end,
+    I2 = jit_x86_64_asm:pushq(rdx),
+    I3 = jit_x86_64_asm:cqo(),
+    I4 = jit_x86_64_asm:idivq(ActualDivisor),
+    I5 = jit_x86_64_asm:movq(rdx, RemTemp),
+    I6 = jit_x86_64_asm:popq(rdx),
+    Code = <<I0/binary, I1/binary, I2/binary, I3/binary, I4/binary, I5/binary, I6/binary>>,
+    Stream1 = StreamModule:append(Stream0, Code),
+    RemBit = reg_bit(RemTemp),
+    Regs2 = jit_regs:invalidate_reg(Regs1, rax),
+    Regs3 = jit_regs:invalidate_reg(Regs2, RemTemp),
+    {
+        State#state{
+            stream = Stream1,
+            regs = Regs3,
+            available_regs = Avail band (bnot RemBit),
+            used_regs = State#state.used_regs bor RemBit
+        },
+        RemTemp
+    }.
 
 -spec decrement_reductions_and_maybe_schedule_next(state()) -> state().
 decrement_reductions_and_maybe_schedule_next(

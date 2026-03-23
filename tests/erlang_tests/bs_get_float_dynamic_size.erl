@@ -21,12 +21,9 @@
 -module(bs_get_float_dynamic_size).
 
 %% Force the compiler to use bs_get_float2 opcode instead of the
-%% newer bs_match opcode (OTP 25+). On older OTP this is ignored.
-%% The no_bs_match option was removed in OTP 29.
--ifdef(OTP_RELEASE).
+%% newer bs_match opcode. The no_bs_match option was removed in OTP 29.
 -if(?OTP_RELEASE =< 28).
 -compile([no_bs_match]).
--endif.
 -endif.
 
 -export([start/0]).

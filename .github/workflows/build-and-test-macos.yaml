@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ["macos-14", "macos-15", "macos-15-intel", "macos-26"]
-        otp: ["25", "26", "27", "28"]
+        otp: ["26", "27", "28"]
         mbedtls: ["mbedtls@3"]
         cmake_opts_other: [""]
 
@@ -73,7 +73,7 @@ jobs:
     - uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.otp }}
-        rebar3-version: ${{ fromJSON('{"25":"3.24.0","26":"3.25.1","27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
+        rebar3-version: ${{ fromJSON('{"26":"3.25.1","27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm

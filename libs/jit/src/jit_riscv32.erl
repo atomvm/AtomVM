@@ -71,7 +71,10 @@
     return_labels_and_lines/2,
     add_label/2,
     add_label/3,
-    xor_/3
+    xor_/3,
+    shift_right_arith/3,
+    div_/3,
+    rem_/3
 ]).
 
 -ifdef(JIT_DWARF).
@@ -1557,6 +1560,63 @@ shift_left(
     Stream1 = StreamModule:append(Stream0, I),
     Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
     State#state{stream = Stream1, regs = Regs1}.
+
+shift_right_arith(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, {free, Reg}, Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    I = jit_riscv32_asm:srai(Reg, Reg, Shift),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, Reg),
+    {State#state{stream = Stream1, regs = Regs1}, Reg};
+shift_right_arith(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0,
+        available_regs = Avail,
+        used_regs = UR,
+        regs = Regs0
+    } = State,
+    Reg,
+    Shift
+) when
+    ?IS_GPR(Reg) andalso is_integer(Shift)
+->
+    ResultReg = first_avail(Avail),
+    ResultBit = reg_bit(ResultReg),
+    I = jit_riscv32_asm:srai(ResultReg, Reg, Shift),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, ResultReg),
+    {
+        State#state{
+            stream = Stream1,
+            available_regs = Avail band (bnot ResultBit),
+            used_regs = UR bor ResultBit,
+            regs = Regs1
+        },
+        ResultReg
+    }.
+
+div_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State,
+    DividendReg,
+    DivisorReg
+) ->
+    I = jit_riscv32_asm:'div'(DividendReg, DividendReg, DivisorReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DividendReg),
+    {State#state{stream = Stream1, regs = Regs1}, DividendReg}.
+
+rem_(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State,
+    DividendReg,
+    DivisorReg
+) ->
+    I = jit_riscv32_asm:'rem'(DividendReg, DividendReg, DivisorReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DividendReg),
+    {State#state{stream = Stream1, regs = Regs1}, DividendReg}.
 
 %%-----------------------------------------------------------------------------
 %% @doc Emit a call to a function pointer with arguments. This function converts
@@ -3117,6 +3177,7 @@ sub(#state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} =
     Regs1 = jit_regs:invalidate_reg(jit_regs:invalidate_reg(Regs0, Reg), Temp),
     State1#state{available_regs = Avail, stream = Stream2, regs = Regs1}.
 
+-spec mul(state(), riscv32_register(), integer() | riscv32_register()) -> state().
 mul(State, _Reg, 1) ->
     State;
 mul(State, Reg, 2) ->
@@ -3176,7 +3237,7 @@ mul(
     #state{stream_module = StreamModule, available_regs = Avail, regs = Regs0} = State0,
     Reg,
     Val
-) ->
+) when is_integer(Val) ->
     Temp = first_avail(Avail),
     AT = Avail band (bnot reg_bit(Temp)),
     State1 = mov_immediate(State0#state{available_regs = AT}, Temp, Val),
@@ -3188,7 +3249,14 @@ mul(
         stream = Stream2,
         available_regs = State1#state.available_regs bor reg_bit(Temp),
         regs = Regs1
-    }.
+    };
+mul(
+    #state{stream_module = StreamModule, stream = Stream0, regs = Regs0} = State, DestReg, SrcReg
+) when is_atom(SrcReg) ->
+    I = jit_riscv32_asm:mul(DestReg, DestReg, SrcReg),
+    Stream1 = StreamModule:append(Stream0, I),
+    Regs1 = jit_regs:invalidate_reg(Regs0, DestReg),
+    State#state{stream = Stream1, regs = Regs1}.
 
 %%
 %% RISC-V32 implementation (no prolog/epilog needed due to 32 registers):

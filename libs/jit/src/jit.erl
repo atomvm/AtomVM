@@ -812,9 +812,14 @@ first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_TUPLE ~p, ~p\n", [Label, Arg1]),
-    MSt2 = verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TUPLE, MMod, MSt1),
-    ?ASSERT_ALL_NATIVE_FREE(MSt2),
-    first_pass(Rest2, MMod, MSt2, State0);
+    case try_fuse_tuple_ops(Rest2, Arg1, Label, MMod, MSt1, State0) of
+        {fused, MStFused, RestFused} ->
+            first_pass(RestFused, MMod, MStFused, State0);
+        not_fused ->
+            MSt2 = verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TUPLE, MMod, MSt1),
+            ?ASSERT_ALL_NATIVE_FREE(MSt2),
+            first_pass(Rest2, MMod, MSt2, State0)
+    end;
 % 58
 first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -1463,30 +1468,20 @@ first_pass(<<?OP_BS_TEST_TAIL2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt10),
     first_pass(Rest3, MMod, MSt10, State0);
 % 124
-first_pass(<<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, State0) ->
+first_pass(
+    <<?OP_GC_BIF1, Rest0/binary>>, MMod, MSt0, #state{import_resolver = ImportResolver} = State0
+) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {FailLabel, Rest1} = decode_label(Rest0),
     {Live, Rest2} = decode_literal(Rest1),
-    {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
-    MSt2 = MMod:free_native_registers(MSt1, [TrimResultReg]),
-    CappedLive =
-        if
-            Live > ?MAX_REG -> ?MAX_REG;
-            true -> Live
-        end,
     {Bif, Rest3} = decode_literal(Rest2),
-    {MSt3, FuncPtr} = MMod:call_primitive(MSt2, ?PRIM_GET_IMPORTED_BIF, [
-        jit_state, Bif
-    ]),
-    {MSt4, Arg, Rest4} = decode_compact_term(Rest3, MMod, MSt3, State0),
-    {MSt5, Dest, Rest5} = decode_dest(Rest4, MMod, MSt4),
+    {MSt1, Arg, Rest4} = decode_typed_compact_term(Rest3, MMod, MSt0, State0),
+    {MSt2, Dest, Rest5} = decode_dest(Rest4, MMod, MSt1),
+    {BifModule, BifFunName, 1} = ImportResolver(Bif),
     ?TRACE("OP_GC_BIF1 ~p, ~p, ~p, ~p, ~p\n", [FailLabel, Live, Bif, Arg, Dest]),
-    {MSt6, ResultReg} = MMod:call_func_ptr(MSt5, {free, FuncPtr}, [
-        ctx, FailLabel, CappedLive, {free, Arg}
-    ]),
-    MSt7 = bif_faillabel_test(FailLabel, MMod, MSt6, {free, ResultReg}, {free, Dest}),
-    ?ASSERT_ALL_NATIVE_FREE(MSt7),
-    first_pass(Rest5, MMod, MSt7, State0);
+    MSt3 = op_gc_bif1(MMod, MSt2, FailLabel, Live, Bif, BifModule, BifFunName, Arg, Dest),
+    ?ASSERT_ALL_NATIVE_FREE(MSt3),
+    first_pass(Rest5, MMod, MSt3, State0);
 % 125
 first_pass(
     <<?OP_GC_BIF2, Rest0/binary>>, MMod, MSt0, #state{import_resolver = ImportResolver} = State0
@@ -3232,6 +3227,53 @@ first_pass_bs_match_skip(MatchState, BSOffsetReg, J0, Rest0, MMod, MSt0) ->
     ?TRACE("{skip,~p},", [Stride]),
     {J0 - 1, Rest1, MatchState, BSOffsetReg, MSt1}.
 
+% byte_size on a known binary - inline
+op_gc_bif1(MMod, MSt0, FailLabel, Live, Bif, erlang, 'byte_size', Arg, Dest) ->
+    case is_known_binary(MMod, MSt0, Arg) of
+        true ->
+            op_gc_bif1_byte_size_binary(MMod, MSt0, unwrap_typed(Arg), Dest);
+        false ->
+            op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, unwrap_typed(Arg), Dest)
+    end;
+% Default: call BIF via function pointer
+op_gc_bif1(MMod, MSt0, FailLabel, Live, Bif, _Module, _Function, Arg, Dest) ->
+    op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, unwrap_typed(Arg), Dest).
+
+op_gc_bif1_default(MMod, MSt0, FailLabel, Live, Bif, Arg, Dest) ->
+    {MSt1, TrimResultReg} = MMod:call_primitive(MSt0, ?PRIM_TRIM_LIVE_REGS, [ctx, Live]),
+    MSt2 = MMod:free_native_registers(MSt1, [TrimResultReg]),
+    CappedLive =
+        if
+            Live > ?MAX_REG -> ?MAX_REG;
+            true -> Live
+        end,
+    {MSt3, FuncPtr} = MMod:call_primitive(MSt2, ?PRIM_GET_IMPORTED_BIF, [
+        jit_state, Bif
+    ]),
+    {MSt4, ResultReg} = MMod:call_func_ptr(MSt3, {free, FuncPtr}, [
+        ctx, FailLabel, CappedLive, {free, Arg}
+    ]),
+    bif_faillabel_test(FailLabel, MMod, MSt4, {free, ResultReg}, {free, Dest}).
+
+% Inline byte_size for a known binary
+% Binary layout: boxed_value[0] = header, boxed_value[1] = byte size (raw integer)
+op_gc_bif1_byte_size_binary(MMod, MSt0, Arg, Dest) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg),
+    % Strip primary tag to get raw pointer
+    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    % Read byte size from boxed_value[1]
+    MSt3 = MMod:move_array_element(MSt2, Reg, 1, Reg),
+    % Encode as tagged integer: (size << 4) | 0xF
+    MSt4 = MMod:shift_left(MSt3, Reg, 4),
+    MSt5 = MMod:or_(MSt4, Reg, ?TERM_INTEGER_TAG),
+    MSt6 = MMod:move_to_vm_register(MSt5, Reg, Dest),
+    MMod:free_native_registers(MSt6, [Reg, Dest]).
+
+is_known_binary(_MMod, _MSt, {typed, _Arg, {t_bs_matchable, Unit}}) when Unit rem 8 =:= 0 ->
+    true;
+is_known_binary(_MMod, _MSt, _) ->
+    false.
+
 op_gc_bif2(
     MMod,
     MSt0,
@@ -3359,6 +3401,105 @@ op_gc_bif2(
     Arg2Value = Arg2 bsr 4,
     Range2 = {Arg2Value, Arg2Value},
     op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% mul - both typed integers with range: inline if proven small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    '*',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    '*',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% div - both typed integers: inline if divisor provably non-zero and result fits
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'div',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod, MSt0, FailLabel, Live, Bif, erlang, 'div', {typed, Arg1, {t_integer, Range1}}, Arg2, Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% rem - both typed integers: inline if divisor provably non-zero and result fits
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'rem',
+    {typed, Arg1, {t_integer, Range1}},
+    {typed, Arg2, {t_integer, Range2}},
+    Dest
+) ->
+    op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+op_gc_bif2(
+    MMod, MSt0, FailLabel, Live, Bif, erlang, 'rem', {typed, Arg1, {t_integer, Range1}}, Arg2, Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    Range2 = {Arg2Value, Arg2Value},
+    op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2);
+% bsl - typed integer with literal shift amount: inline if result fits
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bsl',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    op_gc_bif2_bsl(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Arg2Value);
+% bsr - typed integer with literal shift amount: inline if non-negative and small
+op_gc_bif2(
+    MMod,
+    MSt0,
+    FailLabel,
+    Live,
+    Bif,
+    erlang,
+    'bsr',
+    {typed, Arg1, {t_integer, Range1}},
+    Arg2,
+    Dest
+) when is_integer(Arg2), Arg2 band ?TERM_IMMED_TAG_MASK =:= ?TERM_INTEGER_TAG ->
+    Arg2Value = Arg2 bsr 4,
+    op_gc_bif2_bsr(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Arg2Value);
 % Default case
 op_gc_bif2(
     MMod, MSt0, FailLabel, Live, Bif, _Module, _Function, {typed, Arg1, _}, {typed, Arg2, _}, Dest
@@ -3587,6 +3728,319 @@ op_gc_bif2_bxor(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Rang
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.
 
+% Check if multiplication can be inlined based on type ranges
+% Returns true if the result is guaranteed to fit in a small integer
+can_inline_mul(Range1, Range2, MMod) ->
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    case {Range1, Range2} of
+        {{Min1, Max1}, {Min2, Max2}} when
+            is_integer(Min1),
+            is_integer(Max1),
+            is_integer(Min2),
+            is_integer(Max2)
+        ->
+            % For multiplication, all four corner products must be checked
+            Products = [Min1 * Min2, Min1 * Max2, Max1 * Min2, Max1 * Max2],
+            MinResult = lists:min(Products),
+            MaxResult = lists:max(Products),
+            MinResult >= MinSafe andalso MaxResult =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized multiplication with compile-time range checking
+op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    case can_inline_mul(Range1, Range2, MMod) of
+        true ->
+            Arg2Value = Arg2 bsr 4,
+            case Arg2Value of
+                C when C > 1 ->
+                    % Strip tag, multiply by constant, re-tag
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, bnot (?TERM_IMMED_TAG_MASK)),
+                    MSt3 = MMod:mul(MSt2, Reg, C),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest]);
+                _ ->
+                    % 0 or 1 would need special handling (0 produces wrong
+                    % tag, 1 is identity), and negative constants require
+                    % sign-aware logic. The compiler typically folds these,
+                    % but fall back defensively.
+                    op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+            end;
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end;
+op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case can_inline_mul(Range1, Range2, MMod) of
+        true ->
+            % Both operands in registers: strip tags, extract value, multiply
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            % Strip tag from Reg1: value1 << 4
+            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+            % Strip tag from Reg2 and shift right by 4 to get raw value2
+            {MSt4, Reg2} = MMod:and_(MSt3, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt5, Reg2} = MMod:shift_right(MSt4, {free, Reg2}, 4),
+            % Multiply: (value1 << 4) * value2 = (value1 * value2) << 4
+            MSt6 = MMod:mul(MSt5, Reg1, Reg2),
+            % Add tag back
+            MSt7 = MMod:or_(MSt6, Reg1, ?TERM_INTEGER_TAG),
+            MSt8 = MMod:move_to_vm_register(MSt7, Reg1, Dest),
+            MMod:free_native_registers(MSt8, [Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if left shift can be inlined based on type range and shift amount
+can_inline_bsl(Range1, ShiftAmount, MMod) ->
+    {MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    case Range1 of
+        {Min1, Max1} when
+            is_integer(Min1),
+            is_integer(Max1),
+            ShiftAmount >= 0
+        ->
+            MinResult = Min1 bsl ShiftAmount,
+            MaxResult = Max1 bsl ShiftAmount,
+            MinResult >= MinSafe andalso MaxResult =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized bsl with compile-time range checking
+op_gc_bif2_bsl(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, ShiftAmount) ->
+    case can_inline_bsl(Range1, ShiftAmount, MMod) of
+        true ->
+            case ShiftAmount of
+                0 ->
+                    % No shift - just copy
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    MSt2 = MMod:move_to_vm_register(MSt1, Reg, Dest),
+                    MMod:free_native_registers(MSt2, [Reg, Dest]);
+                _ ->
+                    % Strip tag, shift left, re-tag
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:and_(MSt1, {free, Reg}, bnot (?TERM_IMMED_TAG_MASK)),
+                    MSt3 = MMod:shift_left(MSt2, Reg, ShiftAmount),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest])
+            end;
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+% Check if right shift can be inlined
+% Only safe for non-negative inputs (the generated native code uses logical
+% shift right, which does not preserve sign for negative values)
+can_inline_bsr(Range1, ShiftAmount, MMod) ->
+    {_MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    % Ensure (ShiftAmount + 4) does not exceed register width
+    % (would be undefined behavior in native shift)
+    WordBits = MMod:word_size() * 8,
+    case Range1 of
+        {Min1, Max1} when
+            is_integer(Min1),
+            is_integer(Max1),
+            Min1 >= 0,
+            ShiftAmount >= 0,
+            ShiftAmount + 4 < WordBits
+        ->
+            % Non-negative input: right shift can only reduce magnitude
+            Max1 =< MaxSafe;
+        _ ->
+            false
+    end.
+
+% Optimized bsr with compile-time range checking
+op_gc_bif2_bsr(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, ShiftAmount) ->
+    case can_inline_bsr(Range1, ShiftAmount, MMod) of
+        true ->
+            case ShiftAmount of
+                0 ->
+                    % No shift - just copy
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    MSt2 = MMod:move_to_vm_register(MSt1, Reg, Dest),
+                    MMod:free_native_registers(MSt2, [Reg, Dest]);
+                _ ->
+                    % For non-negative values: shift right by (S+4), shift left by 4, re-tag.
+                    % This avoids a separate tag-stripping instruction: the combined
+                    % shift (S+4) removes both the 4 tag bits and applies the S-bit
+                    % shift in one operation. The tag bits get shifted away since S+4 >= 5.
+                    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg} = MMod:shift_right(MSt1, {free, Reg}, ShiftAmount + 4),
+                    MSt3 = MMod:shift_left(MSt2, Reg, 4),
+                    MSt4 = MMod:or_(MSt3, Reg, ?TERM_INTEGER_TAG),
+                    MSt5 = MMod:move_to_vm_register(MSt4, Reg, Dest),
+                    MMod:free_native_registers(MSt5, [Reg, Dest])
+            end;
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+can_inline_div(Range1, Range2, MMod) ->
+    case erlang:function_exported(MMod, div_, 3) of
+        false ->
+            false;
+        true ->
+            {MinSafe, MaxSafe} =
+                case MMod:word_size() of
+                    4 -> {-(1 bsl 27), (1 bsl 27) - 1};
+                    8 -> {-(1 bsl 59), (1 bsl 59) - 1}
+                end,
+            case {Range1, Range2} of
+                {{Min1, Max1}, {Min2, Max2}} when
+                    is_integer(Min1),
+                    is_integer(Max1),
+                    is_integer(Min2),
+                    is_integer(Max2),
+                    Min1 >= MinSafe,
+                    Max1 =< MaxSafe,
+                    Min2 >= MinSafe,
+                    Max2 =< MaxSafe,
+                    (Min2 > 0 orelse Max2 < 0)
+                ->
+                    % Guard against MinSafe div -1 = -MinSafe which overflows
+                    not (Min1 =:= MinSafe andalso Min2 =< -1 andalso Max2 >= -1);
+                _ ->
+                    false
+            end
+    end.
+
+% Compute log2 of a power of 2
+log2_pow2(1) -> 0;
+log2_pow2(N) when N > 0 -> 1 + log2_pow2(N bsr 1).
+
+% Check if we can use power-of-2 shift optimization for div
+% Requires: divisor is power of 2, dividend is non-negative, fits in small integer
+can_inline_pow2_div({Min1, Max1}, Arg2Value, MMod) when
+    is_integer(Min1),
+    is_integer(Max1),
+    Min1 >= 0,
+    is_integer(Arg2Value),
+    Arg2Value > 0,
+    Arg2Value band (Arg2Value - 1) =:= 0
+->
+    {_MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    Max1 =< MaxSafe;
+can_inline_pow2_div(_, _, _) ->
+    false.
+
+% Check if we can use power-of-2 AND optimization for rem
+% Same requirements as pow2 div
+can_inline_pow2_rem({Min1, Max1}, Arg2Value, MMod) when
+    is_integer(Min1),
+    is_integer(Max1),
+    Min1 >= 0,
+    is_integer(Arg2Value),
+    Arg2Value > 0,
+    Arg2Value band (Arg2Value - 1) =:= 0
+->
+    {_MinSafe, MaxSafe} = small_integer_bounds(MMod),
+    Max1 =< MaxSafe;
+can_inline_pow2_rem(_, _, _) ->
+    false.
+
+op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    Arg2Value = Arg2 bsr 4,
+    case can_inline_pow2_div(Range1, Arg2Value, MMod) of
+        true ->
+            % Power-of-2 division: X div 2^k = X >> k for non-negative X
+            Shift = log2_pow2(Arg2Value),
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4 + Shift),
+            MSt4 = MMod:shift_left(MSt3, Reg1, 4),
+            MSt5 = MMod:or_(MSt4, Reg1, ?TERM_INTEGER_TAG),
+            MSt6 = MMod:move_to_vm_register(MSt5, Reg1, Dest),
+            MMod:free_native_registers(MSt6, [Reg1, Dest]);
+        false ->
+            case can_inline_div(Range1, Range2, MMod) of
+                true ->
+                    {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+                    {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
+                    {MSt4, Reg2} = MMod:move_to_native_register(MSt3, Arg2Value),
+                    {MSt5, QuotientReg} = MMod:div_(MSt4, Reg1, Reg2),
+                    MSt6 = MMod:shift_left(MSt5, QuotientReg, 4),
+                    MSt7 = MMod:or_(MSt6, QuotientReg, ?TERM_INTEGER_TAG),
+                    MSt8 = MMod:move_to_vm_register(MSt7, QuotientReg, Dest),
+                    MMod:free_native_registers(MSt8, [QuotientReg, Reg1, Reg2, Dest]);
+                false ->
+                    op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+            end
+    end;
+op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case can_inline_div(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt4, Reg1} = MMod:shift_right_arith(MSt3, {free, Reg1}, 4),
+            {MSt5, Reg2} = MMod:and_(MSt4, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt6, Reg2} = MMod:shift_right_arith(MSt5, {free, Reg2}, 4),
+            {MSt7, QuotientReg} = MMod:div_(MSt6, Reg1, Reg2),
+            MSt8 = MMod:shift_left(MSt7, QuotientReg, 4),
+            MSt9 = MMod:or_(MSt8, QuotientReg, ?TERM_INTEGER_TAG),
+            MSt10 = MMod:move_to_vm_register(MSt9, QuotientReg, Dest),
+            MMod:free_native_registers(MSt10, [QuotientReg, Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
+op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) when
+    is_integer(Arg2)
+->
+    Arg2Value = Arg2 bsr 4,
+    case can_inline_pow2_rem(Range1, Arg2Value, MMod) of
+        true ->
+            % Power-of-2 remainder: X rem 2^k = X AND (2^k - 1) for non-negative X
+            % Applied directly on tagged value: AND with ((2^k - 1) << 4 | tag)
+            Mask = ((Arg2Value - 1) bsl 4) bor ?TERM_INTEGER_TAG,
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, Mask),
+            MSt3 = MMod:move_to_vm_register(MSt2, Reg1, Dest),
+            MMod:free_native_registers(MSt3, [Reg1, Dest]);
+        false ->
+            case can_inline_div(Range1, Range2, MMod) of
+                true ->
+                    {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+                    {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+                    {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
+                    {MSt4, Reg2} = MMod:move_to_native_register(MSt3, Arg2Value),
+                    {MSt5, RemReg} = MMod:rem_(MSt4, Reg1, Reg2),
+                    MSt6 = MMod:shift_left(MSt5, RemReg, 4),
+                    MSt7 = MMod:or_(MSt6, RemReg, ?TERM_INTEGER_TAG),
+                    MSt8 = MMod:move_to_vm_register(MSt7, RemReg, Dest),
+                    MMod:free_native_registers(MSt8, [RemReg, Reg1, Reg2, Dest]);
+                false ->
+                    op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+            end
+    end;
+op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range2) ->
+    case can_inline_div(Range1, Range2, MMod) of
+        true ->
+            {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
+            {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
+            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt4, Reg1} = MMod:shift_right_arith(MSt3, {free, Reg1}, 4),
+            {MSt5, Reg2} = MMod:and_(MSt4, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
+            {MSt6, Reg2} = MMod:shift_right_arith(MSt5, {free, Reg2}, 4),
+            {MSt7, RemReg} = MMod:rem_(MSt6, Reg1, Reg2),
+            MSt8 = MMod:shift_left(MSt7, RemReg, 4),
+            MSt9 = MMod:or_(MSt8, RemReg, ?TERM_INTEGER_TAG),
+            MSt10 = MMod:move_to_vm_register(MSt9, RemReg, Dest),
+            MMod:free_native_registers(MSt10, [RemReg, Reg1, Reg2, Dest]);
+        false ->
+            op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
+    end.
+
 % Helper to unwrap typed arguments
 unwrap_typed({typed, Arg, _Type}) -> Arg;
 unwrap_typed(Arg) -> Arg.
@@ -3763,6 +4217,77 @@ verify_is_boxed(MMod, MSt0, Reg, FailLabel) ->
     cond_raise_badarg_or_jump_to_fail_label(
         {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, FailLabel, MMod, MSt0
     ).
+
+%% Fuse is_tuple + test_arity + get_tuple_element(s) on the same register.
+%% Avoids redundant register loads, tag stripping, and header loading.
+try_fuse_tuple_ops(<<?OP_TEST_ARITY, Rest0/binary>>, Arg1, IsTupleLabel, MMod, MSt0, State0) ->
+    {TestArityLabel, Rest1} = decode_label(Rest0),
+    {MSt1, TestArityArg, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {Arity, Rest3} = decode_literal(Rest2),
+    case TestArityArg =:= Arg1 of
+        true ->
+            ?TRACE("FUSE: is_tuple + test_arity ~p, ~p\n", [TestArityLabel, Arity]),
+            {GetElements, Rest4, MSt2} =
+                collect_get_tuple_elements(Rest3, Arg1, MMod, MSt1, State0),
+            MStFused = emit_fused_tuple_ops(
+                IsTupleLabel, TestArityLabel, Arg1, Arity, GetElements, MMod, MSt2
+            ),
+            {fused, MStFused, Rest4};
+        false ->
+            not_fused
+    end;
+try_fuse_tuple_ops(_Rest, _Arg1, _IsTupleLabel, _MMod, _MSt, _State) ->
+    not_fused.
+
+collect_get_tuple_elements(
+    <<?OP_GET_TUPLE_ELEMENT, Rest0/binary>> = FullBin, SrcArg, MMod, MSt0, State0
+) ->
+    {MSt1, Source, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
+    {Element, Rest2} = decode_literal(Rest1),
+    {MSt2, Dest, Rest3} = decode_dest(Rest2, MMod, MSt1),
+    case Source =:= SrcArg of
+        true ->
+            ?TRACE("FUSE: + get_tuple_element ~p, ~p, ~p\n", [Source, Element, Dest]),
+            case Dest =:= SrcArg of
+                true ->
+                    %% This get_tuple_element overwrites the source register.
+                    %% Include it but stop collecting: subsequent get_tuple_elements
+                    %% would read from the new value, not the original tuple.
+                    {[{Element, Dest}], Rest3, MSt2};
+                false ->
+                    {MoreElements, RestN, MStN} =
+                        collect_get_tuple_elements(Rest3, SrcArg, MMod, MSt2, State0),
+                    {[{Element, Dest} | MoreElements], RestN, MStN}
+            end;
+        false ->
+            {[], FullBin, MSt0}
+    end;
+collect_get_tuple_elements(Rest, _SrcArg, _MMod, MSt, _State0) ->
+    {[], Rest, MSt}.
+
+emit_fused_tuple_ops(IsTupleLabel, TestArityLabel, Arg1, Arity, GetElements, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+    MSt2 = cond_jump_to_label(
+        {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, IsTupleLabel, MMod, MSt1
+    ),
+    {MSt3, Reg} = MMod:and_(MSt2, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt4, HeaderReg} = MMod:get_array_element(MSt3, Reg, 0),
+    MSt5 = cond_jump_to_label(
+        {HeaderReg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_TUPLE}, IsTupleLabel, MMod, MSt4
+    ),
+    {MSt6, ArityReg} = MMod:shift_right(MSt5, {free, HeaderReg}, 6),
+    MSt7 = cond_jump_to_label({{free, ArityReg}, '!=', Arity}, TestArityLabel, MMod, MSt6),
+    MSt8 = lists:foldl(
+        fun({Element, Dest}, AccMSt0) ->
+            AccMSt1 = MMod:move_array_element(AccMSt0, Reg, Element + 1, Dest),
+            MMod:free_native_registers(AccMSt1, [Dest])
+        end,
+        MSt7,
+        GetElements
+    ),
+    MSt9 = MMod:free_native_registers(MSt8, [Reg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt9),
+    MSt9.
 
 %% @doc verify_match_state and return the term_ptr for Reg.
 %% Actually, this means Reg isn't restored with OR ?TERM_PRIMARY_BOXED
