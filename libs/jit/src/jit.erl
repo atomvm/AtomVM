@@ -812,9 +812,14 @@ first_pass(<<?OP_IS_TUPLE, Rest0/binary>>, MMod, MSt0, State0) ->
     {Label, Rest1} = decode_label(Rest0),
     {MSt1, Arg1, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
     ?TRACE("OP_IS_TUPLE ~p, ~p\n", [Label, Arg1]),
-    MSt2 = verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TUPLE, MMod, MSt1),
-    ?ASSERT_ALL_NATIVE_FREE(MSt2),
-    first_pass(Rest2, MMod, MSt2, State0);
+    case try_fuse_tuple_ops(Rest2, Arg1, Label, MMod, MSt1, State0) of
+        {fused, MStFused, RestFused} ->
+            first_pass(RestFused, MMod, MStFused, State0);
+        not_fused ->
+            MSt2 = verify_is_boxed_with_tag(Label, Arg1, ?TERM_BOXED_TUPLE, MMod, MSt1),
+            ?ASSERT_ALL_NATIVE_FREE(MSt2),
+            first_pass(Rest2, MMod, MSt2, State0)
+    end;
 % 58
 first_pass(<<?OP_TEST_ARITY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -4212,6 +4217,77 @@ verify_is_boxed(MMod, MSt0, Reg, FailLabel) ->
     cond_raise_badarg_or_jump_to_fail_label(
         {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, FailLabel, MMod, MSt0
     ).
+
+%% Fuse is_tuple + test_arity + get_tuple_element(s) on the same register.
+%% Avoids redundant register loads, tag stripping, and header loading.
+try_fuse_tuple_ops(<<?OP_TEST_ARITY, Rest0/binary>>, Arg1, IsTupleLabel, MMod, MSt0, State0) ->
+    {TestArityLabel, Rest1} = decode_label(Rest0),
+    {MSt1, TestArityArg, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {Arity, Rest3} = decode_literal(Rest2),
+    case TestArityArg =:= Arg1 of
+        true ->
+            ?TRACE("FUSE: is_tuple + test_arity ~p, ~p\n", [TestArityLabel, Arity]),
+            {GetElements, Rest4, MSt2} =
+                collect_get_tuple_elements(Rest3, Arg1, MMod, MSt1, State0),
+            MStFused = emit_fused_tuple_ops(
+                IsTupleLabel, TestArityLabel, Arg1, Arity, GetElements, MMod, MSt2
+            ),
+            {fused, MStFused, Rest4};
+        false ->
+            not_fused
+    end;
+try_fuse_tuple_ops(_Rest, _Arg1, _IsTupleLabel, _MMod, _MSt, _State) ->
+    not_fused.
+
+collect_get_tuple_elements(
+    <<?OP_GET_TUPLE_ELEMENT, Rest0/binary>> = FullBin, SrcArg, MMod, MSt0, State0
+) ->
+    {MSt1, Source, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
+    {Element, Rest2} = decode_literal(Rest1),
+    {MSt2, Dest, Rest3} = decode_dest(Rest2, MMod, MSt1),
+    case Source =:= SrcArg of
+        true ->
+            ?TRACE("FUSE: + get_tuple_element ~p, ~p, ~p\n", [Source, Element, Dest]),
+            case Dest =:= SrcArg of
+                true ->
+                    %% This get_tuple_element overwrites the source register.
+                    %% Include it but stop collecting: subsequent get_tuple_elements
+                    %% would read from the new value, not the original tuple.
+                    {[{Element, Dest}], Rest3, MSt2};
+                false ->
+                    {MoreElements, RestN, MStN} =
+                        collect_get_tuple_elements(Rest3, SrcArg, MMod, MSt2, State0),
+                    {[{Element, Dest} | MoreElements], RestN, MStN}
+            end;
+        false ->
+            {[], FullBin, MSt0}
+    end;
+collect_get_tuple_elements(Rest, _SrcArg, _MMod, MSt, _State0) ->
+    {[], Rest, MSt}.
+
+emit_fused_tuple_ops(IsTupleLabel, TestArityLabel, Arg1, Arity, GetElements, MMod, MSt0) ->
+    {MSt1, Reg} = MMod:move_to_native_register(MSt0, Arg1),
+    MSt2 = cond_jump_to_label(
+        {Reg, '&', ?TERM_PRIMARY_MASK, '!=', ?TERM_PRIMARY_BOXED}, IsTupleLabel, MMod, MSt1
+    ),
+    {MSt3, Reg} = MMod:and_(MSt2, {free, Reg}, ?TERM_PRIMARY_CLEAR_MASK),
+    {MSt4, HeaderReg} = MMod:get_array_element(MSt3, Reg, 0),
+    MSt5 = cond_jump_to_label(
+        {HeaderReg, '&', ?TERM_BOXED_TAG_MASK, '!=', ?TERM_BOXED_TUPLE}, IsTupleLabel, MMod, MSt4
+    ),
+    {MSt6, ArityReg} = MMod:shift_right(MSt5, {free, HeaderReg}, 6),
+    MSt7 = cond_jump_to_label({{free, ArityReg}, '!=', Arity}, TestArityLabel, MMod, MSt6),
+    MSt8 = lists:foldl(
+        fun({Element, Dest}, AccMSt0) ->
+            AccMSt1 = MMod:move_array_element(AccMSt0, Reg, Element + 1, Dest),
+            MMod:free_native_registers(AccMSt1, [Dest])
+        end,
+        MSt7,
+        GetElements
+    ),
+    MSt9 = MMod:free_native_registers(MSt8, [Reg]),
+    ?ASSERT_ALL_NATIVE_FREE(MSt9),
+    MSt9.
 
 %% @doc verify_match_state and return the term_ptr for Reg.
 %% Actually, this means Reg isn't restored with OR ?TERM_PRIMARY_BOXED
