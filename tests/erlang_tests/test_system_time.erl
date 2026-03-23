@@ -34,9 +34,14 @@ start() ->
     ok = test_os_system_time(),
     ok = test_time_unit_ratios(),
 
+    ok = test_integer_time_unit(),
+    ok = test_bad_integer_time_unit(),
+
     ok = expect(fun() -> erlang:system_time(not_a_time_unit) end, badarg),
 
     ok = test_system_time_to_universal_time(),
+    ok = test_integer_unit_universal_time(),
+    ok = test_bad_integer_unit_universal_time(),
 
     0.
 
@@ -164,4 +169,61 @@ test_nanosecond_universal_time() ->
 test_native_universal_time() ->
     {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, native),
     {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000000, native),
+    ok.
+
+test_integer_time_unit() ->
+    %% integer 1 = parts per second, equivalent to second
+    S = erlang:system_time(second),
+    S1 = erlang:system_time(1),
+    true = abs(S1 - S) =< 1,
+
+    %% integer 1000 = parts per second, equivalent to millisecond
+    Ms = erlang:system_time(millisecond),
+    Ms1 = erlang:system_time(1000),
+    true = abs(Ms1 - Ms) =< 1,
+
+    %% integer 1000000 = parts per second, equivalent to microsecond
+    Us = erlang:system_time(microsecond),
+    Us1 = erlang:system_time(1000000),
+    true = abs(Us1 - Us) =< 1000,
+
+    %% integer 1000000000 = parts per second, equivalent to nanosecond
+    Ns = erlang:system_time(nanosecond),
+    Ns1 = erlang:system_time(1000000000),
+    true = abs(Ns1 - Ns) =< 1000000,
+
+    %% verify values are positive
+    true = S1 > 0,
+    true = Ms1 > 0,
+    true = Us1 > 0,
+    true = Ns1 > 0,
+
+    ok.
+
+test_integer_unit_universal_time() ->
+    %% integer 1 = seconds
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1, 1),
+    {{2023, 7, 8}, {20, 19, 39}} = calendar:system_time_to_universal_time(1688847579, 1),
+
+    %% integer 1000 = milliseconds
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000, 1000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1001, 1000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000),
+
+    %% integer 1000000 = microseconds
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1000000),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000, 1000000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000000),
+
+    ok.
+
+test_bad_integer_time_unit() ->
+    ok = expect(fun() -> erlang:system_time(0) end, badarg),
+    ok = expect(fun() -> erlang:system_time(-1) end, badarg),
+    ok.
+
+test_bad_integer_unit_universal_time() ->
+    ok = expect(fun() -> calendar:system_time_to_universal_time(0, 0) end, badarg),
     ok.
