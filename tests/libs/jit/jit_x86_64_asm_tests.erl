@@ -1267,3 +1267,52 @@ xchgq_test_() ->
             <<16#4D, 16#87, 16#D1>>, "xchg %r10,%r9", jit_x86_64_asm:xchgq(r10, r9)
         )
     ].
+
+cqo_test_() ->
+    [
+        ?_assertAsmEqual(<<16#48, 16#99>>, "cqto", jit_x86_64_asm:cqo())
+    ].
+
+idivq_test_() ->
+    [
+        ?_assertAsmEqual(<<16#48, 16#F7, 16#F8>>, "idivq %rax", jit_x86_64_asm:idivq(rax)),
+        ?_assertAsmEqual(<<16#48, 16#F7, 16#F9>>, "idivq %rcx", jit_x86_64_asm:idivq(rcx)),
+        ?_assertAsmEqual(<<16#48, 16#F7, 16#FA>>, "idivq %rdx", jit_x86_64_asm:idivq(rdx)),
+        ?_assertAsmEqual(<<16#48, 16#F7, 16#FE>>, "idivq %rsi", jit_x86_64_asm:idivq(rsi)),
+        ?_assertAsmEqual(<<16#48, 16#F7, 16#FF>>, "idivq %rdi", jit_x86_64_asm:idivq(rdi)),
+        ?_assertAsmEqual(<<16#49, 16#F7, 16#F8>>, "idivq %r8", jit_x86_64_asm:idivq(r8)),
+        ?_assertAsmEqual(<<16#49, 16#F7, 16#F9>>, "idivq %r9", jit_x86_64_asm:idivq(r9)),
+        ?_assertAsmEqual(<<16#49, 16#F7, 16#FA>>, "idivq %r10", jit_x86_64_asm:idivq(r10)),
+        ?_assertAsmEqual(<<16#49, 16#F7, 16#FB>>, "idivq %r11", jit_x86_64_asm:idivq(r11))
+    ].
+
+sarq_test_() ->
+    [
+        ?_assertAsmEqual(
+            <<16#48, 16#C1, 16#F8, 16#04>>, "sarq $0x4,%rax", jit_x86_64_asm:sarq(4, rax)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#C1, 16#F9, 16#04>>, "sarq $0x4,%rcx", jit_x86_64_asm:sarq(4, rcx)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#C1, 16#FA, 16#04>>, "sarq $0x4,%rdx", jit_x86_64_asm:sarq(4, rdx)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#C1, 16#FE, 16#04>>, "sarq $0x4,%rsi", jit_x86_64_asm:sarq(4, rsi)
+        ),
+        ?_assertAsmEqual(
+            <<16#48, 16#C1, 16#FF, 16#04>>, "sarq $0x4,%rdi", jit_x86_64_asm:sarq(4, rdi)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#C1, 16#F8, 16#04>>, "sarq $0x4,%r8", jit_x86_64_asm:sarq(4, r8)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#C1, 16#F9, 16#04>>, "sarq $0x4,%r9", jit_x86_64_asm:sarq(4, r9)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#C1, 16#FA, 16#04>>, "sarq $0x4,%r10", jit_x86_64_asm:sarq(4, r10)
+        ),
+        ?_assertAsmEqual(
+            <<16#49, 16#C1, 16#FB, 16#04>>, "sarq $0x4,%r11", jit_x86_64_asm:sarq(4, r11)
+        )
+    ].
