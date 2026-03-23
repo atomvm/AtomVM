@@ -34,7 +34,6 @@
 #include "intn.h"
 #include "jit.h"
 #include "nifs.h"
-#include "opcodes.h"
 #include "scheduler.h"
 #include "utils.h"
 
@@ -66,6 +65,27 @@
 #ifndef SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE
 #define SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE 1
 #endif
+
+// About X macro: https://en.wikipedia.org/wiki/X_macro
+#define X_OPCODE(op_name, num, lower_name)                    \
+    op_name = num,
+
+#define X_OPCODE_S(op_name, num, lower_name, signature)   \
+    op_name = num,
+
+#define X_OPCODE_SH(op_name, num, lower_name, signature)  \
+    op_name = num,
+
+#define X_SKIP_OPCODE(...)
+
+enum beam_opcodes {
+#include "opcodes.def"
+};
+
+#undef X_OPCODE
+#undef X_OPCODE_S
+#undef X_OPCODE_SH
+#undef X_SKIP_OPCODE
 
 #ifdef __cplusplus
 extern "C" {
