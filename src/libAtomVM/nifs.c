@@ -1867,6 +1867,30 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
     } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
 
+    } else if (term_is_int64(unit)) {
+        avm_int64_t parts_per_second = term_maybe_unbox_int64(unit);
+        if (UNLIKELY(parts_per_second <= 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(
+                ((ts.tv_sec > 0) && ((avm_int64_t) ts.tv_sec > INT64_MAX / parts_per_second))
+                || ((ts.tv_sec < 0) && ((avm_int64_t) ts.tv_sec < INT64_MIN / parts_per_second)))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int64_t second_part = (avm_int64_t) ts.tv_sec * parts_per_second;
+        avm_int64_t quotient = parts_per_second / INT64_C(1000000000);
+        avm_int64_t remainder = parts_per_second % INT64_C(1000000000);
+        avm_int64_t fractional_high = (avm_int64_t) ts.tv_nsec * quotient;
+        avm_int64_t fractional_low = ((avm_int64_t) ts.tv_nsec * remainder) / INT64_C(1000000000);
+        if (UNLIKELY(fractional_high > INT64_MAX - fractional_low)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int64_t fractional_part = fractional_high + fractional_low;
+        if (UNLIKELY(second_part > INT64_MAX - fractional_part)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        return make_maybe_boxed_int64(ctx, second_part + fractional_part);
+
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -1897,6 +1921,30 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 
     } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
         return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
+
+    } else if (term_is_int64(unit)) {
+        avm_int64_t parts_per_second = term_maybe_unbox_int64(unit);
+        if (UNLIKELY(parts_per_second <= 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(
+                ((ts.tv_sec > 0) && ((avm_int64_t) ts.tv_sec > INT64_MAX / parts_per_second))
+                || ((ts.tv_sec < 0) && ((avm_int64_t) ts.tv_sec < INT64_MIN / parts_per_second)))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int64_t second_part = (avm_int64_t) ts.tv_sec * parts_per_second;
+        avm_int64_t quotient = parts_per_second / INT64_C(1000000000);
+        avm_int64_t remainder = parts_per_second % INT64_C(1000000000);
+        avm_int64_t fractional_high = (avm_int64_t) ts.tv_nsec * quotient;
+        avm_int64_t fractional_low = ((avm_int64_t) ts.tv_nsec * remainder) / INT64_C(1000000000);
+        if (UNLIKELY(fractional_high > INT64_MAX - fractional_low)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        avm_int64_t fractional_part = fractional_high + fractional_low;
+        if (UNLIKELY(second_part > INT64_MAX - fractional_part)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        return make_maybe_boxed_int64(ctx, second_part + fractional_part);
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
@@ -2011,7 +2059,6 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
     UNUSED(argc);
 
     struct timespec ts;
-
     avm_int64_t value = term_maybe_unbox_int64(argv[0]);
 
     if (argv[1] == SECOND_ATOM) {
@@ -2029,6 +2076,20 @@ term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term a
     } else if (argv[1] == NANOSECOND_ATOM || argv[1] == NATIVE_ATOM) {
         ts.tv_sec = (time_t) (value / INT64_C(1000000000));
         ts.tv_nsec = value % INT64_C(1000000000);
+
+    } else if (term_is_int64(argv[1])) {
+        avm_int64_t parts_per_second = term_maybe_unbox_int64(argv[1]);
+        if (UNLIKELY(parts_per_second <= 0)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        if (UNLIKELY(!term_is_int64(argv[0]))) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        ts.tv_sec = (time_t) (value / parts_per_second);
+        if ((value % parts_per_second) < 0) {
+            ts.tv_sec -= 1;
+        }
+        ts.tv_nsec = 0;
 
     } else {
         RAISE_ERROR(BADARG_ATOM);
