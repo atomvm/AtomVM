@@ -115,10 +115,10 @@ call_primitive_6_args_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
             "   2:	2603      	movs	r6, #3\n"
             "   4:	43b7      	bics	r7, r6\n"
-            "   6:	69c6      	ldr	r6, [r0, #28]\n"
+            "   6:	6b06      	ldr	r6, [r0, #48]\n"
             "   8:	25b8      	movs	r5, #184	; 0xb8\n"
             "   a:	5955      	ldr	r5, [r2, r5]\n"
             "   c:	b405      	push	{r0, r2}\n"
@@ -303,7 +303,7 @@ call_primitive_last_5_args_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump = <<
         % {State1, RegA} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
         % State2 = ?BACKEND:call_primitive_last(State1, ?PRIM_RAISE_ERROR_TUPLE, [...
         "   2:	6cd6      	ldr	r6, [r2, #76]	; 0x4c\n"
         "   4:	b082      	sub	sp, #8\n"
@@ -440,9 +440,9 @@ move_to_cp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	6946      	ldr	r6, [r0, #20]\n"
+            "   0:	6a86      	ldr	r6, [r0, #40]\n"
             "   2:	6837      	ldr	r7, [r6, #0]\n"
-            "   4:	65c7      	str	r7, [r0, #92]	; 0x5c"
+            "   4:	6707      	str	r7, [r0, #112]"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -452,9 +452,9 @@ increment_sp_test() ->
     Stream = ?BACKEND:stream(State1),
     Dump =
         <<
-            "   0:	6947      	ldr	r7, [r0, #20]\n"
+            "   0:	6a87      	ldr	r7, [r0, #40]\n"
             "   2:	371c      	adds	r7, #28\n"
-            "   4:	6147      	str	r7, [r0, #20]"
+            "   4:	6287      	str	r7, [r0, #40]"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -478,8 +478,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f00      	cmp	r7, #0\n"
                         "   6:	d500      	bpl.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -497,8 +497,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	42b7      	cmp	r7, r6\n"
                         "   6:	da00      	bge.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -516,8 +516,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
                         "   6:	da00      	bge.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -536,8 +536,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2580      	movs	r5, #128	; 0x80\n"
                         "   6:	00ed      	lsls	r5, r5, #3\n"
                         "   8:	42af      	cmp	r7, r5\n"
@@ -558,8 +558,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f00      	cmp	r7, #0\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -577,8 +577,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f00      	cmp	r7, #0\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -596,8 +596,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2501      	movs	r5, #1\n"
                         "   6:	426d      	negs	r5, r5\n"
                         "   8:	42af      	cmp	r7, r5\n"
@@ -617,8 +617,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f00      	cmp	r7, #0\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -636,8 +636,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f00      	cmp	r7, #0\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -655,8 +655,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -674,8 +674,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -693,8 +693,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -714,8 +714,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	4d02      	ldr	r5, [pc, #8]	; (0x10)\n"
                         "   6:	42af      	cmp	r7, r5\n"
                         "   8:	d000      	beq.n	0xc\n"
@@ -737,8 +737,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -756,8 +756,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -775,8 +775,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -794,8 +794,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -813,8 +813,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f2a      	cmp	r7, #42	; 0x2a\n"
                         "   6:	d100      	bne.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -832,8 +832,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	07fd      	lsls	r5, r7, #31\n"
                         "   6:	d400      	bmi.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -851,8 +851,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	07fd      	lsls	r5, r7, #31\n"
                         "   6:	d400      	bmi.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -870,8 +870,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	07fd      	lsls	r5, r7, #31\n"
                         "   6:	d500      	bpl.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -889,8 +889,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	07fd      	lsls	r5, r7, #31\n"
                         "   6:	d500      	bpl.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -908,8 +908,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	077d      	lsls	r5, r7, #29\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -927,8 +927,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2505      	movs	r5, #5\n"
                         "   6:	422f      	tst	r7, r5\n"
                         "   8:	d000      	beq.n	0xc\n"
@@ -947,8 +947,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	077d      	lsls	r5, r7, #29\n"
                         "   6:	d000      	beq.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -966,8 +966,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	43fd      	mvns	r5, r7\n"
                         "   6:	072d      	lsls	r5, r5, #28\n"
                         "   8:	d000      	beq.n	0xc\n"
@@ -986,8 +986,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	43ff      	mvns	r7, r7\n"
                         "   6:	073f      	lsls	r7, r7, #28\n"
                         "   8:	d000      	beq.n	0xc\n"
@@ -1006,8 +1006,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	463d      	mov	r5, r7\n"
                         "   6:	243f      	movs	r4, #63	; 0x3f\n"
                         "   8:	4025      	ands	r5, r4\n"
@@ -1028,8 +1028,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	42b7      	cmp	r7, r6\n"
                         "   6:	da00      	bge.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -1053,8 +1053,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	253f      	movs	r5, #63	; 0x3f\n"
                         "   6:	402f      	ands	r7, r5\n"
                         "   8:	2f08      	cmp	r7, #8\n"
@@ -1074,8 +1074,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f64      	cmp	r7, #100	; 0x64\n"
                         "   6:	dd00      	ble.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -1093,8 +1093,8 @@ if_block_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2f64      	cmp	r7, #100	; 0x64\n"
                         "   6:	dd00      	ble.n	0xa\n"
                         "   8:	3602      	adds	r6, #2"
@@ -1113,8 +1113,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2580      	movs	r5, #128	; 0x80\n"
                         "   6:	00ed      	lsls	r5, r5, #3\n"
                         "   8:	42af      	cmp	r7, r5\n"
@@ -1136,8 +1136,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	2580      	movs	r5, #128	; 0x80\n"
                         "   6:	00ed      	lsls	r5, r5, #3\n"
                         "   8:	42af      	cmp	r7, r5\n"
@@ -1159,8 +1159,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	4d02      	ldr	r5, [pc, #8]	; (0x10)\n"
                         "   6:	42af      	cmp	r7, r5\n"
                         "   8:	dd00      	ble.n	0xc\n"
@@ -1184,8 +1184,8 @@ if_block_test_() ->
                     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	69c6      	ldr	r6, [r0, #28]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6b06      	ldr	r6, [r0, #48]\n"
                         "   4:	4d02      	ldr	r5, [pc, #8]	; (0x10)\n"
                         "   6:	42af      	cmp	r7, r5\n"
                         "   8:	dd00      	ble.n	0xc\n"
@@ -1218,8 +1218,8 @@ bitwise_and_optimization_test_() ->
             ),
             Stream = ?BACKEND:stream(State3),
             Dump = <<
-                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
-                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   0:	6c47      	ldr	r7, [r0, #68]\n"
+                "   2:	6c86      	ldr	r6, [r0, #72]\n"
                 "   4:	07bd      	lsls	r5, r7, #30\n"
                 "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
@@ -1238,8 +1238,8 @@ bitwise_and_optimization_test_() ->
             ),
             Stream = ?BACKEND:stream(State3),
             Dump = <<
-                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
-                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   0:	6c47      	ldr	r7, [r0, #68]\n"
+                "   2:	6c86      	ldr	r6, [r0, #72]\n"
                 "   4:	073d      	lsls	r5, r7, #28\n"
                 "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
@@ -1258,8 +1258,8 @@ bitwise_and_optimization_test_() ->
             ),
             Stream = ?BACKEND:stream(State3),
             Dump = <<
-                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
-                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   0:	6c47      	ldr	r7, [r0, #68]\n"
+                "   2:	6c86      	ldr	r6, [r0, #72]\n"
                 "   4:	06bd      	lsls	r5, r7, #26\n"
                 "   6:	d000      	beq.n	0xa\n"
                 "   8:	3602      	adds	r6, #2"
@@ -1278,8 +1278,8 @@ bitwise_and_optimization_test_() ->
             ),
             Stream = ?BACKEND:stream(State3),
             Dump = <<
-                "   0:	6b07      	ldr	r7, [r0, #48]	; 0x30\n"
-                "   2:	6b46      	ldr	r6, [r0, #52]	; 0x34\n"
+                "   0:	6c47      	ldr	r7, [r0, #68]\n"
+                "   2:	6c86      	ldr	r6, [r0, #72]\n"
                 "   4:	2505      	movs	r5, #5\n"
                 "   6:	422f      	tst	r7, r5\n"
                 "   8:	d000      	beq.n	0xc\n"
@@ -1307,8 +1307,8 @@ if_else_block_test() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]\n"
             "   4:	2f3b      	cmp	r7, #59	; 0x3b\n"
             "   6:	d101      	bne.n	0xc\n"
             "   8:	3602      	adds	r6, #2\n"
@@ -1326,7 +1326,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	6987      	ldr	r7, [r0, #24]\n"
+                    "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                     "   2:	08ff      	lsrs	r7, r7, #3"
                 >>,
             jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -1339,7 +1339,7 @@ shift_right_test_() ->
             Stream = ?BACKEND:stream(State2),
             Dump =
                 <<
-                    "   0:	6987      	ldr	r7, [r0, #24]\n"
+                    "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                     "   2:	08fe      	lsrs	r6, r7, #3"
                 >>,
             jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -1353,7 +1353,7 @@ shift_left_test() ->
     Stream = ?BACKEND:stream(State2),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
             "   2:	00ff      	lsls	r7, r7, #3"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
@@ -1656,7 +1656,7 @@ call_bif_with_large_literal_integer_test() ->
             "  1e:	9500      	str	r5, [sp, #0]\n"
             "  20:	2100      	movs	r1, #0\n"
             "  22:	2201      	movs	r2, #1\n"
-            "  24:	6983      	ldr	r3, [r0, #24]\n"
+            "  24:	6ac3      	ldr	r3, [r0, #44]\n"
             "  26:	47b8      	blx	r7\n"
             "  28:	4607      	mov	r7, r0\n"
             "  2a:	b002      	add	sp, #8\n"
@@ -1671,7 +1671,7 @@ call_bif_with_large_literal_integer_test() ->
             "  3c:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
             "  3e:	0000      	movs	r0, r0\n"
             "  40:	e895 3b7f 	ldmia.w	r5, {r0, r1, r2, r3, r4, r5, r6, r8, r9, fp, ip, sp}\n"
-            "  44:	6187      	str	r7, [r0, #24]"
+            "  44:	62c7      	str	r7, [r0, #44]"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -1685,14 +1685,14 @@ get_list_test() ->
     ?BACKEND:assert_all_native_free(State5),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
         "   2:	2603      	movs	r6, #3\n"
         "   4:	43b7      	bics	r7, r6\n"
         "   6:	687d      	ldr	r5, [r7, #4]\n"
-        "   8:	6946      	ldr	r6, [r0, #20]\n"
+        "   8:	6a86      	ldr	r6, [r0, #40]\n"
         "   a:	6075      	str	r5, [r6, #4]\n"
         "   c:	683d      	ldr	r5, [r7, #0]\n"
-        "   e:	6946      	ldr	r6, [r0, #20]\n"
+        "   e:	6a86      	ldr	r6, [r0, #40]\n"
         "  10:	6035      	str	r5, [r6, #0]"
     >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
@@ -1726,7 +1726,7 @@ is_integer_test() ->
     State5 = ?BACKEND:update_branches(State4),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
         "   2:	43fe      	mvns	r6, r7\n"
         "   4:	0736      	lsls	r6, r6, #28\n"
         "   6:	d015      	beq.n	0x34\n"
@@ -1790,7 +1790,7 @@ is_number_test() ->
     State5 = ?BACKEND:update_branches(State4),
     Stream = ?BACKEND:stream(State5),
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
         "   2:	43fe      	mvns	r6, r7\n"
         "   4:	0736      	lsls	r6, r6, #28\n"
         "   6:	d01b      	beq.n	0x40\n"
@@ -1853,7 +1853,7 @@ is_boolean_test() ->
         "  12:	46c0      	nop\n"
         "  14:	00ed      	lsls	r5, r5, #3\n"
         "  16:	0000      	movs	r0, r0\n"
-        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  18:	6ac7      	ldr	r7, [r0, #44]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
         "  1c:	d006      	beq.n	0x2c\n"
         "  1e:	2f0b      	cmp	r7, #11\n"
@@ -1894,7 +1894,7 @@ is_boolean_far_test() ->
         "  12:	46c0      	nop\n"
         "  14:	0fed      	lsrs	r5, r5, #31\n"
         "  16:	0000      	movs	r0, r0\n"
-        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  18:	6ac7      	ldr	r7, [r0, #44]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
         "  1c:	d006      	beq.n	0x2c\n"
         "  1e:	2f0b      	cmp	r7, #11\n"
@@ -1929,7 +1929,7 @@ is_boolean_far_unaligned_test() ->
     Stream = ?BACKEND:stream(State5),
     Dump = <<
         "   0:	4770      	bx	lr\n"
-        "   2:	6987      	ldr	r7, [r0, #24]\n"
+        "   2:	6ac7      	ldr	r7, [r0, #44]\n"
         "   4:	2f4b      	cmp	r7, #75	@ 0x4b\n"
         "   6:	d007      	beq.n	0x18\n"
         "   8:	2f0b      	cmp	r7, #11\n"
@@ -1971,7 +1971,7 @@ is_boolean_far_known_test() ->
         "  12:	46c0      	nop\n"
         "  14:	0fed      	lsrs	r5, r5, #31\n"
         "  16:	0000      	movs	r0, r0\n"
-        "  18:	6987      	ldr	r7, [r0, #24]\n"
+        "  18:	6ac7      	ldr	r7, [r0, #44]\n"
         "  1a:	2f4b      	cmp	r7, #75\n"
         "  1c:	d006      	beq.n	0x2c\n"
         "  1e:	2f0b      	cmp	r7, #11\n"
@@ -2019,7 +2019,7 @@ is_boolean_far_known_unaligned_test() ->
         "  14:	46c0      	nop\n"
         "  16:	0feb      	lsrs	r3, r5, #31\n"
         "  18:	0000      	movs	r0, r0\n"
-        "  1a:	6987      	ldr	r7, [r0, #24]\n"
+        "  1a:	6ac7      	ldr	r7, [r0, #44]\n"
         "  1c:	2f4b      	cmp	r7, #75\n"
         "  1e:	d007      	beq.n	0x30\n"
         "  20:	2f0b      	cmp	r7, #11\n"
@@ -2289,11 +2289,11 @@ gc_bif2_test() ->
         "   c:	bc05      	pop	{r0, r2}\n"
         "   e:	b405      	push	{r0, r2}\n"
         "  10:	b082      	sub	sp, #8\n"
-        "  12:	6986      	ldr	r6, [r0, #24]\n"
+        "  12:	6ac6      	ldr	r6, [r0, #44]\n"
         "  14:	9600      	str	r6, [sp, #0]\n"
         "  16:	2100      	movs	r1, #0\n"
         "  18:	2203      	movs	r2, #3\n"
-        "  1a:	6946      	ldr	r6, [r0, #20]\n"
+        "  1a:	6a86      	ldr	r6, [r0, #40]\n"
         "  1c:	6833      	ldr	r3, [r6, #0]\n"
         "  1e:	47b8      	blx	r7\n"
         "  20:	4607      	mov	r7, r0\n"
@@ -2356,7 +2356,7 @@ call_ext_test() ->
         "  24:	063f      	lsls	r7, r7, #24\n"
         "  26:	4e07      	ldr	r6, [pc, #28]	; (0x44)\n"
         "  28:	4337      	orrs	r7, r6\n"
-        "  2a:	65c7      	str	r7, [r0, #92]	; 0x5c\n"
+        "  2a:	6707      	str	r7, [r0, #112]\n"
         "  2c:	6917      	ldr	r7, [r2, #16]\n"
         "  2e:	b082      	sub	sp, #8\n"
         "  30:	2601      	movs	r6, #1\n"
@@ -2420,7 +2420,7 @@ call_fun_test() ->
         "  18:	bdf2      	pop	{r1, r4, r5, r6, r7, pc}\n"
         "  1a:	46c0      	nop			; (mov r8, r8)\n"
         "  1c:	b5f2      	push	{r1, r4, r5, r6, r7, lr}\n"
-        "  1e:	6987      	ldr	r7, [r0, #24]\n"
+        "  1e:	6ac7      	ldr	r7, [r0, #44]\n"
         "  20:	463e      	mov	r6, r7\n"
         "  22:	4635      	mov	r5, r6\n"
         "  24:	2403      	movs	r4, #3\n"
@@ -2461,7 +2461,7 @@ call_fun_test() ->
         "  6a:	0636      	lsls	r6, r6, #24\n"
         "  6c:	4d05      	ldr	r5, [pc, #20]	; (0x84)\n"
         "  6e:	432e      	orrs	r6, r5\n"
-        "  70:	65c6      	str	r6, [r0, #92]	; 0x5c\n"
+        "  70:	6706      	str	r6, [r0, #112]\n"
         "  72:	2680      	movs	r6, #128	; 0x80\n"
         "  74:	5996      	ldr	r6, [r2, r6]\n"
         "  76:	463a      	mov	r2, r7\n"
@@ -2493,14 +2493,14 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, 0}, <<
                         "   0:	2700      	movs	r7, #0\n"
-                        "   2:	6187      	str	r7, [r0, #24]\n"
+                        "   2:	62c7      	str	r7, [r0, #44]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {x_reg, extra}, <<
                         "   0:	2700      	movs	r7, #0\n"
-                        "   2:	6587      	str	r7, [r0, #88]	; 0x58\n"
+                        "   2:	66c7      	str	r7, [r0, #108]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
@@ -2514,7 +2514,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 2}, <<
                         "   0:	2600      	movs	r6, #0\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	60be      	str	r6, [r7, #8]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2522,7 +2522,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 0, {y_reg, 20}, <<
                         "   0:	2600      	movs	r6, #0\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	653e      	str	r6, [r7, #80]	; 0x50\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2531,21 +2531,21 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, 0}, <<
                         "   0:	272a      	movs	r7, #42	; 0x2a\n"
-                        "   2:	6187      	str	r7, [r0, #24]\n"
+                        "   2:	62c7      	str	r7, [r0, #44]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {x_reg, extra}, <<
                         "   0:	272a      	movs	r7, #42	; 0x2a\n"
-                        "   2:	6587      	str	r7, [r0, #88]	; 0x58\n"
+                        "   2:	66c7      	str	r7, [r0, #108]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 2}, <<
                         "   0:	262a      	movs	r6, #42	; 0x2a\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	60be      	str	r6, [r7, #8]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2553,7 +2553,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 20}, <<
                         "   0:	262a      	movs	r6, #42	; 0x2a\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	653e      	str	r6, [r7, #80]	; 0x50\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2569,15 +2569,15 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {x_reg, 2}, <<
-                        "   0:	69c7      	ldr	r7, [r0, #28]\n"
-                        "   2:	6207      	str	r7, [r0, #32]\n"
+                        "   0:	6b07      	ldr	r7, [r0, #48]\n"
+                        "   2:	6347      	str	r7, [r0, #52]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
                 %% Test: x_reg to ptr
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 1}, {ptr, r1}, <<
-                        "   0:	69c7      	ldr	r7, [r0, #28]\n"
+                        "   0:	6b07      	ldr	r7, [r0, #48]\n"
                         "   2:	600f      	str	r7, [r1, #0]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
@@ -2586,15 +2586,15 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, {ptr, r4}, {x_reg, 3}, <<
                         "   0:	6827      	ldr	r7, [r4, #0]\n"
-                        "   2:	6247      	str	r7, [r0, #36]	; 0x24\n"
+                        "   2:	6387      	str	r7, [r0, #56]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
                 end),
                 %% Test: x_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 0}, {y_reg, 1}, <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6a86      	ldr	r6, [r0, #40]\n"
                         "   4:	6077      	str	r7, [r6, #4]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2602,31 +2602,31 @@ move_to_vm_register_test_() ->
                 %% Test: y_reg to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 0}, {x_reg, 3}, <<
-                        "   0:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6a86      	ldr	r6, [r0, #40]\n"
                         "   2:	6837      	ldr	r7, [r6, #0]\n"
-                        "   4:	6247      	str	r7, [r0, #36]	; 0x24\n"
+                        "   4:	6387      	str	r7, [r0, #56]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
                 end),
                 %% Test: y_reg to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 1}, {x_reg, 3}, <<
-                        "   0:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6a86      	ldr	r6, [r0, #40]\n"
                         "   2:	6877      	ldr	r7, [r6, #4]\n"
-                        "   4:	6247      	str	r7, [r0, #36]	; 0x24\n"
+                        "   4:	6387      	str	r7, [r0, #56]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
                 end),
                 %% Test: Native register to x_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r5, {x_reg, 0}, <<
-                        "   0:	6185      	str	r5, [r0, #24]\n"
+                        "   0:	62c5      	str	r5, [r0, #44]\n"
                         "   2:	e07d      	b.n	0x100"
                     >>)
                 end),
                 ?_test(begin
                     move_to_vm_register_test0(State0, r6, {x_reg, extra}, <<
-                        "   0:	6586      	str	r6, [r0, #88]	; 0x58\n"
+                        "   0:	66c6      	str	r6, [r0, #108]\n"
                         "   2:	e07d      	b.n	0x100"
                     >>)
                 end),
@@ -2640,7 +2640,7 @@ move_to_vm_register_test_() ->
                 %% Test: Native register to y_reg
                 ?_test(begin
                     move_to_vm_register_test0(State0, r1, {y_reg, 0}, <<
-                        "   0:	6947      	ldr	r7, [r0, #20]\n"
+                        "   0:	6a87      	ldr	r7, [r0, #40]\n"
                         "   2:	6039      	str	r1, [r7, #0]\n"
                         "   4:	e07c      	b.n	0x100"
                     >>)
@@ -2649,7 +2649,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#12345678, {x_reg, 0}, <<
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
-                        "   2:	6187      	str	r7, [r0, #24]\n"
+                        "   2:	62c7      	str	r7, [r0, #44]\n"
                         "   4:	e07c      	b.n	0x100\n"
                         "   6:	0000      	movs	r0, r0\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
@@ -2667,7 +2667,7 @@ move_to_vm_register_test_() ->
                     Dump = <<
                         "   0:	6019      	str	r1, [r3, #0]\n"
                         "   2:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
-                        "   4:	6187      	str	r7, [r0, #24]\n"
+                        "   4:	62c7      	str	r7, [r0, #44]\n"
                         "   6:	e07b      	b.n	0x100\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
                         "   a:	1234      	asrs	r4, r6, #8"
@@ -2677,7 +2677,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#12345678, {x_reg, extra}, <<
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
-                        "   2:	6587      	str	r7, [r0, #88]	; 0x58\n"
+                        "   2:	66c7      	str	r7, [r0, #108]\n"
                         "   4:	e07c      	b.n	0x100\n"
                         "   6:	0000      	movs	r0, r0\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
@@ -2687,7 +2687,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#12345678, {y_reg, 2}, <<
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
-                        "   2:	6946      	ldr	r6, [r0, #20]\n"
+                        "   2:	6a86      	ldr	r6, [r0, #40]\n"
                         "   4:	60b7      	str	r7, [r6, #8]\n"
                         "   6:	e07b      	b.n	0x100\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
@@ -2697,7 +2697,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 16#12345678, {y_reg, 20}, <<
                         "   0:	4f01      	ldr	r7, [pc, #4]	; (0x8)\n"
-                        "   2:	6946      	ldr	r6, [r0, #20]\n"
+                        "   2:	6a86      	ldr	r6, [r0, #40]\n"
                         "   4:	6537      	str	r7, [r6, #80]	; 0x50\n"
                         "   6:	e07b      	b.n	0x100\n"
                         "   8:	5678      	ldrsb	r0, [r7, r1]\n"
@@ -2718,8 +2718,8 @@ move_to_vm_register_test_() ->
                 %% Test: x_reg to y_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {x_reg, 15}, {y_reg, 31}, <<
-                        "   0:	6d47      	ldr	r7, [r0, #84]	; 0x54\n"
-                        "   2:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6e87      	ldr	r7, [r0, #104]\n"
+                        "   2:	6a86      	ldr	r6, [r0, #40]\n"
                         "   4:	67f7      	str	r7, [r6, #124]	; 0x7c\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
@@ -2727,9 +2727,9 @@ move_to_vm_register_test_() ->
                 %% Test: y_reg to x_reg (high index)
                 ?_test(begin
                     move_to_vm_register_test0(State0, {y_reg, 31}, {x_reg, 15}, <<
-                        "   0:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6a86      	ldr	r6, [r0, #40]\n"
                         "   2:	6ff7      	ldr	r7, [r6, #124]	; 0x7c\n"
-                        "   4:	6547      	str	r7, [r0, #84]	; 0x54\n"
+                        "   4:	6687      	str	r7, [r0, #104]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
                 end),
@@ -2737,7 +2737,7 @@ move_to_vm_register_test_() ->
                 ?_test(begin
                     move_to_vm_register_test0(State0, 42, {y_reg, 32}, <<
                         "   0:	262a      	movs	r6, #42	; 0x2a\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	2580      	movs	r5, #128	; 0x80\n"
                         "   6:	443d      	add	r5, r7\n"
                         "   8:	602e      	str	r6, [r5, #0]\n"
@@ -2749,7 +2749,7 @@ move_to_vm_register_test_() ->
                     move_to_vm_register_test0(State0, -1, {x_reg, 0}, <<
                         "   0:	2701      	movs	r7, #1\n"
                         "   2:	427f      	negs	r7, r7\n"
-                        "   4:	6187      	str	r7, [r0, #24]\n"
+                        "   4:	62c7      	str	r7, [r0, #44]\n"
                         "   6:	e07b      	b.n	0x100"
                     >>)
                 end)
@@ -2772,7 +2772,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r3, 2, {x_reg, 0}, <<
                         "   0:	689f      	ldr	r7, [r3, #8]\n"
-                        "   2:	6187      	str	r7, [r0, #24]"
+                        "   2:	62c7      	str	r7, [r0, #44]"
                     >>)
                 end),
                 %% move_array_element: reg[x] to ptr
@@ -2786,7 +2786,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r3, 1, {y_reg, 2}, <<
                         "   0:	685e      	ldr	r6, [r3, #4]\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	60be      	str	r6, [r7, #8]"
                     >>)
                 end),
@@ -2800,7 +2800,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r3, 7, {y_reg, 31}, <<
                         "   0:	69de      	ldr	r6, [r3, #28]\n"
-                        "   2:	6947      	ldr	r7, [r0, #20]\n"
+                        "   2:	6a87      	ldr	r7, [r0, #40]\n"
                         "   4:	67fe      	str	r6, [r7, #124]	; 0x7c"
                     >>)
                 end),
@@ -2808,7 +2808,7 @@ move_array_element_test_() ->
                 ?_test(begin
                     move_array_element_test0(State0, r3, 7, {x_reg, 15}, <<
                         "   0:	69df      	ldr	r7, [r3, #28]\n"
-                        "   2:	6547      	str	r7, [r0, #84]	; 0x54"
+                        "   2:	6687      	str	r7, [r0, #104]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to x_reg
@@ -2818,7 +2818,7 @@ move_array_element_test_() ->
                         "   0:	691f      	ldr	r7, [r3, #16]\n"
                         "   2:	00bf      	lsls	r7, r7, #2\n"
                         "   4:	59df      	ldr	r7, [r3, r7]\n"
-                        "   6:	6207      	str	r7, [r0, #32]"
+                        "   6:	6347      	str	r7, [r0, #52]"
                     >>)
                 end),
                 %% move_array_element: reg_x[reg_y] to pointer (large x reg)
@@ -2838,7 +2838,7 @@ move_array_element_test_() ->
                         "   0:	691f      	ldr	r7, [r3, #16]\n"
                         "   2:	00bf      	lsls	r7, r7, #2\n"
                         "   4:	59df      	ldr	r7, [r3, r7]\n"
-                        "   6:	6946      	ldr	r6, [r0, #20]\n"
+                        "   6:	6a86      	ldr	r6, [r0, #40]\n"
                         "   8:	67f7      	str	r7, [r6, #124]	; 0x7c"
                     >>)
                 end),
@@ -2849,7 +2849,7 @@ move_array_element_test_() ->
                         "   0:	691f      	ldr	r7, [r3, #16]\n"
                         "   2:	00bf      	lsls	r7, r7, #2\n"
                         "   4:	59df      	ldr	r7, [r3, r7]\n"
-                        "   6:	6946      	ldr	r6, [r0, #20]\n"
+                        "   6:	6a86      	ldr	r6, [r0, #40]	@ 0x28\n"
                         "   8:	2580      	movs	r5, #128\t; 0x80\n"
                         "   a:	4435      	add	r5, r6\n"
                         "   c:	602f      	str	r7, [r5, #0]"
@@ -2859,9 +2859,9 @@ move_array_element_test_() ->
                 ?_test(begin
                     {State1, BaseReg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
                     move_array_element_test0(State1, BaseReg, 2, {x_reg, 5}, <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	68be      	ldr	r6, [r7, #8]\n"
-                        "   4:	62c6      	str	r6, [r0, #44]	; 0x2c"
+                        "   4:	6406      	str	r6, [r0, #64]"
                     >>)
                 end),
                 %% move_array_element: reg[32] to x_reg (large offset, index 32, offset 128)
@@ -2870,7 +2870,7 @@ move_array_element_test_() ->
                         "   0:	2704      	movs	r7, #4\n"
                         "   2:	441f      	add	r7, r3\n"
                         "   4:	6ffe      	ldr	r6, [r7, #124]	; 0x7c\n"
-                        "   6:	6186      	str	r6, [r0, #24]"
+                        "   6:	62c6      	str	r6, [r0, #44]"
                     >>)
                 end),
                 %% move_array_element: reg[32] to ptr (large offset)
@@ -2888,7 +2888,7 @@ move_array_element_test_() ->
                         "   0:	2604      	movs	r6, #4\n"
                         "   2:	441e      	add	r6, r3\n"
                         "   4:	6ff6      	ldr	r6, [r6, #124]	; 0x7c\n"
-                        "   6:	6947      	ldr	r7, [r0, #20]\n"
+                        "   6:	6a87      	ldr	r7, [r0, #40]\n"
                         "   8:	60be      	str	r6, [r7, #8]"
                     >>)
                 end)
@@ -2940,7 +2940,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, 2),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	609f      	str	r7, [r3, #8]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -2950,7 +2950,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, 32),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	2604      	movs	r6, #4\n"
                         "   4:	441e      	add	r6, r3\n"
                         "   6:	67f7      	str	r7, [r6, #124]	; 0x7c"
@@ -2962,7 +2962,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, r4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	4626      	mov	r6, r4\n"
                         "   4:	00b6      	lsls	r6, r6, #2\n"
                         "   6:	519f      	str	r7, [r3, r6]"
@@ -2986,7 +2986,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {y_reg, 2}, r3, r4),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6a86      	ldr	r6, [r0, #40]\n"
                         "   2:	68b7      	ldr	r7, [r6, #8]\n"
                         "   4:	4626      	mov	r6, r4\n"
                         "   6:	00b6      	lsls	r6, r6, #2\n"
@@ -2999,7 +2999,7 @@ move_to_array_element_test_() ->
                     State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r3, 2, 1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	609f      	str	r7, [r3, #8]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -3014,7 +3014,7 @@ move_to_array_element_test_() ->
                     State3 = ?BACKEND:move_to_array_element(State2, {x_reg, 0}, r3, r4, 1),
                     Stream = ?BACKEND:stream(State3),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
                         "   2:	1c66      	adds	r6, r4, #1\n"
                         "   4:	00b6      	lsls	r6, r6, #2\n"
                         "   6:	519f      	str	r7, [r3, r6]"
@@ -3109,7 +3109,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	6a47      	ldr	r7, [r0, #36]	; 0x24"
+                        "   0:	6b87      	ldr	r7, [r0, #56]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
                 end),
@@ -3119,7 +3119,7 @@ move_to_native_register_test_() ->
                     Stream = ?BACKEND:stream(State1),
                     ?assertEqual(r7, Reg),
                     Dump = <<
-                        "   0:	6946      	ldr	r6, [r0, #20]\n"
+                        "   0:	6a86      	ldr	r6, [r0, #40]\n"
                         "   2:	68f7      	ldr	r7, [r6, #12]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -3156,7 +3156,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r3),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6a03      	ldr	r3, [r0, #32]"
+                        "   0:	6b43      	ldr	r3, [r0, #52]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
                 end),
@@ -3165,7 +3165,7 @@ move_to_native_register_test_() ->
                     State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r1),
                     Stream = ?BACKEND:stream(State1),
                     Dump = <<
-                        "   0:	6947      	ldr	r7, [r0, #20]\n"
+                        "   0:	6a87      	ldr	r7, [r0, #40]\n"
                         "   2:	68b9      	ldr	r1, [r7, #8]"
                     >>,
                     jit_tests_common:assert_stream(arm, Dump, Stream)
@@ -3178,8 +3178,8 @@ move_to_native_register_test_() ->
                     ),
                     Stream = ?BACKEND:stream(State2),
                     Dump = <<
-                        "   0:	6987      	ldr	r7, [r0, #24]\n"
-                        "   2:	6e06      	ldr	r6, [r0, #96]	; 0x60\n"
+                        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                        "   2:	6f46      	ldr	r6, [r0, #116]\n"
                         "   4:	687d      	ldr	r5, [r7, #4]\n"
                         "   6:	61b5      	str	r5, [r6, #24]\n"
                         "   8:	68bd      	ldr	r5, [r7, #8]\n"
@@ -3459,7 +3459,7 @@ set_args1_y_reg_test() ->
         "   2:	00bf      	lsls	r7, r7, #2\n"
         "   4:	59d7      	ldr	r7, [r2, r7]\n"
         "   6:	b405      	push	{r0, r2}\n"
-        "   8:	6946      	ldr	r6, [r0, #20]\n"
+        "   8:	6a86      	ldr	r6, [r0, #40]\n"
         "   a:	6970      	ldr	r0, [r6, #20]\n"
         "   c:	47b8      	blx	r7\n"
         "   e:	4607      	mov	r7, r0\n"
@@ -3475,7 +3475,7 @@ large_y_reg_read_test() ->
     Stream = ?BACKEND:stream(State1),
     % Expected: uses helper with temp register since offset 128 > 124
     Dump = <<
-        "   0:	6946      	ldr	r6, [r0, #20]\n"
+        "   0:	6a86      	ldr	r6, [r0, #40]\n"
         "   2:	2780      	movs	r7, #128	; 0x80\n"
         "   4:	4437      	add	r7, r6\n"
         "   6:	683f      	ldr	r7, [r7, #0]"
@@ -3493,8 +3493,8 @@ large_y_reg_write_test() ->
     Stream = ?BACKEND:stream(State2),
     % Expected: uses helper with two temp registers since we have registers available
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	6946      	ldr	r6, [r0, #20]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+        "   2:	6a86      	ldr	r6, [r0, #40]\n"
         "   4:	25a0      	movs	r5, #160	; 0xa0\n"
         "   6:	4435      	add	r5, r6\n"
         "   8:	602f      	str	r7, [r5, #0]"
@@ -3515,12 +3515,12 @@ large_y_reg_read_register_exhaustion_test() ->
     Stream = ?BACKEND:stream(StateFinal),
     % Expected: uses IP_REG (r12) fallback sequence
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
-        "   4:	6a05      	ldr	r5, [r0, #32]\n"
-        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-        "   a:	6941      	ldr	r1, [r0, #20]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]\n"
+        "   4:	6b45      	ldr	r5, [r0, #52]\n"
+        "   6:	6b84      	ldr	r4, [r0, #56]\n"
+        "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+        "   a:	6a81      	ldr	r1, [r0, #40]\n"
         "   c:	468c      	mov	ip, r1\n"
         "   e:	218c      	movs	r1, #140	; 0x8c\n"
         "  10:	4461      	add	r1, ip\n"
@@ -3544,12 +3544,12 @@ large_y_reg_write_register_exhaustion_test() ->
     Stream = ?BACKEND:stream(StateFinal),
     % Expected: uses IP_REG (r12) fallback sequence
     Dump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
-        "   4:	6a05      	ldr	r5, [r0, #32]\n"
-        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-        "   a:	6941      	ldr	r1, [r0, #20]\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]\n"
+        "   4:	6b45      	ldr	r5, [r0, #52]\n"
+        "   6:	6b84      	ldr	r4, [r0, #56]\n"
+        "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+        "   a:	6a81      	ldr	r1, [r0, #40]\n"
         "   c:	468c      	mov	ip, r1\n"
         "   e:	21c8      	movs	r1, #200	; 0xc8\n"
         "  10:	4461      	add	r1, ip\n"
@@ -3564,7 +3564,7 @@ y_reg_boundary_direct_test() ->
     Stream = ?BACKEND:stream(State1),
     % Expected: uses direct addressing since 31 * 4 = 124 <= 124
     Dump = <<
-        "   0:	6946      	ldr	r6, [r0, #20]\n"
+        "   0:	6a86      	ldr	r6, [r0, #40]\n"
         "   2:	6ff7      	ldr	r7, [r6, #124]	; 0x7c"
     >>,
     jit_tests_common:assert_stream(arm, Dump, Stream),
@@ -3593,12 +3593,12 @@ and_register_exhaustion_negative_test() ->
     {StateResult, r7} = ?BACKEND:and_(StateNoRegs, {free, r7}, -4),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
-        "   4:	6a05      	ldr	r5, [r0, #32]\n"
-        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-        "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]\n"
+        "   4:	6b45      	ldr	r5, [r0, #52]\n"
+        "   6:	6b84      	ldr	r4, [r0, #56]\n"
+        "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+        "   a:	6c01      	ldr	r1, [r0, #64]\n"
         "   c:	4684      	mov	ip, r0\n"
         "   e:	2003      	movs	r0, #3\n"
         "  10:	4387      	bics	r7, r0\n"
@@ -3619,12 +3619,12 @@ and_register_exhaustion_positive_test() ->
     {StateResult, r7} = ?BACKEND:and_(StateNoRegs, {free, r7}, 16#3F),
     Stream = ?BACKEND:stream(StateResult),
     ExpectedDump = <<
-        "   0:	6987      	ldr	r7, [r0, #24]\n"
-        "   2:	69c6      	ldr	r6, [r0, #28]\n"
-        "   4:	6a05      	ldr	r5, [r0, #32]\n"
-        "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-        "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-        "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+        "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+        "   2:	6b06      	ldr	r6, [r0, #48]\n"
+        "   4:	6b45      	ldr	r5, [r0, #52]\n"
+        "   6:	6b84      	ldr	r4, [r0, #56]\n"
+        "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+        "   a:	6c01      	ldr	r1, [r0, #64]\n"
         "   c:	4684      	mov	ip, r0\n"
         "   e:	203f      	movs	r0, #63	; 0x3f\n"
         "  10:	4007      	ands	r7, r0\n"
@@ -3707,9 +3707,9 @@ call_func_ptr_stack_alignment_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-            "   4:	6a05      	ldr	r5, [r0, #32]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+            "   4:	6b45      	ldr	r5, [r0, #52]\n"
             "   6:	b4ed      	push	{r0, r2, r3, r5, r6, r7}\n"
             "   8:	202a      	movs	r0, #42	; 0x2a\n"
             "   a:	4798      	blx	r3\n"
@@ -3746,12 +3746,12 @@ call_func_ptr_register_exhaustion_test_() ->
                     Stream = ?BACKEND:stream(State7),
                     Dump =
                         <<
-                            "   0:	6987      	ldr	r7, [r0, #24]\n"
-                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+                            "   4:	6b45      	ldr	r5, [r0, #52]\n"
+                            "   6:	6b84      	ldr	r4, [r0, #56]\n"
+                            "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+                            "   a:	6c01      	ldr	r1, [r0, #64]\n"
                             "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
                             "   e:	b082      	sub	sp, #8\n"
                             "  10:	2701      	movs	r7, #1\n"
@@ -3775,12 +3775,12 @@ call_func_ptr_register_exhaustion_test_() ->
                     Stream = ?BACKEND:stream(State7),
                     Dump =
                         <<
-                            "   0:	6987      	ldr	r7, [r0, #24]\n"
-                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+                            "   4:	6b45      	ldr	r5, [r0, #52]\n"
+                            "   6:	6b84      	ldr	r4, [r0, #56]\n"
+                            "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+                            "   a:	6c01      	ldr	r1, [r0, #64]\n"
                             "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
                             "   e:	b082      	sub	sp, #8\n"
                             "  10:	9100      	str	r1, [sp, #0]\n"
@@ -3803,12 +3803,12 @@ call_func_ptr_register_exhaustion_test_() ->
                     Stream = ?BACKEND:stream(State7),
                     Dump =
                         <<
-                            "   0:	6987      	ldr	r7, [r0, #24]\n"
-                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+                            "   4:	6b45      	ldr	r5, [r0, #52]\n"
+                            "   6:	6b84      	ldr	r4, [r0, #56]\n"
+                            "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+                            "   a:	6c01      	ldr	r1, [r0, #64]\n"
                             "   c:	b4b7      	push	{r0, r1, r2, r4, r5, r7}\n"
                             "   e:	b082      	sub	sp, #8\n"
                             "  10:	2701      	movs	r7, #1\n"
@@ -3834,12 +3834,12 @@ call_func_ptr_register_exhaustion_test_() ->
                     Stream = ?BACKEND:stream(State7),
                     Dump =
                         <<
-                            "   0:	6987      	ldr	r7, [r0, #24]\n"
-                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+                            "   4:	6b45      	ldr	r5, [r0, #52]\n"
+                            "   6:	6b84      	ldr	r4, [r0, #56]\n"
+                            "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+                            "   a:	6c01      	ldr	r1, [r0, #64]\n"
                             "   c:	b4ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7}\n"
                             "   e:	460f      	mov	r7, r1\n"
                             "  10:	4630      	mov	r0, r6\n"
@@ -3860,12 +3860,12 @@ call_func_ptr_register_exhaustion_test_() ->
                     Stream = ?BACKEND:stream(State7),
                     Dump =
                         <<
-                            "   0:	6987      	ldr	r7, [r0, #24]\n"
-                            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-                            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-                            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-                            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-                            "   a:	6ac1      	ldr	r1, [r0, #44]	; 0x2c\n"
+                            "   0:	6ac7      	ldr	r7, [r0, #44]\n"
+                            "   2:	6b06      	ldr	r6, [r0, #48]\n"
+                            "   4:	6b45      	ldr	r5, [r0, #52]\n"
+                            "   6:	6b84      	ldr	r4, [r0, #56]\n"
+                            "   8:	6bc3      	ldr	r3, [r0, #60]\n"
+                            "   a:	6c01      	ldr	r1, [r0, #64]\n"
                             "   c:	b4ff      	push	{r0, r1, r2, r3, r4, r5, r6, r7}\n"
                             "   e:	6897      	ldr	r7, [r2, #8]\n"
                             "  10:	4630      	mov	r0, r6\n"
@@ -3956,10 +3956,10 @@ add_beam_test() ->
             % label 1
             % {move,{integer,9},{x,1}}.
             "  30:	279f      	movs	r7, #159	; 0x9f\n"
-            "  32:	61c7      	str	r7, [r0, #28]\n"
+            "  32:	6307      	str	r7, [r0, #48]\n"
             % {move,{integer,8},{x,0}}
             "  34:	278f      	movs	r7, #143	; 0x8f\n"
-            "  36:	6187      	str	r7, [r0, #24]\n"
+            "  36:	62c7      	str	r7, [r0, #44]\n"
             % {call_only,2,{f,2}}.
             "  38:	9e00      	ldr	r6, [sp, #0]\n"
             "  3a:	68b7      	ldr	r7, [r6, #8]\n"
@@ -4008,7 +4008,7 @@ add_beam_test() ->
             % {init_yregs,{list,[{y,0}]}}.
             %% move_to_vm_register(State8, ?TERM_NIL, {y_reg, 0}),
             "  8c:	263b      	movs	r6, #59	; 0x3b\n"
-            "  8e:	6947      	ldr	r7, [r0, #20]\n"
+            "  8e:	6a87      	ldr	r7, [r0, #40]\n"
             "  90:	603e      	str	r6, [r7, #0]\n"
             % {call,1,{f,3}}
             %% call_or_schedule_next(State9, 3),
@@ -4018,7 +4018,7 @@ add_beam_test() ->
             "  98:	063f      	lsls	r7, r7, #24\n"
             "  9a:	4e0c      	ldr	r6, [pc, #48]	; (0xcc)\n"
             "  9c:	4337      	orrs	r7, r6\n"
-            "  9e:	65c7      	str	r7, [r0, #92]	; 0x5c\n"
+            "  9e:	6707      	str	r7, [r0, #112]\n"
             "  a0:	9e00      	ldr	r6, [sp, #0]\n"
             "  a2:	68b7      	ldr	r7, [r6, #8]\n"
             "  a4:	3f01      	subs	r7, #1\n"
@@ -4071,7 +4071,7 @@ cached_load_after_free_test() ->
     Stream = ?BACKEND:stream(State3),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4091,11 +4091,11 @@ and_negative_imm_invalidates_temp_cache_test() ->
     Stream = ?BACKEND:stream(State5),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
             "   4:	2603      	movs	r6, #3\n"
             "   6:	43b7      	bics	r7, r6\n"
-            "   8:	69c6      	ldr	r6, [r0, #28]"
+            "   8:	6b06      	ldr	r6, [r0, #48]	@ 0x30"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4110,11 +4110,11 @@ and_positive_imm_invalidates_temp_cache_test() ->
     Stream = ?BACKEND:stream(State5),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
             "   4:	263f      	movs	r6, #63	; 0x3f\n"
             "   6:	4037      	ands	r7, r6\n"
-            "   8:	69c6      	ldr	r6, [r0, #28]"
+            "   8:	6b06      	ldr	r6, [r0, #48]	@ 0x30"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4134,13 +4134,13 @@ if_block_cond_free_reg_invalidates_cache_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
             "   4:	43ff      	mvns	r7, r7\n"
             "   6:	073f      	lsls	r7, r7, #28\n"
             "   8:	d000      	beq.n	0xc\n"
             "   a:	3602      	adds	r6, #2\n"
-            "   c:	6987      	ldr	r7, [r0, #24]"
+            "   c:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4156,10 +4156,10 @@ jump_to_label_invalidates_cache_test() ->
     Stream = ?BACKEND:stream(State4),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
             "   2:	ffff ffff 			; <UNDEFINED> instruction: 0xffffffff\n"
             "   6:	ffff ffff 			; <UNDEFINED> instruction: 0xffffffff\n"
-            "   a:	ffff 6987 	vtbl.8	d22, {d31-<overflow reg d32}, d7"
+            "   a:	ffff 6ac7 	vtbx.8	d22, {d31-<overflow reg d33}, d7"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4175,11 +4175,11 @@ move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
     Stream = ?BACKEND:stream(S4),
     Dump =
         <<
-            "   0:	6ac7      	ldr	r7, [r0, #44]	; 0x2c\n"
-            "   2:	6986      	ldr	r6, [r0, #24]\n"
+            "   0:	6c07      	ldr	r7, [r0, #44]	; 0x2c\n"
+            "   2:	6ac6      	ldr	r6, [r0, #44]	@ 0x2c\n"
             "   4:	6835      	ldr	r5, [r6, #0]\n"
-            "   6:	62c5      	str	r5, [r0, #44]	; 0x2c\n"
-            "   8:	6ac5      	ldr	r5, [r0, #44]	; 0x2c"
+            "   6:	6405      	str	r5, [r0, #44]	; 0x2c\n"
+            "   8:	6c05      	ldr	r5, [r0, #44]	; 0x2c"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4199,12 +4199,12 @@ ldr_y_reg_invalidates_hidden_temp_cache_test() ->
     Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-            "   6:	6945      	ldr	r5, [r0, #20]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
+            "   4:	6b45      	ldr	r5, [r0, #52]	@ 0x34\n"
+            "   6:	6a85      	ldr	r5, [r0, #40]	@ 0x28\n"
             "   8:	682e      	ldr	r6, [r5, #0]\n"
-            "   a:	6a05      	ldr	r5, [r0, #32]"
+            "   a:	6b45      	ldr	r5, [r0, #52]	@ 0x34"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
 
@@ -4223,12 +4223,12 @@ y_reg_load_last_available_register_test() ->
     Stream = ?BACKEND:stream(State6),
     Dump =
         <<
-            "   0:	6987      	ldr	r7, [r0, #24]\n"
-            "   2:	69c6      	ldr	r6, [r0, #28]\n"
-            "   4:	6a05      	ldr	r5, [r0, #32]\n"
-            "   6:	6a44      	ldr	r4, [r0, #36]	; 0x24\n"
-            "   8:	6a83      	ldr	r3, [r0, #40]	; 0x28\n"
-            "   a:	6941      	ldr	r1, [r0, #20]\n"
+            "   0:	6ac7      	ldr	r7, [r0, #44]	@ 0x2c\n"
+            "   2:	6b06      	ldr	r6, [r0, #48]	@ 0x30\n"
+            "   4:	6b45      	ldr	r5, [r0, #52]	@ 0x34\n"
+            "   6:	6b84      	ldr	r4, [r0, #36]	; 0x24\n"
+            "   8:	6bc3      	ldr	r3, [r0, #40]	; 0x28\n"
+            "   a:	6a81      	ldr	r1, [r0, #40]	@ 0x28\n"
             "   c:	6809      	ldr	r1, [r1, #0]"
         >>,
     jit_tests_common:assert_stream(arm, Dump, Stream).
