@@ -67,25 +67,25 @@
 #endif
 
 // About X macro: https://en.wikipedia.org/wiki/X_macro
-#define X_OPCODE(op_name, num, lower_name)                    \
+#define X_OPCODE(op_name, num, lower_name, signature) \
     op_name = num,
 
-#define X_OPCODE_S(op_name, num, lower_name, signature)   \
+#define X_OPCODE_HANDLER(op_name, num, lower_name, signature) \
     op_name = num,
 
-#define X_OPCODE_SH(op_name, num, lower_name, signature)  \
+#define X_OPCODE_REMOVED(op_name, num, lower_name) \
     op_name = num,
 
-#define X_SKIP_OPCODE(...)
+#define X_OPCODE_SKIP(...)
 
 enum beam_opcodes {
 #include "opcodes.def"
 };
 
 #undef X_OPCODE
-#undef X_OPCODE_S
-#undef X_OPCODE_SH
-#undef X_SKIP_OPCODE
+#undef X_OPCODE_HANDLER
+#undef X_OPCODE_REMOVED
+#undef X_OPCODE_SKIP
 
 #ifdef __cplusplus
 extern "C" {
