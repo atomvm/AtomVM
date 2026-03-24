@@ -413,6 +413,7 @@ struct Test tests[] = {
     TEST_CASE(test_undef),
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
+    TEST_CASE(test_bs_int_any_flags),
     TEST_CASE(test_bs_int_unaligned),
     TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
