@@ -162,6 +162,7 @@
     length/1,
     list_to_float/1,
     node/0,
+    node/1,
     round/1,
     self/0,
     setelement/3,
@@ -1942,6 +1943,17 @@ list_to_float(_String) ->
 %%-----------------------------------------------------------------------------
 -spec node() -> node().
 node() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Item  a pid, port, or reference
+%% @returns the node name associated with `Item'
+%% @doc     Return the node name for a pid, port, or reference.
+%% Raises `badarg' if `Item' is not a pid, port, or reference.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec node(Item :: pid() | port() | reference()) -> node().
+node(_Item) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

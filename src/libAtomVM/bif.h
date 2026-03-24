@@ -43,6 +43,7 @@ const struct ExportedFunction *bif_registry_get_handler(const char *mfa);
 
 term bif_erlang_self_0(Context *ctx);
 term bif_erlang_node_0(Context *ctx);
+term bif_erlang_node_1(Context *ctx, uint32_t fail_label, term arg1);
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_bit_size_1(Context *ctx, uint32_t fail_label, int live, term arg1);
 term bif_erlang_binary_part_3(Context *ctx, uint32_t fail_label, int live, term arg1, term arg2, term arg3);
