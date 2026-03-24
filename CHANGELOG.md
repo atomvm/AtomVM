@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-alpha.1] - Unreleased
 
 ### Added
+- Added `erts_internal:cmp_term/2`
 ### Changed
 ### Fixed
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)

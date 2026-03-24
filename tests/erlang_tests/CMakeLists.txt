@@ -421,6 +421,7 @@ compile_erlang(test_binaries_ordering)
 compile_erlang(test_lists_ordering)
 compile_erlang(test_tuples_ordering)
 compile_erlang(test_types_ordering)
+compile_erlang(test_cmp_term)
 compile_erlang(test_bigintegers_ordering)
 compile_erlang(test_refs_ordering)
 compile_erlang(test_atom_ordering)
@@ -971,6 +972,7 @@ set(erlang_test_beams
     test_lists_ordering.beam
     test_tuples_ordering.beam
     test_types_ordering.beam
+    test_cmp_term.beam
     test_bigintegers_ordering.beam
     test_refs_ordering.beam
     test_atom_ordering.beam
