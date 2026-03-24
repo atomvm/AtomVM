@@ -24,7 +24,8 @@
     stream/1,
     backend/2,
     beam_chunk_header/3,
-    compile/7
+    compile/7,
+    decode_value64/1
 ]).
 
 % NIFs
@@ -51,38 +52,20 @@
 -include("opcodes.hrl").
 -include("primitives.hrl").
 -include("term.hrl").
+-include("compact_term.hrl").
 
--define(COMPACT_LITERAL, 0).
--define(COMPACT_INTEGER, 1).
--define(COMPACT_ATOM, 2).
--define(COMPACT_XREG, 3).
--define(COMPACT_YREG, 4).
--define(COMPACT_LABEL, 5).
--define(COMPACT_EXTENDED, 7).
--define(COMPACT_LARGE_LITERAL, 8).
--define(COMPACT_LARGE_INTEGER, 9).
--define(COMPACT_LARGE_ATOM, 10).
--define(COMPACT_LARGE_XREG, 11).
--define(COMPACT_LARGE_YREG, 12).
-
-% OTP-20+ format
--define(COMPACT_EXTENDED_LIST, 16#17).
--define(COMPACT_EXTENDED_FP_REGISTER, 16#27).
--define(COMPACT_EXTENDED_ALLOCATION_LIST, 16#37).
--define(COMPACT_EXTENDED_LITERAL, 16#47).
-% https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
--define(COMPACT_EXTENDED_TYPED_REGISTER, 16#57).
-
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS, 0).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS, 1).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS, 2).
-
--define(COMPACT_LARGE_IMM_MASK, 16#18).
--define(COMPACT_11BITS_VALUE, 16#8).
--define(COMPACT_NBITS_VALUE, 16#18).
-
--define(COMPACT_LARGE_INTEGER_11BITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_11BITS_VALUE)).
--define(COMPACT_LARGE_INTEGER_NBITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_NBITS_VALUE)).
+-ifdef(JIT_DWARF).
+-compile({parse_transform, jit_dwarf_pt}).
+-define(DWARF_LABEL(MMod, MSt, Label), MMod:dwarf_label(MSt, Label)).
+-define(DWARF_FUNCTION(MMod, MSt, FunctionName, Arity),
+    MMod:dwarf_function(MSt, (State0#state.atom_resolver)(FunctionName), Arity)
+).
+-define(DWARF_LINE(MMod, MSt, Line), MMod:dwarf_line(MSt, Line)).
+-else.
+-define(DWARF_LABEL(_MMod, MSt, _Label), MSt).
+-define(DWARF_FUNCTION(_MMod, MSt, _FunctionName, _Arity), MSt).
+-define(DWARF_LINE(_MMod, MSt, _Line), MSt).
+-endif.
 
 -define(BOXED_FUN_SIZE, 3).
 -define(FLOAT_SIZE_64, 2).
@@ -178,9 +161,10 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LABEL ~p\n", [Label]),
-    MSt1 = MMod:add_label(MSt0, Label),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest1, MMod, MSt1, State0);
+    MSt1 = ?DWARF_LABEL(MMod, MSt0, Label),
+    MSt2 = MMod:add_label(MSt1, Label),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    first_pass(Rest1, MMod, MSt2, State0);
 % 2
 first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -213,8 +197,9 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
                 ]),
                 {MSt4b, State0}
         end,
-    ?ASSERT_ALL_NATIVE_FREE(MSt4),
-    first_pass(Rest3, MMod, MSt4, State1);
+    MSt5 = ?DWARF_FUNCTION(MMod, MSt4, FunctionAtomIndex, Arity),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    first_pass(Rest3, MMod, MSt5, State1);
 % 3
 first_pass(
     <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
@@ -1721,8 +1706,9 @@ first_pass(
 ) ->
     {Line, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LINE ~p\n", [Line]),
-    Offset = MMod:offset(MSt),
-    first_pass(Rest1, MMod, MSt, State0#state{
+    MSt0 = ?DWARF_LINE(MMod, MSt, Line),
+    Offset = MMod:offset(MSt0),
+    first_pass(Rest1, MMod, MSt0, State0#state{
         line_offsets = [{Line, Offset} | AccLines]
     });
 % 154

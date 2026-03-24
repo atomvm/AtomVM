@@ -37,6 +37,7 @@
 -export([
     new/0,
     get_contents/2,
+    get_all_contents/1,
     set_contents/3,
     invalidate_reg/2,
     invalidate_all/1,
@@ -88,6 +89,10 @@ new() ->
 -spec get_contents(regs(), atom()) -> contents().
 get_contents(#regs{contents = C}, Reg) ->
     maps:get(Reg, C, unknown).
+
+%% @doc Get the full contents map (cpu_reg -> contents).
+-spec get_all_contents(regs()) -> #{atom() => contents()}.
+get_all_contents(#regs{contents = C}) -> C.
 
 %% @doc Record that a CPU register now holds the given contents.
 -spec set_contents(regs(), atom(), contents()) -> regs().

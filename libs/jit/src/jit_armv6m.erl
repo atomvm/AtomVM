@@ -75,10 +75,26 @@
     xor_/3
 ]).
 
+-ifdef(JIT_DWARF).
+-export([
+    dwarf_opcode/2,
+    dwarf_label/2,
+    dwarf_function/3,
+    dwarf_line/2,
+    dwarf_ctx_register/0
+]).
+-endif.
+
+-compile([warnings_as_errors]).
+
 -include_lib("jit.hrl").
 
 -include("primitives.hrl").
 -include("term.hrl").
+
+-ifdef(JIT_DWARF).
+-include("jit_dwarf.hrl").
+-endif.
 
 %-define(ASSERT(Expr), true = Expr).
 -define(ASSERT(Expr), ok).
@@ -241,6 +257,8 @@
     (?REG_BIT_R7 bor ?REG_BIT_R6 bor ?REG_BIT_R5 bor ?REG_BIT_R4 bor ?REG_BIT_R3 bor
         ?REG_BIT_R2 bor ?REG_BIT_R1 bor ?REG_BIT_R0 bor ?REG_BIT_R12)
 ).
+
+-include("jit_backend_dwarf_impl.hrl").
 
 %%-----------------------------------------------------------------------------
 %% @doc Return the word size in bytes, i.e. the sizeof(term) i.e.
@@ -4213,3 +4231,32 @@ add_label(
     };
 add_label(#state{labels = Labels} = State, Label, Offset) ->
     State#state{labels = [{Label, Offset} | Labels]}.
+
+-ifdef(JIT_DWARF).
+%%-----------------------------------------------------------------------------
+%% @doc Return the DWARF register number for the ctx parameter
+%% @returns The DWARF register number where ctx is passed (r0 in ARM)
+%% @end
+%%-----------------------------------------------------------------------------
+-spec dwarf_ctx_register() -> non_neg_integer().
+dwarf_ctx_register() ->
+    ?DWARF_R0_REG_ARMV6M.
+
+-spec dwarf_register_number(atom()) -> non_neg_integer().
+dwarf_register_number(r0) -> 0;
+dwarf_register_number(r1) -> 1;
+dwarf_register_number(r2) -> 2;
+dwarf_register_number(r3) -> 3;
+dwarf_register_number(r4) -> 4;
+dwarf_register_number(r5) -> 5;
+dwarf_register_number(r6) -> 6;
+dwarf_register_number(r7) -> 7;
+dwarf_register_number(r8) -> 8;
+dwarf_register_number(r9) -> 9;
+dwarf_register_number(r10) -> 10;
+dwarf_register_number(r11) -> 11;
+dwarf_register_number(r12) -> 12;
+dwarf_register_number(r13) -> 13;
+dwarf_register_number(r14) -> 14;
+dwarf_register_number(r15) -> 15.
+-endif.
