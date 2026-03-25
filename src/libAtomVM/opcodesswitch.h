@@ -33,15 +33,11 @@
 #include "exportedfunction.h"
 #include "intn.h"
 #include "jit.h"
+#include "mailbox.h"
 #include "nifs.h"
 #include "scheduler.h"
+#include "stacktrace.h"
 #include "utils.h"
-
-#ifdef IMPL_EXECUTE_LOOP
-    #include "bitstring.h"
-    #include "mailbox.h"
-    #include "stacktrace.h"
-#endif
 
 //#define ENABLE_TRACE
 #include "trace.h"
@@ -91,7 +87,6 @@ enum beam_opcodes {
 extern "C" {
 #endif
 
-#ifdef IMPL_EXECUTE_LOOP
 
 #if AVM_NO_JIT
 #define SET_ERROR(error_type_atom)                \
@@ -152,402 +147,8 @@ extern "C" {
 #define VM_ABORT() \
     goto do_abort;
 
-#endif
 
-#ifdef IMPL_CODE_LOADER
 
-#ifdef ENABLE_TRACE
-typedef struct
-{
-    int reg_type;
-    int index;
-} dreg_t;
-
-typedef dreg_t dreg_gc_safe_t;
-
-#define DEST_REGISTER(reg) dreg_t reg
-#define GC_SAFE_DEST_REGISTER(reg) dreg_gc_safe_t reg
-
-#define T_DEST_REG(dreg) \
-    reg_type_c((dreg).reg_type), (int) ((dreg).index)
-
-#define T_DEST_REG_GC_SAFE(dreg) T_DEST_REG(dreg)
-#else
-
-#define DEST_REGISTER(...)
-#define GC_SAFE_DEST_REGISTER(...)
-
-#endif
-
-// This macro does not decode all cases but cases we actually observe in opcodes
-// below. More specific decoding is performed when we know the type of the
-// argument
-#define DECODE_COMPACT_TERM(dest_term, decode_pc)                                       \
-{                                                                                       \
-    uint8_t first_byte = *(decode_pc)++;                                                \
-    switch (first_byte & 0xF) {                                                         \
-        case COMPACT_LARGE_LITERAL:                                                     \
-        case COMPACT_LITERAL:                                                           \
-            switch (((first_byte) >> 3) & 0x3) {                                        \
-                case 0:                                                                 \
-                case 2:                                                                 \
-                    dest_term = term_from_int4(first_byte >> 4);                        \
-                    break;                                                              \
-                                                                                        \
-                case 1:                                                                 \
-                    dest_term = term_from_int(((first_byte & 0xE0) << 3) | *(decode_pc)++); \
-                    break;                                                              \
-                                                                                        \
-                case 3: {                                                               \
-                    uint8_t sz = (first_byte >> 5) + 2;                                 \
-                    avm_int_t val = 0;                                                  \
-                    for (uint8_t vi = 0; vi < sz; vi++) {                               \
-                        val <<= 8;                                                      \
-                        val |= *(decode_pc)++;                                          \
-                    }                                                                   \
-                    dest_term = term_from_int(val);                                     \
-                    break;                                                              \
-                }                                                                       \
-                default: UNREACHABLE(); /* help gcc 8.4 */                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_INTEGER:                                                           \
-            switch (((first_byte) >> 3) & 0x3) {                                        \
-                case 0:                                                                 \
-                case 2:                                                                 \
-                    break;                                                              \
-                                                                                        \
-                default:                                                                \
-                    fprintf(stderr, "Operand not a small integer: %x, or unsupported encoding\n", (first_byte)); \
-                    AVM_ABORT();                                                        \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_ATOM:                                                              \
-        case COMPACT_XREG:                                                              \
-        case COMPACT_YREG:                                                              \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_EXTENDED:                                                          \
-            switch (first_byte) {                                                       \
-                case COMPACT_EXTENDED_LITERAL: {                                        \
-                    uint8_t first_extended_byte = *(decode_pc)++;                       \
-                    switch (((first_extended_byte) >> 3) & 0x3) {                       \
-                        case 0:                                                         \
-                        case 2:                                                         \
-                            break;                                                      \
-                                                                                        \
-                        case 1:                                                         \
-                            (decode_pc)++;                                              \
-                            break;                                                      \
-                                                                                        \
-                        case 3: {                                                       \
-                            uint8_t sz = (first_extended_byte >> 5) + 2;                \
-                            decode_pc += sz;                                            \
-                            break;                                                      \
-                        }                                                               \
-                        default: UNREACHABLE(); /* help gcc 8.4 */                      \
-                    }                                                                   \
-                    break;                                                              \
-                }                                                                       \
-                case COMPACT_EXTENDED_TYPED_REGISTER: {                                 \
-                    uint8_t reg_byte = *(decode_pc)++;                                  \
-                    switch (reg_byte & 0x0F) {                                          \
-                        case COMPACT_XREG:                                              \
-                        case COMPACT_YREG:                                              \
-                            break;                                                      \
-                        case COMPACT_LARGE_XREG:                                        \
-                        case COMPACT_LARGE_YREG:                                        \
-                            (decode_pc)++;                                              \
-                            break;                                                      \
-                        default:                                                        \
-                            fprintf(stderr, "Unexpected reg byte %x @ %" PRIuPTR "\n",  \
-                                    (int) reg_byte, (uintptr_t) ((decode_pc) - 1));     \
-                            AVM_ABORT();                                                \
-                    }                                                                   \
-                    int type_index;                                                     \
-                    DECODE_LITERAL(type_index, decode_pc)                               \
-                    break;                                                              \
-                }                                                                       \
-                default:                                                                \
-                    fprintf(stderr, "Unexpected extended %x @ %" PRIuPTR "\n", (int) first_byte, (uintptr_t) ((decode_pc) - 1)); \
-                    AVM_ABORT();                                                        \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_LARGE_INTEGER:                                                     \
-        case COMPACT_LARGE_ATOM:                                                        \
-            switch (first_byte & COMPACT_LARGE_IMM_MASK) {                              \
-                case COMPACT_11BITS_VALUE:                                              \
-                    (decode_pc)++;                                                      \
-                    break;                                                              \
-                case COMPACT_NBITS_VALUE:{                                              \
-                    int sz = (first_byte >> 5) + 2;                                     \
-                    if (LIKELY(sz <= 8)) {                                              \
-                        (decode_pc) += sz;                                              \
-                    } else {                                                            \
-                        (decode_pc) += decode_nbits_integer(NULL, (decode_pc), NULL);   \
-                    }                                                                   \
-                    break;                                                              \
-                }                                                                       \
-                default:                                                                \
-                    assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);               \
-                    break;                                                              \
-            }                                                                           \
-            break;                                                                      \
-                                                                                        \
-        case COMPACT_LARGE_XREG:                                                        \
-        case COMPACT_LARGE_YREG:                                                        \
-            (decode_pc)++;                                                              \
-            break;                                                                      \
-                                                                                        \
-        default:                                                                        \
-            fprintf(stderr, "unknown compact term type: %i\n", ((first_byte) & 0xF));   \
-            AVM_ABORT();                                                                \
-            break;                                                                      \
-    }                                                                                   \
-}
-
-#define DECODE_EXTENDED_LIST_TAG(decode_pc)                                             \
-{                                                                                       \
-    if ((*(decode_pc)++) != COMPACT_EXTENDED_LIST) {                                    \
-        fprintf(stderr, "Unexpected operand, expected a list, got %x\n", (decode_pc)[-1]);\
-        AVM_ABORT();                                                                    \
-    }                                                                                   \
-}
-
-#define DECODE_NIL(decode_pc)                                                           \
-{                                                                                       \
-    if ((*(decode_pc)++) != COMPACT_ATOM) {                                             \
-        fprintf(stderr, "Unexpected operand, expected nil, got %x\n", (decode_pc)[-1]); \
-        AVM_ABORT();                                                                    \
-    }                                                                                   \
-}
-
-#ifdef ENABLE_TRACE
-
-#define DECODE_DEST_REGISTER(dreg, decode_pc)                                                       \
-{                                                                                                   \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    uint8_t reg_type = first_byte & 0xF;                                                            \
-    (dreg).reg_type = reg_type;                                                                     \
-    switch (reg_type) {                                                                             \
-        case COMPACT_XREG:                                                                          \
-        case COMPACT_YREG:                                                                          \
-            (dreg).index = first_byte >> 4;                                                         \
-             break;                                                                                 \
-        case COMPACT_LARGE_XREG:                                                                    \
-        case COMPACT_LARGE_YREG:                                                                    \
-            (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++);                           \
-            break;                                                                                  \
-        default:                                                                                    \
-            AVM_ABORT();                                                                            \
-    }                                                                                               \
-}
-
-#define DECODE_DEST_REGISTER_GC_SAFE(dreg, decode_pc) \
-    DECODE_DEST_REGISTER(dreg, decode_pc)
-
-#else
-
-#define DECODE_DEST_REGISTER(dreg, decode_pc)                                                       \
-{                                                                                                   \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    uint8_t reg_type = first_byte & 0xF;                                                            \
-    switch (reg_type) {                                                                             \
-        case COMPACT_XREG:                                                                          \
-        case COMPACT_YREG:                                                                          \
-            break;                                                                                  \
-        case COMPACT_LARGE_XREG:                                                                    \
-        case COMPACT_LARGE_YREG:                                                                    \
-            (decode_pc)++;                                                                          \
-            break;                                                                                  \
-        default:                                                                                    \
-            AVM_ABORT();                                                                            \
-    }                                                                                               \
-}
-
-#define DECODE_DEST_REGISTER_GC_SAFE(dreg, decode_pc) \
-    DECODE_DEST_REGISTER(dreg, decode_pc)
-
-#endif
-
-#define DECODE_FP_REGISTER(freg, decode_pc)                                                         \
-{                                                                                                   \
-    if ((*(decode_pc)++) != COMPACT_EXTENDED_FP_REGISTER) {                                         \
-        fprintf(stderr, "Unexpected operand, expected an fp register, got %x\n", (decode_pc)[-1]);  \
-        AVM_ABORT();                                                                                \
-    }                                                                                               \
-    DECODE_LITERAL(freg, decode_pc);                                                                \
-    if (freg > MAX_REG) {                                                                           \
-        fprintf(stderr, "FP register index %d > MAX_REG = %d\n", freg, MAX_REG);                    \
-        AVM_ABORT();                                                                                \
-    }                                                                                               \
-}
-
-#define DECODE_VALUE32(val, decode_pc)                                                              \
-{                                                                                                   \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    switch (((first_byte) >> 3) & 0x3) {                                                            \
-        case 0:                                                                                     \
-        case 2:                                                                                     \
-            val = first_byte >> 4;                                                                  \
-            break;                                                                                  \
-                                                                                                    \
-        case 1:                                                                                     \
-            val = ((first_byte & 0xE0) << 3) | *(decode_pc)++;                                      \
-            break;                                                                                  \
-                                                                                                    \
-        case 3: {                                                                                   \
-            uint8_t sz = (first_byte >> 5) + 2;                                                     \
-            if (sz > 4) {                                                                           \
-                fprintf(stderr, "Unexpected operand, expected a literal of at most 4 bytes\n");     \
-                AVM_ABORT();                                                                        \
-            }                                                                                       \
-            val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
-                val <<= 8;                                                                          \
-                val |= *(decode_pc)++;                                                              \
-            }                                                                                       \
-            break;                                                                                  \
-        }                                                                                           \
-        default: UNREACHABLE(); /* help gcc 8.4 */                                                  \
-    }                                                                                               \
-}
-
-#define DECODE_VALUE64(val, decode_pc)                                                              \
-{                                                                                                   \
-    uint8_t first_byte = *(decode_pc)++;                                                            \
-    switch (((first_byte) >> 3) & 0x3) {                                                            \
-        case 0:                                                                                     \
-        case 2:                                                                                     \
-            val = first_byte >> 4;                                                                  \
-            break;                                                                                  \
-                                                                                                    \
-        case 1:                                                                                     \
-            val = ((first_byte & 0xE0) << 3) | *(decode_pc)++;                                      \
-            break;                                                                                  \
-                                                                                                    \
-        case 3: {                                                                                   \
-            uint8_t sz = (first_byte >> 5) + 2;                                                     \
-            if (sz > 8) {                                                                           \
-                fprintf(stderr, "Unexpected operand, expected a literal of at most 8 bytes\n");     \
-                AVM_ABORT();                                                                        \
-            }                                                                                       \
-            val = 0;                                                                                \
-            for (uint8_t vi = 0; vi < sz; vi++) {                                                   \
-                val <<= 8;                                                                          \
-                val |= *(decode_pc)++;                                                              \
-            }                                                                                       \
-            break;                                                                                  \
-        }                                                                                           \
-    }                                                                                               \
-}
-
-#define DECODE_ATOM(atom, decode_pc)                                                                    \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_ATOM)) {                                               \
-        fprintf(stderr, "Unexpected operand, expected an atom (%x)\n", *(decode_pc));                   \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    uint32_t atom_ix;                                                                                   \
-    DECODE_VALUE32(atom_ix, decode_pc);                                                                 \
-    atom = module_get_atom_term_by_id(mod, atom_ix);                                                    \
-}
-
-#define DECODE_LABEL(label, decode_pc)                                                                  \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LABEL)) {                                              \
-        fprintf(stderr, "Unexpected operand, expected a label (%x)\n", *(decode_pc));                   \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(label, decode_pc);                                                                   \
-}
-
-#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                    \
-{                                                                                                       \
-    if ((*(decode_pc) & 0x7) != COMPACT_ATOM) {                                                         \
-        if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LABEL)) {                                          \
-            fprintf(stderr, "Unexpected operand, expected an atom or label (%x)\n", *(decode_pc));      \
-            AVM_ABORT();                                                                                \
-        }                                                                                               \
-        atom = term_invalid_term();                                                                     \
-        DECODE_VALUE32(label, decode_pc);                                                               \
-    } else {                                                                                            \
-        uint32_t atom_ix;                                                                               \
-        DECODE_VALUE32(atom_ix, decode_pc);                                                             \
-        atom = module_get_atom_term_by_id(mod, atom_ix);                                                \
-    }                                                                                                   \
-}
-
-#define DECODE_LITERAL(literal, decode_pc)                                                              \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_LITERAL)) {                                            \
-        fprintf(stderr, "Unexpected operand, expected a literal (%x)\n", *(decode_pc));                 \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(literal, decode_pc);                                                                 \
-}
-
-#define DECODE_INTEGER(integer, decode_pc)                                                              \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_INTEGER)) {                                            \
-        fprintf(stderr, "Unexpected operand, expected an integer (%x)\n", *(decode_pc));                \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE64(integer, decode_pc);                                                                 \
-}
-
-#define DECODE_XREG(reg, decode_pc)                                                                     \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_XREG)) {                                               \
-        fprintf(stderr, "Unexpected operand, expected an xreg (%x)\n", *(decode_pc));                   \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(reg, decode_pc);                                                                     \
-    if (reg > MAX_REG) {                                                                                \
-        fprintf(stderr, "Register index %d > MAX_REG = %d\n", reg, MAX_REG);                            \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-}
-
-#define DECODE_YREG(reg, decode_pc)                                                                     \
-{                                                                                                       \
-    if (UNLIKELY((*(decode_pc) & 0x7) != COMPACT_YREG)) {                                               \
-        fprintf(stderr, "Unexpected operand, expected a yreg (%x)\n", *(decode_pc));                    \
-        AVM_ABORT();                                                                                    \
-    }                                                                                                   \
-    DECODE_VALUE32(reg, decode_pc);                                                                     \
-}
-
-#define DECODE_ALLOCATOR_LIST(need, decode_pc)                                          \
-    if (IS_EXTENDED_ALLOCATOR(decode_pc)) {                                             \
-        need = 0;                                                                       \
-        (decode_pc)++; /* skip list tag */                                              \
-        uint32_t list_size;                                                             \
-        DECODE_LITERAL(list_size, (decode_pc));                                         \
-        uint32_t allocator_tag;                                                         \
-        uint32_t allocator_size;                                                        \
-        for (uint32_t j = 0; j < list_size; j++) {                                      \
-            DECODE_LITERAL(allocator_tag, (decode_pc));                                 \
-            DECODE_LITERAL(allocator_size, (decode_pc));                                \
-            if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {          \
-                allocator_size *= FLOAT_SIZE;                                           \
-            } else if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS) {     \
-                allocator_size *= BOXED_FUN_SIZE;                                       \
-            }                                                                           \
-            need += allocator_size;                                                     \
-        }                                                                               \
-    } else {                                                                            \
-        DECODE_LITERAL(need, decode_pc);                                                \
-    }
-
-#endif
-
-#ifdef IMPL_EXECUTE_LOOP
 
 // If GC can be performed between decoding of register and accessing it,
 // GC_SAFE variant must be used
@@ -1037,7 +638,6 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         DECODE_LITERAL(need, decode_pc);                                                \
     }
 
-#endif
 
 #define IS_EXTENDED_ALLOCATOR(decode_pc) \
     (*decode_pc) == COMPACT_EXTENDED_ALLOCATION_LIST
@@ -1534,7 +1134,6 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #endif
 
-#ifdef IMPL_EXECUTE_LOOP
 
 #ifndef AVM_NO_EMU
 struct Int24
@@ -1893,7 +1492,6 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 
 #endif
 
-#endif
 
 #ifndef AVM_NO_EMU
     static term make_bigint_from_digits(Context *ctx, intn_digit_t *bigint, intn_integer_sign_t sign, size_t count)
@@ -1962,23 +1560,8 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #endif
 
-#ifdef IMPL_CODE_LOADER
-    int read_core_chunk0(Module *mod, struct ListHead *line_refs);
-
-    int read_core_chunk(Module *mod, struct ListHead *line_refs)
-#else
-    #ifdef IMPL_EXECUTE_LOOP
-        int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
-    #else
-        #error Need implementation type
-    #endif
-#endif
+    int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
 {
-    #ifdef IMPL_CODE_LOADER
-        TRACE("-- Loading code\n");
-    #endif
-
-    #ifdef IMPL_EXECUTE_LOOP
         TRACE("-- Executing code\n");
 
         atom_index_t function_name_index;
@@ -2010,31 +1593,16 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
         }
 #endif
         scheduler_init_ready(ctx);
-    #endif
 
-#ifdef IMPL_CODE_LOADER
-    return read_core_chunk0(mod, line_refs);
-#endif
-#ifdef IMPL_EXECUTE_LOOP
     // This process is the first scheduler process
     #ifndef AVM_NO_SMP
         ctx->global->running_schedulers = 1;
     #endif
     return scheduler_entry_point(ctx->global);
-#endif
 }
 
-#ifdef IMPL_CODE_LOADER
-int read_core_chunk0(Module *mod, struct ListHead *line_refs)
-#else
-#ifdef IMPL_EXECUTE_LOOP
 HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
-#else
-#error Need implementation type
-#endif
-#endif
 {
-#ifdef IMPL_EXECUTE_LOOP
     const uint8_t *code;
     Module *mod;
     term *x_regs;
@@ -2087,17 +1655,8 @@ schedule_in:
 #ifndef AVM_NO_EMU
     }
 #endif
-#endif
-
-#ifdef IMPL_CODE_LOADER
-    TRACE("-- Loading code\n");
-    SMP_MODULE_LOCK(mod);
-    const uint8_t *code = mod->code->code;
-    const uint8_t *pc = code;
-#endif
 
     while (1) {
-#ifdef IMPL_EXECUTE_LOOP
 #ifndef AVM_NO_JIT
 #ifndef AVM_NO_EMU
         if (native_pc) {
@@ -2148,14 +1707,11 @@ schedule_in:
         }
 #endif
 #endif
-#endif
 
 #ifndef AVM_NO_EMU
 
     TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
-#ifdef IMPL_EXECUTE_LOOP
 loop:
-#endif
         switch (*pc++) {
             case OP_LABEL: {
                 uint32_t label;
@@ -2164,10 +1720,6 @@ loop:
                 TRACE("label/1 label=%i\n", label);
                 USED_BY_TRACE(label);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("Mark label %i here at %" PRIuPTR "\n", label, pc - code);
-                    module_add_label(mod, label, pc);
-                #endif
                 break;
             }
 
@@ -2180,28 +1732,16 @@ loop:
                 DECODE_LITERAL(arity, pc);
 
                 TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
-                USED_BY_TRACE(function_name_atom);
-                USED_BY_TRACE(module_atom);
-                USED_BY_TRACE(arity);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     RAISE_ERROR_MFA(FUNCTION_CLAUSE_ATOM, module_atom, function_name_atom, arity);
-                #endif
                 break;
             }
 
             case OP_INT_CALL_END: {
                 TRACE("int_call_end!\n");
 
-            #ifdef IMPL_CODE_LOADER
-                TRACE("-- Code loading finished --\n");
-                SMP_MODULE_UNLOCK(mod);
-                return pc - code - 1;
-            #endif
 
-            #ifdef IMPL_EXECUTE_LOOP
                 goto terminate_context;
-            #endif
             }
 
             case OP_CALL: {
@@ -2213,7 +1753,6 @@ loop:
                 TRACE("call/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     ctx->cp = module_address(mod->module_index, pc - code);
 
                     remaining_reductions--;
@@ -2223,7 +1762,6 @@ loop:
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
-                #endif
 
                 break;
             }
@@ -2238,10 +1776,7 @@ loop:
 
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(label);
-                USED_BY_TRACE(n_words);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     ctx->cp = ctx->e[n_words];
                     ctx->e += (n_words + 1);
 
@@ -2254,7 +1789,6 @@ loop:
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
-                #endif
                 break;
             }
 
@@ -2266,9 +1800,7 @@ loop:
 
                 TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(label);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
                         TRACE_CALL(ctx, mod, "call_only", label, arity);
@@ -2276,12 +1808,10 @@ loop:
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
-                #endif
                 break;
             }
 
             case OP_CALL_EXT: {
-                #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
 
@@ -2289,7 +1819,6 @@ loop:
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, orig_pc);
                     }
-                #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -2297,10 +1826,8 @@ loop:
 
                 TRACE("call_ext/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(index);
 
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
 
                     const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
@@ -2395,13 +1922,11 @@ loop:
                             AVM_ABORT();
                         }
                     }
-                #endif
 
                 break;
             }
 
             case OP_CALL_EXT_LAST: {
-                #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
 
@@ -2409,7 +1934,6 @@ loop:
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, orig_pc);
                     }
-                #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -2419,10 +1943,8 @@ loop:
 
                 TRACE("call_ext_last/3, arity=%i, index=%i, n_words=%i\n", arity, index, n_words);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(index);
                 USED_BY_TRACE(n_words);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
 
                     const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
@@ -2544,7 +2066,6 @@ loop:
                             AVM_ABORT();
                         }
                     }
-                #endif
                 break;
             }
 
@@ -2555,16 +2076,13 @@ loop:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 TRACE("bif0/2 bif=%i, dreg=%c%i\n", bif, T_DEST_REG(dreg));
-                USED_BY_TRACE(bif);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl0 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
                     DEBUG_FAIL_NULL(func);
                     term ret = func(ctx);
 
                     WRITE_REGISTER(dreg, ret);
-                #endif
                 break;
             }
 
@@ -2579,13 +2097,8 @@ loop:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 TRACE("bif1/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
-                USED_BY_TRACE(bif);
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(arg1);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
                     DEBUG_FAIL_NULL(func);
@@ -2600,7 +2113,6 @@ loop:
                     }
 
                     WRITE_REGISTER(dreg, ret);
-                #endif
                 break;
             }
 
@@ -2617,14 +2129,8 @@ loop:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 TRACE("bif2/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
-                USED_BY_TRACE(bif);
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(arg1);
-                    UNUSED(arg2);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                     BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
                     DEBUG_FAIL_NULL(func);
@@ -2639,7 +2145,6 @@ loop:
                     }
 
                     WRITE_REGISTER(dreg, ret);
-                #endif
                 break;
             }
 
@@ -2649,10 +2154,7 @@ loop:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
-                USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
                         TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -2661,7 +2163,6 @@ loop:
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
-                #endif
                 break;
             }
 
@@ -2673,11 +2174,7 @@ loop:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
-                USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
                         TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -2686,7 +2183,6 @@ loop:
                     }
                     ctx->e -= stack_need + 1;
                     ctx->e[stack_need] = ctx->cp;
-                #endif
                 break;
             }
 
@@ -2696,10 +2192,7 @@ loop:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
-                USED_BY_TRACE(stack_need);
-                USED_BY_TRACE(live);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
                         TRIM_LIVE_REGS(live);
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -2712,7 +2205,6 @@ loop:
                         ctx->e[s] = term_nil();
                     }
                     ctx->e[stack_need] = ctx->cp;
-                #endif
                 break;
             }
 
@@ -2723,10 +2215,7 @@ loop:
                 DECODE_LITERAL(live_registers, pc);
 
                 TRACE("test_heap/2 heap_need=%i, live_registers=%i\n", heap_need, live_registers);
-                USED_BY_TRACE(heap_need);
-                USED_BY_TRACE(live_registers);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     size_t heap_free = context_avail_free_memory(ctx);
                     // if we need more heap space than is currently free, then try to GC the needed space
                     if (heap_free < heap_need) {
@@ -2743,7 +2232,6 @@ loop:
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
-                #endif
                 break;
             }
 
@@ -2753,9 +2241,7 @@ loop:
 
                 TRACE("kill/1 target=%i\n", target);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     ctx->e[target] = term_nil();
-                #endif
                 break;
             }
 
@@ -2764,9 +2250,7 @@ loop:
                 DECODE_LITERAL(n_words, pc);
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
-                USED_BY_TRACE(n_words);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     DEBUG_DUMP_STACK(ctx);
 
                     ctx->cp = ctx->e[n_words];
@@ -2778,14 +2262,12 @@ loop:
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                     }
-                #endif
                 break;
             }
 
             case OP_RETURN: {
                 TRACE("return/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE_RETURN(ctx);
 
                     if ((intptr_t) ctx->cp == -1) {
@@ -2793,16 +2275,11 @@ loop:
                     }
 
                     DO_RETURN();
-                #endif
                 break;
             }
 
             case OP_SEND: {
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("send/0\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term recipient_term = x_regs[0];
                     if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
                         term return_value = dist_send_message(recipient_term, x_regs[1], ctx);
@@ -2829,14 +2306,12 @@ loop:
                         globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
                         x_regs[0] = x_regs[1];
                     }
-                #endif
                 break;
             }
 
             case OP_REMOVE_MESSAGE: {
                 TRACE("remove_message/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
                         scheduler_cancel_timeout(ctx);
                     }
@@ -2844,19 +2319,16 @@ loop:
                     mailbox_remove_message(&ctx->mailbox, &ctx->heap);
                     ctx->mailbox.receive_has_match_clauses = false;
                     // Cannot GC now as remove_message is GC neutral
-                #endif
                 break;
             }
 
             case OP_TIMEOUT: {
                 TRACE("timeout/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
                     ctx->mailbox.receive_has_match_clauses = false;
 
                     mailbox_reset(&ctx->mailbox);
-                #endif
                 break;
             }
 
@@ -2868,7 +2340,6 @@ loop:
 
                 TRACE("loop_rec/2, dreg=%c%i\n", T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     ctx->mailbox.receive_has_match_clauses = true;
                     term ret;
                     PROCESS_SIGNAL_MESSAGES();
@@ -2879,7 +2350,6 @@ loop:
                     } else {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     }
-                #endif
                 break;
             }
 
@@ -2888,13 +2358,10 @@ loop:
                 DECODE_LABEL(label, pc);
 
                 TRACE("loop_rec_end/1 label=%i\n", label);
-                USED_BY_TRACE(label);
 
-#ifdef IMPL_EXECUTE_LOOP
                 PROCESS_SIGNAL_MESSAGES();
                 mailbox_next(&ctx->mailbox);
                 pc = mod->labels[label];
-#endif
                 break;
             }
 
@@ -2904,27 +2371,22 @@ loop:
 
                 TRACE("wait/1\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     // When a message is sent, process is moved to ready list
                     // after message is enqueued. So we always schedule out
                     // when executing wait/1 and process will be scheduled in
                     // and the outer list will be processed.
                     SCHEDULE_WAIT(mod, mod->labels[label]);
-                #endif
                 break;
             }
 
             case OP_WAIT_TIMEOUT: {
-                #ifdef IMPL_EXECUTE_LOOP
                     // PC for wait_timeout_trap_handler, just before label
                     const uint8_t *saved_pc = pc;
-                #endif
                 uint32_t label;
                 DECODE_LABEL(label, pc)
                 term timeout;
                 DECODE_COMPACT_TERM(timeout, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     avm_int64_t t = 0;
                     if (term_is_any_integer(timeout)) {
                         t = term_maybe_unbox_int64(timeout);
@@ -2959,18 +2421,11 @@ loop:
                         ctx->waiting_with_timeout = true;
                         SCHEDULE_WAIT(mod, saved_pc);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("wait_timeout/2, label: %i\n", label);
-
-                    UNUSED(timeout)
-                #endif
 
                 break;
             }
 
-#ifdef IMPL_EXECUTE_LOOP
 wait_timeout_trap_handler:
             {
                 // Redo the offset computation and refetch the label
@@ -2997,7 +2452,6 @@ wait_timeout_trap_handler:
                 }
                 break;
             }
-#endif
 
             case OP_IS_LT: {
                 uint32_t label;
@@ -3007,7 +2461,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_lt/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
@@ -3016,13 +2469,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_lt/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3035,7 +2482,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_ge/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
@@ -3044,13 +2490,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_ge/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3063,7 +2503,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
@@ -3072,13 +2511,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_equal/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3091,7 +2524,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
@@ -3100,13 +2532,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_not_equal/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3119,7 +2545,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
@@ -3128,13 +2553,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_eq_exact/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3147,7 +2566,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_not_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
                     TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
@@ -3156,13 +2574,7 @@ wait_timeout_trap_handler:
                     } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_not_eq_exact/3\n");
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
 
                 break;
             }
@@ -3173,19 +2585,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_integer/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_any_integer(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_integer/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3196,19 +2601,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_float/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_float(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_float/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3219,19 +2617,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_number/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_number(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_number/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3242,18 +2633,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_binary/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_binary(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_binary/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3264,18 +2649,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_list(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_list/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3286,18 +2665,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_nonempty_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_nonempty_list(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_nonempty_list/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3308,18 +2681,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_nil/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_nil(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_nil/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3330,18 +2697,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_atom/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_atom(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_atom/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3352,18 +2713,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_pid/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_pid(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_pid/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3374,18 +2729,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_reference/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_reference(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_reference/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3396,18 +2745,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_port/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_port(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_port/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3418,19 +2761,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_tuple/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_tuple(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_tuple/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3443,20 +2779,13 @@ wait_timeout_trap_handler:
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("test_arity/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     assert(term_is_tuple(arg1));
                     if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("test_arity/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -3471,16 +2800,9 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(size, pc)
 
                 TRACE("select_val/3, default_label=%i, vals=%i\n", default_label, size);
-                USED_BY_TRACE(default_label);
-                USED_BY_TRACE(size);
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_value);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     const uint8_t *jump_to_address = NULL;
-                #endif
 
                 for (uint32_t j = 0; j < size / 2; j++) {
                     term cmp_value;
@@ -3488,11 +2810,7 @@ wait_timeout_trap_handler:
                     uint32_t jmp_label;
                     DECODE_LABEL(jmp_label, pc)
 
-                    #ifdef IMPL_CODE_LOADER
-                        UNUSED(cmp_value);
-                    #endif
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         if (!jump_to_address) {
                             TermCompareResult result = term_compare(
                                 src_value, cmp_value, TermCompareExact, ctx->global);
@@ -3502,16 +2820,13 @@ wait_timeout_trap_handler:
                                 RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                         }
-                    #endif
                 }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (!jump_to_address) {
                         JUMP_TO_ADDRESS(mod->labels[default_label]);
                     } else {
                         JUMP_TO_ADDRESS(jump_to_address);
                     }
-                #endif
                 break;
             }
 
@@ -3525,21 +2840,12 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(size, pc)
 
                 TRACE("select_tuple_arity/3, default_label=%i, vals=%i\n", default_label, size);
-                USED_BY_TRACE(default_label);
-                USED_BY_TRACE(size);
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_value);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     const uint8_t *jump_to_address = NULL;
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     assert(term_is_tuple(src_value));
                     int arity = term_get_tuple_arity(src_value);
-                #endif
 
                     for (uint32_t j = 0; j < size / 2; j++) {
                         uint32_t cmp_value;
@@ -3547,24 +2853,17 @@ wait_timeout_trap_handler:
                         uint32_t jmp_label;
                         DECODE_LABEL(jmp_label, pc)
 
-                        #ifdef IMPL_CODE_LOADER
-                            UNUSED(cmp_value);
-                        #endif
 
-                        #ifdef IMPL_EXECUTE_LOOP
                             if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
                                 jump_to_address = mod->labels[jmp_label];
                             }
-                        #endif
                     }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (!jump_to_address) {
                         JUMP_TO_ADDRESS(mod->labels[default_label]);
                     } else {
                         JUMP_TO_ADDRESS(jump_to_address);
                     }
-                #endif
                 break;
             }
 
@@ -3573,16 +2872,13 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(label, pc)
 
                 TRACE("jump/1 label=%i\n", label);
-                USED_BY_TRACE(label);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (LIKELY(remaining_reductions)) {
                         JUMP_TO_ADDRESS(mod->labels[label]);
                     } else {
                         SCHEDULE_NEXT(mod, mod->labels[label]);
                     }
-                #endif
                 break;
             }
 
@@ -3592,16 +2888,10 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("move/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(dreg));
 
                     WRITE_REGISTER(dreg, src_value);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("move/2\n");
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -3613,19 +2903,13 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(tail_dreg);
                 DECODE_DEST_REGISTER(tail_dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_list/3 %" TERM_X_FMT ", %c%i, %c%i\n", src_value, T_DEST_REG(head_dreg), T_DEST_REG(tail_dreg));
 
                     term *list_ptr = term_get_list_ptr(src_value);
 
                     WRITE_REGISTER(head_dreg, list_ptr[LIST_HEAD_INDEX]);
                     WRITE_REGISTER(tail_dreg, list_ptr[LIST_TAIL_INDEX]);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("get_list/3\n");
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -3638,20 +2922,14 @@ wait_timeout_trap_handler:
                 DECODE_DEST_REGISTER(dreg, pc);
 
                 TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, T_DEST_REG(dreg));
-                USED_BY_TRACE(element);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_tuple(src_value) || (element >= (uint32_t) term_get_tuple_arity(src_value)))) {
                         AVM_ABORT();
                     }
 
                     term t = term_get_tuple_element(src_value, element);
                     WRITE_REGISTER(dreg, t);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -3665,19 +2943,12 @@ wait_timeout_trap_handler:
 
                 TRACE("set_tuple_element/2\n");
 
-#ifdef IMPL_EXECUTE_LOOP
                 if (UNLIKELY(!term_is_tuple(tuple) || (position >= (uint32_t) term_get_tuple_arity(tuple)))) {
                     AVM_ABORT();
                 }
 
                 term_put_tuple_element(tuple, position, new_element);
-#endif
 
-#ifdef IMPL_CODE_LOADER
-                UNUSED(tuple);
-                UNUSED(position);
-                UNUSED(new_element);
-#endif
                 break;
             }
 
@@ -3688,24 +2959,15 @@ wait_timeout_trap_handler:
                 term tail;
                 DECODE_COMPACT_TERM(tail, pc);
 
-#ifdef IMPL_EXECUTE_LOOP
                 term *list_elem = term_list_alloc(&ctx->heap);
-#endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("put_list/3\n");
-                    UNUSED(head);
-                    UNUSED(tail);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("put_list/3 dreg=%c%i\n", T_DEST_REG(dreg));
                     term t = term_list_init_prepend(list_elem, head, tail);
                     WRITE_REGISTER(dreg, t);
-                #endif
                 break;
             }
 
@@ -3713,12 +2975,7 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("badmatch/1\n");
-                    USED_BY_TRACE(arg1);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("badmatch/1, v=0x%" TERM_X_FMT "\n", arg1);
 
                     // We can gc as we are raising
@@ -3731,16 +2988,13 @@ wait_timeout_trap_handler:
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
                     RAISE_ERROR(new_error_tuple);
-                #endif
                 break;
             }
 
             case OP_IF_END: {
                 TRACE("if_end/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     RAISE_ERROR(IF_CLAUSE_ATOM);
-                #endif
                 break;
             }
 
@@ -3748,12 +3002,7 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("case_end/1\n");
-                    USED_BY_TRACE(arg1);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("case_end/1, v=0x%" TERM_X_FMT "\n", arg1);
 
                     // We can gc as we are raising
@@ -3766,24 +3015,19 @@ wait_timeout_trap_handler:
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
                     RAISE_ERROR(new_error_tuple);
-                #endif
                 break;
             }
 
             case OP_CALL_FUN: {
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, pc - 1);
                     }
-                #endif
                 uint32_t args_count;
                 DECODE_LITERAL(args_count, pc)
 
                 TRACE("call_fun/1, args_count=%i\n", args_count);
-                USED_BY_TRACE(args_count);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term fun;
                     READ_ANY_XREG(fun, args_count);
                     if (UNLIKELY(!term_is_function(fun))) {
@@ -3798,7 +3042,6 @@ wait_timeout_trap_handler:
                     }
 
                     CALL_FUN(fun, args_count)
-                #endif
 
                 break;
             }
@@ -3809,30 +3052,21 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_function/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_function(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_function/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
 
             case OP_CALL_EXT_ONLY: {
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, pc - 1);
                     }
-                #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -3840,8 +3074,6 @@ wait_timeout_trap_handler:
 
                 TRACE("call_ext_only/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
-                USED_BY_TRACE(index);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
 
                     const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
@@ -3930,7 +3162,6 @@ wait_timeout_trap_handler:
                             AVM_ABORT();
                         }
                     }
-                #endif
 
                 break;
             }
@@ -3940,14 +3171,12 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(fun_index, pc)
 
                 TRACE("make_fun/2, fun_index=%i\n", fun_index);
-                #ifdef IMPL_EXECUTE_LOOP
                     term f = make_fun(ctx, mod, fun_index, x_regs);
                     if (term_is_invalid_term(f)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     } else {
                         x_regs[0] = f;
                     }
-                #endif
                 break;
             }
 
@@ -3959,10 +3188,8 @@ wait_timeout_trap_handler:
 
                 TRACE("try/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
                     WRITE_REGISTER(dreg, catch_term);
-                #endif
                 break;
             }
 
@@ -3972,9 +3199,7 @@ wait_timeout_trap_handler:
 
                 TRACE("try_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg, term_nil());
-                #endif
                 break;
             }
 
@@ -3984,10 +3209,8 @@ wait_timeout_trap_handler:
 
                 TRACE("try_case/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     // clears the catch value on stack
                     WRITE_REGISTER(dreg, term_nil());
-                #endif
                 break;
             }
 
@@ -3995,12 +3218,7 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("try_case_end/1\n");
-                    UNUSED(arg1);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("try_case_end/1, val=%" TERM_X_FMT "\n", arg1);
 
                     // We can gc as we are raising
@@ -4013,7 +3231,6 @@ wait_timeout_trap_handler:
                     term_put_tuple_element(new_error_tuple, 1, arg1);
 
                     RAISE_ERROR(new_error_tuple);
-                #endif
                 break;
             }
 
@@ -4023,19 +3240,12 @@ wait_timeout_trap_handler:
                 term exc_value;
                 DECODE_COMPACT_TERM(exc_value, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("raise/2\n");
-                    UNUSED(stacktrace);
-                    UNUSED(exc_value);
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
                     context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
                     ctx->exception_reason = exc_value;
                     ctx->exception_stacktrace = stacktrace;
                     goto handle_error;
-                #endif
 
                 break;
             }
@@ -4048,10 +3258,8 @@ wait_timeout_trap_handler:
 
                 TRACE("catch/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term catch_term = term_from_catch_label(mod->module_index, label);
                     WRITE_REGISTER(dreg, catch_term);
-                #endif
                 break;
             }
 
@@ -4061,7 +3269,6 @@ wait_timeout_trap_handler:
 
                 TRACE("catch_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg, term_nil());
                     // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
                     switch (term_to_atom_index(x_regs[0])) {
@@ -4098,7 +3305,6 @@ wait_timeout_trap_handler:
                             break;
                         }
                     }
-                #endif
                 break;
             }
 
@@ -4114,11 +3320,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_add/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_INTEGER(src1, "bs_add", 0);
                     VERIFY_IS_INTEGER(src2, "bs_add", 0);
                     avm_int_t src1_val = term_to_int(src1);
@@ -4127,7 +3329,6 @@ wait_timeout_trap_handler:
                     TRACE("bs_add/5, fail=%i src1=" AVM_INT_FMT " src2=" AVM_INT_FMT " unit=%u dreg=%c%i\n", fail, src1_val, src2_val, (unsigned) unit, T_DEST_REG(dreg));
 
                     WRITE_REGISTER(dreg, term_from_int((src1_val + src2_val) * unit));
-                #endif
                 break;
             }
 
@@ -4143,11 +3344,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_utf8/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf8/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT " dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
 
                     assert(term_is_match_state(src));
@@ -4165,7 +3362,6 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, offset_bits + (out_size * 8));
                         WRITE_REGISTER(dreg, term_from_int(val));
                     }
-                #endif
 
                 break;
             }
@@ -4180,11 +3376,7 @@ wait_timeout_trap_handler:
                 term arg3;
                 DECODE_COMPACT_TERM(arg3, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_skip_utf8/4\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf8/4, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT "\n", fail, src, arg2, arg3);
 
                     assert(term_is_match_state(src));
@@ -4201,7 +3393,6 @@ wait_timeout_trap_handler:
                     } else {
                         term_set_match_state_offset(src, offset_bits + (out_size * 8));
                     }
-                #endif
 
                 break;
             }
@@ -4218,11 +3409,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_utf16/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     assert(term_is_match_state(src));
@@ -4240,7 +3427,6 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, offset_bits + (out_size * 8));
                         WRITE_REGISTER(dreg, term_from_int(val));
                     }
-                #endif
 
                 break;
             }
@@ -4255,11 +3441,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_skip_utf16/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
 
                     assert(term_is_match_state(src));
@@ -4276,7 +3458,6 @@ wait_timeout_trap_handler:
                     } else {
                         term_set_match_state_offset(src, offset_bits + (out_size * 8));
                     }
-                #endif
 
                 break;
             }
@@ -4293,11 +3474,7 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_utf32/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_get_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
                     assert(term_is_match_state(src));
@@ -4314,7 +3491,6 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, offset_bits + 32);
                         WRITE_REGISTER(dreg, term_from_int(val));
                     }
-                #endif
 
                 break;
             }
@@ -4329,11 +3505,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_skip_utf32/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_skip_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
 
                     assert(term_is_match_state(src));
@@ -4349,7 +3521,6 @@ wait_timeout_trap_handler:
                     } else {
                         term_set_match_state_offset(src, offset_bits + 32);
                     }
-                #endif
 
                 break;
             }
@@ -4358,7 +3529,6 @@ wait_timeout_trap_handler:
 
                 TRACE("bs_init_writable/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
@@ -4370,7 +3540,6 @@ wait_timeout_trap_handler:
                     ctx->bs = t;
                     ctx->bs_offset = 0;
                     x_regs[0] = t;
-                #endif
                 break;
             }
 
@@ -4384,11 +3553,7 @@ wait_timeout_trap_handler:
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match3/4\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_start_match3/4, fail=%i src=0x%" TERM_X_FMT " live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
                     if (!(term_is_binary(src) || term_is_match_state(src))) {
                         pc = mod->labels[fail];
@@ -4404,7 +3569,6 @@ wait_timeout_trap_handler:
 
                         WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
-                #endif
                 break;
             }
 
@@ -4418,11 +3582,7 @@ wait_timeout_trap_handler:
                 UNUSED(live);
                 DECODE_LITERAL(live, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_position/3\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_position", 0);
 
                     TRACE("bs_get_position/3 src=0x%" TERM_X_FMT " dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
@@ -4431,7 +3591,6 @@ wait_timeout_trap_handler:
                     term offset_term = term_from_int(offset);
 
                     WRITE_REGISTER(dreg, offset_term);
-                #endif
                 break;
             }
 
@@ -4443,11 +3602,7 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_tail/3\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_tail", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
@@ -4480,7 +3635,6 @@ wait_timeout_trap_handler:
 
                         }
                     }
-                #endif
                 break;
             }
 
@@ -4490,18 +3644,13 @@ wait_timeout_trap_handler:
                 term pos;
                 DECODE_COMPACT_TERM(pos, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_set_position/2\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_set_position", 0);
                     VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
 
                     avm_int_t pos_val = term_to_int(pos);
                     TRACE("bs_set_position/2 src=0x%" TERM_X_FMT " pos=" AVM_INT_FMT "\n", src, pos_val);
                     term_set_match_state_offset(src,  pos_val);
-                #endif
                 break;
             }
 
@@ -4515,11 +3664,7 @@ wait_timeout_trap_handler:
                 uint32_t offset;
                 DECODE_LITERAL(offset, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_match_string/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_match_string", 0);
 
                     avm_int_t bs_offset = term_get_match_state_offset(src);
@@ -4583,7 +3728,6 @@ wait_timeout_trap_handler:
                             }
                         }
                     }
-                #endif
                 break;
             }
 
@@ -4599,11 +3743,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_skip_bits2/5\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
                     VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
                     // Ignore flags value as skipping bits is the same whatever the endianness
@@ -4621,7 +3761,6 @@ wait_timeout_trap_handler:
                         term_set_match_state_offset(src, bs_offset + increment);
                     }
 
-                #endif
                 break;
             }
 
@@ -4634,11 +3773,7 @@ wait_timeout_trap_handler:
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_test_unit/3\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
 
                     TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
@@ -4649,7 +3784,6 @@ wait_timeout_trap_handler:
                         TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }
-                #endif
                 break;
             }
 #endif
@@ -4663,11 +3797,7 @@ wait_timeout_trap_handler:
                 uint32_t bits;
                 DECODE_LITERAL(bits, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_test_tail2/3\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_test_tail2", 0);
 
                     TRACE("bs_test_tail2/3, fail=%u src=%p bits=%u\n", (unsigned) fail, (void *) src, (unsigned) bits);
@@ -4679,7 +3809,6 @@ wait_timeout_trap_handler:
                         TRACE("bs_test_tail2: Expected exactly %u bits remaining, but remaining=%u\n", (unsigned) bits, (unsigned) (term_binary_size(bs_bin) * 8 - bs_offset));
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }
-                #endif
                 break;
             }
 #endif
@@ -4699,11 +3828,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_integer2/7\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
                     VERIFY_IS_INTEGER(size,     "bs_get_integer", 0);
 
@@ -4754,14 +3879,11 @@ wait_timeout_trap_handler:
                     } else {
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg, t);
-                #endif
                 break;
             }
 
@@ -4780,11 +3902,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_float2/7\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
                     VERIFY_IS_INTEGER(size,     "bs_get_float", 0);
 
@@ -4823,15 +3941,12 @@ wait_timeout_trap_handler:
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
                         term t = term_from_float(value, &ctx->heap);
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                         WRITE_REGISTER(dreg, t);
                     }
-                #endif
                 break;
             }
 
@@ -4849,11 +3964,7 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_get_binary2/7\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(src, "bs_get_binary2", 0);
 
                     term bs_bin = term_get_match_state_binary(src);
@@ -4896,23 +4007,19 @@ wait_timeout_trap_handler:
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                         bs_bin = x_regs[live];
 
                         term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
                         WRITE_REGISTER(dreg, t);
                     }
-                #endif
                 break;
             }
 
             case OP_APPLY: {
-                #ifdef IMPL_EXECUTE_LOOP
                     // save pc in case of error
                     const uint8_t *orig_pc = pc - 1;
 
@@ -4920,10 +4027,8 @@ wait_timeout_trap_handler:
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, orig_pc);
                     }
-                #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
-#ifdef IMPL_EXECUTE_LOOP
                 term module;
                 READ_ANY_XREG(module, arity);
                 term function;
@@ -4960,25 +4065,18 @@ wait_timeout_trap_handler:
                     ctx->cp = module_address(mod->module_index, pc - code);
                     JUMP_TO_LABEL(target_module, target_label);
                 }
-#endif
-#ifdef IMPL_CODE_LOADER
-                TRACE("apply/1 arity=%i\n", arity);
-#endif
                 break;
             }
 
             case OP_APPLY_LAST: {
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, pc - 1);
                     }
-                #endif
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
                 uint32_t n_words;
                 DECODE_LITERAL(n_words, pc);
-#ifdef IMPL_EXECUTE_LOOP
                 term module;
                 READ_ANY_XREG(module, arity);
                 term function;
@@ -5016,10 +4114,6 @@ wait_timeout_trap_handler:
                     }
                     JUMP_TO_LABEL(target_module, target_label);
                 }
-#endif
-#ifdef IMPL_CODE_LOADER
-                TRACE("apply_last/1 arity=%i deallocate=%i\n", arity, n_words);
-#endif
                 break;
             }
 
@@ -5029,19 +4123,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_boolean/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if ((arg1 != TRUE_ATOM) && (arg1 != FALSE_ATOM)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_boolean/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                    #endif
 
                 break;
             }
@@ -5054,7 +4141,6 @@ wait_timeout_trap_handler:
                 term arity_term;
                 DECODE_COMPACT_TERM(arity_term, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_function2/3, label=%i, arg1=%" TERM_X_FMT ", arity=%p\n", label, arg1, (void *) arity_term);
 
                     if (term_is_function(arg1) && term_is_integer(arity_term)) {
@@ -5087,13 +4173,7 @@ wait_timeout_trap_handler:
                     } else {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_function2/3\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -5108,7 +4188,6 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRIM_LIVE_REGS(live);
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
@@ -5123,24 +4202,13 @@ wait_timeout_trap_handler:
                             HANDLE_ERROR();
                         }
                     }
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("gc_bif1/5\n");
-
-                    UNUSED(fail_label)
-                    UNUSED(live)
-                    UNUSED(bif)
-                    UNUSED(arg1)
-                #endif
                 break;
             }
 
@@ -5156,7 +4224,6 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRIM_LIVE_REGS(live);
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
@@ -5171,25 +4238,13 @@ wait_timeout_trap_handler:
                             HANDLE_ERROR();
                         }
                     }
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("gc_bif2/6\n");
-
-                    UNUSED(fail_label)
-                    UNUSED(live)
-                    UNUSED(bif)
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                #endif
                 break;
             }
 
@@ -5199,18 +4254,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_bitstr/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_binary(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_bitstr/2\n");
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -5229,7 +4278,6 @@ wait_timeout_trap_handler:
                 term arg3;
                 DECODE_COMPACT_TERM(arg3, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRIM_LIVE_REGS(live);
 
                     const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
@@ -5244,26 +4292,13 @@ wait_timeout_trap_handler:
                             HANDLE_ERROR();
                         }
                     }
-                #endif
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", arg3=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg));
                     WRITE_REGISTER(dreg, ret);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("gc_bif2/6\n");
-
-                    UNUSED(fail_label)
-                    UNUSED(live)
-                    UNUSED(bif)
-                    UNUSED(arg1)
-                    UNUSED(arg2)
-                    UNUSED(arg3)
-                #endif
                 break;
             }
 
@@ -5274,32 +4309,23 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(n_remaining, pc);
 
                 TRACE("trim/2 words=%i, remaining=%i\n", n_words, n_remaining);
-                USED_BY_TRACE(n_words);
                 USED_BY_TRACE(n_remaining);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     DEBUG_DUMP_STACK(ctx);
                     ctx->e += n_words;
                     DEBUG_DUMP_STACK(ctx);
-                #endif
 
                 UNUSED(n_remaining)
                 break;
             }
 
             case OP_LINE: {
-                #ifdef IMPL_CODE_LOADER
-                    unsigned int offset = pc - code;
-                #endif
                 uint32_t line_number;
                 // This decode increments pc and ensures we can decode it
                 DECODE_LITERAL(line_number, pc);
 
                 TRACE("line/1: %i\n", line_number);
 
-                #ifdef IMPL_CODE_LOADER
-                    module_insert_line_ref_offset(mod, line_refs, line_number, offset);
-                #endif
                 break;
             }
 
@@ -5313,41 +4339,30 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
 	                TRACE("put_map_assoc/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
-	            #else
-	                TRACE("put_map_assoc/5: label: %i dest=%c%i live: %i\n", label, T_DEST_REG_GC_SAFE(dreg), live);
-	            #endif
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     const uint8_t *list_pc = pc;
-                #endif
                 uint32_t num_elements = list_len / 2;
                 //
                 // Count how many of the entries in list(...) are not already in src
                 //
-                #ifdef IMPL_EXECUTE_LOOP
                     unsigned new_entries = 0;
-                #endif
                 for (uint32_t j = 0;  j < num_elements;  ++j) {
                     term key, value;
                     DECODE_COMPACT_TERM(key, pc);
                     DECODE_COMPACT_TERM(value, pc);
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         int map_pos = term_find_map_pos(src, key, ctx->global);
                         if (map_pos == TERM_MAP_NOT_FOUND) {
                             new_entries++;
                         } else if (UNLIKELY(map_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                    #endif
                 }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC
                     //
@@ -5435,7 +4450,6 @@ wait_timeout_trap_handler:
                     free(kv);
 
                     WRITE_REGISTER_GC_SAFE(dreg, map);
-                #endif
                 break;
             }
 
@@ -5449,17 +4463,11 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("put_map_exact/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
-                #else
-	            TRACE("put_map_exact/5: label: %i dest=%c%i live: %i\n", label, T_DEST_REG_GC_SAFE(dreg), live);
-                #endif
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     const uint8_t *list_pc = pc;
-                #endif
                 uint32_t num_elements = list_len / 2;
                 //
                 // Make sure every key from list is in src
@@ -5469,17 +4477,14 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(key, pc);
                     DECODE_COMPACT_TERM(value, pc);
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         int map_pos = term_find_map_pos(src, key, ctx->global);
                         if (map_pos == TERM_MAP_NOT_FOUND) {
                             RAISE_ERROR(BADARG_ATOM);
                         } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                    #endif
                 }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     //
                     // Maybe GC
                     //
@@ -5512,7 +4517,6 @@ wait_timeout_trap_handler:
                         term_set_map_assoc(map, pos, key, value);
                     }
                     WRITE_REGISTER_GC_SAFE(dreg, map);
-                #endif
                 break;
             }
 
@@ -5522,19 +4526,12 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_map/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
                     if (!term_is_map(arg1)) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_map/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -5545,11 +4542,7 @@ wait_timeout_trap_handler:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("has_map_fields/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
-                #else
-                    TRACE("has_map_fields/3: label: %i\n", label);
-                #endif
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
@@ -5558,7 +4551,6 @@ wait_timeout_trap_handler:
                     term key;
                     DECODE_COMPACT_TERM(key, pc);
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         int pos = term_find_map_pos(src, key, ctx->global);
                         if (pos == TERM_MAP_NOT_FOUND) {
                             pc = mod->labels[label];
@@ -5566,7 +4558,6 @@ wait_timeout_trap_handler:
                         } else if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
                             RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                    #endif
                 }
                 break;
             }
@@ -5576,11 +4567,7 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(label, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_map_elements/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
-                #else
-                    TRACE("get_map_elements/3: label: %i\n", label);
-                #endif
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
@@ -5592,7 +4579,6 @@ wait_timeout_trap_handler:
                     DEST_REGISTER(dreg);
                     DECODE_DEST_REGISTER(dreg, pc);
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         int pos = term_find_map_pos(src, key, ctx->global);
                         if (pos == TERM_MAP_NOT_FOUND) {
                             pc = mod->labels[label];
@@ -5603,7 +4589,6 @@ wait_timeout_trap_handler:
                             term value = term_get_map_value(src, pos);
                             WRITE_REGISTER(dreg, value);
                         }
-                    #endif
                 }
                 break;
             }
@@ -5618,19 +4603,12 @@ wait_timeout_trap_handler:
                 term tag_atom;
                 DECODE_ATOM(tag_atom, pc)
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("is_tagged_tuple/2, label=%u, arg1=%p, arity=%u, atom_id=%p\n", (unsigned) label, (void *) arg1, (unsigned) arity, (void *) tag_atom);
 
                     if (!(term_is_tuple(arg1) && ((uint32_t) term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom))) {
                         pc = mod->labels[label];
                     }
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("is_tagged_tuple/2\n");
-                    UNUSED(label)
-                    UNUSED(arg1)
-                #endif
 
                 break;
             }
@@ -5641,31 +4619,18 @@ wait_timeout_trap_handler:
                     DECODE_FP_REGISTER(freg, pc);
                     DEST_REGISTER(dreg);
                     DECODE_DEST_REGISTER(dreg, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
                         // Space should be available on heap as compiler added an allocate opcode
                         term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
                         WRITE_REGISTER(dreg, float_value);
-                    #endif
-                    #ifdef IMPL_CODE_LOADER
-                        TRACE("fmove/2\n");
-                        UNUSED(freg)
-                    #endif
                 } else {
                     term src_value;
                     DECODE_COMPACT_TERM(src_value, pc);
                     int freg;
                     DECODE_FP_REGISTER(freg, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         TRACE("fmove/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
                         context_ensure_fpregs(ctx);
                         ctx->fr[freg] = term_to_float(src_value);
-                    #endif
-                    #ifdef IMPL_CODE_LOADER
-                        TRACE("fmove/2\n");
-                        UNUSED(src_value)
-                        UNUSED(freg)
-                    #endif
                 }
                 break;
             }
@@ -5676,7 +4641,6 @@ wait_timeout_trap_handler:
                 int freg;
                 DECODE_FP_REGISTER(freg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fconv/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
                     context_ensure_fpregs(ctx);
                     if (UNLIKELY(!term_is_number(src_value))) {
@@ -5687,13 +4651,7 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(BADARITH_ATOM);
                     }
                     ctx->fr[freg] = converted;
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fconv/2\n");
-                    UNUSED(freg)
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -5707,7 +4665,6 @@ wait_timeout_trap_handler:
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fadd/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
@@ -5732,14 +4689,7 @@ wait_timeout_trap_handler:
                             }
                         }
                     #endif
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fadd/3\n");
-                    UNUSED(freg1)
-                    UNUSED(freg2)
-                    UNUSED(freg3)
-                #endif
                 break;
             }
 
@@ -5753,7 +4703,6 @@ wait_timeout_trap_handler:
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fsub/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
@@ -5778,14 +4727,7 @@ wait_timeout_trap_handler:
                             }
                         }
                     #endif
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fsub/3\n");
-                    UNUSED(freg1)
-                    UNUSED(freg2)
-                    UNUSED(freg3)
-                #endif
                 break;
             }
 
@@ -5799,7 +4741,6 @@ wait_timeout_trap_handler:
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fmul/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW);
@@ -5824,14 +4765,7 @@ wait_timeout_trap_handler:
                             }
                         }
                     #endif
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fmul/3\n");
-                    UNUSED(freg1)
-                    UNUSED(freg2)
-                    UNUSED(freg3)
-                #endif
                 break;
             }
 
@@ -5845,7 +4779,6 @@ wait_timeout_trap_handler:
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fdiv/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
                     #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
                         feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
@@ -5870,14 +4803,7 @@ wait_timeout_trap_handler:
                             }
                         }
                     #endif
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fdiv/3\n");
-                    UNUSED(freg1)
-                    UNUSED(freg2)
-                    UNUSED(freg3)
-                #endif
                 break;
             }
 
@@ -5887,17 +4813,10 @@ wait_timeout_trap_handler:
                 int freg1, freg2;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("fnegate/2 fp%i, fp%i\n", freg1, freg2);
                     context_ensure_fpregs(ctx);
                     ctx->fr[freg2] = - ctx->fr[freg1];
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("fnegate/2\n");
-                    UNUSED(freg1)
-                    UNUSED(freg2)
-                #endif
                 break;
             }
 
@@ -5905,11 +4824,9 @@ wait_timeout_trap_handler:
 
                 TRACE("build_stacktrace/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
 
                     x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
 
-                #endif
                 break;
             }
 
@@ -5917,7 +4834,6 @@ wait_timeout_trap_handler:
 
                 TRACE("raw_raise/0\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     // This is an optimization from the compiler where we don't need to call
                     // stacktrace_create_raw here because the stack trace has already been created
                     // and set in x[2].
@@ -5932,7 +4848,6 @@ wait_timeout_trap_handler:
                         ctx->exception_stacktrace = x_regs[2];
                         goto handle_error;
                     }
-                #endif
                 break;
             }
 
@@ -5942,18 +4857,12 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(head_dreg);
                 DECODE_DEST_REGISTER(head_dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_hd/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(head_dreg));
 
                     term head = term_get_list_head(src_value);
 
                     WRITE_REGISTER(head_dreg, head);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("get_hd/2\n");
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -5963,18 +4872,12 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(tail_dreg);
                 DECODE_DEST_REGISTER(tail_dreg, pc);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("get_tl/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(tail_dreg));
 
                     term tail = term_get_list_tail(src_value);
 
                     WRITE_REGISTER(tail_dreg, tail);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("get_tl/2\n");
-                    UNUSED(src_value)
-                #endif
                 break;
             }
 
@@ -5986,28 +4889,18 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(size, pc)
 
                 TRACE("put_tuple2/2, size=%i\n", size);
-                USED_BY_TRACE(size);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term t = term_alloc_tuple(size, &ctx->heap);
-                #endif
 
                 for (uint32_t j = 0; j < size; j++) {
                     term element;
                     DECODE_COMPACT_TERM(element, pc)
 
-                    #ifdef IMPL_CODE_LOADER
-                        UNUSED(element);
-                    #endif
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         term_put_tuple_element(t, j, element);
-                    #endif
                 }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     WRITE_REGISTER(dreg, t);
-                #endif
                 break;
             }
 
@@ -6019,13 +4912,11 @@ wait_timeout_trap_handler:
 
                 TRACE("swap/2 a=%c%i, b=%c%i\n", T_DEST_REG(reg_a), T_DEST_REG(reg_b));
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term a = READ_DEST_REGISTER(reg_a);
                     term b = READ_DEST_REGISTER(reg_b);
 
                     WRITE_REGISTER(reg_a, b);
                     WRITE_REGISTER(reg_b, a);
-                #endif
                 break;
             }
 
@@ -6040,11 +4931,7 @@ wait_timeout_trap_handler:
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("bs_start_match4/4\n");
-                #endif
 
-                #ifdef IMPL_EXECUTE_LOOP
                     TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG_GC_SAFE(dreg));
 
                     // no_fail: we know it's a binary or a match_state
@@ -6065,7 +4952,6 @@ wait_timeout_trap_handler:
 
                         WRITE_REGISTER_GC_SAFE(dreg, match_state);
                     }
-                #endif
                 break;
             }
 
@@ -6079,27 +4965,21 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(numfree, pc)
                 TRACE("make_fun3/3, fun_index=%i dreg=%c%i numfree=%i\n", fun_index, T_DEST_REG(dreg), numfree);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     size_t size = numfree + BOXED_FUN_SIZE;
                     term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
                     boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
                     boxed_func[1] = (term) mod;
                     boxed_func[2] = term_from_int(fun_index);
-                #endif
 
                 for (uint32_t j = 0; j < numfree; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         boxed_func[3 + j] = arg;
-                    #endif
                 }
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term fun = ((term) boxed_func) | TERM_PRIMARY_BOXED;
                     WRITE_REGISTER(dreg, fun);
-                #endif
                 break;
             }
 
@@ -6110,9 +4990,7 @@ wait_timeout_trap_handler:
                 for (uint32_t j = 0; j < size; j++) {
                     uint32_t target;
                     DECODE_YREG(target, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         ctx->e[target] = term_nil();
-                    #endif
                 }
                 break;
             }
@@ -6137,10 +5015,8 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(reg_a);
                 DECODE_DEST_REGISTER(reg_a, pc);
                 TRACE("recv_marker_reserve/1: reg1=%c%i\n", T_DEST_REG(reg_a));
-#ifdef IMPL_EXECUTE_LOOP
                 // Clear register to avoid any issue with GC
                 WRITE_REGISTER(reg_a, term_nil());
-#endif
                 break;
             }
 
@@ -6166,21 +5042,11 @@ wait_timeout_trap_handler:
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     const uint8_t* list_pc = pc;
-                #endif
                 size_t nb_segments = list_len / 6;
-                #ifdef IMPL_CODE_LOADER
-                    if (list_len != nb_segments * 6) {
-                        fprintf(stderr, "Unexpected number of operations for bs_create_bin/6, each segment should be 6 elements\n");
-                        AVM_ABORT();
-                    }
-                #endif
                 // Verify parameters and compute binary size in first iteration
-                #ifdef IMPL_EXECUTE_LOOP
                     size_t binary_size = 0;
                     bool reuse_binary = false;
-                #endif
                 for (size_t j = 0; j < nb_segments; j++) {
                     term atom_type;
                     DECODE_ATOM(atom_type, pc);
@@ -6194,7 +5060,6 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(src, pc);
                     term size;
                     DECODE_COMPACT_TERM(size, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         size_t segment_size = 0;
                         switch (atom_type) {
                             // OTP ignores size for these types
@@ -6326,10 +5191,8 @@ wait_timeout_trap_handler:
                             }
                         }
                         binary_size += segment_unit * segment_size;
-                    #endif
                 }
                 // Allocate and build binary in second iteration
-                #ifdef IMPL_EXECUTE_LOOP
                     if (binary_size % 8) {
                         TRACE("bs_create_bin/6: total binary size (%d) is not evenly divisible by 8\n", (int) binary_size);
                         RAISE_ERROR(UNSUPPORTED_ATOM);
@@ -6560,17 +5423,14 @@ wait_timeout_trap_handler:
                         offset += segment_size;
                     }
                     WRITE_REGISTER_GC_SAFE(dreg, t);
-                #endif
                 break;
             }
 
             case OP_CALL_FUN2: {
-                #ifdef IMPL_EXECUTE_LOOP
                     remaining_reductions--;
                     if (UNLIKELY(!remaining_reductions)) {
                         SCHEDULE_NEXT(mod, pc - 1);
                     }
-                #endif
                 term tag;
                 DECODE_COMPACT_TERM(tag, pc)
                 unsigned int args_count;
@@ -6579,9 +5439,7 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(fun, pc)
 
                 TRACE("call_fun2/3, tag, args_count=%i, fun\n", args_count);
-                USED_BY_TRACE(args_count);
 
-                #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_function(fun))) {
                         // We can gc as we are raising
                         if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
@@ -6593,14 +5451,12 @@ wait_timeout_trap_handler:
                         RAISE_ERROR(new_error_tuple);
                     }
                     CALL_FUN(fun, args_count)
-                #endif
                 break;
             }
 
             case OP_BADRECORD: {
                 TRACE("badrecord/1\n");
 
-                #ifdef IMPL_EXECUTE_LOOP
                     term value;
                     DECODE_COMPACT_TERM(value, pc)
 
@@ -6612,20 +5468,12 @@ wait_timeout_trap_handler:
                     term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
                     term_put_tuple_element(new_error_tuple, 1, value);
                     RAISE_ERROR(new_error_tuple);
-                #endif
 
-                #ifdef IMPL_CODE_LOADER
-                    term value;
-                    DECODE_COMPACT_TERM(value, pc)
-                #endif
 
                 break;
             }
 
             case OP_UPDATE_RECORD: {
-                #ifdef IMPL_CODE_LOADER
-                    TRACE("update_record/5\n");
-                #endif
 
                 term hint;
                 DECODE_ATOM(hint, pc);
@@ -6635,16 +5483,13 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     if (UNLIKELY(!term_is_tuple(src) || (size != term_get_tuple_arity(src)))) {
                         fprintf(stderr, "update_record/5 !term_is_tuple(src) or size doesn't match\n");
                         AVM_ABORT();
                     }
-                #endif
                 DECODE_EXTENDED_LIST_TAG(pc);
                 int list_len;
                 DECODE_LITERAL(list_len, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     term dst;
                     dst = term_alloc_tuple(size, &ctx->heap);
 
@@ -6653,13 +5498,11 @@ wait_timeout_trap_handler:
                     for (int j = 0;  j < size; j++) {
                         term_put_tuple_element(dst, j, term_get_tuple_element(src, j));
                     }
-                #endif
                 for (int j = 0;  j < list_len; j+=2) {
                     int update_ix;
                     DECODE_LITERAL(update_ix, pc);
                     term update_value;
                     DECODE_COMPACT_TERM(update_value, pc);
-                    #ifdef IMPL_EXECUTE_LOOP
                         if (reuse) {
                             term old_value = term_get_tuple_element(dst, update_ix - 1);
                             TermCompareResult result = term_compare(update_value, old_value, TermCompareExact, ctx->global);
@@ -6671,15 +5514,12 @@ wait_timeout_trap_handler:
                             reuse = false;
                         }
                         term_put_tuple_element(dst, update_ix - 1, update_value);
-                    #endif
                 }
-                #ifdef IMPL_EXECUTE_LOOP
                     if (reuse) {
                         WRITE_REGISTER(dreg, src);
                     } else {
                         WRITE_REGISTER(dreg, dst);
                     }
-                #endif
                 break;
             }
 
@@ -6690,11 +5530,9 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc);
                 term match_state;
                 DECODE_COMPACT_TERM(match_state, pc);
-                #ifdef IMPL_EXECUTE_LOOP
                     VERIFY_IS_MATCH_STATE(match_state, "bs_match/3", fail)
                     term bs_bin = term_get_match_state_binary(match_state);
                     size_t bs_offset = term_get_match_state_offset(match_state);
-                #endif
                 DECODE_EXTENDED_LIST_TAG(pc);
                 int list_len;
                 DECODE_LITERAL(list_len, pc);
@@ -6711,7 +5549,6 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 size_t bs_bin_size = term_binary_size(bs_bin);
                                 if (UNLIKELY(stride < 0)) {
                                     RAISE_ERROR(BADARG_ATOM);
@@ -6722,7 +5559,6 @@ wait_timeout_trap_handler:
                                     TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
                                     goto bs_match_jump_to_fail;
                                 }
-                            #endif
                             break;
                         }
 
@@ -6730,7 +5566,6 @@ wait_timeout_trap_handler:
                             int stride;
                             DECODE_LITERAL(stride, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 if (UNLIKELY(stride < 0)) {
                                     RAISE_ERROR(BADARG_ATOM);
                                 }
@@ -6740,7 +5575,6 @@ wait_timeout_trap_handler:
                                     TRACE("bs_match/3: ensure_exactly failed -- bs_bin_size = %lu, bs_offset = %lu, stride = %lu\n", (unsigned long) bs_bin_size, (unsigned long) bs_offset, (unsigned long) stride);
                                     goto bs_match_jump_to_fail;
                                 }
-                            #endif
                             break;
                         }
 
@@ -6751,17 +5585,14 @@ wait_timeout_trap_handler:
                             term flags;
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 avm_int_t flags_value;
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode)
-                            #endif
                             term size;
                             DECODE_COMPACT_TERM(size, pc);
                             j++;
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 // context_clean_registers(ctx, live); // TODO: check if needed
                                 VERIFY_IS_INTEGER(size, "bs_match/3", fail);
                                 avm_int_t size_val = term_to_int(size);
@@ -6802,14 +5633,11 @@ wait_timeout_trap_handler:
                                 } else {
                                     goto bs_match_jump_to_fail;
                                 }
-                            #endif
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 WRITE_REGISTER(dreg, t);
                                 bs_offset += increment;
-                            #endif
                             break;
                         }
 
@@ -6820,18 +5648,15 @@ wait_timeout_trap_handler:
                             term flags;
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 // TODO : determine what this is used for
                                 avm_int_t flags_value;
                                 DECODE_FLAGS_LIST(flags_value, flags, opcode)
-                            #endif
                             int size;
                             DECODE_LITERAL(size, pc);
                             j++;
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 int matched_bits = size * unit;
                                 if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
@@ -6850,14 +5675,11 @@ wait_timeout_trap_handler:
                                 match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
                                 term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, &ctx->heap, ctx->global);
-                            #endif
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 WRITE_REGISTER(dreg, t);
                                 bs_offset += matched_bits;
-                            #endif
                             break;
                         }
 
@@ -6868,7 +5690,6 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 // TODO: rewrite this bit once bitstrings are supported
                                 if (bs_offset % 8 != 0) {
                                     TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
@@ -6886,14 +5707,11 @@ wait_timeout_trap_handler:
                                 match_state = x_regs[live];
                                 bs_bin = term_get_match_state_binary(match_state);
                                 term t = term_maybe_create_sub_binary(bs_bin, bs_offset_bytes, tail_bytes, &ctx->heap, ctx->global);
-                            #endif
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 WRITE_REGISTER(dreg, t);
                                 bs_offset = total_bytes * 8;
-                            #endif
                             break;
                         }
 
@@ -6907,7 +5725,6 @@ wait_timeout_trap_handler:
                             avm_int_t pattern_value;
                             DECODE_LITERAL(pattern_value, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 if (size > 64) {
                                     // TODO: implement support for big integers also here
                                     RAISE_ERROR(BADARG_ATOM);
@@ -6923,7 +5740,6 @@ wait_timeout_trap_handler:
                                     goto bs_match_jump_to_fail;
                                 }
                                 bs_offset += size;
-                            #endif
                             break;
                         }
 
@@ -6931,30 +5747,22 @@ wait_timeout_trap_handler:
                             int stride;
                             DECODE_LITERAL(stride, pc);
                             j++;
-                            #ifdef IMPL_EXECUTE_LOOP
                                 bs_offset += stride;
-                            #endif
                             break;
                         }
 
                         default:
                             fprintf(stderr, "bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
-                            #ifdef IMPL_EXECUTE_LOOP
                                 fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
-                            #endif
 
                             AVM_ABORT();
                     }
-                    #ifdef IMPL_EXECUTE_LOOP
                         term_set_match_state_offset(match_state, bs_offset);
-                    #endif
                 }
                 break;
 
-                #ifdef IMPL_EXECUTE_LOOP
 bs_match_jump_to_fail:
                     JUMP_TO_ADDRESS(mod->labels[fail]);
-                #endif
 
 #if MAXIMUM_OTP_COMPILER_VERSION >= 29
                 case OP_BIF3: {
@@ -6972,15 +5780,8 @@ bs_match_jump_to_fail:
                     DECODE_DEST_REGISTER(dreg, pc);
 
                     TRACE("bif3/6 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
-                    USED_BY_TRACE(bif);
 
-                    #ifdef IMPL_CODE_LOADER
-                        UNUSED(arg1);
-                        UNUSED(arg2);
-                        UNUSED(arg3);
-                    #endif
 
-                    #ifdef IMPL_EXECUTE_LOOP
                         const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
                         BifImpl3 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif3_ptr;
                         DEBUG_FAIL_NULL(func);
@@ -6995,7 +5796,6 @@ bs_match_jump_to_fail:
                         }
 
                         WRITE_REGISTER(dreg, ret);
-                    #endif
 
                     break;
                 }
@@ -7004,9 +5804,7 @@ bs_match_jump_to_fail:
 
             default:
                 printf("Undecoded opcode: %i\n", pc[-1]);
-                #ifdef IMPL_EXECUTE_LOOP
                     fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
-                #endif
                 AVM_ABORT();
                 return 1;
         }
@@ -7015,7 +5813,6 @@ bs_match_jump_to_fail:
 
 #endif
 
-#ifdef IMPL_EXECUTE_LOOP
 #ifndef AVM_NO_EMU
 do_abort:
         context_set_exception_class(ctx, ERROR_ATOM);
@@ -7094,7 +5891,6 @@ terminate_context:
         scheduler_terminate(ctx);
         ctx = scheduler_run(global);
         goto schedule_in;
-#endif
     }
 }
 
