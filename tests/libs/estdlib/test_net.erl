@@ -65,7 +65,7 @@ test_getaddrinfo(Host) ->
     expect_failure(fun() -> net:getaddrinfo([isnot, a, string]) end, badarg),
     expect_failure(fun() -> net:getaddrinfo([$i, $m, $p, $r, $o, $p, $e | $r]) end, badarg),
 
-    {error, _Reason} = net:getaddrinfo("ewkrkerkwe.oksjds.wee.org"),
+    ok = expect_nxdomain(fun() -> net:getaddrinfo("ewkrkerkwe.oksjds.wee.org") end),
 
     ok.
 
@@ -109,9 +109,20 @@ test_getaddrinfo2(Host, Service) ->
     expect_failure(fun() -> net:getaddrinfo(Host, [$i, $m, $p, $r, $o, $p, $e | $r]) end, badarg),
     expect_failure(fun() -> net:getaddrinfo(undefined, undefined) end, function_clause),
 
-    {error, _Reason} = net:getaddrinfo("ewkrkerkwe.oksjds.wee.org", Service),
+    ok = expect_nxdomain(fun() -> net:getaddrinfo("ewkrkerkwe.oksjds.wee.org", Service) end),
 
     ok.
+
+expect_nxdomain(F) ->
+    case os:getenv("GITHUB_ACTIONS") of
+        "true" ->
+            % GitHub DNS resolver may perform wildcard/hijacking resolving.
+            _ = F(),
+            ok;
+        false ->
+            {error, _Reason} = F(),
+            ok
+    end.
 
 expect_failure(F, Expected) ->
     try
