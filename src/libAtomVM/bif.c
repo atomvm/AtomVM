@@ -104,6 +104,15 @@ term bif_erlang_node_0(Context *ctx)
     return ctx->global->node_name;
 }
 
+term bif_erlang_node_1(Context *ctx, uint32_t fail_label, term arg1)
+{
+    if (term_is_pid(arg1) || term_is_port(arg1) || term_is_reference(arg1)) {
+        return term_is_external(arg1) ? term_get_external_node(arg1) : ctx->global->node_name;
+    }
+
+    RAISE_ERROR_BIF(fail_label, BADARG_ATOM);
+}
+
 term bif_erlang_byte_size_1(Context *ctx, uint32_t fail_label, int live, term arg1)
 {
     UNUSED(live);
