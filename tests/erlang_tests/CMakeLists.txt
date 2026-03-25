@@ -555,6 +555,7 @@ compile_erlang(bs_get_integer_fixed_size)
 compile_erlang(bs_get_float_dynamic_size)
 compile_erlang(test_is_not_equal)
 compile_assembler(test_is_not_equal_asm)
+compile_erlang(test_allocate_zero)
 compile_erlang(test_has_map_fields)
 compile_erlang(test_bs_create_bin_accum)
 compile_assembler(test_bs_create_bin_accum_asm)
@@ -1111,6 +1112,7 @@ set(erlang_test_beams
     bs_get_float_dynamic_size.beam
     test_is_not_equal.beam
     test_is_not_equal_asm.beam
+    test_allocate_zero.beam
     test_has_map_fields.beam
     test_bs_create_bin_accum.beam
     bs_context_to_binary_with_offset.beam
