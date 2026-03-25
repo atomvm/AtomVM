@@ -23,7 +23,7 @@
 -export([start/0, sort/1, insert/2, check/1]).
 
 start() ->
-    Sorted = sort([{1}, [], {}, <<"bar">>, 1, [1, 2], {1, 2}, foo]),
+    Sorted = sort([{1}, [], #{}, {}, <<"bar">>, 1, [1, 2], #{a => 1}, {1, 2}, foo]),
     check(Sorted).
 
 sort(L) ->
@@ -45,7 +45,7 @@ insert([H | T], HL, I) when I < H ->
 insert([H | T], HL, I) ->
     insert(T, HL ++ [H], I).
 
-check(T) when T == [1, foo, {}, {1}, {1, 2}, [], [1, 2], <<"bar">>] ->
+check(T) when T == [1, foo, {}, {1}, {1, 2}, #{}, #{a => 1}, [], [1, 2], <<"bar">>] ->
     1;
 check(_T) ->
     0.

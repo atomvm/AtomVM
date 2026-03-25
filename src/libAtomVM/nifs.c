@@ -207,6 +207,7 @@ static term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_localtime(Context *ctx, int argc, term argv[]);
 static term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[]);
 static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[]);
+static term nif_erts_internal_cmp_term(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_flag(Context *ctx, int argc, term argv[]);
 static term nif_erlang_processes(Context *ctx, int argc, term argv[]);
 static term nif_erlang_process_info(Context *ctx, int argc, term argv[]);
@@ -591,6 +592,11 @@ static const struct Nif tuple_to_list_nif = {
 static const struct Nif flat_size_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erts_debug_flat_size
+};
+
+static const struct Nif erts_internal_cmp_term_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erts_internal_cmp_term
 };
 
 static const struct Nif process_flag_nif = {
@@ -4239,6 +4245,30 @@ static term nif_erts_debug_flat_size(Context *ctx, int argc, term argv[])
     terms_count = memory_estimate_usage(argv[0]);
 
     return term_from_int28(terms_count);
+}
+
+static term nif_erts_internal_cmp_term(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    term a = argv[0];
+    term b = argv[1];
+
+    TermCompareResult result = term_compare(a, b, TermCompareExact, ctx->global);
+    if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    switch (result) {
+        case TermLessThan:
+            return term_from_int11(-1);
+        case TermGreaterThan:
+            return term_from_int11(1);
+        case TermEquals:
+            return term_from_int11(0);
+        default:
+            UNREACHABLE();
+    }
 }
 
 static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx)

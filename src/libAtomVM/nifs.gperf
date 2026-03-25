@@ -157,6 +157,7 @@ erlang:module_loaded/1,&module_loaded_nif
 erlang:nif_error/1,&nif_error_nif
 erlang:list_to_bitstring/1, &list_to_bitstring_nif
 erts_debug:flat_size/1, &flat_size_nif
+erts_internal:cmp_term/2, &erts_internal_cmp_term_nif
 file:get_cwd/0, IF_HAVE_GETCWD_PATHMAX(&file_get_cwd_nif)
 ets:new/2, &ets_new_nif
 ets:lookup/2, &ets_lookup_nif

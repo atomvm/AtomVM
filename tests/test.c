@@ -397,6 +397,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_lists_ordering, 7),
     TEST_CASE_EXPECTED(test_tuples_ordering, 7),
     TEST_CASE_EXPECTED(test_types_ordering, 1),
+    TEST_CASE_EXPECTED(test_cmp_term, 1),
     TEST_CASE_EXPECTED(test_bigintegers_ordering, 7),
     TEST_CASE_EXPECTED(test_refs_ordering, 7),
     TEST_CASE_EXPECTED(test_atom_ordering, 7),
