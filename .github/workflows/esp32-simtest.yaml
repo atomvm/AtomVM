@@ -98,6 +98,10 @@ jobs:
             idf-version: "v5.5.3"
           - esp-idf-target: "esp32c61"
             idf-version: "v5.5.3"
+          - esp-idf-target: "esp32"
+            idf-version: "v6.0"
+          - esp-idf-target: "esp32s3"
+            idf-version: "v6.0"
 
     steps:
       - name: Checkout repo
