@@ -35,7 +35,7 @@ concurrency:
 jobs:
   build-and-test-on-freebsd:
     runs-on: ubuntu-24.04
-    name: Build and test AtomVM on FreeBSD
+    name: Build and test AtomVM on FreeBSD ${{ matrix.os_release }} (${{ matrix.mbedtls }})
     env:
       ATOMVM_EXAMPLE: "atomvm-example"
 
@@ -44,6 +44,10 @@ jobs:
 
       matrix:
         os_release: ["13.5", "14.3", "15.0"]
+        mbedtls: ["mbedtls@3"]
+        include:
+          - os_release: "14.3"
+            mbedtls: "mbedtls@4"
 
     steps:
 
@@ -60,10 +64,25 @@ jobs:
         sync: rsync
         copyback: false
 
-    - name: "Install deps"
+    - name: "Use latest pkg repo for MbedTLS 4"
+      if: matrix.mbedtls == 'mbedtls@4'
       shell: freebsd {0}
       run: |
-        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3 ninja socat
+        mkdir -p /usr/local/etc/pkg/repos
+        echo 'FreeBSD: { url: "pkg+https://pkg.FreeBSD.org/${ABI}/latest" }' > /usr/local/etc/pkg/repos/FreeBSD.conf
+        pkg update -f
+
+    - name: "Install deps"
+      if: matrix.mbedtls == 'mbedtls@3'
+      shell: freebsd {0}
+      run: |
+        pkg install -y curl cmake gperf erlang elixir rebar3 ninja mbedtls3 socat
+
+    - name: "Install deps (MbedTLS 4)"
+      if: matrix.mbedtls == 'mbedtls@4'
+      shell: freebsd {0}
+      run: |
+        pkg install -y curl cmake gperf erlang elixir rebar3 ninja mbedtls4 socat
 
     - name: "Add hostname to /etc/hosts for distribution tests"
       shell: freebsd {0}
@@ -102,6 +121,15 @@ jobs:
         mkdir build
 
     - name: "Build: run cmake"
+      if: matrix.mbedtls == 'mbedtls@3'
+      shell: freebsd {0}
+      run: |
+        cd $GITHUB_WORKSPACE;
+        cd build
+        cmake .. -DAVM_WARNINGS_ARE_ERRORS=ON
+
+    - name: "Build: run cmake (MbedTLS 4)"
+      if: matrix.mbedtls == 'mbedtls@4'
       shell: freebsd {0}
       run: |
         cd $GITHUB_WORKSPACE;
