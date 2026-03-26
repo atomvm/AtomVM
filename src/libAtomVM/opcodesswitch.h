@@ -1620,7 +1620,9 @@ HOT_FUNC int scheduler_entry_point(GlobalContext *glb)
 // This is where loop starts after context switching.
 schedule_in:
     TRACE("scheduling in, ctx = %p\n", (void *) ctx);
-    if (ctx == NULL) return 0;
+    if (ctx == NULL) {
+        return 0;
+    }
     x_regs = ctx->x;
     mod = ctx->saved_module;
 #ifndef AVM_NO_EMU
@@ -1710,8 +1712,8 @@ schedule_in:
 
 #ifndef AVM_NO_EMU
 
-    TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
-loop:
+        TRACE("-- loop -- i = %" PRIuPTR ", next ocopde = %d\n", pc - code, *pc);
+    loop:
         switch (*pc++) {
             case OP_LABEL: {
                 uint32_t label;
@@ -1733,13 +1735,12 @@ loop:
 
                 TRACE("func_info/3 module_name_a=%i, function_name_a=%i, arity=%i\n", module_atom, function_name_atom, arity);
 
-                    RAISE_ERROR_MFA(FUNCTION_CLAUSE_ATOM, module_atom, function_name_atom, arity);
+                RAISE_ERROR_MFA(FUNCTION_CLAUSE_ATOM, module_atom, function_name_atom, arity);
                 break;
             }
 
             case OP_INT_CALL_END: {
                 TRACE("int_call_end!\n");
-
 
                 goto terminate_context;
             }
@@ -1753,15 +1754,15 @@ loop:
                 TRACE("call/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
 
-                    ctx->cp = module_address(mod->module_index, pc - code);
+                ctx->cp = module_address(mod->module_index, pc - code);
 
-                    remaining_reductions--;
-                    if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, mod, "call", label, arity);
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
-                    }
+                remaining_reductions--;
+                if (LIKELY(remaining_reductions)) {
+                    TRACE_CALL(ctx, mod, "call", label, arity);
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                } else {
+                    SCHEDULE_NEXT(mod, mod->labels[label]);
+                }
 
                 break;
             }
@@ -1777,18 +1778,18 @@ loop:
                 TRACE("call_last/3, arity=%i, label=%i, dellocate=%i\n", arity, label, n_words);
                 USED_BY_TRACE(arity);
 
-                    ctx->cp = ctx->e[n_words];
-                    ctx->e += (n_words + 1);
+                ctx->cp = ctx->e[n_words];
+                ctx->e += (n_words + 1);
 
-                    DEBUG_DUMP_STACK(ctx);
+                DEBUG_DUMP_STACK(ctx);
 
-                    remaining_reductions--;
-                    if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, mod, "call_last", label, arity);
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
-                    }
+                remaining_reductions--;
+                if (LIKELY(remaining_reductions)) {
+                    TRACE_CALL(ctx, mod, "call_last", label, arity);
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                } else {
+                    SCHEDULE_NEXT(mod, mod->labels[label]);
+                }
                 break;
             }
 
@@ -1801,24 +1802,24 @@ loop:
                 TRACE("call_only/2, arity=%i, label=%i\n", arity, label);
                 USED_BY_TRACE(arity);
 
-                    remaining_reductions--;
-                    if (LIKELY(remaining_reductions)) {
-                        TRACE_CALL(ctx, mod, "call_only", label, arity);
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
-                    }
+                remaining_reductions--;
+                if (LIKELY(remaining_reductions)) {
+                    TRACE_CALL(ctx, mod, "call_only", label, arity);
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                } else {
+                    SCHEDULE_NEXT(mod, mod->labels[label]);
+                }
                 break;
             }
 
             case OP_CALL_EXT: {
-                    // save pc in case of error
-                    const uint8_t *orig_pc = pc - 1;
+                // save pc in case of error
+                const uint8_t *orig_pc = pc - 1;
 
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, orig_pc);
+                }
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -1827,113 +1828,112 @@ loop:
                 TRACE("call_ext/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
 
+                TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
 
-                    TRACE_CALL_EXT(ctx, mod, "call_ext", index, arity);
+                const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
+                if (IS_NULL_PTR(func)) {
+                    RAISE_ERROR(UNDEF_ATOM);
+                }
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
-                    if (IS_NULL_PTR(func)) {
-                            RAISE_ERROR(UNDEF_ATOM);
-                    }
-
-                    switch (func->type) {
-                        case NIFFunctionType: {
-                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            term return_value = nif->nif_ptr(ctx, arity, x_regs);
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY(return_value, orig_pc, mod, index, arity);
-                            x_regs[0] = return_value;
-                            if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
+                switch (func->type) {
+                    case NIFFunctionType: {
+                        const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                        term return_value = nif->nif_ptr(ctx, arity, x_regs);
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC_INDEX_ARITY(return_value, orig_pc, mod, index, arity);
+                        x_regs[0] = return_value;
+                        if (ctx->heap.root->next) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            break;
                         }
-                        case ModuleFunction: {
-                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+                        break;
+                    }
+                    case ModuleFunction: {
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                            ctx->cp = module_address(mod->module_index, pc - code);
-                            JUMP_TO_LABEL(jump->target, jump->label);
+                        ctx->cp = module_address(mod->module_index, pc - code);
+                        JUMP_TO_LABEL(jump->target, jump->label);
 
-                            break;
-                        }
+                        break;
+                    }
 #ifndef AVM_NO_JIT
-                        case ModuleNativeFunction: {
-                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+                    case ModuleNativeFunction: {
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                            ctx->cp = module_address(mod->module_index, pc - code);
-                            if (jump->target != mod) {
-                                prev_mod = mod;
-                                mod = jump->target;
-                                code = mod->code->code;
-                            }
-                            native_pc = jump->entry_point;
-                            continue;
+                        ctx->cp = module_address(mod->module_index, pc - code);
+                        if (jump->target != mod) {
+                            prev_mod = mod;
+                            mod = jump->target;
+                            code = mod->code->code;
                         }
-#endif
-                        case BIFFunctionType: {
-                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 0:
-                                    return_value = bif->bif0_ptr(ctx);
-                                    break;
-                                case 1:
-                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
-                            x_regs[0] = return_value;
-
-                            break;
-                        }
-                        case GCBIFFunctionType: {
-                            // Support compilers < OTP28 that generate CALL_EXT
-                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
-                            // functions.
-                            // Regular CALL_EXTs to those functions are generated as well
-                            // even on OTP28, so it is required to allow calling them using
-                            // CALL_EXT even on OTP28: BIFs are used for try ... catch.
-                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 1:
-                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
-                            x_regs[0] = return_value;
-
-                            break;
-                        }
-                        default: {
-                            fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
-                            AVM_ABORT();
-                        }
+                        native_pc = jump->entry_point;
+                        continue;
                     }
+#endif
+                    case BIFFunctionType: {
+                        const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 0:
+                                return_value = bif->bif0_ptr(ctx);
+                                break;
+                            case 1:
+                                return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
+                        x_regs[0] = return_value;
+
+                        break;
+                    }
+                    case GCBIFFunctionType: {
+                        // Support compilers < OTP28 that generate CALL_EXT
+                        // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                        // functions.
+                        // Regular CALL_EXTs to those functions are generated as well
+                        // even on OTP28, so it is required to allow calling them using
+                        // CALL_EXT even on OTP28: BIFs are used for try ... catch.
+                        const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 1:
+                                return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_RESTORE_PC(return_value, orig_pc);
+                        x_regs[0] = return_value;
+
+                        break;
+                    }
+                    default: {
+                        fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
+                        AVM_ABORT();
+                    }
+                }
 
                 break;
             }
 
             case OP_CALL_EXT_LAST: {
-                    // save pc in case of error
-                    const uint8_t *orig_pc = pc - 1;
+                // save pc in case of error
+                const uint8_t *orig_pc = pc - 1;
 
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, orig_pc);
+                }
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -1945,127 +1945,127 @@ loop:
                 USED_BY_TRACE(arity);
                 USED_BY_TRACE(n_words);
 
-                    TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
+                TRACE_CALL_EXT(ctx, mod, "call_ext_last", index, arity);
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
-                    if (IS_NULL_PTR(func)) {
-                        RAISE_ERROR(UNDEF_ATOM);
-                    }
+                const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
+                if (IS_NULL_PTR(func)) {
+                    RAISE_ERROR(UNDEF_ATOM);
+                }
 
-                    switch (func->type) {
-                        case NIFFunctionType: {
-                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            term return_value = nif->nif_ptr(ctx, arity, x_regs);
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
+                switch (func->type) {
+                    case NIFFunctionType: {
+                        const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                        term return_value = nif->nif_ptr(ctx, arity, x_regs);
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
 
-                            // We deallocate after (instead of before) as a
-                            // workaround for issue
-                            // https://github.com/erlang/otp/issues/7152
+                        // We deallocate after (instead of before) as a
+                        // workaround for issue
+                        // https://github.com/erlang/otp/issues/7152
 
-                            ctx->cp = ctx->e[n_words];
-                            ctx->e += (n_words + 1);
+                        ctx->cp = ctx->e[n_words];
+                        ctx->e += (n_words + 1);
 
-                            if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
+                        if (ctx->heap.root->next) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
-                            DO_RETURN();
-
-                            break;
                         }
-                        case ModuleFunction: {
-                            // In the non-nif case, we can deallocate before
-                            // (and it doesn't matter as the code below does
-                            // not access ctx->e or ctx->cp)
+                        DO_RETURN();
 
-                            ctx->cp = ctx->e[n_words];
-                            ctx->e += (n_words + 1);
+                        break;
+                    }
+                    case ModuleFunction: {
+                        // In the non-nif case, we can deallocate before
+                        // (and it doesn't matter as the code below does
+                        // not access ctx->e or ctx->cp)
 
-                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
-                            JUMP_TO_LABEL(jump->target, jump->label);
+                        ctx->cp = ctx->e[n_words];
+                        ctx->e += (n_words + 1);
 
-                            break;
-                        }
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+                        JUMP_TO_LABEL(jump->target, jump->label);
+
+                        break;
+                    }
 #ifndef AVM_NO_JIT
-                        case ModuleNativeFunction: {
-                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+                    case ModuleNativeFunction: {
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
 
-                            ctx->cp = ctx->e[n_words];
-                            ctx->e += (n_words + 1);
+                        ctx->cp = ctx->e[n_words];
+                        ctx->e += (n_words + 1);
 
-                            if (jump->target != mod) {
-                                prev_mod = mod;
-                                mod = jump->target;
-                                code = mod->code->code;
-                            }
-                            native_pc = jump->entry_point;
-                            continue;
+                        if (jump->target != mod) {
+                            prev_mod = mod;
+                            mod = jump->target;
+                            code = mod->code->code;
                         }
-#endif
-                        case BIFFunctionType: {
-                            ctx->cp = ctx->e[n_words];
-                            ctx->e += (n_words + 1);
-
-                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 0:
-                                    return_value = bif->bif0_ptr(ctx);
-                                    break;
-                                case 1:
-                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
-
-                            DO_RETURN();
-
-                            break;
-                        }
-                        case GCBIFFunctionType: {
-                            // Support compilers < OTP28 that generate CALL_EXT_LAST
-                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
-                            // functions.
-                            // Regular CALL_EXT_LASTs to those functions are generated as well
-                            // even on OTP28, so it is required to allow calling them using
-                            // CALL_EXT_LAST even on OTP28: BIFs are used for try ... catch.
-                            ctx->cp = ctx->e[n_words];
-                            ctx->e += (n_words + 1);
-
-                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 1:
-                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
-
-                            DO_RETURN();
-
-                            break;
-                        }
-                        default: {
-                            fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
-                            AVM_ABORT();
-                        }
+                        native_pc = jump->entry_point;
+                        continue;
                     }
+#endif
+                    case BIFFunctionType: {
+                        ctx->cp = ctx->e[n_words];
+                        ctx->e += (n_words + 1);
+
+                        const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 0:
+                                return_value = bif->bif0_ptr(ctx);
+                                break;
+                            case 1:
+                                return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
+
+                        DO_RETURN();
+
+                        break;
+                    }
+                    case GCBIFFunctionType: {
+                        // Support compilers < OTP28 that generate CALL_EXT_LAST
+                        // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                        // functions.
+                        // Regular CALL_EXT_LASTs to those functions are generated as well
+                        // even on OTP28, so it is required to allow calling them using
+                        // CALL_EXT_LAST even on OTP28: BIFs are used for try ... catch.
+                        ctx->cp = ctx->e[n_words];
+                        ctx->e += (n_words + 1);
+
+                        const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 1:
+                                return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
+
+                        DO_RETURN();
+
+                        break;
+                    }
+                    default: {
+                        fprintf(stderr, "Invalid function type %i at index: %" PRIu32 "\n", func->type, index);
+                        AVM_ABORT();
+                    }
+                }
                 break;
             }
 
@@ -2077,12 +2077,12 @@ loop:
 
                 TRACE("bif0/2 bif=%i, dreg=%c%i\n", bif, T_DEST_REG(dreg));
 
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    BifImpl0 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx);
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                BifImpl0 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif0_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx);
 
-                    WRITE_REGISTER(dreg, ret);
+                WRITE_REGISTER(dreg, ret);
                 break;
             }
 
@@ -2098,21 +2098,20 @@ loop:
 
                 TRACE("bif1/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
 
-
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, arg1);
-                    if (UNLIKELY(term_is_invalid_term(ret))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        } else {
-                            HANDLE_ERROR();
-                        }
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                BifImpl1 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif1_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx, fail_label, arg1);
+                if (UNLIKELY(term_is_invalid_term(ret))) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    } else {
+                        HANDLE_ERROR();
                     }
+                }
 
-                    WRITE_REGISTER(dreg, ret);
+                WRITE_REGISTER(dreg, ret);
                 break;
             }
 
@@ -2130,21 +2129,20 @@ loop:
 
                 TRACE("bif2/2 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
 
-
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, arg1, arg2);
-                    if (UNLIKELY(term_is_invalid_term(ret))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        } else {
-                            HANDLE_ERROR();
-                        }
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                BifImpl2 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif2_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx, fail_label, arg1, arg2);
+                if (UNLIKELY(term_is_invalid_term(ret))) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    } else {
+                        HANDLE_ERROR();
                     }
+                }
 
-                    WRITE_REGISTER(dreg, ret);
+                WRITE_REGISTER(dreg, ret);
                 break;
             }
 
@@ -2153,16 +2151,16 @@ loop:
                 DECODE_LITERAL(stack_need, pc);
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
-                TRACE("allocate/2 stack_need=%i, live=%i\n" , stack_need, live);
+                TRACE("allocate/2 stack_need=%i, live=%i\n", stack_need, live);
 
-                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
-                        TRIM_LIVE_REGS(live);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                    TRIM_LIVE_REGS(live);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    ctx->e -= stack_need + 1;
-                    ctx->e[stack_need] = ctx->cp;
+                }
+                ctx->e -= stack_need + 1;
+                ctx->e[stack_need] = ctx->cp;
                 break;
             }
 
@@ -2175,14 +2173,14 @@ loop:
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_heap/2 stack_need=%i, heap_need=%i, live=%i\n", stack_need, heap_need, live);
 
-                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
-                        TRIM_LIVE_REGS(live);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr + heap_need) > ctx->e - (stack_need + 1))) {
+                    TRIM_LIVE_REGS(live);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need + stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    ctx->e -= stack_need + 1;
-                    ctx->e[stack_need] = ctx->cp;
+                }
+                ctx->e -= stack_need + 1;
+                ctx->e[stack_need] = ctx->cp;
                 break;
             }
 
@@ -2193,18 +2191,18 @@ loop:
                 DECODE_LITERAL(live, pc);
                 TRACE("allocate_zero/2 stack_need=%i, live=%i\n", stack_need, live);
 
-                    if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
-                        TRIM_LIVE_REGS(live);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                if (ctx->heap.root->next || ((ctx->heap.heap_ptr > ctx->e - (stack_need + 1)))) {
+                    TRIM_LIVE_REGS(live);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, stack_need + 1, live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                }
 
-                    ctx->e -= stack_need + 1;
-                    for (uint32_t s = 0; s < stack_need; s++) {
-                        ctx->e[s] = term_nil();
-                    }
-                    ctx->e[stack_need] = ctx->cp;
+                ctx->e -= stack_need + 1;
+                for (uint32_t s = 0; s < stack_need; s++) {
+                    ctx->e[s] = term_nil();
+                }
+                ctx->e[stack_need] = ctx->cp;
                 break;
             }
 
@@ -2216,22 +2214,22 @@ loop:
 
                 TRACE("test_heap/2 heap_need=%i, live_registers=%i\n", heap_need, live_registers);
 
-                    size_t heap_free = context_avail_free_memory(ctx);
-                    // if we need more heap space than is currently free, then try to GC the needed space
-                    if (heap_free < heap_need) {
-                        TRIM_LIVE_REGS(live_registers);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                size_t heap_free = context_avail_free_memory(ctx);
+                // if we need more heap space than is currently free, then try to GC the needed space
+                if (heap_free < heap_need) {
+                    TRIM_LIVE_REGS(live_registers);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need, live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                     // otherwise, there is enough space for the needed heap, but there might
                     // more more than necessary.  In that case, try to shrink the heap.
-                    } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
-                        TRIM_LIVE_REGS(live_registers);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                } else if (heap_free > heap_need * HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF) {
+                    TRIM_LIVE_REGS(live_registers);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_need * (HEAP_NEED_GC_SHRINK_THRESHOLD_COEFF / 2), live_registers, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        TRACE("Unable to ensure free memory.  heap_need=%i\n", heap_need);
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                }
                 break;
             }
 
@@ -2241,7 +2239,7 @@ loop:
 
                 TRACE("kill/1 target=%i\n", target);
 
-                    ctx->e[target] = term_nil();
+                ctx->e[target] = term_nil();
                 break;
             }
 
@@ -2251,84 +2249,84 @@ loop:
 
                 TRACE("deallocate/1 n_words=%i\n", n_words);
 
-                    DEBUG_DUMP_STACK(ctx);
+                DEBUG_DUMP_STACK(ctx);
 
-                    ctx->cp = ctx->e[n_words];
-                    ctx->e += n_words + 1;
-                    DEBUG_DUMP_STACK(ctx);
-                    // Hopefully, we only need x[0]
-                    if (ctx->heap.root->next) {
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                ctx->cp = ctx->e[n_words];
+                ctx->e += n_words + 1;
+                DEBUG_DUMP_STACK(ctx);
+                // Hopefully, we only need x[0]
+                if (ctx->heap.root->next) {
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                }
                 break;
             }
 
             case OP_RETURN: {
                 TRACE("return/0\n");
 
-                    TRACE_RETURN(ctx);
+                TRACE_RETURN(ctx);
 
-                    if ((intptr_t) ctx->cp == -1) {
-                        return 0;
-                    }
+                if ((intptr_t) ctx->cp == -1) {
+                    return 0;
+                }
 
-                    DO_RETURN();
+                DO_RETURN();
                 break;
             }
 
             case OP_SEND: {
 
-                    term recipient_term = x_regs[0];
-                    if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
-                        term return_value = dist_send_message(recipient_term, x_regs[1], ctx);
-                        if (UNLIKELY(term_is_invalid_term(return_value))) {
-                            HANDLE_ERROR();
-                        }
-                        x_regs[0] = return_value;
-                    } else {
-                        if (term_is_atom(recipient_term)) {
-                            recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
-                            if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
-                                RAISE_ERROR(BADARG_ATOM);
-                            }
-                        }
-
-                        int local_process_id;
-                        if (term_is_local_pid_or_port(recipient_term)) {
-                            local_process_id = term_to_local_process_id(recipient_term);
-                        } else {
+                term recipient_term = x_regs[0];
+                if (UNLIKELY(term_is_external_pid(recipient_term) || term_is_tuple(recipient_term))) {
+                    term return_value = dist_send_message(recipient_term, x_regs[1], ctx);
+                    if (UNLIKELY(term_is_invalid_term(return_value))) {
+                        HANDLE_ERROR();
+                    }
+                    x_regs[0] = return_value;
+                } else {
+                    if (term_is_atom(recipient_term)) {
+                        recipient_term = globalcontext_get_registered_process(ctx->global, term_to_atom_index(recipient_term));
+                        if (UNLIKELY(recipient_term == UNDEFINED_ATOM)) {
                             RAISE_ERROR(BADARG_ATOM);
                         }
-                        TRACE("send/0 target_pid=%i\n", local_process_id);
-                        TRACE_SEND(ctx, x_regs[0], x_regs[1]);
-                        globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
-                        x_regs[0] = x_regs[1];
                     }
+
+                    int local_process_id;
+                    if (term_is_local_pid_or_port(recipient_term)) {
+                        local_process_id = term_to_local_process_id(recipient_term);
+                    } else {
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                    TRACE("send/0 target_pid=%i\n", local_process_id);
+                    TRACE_SEND(ctx, x_regs[0], x_regs[1]);
+                    globalcontext_send_message(ctx->global, local_process_id, x_regs[1]);
+                    x_regs[0] = x_regs[1];
+                }
                 break;
             }
 
             case OP_REMOVE_MESSAGE: {
                 TRACE("remove_message/0\n");
 
-                    if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
-                        scheduler_cancel_timeout(ctx);
-                    }
-                    PROCESS_SIGNAL_MESSAGES();
-                    mailbox_remove_message(&ctx->mailbox, &ctx->heap);
-                    ctx->mailbox.receive_has_match_clauses = false;
-                    // Cannot GC now as remove_message is GC neutral
+                if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired)) {
+                    scheduler_cancel_timeout(ctx);
+                }
+                PROCESS_SIGNAL_MESSAGES();
+                mailbox_remove_message(&ctx->mailbox, &ctx->heap);
+                ctx->mailbox.receive_has_match_clauses = false;
+                // Cannot GC now as remove_message is GC neutral
                 break;
             }
 
             case OP_TIMEOUT: {
                 TRACE("timeout/0\n");
 
-                    context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
-                    ctx->mailbox.receive_has_match_clauses = false;
+                context_update_flags(ctx, ~WaitingTimeoutExpired, NoFlags);
+                ctx->mailbox.receive_has_match_clauses = false;
 
-                    mailbox_reset(&ctx->mailbox);
+                mailbox_reset(&ctx->mailbox);
                 break;
             }
 
@@ -2340,16 +2338,16 @@ loop:
 
                 TRACE("loop_rec/2, dreg=%c%i\n", T_DEST_REG(dreg));
 
-                    ctx->mailbox.receive_has_match_clauses = true;
-                    term ret;
-                    PROCESS_SIGNAL_MESSAGES();
-                    if (mailbox_peek(ctx, &ret)) {
-                        TRACE_RECEIVE(ctx, ret);
+                ctx->mailbox.receive_has_match_clauses = true;
+                term ret;
+                PROCESS_SIGNAL_MESSAGES();
+                if (mailbox_peek(ctx, &ret)) {
+                    TRACE_RECEIVE(ctx, ret);
 
-                        WRITE_REGISTER(dreg, ret);
-                    } else {
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    }
+                    WRITE_REGISTER(dreg, ret);
+                } else {
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                }
                 break;
             }
 
@@ -2371,63 +2369,61 @@ loop:
 
                 TRACE("wait/1\n");
 
-                    // When a message is sent, process is moved to ready list
-                    // after message is enqueued. So we always schedule out
-                    // when executing wait/1 and process will be scheduled in
-                    // and the outer list will be processed.
-                    SCHEDULE_WAIT(mod, mod->labels[label]);
+                // When a message is sent, process is moved to ready list
+                // after message is enqueued. So we always schedule out
+                // when executing wait/1 and process will be scheduled in
+                // and the outer list will be processed.
+                SCHEDULE_WAIT(mod, mod->labels[label]);
                 break;
             }
 
             case OP_WAIT_TIMEOUT: {
-                    // PC for wait_timeout_trap_handler, just before label
-                    const uint8_t *saved_pc = pc;
+                // PC for wait_timeout_trap_handler, just before label
+                const uint8_t *saved_pc = pc;
                 uint32_t label;
                 DECODE_LABEL(label, pc)
                 term timeout;
                 DECODE_COMPACT_TERM(timeout, pc)
 
-                    avm_int64_t t = 0;
-                    if (term_is_any_integer(timeout)) {
-                        t = term_maybe_unbox_int64(timeout);
-                        if (UNLIKELY(t < 0)) {
-                            RAISE_ERROR(TIMEOUT_VALUE_ATOM);
-                        }
-                    } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
+                avm_int64_t t = 0;
+                if (term_is_any_integer(timeout)) {
+                    t = term_maybe_unbox_int64(timeout);
+                    if (UNLIKELY(t < 0)) {
                         RAISE_ERROR(TIMEOUT_VALUE_ATOM);
                     }
-                    TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
+                } else if (UNLIKELY(timeout != INFINITY_ATOM)) {
+                    RAISE_ERROR(TIMEOUT_VALUE_ATOM);
+                }
+                TRACE("wait_timeout/2, label: %i, timeout: %li\n", label, (long int) t);
 
-                    PROCESS_SIGNAL_MESSAGES();
-                    int needs_to_wait = 0;
-                    if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired) == 0) {
-                        if (timeout != INFINITY_ATOM) {
-                            scheduler_set_timeout(ctx, t);
-                        }
-                        needs_to_wait = 1;
-                    } else if (context_get_flags(ctx, WaitingTimeout) != 0) {
-                        needs_to_wait = 1;
+                PROCESS_SIGNAL_MESSAGES();
+                int needs_to_wait = 0;
+                if (context_get_flags(ctx, WaitingTimeout | WaitingTimeoutExpired) == 0) {
+                    if (timeout != INFINITY_ATOM) {
+                        scheduler_set_timeout(ctx, t);
                     }
-                    // else: WaitingTimeoutExpired -- fall through to timeout.
-                    // Any messages in the mailbox are left for the next receive.
+                    needs_to_wait = 1;
+                } else if (context_get_flags(ctx, WaitingTimeout) != 0) {
+                    needs_to_wait = 1;
+                }
+                // else: WaitingTimeoutExpired -- fall through to timeout.
+                // Any messages in the mailbox are left for the next receive.
 
-                    if (needs_to_wait) {
-                        // Signal processing may have moved messages to the inner
-                        // list. If there are match clauses (loop_rec was
-                        // executed), jump to loop_rec to scan them.
-                        if (ctx->mailbox.receive_has_match_clauses && mailbox_has_next(&ctx->mailbox)) {
-                            JUMP_TO_ADDRESS(mod->labels[label]);
-                        }
-                        ctx->waiting_with_timeout = true;
-                        SCHEDULE_WAIT(mod, saved_pc);
+                if (needs_to_wait) {
+                    // Signal processing may have moved messages to the inner
+                    // list. If there are match clauses (loop_rec was
+                    // executed), jump to loop_rec to scan them.
+                    if (ctx->mailbox.receive_has_match_clauses && mailbox_has_next(&ctx->mailbox)) {
+                        JUMP_TO_ADDRESS(mod->labels[label]);
                     }
-
+                    ctx->waiting_with_timeout = true;
+                    SCHEDULE_WAIT(mod, saved_pc);
+                }
 
                 break;
             }
 
-wait_timeout_trap_handler:
-            {
+            wait_timeout_trap_handler: {
                 // Redo the offset computation and refetch the label
                 int label;
                 DECODE_LABEL(label, pc)
@@ -2461,15 +2457,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                    TRACE("is_lt/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_lt/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
-                    if (result & (TermGreaterThan | TermEquals)) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                if (result & (TermGreaterThan | TermEquals)) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2482,15 +2477,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                    TRACE("is_ge/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_ge/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
-                    if (result == TermLessThan) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                if (result == TermLessThan) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2503,15 +2497,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                    TRACE("is_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
-                    if (result & (TermLessThan | TermGreaterThan)) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                if (result & (TermLessThan | TermGreaterThan)) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2524,15 +2517,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                    TRACE("is_not_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_not_equal/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
-                    if (result == TermEquals) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareNoOpts, ctx->global);
+                if (result == TermEquals) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2545,15 +2537,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                    TRACE("is_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
-                    if (result & (TermLessThan | TermGreaterThan)) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                if (result & (TermLessThan | TermGreaterThan)) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2566,15 +2557,14 @@ wait_timeout_trap_handler:
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc)
 
-                    TRACE("is_not_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
+                TRACE("is_not_eq_exact/3, label=%" PRIu32 ", arg1=%" TERM_X_FMT ", arg2=%" TERM_X_FMT "\n", label, arg1, arg2);
 
-                    TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
-                    if (result == TermEquals) {
-                        pc = mod->labels[label];
-                    } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-
+                TermCompareResult result = term_compare(arg1, arg2, TermCompareExact, ctx->global);
+                if (result == TermEquals) {
+                    pc = mod->labels[label];
+                } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
                 break;
             }
@@ -2585,12 +2575,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_integer/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_integer/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_any_integer(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_any_integer(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2601,12 +2590,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_float/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_float/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_float(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_float(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2617,12 +2605,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_number/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_number/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_number(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_number(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2633,12 +2620,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_binary/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_binary/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_binary(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_binary(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2649,12 +2635,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_list(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_list(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2665,12 +2650,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_nonempty_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_nonempty_list/2, label=%" PRIu32 ", arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_nonempty_list(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_nonempty_list(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2681,12 +2665,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_nil/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_nil/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_nil(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_nil(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2697,12 +2680,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_atom/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_atom/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_atom(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_atom(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2713,12 +2695,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_pid/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_pid/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_pid(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_pid(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2729,12 +2710,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_reference/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_reference/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_reference(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_reference(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2745,12 +2725,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_port/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_port/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_port(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_port(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2761,12 +2740,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_tuple/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_tuple/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_tuple(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_tuple(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2779,13 +2757,12 @@ wait_timeout_trap_handler:
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
 
-                    TRACE("test_arity/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("test_arity/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    assert(term_is_tuple(arg1));
-                    if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
-                        pc = mod->labels[label];
-                    }
-
+                assert(term_is_tuple(arg1));
+                if ((uint32_t) term_get_tuple_arity(arg1) != arity) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -2801,8 +2778,7 @@ wait_timeout_trap_handler:
 
                 TRACE("select_val/3, default_label=%i, vals=%i\n", default_label, size);
 
-
-                    const uint8_t *jump_to_address = NULL;
+                const uint8_t *jump_to_address = NULL;
 
                 for (uint32_t j = 0; j < size / 2; j++) {
                     term cmp_value;
@@ -2810,23 +2786,22 @@ wait_timeout_trap_handler:
                     uint32_t jmp_label;
                     DECODE_LABEL(jmp_label, pc)
 
-
-                        if (!jump_to_address) {
-                            TermCompareResult result = term_compare(
-                                src_value, cmp_value, TermCompareExact, ctx->global);
-                            if (result == TermEquals) {
-                                jump_to_address = mod->labels[jmp_label];
-                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
+                    if (!jump_to_address) {
+                        TermCompareResult result = term_compare(
+                            src_value, cmp_value, TermCompareExact, ctx->global);
+                        if (result == TermEquals) {
+                            jump_to_address = mod->labels[jmp_label];
+                        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
+                    }
                 }
 
-                    if (!jump_to_address) {
-                        JUMP_TO_ADDRESS(mod->labels[default_label]);
-                    } else {
-                        JUMP_TO_ADDRESS(jump_to_address);
-                    }
+                if (!jump_to_address) {
+                    JUMP_TO_ADDRESS(mod->labels[default_label]);
+                } else {
+                    JUMP_TO_ADDRESS(jump_to_address);
+                }
                 break;
             }
 
@@ -2841,29 +2816,27 @@ wait_timeout_trap_handler:
 
                 TRACE("select_tuple_arity/3, default_label=%i, vals=%i\n", default_label, size);
 
+                const uint8_t *jump_to_address = NULL;
 
-                    const uint8_t *jump_to_address = NULL;
+                assert(term_is_tuple(src_value));
+                int arity = term_get_tuple_arity(src_value);
 
-                    assert(term_is_tuple(src_value));
-                    int arity = term_get_tuple_arity(src_value);
+                for (uint32_t j = 0; j < size / 2; j++) {
+                    uint32_t cmp_value;
+                    DECODE_LITERAL(cmp_value, pc)
+                    uint32_t jmp_label;
+                    DECODE_LABEL(jmp_label, pc)
 
-                    for (uint32_t j = 0; j < size / 2; j++) {
-                        uint32_t cmp_value;
-                        DECODE_LITERAL(cmp_value, pc)
-                        uint32_t jmp_label;
-                        DECODE_LABEL(jmp_label, pc)
-
-
-                            if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
-                                jump_to_address = mod->labels[jmp_label];
-                            }
+                    if (!jump_to_address && ((uint32_t) arity == cmp_value)) {
+                        jump_to_address = mod->labels[jmp_label];
                     }
+                }
 
-                    if (!jump_to_address) {
-                        JUMP_TO_ADDRESS(mod->labels[default_label]);
-                    } else {
-                        JUMP_TO_ADDRESS(jump_to_address);
-                    }
+                if (!jump_to_address) {
+                    JUMP_TO_ADDRESS(mod->labels[default_label]);
+                } else {
+                    JUMP_TO_ADDRESS(jump_to_address);
+                }
                 break;
             }
 
@@ -2873,12 +2846,12 @@ wait_timeout_trap_handler:
 
                 TRACE("jump/1 label=%i\n", label);
 
-                    remaining_reductions--;
-                    if (LIKELY(remaining_reductions)) {
-                        JUMP_TO_ADDRESS(mod->labels[label]);
-                    } else {
-                        SCHEDULE_NEXT(mod, mod->labels[label]);
-                    }
+                remaining_reductions--;
+                if (LIKELY(remaining_reductions)) {
+                    JUMP_TO_ADDRESS(mod->labels[label]);
+                } else {
+                    SCHEDULE_NEXT(mod, mod->labels[label]);
+                }
                 break;
             }
 
@@ -2888,9 +2861,9 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                    TRACE("move/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(dreg));
+                TRACE("move/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(dreg));
 
-                    WRITE_REGISTER(dreg, src_value);
+                WRITE_REGISTER(dreg, src_value);
 
                 break;
             }
@@ -2903,12 +2876,12 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(tail_dreg);
                 DECODE_DEST_REGISTER(tail_dreg, pc);
 
-                    TRACE("get_list/3 %" TERM_X_FMT ", %c%i, %c%i\n", src_value, T_DEST_REG(head_dreg), T_DEST_REG(tail_dreg));
+                TRACE("get_list/3 %" TERM_X_FMT ", %c%i, %c%i\n", src_value, T_DEST_REG(head_dreg), T_DEST_REG(tail_dreg));
 
-                    term *list_ptr = term_get_list_ptr(src_value);
+                term *list_ptr = term_get_list_ptr(src_value);
 
-                    WRITE_REGISTER(head_dreg, list_ptr[LIST_HEAD_INDEX]);
-                    WRITE_REGISTER(tail_dreg, list_ptr[LIST_TAIL_INDEX]);
+                WRITE_REGISTER(head_dreg, list_ptr[LIST_HEAD_INDEX]);
+                WRITE_REGISTER(tail_dreg, list_ptr[LIST_TAIL_INDEX]);
 
                 break;
             }
@@ -2923,12 +2896,12 @@ wait_timeout_trap_handler:
 
                 TRACE("get_tuple_element/2, element=%i, dest=%c%i\n", element, T_DEST_REG(dreg));
 
-                    if (UNLIKELY(!term_is_tuple(src_value) || (element >= (uint32_t) term_get_tuple_arity(src_value)))) {
-                        AVM_ABORT();
-                    }
+                if (UNLIKELY(!term_is_tuple(src_value) || (element >= (uint32_t) term_get_tuple_arity(src_value)))) {
+                    AVM_ABORT();
+                }
 
-                    term t = term_get_tuple_element(src_value, element);
-                    WRITE_REGISTER(dreg, t);
+                term t = term_get_tuple_element(src_value, element);
+                WRITE_REGISTER(dreg, t);
 
                 break;
             }
@@ -2964,10 +2937,9 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-
-                    TRACE("put_list/3 dreg=%c%i\n", T_DEST_REG(dreg));
-                    term t = term_list_init_prepend(list_elem, head, tail);
-                    WRITE_REGISTER(dreg, t);
+                TRACE("put_list/3 dreg=%c%i\n", T_DEST_REG(dreg));
+                term t = term_list_init_prepend(list_elem, head, tail);
+                WRITE_REGISTER(dreg, t);
                 break;
             }
 
@@ -2975,26 +2947,25 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
+                TRACE("badmatch/1, v=0x%" TERM_X_FMT "\n", arg1);
 
-                    TRACE("badmatch/1, v=0x%" TERM_X_FMT "\n", arg1);
+                // We can gc as we are raising
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
+                term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
+                term_put_tuple_element(new_error_tuple, 1, arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                    term_put_tuple_element(new_error_tuple, 0, BADMATCH_ATOM);
-                    term_put_tuple_element(new_error_tuple, 1, arg1);
-
-                    RAISE_ERROR(new_error_tuple);
+                RAISE_ERROR(new_error_tuple);
                 break;
             }
 
             case OP_IF_END: {
                 TRACE("if_end/0\n");
 
-                    RAISE_ERROR(IF_CLAUSE_ATOM);
+                RAISE_ERROR(IF_CLAUSE_ATOM);
                 break;
             }
 
@@ -3002,71 +2973,69 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
+                TRACE("case_end/1, v=0x%" TERM_X_FMT "\n", arg1);
 
-                    TRACE("case_end/1, v=0x%" TERM_X_FMT "\n", arg1);
+                // We can gc as we are raising
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
+                term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
+                term_put_tuple_element(new_error_tuple, 1, arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                    term_put_tuple_element(new_error_tuple, 0, CASE_CLAUSE_ATOM);
-                    term_put_tuple_element(new_error_tuple, 1, arg1);
-
-                    RAISE_ERROR(new_error_tuple);
+                RAISE_ERROR(new_error_tuple);
                 break;
             }
 
             case OP_CALL_FUN: {
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, pc - 1);
+                }
                 uint32_t args_count;
                 DECODE_LITERAL(args_count, pc)
 
                 TRACE("call_fun/1, args_count=%i\n", args_count);
 
-                    term fun;
-                    READ_ANY_XREG(fun, args_count);
-                    if (UNLIKELY(!term_is_function(fun))) {
-                        // We can gc as we are raising
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                        term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, fun);
-                        RAISE_ERROR(new_error_tuple);
+                term fun;
+                READ_ANY_XREG(fun, args_count);
+                if (UNLIKELY(!term_is_function(fun))) {
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                    term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, fun);
+                    RAISE_ERROR(new_error_tuple);
+                }
 
-                    CALL_FUN(fun, args_count)
+                CALL_FUN(fun, args_count)
 
                 break;
             }
 
-           case OP_IS_FUNCTION: {
+            case OP_IS_FUNCTION: {
                 uint32_t label;
                 DECODE_LABEL(label, pc)
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_function/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_function/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_function(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_function(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
 
             case OP_CALL_EXT_ONLY: {
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, pc - 1);
+                }
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc);
                 uint32_t index;
@@ -3074,94 +3043,94 @@ wait_timeout_trap_handler:
 
                 TRACE("call_ext_only/2, arity=%i, index=%i\n", arity, index);
                 USED_BY_TRACE(arity);
-                    TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
+                TRACE_CALL_EXT(ctx, mod, "call_ext_only", index, arity);
 
-                    const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
-                    if (IS_NULL_PTR(func)) {
-                        RAISE_ERROR(UNDEF_ATOM);
+                const struct ExportedFunction *func = module_resolve_function(mod, index, glb);
+                if (IS_NULL_PTR(func)) {
+                    RAISE_ERROR(UNDEF_ATOM);
+                }
+
+                switch (func->type) {
+                    case NIFFunctionType: {
+                        const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
+                        term return_value = nif->nif_ptr(ctx, arity, x_regs);
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
+
+                        if (ctx->heap.root->next) {
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                        }
+                        if ((intptr_t) ctx->cp == -1) {
+                            return 0;
+                        }
+
+                        DO_RETURN();
+
+                        break;
                     }
+                    case ModuleFunction: {
+                        const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
+                        JUMP_TO_LABEL(jump->target, jump->label);
 
-                    switch (func->type) {
-                        case NIFFunctionType: {
-                            const struct Nif *nif = EXPORTED_FUNCTION_TO_NIF(func);
-                            term return_value = nif->nif_ptr(ctx, arity, x_regs);
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
-
-                            if (ctx->heap.root->next) {
-                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, 0, 1, x_regs, MEMORY_FORCE_SHRINK) != MEMORY_GC_OK)) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
-                            }
-                            if ((intptr_t) ctx->cp == -1) {
-                                return 0;
-                            }
-
-                            DO_RETURN();
-
-                            break;
-                        }
-                        case ModuleFunction: {
-                            const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
-                            JUMP_TO_LABEL(jump->target, jump->label);
-
-                            break;
-                        }
-                        case BIFFunctionType: {
-                            const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 0:
-                                    return_value = bif->bif0_ptr(ctx);
-                                    break;
-                                case 1:
-                                    return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
-
-                            DO_RETURN();
-
-                            break;
-                        }
-                        case GCBIFFunctionType: {
-                            // Support compilers < OTP28 that generate CALL_EXT_ONLY
-                            // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
-                            // functions.
-                            // Regular CALL_EXT_ONLYs to those functions are generated as well
-                            // even on OTP28, so it is required to allow calling them using
-                            // CALL_EXT_ONLY even on OTP28: BIFs are used for try ... catch.
-                            const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
-                            term return_value;
-                            switch (arity) {
-                                case 1:
-                                    return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
-                                    break;
-                                case 2:
-                                    return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
-                                    break;
-                                default:
-                                    fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
-                                    AVM_ABORT();
-                            }
-                            PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
-                            x_regs[0] = return_value;
-
-                            DO_RETURN();
-
-                            break;
-                        }
-                        default: {
-                            AVM_ABORT();
-                        }
+                        break;
                     }
+                    case BIFFunctionType: {
+                        const struct Bif *bif = EXPORTED_FUNCTION_TO_BIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 0:
+                                return_value = bif->bif0_ptr(ctx);
+                                break;
+                            case 1:
+                                return_value = bif->bif1_ptr(ctx, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = bif->bif2_ptr(ctx, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
+
+                        DO_RETURN();
+
+                        break;
+                    }
+                    case GCBIFFunctionType: {
+                        // Support compilers < OTP28 that generate CALL_EXT_ONLY
+                        // for binary_to_(existing_)atom/1,2 and list_to_(existing_)atom/1
+                        // functions.
+                        // Regular CALL_EXT_ONLYs to those functions are generated as well
+                        // even on OTP28, so it is required to allow calling them using
+                        // CALL_EXT_ONLY even on OTP28: BIFs are used for try ... catch.
+                        const struct GCBif *gcbif = EXPORTED_FUNCTION_TO_GCBIF(func);
+                        term return_value;
+                        switch (arity) {
+                            case 1:
+                                return_value = gcbif->gcbif1_ptr(ctx, 0, 0, x_regs[0]);
+                                break;
+                            case 2:
+                                return_value = gcbif->gcbif2_ptr(ctx, 0, 0, x_regs[0], x_regs[1]);
+                                break;
+                            default:
+                                fprintf(stderr, "Invalid arity %" PRIu32 " for bif\n", arity);
+                                AVM_ABORT();
+                        }
+                        PROCESS_MAYBE_TRAP_RETURN_VALUE_LAST(return_value);
+                        x_regs[0] = return_value;
+
+                        DO_RETURN();
+
+                        break;
+                    }
+                    default: {
+                        AVM_ABORT();
+                    }
+                }
 
                 break;
             }
@@ -3171,12 +3140,12 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(fun_index, pc)
 
                 TRACE("make_fun/2, fun_index=%i\n", fun_index);
-                    term f = make_fun(ctx, mod, fun_index, x_regs);
-                    if (term_is_invalid_term(f)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    } else {
-                        x_regs[0] = f;
-                    }
+                term f = make_fun(ctx, mod, fun_index, x_regs);
+                if (term_is_invalid_term(f)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                } else {
+                    x_regs[0] = f;
+                }
                 break;
             }
 
@@ -3188,8 +3157,8 @@ wait_timeout_trap_handler:
 
                 TRACE("try/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                    term catch_term = term_from_catch_label(mod->module_index, label);
-                    WRITE_REGISTER(dreg, catch_term);
+                term catch_term = term_from_catch_label(mod->module_index, label);
+                WRITE_REGISTER(dreg, catch_term);
                 break;
             }
 
@@ -3199,7 +3168,7 @@ wait_timeout_trap_handler:
 
                 TRACE("try_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                    WRITE_REGISTER(dreg, term_nil());
+                WRITE_REGISTER(dreg, term_nil());
                 break;
             }
 
@@ -3209,8 +3178,8 @@ wait_timeout_trap_handler:
 
                 TRACE("try_case/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                    // clears the catch value on stack
-                    WRITE_REGISTER(dreg, term_nil());
+                // clears the catch value on stack
+                WRITE_REGISTER(dreg, term_nil());
                 break;
             }
 
@@ -3218,19 +3187,18 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
+                TRACE("try_case_end/1, val=%" TERM_X_FMT "\n", arg1);
 
-                    TRACE("try_case_end/1, val=%" TERM_X_FMT "\n", arg1);
+                // We can gc as we are raising
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &arg1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
+                term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
+                term_put_tuple_element(new_error_tuple, 1, arg1);
 
-                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                    term_put_tuple_element(new_error_tuple, 0, TRY_CLAUSE_ATOM);
-                    term_put_tuple_element(new_error_tuple, 1, arg1);
-
-                    RAISE_ERROR(new_error_tuple);
+                RAISE_ERROR(new_error_tuple);
                 break;
             }
 
@@ -3240,12 +3208,11 @@ wait_timeout_trap_handler:
                 term exc_value;
                 DECODE_COMPACT_TERM(exc_value, pc);
 
-
-                    TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
-                    context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
-                    ctx->exception_reason = exc_value;
-                    ctx->exception_stacktrace = stacktrace;
-                    goto handle_error;
+                TRACE("raise/2 stacktrace=0x%" TERM_X_FMT " exc_value=0x%" TERM_X_FMT "\n", stacktrace, exc_value);
+                context_set_exception_class(ctx, stacktrace_exception_class(stacktrace));
+                ctx->exception_reason = exc_value;
+                ctx->exception_stacktrace = stacktrace;
+                goto handle_error;
 
                 break;
             }
@@ -3258,8 +3225,8 @@ wait_timeout_trap_handler:
 
                 TRACE("catch/2, label=%i, reg=%c%i\n", label, T_DEST_REG(dreg));
 
-                    term catch_term = term_from_catch_label(mod->module_index, label);
-                    WRITE_REGISTER(dreg, catch_term);
+                term catch_term = term_from_catch_label(mod->module_index, label);
+                WRITE_REGISTER(dreg, catch_term);
                 break;
             }
 
@@ -3269,42 +3236,42 @@ wait_timeout_trap_handler:
 
                 TRACE("catch_end/1, reg=%c%i\n", T_DEST_REG(dreg));
 
-                    WRITE_REGISTER(dreg, term_nil());
-                    // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
-                    switch (term_to_atom_index(x_regs[0])) {
-                        case THROW_ATOM_INDEX:
-                            x_regs[0] = x_regs[1];
-                            break;
+                WRITE_REGISTER(dreg, term_nil());
+                // C.f. https://www.erlang.org/doc/reference_manual/expressions.html#catch-and-throw
+                switch (term_to_atom_index(x_regs[0])) {
+                    case THROW_ATOM_INDEX:
+                        x_regs[0] = x_regs[1];
+                        break;
 
-                        case ERROR_ATOM_INDEX: {
-                            x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
-                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-                            term reason_tuple = term_alloc_tuple(2, &ctx->heap);
-                            term_put_tuple_element(reason_tuple, 0, x_regs[1]);
-                            term_put_tuple_element(reason_tuple, 1, x_regs[2]);
-                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
-                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
-                            term_put_tuple_element(exit_tuple, 1, reason_tuple);
-                            x_regs[0] = exit_tuple;
-
-                            break;
+                    case ERROR_ATOM_INDEX: {
+                        x_regs[2] = stacktrace_build(ctx, &x_regs[2], 3);
+                        // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2) * 2, 2, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
-                        case LOWERCASE_EXIT_ATOM_INDEX: {
-                            // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
-                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-                            term exit_tuple = term_alloc_tuple(2, &ctx->heap);
-                            term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
-                            term_put_tuple_element(exit_tuple, 1, x_regs[1]);
-                            x_regs[0] = exit_tuple;
+                        term reason_tuple = term_alloc_tuple(2, &ctx->heap);
+                        term_put_tuple_element(reason_tuple, 0, x_regs[1]);
+                        term_put_tuple_element(reason_tuple, 1, x_regs[2]);
+                        term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+                        term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                        term_put_tuple_element(exit_tuple, 1, reason_tuple);
+                        x_regs[0] = exit_tuple;
 
-                            break;
-                        }
+                        break;
                     }
+                    case LOWERCASE_EXIT_ATOM_INDEX: {
+                        // MEMORY_CAN_SHRINK because catch_end is classified as gc in beam_ssa_codegen.erl
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, x_regs + 1, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        term exit_tuple = term_alloc_tuple(2, &ctx->heap);
+                        term_put_tuple_element(exit_tuple, 0, EXIT_ATOM);
+                        term_put_tuple_element(exit_tuple, 1, x_regs[1]);
+                        x_regs[0] = exit_tuple;
+
+                        break;
+                    }
+                }
                 break;
             }
 
@@ -3320,15 +3287,14 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
+                VERIFY_IS_INTEGER(src1, "bs_add", 0);
+                VERIFY_IS_INTEGER(src2, "bs_add", 0);
+                avm_int_t src1_val = term_to_int(src1);
+                avm_int_t src2_val = term_to_int(src2);
 
-                    VERIFY_IS_INTEGER(src1, "bs_add", 0);
-                    VERIFY_IS_INTEGER(src2, "bs_add", 0);
-                    avm_int_t src1_val = term_to_int(src1);
-                    avm_int_t src2_val = term_to_int(src2);
+                TRACE("bs_add/5, fail=%i src1=" AVM_INT_FMT " src2=" AVM_INT_FMT " unit=%u dreg=%c%i\n", fail, src1_val, src2_val, (unsigned) unit, T_DEST_REG(dreg));
 
-                    TRACE("bs_add/5, fail=%i src1=" AVM_INT_FMT " src2=" AVM_INT_FMT " unit=%u dreg=%c%i\n", fail, src1_val, src2_val, (unsigned) unit, T_DEST_REG(dreg));
-
-                    WRITE_REGISTER(dreg, term_from_int((src1_val + src2_val) * unit));
+                WRITE_REGISTER(dreg, term_from_int((src1_val + src2_val) * unit));
                 break;
             }
 
@@ -3344,24 +3310,23 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
+                TRACE("bs_get_utf8/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT " dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
 
-                    TRACE("bs_get_utf8/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT " dreg=%c%i\n", fail, src, arg2, arg3, T_DEST_REG(dreg));
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                uint32_t val = 0;
+                size_t out_size = 0;
+                bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
 
-                    uint32_t val = 0;
-                    size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &val, &out_size);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
-                        WRITE_REGISTER(dreg, term_from_int(val));
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                    WRITE_REGISTER(dreg, term_from_int(val));
+                }
 
                 break;
             }
@@ -3376,23 +3341,22 @@ wait_timeout_trap_handler:
                 term arg3;
                 DECODE_COMPACT_TERM(arg3, pc);
 
+                TRACE("bs_skip_utf8/4, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT "\n", fail, src, arg2, arg3);
 
-                    TRACE("bs_skip_utf8/4, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " arg3=0x%" TERM_X_FMT "\n", fail, src, arg2, arg3);
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                uint32_t c = 0;
+                size_t out_size = 0;
+                bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &c, &out_size);
 
-                    uint32_t c = 0;
-                    size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf8(src_bin, (size_t) offset_bits, &c, &out_size);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                }
 
                 break;
             }
@@ -3409,24 +3373,23 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
+                TRACE("bs_get_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" PRIu32 " dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    TRACE("bs_get_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                int32_t val = 0;
+                size_t out_size = 0;
+                bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
 
-                    int32_t val = 0;
-                    size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
-                        WRITE_REGISTER(dreg, term_from_int(val));
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                    WRITE_REGISTER(dreg, term_from_int(val));
+                }
 
                 break;
             }
@@ -3441,23 +3404,22 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
+                TRACE("bs_skip_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
 
-                    TRACE("bs_skip_utf16/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                int32_t val = 0;
+                size_t out_size = 0;
+                bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
 
-                    int32_t val = 0;
-                    size_t out_size = 0;
-                    bool is_valid = bitstring_match_utf16(src_bin, (size_t) offset_bits, &val, &out_size, flags_value);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + (out_size * 8));
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + (out_size * 8));
+                }
 
                 break;
             }
@@ -3474,23 +3436,22 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
+                TRACE("bs_get_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" PRIu32 " dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
 
-                    TRACE("bs_get_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%"PRIu32" dreg=%c%i\n", fail, src, arg2, flags_value, T_DEST_REG(dreg));
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                int32_t val = 0;
+                bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
 
-                    int32_t val = 0;
-                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + 32);
-                        WRITE_REGISTER(dreg, term_from_int(val));
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + 32);
+                    WRITE_REGISTER(dreg, term_from_int(val));
+                }
 
                 break;
             }
@@ -3505,22 +3466,21 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
+                TRACE("bs_skip_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
 
-                    TRACE("bs_skip_utf32/5, fail=%i src=0x%" TERM_X_FMT " arg2=0x%" TERM_X_FMT " flags=0x%" TERM_X_FMT "\n", fail, src, arg2, flags);
+                assert(term_is_match_state(src));
 
-                    assert(term_is_match_state(src));
+                term src_bin = term_get_match_state_binary(src);
+                avm_int_t offset_bits = term_get_match_state_offset(src);
 
-                    term src_bin = term_get_match_state_binary(src);
-                    avm_int_t offset_bits = term_get_match_state_offset(src);
+                int32_t val = 0;
+                bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
 
-                    int32_t val = 0;
-                    bool is_valid = bitstring_match_utf32(src_bin, (size_t) offset_bits, &val, flags_value);
-
-                    if (!is_valid) {
-                        pc = mod->labels[fail];
-                    } else {
-                        term_set_match_state_offset(src, offset_bits + 32);
-                    }
+                if (!is_valid) {
+                    pc = mod->labels[fail];
+                } else {
+                    term_set_match_state_offset(src, offset_bits + 32);
+                }
 
                 break;
             }
@@ -3529,17 +3489,17 @@ wait_timeout_trap_handler:
 
                 TRACE("bs_init_writable/0\n");
 
-                    if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term t = term_create_empty_binary(0, &ctx->heap, ctx->global);
-                    if (UNLIKELY(term_is_invalid_term(t))) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
+                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(0), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term t = term_create_empty_binary(0, &ctx->heap, ctx->global);
+                if (UNLIKELY(term_is_invalid_term(t))) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
 
-                    ctx->bs = t;
-                    ctx->bs_offset = 0;
-                    x_regs[0] = t;
+                ctx->bs = t;
+                ctx->bs_offset = 0;
+                x_regs[0] = t;
                 break;
             }
 
@@ -3553,22 +3513,21 @@ wait_timeout_trap_handler:
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
-
-                    TRACE("bs_start_match3/4, fail=%i src=0x%" TERM_X_FMT " live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
-                    if (!(term_is_binary(src) || term_is_match_state(src))) {
-                        pc = mod->labels[fail];
-                    } else {
-                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                        TRIM_LIVE_REGS(live);
-                        x_regs[live] = src;
-                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        src = x_regs[live];
-                        term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
-
-                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
+                TRACE("bs_start_match3/4, fail=%i src=0x%" TERM_X_FMT " live=%u dreg=%c%i\n", fail, src, live, T_DEST_REG_GC_SAFE(dreg));
+                if (!(term_is_binary(src) || term_is_match_state(src))) {
+                    pc = mod->labels[fail];
+                } else {
+                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                    TRIM_LIVE_REGS(live);
+                    x_regs[live] = src;
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    src = x_regs[live];
+                    term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
+
+                    WRITE_REGISTER_GC_SAFE(dreg, match_state);
+                }
                 break;
             }
 
@@ -3582,15 +3541,14 @@ wait_timeout_trap_handler:
                 UNUSED(live);
                 DECODE_LITERAL(live, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_get_position", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_position", 0);
+                TRACE("bs_get_position/3 src=0x%" TERM_X_FMT " dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
 
-                    TRACE("bs_get_position/3 src=0x%" TERM_X_FMT " dreg=%c%i live=%u\n", src, T_DEST_REG(dreg), live);
+                avm_int_t offset = term_get_match_state_offset(src);
+                term offset_term = term_from_int(offset);
 
-                    avm_int_t offset = term_get_match_state_offset(src);
-                    term offset_term = term_from_int(offset);
-
-                    WRITE_REGISTER(dreg, offset_term);
+                WRITE_REGISTER(dreg, offset_term);
                 break;
             }
 
@@ -3602,39 +3560,37 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_get_tail", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_tail", 0);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                term bs_bin = term_get_match_state_binary(src);
 
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    term bs_bin = term_get_match_state_binary(src);
+                TRACE("bs_get_tail/3 src=0x%" TERM_X_FMT " dreg=%c%i live=%u\n", src, T_DEST_REG_GC_SAFE(dreg), live);
+                if (bs_offset == 0) {
 
-                    TRACE("bs_get_tail/3 src=0x%" TERM_X_FMT " dreg=%c%i live=%u\n", src, T_DEST_REG_GC_SAFE(dreg), live);
-                    if (bs_offset == 0) {
+                    WRITE_REGISTER_GC_SAFE(dreg, bs_bin);
 
-                        WRITE_REGISTER_GC_SAFE(dreg, bs_bin);
-
+                } else {
+                    if (bs_offset % 8 != 0) {
+                        TRACE("bs_get_tail: Unsupported alignment.\n");
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
                     } else {
-                        if (bs_offset % 8 != 0) {
-                            TRACE("bs_get_tail: Unsupported alignment.\n");
-                            RAISE_ERROR(UNSUPPORTED_ATOM);
-                        } else {
-                            size_t start_pos = bs_offset / 8;
-                            size_t src_size = term_binary_size(bs_bin);
-                            size_t new_bin_size = src_size - start_pos;
-                            size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
+                        size_t start_pos = bs_offset / 8;
+                        size_t src_size = term_binary_size(bs_bin);
+                        size_t new_bin_size = src_size - start_pos;
+                        size_t heap_size = term_sub_binary_heap_size(bs_bin, src_size - start_pos);
 
-                            TRIM_LIVE_REGS(live);
-                            x_regs[live] = src;
-                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-                            src = x_regs[live];
-                            bs_bin = term_get_match_state_binary(src);
-                            term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, &ctx->heap, ctx->global);
-                            WRITE_REGISTER_GC_SAFE(dreg, t);
-
+                        TRIM_LIVE_REGS(live);
+                        x_regs[live] = src;
+                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                         }
+                        src = x_regs[live];
+                        bs_bin = term_get_match_state_binary(src);
+                        term t = term_maybe_create_sub_binary(bs_bin, start_pos, new_bin_size, &ctx->heap, ctx->global);
+                        WRITE_REGISTER_GC_SAFE(dreg, t);
                     }
+                }
                 break;
             }
 
@@ -3644,13 +3600,12 @@ wait_timeout_trap_handler:
                 term pos;
                 DECODE_COMPACT_TERM(pos, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_set_position", 0);
+                VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_set_position", 0);
-                    VERIFY_IS_INTEGER(pos, "bs_set_position", 0);
-
-                    avm_int_t pos_val = term_to_int(pos);
-                    TRACE("bs_set_position/2 src=0x%" TERM_X_FMT " pos=" AVM_INT_FMT "\n", src, pos_val);
-                    term_set_match_state_offset(src,  pos_val);
+                avm_int_t pos_val = term_to_int(pos);
+                TRACE("bs_set_position/2 src=0x%" TERM_X_FMT " pos=" AVM_INT_FMT "\n", src, pos_val);
+                term_set_match_state_offset(src, pos_val);
                 break;
             }
 
@@ -3664,70 +3619,69 @@ wait_timeout_trap_handler:
                 uint32_t offset;
                 DECODE_LITERAL(offset, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_match_string", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_match_string", 0);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                term bs_bin = term_get_match_state_binary(src);
 
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    term bs_bin = term_get_match_state_binary(src);
+                TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
 
-                    TRACE("bs_match_string/4, fail=%u src=%p bits=%u offset=%u\n", (unsigned) fail, (void *) src, (unsigned) bits, (unsigned) offset);
+                size_t remaining = 0;
+                const uint8_t *str = module_get_str(mod, offset, &remaining);
+                if (IS_NULL_PTR(str)) {
+                    TRACE("bs_match_string: Bad offset in strings table.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
 
-                    size_t remaining = 0;
-                    const uint8_t *str = module_get_str(mod, offset, &remaining);
-                    if (IS_NULL_PTR(str)) {
-                        TRACE("bs_match_string: Bad offset in strings table.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
+                if (term_binary_size(bs_bin) * 8 - bs_offset < MINI(remaining * 8, bits)) {
+                    TRACE("bs_match_string: failed to match (binary is shorter)\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                } else {
+                    if (bits % 8 == 0 && bs_offset % 8 == 0) {
+                        avm_int_t bytes = bits / 8;
+                        avm_int_t byte_offset = bs_offset / 8;
 
-                    if (term_binary_size(bs_bin) * 8 - bs_offset < MINI(remaining * 8, bits)) {
-                        TRACE("bs_match_string: failed to match (binary is shorter)\n");
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
+                        if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MINI(remaining, (unsigned int) bytes)) != 0) {
+                            TRACE("bs_match_string: failed to match\n");
+                            JUMP_TO_ADDRESS(mod->labels[fail]);
+                        } else {
+                            term_set_match_state_offset(src, bs_offset + bits);
+                        }
                     } else {
-                        if (bits % 8 == 0 && bs_offset % 8 == 0) {
-                            avm_int_t bytes = bits / 8;
-                            avm_int_t byte_offset = bs_offset / 8;
-
-                            if (memcmp(term_binary_data(bs_bin) + byte_offset, str, MINI(remaining, (unsigned int) bytes)) != 0) {
+                        // Compare unaligned bits
+                        const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
+                        uint8_t bin_bit_offset = 7 - (bs_offset - (8 * (bs_offset / 8)));
+                        uint8_t str_bit_offset = 7;
+                        size_t remaining_bits = bits;
+                        while (remaining_bits > 0) {
+                            uint8_t str_ch = *str;
+                            uint8_t bin_ch = *bs_str;
+                            uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
+                            uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
+                            if (str_ch_bit ^ bin_ch_bit) {
                                 TRACE("bs_match_string: failed to match\n");
                                 JUMP_TO_ADDRESS(mod->labels[fail]);
+                                break;
+                            }
+                            if (str_bit_offset) {
+                                str_bit_offset--;
                             } else {
-                                term_set_match_state_offset(src, bs_offset + bits);
+                                str_bit_offset = 7;
+                                str++;
                             }
-                        } else {
-                            // Compare unaligned bits
-                            const uint8_t *bs_str = (const uint8_t *) term_binary_data(bs_bin) + (bs_offset / 8);
-                            uint8_t bin_bit_offset = 7 - (bs_offset - (8 *(bs_offset / 8)));
-                            uint8_t str_bit_offset = 7;
-                            size_t remaining_bits = bits;
-                            while (remaining_bits > 0) {
-                                uint8_t str_ch = *str;
-                                uint8_t bin_ch = *bs_str;
-                                uint8_t str_ch_bit = (str_ch >> str_bit_offset) & 1;
-                                uint8_t bin_ch_bit = (bin_ch >> bin_bit_offset) & 1;
-                                if (str_ch_bit ^ bin_ch_bit) {
-                                    TRACE("bs_match_string: failed to match\n");
-                                    JUMP_TO_ADDRESS(mod->labels[fail]);
-                                    break;
-                                }
-                                if (str_bit_offset) {
-                                    str_bit_offset--;
-                                } else {
-                                    str_bit_offset = 7;
-                                    str++;
-                                }
-                                if (bin_bit_offset) {
-                                    bin_bit_offset--;
-                                } else {
-                                    bin_bit_offset = 7;
-                                    bs_str++;
-                                }
-                                remaining_bits--;
+                            if (bin_bit_offset) {
+                                bin_bit_offset--;
+                            } else {
+                                bin_bit_offset = 7;
+                                bs_str++;
                             }
-                            if (remaining_bits == 0) {
-                                term_set_match_state_offset(src, bs_offset + bits);
-                            }
+                            remaining_bits--;
+                        }
+                        if (remaining_bits == 0) {
+                            term_set_match_state_offset(src, bs_offset + bits);
                         }
                     }
+                }
                 break;
             }
 
@@ -3743,23 +3697,22 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
+                VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
+                VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
+                // Ignore flags value as skipping bits is the same whatever the endianness
+                avm_int_t size_val = term_to_int(size);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_skip_bits2", 0);
-                    VERIFY_IS_INTEGER(size, "bs_skip_bits2", 0);
-                    // Ignore flags value as skipping bits is the same whatever the endianness
-                    avm_int_t size_val = term_to_int(size);
+                TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) size_val, (unsigned) unit, (int) flags_value);
 
-                    TRACE("bs_skip_bits2/5, fail=%u src=%p size=0x%lx unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned long) size_val, (unsigned) unit, (int) flags_value);
-
-                    size_t increment = size_val * unit;
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    term bs_bin = term_get_match_state_binary(src);
-                    if ((bs_offset + increment) > term_binary_size(bs_bin) * 8) {
-                        TRACE("bs_skip_bits2: Insufficient capacity to skip bits: %lu, inc: %zu\n", (unsigned long) bs_offset, increment);
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    } else {
-                        term_set_match_state_offset(src, bs_offset + increment);
-                    }
+                size_t increment = size_val * unit;
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                term bs_bin = term_get_match_state_binary(src);
+                if ((bs_offset + increment) > term_binary_size(bs_bin) * 8) {
+                    TRACE("bs_skip_bits2: Insufficient capacity to skip bits: %lu, inc: %zu\n", (unsigned long) bs_offset, increment);
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                } else {
+                    term_set_match_state_offset(src, bs_offset + increment);
+                }
 
                 break;
             }
@@ -3773,17 +3726,16 @@ wait_timeout_trap_handler:
                 uint32_t unit;
                 DECODE_LITERAL(unit, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_unit", 0);
+                TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
 
-                    TRACE("bs_test_unit/3, fail=%u src=%p unit=%u\n", (unsigned) fail, (void *) src, (unsigned) unit);
-
-                    term bs_bin = term_get_match_state_binary(src);
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    if ((term_binary_size(bs_bin) * 8 - bs_offset) % unit != 0) {
-                        TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    }
+                term bs_bin = term_get_match_state_binary(src);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                if ((term_binary_size(bs_bin) * 8 - bs_offset) % unit != 0) {
+                    TRACE("bs_test_unit: Available bits in source not evenly divisible by unit\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
                 break;
             }
 #endif
@@ -3797,18 +3749,17 @@ wait_timeout_trap_handler:
                 uint32_t bits;
                 DECODE_LITERAL(bits, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_test_tail2", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_test_tail2", 0);
+                TRACE("bs_test_tail2/3, fail=%u src=%p bits=%u\n", (unsigned) fail, (void *) src, (unsigned) bits);
 
-                    TRACE("bs_test_tail2/3, fail=%u src=%p bits=%u\n", (unsigned) fail, (void *) src, (unsigned) bits);
+                term bs_bin = term_get_match_state_binary(src);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
 
-                    term bs_bin = term_get_match_state_binary(src);
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-
-                    if ((term_binary_size(bs_bin) * 8 - bs_offset) != (unsigned int) bits) {
-                        TRACE("bs_test_tail2: Expected exactly %u bits remaining, but remaining=%u\n", (unsigned) bits, (unsigned) (term_binary_size(bs_bin) * 8 - bs_offset));
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    }
+                if ((term_binary_size(bs_bin) * 8 - bs_offset) != (unsigned int) bits) {
+                    TRACE("bs_test_tail2: Expected exactly %u bits remaining, but remaining=%u\n", (unsigned) bits, (unsigned) (term_binary_size(bs_bin) * 8 - bs_offset));
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
                 break;
             }
 #endif
@@ -3828,62 +3779,61 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
+                VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
+                VERIFY_IS_INTEGER(size, "bs_get_integer", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_integer", 0);
-                    VERIFY_IS_INTEGER(size,     "bs_get_integer", 0);
+                avm_int_t size_val = term_to_int(size);
 
-                    avm_int_t size_val = term_to_int(size);
+                TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) live, (unsigned) unit, (int) flags_value);
 
-                    TRACE("bs_get_integer2/7, fail=%u src=%p live=%u size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) live, (unsigned) unit, (int) flags_value);
-
-                    avm_int_t increment = size_val * unit;
-                    union maybe_unsigned_int64 value;
-                    term bs_bin = term_get_match_state_binary(src);
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    term t;
-                    if (increment <= 64) {
-                        bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
-                        if (UNLIKELY(!status)) {
-                            TRACE("bs_get_integer2: error extracting integer.\n");
-                            JUMP_TO_ADDRESS(mod->labels[fail]);
-                        } else {
-                            term_set_match_state_offset(src, bs_offset + increment);
-
-                            if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
-                                t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-                            } else {
-                                intn_digit_t int_buf[INTN_UINT64_LEN];
-                                intn_from_uint64(value.u, int_buf);
-                                t = make_bigint_from_digits(
-                                    ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
-                            }
-
-                            if (UNLIKELY(term_is_invalid_term(t))) {
-                                HANDLE_ERROR();
-                            }
-                        }
-                    } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-                        unsigned long capacity = term_binary_size(bs_bin);
-                        if (8 * capacity - bs_offset < (unsigned long) increment) {
-                            JUMP_TO_ADDRESS(mod->labels[fail]);
-                        }
-                        size_t byte_offset = bs_offset / 8;
-                        const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
-
-                        t = extract_nbits_integer(ctx, int_bytes + byte_offset, increment / 8,
-                            bitstring_flags_to_intn_opts(flags_value));
+                avm_int_t increment = size_val * unit;
+                union maybe_unsigned_int64 value;
+                term bs_bin = term_get_match_state_binary(src);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                term t;
+                if (increment <= 64) {
+                    bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                    if (UNLIKELY(!status)) {
+                        TRACE("bs_get_integer2: error extracting integer.\n");
+                        JUMP_TO_ADDRESS(mod->labels[fail]);
+                    } else {
                         term_set_match_state_offset(src, bs_offset + increment);
-                        if (term_is_invalid_term(t)) {
+
+                        if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                            t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                        } else {
+                            intn_digit_t int_buf[INTN_UINT64_LEN];
+                            intn_from_uint64(value.u, int_buf);
+                            t = make_bigint_from_digits(
+                                ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                        }
+
+                        if (UNLIKELY(term_is_invalid_term(t))) {
                             HANDLE_ERROR();
                         }
-                    } else {
+                    }
+                } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
+                    unsigned long capacity = term_binary_size(bs_bin);
+                    if (8 * capacity - bs_offset < (unsigned long) increment) {
                         JUMP_TO_ADDRESS(mod->labels[fail]);
                     }
+                    size_t byte_offset = bs_offset / 8;
+                    const uint8_t *int_bytes = (const uint8_t *) term_binary_data(bs_bin);
+
+                    t = extract_nbits_integer(ctx, int_bytes + byte_offset, increment / 8,
+                        bitstring_flags_to_intn_opts(flags_value));
+                    term_set_match_state_offset(src, bs_offset + increment);
+                    if (term_is_invalid_term(t)) {
+                        HANDLE_ERROR();
+                    }
+                } else {
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                }
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                    WRITE_REGISTER(dreg, t);
+                WRITE_REGISTER(dreg, t);
                 break;
             }
 
@@ -3902,51 +3852,50 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc);
 
+                VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
+                VERIFY_IS_INTEGER(size, "bs_get_float", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_float", 0);
-                    VERIFY_IS_INTEGER(size,     "bs_get_float", 0);
+                avm_int_t size_val = term_to_int(size);
 
-                    avm_int_t size_val = term_to_int(size);
+                TRACE("bs_get_float2/7, fail=%u src=%p size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) unit, (int) flags_value);
 
-                    TRACE("bs_get_float2/7, fail=%u src=%p size=%u unit=%u flags=%x\n", (unsigned) fail, (void *) src, (unsigned) size_val, (unsigned) unit, (int) flags_value);
-
-                    avm_int_t increment = size_val * unit;
-                    avm_float_t value;
-                    term bs_bin = term_get_match_state_binary(src);
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
-                    bool status;
-                    switch (size_val) {
-                        case 16:
-                            status = bitstring_extract_f16(bs_bin, bs_offset, increment, flags_value, &value);
-                            break;
-                        case 32:
-                            status = bitstring_extract_f32(bs_bin, bs_offset, increment, flags_value, &value);
-                            break;
-                        case 64:
-                            status = bitstring_extract_f64(bs_bin, bs_offset, increment, flags_value, &value);
-                            break;
-                        default:
-                            TRACE("bs_get_float2: error extracting float.\n");
-                            status = false;
-                            JUMP_TO_ADDRESS(mod->labels[fail]);
-                            break;
-                    }
-                    if (UNLIKELY(!status)) {
+                avm_int_t increment = size_val * unit;
+                avm_float_t value;
+                term bs_bin = term_get_match_state_binary(src);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
+                bool status;
+                switch (size_val) {
+                    case 16:
+                        status = bitstring_extract_f16(bs_bin, bs_offset, increment, flags_value, &value);
+                        break;
+                    case 32:
+                        status = bitstring_extract_f32(bs_bin, bs_offset, increment, flags_value, &value);
+                        break;
+                    case 64:
+                        status = bitstring_extract_f64(bs_bin, bs_offset, increment, flags_value, &value);
+                        break;
+                    default:
                         TRACE("bs_get_float2: error extracting float.\n");
+                        status = false;
                         JUMP_TO_ADDRESS(mod->labels[fail]);
-                    } else {
-                        term_set_match_state_offset(src, bs_offset + increment);
+                        break;
+                }
+                if (UNLIKELY(!status)) {
+                    TRACE("bs_get_float2: error extracting float.\n");
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                } else {
+                    term_set_match_state_offset(src, bs_offset + increment);
 
-                        if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        term t = term_from_float(value, &ctx->heap);
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                        WRITE_REGISTER(dreg, t);
+                    if (UNLIKELY(memory_ensure_free_opt(ctx, FLOAT_SIZE, MEMORY_NO_GC) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    term t = term_from_float(value, &ctx->heap);
+
+                    DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER(dreg, pc);
+
+                    WRITE_REGISTER(dreg, t);
+                }
                 break;
             }
 
@@ -3964,69 +3913,68 @@ wait_timeout_trap_handler:
                 uint32_t flags_value;
                 DECODE_LITERAL(flags_value, pc)
 
+                VERIFY_IS_MATCH_STATE(src, "bs_get_binary2", 0);
 
-                    VERIFY_IS_MATCH_STATE(src, "bs_get_binary2", 0);
+                term bs_bin = term_get_match_state_binary(src);
+                avm_int_t bs_offset = term_get_match_state_offset(src);
 
-                    term bs_bin = term_get_match_state_binary(src);
-                    avm_int_t bs_offset = term_get_match_state_offset(src);
+                if (unit != 8) {
+                    TRACE("bs_get_binary2: Unsupported: unit must be 8.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                avm_int_t size_val = 0;
+                if (term_is_integer(size)) {
+                    size_val = term_to_int(size);
+                } else if (size == ALL_ATOM) {
+                    size_val = term_binary_size(bs_bin) - bs_offset / 8;
+                } else {
+                    TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (bs_offset % unit != 0) {
+                    TRACE("bs_get_binary2: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (flags_value != 0) {
+                    TRACE("bs_get_binary2: neither signed nor native or little endian encoding supported.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
 
-                    if (unit != 8) {
-                        TRACE("bs_get_binary2: Unsupported: unit must be 8.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
+
+                if ((unsigned int) (bs_offset / unit + size_val) > term_binary_size(bs_bin)) {
+                    TRACE("bs_get_binary2: insufficient capacity -- bs_offset = %d, size_val = %d\n", (int) bs_offset, (int) size_val);
+                    JUMP_TO_ADDRESS(mod->labels[fail]);
+                } else {
+                    term_set_match_state_offset(src, bs_offset + size_val * unit);
+
+                    TRIM_LIVE_REGS(live);
+                    // there is always room for a MAX_REG + 1 register, used as working register
+                    x_regs[live] = bs_bin;
+                    size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    avm_int_t size_val = 0;
-                    if (term_is_integer(size)) {
-                        size_val = term_to_int(size);
-                    } else if (size == ALL_ATOM) {
-                        size_val = term_binary_size(bs_bin) - bs_offset / 8;
-                    } else {
-                        TRACE("bs_get_binary2: size is neither an integer nor the atom `all`\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (bs_offset % unit != 0) {
-                        TRACE("bs_get_binary2: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
-                        RAISE_ERROR(BADARG_ATOM);
-                    }
-                    if (flags_value != 0) {
-                        TRACE("bs_get_binary2: neither signed nor native or little endian encoding supported.\n");
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
 
-                    TRACE("bs_get_binary2/7, fail=%u src=%p live=%u unit=%u\n", (unsigned) fail, (void *) bs_bin, (unsigned) live, (unsigned) unit);
+                    DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER(dreg, pc);
 
-                    if ((unsigned int) (bs_offset / unit + size_val) > term_binary_size(bs_bin)) {
-                        TRACE("bs_get_binary2: insufficient capacity -- bs_offset = %d, size_val = %d\n", (int) bs_offset, (int) size_val);
-                        JUMP_TO_ADDRESS(mod->labels[fail]);
-                    } else {
-                        term_set_match_state_offset(src, bs_offset + size_val * unit);
+                    bs_bin = x_regs[live];
 
-                        TRIM_LIVE_REGS(live);
-                        // there is always room for a MAX_REG + 1 register, used as working register
-                        x_regs[live] = bs_bin;
-                        size_t heap_size = term_sub_binary_heap_size(bs_bin, size_val);
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-
-                DEST_REGISTER(dreg);
-                DECODE_DEST_REGISTER(dreg, pc);
-
-                        bs_bin = x_regs[live];
-
-                        term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
-                        WRITE_REGISTER(dreg, t);
-                    }
+                    term t = term_maybe_create_sub_binary(bs_bin, bs_offset / unit, size_val, &ctx->heap, ctx->global);
+                    WRITE_REGISTER(dreg, t);
+                }
                 break;
             }
 
             case OP_APPLY: {
-                    // save pc in case of error
-                    const uint8_t *orig_pc = pc - 1;
+                // save pc in case of error
+                const uint8_t *orig_pc = pc - 1;
 
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, orig_pc);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, orig_pc);
+                }
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
                 term module;
@@ -4069,10 +4017,10 @@ wait_timeout_trap_handler:
             }
 
             case OP_APPLY_LAST: {
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, pc - 1);
+                }
                 uint32_t arity;
                 DECODE_LITERAL(arity, pc)
                 uint32_t n_words;
@@ -4123,12 +4071,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_boolean/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_boolean/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if ((arg1 != TRUE_ATOM) && (arg1 != FALSE_ATOM)) {
-                        pc = mod->labels[label];
-                    }
-
+                if ((arg1 != TRUE_ATOM) && (arg1 != FALSE_ATOM)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -4141,39 +4088,38 @@ wait_timeout_trap_handler:
                 term arity_term;
                 DECODE_COMPACT_TERM(arity_term, pc)
 
-                    TRACE("is_function2/3, label=%i, arg1=%" TERM_X_FMT ", arity=%p\n", label, arg1, (void *) arity_term);
+                TRACE("is_function2/3, label=%i, arg1=%" TERM_X_FMT ", arity=%p\n", label, arg1, (void *) arity_term);
 
-                    if (term_is_function(arg1) && term_is_integer(arity_term)) {
-                        const term *boxed_value = term_to_const_term_ptr(arg1);
+                if (term_is_function(arg1) && term_is_integer(arity_term)) {
+                    const term *boxed_value = term_to_const_term_ptr(arg1);
 
-                        Module *fun_module = (Module *) boxed_value[1];
-                        term index_or_module = boxed_value[2];
+                    Module *fun_module = (Module *) boxed_value[1];
+                    term index_or_module = boxed_value[2];
 
-                        avm_int_t arity = term_to_int(arity_term);
+                    avm_int_t arity = term_to_int(arity_term);
 
-                        uint32_t fun_arity;
+                    uint32_t fun_arity;
 
-                        if (term_is_atom(index_or_module)) {
-                            fun_arity = term_to_int(boxed_value[3]);
+                    if (term_is_atom(index_or_module)) {
+                        fun_arity = term_to_int(boxed_value[3]);
 
-                        } else {
-                            uint32_t fun_index = term_to_int32(index_or_module);
-
-                            uint32_t fun_label;
-                            uint32_t fun_arity_and_freeze;
-                            uint32_t fun_n_freeze;
-
-                            module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
-                            fun_arity = fun_arity_and_freeze - fun_n_freeze;
-                        }
-
-                        if ((arity < 0) || (arity != (avm_int_t) fun_arity)) {
-                            pc = mod->labels[label];
-                        }
                     } else {
-                        pc = mod->labels[label];
+                        uint32_t fun_index = term_to_int32(index_or_module);
+
+                        uint32_t fun_label;
+                        uint32_t fun_arity_and_freeze;
+                        uint32_t fun_n_freeze;
+
+                        module_get_fun(fun_module, fun_index, &fun_label, &fun_arity_and_freeze, &fun_n_freeze);
+                        fun_arity = fun_arity_and_freeze - fun_n_freeze;
                     }
 
+                    if ((arity < 0) || (arity != (avm_int_t) fun_arity)) {
+                        pc = mod->labels[label];
+                    }
+                } else {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -4184,30 +4130,30 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
-                DECODE_LITERAL(bif, pc); //s?
+                DECODE_LITERAL(bif, pc); // s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRIM_LIVE_REGS(live);
+                TRIM_LIVE_REGS(live);
 
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, live, arg1);
-                    if (UNLIKELY(term_is_invalid_term(ret))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        } else {
-                            HANDLE_ERROR();
-                        }
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                GCBifImpl1 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif1_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx, fail_label, live, arg1);
+                if (UNLIKELY(term_is_invalid_term(ret))) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    } else {
+                        HANDLE_ERROR();
                     }
+                }
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                    TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, ret);
+                TRACE("gc_bif1/5 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, T_DEST_REG(dreg));
+                WRITE_REGISTER(dreg, ret);
 
                 break;
             }
@@ -4218,32 +4164,32 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
-                DECODE_LITERAL(bif, pc); //s?
+                DECODE_LITERAL(bif, pc); // s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc);
                 term arg2;
                 DECODE_COMPACT_TERM(arg2, pc);
 
-                    TRIM_LIVE_REGS(live);
+                TRIM_LIVE_REGS(live);
 
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, live, arg1, arg2);
-                    if (UNLIKELY(term_is_invalid_term(ret))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        } else {
-                            HANDLE_ERROR();
-                        }
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                GCBifImpl2 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif2_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx, fail_label, live, arg1, arg2);
+                if (UNLIKELY(term_is_invalid_term(ret))) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    } else {
+                        HANDLE_ERROR();
                     }
+                }
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                    TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, ret);
+                TRACE("gc_bif2/6 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, T_DEST_REG(dreg));
+                WRITE_REGISTER(dreg, ret);
 
                 break;
             }
@@ -4254,12 +4200,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_bitstr/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_bitstr/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_binary(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_binary(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -4270,7 +4215,7 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
                 uint32_t bif;
-                DECODE_LITERAL(bif, pc); //s?
+                DECODE_LITERAL(bif, pc); // s?
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc);
                 term arg2;
@@ -4278,26 +4223,26 @@ wait_timeout_trap_handler:
                 term arg3;
                 DECODE_COMPACT_TERM(arg3, pc);
 
-                    TRIM_LIVE_REGS(live);
+                TRIM_LIVE_REGS(live);
 
-                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                    GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
-                    DEBUG_FAIL_NULL(func);
-                    term ret = func(ctx, fail_label, live, arg1, arg2, arg3);
-                    if (UNLIKELY(term_is_invalid_term(ret))) {
-                        if (fail_label) {
-                            pc = mod->labels[fail_label];
-                            break;
-                        } else {
-                            HANDLE_ERROR();
-                        }
+                const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                GCBifImpl3 func = EXPORTED_FUNCTION_TO_GCBIF(exported_bif)->gcbif3_ptr;
+                DEBUG_FAIL_NULL(func);
+                term ret = func(ctx, fail_label, live, arg1, arg2, arg3);
+                if (UNLIKELY(term_is_invalid_term(ret))) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                        break;
+                    } else {
+                        HANDLE_ERROR();
                     }
+                }
 
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
 
-                    TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", arg3=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg));
-                    WRITE_REGISTER(dreg, ret);
+                TRACE("gc_bif3/7 fail_lbl=%i, live=%i, bif=%i, arg1=0x%" TERM_X_FMT ", arg2=0x%" TERM_X_FMT ", arg3=0x%" TERM_X_FMT ", dest=%c%i\n", fail_label, live, bif, arg1, arg2, arg3, T_DEST_REG(dreg));
+                WRITE_REGISTER(dreg, ret);
 
                 break;
             }
@@ -4311,9 +4256,9 @@ wait_timeout_trap_handler:
                 TRACE("trim/2 words=%i, remaining=%i\n", n_words, n_remaining);
                 USED_BY_TRACE(n_remaining);
 
-                    DEBUG_DUMP_STACK(ctx);
-                    ctx->e += n_words;
-                    DEBUG_DUMP_STACK(ctx);
+                DEBUG_DUMP_STACK(ctx);
+                ctx->e += n_words;
+                DEBUG_DUMP_STACK(ctx);
 
                 UNUSED(n_remaining)
                 break;
@@ -4339,117 +4284,117 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
-	                TRACE("put_map_assoc/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
+                TRACE("put_map_assoc/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                    const uint8_t *list_pc = pc;
+                const uint8_t *list_pc = pc;
                 uint32_t num_elements = list_len / 2;
                 //
                 // Count how many of the entries in list(...) are not already in src
                 //
-                    unsigned new_entries = 0;
-                for (uint32_t j = 0;  j < num_elements;  ++j) {
+                unsigned new_entries = 0;
+                for (uint32_t j = 0; j < num_elements; ++j) {
                     term key, value;
                     DECODE_COMPACT_TERM(key, pc);
                     DECODE_COMPACT_TERM(value, pc);
 
-                        int map_pos = term_find_map_pos(src, key, ctx->global);
-                        if (map_pos == TERM_MAP_NOT_FOUND) {
-                            new_entries++;
-                        } else if (UNLIKELY(map_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                    int map_pos = term_find_map_pos(src, key, ctx->global);
+                    if (map_pos == TERM_MAP_NOT_FOUND) {
+                        new_entries++;
+                    } else if (UNLIKELY(map_pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                 }
 
-                    //
-                    // Maybe GC
-                    //
-                    size_t src_size = term_get_map_size(src);
-                    size_t new_map_size = src_size + new_entries;
-                    bool is_shared = new_entries == 0;
-                    size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
-                    x_regs[live] = src;
-                    if (memory_ensure_free_with_roots(ctx, heap_needed, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    src = x_regs[live];
-                    //
-                    //
-                    //
-                    struct kv_pair *kv = malloc(num_elements * sizeof(struct kv_pair));
-                    if (IS_NULL_PTR(kv)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    for (uint32_t j = 0; j < num_elements; j++) {
-                        term key, value;
-                        DECODE_COMPACT_TERM(key, list_pc);
-                        DECODE_COMPACT_TERM(value, list_pc);
-                        kv[j].key = key;
-                        kv[j].value = value;
-                    }
-                    if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
-                        free(kv);
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    //
-                    // Create a new map of the requested size and stitch src
-                    // and kv together into new map.  Both src and kv are sorted.
-                    //
-                    term map = term_alloc_map_maybe_shared(new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term(), &ctx->heap);
-                    size_t src_pos = 0;
-                    uint32_t kv_pos = 0;
-                    for (size_t j = 0; j < new_map_size; j++) {
-                        if (src_pos >= src_size) {
-                            term new_key = kv[kv_pos].key;
-                            term new_value = kv[kv_pos].value;
-                            term_set_map_assoc(map, j, new_key, new_value);
-                            kv_pos++;
-                        } else if (kv_pos >= num_elements) {
-                            term src_key = term_get_map_key(src, src_pos);
-                            term src_value = term_get_map_value(src, src_pos);
-                            term_set_map_assoc(map, j, src_key, src_value);
-                            src_pos++;
-                        } else {
-                            term src_key = term_get_map_key(src, src_pos);
-                            term new_key = kv[kv_pos].key;
-                            // TODO: not sure if exact is the right choice here
-                            switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
-                                case TermLessThan: {
-                                    term src_value = term_get_map_value(src, src_pos);
-                                    term_set_map_assoc(map, j, src_key, src_value);
-                                    src_pos++;
-                                    break;
-                                }
+                //
+                // Maybe GC
+                //
+                size_t src_size = term_get_map_size(src);
+                size_t new_map_size = src_size + new_entries;
+                bool is_shared = new_entries == 0;
+                size_t heap_needed = term_map_size_in_terms_maybe_shared(new_map_size, is_shared);
+                TRIM_LIVE_REGS(live);
+                // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
+                x_regs[live] = src;
+                if (memory_ensure_free_with_roots(ctx, heap_needed, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                src = x_regs[live];
+                //
+                //
+                //
+                struct kv_pair *kv = malloc(num_elements * sizeof(struct kv_pair));
+                if (IS_NULL_PTR(kv)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                for (uint32_t j = 0; j < num_elements; j++) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, list_pc);
+                    DECODE_COMPACT_TERM(value, list_pc);
+                    kv[j].key = key;
+                    kv[j].value = value;
+                }
+                if (UNLIKELY(!sort_kv_pairs(kv, num_elements, ctx->global))) {
+                    free(kv);
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                //
+                // Create a new map of the requested size and stitch src
+                // and kv together into new map.  Both src and kv are sorted.
+                //
+                term map = term_alloc_map_maybe_shared(new_map_size, is_shared ? term_get_map_keys(src) : term_invalid_term(), &ctx->heap);
+                size_t src_pos = 0;
+                uint32_t kv_pos = 0;
+                for (size_t j = 0; j < new_map_size; j++) {
+                    if (src_pos >= src_size) {
+                        term new_key = kv[kv_pos].key;
+                        term new_value = kv[kv_pos].value;
+                        term_set_map_assoc(map, j, new_key, new_value);
+                        kv_pos++;
+                    } else if (kv_pos >= num_elements) {
+                        term src_key = term_get_map_key(src, src_pos);
+                        term src_value = term_get_map_value(src, src_pos);
+                        term_set_map_assoc(map, j, src_key, src_value);
+                        src_pos++;
+                    } else {
+                        term src_key = term_get_map_key(src, src_pos);
+                        term new_key = kv[kv_pos].key;
+                        // TODO: not sure if exact is the right choice here
+                        switch (term_compare(src_key, new_key, TermCompareExact, ctx->global)) {
+                            case TermLessThan: {
+                                term src_value = term_get_map_value(src, src_pos);
+                                term_set_map_assoc(map, j, src_key, src_value);
+                                src_pos++;
+                                break;
+                            }
 
-                                case TermGreaterThan: {
-                                    term new_value = kv[kv_pos].value;
-                                    term_set_map_assoc(map, j, new_key, new_value);
-                                    kv_pos++;
-                                    break;
-                                }
+                            case TermGreaterThan: {
+                                term new_value = kv[kv_pos].value;
+                                term_set_map_assoc(map, j, new_key, new_value);
+                                kv_pos++;
+                                break;
+                            }
 
-                                case TermEquals: {
-                                    term new_value = kv[kv_pos].value;
-                                    term_set_map_assoc(map, j, src_key, new_value);
-                                    src_pos++;
-                                    kv_pos++;
-                                    break;
-                                }
+                            case TermEquals: {
+                                term new_value = kv[kv_pos].value;
+                                term_set_map_assoc(map, j, src_key, new_value);
+                                src_pos++;
+                                kv_pos++;
+                                break;
+                            }
 
-                                case TermCompareMemoryAllocFail: {
-                                    free(kv);
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
+                            case TermCompareMemoryAllocFail: {
+                                free(kv);
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                             }
                         }
                     }
-                    free(kv);
+                }
+                free(kv);
 
-                    WRITE_REGISTER_GC_SAFE(dreg, map);
+                WRITE_REGISTER_GC_SAFE(dreg, map);
                 break;
             }
 
@@ -4463,11 +4408,11 @@ wait_timeout_trap_handler:
                 uint32_t live;
                 DECODE_LITERAL(live, pc);
 
-                    TRACE("put_map_exact/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
+                TRACE("put_map_exact/5: label: %i src: 0x%" TERM_X_FMT " dest=%c%i live: %i\n", label, src, T_DEST_REG_GC_SAFE(dreg), live);
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                    const uint8_t *list_pc = pc;
+                const uint8_t *list_pc = pc;
                 uint32_t num_elements = list_len / 2;
                 //
                 // Make sure every key from list is in src
@@ -4477,46 +4422,46 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(key, pc);
                     DECODE_COMPACT_TERM(value, pc);
 
-                        int map_pos = term_find_map_pos(src, key, ctx->global);
-                        if (map_pos == TERM_MAP_NOT_FOUND) {
-                            RAISE_ERROR(BADARG_ATOM);
-                        } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                }
-
-                    //
-                    // Maybe GC
-                    //
-                    size_t src_size = term_get_map_size(src);
-                    TRIM_LIVE_REGS(live);
-                    // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
-                    x_regs[live] = src;
-                    if (memory_ensure_free_with_roots(ctx, term_map_size_in_terms_maybe_shared(src_size, true), live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    int map_pos = term_find_map_pos(src, key, ctx->global);
+                    if (map_pos == TERM_MAP_NOT_FOUND) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else if (map_pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
                         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    src = x_regs[live];
-                    //
-                    // Create a new map of the same size as src and populate with entries from src
-                    //
-                    term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
-                    for (size_t j = 0;  j < src_size;  ++j) {
-                        term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+                }
+
+                //
+                // Maybe GC
+                //
+                size_t src_size = term_get_map_size(src);
+                TRIM_LIVE_REGS(live);
+                // MEMORY_CAN_SHRINK because put_map is classified as gc in beam_ssa_codegen.erl
+                x_regs[live] = src;
+                if (memory_ensure_free_with_roots(ctx, term_map_size_in_terms_maybe_shared(src_size, true), live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                src = x_regs[live];
+                //
+                // Create a new map of the same size as src and populate with entries from src
+                //
+                term map = term_alloc_map_maybe_shared(src_size, term_get_map_keys(src), &ctx->heap);
+                for (size_t j = 0; j < src_size; ++j) {
+                    term_set_map_assoc(map, j, term_get_map_key(src, j), term_get_map_value(src, j));
+                }
+                //
+                // Copy the new terms into the new map, in situ only
+                //
+                for (uint32_t j = 0; j < num_elements; ++j) {
+                    term key, value;
+                    DECODE_COMPACT_TERM(key, list_pc);
+                    DECODE_COMPACT_TERM(value, list_pc);
+                    int pos = term_find_map_pos(src, key, ctx->global);
+                    if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    //
-                    // Copy the new terms into the new map, in situ only
-                    //
-                    for (uint32_t j = 0; j < num_elements; ++j) {
-                        term key, value;
-                        DECODE_COMPACT_TERM(key, list_pc);
-                        DECODE_COMPACT_TERM(value, list_pc);
-                        int pos = term_find_map_pos(src, key, ctx->global);
-                        if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        term_set_map_assoc(map, pos, key, value);
-                    }
-                    WRITE_REGISTER_GC_SAFE(dreg, map);
+                    term_set_map_assoc(map, pos, key, value);
+                }
+                WRITE_REGISTER_GC_SAFE(dreg, map);
                 break;
             }
 
@@ -4526,12 +4471,11 @@ wait_timeout_trap_handler:
                 term arg1;
                 DECODE_COMPACT_TERM(arg1, pc)
 
-                    TRACE("is_map/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
+                TRACE("is_map/2, label=%i, arg1=%" TERM_X_FMT "\n", label, arg1);
 
-                    if (!term_is_map(arg1)) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!term_is_map(arg1)) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -4542,22 +4486,22 @@ wait_timeout_trap_handler:
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
 
-                    TRACE("has_map_fields/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
+                TRACE("has_map_fields/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                for (uint32_t j = 0;  j < list_len; ++j) {
+                for (uint32_t j = 0; j < list_len; ++j) {
                     term key;
                     DECODE_COMPACT_TERM(key, pc);
 
-                        int pos = term_find_map_pos(src, key, ctx->global);
-                        if (pos == TERM_MAP_NOT_FOUND) {
-                            pc = mod->labels[label];
-                            break;
-                        } else if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
+                    int pos = term_find_map_pos(src, key, ctx->global);
+                    if (pos == TERM_MAP_NOT_FOUND) {
+                        pc = mod->labels[label];
+                        break;
+                    } else if (pos == TERM_MAP_MEMORY_ALLOC_FAIL) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
                 }
                 break;
             }
@@ -4567,28 +4511,28 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(label, pc)
                 term src;
                 DECODE_COMPACT_TERM(src, pc);
-                    TRACE("get_map_elements/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
+                TRACE("get_map_elements/3: label: %i src: 0x%" TERM_X_FMT "\n", label, src);
 
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
                 uint32_t num_elements = list_len / 2;
-                for (uint32_t j = 0;  j < num_elements; ++j) {
+                for (uint32_t j = 0; j < num_elements; ++j) {
                     term key;
                     DECODE_COMPACT_TERM(key, pc);
                     DEST_REGISTER(dreg);
                     DECODE_DEST_REGISTER(dreg, pc);
 
-                        int pos = term_find_map_pos(src, key, ctx->global);
-                        if (pos == TERM_MAP_NOT_FOUND) {
-                            pc = mod->labels[label];
-                            break;
-                        } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        } else {
-                            term value = term_get_map_value(src, pos);
-                            WRITE_REGISTER(dreg, value);
-                        }
+                    int pos = term_find_map_pos(src, key, ctx->global);
+                    if (pos == TERM_MAP_NOT_FOUND) {
+                        pc = mod->labels[label];
+                        break;
+                    } else if (UNLIKELY(pos == TERM_MAP_MEMORY_ALLOC_FAIL)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    } else {
+                        term value = term_get_map_value(src, pos);
+                        WRITE_REGISTER(dreg, value);
+                    }
                 }
                 break;
             }
@@ -4603,12 +4547,11 @@ wait_timeout_trap_handler:
                 term tag_atom;
                 DECODE_ATOM(tag_atom, pc)
 
-                    TRACE("is_tagged_tuple/2, label=%u, arg1=%p, arity=%u, atom_id=%p\n", (unsigned) label, (void *) arg1, (unsigned) arity, (void *) tag_atom);
+                TRACE("is_tagged_tuple/2, label=%u, arg1=%p, arity=%u, atom_id=%p\n", (unsigned) label, (void *) arg1, (unsigned) arity, (void *) tag_atom);
 
-                    if (!(term_is_tuple(arg1) && ((uint32_t) term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom))) {
-                        pc = mod->labels[label];
-                    }
-
+                if (!(term_is_tuple(arg1) && ((uint32_t) term_get_tuple_arity(arg1) == arity) && (term_get_tuple_element(arg1, 0) == tag_atom))) {
+                    pc = mod->labels[label];
+                }
 
                 break;
             }
@@ -4619,18 +4562,18 @@ wait_timeout_trap_handler:
                     DECODE_FP_REGISTER(freg, pc);
                     DEST_REGISTER(dreg);
                     DECODE_DEST_REGISTER(dreg, pc);
-                        TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
-                        // Space should be available on heap as compiler added an allocate opcode
-                        term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
-                        WRITE_REGISTER(dreg, float_value);
+                    TRACE("fmove/2 fp%i, %c%i\n", freg, T_DEST_REG(dreg));
+                    // Space should be available on heap as compiler added an allocate opcode
+                    term float_value = term_from_float(ctx->fr[freg], &ctx->heap);
+                    WRITE_REGISTER(dreg, float_value);
                 } else {
                     term src_value;
                     DECODE_COMPACT_TERM(src_value, pc);
                     int freg;
                     DECODE_FP_REGISTER(freg, pc);
-                        TRACE("fmove/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
-                        context_ensure_fpregs(ctx);
-                        ctx->fr[freg] = term_to_float(src_value);
+                    TRACE("fmove/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
+                    context_ensure_fpregs(ctx);
+                    ctx->fr[freg] = term_to_float(src_value);
                 }
                 break;
             }
@@ -4641,168 +4584,168 @@ wait_timeout_trap_handler:
                 int freg;
                 DECODE_FP_REGISTER(freg, pc);
 
-                    TRACE("fconv/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
-                    context_ensure_fpregs(ctx);
-                    if (UNLIKELY(!term_is_number(src_value))) {
-                        RAISE_ERROR(BADARITH_ATOM);
-                    }
-                    avm_float_t converted = term_conv_to_float(src_value);
-                    if (UNLIKELY(!isfinite(converted))) {
-                        RAISE_ERROR(BADARITH_ATOM);
-                    }
-                    ctx->fr[freg] = converted;
+                TRACE("fconv/2 %" TERM_X_FMT ", fp%i\n", src_value, freg);
+                context_ensure_fpregs(ctx);
+                if (UNLIKELY(!term_is_number(src_value))) {
+                    RAISE_ERROR(BADARITH_ATOM);
+                }
+                avm_float_t converted = term_conv_to_float(src_value);
+                if (UNLIKELY(!isfinite(converted))) {
+                    RAISE_ERROR(BADARITH_ATOM);
+                }
+                ctx->fr[freg] = converted;
 
                 break;
             }
 
             case OP_FADD: {
-                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                    #pragma STDC FENV_ACCESS ON
-                #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+#endif
                 int fail_label;
                 DECODE_LABEL(fail_label, pc);
                 int freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                    TRACE("fadd/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        feclearexcept(FE_OVERFLOW);
-                    #endif
-                    ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        if (fetestexcept(FE_OVERFLOW)) {
-                            if (fail_label) {
-                                // Not sure this can happen, float operations
-                                // in guards are translated to gc_bif calls
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #else
-                        if (!isfinite(ctx->fr[freg3])) {
-                            if (fail_label) {
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #endif
+                TRACE("fadd/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                feclearexcept(FE_OVERFLOW);
+#endif
+                ctx->fr[freg3] = ctx->fr[freg1] + ctx->fr[freg2];
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                if (fetestexcept(FE_OVERFLOW)) {
+                    if (fail_label) {
+                        // Not sure this can happen, float operations
+                        // in guards are translated to gc_bif calls
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#else
+                if (!isfinite(ctx->fr[freg3])) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#endif
 
                 break;
             }
 
             case OP_FSUB: {
-                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                    #pragma STDC FENV_ACCESS ON
-                #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+#endif
                 int fail_label;
                 DECODE_LABEL(fail_label, pc);
                 int freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                    TRACE("fsub/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        feclearexcept(FE_OVERFLOW);
-                    #endif
-                    ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        if (fetestexcept(FE_OVERFLOW)) {
-                            if (fail_label) {
-                                // Not sure this can happen, float operations
-                                // in guards are translated to gc_bif calls
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #else
-                        if (!isfinite(ctx->fr[freg3])) {
-                            if (fail_label) {
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #endif
+                TRACE("fsub/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                feclearexcept(FE_OVERFLOW);
+#endif
+                ctx->fr[freg3] = ctx->fr[freg1] - ctx->fr[freg2];
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                if (fetestexcept(FE_OVERFLOW)) {
+                    if (fail_label) {
+                        // Not sure this can happen, float operations
+                        // in guards are translated to gc_bif calls
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#else
+                if (!isfinite(ctx->fr[freg3])) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#endif
 
                 break;
             }
 
             case OP_FMUL: {
-                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                    #pragma STDC FENV_ACCESS ON
-                #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+#endif
                 int fail_label;
                 DECODE_LABEL(fail_label, pc);
                 int freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                    TRACE("fmul/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        feclearexcept(FE_OVERFLOW);
-                    #endif
-                    ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        if (fetestexcept(FE_OVERFLOW)) {
-                            if (fail_label) {
-                                // Not sure this can happen, float operations
-                                // in guards are translated to gc_bif calls
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #else
-                        if (!isfinite(ctx->fr[freg3])) {
-                            if (fail_label) {
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #endif
+                TRACE("fmul/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                feclearexcept(FE_OVERFLOW);
+#endif
+                ctx->fr[freg3] = ctx->fr[freg1] * ctx->fr[freg2];
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                if (fetestexcept(FE_OVERFLOW)) {
+                    if (fail_label) {
+                        // Not sure this can happen, float operations
+                        // in guards are translated to gc_bif calls
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#else
+                if (!isfinite(ctx->fr[freg3])) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#endif
 
                 break;
             }
 
             case OP_FDIV: {
-                #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                    #pragma STDC FENV_ACCESS ON
-                #endif
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+#pragma STDC FENV_ACCESS ON
+#endif
                 int fail_label;
                 DECODE_LABEL(fail_label, pc);
                 int freg1, freg2, freg3;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
                 DECODE_FP_REGISTER(freg3, pc);
-                    TRACE("fdiv/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
-                    #endif
-                    ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
-                    #ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
-                        if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
-                            if (fail_label) {
-                                // Not sure this can happen, float operations
-                                // in guards are translated to gc_bif calls
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #else
-                        if (!isfinite(ctx->fr[freg3])) {
-                            if (fail_label) {
-                                pc = mod->labels[fail_label];
-                            } else {
-                                RAISE_ERROR(BADARITH_ATOM);
-                            }
-                        }
-                    #endif
+                TRACE("fdiv/3 fp%i, fp%i, fp%i\n", freg1, freg2, freg3);
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                feclearexcept(FE_OVERFLOW | FE_DIVBYZERO);
+#endif
+                ctx->fr[freg3] = ctx->fr[freg1] / ctx->fr[freg2];
+#ifdef HAVE_PRAGMA_STDC_FENV_ACCESS
+                if (fetestexcept(FE_OVERFLOW | FE_DIVBYZERO)) {
+                    if (fail_label) {
+                        // Not sure this can happen, float operations
+                        // in guards are translated to gc_bif calls
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#else
+                if (!isfinite(ctx->fr[freg3])) {
+                    if (fail_label) {
+                        pc = mod->labels[fail_label];
+                    } else {
+                        RAISE_ERROR(BADARITH_ATOM);
+                    }
+                }
+#endif
 
                 break;
             }
@@ -4813,9 +4756,9 @@ wait_timeout_trap_handler:
                 int freg1, freg2;
                 DECODE_FP_REGISTER(freg1, pc);
                 DECODE_FP_REGISTER(freg2, pc);
-                    TRACE("fnegate/2 fp%i, fp%i\n", freg1, freg2);
-                    context_ensure_fpregs(ctx);
-                    ctx->fr[freg2] = - ctx->fr[freg1];
+                TRACE("fnegate/2 fp%i, fp%i\n", freg1, freg2);
+                context_ensure_fpregs(ctx);
+                ctx->fr[freg2] = -ctx->fr[freg1];
 
                 break;
             }
@@ -4824,8 +4767,7 @@ wait_timeout_trap_handler:
 
                 TRACE("build_stacktrace/0\n");
 
-
-                    x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
+                x_regs[0] = stacktrace_build(ctx, &x_regs[0], 1);
 
                 break;
             }
@@ -4834,20 +4776,18 @@ wait_timeout_trap_handler:
 
                 TRACE("raw_raise/0\n");
 
-                    // This is an optimization from the compiler where we don't need to call
-                    // stacktrace_create_raw here because the stack trace has already been created
-                    // and set in x[2].
-                    term ex_class = x_regs[0];
-                    if (UNLIKELY(ex_class != ERROR_ATOM &&
-                                ex_class != LOWERCASE_EXIT_ATOM &&
-                                ex_class != THROW_ATOM)) {
-                        x_regs[0] = BADARG_ATOM;
-                    } else {
-                        context_set_exception_class(ctx, x_regs[0]);
-                        ctx->exception_reason = x_regs[1];
-                        ctx->exception_stacktrace = x_regs[2];
-                        goto handle_error;
-                    }
+                // This is an optimization from the compiler where we don't need to call
+                // stacktrace_create_raw here because the stack trace has already been created
+                // and set in x[2].
+                term ex_class = x_regs[0];
+                if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
+                    x_regs[0] = BADARG_ATOM;
+                } else {
+                    context_set_exception_class(ctx, x_regs[0]);
+                    ctx->exception_reason = x_regs[1];
+                    ctx->exception_stacktrace = x_regs[2];
+                    goto handle_error;
+                }
                 break;
             }
 
@@ -4857,11 +4797,11 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(head_dreg);
                 DECODE_DEST_REGISTER(head_dreg, pc);
 
-                    TRACE("get_hd/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(head_dreg));
+                TRACE("get_hd/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(head_dreg));
 
-                    term head = term_get_list_head(src_value);
+                term head = term_get_list_head(src_value);
 
-                    WRITE_REGISTER(head_dreg, head);
+                WRITE_REGISTER(head_dreg, head);
 
                 break;
             }
@@ -4872,11 +4812,11 @@ wait_timeout_trap_handler:
                 DEST_REGISTER(tail_dreg);
                 DECODE_DEST_REGISTER(tail_dreg, pc);
 
-                    TRACE("get_tl/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(tail_dreg));
+                TRACE("get_tl/2 %" TERM_X_FMT ", %c%i\n", src_value, T_DEST_REG(tail_dreg));
 
-                    term tail = term_get_list_tail(src_value);
+                term tail = term_get_list_tail(src_value);
 
-                    WRITE_REGISTER(tail_dreg, tail);
+                WRITE_REGISTER(tail_dreg, tail);
 
                 break;
             }
@@ -4890,17 +4830,16 @@ wait_timeout_trap_handler:
 
                 TRACE("put_tuple2/2, size=%i\n", size);
 
-                    term t = term_alloc_tuple(size, &ctx->heap);
+                term t = term_alloc_tuple(size, &ctx->heap);
 
                 for (uint32_t j = 0; j < size; j++) {
                     term element;
                     DECODE_COMPACT_TERM(element, pc)
 
-
-                        term_put_tuple_element(t, j, element);
+                    term_put_tuple_element(t, j, element);
                 }
 
-                    WRITE_REGISTER(dreg, t);
+                WRITE_REGISTER(dreg, t);
                 break;
             }
 
@@ -4912,11 +4851,11 @@ wait_timeout_trap_handler:
 
                 TRACE("swap/2 a=%c%i, b=%c%i\n", T_DEST_REG(reg_a), T_DEST_REG(reg_b));
 
-                    term a = READ_DEST_REGISTER(reg_a);
-                    term b = READ_DEST_REGISTER(reg_b);
+                term a = READ_DEST_REGISTER(reg_a);
+                term b = READ_DEST_REGISTER(reg_b);
 
-                    WRITE_REGISTER(reg_a, b);
-                    WRITE_REGISTER(reg_b, a);
+                WRITE_REGISTER(reg_a, b);
+                WRITE_REGISTER(reg_b, a);
                 break;
             }
 
@@ -4931,27 +4870,26 @@ wait_timeout_trap_handler:
                 GC_SAFE_DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER_GC_SAFE(dreg, pc);
 
+                TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG_GC_SAFE(dreg));
 
-                    TRACE("bs_start_match4/4, fail_atom=%u fail_label=%u live=%u src=%p dreg=%c%i\n", (unsigned) fail_atom, (unsigned) fail_label, (unsigned) live, (void *) src, T_DEST_REG_GC_SAFE(dreg));
+                // no_fail: we know it's a binary or a match_state
+                // resume: we know it's a match_state
+                if (term_is_invalid_term(fail_atom) && !(term_is_binary(src) || term_is_match_state(src))) {
+                    pc = mod->labels[fail_label];
+                } else {
+                    assert(term_is_binary(src) || term_is_match_state(src));
 
-                    // no_fail: we know it's a binary or a match_state
-                    // resume: we know it's a match_state
-                    if (term_is_invalid_term(fail_atom) && !(term_is_binary(src) || term_is_match_state(src))) {
-                        pc = mod->labels[fail_label];
-                    } else {
-                        assert(term_is_binary(src) || term_is_match_state(src));
-
-                        TRIM_LIVE_REGS(live);
-                        x_regs[live] = src;
-                        // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
-                        if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        src = x_regs[live];
-                        term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
-
-                        WRITE_REGISTER_GC_SAFE(dreg, match_state);
+                    TRIM_LIVE_REGS(live);
+                    x_regs[live] = src;
+                    // MEMORY_CAN_SHRINK because bs_start_match is classified as gc in beam_ssa_codegen.erl
+                    if (memory_ensure_free_with_roots(ctx, TERM_BOXED_BIN_MATCH_STATE_SIZE, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
+                    src = x_regs[live];
+                    term match_state = term_alloc_bin_match_state(src, 0, &ctx->heap);
+
+                    WRITE_REGISTER_GC_SAFE(dreg, match_state);
+                }
                 break;
             }
 
@@ -4965,21 +4903,21 @@ wait_timeout_trap_handler:
                 DECODE_LITERAL(numfree, pc)
                 TRACE("make_fun3/3, fun_index=%i dreg=%c%i numfree=%i\n", fun_index, T_DEST_REG(dreg), numfree);
 
-                    size_t size = numfree + BOXED_FUN_SIZE;
-                    term *boxed_func = memory_heap_alloc(&ctx->heap, size);
+                size_t size = numfree + BOXED_FUN_SIZE;
+                term *boxed_func = memory_heap_alloc(&ctx->heap, size);
 
-                    boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
-                    boxed_func[1] = (term) mod;
-                    boxed_func[2] = term_from_int(fun_index);
+                boxed_func[0] = ((size - 1) << 6) | TERM_BOXED_FUN;
+                boxed_func[1] = (term) mod;
+                boxed_func[2] = term_from_int(fun_index);
 
                 for (uint32_t j = 0; j < numfree; j++) {
                     term arg;
                     DECODE_COMPACT_TERM(arg, pc);
-                        boxed_func[3 + j] = arg;
+                    boxed_func[3 + j] = arg;
                 }
 
-                    term fun = ((term) boxed_func) | TERM_PRIMARY_BOXED;
-                    WRITE_REGISTER(dreg, fun);
+                term fun = ((term) boxed_func) | TERM_PRIMARY_BOXED;
+                WRITE_REGISTER(dreg, fun);
                 break;
             }
 
@@ -4990,7 +4928,7 @@ wait_timeout_trap_handler:
                 for (uint32_t j = 0; j < size; j++) {
                     uint32_t target;
                     DECODE_YREG(target, pc);
-                        ctx->e[target] = term_nil();
+                    ctx->e[target] = term_nil();
                 }
                 break;
             }
@@ -5042,11 +4980,11 @@ wait_timeout_trap_handler:
                 DECODE_EXTENDED_LIST_TAG(pc);
                 uint32_t list_len;
                 DECODE_LITERAL(list_len, pc);
-                    const uint8_t* list_pc = pc;
+                const uint8_t *list_pc = pc;
                 size_t nb_segments = list_len / 6;
                 // Verify parameters and compute binary size in first iteration
-                    size_t binary_size = 0;
-                    bool reuse_binary = false;
+                size_t binary_size = 0;
+                bool reuse_binary = false;
                 for (size_t j = 0; j < nb_segments; j++) {
                     term atom_type;
                     DECODE_ATOM(atom_type, pc);
@@ -5060,46 +4998,104 @@ wait_timeout_trap_handler:
                     DECODE_COMPACT_TERM(src, pc);
                     term size;
                     DECODE_COMPACT_TERM(size, pc);
-                        size_t segment_size = 0;
-                        switch (atom_type) {
-                            // OTP ignores size for these types
-                            case UTF8_ATOM: {
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
-                                // Silently ignore segment_unit != 0
-                                segment_unit = 8;
-                                avm_int_t src_value = term_to_int(src);
-                                if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
+                    size_t segment_size = 0;
+                    switch (atom_type) {
+                        // OTP ignores size for these types
+                        case UTF8_ATOM: {
+                            VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                            // Silently ignore segment_unit != 0
+                            segment_unit = 8;
+                            avm_int_t src_value = term_to_int(src);
+                            if (UNLIKELY(!bitstring_utf8_size(src_value, &segment_size))) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
                                 }
-                                break;
                             }
-                            case UTF16_ATOM: {
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
-                                // Silently ignore segment_unit != 0
-                                segment_unit = 8;
-                                avm_int_t src_value = term_to_int(src);
-                                if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
+                            break;
+                        }
+                        case UTF16_ATOM: {
+                            VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                            // Silently ignore segment_unit != 0
+                            segment_unit = 8;
+                            avm_int_t src_value = term_to_int(src);
+                            if (UNLIKELY(!bitstring_utf16_size(src_value, &segment_size))) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
                                 }
-                                break;
                             }
-                            case UTF32_ATOM: {
-                                VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
-                                // Silently ignore segment_unit != 0
+                            break;
+                        }
+                        case UTF32_ATOM: {
+                            VERIFY_IS_INTEGER(src, "bs_create_bin/6", fail);
+                            // Silently ignore segment_unit != 0
+                            segment_unit = 8;
+                            segment_size = 4;
+                            break;
+                        }
+                        case INTEGER_ATOM: {
+                            VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6", fail);
+                            VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                            avm_int_t signed_size_value = term_to_int(size);
+                            if (UNLIKELY(signed_size_value < 0)) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            segment_size = signed_size_value;
+                            break;
+                        }
+                        case FLOAT_ATOM: {
+                            if (!term_is_number(src)) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                            avm_int_t signed_size_value = term_to_int(size);
+                            if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            segment_size = signed_size_value;
+                            segment_unit = 1;
+                            break;
+                        }
+                        case STRING_ATOM: {
+                            VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                            avm_int_t signed_size_value = term_to_int(size);
+                            if (UNLIKELY(signed_size_value < 0)) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            segment_size = signed_size_value;
+                            break;
+                        }
+                        case APPEND_ATOM:
+                        case BINARY_ATOM:
+                        case PRIVATE_APPEND_ATOM: {
+                            VERIFY_IS_BINARY(src, "bs_create_bin/6", fail);
+                            if (size == ALL_ATOM) {
+                                // We only support src as a binary of bytes here.
+                                segment_size = term_binary_size(src);
                                 segment_unit = 8;
-                                segment_size = 4;
-                                break;
-                            }
-                            case INTEGER_ATOM: {
-                                VERIFY_IS_ANY_INTEGER(src, "bs_create_bin/6", fail);
+                                if (atom_type == PRIVATE_APPEND_ATOM && j == 0) {
+                                    reuse_binary = true;
+                                }
+                            } else {
                                 VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
                                 avm_int_t signed_size_value = term_to_int(size);
                                 if (UNLIKELY(signed_size_value < 0)) {
@@ -5109,328 +5105,270 @@ wait_timeout_trap_handler:
                                         JUMP_TO_LABEL(mod, fail);
                                     }
                                 }
-                                segment_size = signed_size_value;
-                                break;
-                            }
-                            case FLOAT_ATOM: {
-                                if (!term_is_number(src)) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                                avm_int_t signed_size_value = term_to_int(size);
-                                if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-                                segment_size = signed_size_value;
-                                segment_unit = 1;
-                                break;
-                            }
-                            case STRING_ATOM: {
-                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                                avm_int_t signed_size_value = term_to_int(size);
-                                if (UNLIKELY(signed_size_value < 0)) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-                                segment_size = signed_size_value;
-                                break;
-                            }
-                            case APPEND_ATOM:
-                            case BINARY_ATOM:
-                            case PRIVATE_APPEND_ATOM: {
-                                VERIFY_IS_BINARY(src, "bs_create_bin/6", fail);
-                                if (size == ALL_ATOM) {
-                                    // We only support src as a binary of bytes here.
-                                    segment_size = term_binary_size(src);
-                                    segment_unit = 8;
-                                    if (atom_type == PRIVATE_APPEND_ATOM && j == 0) {
-                                        reuse_binary = true;
-                                    }
-                                } else {
-                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                                    avm_int_t signed_size_value = term_to_int(size);
-                                    if (UNLIKELY(signed_size_value < 0)) {
-                                        if (fail == 0) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        } else {
-                                            JUMP_TO_LABEL(mod, fail);
-                                        }
-                                    }
-                                    avm_int_t size_in_bits = signed_size_value * segment_unit;
-                                    if (size_in_bits % 8) {
-                                        TRACE("bs_create_bin/6: size in bits (%d) is not evenly divisible by 8\n", (int) size_in_bits);
-                                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                                    }
-                                    avm_int_t size_in_bytes = size_in_bits / 8;
-                                    size_t binary_size = term_binary_size(src);
-                                    if ((size_t) size_in_bytes > binary_size) {
-                                        if (fail == 0) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        } else {
-                                            JUMP_TO_LABEL(mod, fail);
-                                        }
-                                    }
-                                    segment_size = signed_size_value;
-                                }
-                                break;
-                            }
-                            default: {
-                                TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
-                                RAISE_ERROR(UNSUPPORTED_ATOM);
-                            }
-                        }
-                        binary_size += segment_unit * segment_size;
-                }
-                // Allocate and build binary in second iteration
-                    if (binary_size % 8) {
-                        TRACE("bs_create_bin/6: total binary size (%d) is not evenly divisible by 8\n", (int) binary_size);
-                        RAISE_ERROR(UNSUPPORTED_ATOM);
-                    }
-                    TRIM_LIVE_REGS(live);
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc + term_binary_heap_size(binary_size / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term t;
-                    if (!reuse_binary) {
-                        t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
-                        if (UNLIKELY(term_is_invalid_term(t))) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                    } else {
-                        // t will be created in the first segment (PRIVATE_APPEND case)
-                        t = term_invalid_term();
-                    }
-                    size_t offset = 0;
-
-                    for (size_t j = 0; j < nb_segments; j++) {
-                        term atom_type;
-                        DECODE_ATOM(atom_type, list_pc);
-                        int seg;
-                        DECODE_LITERAL(seg, list_pc);
-                        int segment_unit;
-                        DECODE_LITERAL(segment_unit, list_pc);
-                        term flags;
-                        DECODE_COMPACT_TERM(flags, list_pc);
-                        term src;
-                        DECODE_COMPACT_TERM(src, list_pc);
-                        term size;
-                        DECODE_COMPACT_TERM(size, list_pc);
-                        size_t segment_size;
-                        avm_int_t flags_value = 0;
-                        avm_int64_t src_value = 0;
-                        const intn_digit_t *big_src_value = NULL;
-                        size_t big_len = 0;
-                        intn_integer_sign_t big_sign = IntNPositiveInteger;
-                        size_t size_value = 0;
-                        switch (atom_type) {
-                            case UTF16_ATOM:
-                            case UTF32_ATOM:
-                            case INTEGER_ATOM:
-                            case FLOAT_ATOM:
-                                DECODE_FLAGS_LIST(flags_value, flags, opcode);
-                                break;
-                            default:
-                                break;
-                        }
-                        switch (atom_type) {
-                            case STRING_ATOM:
-                            case UTF8_ATOM:
-                            case UTF16_ATOM:
-                            case UTF32_ATOM:
-                                src_value = term_to_int(src);
-                                break;
-                            case INTEGER_ATOM:
-                                if (term_is_int(src)
-                                    || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
-                                    src_value = term_maybe_unbox_int64(src);
-                                } else {
-                                    term_to_bigint(src, &big_src_value, &big_len, &big_sign);
-                                }
-                                break;
-                            default:
-                                break;
-                        }
-                        switch (atom_type) {
-                            case INTEGER_ATOM:
-                            case STRING_ATOM:
-                                size_value = (size_t) term_to_int(size);
-                                break;
-                            case FLOAT_ATOM:
-                                size_value = (size_t) term_to_int(size);
-                                break;
-                            default:
-                                break;
-                        }
-                        switch (atom_type) {
-                            case UTF8_ATOM: {
-                                bool result = bitstring_insert_utf8(t, offset, src_value, &segment_size);
-                                // bitstring_utf8_size was called so bitstring_insert_utf8 succeeds
-                                UNUSED(result);
-                                assert(result);
-                                segment_size *= 8;
-                                break;
-                            }
-                            case UTF16_ATOM: {
-                                bool result = bitstring_insert_utf16(t, offset, src_value, flags_value, &segment_size);
-                                // bitstring_utf16_size was called so bitstring_insert_utf16 succeeds
-                                UNUSED(result);
-                                assert(result);
-                                segment_size *= 8;
-                                break;
-                            }
-                            case UTF32_ATOM: {
-                                bool result = bitstring_insert_utf32(t, offset, src_value, flags_value);
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert character as utf32 into binary: %i\n", result);
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-                                segment_size = 32;
-                                break;
-                            }
-                            case INTEGER_ATOM: {
-                                if (!big_src_value) {
-                                    bool result = bitstring_insert_integer(t, offset, src_value,
-                                        size_value * segment_unit, flags_value);
-                                    if (UNLIKELY(!result)) {
-                                        TRACE("bs_create_bin/6: Failed to insert integer into "
-                                              "binary\n");
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    }
-                                } else {
-                                    // when building a binary, `signed` flag is implicit
-                                    intn_from_integer_options_t intn_flags
-                                        = bitstring_flags_to_intn_opts(flags_value);
-                                    int byte_offset = offset / 8;
-                                    uint8_t *dst = (uint8_t *) term_binary_data(t) + byte_offset;
-                                    size_t t_capacity = term_binary_size(t);
-                                    size_t avail = t_capacity - byte_offset;
-
-                                    int written = intn_to_integer_bytes(
-                                        big_src_value, big_len, big_sign, intn_flags, dst, avail);
-                                    if (UNLIKELY(written < 0)) {
-                                        TRACE("bs_create_bin/6: Failed to insert integer into "
-                                              "binary\n");
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    }
-                                }
-                                segment_size = size_value * segment_unit;
-                                break;
-                            }
-                            case FLOAT_ATOM: {
-                                avm_float_t float_value = 0;
-                                bool is_number = false;
-                                if (term_is_float(src)) {
-                                    float_value = term_to_float(src);
-                                    is_number = true;
-                                } else if (term_is_any_integer(src)) {
-                                    float_value = term_conv_to_float(src);
-                                    is_number = isfinite(float_value);
-                                }
-
-                                if (UNLIKELY(!is_number)) {
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-
-                                bool result;
-                                if (size_value == 16) {
-                                    result = bitstring_insert_f16(t, offset, float_value, flags_value);
-                                } else if (size_value == 32) {
-                                    result = bitstring_insert_f32(t, offset, float_value, flags_value);
-                                } else {
-                                    result = bitstring_insert_f64(t, offset, float_value, flags_value);
-                                }
-                                if (UNLIKELY(!result)) {
-                                    TRACE("bs_create_bin/6: Failed to insert float into binary\n");
-                                    if (fail == 0) {
-                                        RAISE_ERROR(BADARG_ATOM);
-                                    } else {
-                                        JUMP_TO_LABEL(mod, fail);
-                                    }
-                                }
-                                segment_size = size_value;
-                                break;
-                            }
-                            case STRING_ATOM: {
-                                uint8_t *dst = (uint8_t *) term_binary_data(t);
-                                size_t remaining = 0;
-                                const uint8_t *str = module_get_str(mod, src_value, &remaining);
-                                segment_size = size_value * segment_unit;
-                                bitstring_copy_bits(dst, offset, str, segment_size);
-                                break;
-                            }
-                            case APPEND_ATOM:
-                            case BINARY_ATOM:
-                            case PRIVATE_APPEND_ATOM: {
-                                if (offset % 8) {
-                                    TRACE("bs_create_bin/6: current offset (%d) is not evenly divisible by 8\n", (int) offset);
+                                avm_int_t size_in_bits = signed_size_value * segment_unit;
+                                if (size_in_bits % 8) {
+                                    TRACE("bs_create_bin/6: size in bits (%d) is not evenly divisible by 8\n", (int) size_in_bits);
                                     RAISE_ERROR(UNSUPPORTED_ATOM);
                                 }
-                                size_t src_size = term_binary_size(src);
-                                if (reuse_binary && j == 0) {
-                                    t = term_reuse_binary(src, binary_size / 8, &ctx->heap, ctx->global);
-                                    if (UNLIKELY(term_is_invalid_term(t))) {
-                                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                    }
-                                    segment_size = src_size * 8;
-                                    break;
-                                }
-                                uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
-                                const uint8_t *bin = (const uint8_t *) term_binary_data(src);
-                                if (size != ALL_ATOM) {
-                                    VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
-                                    avm_int_t signed_size_value = term_to_int(size);
-                                    if (UNLIKELY(signed_size_value < 0)) {
-                                        TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
+                                avm_int_t size_in_bytes = size_in_bits / 8;
+                                size_t binary_size = term_binary_size(src);
+                                if ((size_t) size_in_bytes > binary_size) {
+                                    if (fail == 0) {
                                         RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
                                     }
-                                    // We checked earlier it's a multiple of 8
-                                    size_value = ((size_t) signed_size_value) * segment_unit / 8;
-                                    if (size_value > src_size) {
-                                        if (fail == 0) {
-                                            RAISE_ERROR(BADARG_ATOM);
-                                        } else {
-                                            JUMP_TO_LABEL(mod, fail);
-                                        }
-                                    }
-                                    src_size = size_value;
                                 }
-                                memcpy(dst, bin, src_size);
+                                segment_size = signed_size_value;
+                            }
+                            break;
+                        }
+                        default: {
+                            TRACE("bs_create_bin/6: unsupported type atom_index=%i\n", (int) term_to_atom_index(atom_type));
+                            RAISE_ERROR(UNSUPPORTED_ATOM);
+                        }
+                    }
+                    binary_size += segment_unit * segment_size;
+                }
+                // Allocate and build binary in second iteration
+                if (binary_size % 8) {
+                    TRACE("bs_create_bin/6: total binary size (%d) is not evenly divisible by 8\n", (int) binary_size);
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                TRIM_LIVE_REGS(live);
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, alloc + term_binary_heap_size(binary_size / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term t;
+                if (!reuse_binary) {
+                    t = term_create_empty_binary(binary_size / 8, &ctx->heap, ctx->global);
+                    if (UNLIKELY(term_is_invalid_term(t))) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                    }
+                } else {
+                    // t will be created in the first segment (PRIVATE_APPEND case)
+                    t = term_invalid_term();
+                }
+                size_t offset = 0;
+
+                for (size_t j = 0; j < nb_segments; j++) {
+                    term atom_type;
+                    DECODE_ATOM(atom_type, list_pc);
+                    int seg;
+                    DECODE_LITERAL(seg, list_pc);
+                    int segment_unit;
+                    DECODE_LITERAL(segment_unit, list_pc);
+                    term flags;
+                    DECODE_COMPACT_TERM(flags, list_pc);
+                    term src;
+                    DECODE_COMPACT_TERM(src, list_pc);
+                    term size;
+                    DECODE_COMPACT_TERM(size, list_pc);
+                    size_t segment_size;
+                    avm_int_t flags_value = 0;
+                    avm_int64_t src_value = 0;
+                    const intn_digit_t *big_src_value = NULL;
+                    size_t big_len = 0;
+                    intn_integer_sign_t big_sign = IntNPositiveInteger;
+                    size_t size_value = 0;
+                    switch (atom_type) {
+                        case UTF16_ATOM:
+                        case UTF32_ATOM:
+                        case INTEGER_ATOM:
+                        case FLOAT_ATOM:
+                            DECODE_FLAGS_LIST(flags_value, flags, opcode);
+                            break;
+                        default:
+                            break;
+                    }
+                    switch (atom_type) {
+                        case STRING_ATOM:
+                        case UTF8_ATOM:
+                        case UTF16_ATOM:
+                        case UTF32_ATOM:
+                            src_value = term_to_int(src);
+                            break;
+                        case INTEGER_ATOM:
+                            if (term_is_int(src)
+                                || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+                                src_value = term_maybe_unbox_int64(src);
+                            } else {
+                                term_to_bigint(src, &big_src_value, &big_len, &big_sign);
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                    switch (atom_type) {
+                        case INTEGER_ATOM:
+                        case STRING_ATOM:
+                            size_value = (size_t) term_to_int(size);
+                            break;
+                        case FLOAT_ATOM:
+                            size_value = (size_t) term_to_int(size);
+                            break;
+                        default:
+                            break;
+                    }
+                    switch (atom_type) {
+                        case UTF8_ATOM: {
+                            bool result = bitstring_insert_utf8(t, offset, src_value, &segment_size);
+                            // bitstring_utf8_size was called so bitstring_insert_utf8 succeeds
+                            UNUSED(result);
+                            assert(result);
+                            segment_size *= 8;
+                            break;
+                        }
+                        case UTF16_ATOM: {
+                            bool result = bitstring_insert_utf16(t, offset, src_value, flags_value, &segment_size);
+                            // bitstring_utf16_size was called so bitstring_insert_utf16 succeeds
+                            UNUSED(result);
+                            assert(result);
+                            segment_size *= 8;
+                            break;
+                        }
+                        case UTF32_ATOM: {
+                            bool result = bitstring_insert_utf32(t, offset, src_value, flags_value);
+                            if (UNLIKELY(!result)) {
+                                TRACE("bs_create_bin/6: Failed to insert character as utf32 into binary: %i\n", result);
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            segment_size = 32;
+                            break;
+                        }
+                        case INTEGER_ATOM: {
+                            if (!big_src_value) {
+                                bool result = bitstring_insert_integer(t, offset, src_value,
+                                    size_value * segment_unit, flags_value);
+                                if (UNLIKELY(!result)) {
+                                    TRACE("bs_create_bin/6: Failed to insert integer into "
+                                          "binary\n");
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                            } else {
+                                // when building a binary, `signed` flag is implicit
+                                intn_from_integer_options_t intn_flags
+                                    = bitstring_flags_to_intn_opts(flags_value);
+                                int byte_offset = offset / 8;
+                                uint8_t *dst = (uint8_t *) term_binary_data(t) + byte_offset;
+                                size_t t_capacity = term_binary_size(t);
+                                size_t avail = t_capacity - byte_offset;
+
+                                int written = intn_to_integer_bytes(
+                                    big_src_value, big_len, big_sign, intn_flags, dst, avail);
+                                if (UNLIKELY(written < 0)) {
+                                    TRACE("bs_create_bin/6: Failed to insert integer into "
+                                          "binary\n");
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                            }
+                            segment_size = size_value * segment_unit;
+                            break;
+                        }
+                        case FLOAT_ATOM: {
+                            avm_float_t float_value = 0;
+                            bool is_number = false;
+                            if (term_is_float(src)) {
+                                float_value = term_to_float(src);
+                                is_number = true;
+                            } else if (term_is_any_integer(src)) {
+                                float_value = term_conv_to_float(src);
+                                is_number = isfinite(float_value);
+                            }
+
+                            if (UNLIKELY(!is_number)) {
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+
+                            bool result;
+                            if (size_value == 16) {
+                                result = bitstring_insert_f16(t, offset, float_value, flags_value);
+                            } else if (size_value == 32) {
+                                result = bitstring_insert_f32(t, offset, float_value, flags_value);
+                            } else {
+                                result = bitstring_insert_f64(t, offset, float_value, flags_value);
+                            }
+                            if (UNLIKELY(!result)) {
+                                TRACE("bs_create_bin/6: Failed to insert float into binary\n");
+                                if (fail == 0) {
+                                    RAISE_ERROR(BADARG_ATOM);
+                                } else {
+                                    JUMP_TO_LABEL(mod, fail);
+                                }
+                            }
+                            segment_size = size_value;
+                            break;
+                        }
+                        case STRING_ATOM: {
+                            uint8_t *dst = (uint8_t *) term_binary_data(t);
+                            size_t remaining = 0;
+                            const uint8_t *str = module_get_str(mod, src_value, &remaining);
+                            segment_size = size_value * segment_unit;
+                            bitstring_copy_bits(dst, offset, str, segment_size);
+                            break;
+                        }
+                        case APPEND_ATOM:
+                        case BINARY_ATOM:
+                        case PRIVATE_APPEND_ATOM: {
+                            if (offset % 8) {
+                                TRACE("bs_create_bin/6: current offset (%d) is not evenly divisible by 8\n", (int) offset);
+                                RAISE_ERROR(UNSUPPORTED_ATOM);
+                            }
+                            size_t src_size = term_binary_size(src);
+                            if (reuse_binary && j == 0) {
+                                t = term_reuse_binary(src, binary_size / 8, &ctx->heap, ctx->global);
+                                if (UNLIKELY(term_is_invalid_term(t))) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
                                 segment_size = src_size * 8;
                                 break;
                             }
-                            default:
-                                UNREACHABLE();
+                            uint8_t *dst = (uint8_t *) term_binary_data(t) + (offset / 8);
+                            const uint8_t *bin = (const uint8_t *) term_binary_data(src);
+                            if (size != ALL_ATOM) {
+                                VERIFY_IS_INTEGER(size, "bs_create_bin/6", fail);
+                                avm_int_t signed_size_value = term_to_int(size);
+                                if (UNLIKELY(signed_size_value < 0)) {
+                                    TRACE("bs_create_bin/6: size value less than 0: %i\n", (int) signed_size_value);
+                                    RAISE_ERROR(BADARG_ATOM);
+                                }
+                                // We checked earlier it's a multiple of 8
+                                size_value = ((size_t) signed_size_value) * segment_unit / 8;
+                                if (size_value > src_size) {
+                                    if (fail == 0) {
+                                        RAISE_ERROR(BADARG_ATOM);
+                                    } else {
+                                        JUMP_TO_LABEL(mod, fail);
+                                    }
+                                }
+                                src_size = size_value;
+                            }
+                            memcpy(dst, bin, src_size);
+                            segment_size = src_size * 8;
+                            break;
                         }
-                        offset += segment_size;
+                        default:
+                            UNREACHABLE();
                     }
-                    WRITE_REGISTER_GC_SAFE(dreg, t);
+                    offset += segment_size;
+                }
+                WRITE_REGISTER_GC_SAFE(dreg, t);
                 break;
             }
 
             case OP_CALL_FUN2: {
-                    remaining_reductions--;
-                    if (UNLIKELY(!remaining_reductions)) {
-                        SCHEDULE_NEXT(mod, pc - 1);
-                    }
+                remaining_reductions--;
+                if (UNLIKELY(!remaining_reductions)) {
+                    SCHEDULE_NEXT(mod, pc - 1);
+                }
                 term tag;
                 DECODE_COMPACT_TERM(tag, pc)
                 unsigned int args_count;
@@ -5440,35 +5378,34 @@ wait_timeout_trap_handler:
 
                 TRACE("call_fun2/3, tag, args_count=%i, fun\n", args_count);
 
-                    if (UNLIKELY(!term_is_function(fun))) {
-                        // We can gc as we are raising
-                        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                        }
-                        term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                        term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
-                        term_put_tuple_element(new_error_tuple, 1, fun);
-                        RAISE_ERROR(new_error_tuple);
+                if (UNLIKELY(!term_is_function(fun))) {
+                    // We can gc as we are raising
+                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &fun, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
                     }
-                    CALL_FUN(fun, args_count)
+                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                    term_put_tuple_element(new_error_tuple, 0, BADFUN_ATOM);
+                    term_put_tuple_element(new_error_tuple, 1, fun);
+                    RAISE_ERROR(new_error_tuple);
+                }
+                CALL_FUN(fun, args_count)
                 break;
             }
 
             case OP_BADRECORD: {
                 TRACE("badrecord/1\n");
 
-                    term value;
-                    DECODE_COMPACT_TERM(value, pc)
+                term value;
+                DECODE_COMPACT_TERM(value, pc)
 
-                    // We can gc as we are raising
-                    if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                    }
-                    term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
-                    term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
-                    term_put_tuple_element(new_error_tuple, 1, value);
-                    RAISE_ERROR(new_error_tuple);
-
+                // We can gc as we are raising
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(2), 1, &value, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term new_error_tuple = term_alloc_tuple(2, &ctx->heap);
+                term_put_tuple_element(new_error_tuple, 0, BADRECORD_ATOM);
+                term_put_tuple_element(new_error_tuple, 1, value);
+                RAISE_ERROR(new_error_tuple);
 
                 break;
             }
@@ -5483,43 +5420,43 @@ wait_timeout_trap_handler:
                 DECODE_COMPACT_TERM(src, pc);
                 DEST_REGISTER(dreg);
                 DECODE_DEST_REGISTER(dreg, pc);
-                    if (UNLIKELY(!term_is_tuple(src) || (size != term_get_tuple_arity(src)))) {
-                        fprintf(stderr, "update_record/5 !term_is_tuple(src) or size doesn't match\n");
-                        AVM_ABORT();
-                    }
+                if (UNLIKELY(!term_is_tuple(src) || (size != term_get_tuple_arity(src)))) {
+                    fprintf(stderr, "update_record/5 !term_is_tuple(src) or size doesn't match\n");
+                    AVM_ABORT();
+                }
                 DECODE_EXTENDED_LIST_TAG(pc);
                 int list_len;
                 DECODE_LITERAL(list_len, pc);
-                    term dst;
-                    dst = term_alloc_tuple(size, &ctx->heap);
+                term dst;
+                dst = term_alloc_tuple(size, &ctx->heap);
 
-                    TRACE("update_record/5 hint=%" TERM_X_FMT ", size=%i, src=%p, dst=%p, updates_len=%d\n", hint, size, (void *)src, (void *)dst, list_len);
-                    bool reuse = hint == REUSE_ATOM;
-                    for (int j = 0;  j < size; j++) {
-                        term_put_tuple_element(dst, j, term_get_tuple_element(src, j));
-                    }
-                for (int j = 0;  j < list_len; j+=2) {
+                TRACE("update_record/5 hint=%" TERM_X_FMT ", size=%i, src=%p, dst=%p, updates_len=%d\n", hint, size, (void *) src, (void *) dst, list_len);
+                bool reuse = hint == REUSE_ATOM;
+                for (int j = 0; j < size; j++) {
+                    term_put_tuple_element(dst, j, term_get_tuple_element(src, j));
+                }
+                for (int j = 0; j < list_len; j += 2) {
                     int update_ix;
                     DECODE_LITERAL(update_ix, pc);
                     term update_value;
                     DECODE_COMPACT_TERM(update_value, pc);
-                        if (reuse) {
-                            term old_value = term_get_tuple_element(dst, update_ix - 1);
-                            TermCompareResult result = term_compare(update_value, old_value, TermCompareExact, ctx->global);
-                            if (result == TermEquals) {
-                                continue;
-                            } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
-                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                            }
-                            reuse = false;
-                        }
-                        term_put_tuple_element(dst, update_ix - 1, update_value);
-                }
                     if (reuse) {
-                        WRITE_REGISTER(dreg, src);
-                    } else {
-                        WRITE_REGISTER(dreg, dst);
+                        term old_value = term_get_tuple_element(dst, update_ix - 1);
+                        TermCompareResult result = term_compare(update_value, old_value, TermCompareExact, ctx->global);
+                        if (result == TermEquals) {
+                            continue;
+                        } else if (UNLIKELY(result == TermCompareMemoryAllocFail)) {
+                            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                        }
+                        reuse = false;
                     }
+                    term_put_tuple_element(dst, update_ix - 1, update_value);
+                }
+                if (reuse) {
+                    WRITE_REGISTER(dreg, src);
+                } else {
+                    WRITE_REGISTER(dreg, dst);
+                }
                 break;
             }
 
@@ -5530,9 +5467,9 @@ wait_timeout_trap_handler:
                 DECODE_LABEL(fail, pc);
                 term match_state;
                 DECODE_COMPACT_TERM(match_state, pc);
-                    VERIFY_IS_MATCH_STATE(match_state, "bs_match/3", fail)
-                    term bs_bin = term_get_match_state_binary(match_state);
-                    size_t bs_offset = term_get_match_state_offset(match_state);
+                VERIFY_IS_MATCH_STATE(match_state, "bs_match/3", fail)
+                term bs_bin = term_get_match_state_binary(match_state);
+                size_t bs_offset = term_get_match_state_offset(match_state);
                 DECODE_EXTENDED_LIST_TAG(pc);
                 int list_len;
                 DECODE_LITERAL(list_len, pc);
@@ -5549,16 +5486,16 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                                size_t bs_bin_size = term_binary_size(bs_bin);
-                                if (UNLIKELY(stride < 0)) {
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                size_t unsigned_stride = (size_t) stride;
-                                size_t remaining = (bs_bin_size * 8) - bs_offset;
-                                if (remaining < unsigned_stride || (remaining - unsigned_stride) % unit != 0) {
-                                    TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
-                                    goto bs_match_jump_to_fail;
-                                }
+                            size_t bs_bin_size = term_binary_size(bs_bin);
+                            if (UNLIKELY(stride < 0)) {
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                            size_t unsigned_stride = (size_t) stride;
+                            size_t remaining = (bs_bin_size * 8) - bs_offset;
+                            if (remaining < unsigned_stride || (remaining - unsigned_stride) % unit != 0) {
+                                TRACE("bs_match/3: ensure_at_least failed -- bs_bin_size = %d, bs_offset = %d, stride = %d, unit = %d\n", (int) bs_bin_size, (int) bs_offset, (int) stride, (int) unit);
+                                goto bs_match_jump_to_fail;
+                            }
                             break;
                         }
 
@@ -5566,15 +5503,15 @@ wait_timeout_trap_handler:
                             int stride;
                             DECODE_LITERAL(stride, pc);
                             j++;
-                                if (UNLIKELY(stride < 0)) {
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                size_t unsigned_stride = (size_t) stride;
-                                size_t bs_bin_size = term_binary_size(bs_bin);
-                                if ((bs_bin_size * 8) - bs_offset != unsigned_stride) {
-                                    TRACE("bs_match/3: ensure_exactly failed -- bs_bin_size = %lu, bs_offset = %lu, stride = %lu\n", (unsigned long) bs_bin_size, (unsigned long) bs_offset, (unsigned long) stride);
-                                    goto bs_match_jump_to_fail;
-                                }
+                            if (UNLIKELY(stride < 0)) {
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                            size_t unsigned_stride = (size_t) stride;
+                            size_t bs_bin_size = term_binary_size(bs_bin);
+                            if ((bs_bin_size * 8) - bs_offset != unsigned_stride) {
+                                TRACE("bs_match/3: ensure_exactly failed -- bs_bin_size = %lu, bs_offset = %lu, stride = %lu\n", (unsigned long) bs_bin_size, (unsigned long) bs_offset, (unsigned long) stride);
+                                goto bs_match_jump_to_fail;
+                            }
                             break;
                         }
 
@@ -5585,59 +5522,59 @@ wait_timeout_trap_handler:
                             term flags;
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
-                                avm_int_t flags_value;
-                                DECODE_FLAGS_LIST(flags_value, flags, opcode)
+                            avm_int_t flags_value;
+                            DECODE_FLAGS_LIST(flags_value, flags, opcode)
                             term size;
                             DECODE_COMPACT_TERM(size, pc);
                             j++;
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                                // context_clean_registers(ctx, live); // TODO: check if needed
-                                VERIFY_IS_INTEGER(size, "bs_match/3", fail);
-                                avm_int_t size_val = term_to_int(size);
-                                avm_int_t increment = size_val * unit;
-                                union maybe_unsigned_int64 value;
-                                term t;
-                                if (increment <= 64) {
-                                    bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
-                                    if (UNLIKELY(!status)) {
-                                        TRACE("bs_match/3: error extracting integer.\n");
-                                        goto bs_match_jump_to_fail;
-                                    }
-                                    if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
-                                        t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
-                                    } else {
-                                        intn_digit_t int_buf[INTN_UINT64_LEN];
-                                        intn_from_uint64(value.u, int_buf);
-                                        t = make_bigint_from_digits(
-                                            ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
-                                    }
-                                    if (UNLIKELY(term_is_invalid_term(t))) {
-                                        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                    }
-                                } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
-                                    unsigned long capacity = term_binary_size(bs_bin);
-                                    if (8 * capacity - bs_offset < (unsigned long) increment) {
-                                        goto bs_match_jump_to_fail;
-                                    }
-                                    size_t byte_offset = bs_offset / 8;
-                                    const uint8_t *int_bytes
-                                        = (const uint8_t *) term_binary_data(bs_bin);
-
-                                    t = extract_nbits_integer(ctx, int_bytes + byte_offset,
-                                        increment / 8, bitstring_flags_to_intn_opts(flags_value));
-                                    if (term_is_invalid_term(t)) {
-                                        HANDLE_ERROR();
-                                    }
-                                } else {
+                            // context_clean_registers(ctx, live); // TODO: check if needed
+                            VERIFY_IS_INTEGER(size, "bs_match/3", fail);
+                            avm_int_t size_val = term_to_int(size);
+                            avm_int_t increment = size_val * unit;
+                            union maybe_unsigned_int64 value;
+                            term t;
+                            if (increment <= 64) {
+                                bool status = bitstring_extract_integer(bs_bin, bs_offset, increment, flags_value, &value);
+                                if (UNLIKELY(!status)) {
+                                    TRACE("bs_match/3: error extracting integer.\n");
                                     goto bs_match_jump_to_fail;
                                 }
+                                if ((flags_value & SignedInteger) || (value.u <= INT64_MAX)) {
+                                    t = maybe_alloc_boxed_integer_fragment(ctx, value.s);
+                                } else {
+                                    intn_digit_t int_buf[INTN_UINT64_LEN];
+                                    intn_from_uint64(value.u, int_buf);
+                                    t = make_bigint_from_digits(
+                                        ctx, int_buf, IntNPositiveInteger, INTN_UINT64_LEN);
+                                }
+                                if (UNLIKELY(term_is_invalid_term(t))) {
+                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                                }
+                            } else if ((bs_offset % 8 == 0) && (increment % 8 == 0) && (increment <= INTN_MAX_UNSIGNED_BITS_SIZE)) {
+                                unsigned long capacity = term_binary_size(bs_bin);
+                                if (8 * capacity - bs_offset < (unsigned long) increment) {
+                                    goto bs_match_jump_to_fail;
+                                }
+                                size_t byte_offset = bs_offset / 8;
+                                const uint8_t *int_bytes
+                                    = (const uint8_t *) term_binary_data(bs_bin);
+
+                                t = extract_nbits_integer(ctx, int_bytes + byte_offset,
+                                    increment / 8, bitstring_flags_to_intn_opts(flags_value));
+                                if (term_is_invalid_term(t)) {
+                                    HANDLE_ERROR();
+                                }
+                            } else {
+                                goto bs_match_jump_to_fail;
+                            }
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                                WRITE_REGISTER(dreg, t);
-                                bs_offset += increment;
+                            WRITE_REGISTER(dreg, t);
+                            bs_offset += increment;
                             break;
                         }
 
@@ -5648,38 +5585,38 @@ wait_timeout_trap_handler:
                             term flags;
                             DECODE_COMPACT_TERM(flags, pc);
                             j++;
-                                // TODO : determine what this is used for
-                                avm_int_t flags_value;
-                                DECODE_FLAGS_LIST(flags_value, flags, opcode)
+                            // TODO : determine what this is used for
+                            avm_int_t flags_value;
+                            DECODE_FLAGS_LIST(flags_value, flags, opcode)
                             int size;
                             DECODE_LITERAL(size, pc);
                             j++;
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                                int matched_bits = size * unit;
-                                if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
-                                    TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                if ((bs_offset + matched_bits) > term_binary_size(bs_bin) * 8) {
-                                    TRACE("bs_match/3: insufficient capacity\n");
-                                    goto bs_match_jump_to_fail;
-                                }
-                                size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
-                                TRIM_LIVE_REGS(live);
-                                x_regs[live] = match_state;
-                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
-                                match_state = x_regs[live];
-                                bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, &ctx->heap, ctx->global);
+                            int matched_bits = size * unit;
+                            if (bs_offset % 8 != 0 || matched_bits % 8 != 0) {
+                                TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                            if ((bs_offset + matched_bits) > term_binary_size(bs_bin) * 8) {
+                                TRACE("bs_match/3: insufficient capacity\n");
+                                goto bs_match_jump_to_fail;
+                            }
+                            size_t heap_size = term_sub_binary_heap_size(bs_bin, matched_bits / 8);
+                            TRIM_LIVE_REGS(live);
+                            x_regs[live] = match_state;
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            match_state = x_regs[live];
+                            bs_bin = term_get_match_state_binary(match_state);
+                            term t = term_maybe_create_sub_binary(bs_bin, bs_offset / 8, matched_bits / 8, &ctx->heap, ctx->global);
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                                WRITE_REGISTER(dreg, t);
-                                bs_offset += matched_bits;
+                            WRITE_REGISTER(dreg, t);
+                            bs_offset += matched_bits;
                             break;
                         }
 
@@ -5690,28 +5627,28 @@ wait_timeout_trap_handler:
                             int unit;
                             DECODE_LITERAL(unit, pc);
                             j++;
-                                // TODO: rewrite this bit once bitstrings are supported
-                                if (bs_offset % 8 != 0) {
-                                    TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                size_t total_bytes = term_binary_size(bs_bin);
-                                size_t bs_offset_bytes = bs_offset / 8;
-                                size_t tail_bytes = total_bytes - bs_offset_bytes;
-                                size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bytes);
-                                TRIM_LIVE_REGS(live);
-                                x_regs[live] = match_state;
-                                if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-                                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-                                }
-                                match_state = x_regs[live];
-                                bs_bin = term_get_match_state_binary(match_state);
-                                term t = term_maybe_create_sub_binary(bs_bin, bs_offset_bytes, tail_bytes, &ctx->heap, ctx->global);
+                            // TODO: rewrite this bit once bitstrings are supported
+                            if (bs_offset % 8 != 0) {
+                                TRACE("bs_match/3: Unsupported.  Offset on binary read must be aligned on byte boundaries.\n");
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                            size_t total_bytes = term_binary_size(bs_bin);
+                            size_t bs_offset_bytes = bs_offset / 8;
+                            size_t tail_bytes = total_bytes - bs_offset_bytes;
+                            size_t heap_size = term_sub_binary_heap_size(bs_bin, tail_bytes);
+                            TRIM_LIVE_REGS(live);
+                            x_regs[live] = match_state;
+                            if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                            }
+                            match_state = x_regs[live];
+                            bs_bin = term_get_match_state_binary(match_state);
+                            term t = term_maybe_create_sub_binary(bs_bin, bs_offset_bytes, tail_bytes, &ctx->heap, ctx->global);
                             DEST_REGISTER(dreg);
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
-                                WRITE_REGISTER(dreg, t);
-                                bs_offset = total_bytes * 8;
+                            WRITE_REGISTER(dreg, t);
+                            bs_offset = total_bytes * 8;
                             break;
                         }
 
@@ -5725,21 +5662,21 @@ wait_timeout_trap_handler:
                             avm_int_t pattern_value;
                             DECODE_LITERAL(pattern_value, pc);
                             j++;
-                                if (size > 64) {
-                                    // TODO: implement support for big integers also here
-                                    RAISE_ERROR(BADARG_ATOM);
-                                }
-                                union maybe_unsigned_int64 matched_value;
-                                bool status = bitstring_extract_integer(bs_bin, bs_offset, size, 0, &matched_value);
-                                if (UNLIKELY(!status)) {
-                                    TRACE("bs_match/3: error extracting integer for =:=.\n");
-                                    goto bs_match_jump_to_fail;
-                                }
-                                if (matched_value.s != pattern_value) {
-                                    TRACE("bs_match/3: =:= : value doesn't match %lu != %lu\n", (unsigned long) pattern_value, (unsigned long) matched_value.s);
-                                    goto bs_match_jump_to_fail;
-                                }
-                                bs_offset += size;
+                            if (size > 64) {
+                                // TODO: implement support for big integers also here
+                                RAISE_ERROR(BADARG_ATOM);
+                            }
+                            union maybe_unsigned_int64 matched_value;
+                            bool status = bitstring_extract_integer(bs_bin, bs_offset, size, 0, &matched_value);
+                            if (UNLIKELY(!status)) {
+                                TRACE("bs_match/3: error extracting integer for =:=.\n");
+                                goto bs_match_jump_to_fail;
+                            }
+                            if (matched_value.s != pattern_value) {
+                                TRACE("bs_match/3: =:= : value doesn't match %lu != %lu\n", (unsigned long) pattern_value, (unsigned long) matched_value.s);
+                                goto bs_match_jump_to_fail;
+                            }
+                            bs_offset += size;
                             break;
                         }
 
@@ -5747,22 +5684,22 @@ wait_timeout_trap_handler:
                             int stride;
                             DECODE_LITERAL(stride, pc);
                             j++;
-                                bs_offset += stride;
+                            bs_offset += stride;
                             break;
                         }
 
                         default:
                             fprintf(stderr, "bs_match/3: undecoded command: %i, j = %d, list_len = %d\n\n", (int) term_to_atom_index(command), j, list_len);
-                                fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
+                            fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
 
                             AVM_ABORT();
                     }
-                        term_set_match_state_offset(match_state, bs_offset);
+                    term_set_match_state_offset(match_state, bs_offset);
                 }
                 break;
 
-bs_match_jump_to_fail:
-                    JUMP_TO_ADDRESS(mod->labels[fail]);
+            bs_match_jump_to_fail:
+                JUMP_TO_ADDRESS(mod->labels[fail]);
 
 #if MAXIMUM_OTP_COMPILER_VERSION >= 29
                 case OP_BIF3: {
@@ -5781,21 +5718,20 @@ bs_match_jump_to_fail:
 
                     TRACE("bif3/6 bif=%i, fail=%i, dreg=%c%i\n", bif, fail_label, T_DEST_REG(dreg));
 
-
-                        const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
-                        BifImpl3 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif3_ptr;
-                        DEBUG_FAIL_NULL(func);
-                        term ret = func(ctx, fail_label, arg1, arg2, arg3);
-                        if (UNLIKELY(term_is_invalid_term(ret))) {
-                            if (fail_label) {
-                                pc = mod->labels[fail_label];
-                                break;
-                            } else {
-                                HANDLE_ERROR();
-                            }
+                    const struct ExportedFunction *exported_bif = mod->imported_funcs[bif];
+                    BifImpl3 func = EXPORTED_FUNCTION_TO_BIF(exported_bif)->bif3_ptr;
+                    DEBUG_FAIL_NULL(func);
+                    term ret = func(ctx, fail_label, arg1, arg2, arg3);
+                    if (UNLIKELY(term_is_invalid_term(ret))) {
+                        if (fail_label) {
+                            pc = mod->labels[fail_label];
+                            break;
+                        } else {
+                            HANDLE_ERROR();
                         }
+                    }
 
-                        WRITE_REGISTER(dreg, ret);
+                    WRITE_REGISTER(dreg, ret);
 
                     break;
                 }
@@ -5804,7 +5740,7 @@ bs_match_jump_to_fail:
 
             default:
                 printf("Undecoded opcode: %i\n", pc[-1]);
-                    fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
+                fprintf(stderr, "failed at %" PRIuPTR "\n", pc - code);
                 AVM_ABORT();
                 return 1;
         }
@@ -5814,40 +5750,39 @@ bs_match_jump_to_fail:
 #endif
 
 #ifndef AVM_NO_EMU
-do_abort:
+    do_abort:
         context_set_exception_class(ctx, ERROR_ATOM);
         ctx->exception_reason = VM_ABORT_ATOM;
 #endif
 
-handle_error:
-        {
-            x_regs[0] = context_exception_class(ctx);
-            x_regs[1] = ctx->exception_reason;
-            x_regs[2] = ctx->exception_stacktrace;
-            context_set_exception_class(ctx, term_nil());
-            ctx->exception_reason = term_nil();
-            ctx->exception_stacktrace = term_nil();
+    handle_error: {
+        x_regs[0] = context_exception_class(ctx);
+        x_regs[1] = ctx->exception_reason;
+        x_regs[2] = ctx->exception_stacktrace;
+        context_set_exception_class(ctx, term_nil());
+        ctx->exception_reason = term_nil();
+        ctx->exception_stacktrace = term_nil();
 
-            int target_label = context_get_catch_label(ctx, &mod);
-            if (target_label) {
+        int target_label = context_get_catch_label(ctx, &mod);
+        if (target_label) {
 #if AVM_NO_JIT
-                code = mod->code->code;
-                JUMP_TO_ADDRESS(mod->labels[target_label]);
+            code = mod->code->code;
+            JUMP_TO_ADDRESS(mod->labels[target_label]);
 #elif AVM_NO_EMU
+            native_pc = module_get_native_entry_point(mod, target_label);
+            continue;
+#else
+            if (mod->native_code) {
                 native_pc = module_get_native_entry_point(mod, target_label);
                 continue;
-#else
-                if (mod->native_code) {
-                    native_pc = module_get_native_entry_point(mod, target_label);
-                    continue;
-                } else {
-                    native_pc = NULL;
-                    code = mod->code->code;
-                    JUMP_TO_ADDRESS(mod->labels[target_label]);
-                }
-#endif
+            } else {
+                native_pc = NULL;
+                code = mod->code->code;
+                JUMP_TO_ADDRESS(mod->labels[target_label]);
             }
+#endif
         }
+    }
 
 #ifdef AVM_PRINT_PROCESS_CRASH_DUMPS
         // Do not print crash dump if reason is normal or shutdown.
@@ -5882,7 +5817,7 @@ handle_error:
             }
         }
 
-terminate_context:
+    terminate_context:
         TRACE("-- Code execution finished for %i--\n", (int) ctx->process_id);
         GlobalContext *global = ctx->global;
         if (ctx->leader) {
