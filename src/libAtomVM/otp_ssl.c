@@ -521,6 +521,7 @@ static term nif_ssl_conf_rng(Context *ctx, int argc, term argv[])
 
     mbedtls_ssl_conf_rng(&conf_obj->config, mbedtls_ctr_drbg_random, &ctr_drbg_obj->context);
 #else
+    // mbedtls 4.x uses PSA for randomness; no explicit RNG configuration needed.
     UNUSED(conf_obj);
     UNUSED(ctr_drbg_obj);
 #endif
