@@ -749,6 +749,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     psa_set_key_bits(&attributes, key_bits);
 
     psa_status_t status = psa_import_key(&attributes, key_data, key_len, &key_id);
+    psa_reset_key_attributes(&attributes);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         char err_msg[48];
         snprintf(err_msg, sizeof(err_msg), "key import err %d", (int) status);
@@ -1796,7 +1797,7 @@ static term nif_crypto_sign(Context *ctx, int argc, term argv[])
 
     term data_term = argv[2];
     const void *data;
-    size_t data_len;
+    size_t data_len = 0;
     term iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
@@ -1851,9 +1852,9 @@ static term nif_crypto_sign(Context *ctx, int argc, term argv[])
 cleanup:
     psa_destroy_key(key_id);
 
-    free(maybe_allocated_data);
-    free(sig_raw);
-    free(sig_der);
+    secure_free(maybe_allocated_data, data_len);
+    secure_free(sig_raw, sig_raw_size);
+    secure_free(sig_der, sig_der_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -1973,7 +1974,7 @@ static term nif_crypto_verify(Context *ctx, int argc, term argv[])
 
     term data_term = argv[2];
     const void *data;
-    size_t data_len;
+    size_t data_len = 0;
     term iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
@@ -2020,8 +2021,8 @@ static term nif_crypto_verify(Context *ctx, int argc, term argv[])
 cleanup:
     psa_destroy_key(key_id);
 
-    free(maybe_allocated_data);
-    free(sig_raw);
+    secure_free(maybe_allocated_data, data_len);
+    secure_free(sig_raw, sig_raw_size);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -2074,6 +2075,8 @@ static term nif_crypto_mac(Context *ctx, int argc, term argv[])
     void *maybe_allocated_key = NULL;
     size_t key_len = 0;
     void *maybe_allocated_data = NULL;
+    const void *data = NULL;
+    size_t data_len = 0;
     size_t mac_out_size = 0;
     void *mac_out = NULL;
 
@@ -2141,8 +2144,6 @@ static term nif_crypto_mac(Context *ctx, int argc, term argv[])
     }
 
     term data_term = argv[3];
-    const void *data;
-    size_t data_len;
     iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
@@ -2181,7 +2182,7 @@ cleanup:
     psa_destroy_key(key_id);
     secure_free(mac_out, mac_out_size);
     secure_free(maybe_allocated_key, key_len);
-    free(maybe_allocated_data);
+    secure_free(maybe_allocated_data, data_len);
 
     if (UNLIKELY(!success)) {
         RAISE_ERROR(result);
@@ -2216,6 +2217,7 @@ struct MacState
     psa_algorithm_t psa_algo;
     psa_key_type_t psa_key_type;
     size_t key_bit_size;
+    bool finalized;
 #ifndef AVM_NO_SMP
     Mutex *mutex;
 #endif
@@ -2386,13 +2388,17 @@ static term nif_crypto_mac_update(Context *ctx, int argc, term argv[])
     }
     struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
 
+    if (UNLIKELY(mac_state->finalized)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "MAC already finalized", ctx));
+    }
+
     void *maybe_allocated_data = NULL;
-    size_t data_len;
+    size_t data_len = 0;
     term data_term = argv[1];
     const void *data;
     term iodata_handle_result = handle_iodata(data_term, &data, &data_len, &maybe_allocated_data);
     if (UNLIKELY(iodata_handle_result != OK_ATOM)) {
-        free(maybe_allocated_data);
+        secure_free(maybe_allocated_data, data_len);
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad text", ctx));
     }
 
@@ -2402,6 +2408,7 @@ static term nif_crypto_mac_update(Context *ctx, int argc, term argv[])
         psa_mac_abort(&mac_state->psa_op);
         psa_destroy_key(mac_state->key_id);
         mac_state->key_id = 0;
+        mac_state->finalized = true;
         SMP_MUTEX_UNLOCK(mac_state->mutex);
         secure_free(maybe_allocated_data, data_len);
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx));
@@ -2427,6 +2434,10 @@ static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
     }
     struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
 
+    if (UNLIKELY(mac_state->finalized)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "MAC already finalized", ctx));
+    }
+
     bool success = false;
     term result = ERROR_ATOM;
 
@@ -2446,6 +2457,7 @@ static term nif_crypto_mac_final(Context *ctx, int argc, term argv[])
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
     psa_destroy_key(mac_state->key_id);
     mac_state->key_id = 0;
+    mac_state->finalized = true;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -2478,6 +2490,10 @@ static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
     }
     struct MacState *mac_state = (struct MacState *) psa_mac_obj_ptr;
 
+    if (UNLIKELY(mac_state->finalized)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "MAC already finalized", ctx));
+    }
+
     avm_int_t requested_len;
     if (UNLIKELY(!term_is_integer(argv[1]))) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Bad length", ctx));
@@ -2507,6 +2523,7 @@ static term nif_crypto_mac_finalN(Context *ctx, int argc, term argv[])
     psa_status_t status = psa_mac_sign_finish(&mac_state->psa_op, mac_buf, mac_size, &mac_len);
     psa_destroy_key(mac_state->key_id);
     mac_state->key_id = 0;
+    mac_state->finalized = true;
     SMP_MUTEX_UNLOCK(mac_state->mutex);
     if (UNLIKELY(status != PSA_SUCCESS)) {
         result = make_crypto_error(__FILE__, __LINE__, "Unexpected error", ctx);
@@ -3283,6 +3300,10 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "EncFlag must be a boolean", ctx));
     }
 
+    if (UNLIKELY(!encrypting && argc == 6)) {
+        RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Tag is required for AEAD decryption", ctx));
+    }
+
     size_t tag_len = aead_params->default_tag_len;
     const void *tag_data = NULL;
     size_t tag_data_len = 0;
@@ -3358,19 +3379,19 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
     void *maybe_allocated_aad = NULL;
     void *out_buf = NULL;
     size_t out_buf_size = 0;
+    const void *intext_data = NULL;
+    size_t intext_len = 0;
+    const void *aad_data = NULL;
+    size_t aad_len = 0;
 
     // from this point onward use `goto cleanup` in order to raise and free all buffers
 
-    const void *intext_data;
-    size_t intext_len;
     term iodata_result = handle_iodata(argv[3], &intext_data, &intext_len, &maybe_allocated_intext);
     if (UNLIKELY(iodata_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
         goto cleanup;
     }
 
-    const void *aad_data;
-    size_t aad_len;
     iodata_result = handle_iodata(argv[4], &aad_data, &aad_len, &maybe_allocated_aad);
     if (UNLIKELY(iodata_result != OK_ATOM)) {
         result = make_crypto_error(__FILE__, __LINE__, "Expected a binary or a list", ctx);
@@ -3438,7 +3459,7 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
         out_buf_size = pt_size + 1;
         out_buf = malloc(out_buf_size); // +1 to ensure valid malloc even for 0
         if (IS_NULL_PTR(out_buf)) {
-            free(combined_buf);
+            secure_free(combined_buf, combined_len);
             result = OUT_OF_MEMORY_ATOM;
             goto cleanup;
         }
@@ -3446,7 +3467,7 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
         size_t pt_len = 0;
         status = psa_aead_decrypt(key_id, psa_algo, iv_data, iv_len, aad_data, aad_len,
             combined_buf, combined_len, out_buf, pt_size, &pt_len);
-        free(combined_buf);
+        secure_free(combined_buf, combined_len);
 
         switch (status) {
             case PSA_SUCCESS:
@@ -3480,7 +3501,7 @@ static term nif_crypto_crypto_one_time_aead(Context *ctx, int argc, term argv[])
 cleanup:
     psa_destroy_key(key_id);
     secure_free(maybe_allocated_intext, intext_len);
-    free(maybe_allocated_aad);
+    secure_free(maybe_allocated_aad, aad_len);
     secure_free(out_buf, out_buf_size);
 
     if (UNLIKELY(!success)) {
