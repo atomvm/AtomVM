@@ -486,7 +486,7 @@ static term handle_iodata(term iodata, const void **data, size_t *len, void **al
             case InteropBadArg:
                 return BADARG_ATOM;
         }
-        void *allocated_buf = malloc(*len);
+        void *allocated_buf = malloc(*len ? *len : 1);
         if (IS_NULL_PTR(allocated_buf)) {
             return OUT_OF_MEMORY_ATOM;
         }
@@ -756,7 +756,7 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
     if (!encrypt) {
         output_size = PSA_CIPHER_DECRYPT_OUTPUT_SIZE(key_type, alg, data_size);
     }
-    temp_buf = malloc(output_size);
+    temp_buf = malloc(output_size ? output_size : 1);
     if (IS_NULL_PTR(temp_buf)) {
         error_atom = OUT_OF_MEMORY_ATOM;
         goto psa_error;
