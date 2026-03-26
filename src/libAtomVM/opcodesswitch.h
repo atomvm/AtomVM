@@ -1560,44 +1560,44 @@ static bool maybe_call_native(Context *ctx, atom_index_t module_name, atom_index
 #pragma clang diagnostic ignored "-Wunused-but-set-variable"
 #endif
 
-    int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
+int context_execute_loop(Context *ctx, Module *mod, const char *function_name, int arity)
 {
-        TRACE("-- Executing code\n");
+    TRACE("-- Executing code\n");
 
-        atom_index_t function_name_index;
-        enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) function_name, strlen(function_name), AtomTableAlreadyExisting, &function_name_index);
-        if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
-            fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
-            return 0;
-        }
+    atom_index_t function_name_index;
+    enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) function_name, strlen(function_name), AtomTableAlreadyExisting, &function_name_index);
+    if (UNLIKELY(ensure_result != AtomTableEnsureAtomOk)) {
+        fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
+        return 0;
+    }
 
-        int label = module_search_exported_function(mod, function_name_index, arity);
-        if (UNLIKELY(!label)) {
-            fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
-            return 0;
-        }
+    int label = module_search_exported_function(mod, function_name_index, arity);
+    if (UNLIKELY(!label)) {
+        fprintf(stderr, "No %s/%i function found.\n", function_name, arity);
+        return 0;
+    }
 
-        ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
-        ctx->saved_module = mod;
+    ctx->cp = module_address(mod->module_index, mod->end_instruction_ii);
+    ctx->saved_module = mod;
 
 #if AVM_NO_JIT
-        ctx->saved_ip = mod->labels[label];
+    ctx->saved_ip = mod->labels[label];
 #elif AVM_NO_EMU
-        assert(mod->native_code);
-        ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
+    assert(mod->native_code);
+    ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
 #else
-        if (mod->native_code) {
-            ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
-        } else {
-            ctx->saved_ip = mod->labels[label];
-        }
+    if (mod->native_code) {
+        ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
+    } else {
+        ctx->saved_ip = mod->labels[label];
+    }
 #endif
-        scheduler_init_ready(ctx);
+    scheduler_init_ready(ctx);
 
-    // This process is the first scheduler process
-    #ifndef AVM_NO_SMP
-        ctx->global->running_schedulers = 1;
-    #endif
+// This process is the first scheduler process
+#ifndef AVM_NO_SMP
+    ctx->global->running_schedulers = 1;
+#endif
     return scheduler_entry_point(ctx->global);
 }
 
