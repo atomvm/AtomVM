@@ -96,9 +96,11 @@ find_binutils_beam(Arch) ->
 %% Private functions
 
 -spec toolchain_prefixes(atom()) -> [string()].
+toolchain_prefixes(arm32) ->
+    toolchain_prefixes(arm);
 toolchain_prefixes(Arch) ->
     ArchStr = atom_to_list(Arch),
-    Variants = ["-esp-elf", "-unknown-elf", "-elf", "-none-eabi", "-linux-gnu"],
+    Variants = ["-esp-elf", "-unknown-elf", "-elf", "-none-eabi", "-linux-gnu", "-linux-gnueabihf"],
     [ArchStr ++ V || V <- Variants].
 
 %% Generic helper function to find binutils from a list
@@ -117,6 +119,8 @@ find_binutils_from_list([{AsCmd, ObjdumpCmd} | Rest]) ->
 -spec get_asm_header(atom()) -> string().
 get_asm_header(arm) ->
     ".arch armv6-m\n.thumb\n.syntax unified\n";
+get_asm_header(arm32) ->
+    ".arch armv6\n.arm\n.syntax unified\n";
 get_asm_header(aarch64) ->
     ".text\n";
 get_asm_header(x86_64) ->
@@ -129,6 +133,8 @@ get_asm_header(riscv64) ->
 %% Get architecture-specific assembler flags
 -spec get_as_flags(atom()) -> string().
 get_as_flags(arm) ->
+    "";
+get_as_flags(arm32) ->
     "";
 get_as_flags(aarch64) ->
     "";
@@ -321,6 +327,8 @@ diff_disasm(Arch, Expected, Actual) ->
 -spec get_objdump_flags(atom()) -> string().
 get_objdump_flags(arm) ->
     "-marm --disassembler-options=force-thumb";
+get_objdump_flags(arm32) ->
+    "-marm";
 get_objdump_flags(aarch64) ->
     "-m aarch64";
 get_objdump_flags(x86_64) ->
