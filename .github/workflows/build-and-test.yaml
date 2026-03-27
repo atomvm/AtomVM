@@ -277,6 +277,16 @@ jobs:
           library-arch: arm-linux-gnueabihf
           jit_target_arch: "armv6m"
 
+        # JIT ARM32 (ARM mode) build
+        - cc: "arm-linux-gnueabihf-gcc"
+          cxx: "arm-linux-gnueabihf-g++"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O3 -marm -D_FILE_OFFSET_BITS=64"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=arm32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
+          arch: "armhf"
+          library-arch: arm-linux-gnueabihf
+          jit_target_arch: "arm32"
+
         # JIT + DWARF build (armv6m)
         - os: "ubuntu-24.04"
           cc: "arm-linux-gnueabihf-gcc"
@@ -290,6 +300,20 @@ jobs:
           arch: "armhf"
           library-arch: arm-linux-gnueabihf
           jit_target_arch: "armv6m"
+
+        # JIT + DWARF build (arm32)
+        - os: "ubuntu-24.04"
+          cc: "arm-linux-gnueabihf-gcc"
+          cxx: "arm-linux-gnueabihf-g++"
+          cflags: "-mcpu=cortex-a7 -mfloat-abi=hard -O2 -marm -D_FILE_OFFSET_BITS=64"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF -DAVM_JIT_TARGET_ARCH=arm32 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/armhf_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-armhf libc6-dbg:armhf zlib1g-dev:armhf libmbedtls-dev:armhf qemu-user qemu-user-binfmt binfmt-support"
+          arch: "armhf"
+          library-arch: arm-linux-gnueabihf
+          jit_target_arch: "arm32"
 
         # s390x build
         - cc: "s390x-linux-gnu-gcc"

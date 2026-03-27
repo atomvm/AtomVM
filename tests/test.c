@@ -752,6 +752,11 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
             perror("Error: cannot find armv6m directory");
             return EXIT_FAILURE;
         }
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARM32
+        if (chdir("arm32") != 0) {
+            perror("Error: cannot find arm32 directory");
+            return EXIT_FAILURE;
+        }
 #elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
         if (chdir("riscv32") != 0) {
             perror("Error: cannot find riscv32 directory");

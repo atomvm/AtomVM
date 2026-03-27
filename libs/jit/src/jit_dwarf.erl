@@ -376,6 +376,12 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
                     BaseSections ++ [{<<".ARM.attributes">>, ArmAttributesSection}],
                     BaseSectionRelocs ++ [[]]
                 };
+            jit_arm32 ->
+                ArmAttributesSection = generate_arm32_attributes_section(),
+                {
+                    BaseSections ++ [{<<".ARM.attributes">>, ArmAttributesSection}],
+                    BaseSectionRelocs ++ [[]]
+                };
             _ ->
                 {BaseSections, BaseSectionRelocs}
         end,
@@ -408,12 +414,15 @@ elf(_State, _NativeCode) ->
 backend_to_machine_type(jit_x86_64) -> ?EM_X86_64;
 backend_to_machine_type(jit_aarch64) -> ?EM_AARCH64;
 backend_to_machine_type(jit_armv6m) -> ?EM_ARM;
+backend_to_machine_type(jit_arm32) -> ?EM_ARM;
 backend_to_machine_type(jit_riscv32) -> ?EM_RISCV;
 backend_to_machine_type(jit_riscv64) -> ?EM_RISCV.
 
 %% Map JIT backend to ELF flags
 backend_to_elf_flags(jit_armv6m) ->
     ?EF_ARM_EABI_VER5 bor ?EF_ARM_ABI_FLOAT_SOFT bor ?EF_ARM_ARCH_V6M;
+backend_to_elf_flags(jit_arm32) ->
+    ?EF_ARM_EABI_VER5;
 backend_to_elf_flags(_) ->
     0.
 
@@ -492,6 +501,57 @@ generate_arm_attributes_section() ->
         % Total section length (4 bytes, little-endian)
         TotalLength:32/little,
         % Vendor subsection content
+        VendorContent/binary
+    >>.
+
+generate_arm32_attributes_section() ->
+    TagValuePairs = <<
+        % CPU_arch attribute: ARMv6 (value 6)
+        6,
+        6,
+        % CPU_arch_profile attribute: 'A' profile (value 65 = 'A')
+        7,
+        65,
+        % ARM_ISA_use attribute: ARM ISA used (value 1)
+        8,
+        1,
+        % THUMB_ISA_use attribute: No Thumb (value 0)
+        9,
+        0,
+        % FP_arch attribute: VFPv2 (value 2)
+        10,
+        2,
+        % ABI_PCS_wchar_t attribute: 4 bytes (value 2)
+        18,
+        2,
+        % ABI_enum_size attribute: int-sized (value 2)
+        26,
+        2,
+        % ABI_align_needed attribute: 8-byte alignment (value 1)
+        24,
+        1,
+        % ABI_align_preserved attribute: 8-byte alignment (value 1)
+        25,
+        1,
+        % ABI_HardFP_use attribute: SP and DP (value 3)
+        27,
+        3,
+        % ABI_VFP_args attribute: VFP registers (value 1)
+        28,
+        1
+    >>,
+    FileAttributesLength = 1 + 4 + byte_size(TagValuePairs),
+    FileAttributes = <<
+        1,
+        FileAttributesLength:32/little,
+        TagValuePairs/binary
+    >>,
+    VendorContent = <<"aeabi", 0, FileAttributes/binary>>,
+    VendorLength = byte_size(VendorContent),
+    TotalLength = 1 + 4 + VendorLength,
+    <<
+        $A,
+        TotalLength:32/little,
         VendorContent/binary
     >>.
 
@@ -1288,6 +1348,7 @@ generate_symbol_table(
     MappingSyms =
         case Backend of
             jit_armv6m -> [{"$t", 0, 0, 16#00}];
+            jit_arm32 -> [{"$a", 0, 0, 16#00}];
             _ -> []
         end,
 
@@ -1401,7 +1462,7 @@ section_properties(<<".symtab">>, SectionNames, Backend, WordSizeInBits) ->
     StrtabIndex = find_section_index(<<".strtab">>, SectionNames),
     NumLocal =
         case Backend of
-            jit_armv6m -> 2;
+            B when B =:= jit_armv6m; B =:= jit_arm32 -> 2;
             _ -> 1
         end,
     EntSize =
