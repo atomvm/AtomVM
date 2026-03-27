@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `erts_internal:cmp_term/2`
 
 ### Changed
+- ~10% binary size reduction by rewriting module loading logic
 
 ### Fixed
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)

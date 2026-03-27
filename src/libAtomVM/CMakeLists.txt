@@ -49,7 +49,7 @@ set(HEADER_FILES
     mailbox.h
     memory.h
     module.h
-    opcodes.h
+    opcodes.def
     opcodesswitch.h
     overflow_helpers.h
     nifs.h
