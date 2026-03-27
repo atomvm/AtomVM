@@ -42,11 +42,17 @@
 #include <esp_system.h>
 #include <esp_task_wdt.h>
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/cipher.h>
 #include <mbedtls/md5.h>
 #include <mbedtls/sha1.h>
 #include <mbedtls/sha256.h>
 #include <mbedtls/sha512.h>
+#endif
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#endif
+
 #include <soc/soc.h>
 
 #include <stdlib.h>
@@ -477,6 +483,61 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+    uint32_t causes = esp_sleep_get_wakeup_causes();
+
+    if (causes == 0) {
+        return UNDEFINED_ATOM;
+    }
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
+    if (causes & BIT(ESP_SLEEP_WAKEUP_EXT0)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_ext0_atom);
+    }
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
+    if (causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_ext1_atom);
+    }
+#endif
+    if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom);
+    }
+    if (causes & BIT(ESP_SLEEP_WAKEUP_TOUCHPAD)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_touchpad_atom);
+    }
+#if SOC_ULP_SUPPORTED
+    if (causes & BIT(ESP_SLEEP_WAKEUP_ULP)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_ulp_atom);
+    }
+#endif
+    if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_gpio_atom);
+    }
+    if (causes & BIT(ESP_SLEEP_WAKEUP_UART)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_uart_atom);
+    }
+#ifdef ESP_SLEEP_WAKEUP_WIFI
+    if (causes & BIT(ESP_SLEEP_WAKEUP_WIFI)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_wifi_atom);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU
+    if (causes & BIT(ESP_SLEEP_WAKEUP_COCPU)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_atom);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG
+    if (causes & BIT(ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_trap_trig_atom);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_BT
+    if (causes & BIT(ESP_SLEEP_WAKEUP_BT)) {
+        return globalcontext_make_atom(ctx->global, sleep_wakeup_bt_atom);
+    }
+#endif
+    return ERROR_ATOM;
+#else
     esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
 
     switch (cause) {
@@ -521,6 +582,82 @@ static term nif_esp_sleep_get_wakeup_cause(Context *ctx, int argc, term argv[])
         default:
             return ERROR_ATOM;
     }
+#endif
+}
+
+static term nif_esp_sleep_get_wakeup_causes(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    UNUSED(argv);
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+    uint32_t causes = esp_sleep_get_wakeup_causes();
+#else
+    esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+    if (cause == ESP_SLEEP_WAKEUP_UNDEFINED) {
+        return term_nil();
+    }
+    uint32_t causes = BIT(cause);
+#endif
+
+    if (causes == 0) {
+        return term_nil();
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, CONS_SIZE * 11) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term causes_list = term_nil();
+#ifdef ESP_SLEEP_WAKEUP_BT
+    if (causes & BIT(ESP_SLEEP_WAKEUP_BT)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_bt_atom), causes_list, &ctx->heap);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG
+    if (causes & BIT(ESP_SLEEP_WAKEUP_COCPU_TRAP_TRIG)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_trap_trig_atom), causes_list, &ctx->heap);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_COCPU
+    if (causes & BIT(ESP_SLEEP_WAKEUP_COCPU)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_cocpu_atom), causes_list, &ctx->heap);
+    }
+#endif
+#ifdef ESP_SLEEP_WAKEUP_WIFI
+    if (causes & BIT(ESP_SLEEP_WAKEUP_WIFI)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_wifi_atom), causes_list, &ctx->heap);
+    }
+#endif
+    if (causes & BIT(ESP_SLEEP_WAKEUP_UART)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_uart_atom), causes_list, &ctx->heap);
+    }
+    if (causes & BIT(ESP_SLEEP_WAKEUP_GPIO)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_gpio_atom), causes_list, &ctx->heap);
+    }
+#if SOC_ULP_SUPPORTED
+    if (causes & BIT(ESP_SLEEP_WAKEUP_ULP)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_ulp_atom), causes_list, &ctx->heap);
+    }
+#endif
+    if (causes & BIT(ESP_SLEEP_WAKEUP_TOUCHPAD)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_touchpad_atom), causes_list, &ctx->heap);
+    }
+    if (causes & BIT(ESP_SLEEP_WAKEUP_TIMER)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_timer_atom), causes_list, &ctx->heap);
+    }
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT1_WAKEUP
+    if (causes & BIT(ESP_SLEEP_WAKEUP_EXT1)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_ext1_atom), causes_list, &ctx->heap);
+    }
+#endif
+#if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
+    if (causes & BIT(ESP_SLEEP_WAKEUP_EXT0)) {
+        causes_list = term_list_prepend(globalcontext_make_atom(ctx->global, sleep_wakeup_ext0_atom), causes_list, &ctx->heap);
+    }
+#endif
+
+    return causes_list;
 }
 
 #if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
@@ -607,8 +744,13 @@ static term nif_esp_deep_sleep_enable_gpio_wakeup(Context *ctx, int argc, term a
     VALIDATE_VALUE(argv[0], term_is_any_integer);
     VALIDATE_VALUE(argv[1], term_is_integer);
     avm_int64_t mask = term_maybe_unbox_int64(argv[0]);
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(6, 0, 0)
+    esp_sleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
+    esp_err_t err = esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(mask, mode);
+#else
     esp_deepsleep_gpio_wake_up_mode_t mode = term_to_int(argv[1]);
     esp_err_t err = esp_deep_sleep_enable_gpio_wakeup(mask, mode);
+#endif
     if (UNLIKELY(err == ESP_ERR_INVALID_ARG)) {
         RAISE_ERROR(BADARG_ATOM);
     }
@@ -1008,6 +1150,11 @@ static const struct Nif esp_sleep_get_wakeup_cause_nif =
     .base.type = NIFFunctionType,
     .nif_ptr = nif_esp_sleep_get_wakeup_cause
 };
+static const struct Nif esp_sleep_get_wakeup_causes_nif =
+{
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_esp_sleep_get_wakeup_causes
+};
 #if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
 static const struct Nif esp_sleep_enable_ext0_wakeup_nif =
 {
@@ -1173,6 +1320,10 @@ const struct Nif *platform_nifs_get_nif(const char *nifname)
     if (strcmp("esp:sleep_get_wakeup_cause/0", nifname) == 0) {
         TRACE("Resolved platform nif %s ...\n", nifname);
         return &esp_sleep_get_wakeup_cause_nif;
+    }
+    if (strcmp("esp:sleep_get_wakeup_causes/0", nifname) == 0) {
+        TRACE("Resolved platform nif %s ...\n", nifname);
+        return &esp_sleep_get_wakeup_causes_nif;
     }
 #if SOC_PM_SUPPORT_EXT_WAKEUP || SOC_PM_SUPPORT_EXT0_WAKEUP
     if (strcmp("esp:sleep_enable_ext0_wakeup/2", nifname) == 0) {

@@ -30,8 +30,11 @@
 #include <pico/cond.h>
 #include <pico/util/queue.h>
 
+#include <mbedtls/version.h>
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#endif
 
 #pragma GCC diagnostic pop
 
@@ -82,6 +85,7 @@ struct RP2PlatformData
 #endif
     queue_t event_queue;
 
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
@@ -93,6 +97,7 @@ struct RP2PlatformData
 #endif
     mbedtls_ctr_drbg_context random_ctx;
     bool random_is_initialized;
+#endif
 };
 
 #endif

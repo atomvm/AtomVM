@@ -36,7 +36,7 @@
 #include <driver/sdmmc_host.h>
 
 // Since IDF v6 it's a separate component
-#if ESP_IDF_VERSION_MAJOR >= 6 && CONFIG_ETH_USE_OPENETH
+#if ESP_IDF_VERSION_MAJOR >= 6 && CONFIG_ETH_USE_OPENETH && !CONFIG_IDF_TARGET_ESP32C3
 #include "esp_eth_phy_dp83848.h"
 #endif
 

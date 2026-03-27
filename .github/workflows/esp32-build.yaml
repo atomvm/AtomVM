@@ -51,6 +51,7 @@ jobs:
          - 'v5.3.4'
          - 'v5.4.3'
          - 'v5.5.3'
+         - 'v6.0'
 
         include:
         - esp-idf-target: "esp32p4"
