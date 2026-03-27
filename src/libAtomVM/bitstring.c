@@ -60,24 +60,53 @@ bool bitstring_extract_any_integer(const uint8_t *src, size_t offset, avm_int_t 
 
 bool bitstring_insert_any_integer(uint8_t *dst, avm_int_t offset, avm_int64_t value, size_t n, enum BitstringFlags bs_flags)
 {
-    // TODO support big/little endian signedness flags
-    if (bs_flags != 0) {
-        return false;
-    }
-    // value is truncated to 64 bits
-    if (n > 8 * sizeof(value)) {
-        offset += n - (8 * sizeof(value));
-        n = 8 * sizeof(value);
-    }
-    for (size_t i = 0; i < n; ++i) {
-        size_t k = (n - 1) - i;
-        int bit_val = (value & (0x01LL << k)) >> k;
-        if (bit_val) {
-            int bit_pos = offset + i;
-            int byte_pos = bit_pos >> 3; // div 8
-            uint8_t *pos = (uint8_t *) (dst + byte_pos);
-            int shift = 7 - (bit_pos & 7); // mod 8
-            *pos ^= (0x01 << shift);
+    // SignedInteger flag does not affect insertion (caller handles sign extension)
+    bool little_endian = bs_flags & LittleEndianIntegerMask;
+
+    if (little_endian && (offset & 0x7) == 0 && (n & 0x7) == 0) {
+        // Byte-aligned little-endian: write bytes LSB first
+        size_t byte_offset = offset >> 3;
+        size_t num_bytes = n >> 3;
+        // value is truncated to 64 bits
+        size_t val_bytes = sizeof(value);
+        uint64_t uvalue = (uint64_t) value;
+        for (size_t i = 0; i < num_bytes; ++i) {
+            if (i < val_bytes) {
+                dst[byte_offset + i] = (uint8_t) (uvalue & 0xFF);
+                uvalue >>= 8;
+            } else {
+                dst[byte_offset + i] = 0;
+            }
+        }
+    } else {
+        // Big-endian (or unaligned): write bits MSB first
+        uint64_t write_value = (uint64_t) value;
+        if (little_endian) {
+            // Byte-swap the value so MSB-first bit writing produces little-endian bytes
+            size_t num_bytes = (n + 7) >> 3;
+            uint64_t swapped = 0;
+            for (size_t i = 0; i < num_bytes; ++i) {
+                swapped = (swapped << 8) | (write_value & 0xFF);
+                write_value >>= 8;
+            }
+            write_value = swapped;
+        }
+
+        // value is truncated to 64 bits
+        if (n > 8 * sizeof(value)) {
+            offset += n - (8 * sizeof(value));
+            n = 8 * sizeof(value);
+        }
+        for (size_t i = 0; i < n; ++i) {
+            size_t k = (n - 1) - i;
+            int bit_val = (write_value & (0x01ULL << k)) >> k;
+            if (bit_val) {
+                int bit_pos = offset + i;
+                int byte_pos = bit_pos >> 3; // div 8
+                uint8_t *pos = (uint8_t *) (dst + byte_pos);
+                int shift = 7 - (bit_pos & 7); // mod 8
+                *pos ^= (0x01 << shift);
+            }
         }
     }
     return true;
