@@ -48,6 +48,38 @@ add_custom_command(
 add_custom_target(i2c_lis3dh_uf2 ALL DEPENDS i2c_lis3dh.uf2)
 add_dependencies(i2c_lis3dh_uf2 i2c_lis3dh)
 
+set(SPI_FLASH_AVM ${CMAKE_BINARY_DIR}/examples/erlang/spi_flash.avm)
+add_custom_command(
+    OUTPUT spi_flash.uf2
+    DEPENDS ${SPI_FLASH_AVM} UF2Tool
+    COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o spi_flash.uf2 -f universal -s 0x10180000 ${SPI_FLASH_AVM}
+    COMMENT "Creating UF2 file spi_flash.uf2"
+    VERBATIM
+)
+add_custom_target(spi_flash_uf2 ALL DEPENDS spi_flash.uf2)
+add_dependencies(spi_flash_uf2 spi_flash)
+
+set(SPI_LIS3DH_AVM ${CMAKE_BINARY_DIR}/examples/erlang/spi_lis3dh.avm)
+add_custom_command(
+    OUTPUT spi_lis3dh.uf2
+    DEPENDS ${SPI_LIS3DH_AVM} UF2Tool
+    COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o spi_lis3dh.uf2 -f universal -s 0x10180000 ${SPI_LIS3DH_AVM}
+    COMMENT "Creating UF2 file spi_lis3dh.uf2"
+    VERBATIM
+)
+add_custom_target(spi_lis3dh_uf2 ALL DEPENDS spi_lis3dh.uf2)
+add_dependencies(spi_lis3dh_uf2 spi_lis3dh)
+
+set(SIM800L_AVM ${CMAKE_BINARY_DIR}/examples/erlang/sim800l.avm)
+add_custom_command(
+    OUTPUT sim800l.uf2
+    DEPENDS ${SIM800L_AVM} UF2Tool
+    COMMAND ${CMAKE_BINARY_DIR}/tools/uf2tool/uf2tool create -o sim800l.uf2 -f universal -s 0x10180000 ${SIM800L_AVM}
+    COMMENT "Creating UF2 file sim800l.uf2"
+    VERBATIM
+)
+add_custom_target(sim800l_uf2 ALL DEPENDS sim800l.uf2)
+add_dependencies(sim800l_uf2 sim800l)
 pack_uf2(picow_blink picow_blink)
 pack_uf2(picow_wifi_sta picow_wifi_sta)
 pack_uf2(picow_wifi_ap picow_wifi_ap)
