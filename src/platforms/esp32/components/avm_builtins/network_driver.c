@@ -299,14 +299,14 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case WIFI_EVENT_AP_STACONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_AP_STACONNECTED received.");
-                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_base;
+                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_data;
                 send_ap_sta_connected(data, event->mac);
                 break;
             }
 
             case WIFI_EVENT_AP_STADISCONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_AP_STADISCONNECTED received.");
-                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_base;
+                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_data;
                 send_ap_sta_disconnected(data, event->mac);
                 break;
             }
@@ -441,7 +441,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
         free(psk);
         return NULL;
     }
-    if (UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
+    if (!IS_NULL_PTR(psk) && UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
         ESP_LOGE(TAG, "psk cannot be more than %d characters", sizeof(wifi_config->sta.password));
         free(ssid);
         free(psk);
