@@ -346,7 +346,7 @@ const void *esp32_sys_mmap_partition(const char *partition_name, spi_flash_mmap_
         ESP_LOGE(TAG, "Failed to map BEAM partition for %s", partition_name);
         return NULL;
     }
-    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%"PRIx32" (size=%"PRIu32" bytes)",
+    ESP_LOGI(TAG, "Loaded BEAM partition %s at address 0x%" PRIx32 " (size=%" PRIu32 " bytes)",
         partition_name, partition->address, partition->size);
 
     return mapped_memory;
@@ -546,13 +546,13 @@ term sys_get_info(Context *ctx, term key)
 {
     GlobalContext *glb = ctx->global;
     if (key == globalcontext_make_atom(glb, esp_free_heap_size_atom)) {
-        return term_from_int32(esp_get_free_heap_size());
+        return term_from_int28(esp_get_free_heap_size());
     }
     if (key == globalcontext_make_atom(glb, esp_largest_free_block_atom)) {
-        return term_from_int32(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        return term_from_int28(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     }
     if (key == globalcontext_make_atom(glb, esp_get_minimum_free_size_atom)) {
-        return term_from_int32(esp_get_minimum_free_heap_size());
+        return term_from_int28(esp_get_minimum_free_heap_size());
     }
     if (key == globalcontext_make_atom(glb, esp_chip_info_atom)) {
         esp_chip_info_t info;
@@ -561,10 +561,10 @@ term sys_get_info(Context *ctx, term key)
             return OUT_OF_MEMORY_ATOM;
         }
         term ret = term_alloc_map(4, &ctx->heap);
-        term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, cores_atom), term_from_int32(info.cores));
+        term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, cores_atom), term_from_int4(info.cores));
         term_set_map_assoc(ret, 1, globalcontext_make_atom(glb, features_atom), get_features(ctx, info.features));
         term_set_map_assoc(ret, 2, globalcontext_make_atom(glb, model_atom), get_model(ctx, info.model));
-        term_set_map_assoc(ret, 3, globalcontext_make_atom(glb, revision_atom), term_from_int32(info.revision));
+        term_set_map_assoc(ret, 3, globalcontext_make_atom(glb, revision_atom), term_from_int11(info.revision));
         return ret;
     }
     if (key == globalcontext_make_atom(glb, esp_idf_version_atom)) {
