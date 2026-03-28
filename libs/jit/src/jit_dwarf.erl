@@ -408,7 +408,8 @@ elf(_State, _NativeCode) ->
 backend_to_machine_type(jit_x86_64) -> ?EM_X86_64;
 backend_to_machine_type(jit_aarch64) -> ?EM_AARCH64;
 backend_to_machine_type(jit_armv6m) -> ?EM_ARM;
-backend_to_machine_type(jit_riscv32) -> ?EM_RISCV.
+backend_to_machine_type(jit_riscv32) -> ?EM_RISCV;
+backend_to_machine_type(jit_riscv64) -> ?EM_RISCV.
 
 %% Map JIT backend to ELF flags
 backend_to_elf_flags(jit_armv6m) ->
@@ -1125,6 +1126,7 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
         case Backend of
             jit_x86_64 -> 16#30;
             jit_aarch64 -> 16#30;
+            jit_riscv64 -> 16#30;
             % riscv32 and armv6m
             _ -> 16#18
         end,
