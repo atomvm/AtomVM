@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-alpha.1] - Unreleased
 
 ### Added
+- Added `json` module to estdlib, compatible with Erlang/OTP `json` API
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
 - Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`

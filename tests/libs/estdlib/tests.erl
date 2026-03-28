@@ -55,8 +55,9 @@ get_otp_version() ->
     end.
 
 % test_sets heavily relies on is_equal that is from OTP-27
+% test_json requires json module that is from OTP-27
 get_non_networking_tests(OTPVersion) when OTPVersion >= 27 ->
-    [test_sets | get_non_networking_tests(26)];
+    [test_sets, test_json | get_non_networking_tests(26)];
 get_non_networking_tests(_OTPVersion) ->
     [
         test_apply,
