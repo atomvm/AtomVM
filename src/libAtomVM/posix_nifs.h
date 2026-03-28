@@ -95,6 +95,11 @@ extern const struct Nif atomvm_posix_closedir_nif;
 #if defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 extern const struct Nif file_get_cwd_nif;
 #endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_TCGETATTR
+extern const struct Nif atomvm_posix_tcgetattr_nif;
+extern const struct Nif atomvm_posix_tcsetattr_nif;
+extern const struct Nif atomvm_posix_tcflush_nif;
+#endif
 
 /**
  * @brief Convenient function to return posix errors as atom.

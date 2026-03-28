@@ -63,7 +63,7 @@ jobs:
     - name: "Install deps"
       shell: freebsd {0}
       run: |
-        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3 ninja
+        pkg install -y curl cmake gperf erlang elixir rebar3 mbedtls3 ninja socat
 
     - name: "Add hostname to /etc/hosts for distribution tests"
       shell: freebsd {0}

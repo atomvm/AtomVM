@@ -30,6 +30,7 @@ add_subdirectory(avm_esp32/src)
 add_subdirectory(avm_rp2/src)
 add_subdirectory(avm_stm32/src)
 add_subdirectory(avm_emscripten/src)
+add_subdirectory(avm_unix/src)
 add_subdirectory(esp32boot)
 add_subdirectory(esp32devmode/src)
 add_subdirectory(jit/src)
@@ -54,8 +55,8 @@ else()
     message(WARNING "Unable to find gleam -- skipping Gleam libs")
 endif()
 
-# Base (generic_unix): common + network
-pack_lib(atomvmlib ${ATOMVM_COMMON_LIBS} avm_network)
+# Base (generic_unix): common + network + unix
+pack_lib(atomvmlib ${ATOMVM_COMMON_LIBS} avm_network avm_unix)
 
 # Platform-specific variants
 pack_lib(atomvmlib-esp32 ${ATOMVM_COMMON_LIBS} avm_network avm_esp32)

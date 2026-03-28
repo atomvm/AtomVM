@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
+- Added generic unix support for uart using POSIX nifs
 
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic

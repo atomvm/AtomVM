@@ -26,6 +26,9 @@
 #if HAVE_OPEN && HAVE_CLOSE
 #include <fcntl.h>
 #endif
+#if HAVE_TCGETATTR
+#include <termios.h>
+#endif
 #if HAVE_OPEN && HAVE_CLOSE || HAVE_RMDIR || defined(HAVE_GETCWD) && defined(HAVE_PATH_MAX)
 #include <unistd.h>
 #endif
@@ -1435,6 +1438,368 @@ static term nif_file_get_cwd_0(Context *ctx, int argc, term argv[])
 }
 #endif
 
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_TCGETATTR
+
+// clang-format off
+#define BAUD_TABLE(X)   \
+    X(0, B0)            \
+    X(50, B50)          \
+    X(75, B75)          \
+    X(110, B110)        \
+    X(134, B134)        \
+    X(150, B150)        \
+    X(200, B200)        \
+    X(300, B300)        \
+    X(600, B600)        \
+    X(1200, B1200)      \
+    X(1800, B1800)      \
+    X(2400, B2400)      \
+    X(4800, B4800)      \
+    X(9600, B9600)      \
+    X(19200, B19200)    \
+    X(38400, B38400)    \
+    X(57600, B57600)    \
+    X(115200, B115200)  \
+    X(230400, B230400)
+
+#ifdef B460800
+#define BAUD_TABLE_460800(X) X(460800, B460800)
+#else
+#define BAUD_TABLE_460800(X)
+#endif
+#ifdef B500000
+#define BAUD_TABLE_500000(X) X(500000, B500000)
+#else
+#define BAUD_TABLE_500000(X)
+#endif
+#ifdef B576000
+#define BAUD_TABLE_576000(X) X(576000, B576000)
+#else
+#define BAUD_TABLE_576000(X)
+#endif
+#ifdef B921600
+#define BAUD_TABLE_921600(X) X(921600, B921600)
+#else
+#define BAUD_TABLE_921600(X)
+#endif
+#ifdef B1000000
+#define BAUD_TABLE_1000000(X) X(1000000, B1000000)
+#else
+#define BAUD_TABLE_1000000(X)
+#endif
+
+#define BAUD_TABLE_ALL(X)       \
+    BAUD_TABLE(X)               \
+    BAUD_TABLE_460800(X)        \
+    BAUD_TABLE_500000(X)        \
+    BAUD_TABLE_576000(X)        \
+    BAUD_TABLE_921600(X)        \
+    BAUD_TABLE_1000000(X)
+// clang-format on
+
+// On Linux, Bxxx constants equal the integer baud rates, so no mapping needed.
+#if B9600 == 9600
+
+static inline speed_t int_to_baud(avm_int_t baud)
+{
+    return (speed_t) baud;
+}
+
+static inline avm_int_t baud_to_int(speed_t speed)
+{
+    return (avm_int_t) speed;
+}
+
+#else
+
+static speed_t int_to_baud(avm_int_t baud)
+{
+    switch (baud) {
+#define BAUD_INT_TO_CONST(val, constant) \
+    case val:                            \
+        return constant;
+        BAUD_TABLE_ALL(BAUD_INT_TO_CONST)
+#undef BAUD_INT_TO_CONST
+        default:
+            return (speed_t) -1;
+    }
+}
+
+static avm_int_t baud_to_int(speed_t speed)
+{
+    switch (speed) {
+#define BAUD_CONST_TO_INT(val, constant) \
+    case constant:                       \
+        return val;
+        BAUD_TABLE_ALL(BAUD_CONST_TO_INT)
+#undef BAUD_CONST_TO_INT
+        default:
+            return -1;
+    }
+}
+
+#endif
+
+// atomvm:posix_tcgetattr/1 -> {ok, Map} | {error, Reason}
+// Map keys: ispeed, ospeed, iflag, oflag, cflag, lflag
+static term nif_atomvm_posix_tcgetattr(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    GlobalContext *glb = ctx->global;
+
+    void *fd_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], glb->posix_fd_resource_type, &fd_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
+
+    struct termios tio;
+    if (UNLIKELY(tcgetattr(fd_obj->fd, &tio) < 0)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+
+    // Map with 6 keys: ispeed, ospeed, iflag, oflag, cflag, lflag
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + TERM_MAP_SIZE(6), MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term keys[6];
+    term values[6];
+    keys[0] = globalcontext_make_atom(glb, ATOM_STR("\x5", "cflag"));
+    keys[1] = globalcontext_make_atom(glb, ATOM_STR("\x5", "iflag"));
+    keys[2] = globalcontext_make_atom(glb, ATOM_STR("\x6", "ispeed"));
+    keys[3] = globalcontext_make_atom(glb, ATOM_STR("\x5", "lflag"));
+    keys[4] = globalcontext_make_atom(glb, ATOM_STR("\x5", "oflag"));
+    keys[5] = globalcontext_make_atom(glb, ATOM_STR("\x6", "ospeed"));
+    values[0] = term_from_int(tio.c_cflag);
+    values[1] = term_from_int(tio.c_iflag);
+    values[2] = term_from_int(baud_to_int(cfgetispeed(&tio)));
+    values[3] = term_from_int(tio.c_lflag);
+    values[4] = term_from_int(tio.c_oflag);
+    values[5] = term_from_int(baud_to_int(cfgetospeed(&tio)));
+
+    term map = term_alloc_map(6, &ctx->heap);
+    for (int i = 0; i < 6; i++) {
+        term_set_map_assoc(map, i, keys[i], values[i]);
+    }
+
+    term result = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(result, 0, OK_ATOM);
+    term_put_tuple_element(result, 1, map);
+
+    return result;
+}
+
+// atomvm:posix_tcsetattr/3 -> ok | {error, Reason}
+// Args: Fd, When (tcsanow | tcsadrain | tcsaflush), Map
+static term nif_atomvm_posix_tcsetattr(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    GlobalContext *glb = ctx->global;
+
+    void *fd_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], glb->posix_fd_resource_type, &fd_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
+
+    term when_term = argv[1];
+    VALIDATE_VALUE(when_term, term_is_atom);
+    int when_val;
+    if (globalcontext_is_term_equal_to_atom_string(glb, when_term, ATOM_STR("\x7", "tcsanow"))) {
+        when_val = TCSANOW;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, when_term, ATOM_STR("\x9", "tcsadrain"))) {
+        when_val = TCSADRAIN;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, when_term, ATOM_STR("\x9", "tcsaflush"))) {
+        when_val = TCSAFLUSH;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    term map = argv[2];
+    VALIDATE_VALUE(map, term_is_map);
+
+    // Start from current settings
+    struct termios tio;
+    if (UNLIKELY(tcgetattr(fd_obj->fd, &tio) < 0)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+
+    // Check for raw mode first — applies cfmakeraw before any other changes
+    term raw_key = globalcontext_make_atom(glb, ATOM_STR("\x3", "raw"));
+    term raw_val = term_get_map_assoc(map, raw_key, glb);
+    if (raw_val == TRUE_ATOM) {
+        cfmakeraw(&tio);
+    }
+
+    // Apply map entries
+    term cflag_key = globalcontext_make_atom(glb, ATOM_STR("\x5", "cflag"));
+    term iflag_key = globalcontext_make_atom(glb, ATOM_STR("\x5", "iflag"));
+    term oflag_key = globalcontext_make_atom(glb, ATOM_STR("\x5", "oflag"));
+    term lflag_key = globalcontext_make_atom(glb, ATOM_STR("\x5", "lflag"));
+    term ispeed_key = globalcontext_make_atom(glb, ATOM_STR("\x6", "ispeed"));
+    term ospeed_key = globalcontext_make_atom(glb, ATOM_STR("\x6", "ospeed"));
+
+    term val;
+    val = term_get_map_assoc(map, cflag_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        tio.c_cflag = term_to_int(val);
+    }
+    val = term_get_map_assoc(map, iflag_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        tio.c_iflag = term_to_int(val);
+    }
+    val = term_get_map_assoc(map, oflag_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        tio.c_oflag = term_to_int(val);
+    }
+    val = term_get_map_assoc(map, lflag_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        tio.c_lflag = term_to_int(val);
+    }
+    val = term_get_map_assoc(map, ispeed_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        speed_t speed = int_to_baud(term_to_int(val));
+        if (speed == (speed_t) -1) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        cfsetispeed(&tio, speed);
+    }
+    val = term_get_map_assoc(map, ospeed_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        speed_t speed = int_to_baud(term_to_int(val));
+        if (speed == (speed_t) -1) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+        cfsetospeed(&tio, speed);
+    }
+
+    // High-level serial options (portable, no hardcoded flags in Erlang)
+    term data_bits_key = globalcontext_make_atom(glb, ATOM_STR("\x9", "data_bits"));
+    val = term_get_map_assoc(map, data_bits_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        tio.c_cflag &= ~CSIZE;
+        switch (term_to_int(val)) {
+            case 8:
+                tio.c_cflag |= CS8;
+                break;
+            case 7:
+                tio.c_cflag |= CS7;
+                break;
+            case 6:
+                tio.c_cflag |= CS6;
+                break;
+            case 5:
+                tio.c_cflag |= CS5;
+                break;
+            default:
+                RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    term stop_bits_key = globalcontext_make_atom(glb, ATOM_STR("\x9", "stop_bits"));
+    val = term_get_map_assoc(map, stop_bits_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_integer);
+        switch (term_to_int(val)) {
+            case 1:
+                tio.c_cflag &= ~CSTOPB;
+                break;
+            case 2:
+                tio.c_cflag |= CSTOPB;
+                break;
+            default:
+                RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    term parity_key = globalcontext_make_atom(glb, ATOM_STR("\x6", "parity"));
+    val = term_get_map_assoc(map, parity_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_atom);
+        if (val == NONE_ATOM) {
+            tio.c_cflag &= ~(PARENB | PARODD);
+        } else if (globalcontext_is_term_equal_to_atom_string(glb, val, ATOM_STR("\x4", "even"))) {
+            tio.c_cflag |= PARENB;
+            tio.c_cflag &= ~PARODD;
+        } else if (globalcontext_is_term_equal_to_atom_string(glb, val, ATOM_STR("\x3", "odd"))) {
+            tio.c_cflag |= PARENB | PARODD;
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    term fc_key = globalcontext_make_atom(glb, ATOM_STR("\xC", "flow_control"));
+    val = term_get_map_assoc(map, fc_key, glb);
+    if (!term_is_invalid_term(val)) {
+        VALIDATE_VALUE(val, term_is_atom);
+        if (val == NONE_ATOM) {
+            tio.c_cflag &= ~CRTSCTS;
+            tio.c_iflag &= ~(IXON | IXOFF | IXANY);
+        } else if (globalcontext_is_term_equal_to_atom_string(glb, val, ATOM_STR("\x8", "hardware"))) {
+            tio.c_cflag |= CRTSCTS;
+        } else if (globalcontext_is_term_equal_to_atom_string(glb, val, ATOM_STR("\x8", "software"))) {
+            tio.c_iflag |= IXON | IXOFF;
+        } else {
+            RAISE_ERROR(BADARG_ATOM);
+        }
+    }
+
+    // clocal/cread — enable receiver, ignore modem control
+    term clocal_key = globalcontext_make_atom(glb, ATOM_STR("\x6", "clocal"));
+    val = term_get_map_assoc(map, clocal_key, glb);
+    if (val == TRUE_ATOM) {
+        tio.c_cflag |= CLOCAL | CREAD;
+    }
+
+    if (UNLIKELY(tcsetattr(fd_obj->fd, when_val, &tio) < 0)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+
+    return OK_ATOM;
+}
+
+// atomvm:posix_tcflush/2 -> ok | {error, Reason}
+// Args: Fd, Queue (tciflush | tcoflush | tcioflush)
+static term nif_atomvm_posix_tcflush(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    GlobalContext *glb = ctx->global;
+
+    void *fd_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), argv[0], glb->posix_fd_resource_type, &fd_obj_ptr))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    struct PosixFd *fd_obj = (struct PosixFd *) fd_obj_ptr;
+
+    term queue_term = argv[1];
+    VALIDATE_VALUE(queue_term, term_is_atom);
+    int queue_sel;
+    if (globalcontext_is_term_equal_to_atom_string(glb, queue_term, ATOM_STR("\x8", "tciflush"))) {
+        queue_sel = TCIFLUSH;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, queue_term, ATOM_STR("\x8", "tcoflush"))) {
+        queue_sel = TCOFLUSH;
+    } else if (globalcontext_is_term_equal_to_atom_string(glb, queue_term, ATOM_STR("\x9", "tcioflush"))) {
+        queue_sel = TCIOFLUSH;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(tcflush(fd_obj->fd, queue_sel) < 0)) {
+        return errno_to_error_tuple_maybe_gc(ctx);
+    }
+
+    return OK_ATOM;
+}
+#endif
+
 #if HAVE_OPEN && HAVE_CLOSE
 const struct Nif atomvm_posix_open_nif = {
     .base.type = NIFFunctionType,
@@ -1567,5 +1932,19 @@ const struct Nif atomvm_posix_readdir_nif = {
 const struct Nif file_get_cwd_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_file_get_cwd_0
+};
+#endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_TCGETATTR
+const struct Nif atomvm_posix_tcgetattr_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_tcgetattr
+};
+const struct Nif atomvm_posix_tcsetattr_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_tcsetattr
+};
+const struct Nif atomvm_posix_tcflush_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_atomvm_posix_tcflush
 };
 #endif
