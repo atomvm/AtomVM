@@ -572,6 +572,7 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_test_unit),
     TEST_CASE(test_bs_match_ensure_at_least),
+    TEST_CASE(test_bs_match_get_tail),
     TEST_CASE(test_op_bs_create_bin),
 
     TEST_CASE(test_multi_value_comprehension),
