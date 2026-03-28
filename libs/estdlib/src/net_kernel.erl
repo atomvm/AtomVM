@@ -285,7 +285,10 @@ handle_cast(_Message, State) ->
     {noreply, State}.
 
 %% @hidden
-handle_info({accept, AcceptPid, SocketPid, inet, tcp}, #state{proto_dist = ProtoDist} = State) ->
+handle_info(
+    {accept, AcceptPid, SocketPid, _Family, _Protocol},
+    #state{proto_dist = ProtoDist} = State
+) ->
     Pid = ProtoDist:accept_connection(AcceptPid, SocketPid, State#state.node, [], ?SETUPTIME),
     AcceptPid ! {self(), controller, Pid},
     {noreply, State};
