@@ -156,9 +156,11 @@ jobs:
         echo "/opt/riscv32-toolchain/bin" >> $GITHUB_PATH
 
     - name: "Git config safe.directory for codeql"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
 
     - name: "Initialize CodeQL"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/init@v4
       with:
         languages: "cpp"
@@ -176,6 +178,7 @@ jobs:
         cmake --build . --target=AtomVM
 
     - name: "Perform CodeQL Analysis"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/analyze@v4
 
     - name: Install nvm and nodejs 20
@@ -256,8 +259,10 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/') && matrix.board != 'pico_w' && matrix.board != 'pico2_w' && matrix.platform == '' && matrix.jit == ''
       with:
-        draft: true
+        draft: ${{ !endsWith(github.ref_name, '-latest') }}
+        prerelease: ${{ endsWith(github.ref_name, '-latest') }}
         fail_on_unmatched_files: true
+        overwrite_files: ${{ endsWith(github.ref_name, '-latest') }}
         files: |
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256
@@ -270,8 +275,10 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/') && (matrix.board == 'pico_w' || matrix.board == 'pico2_w') && matrix.platform == '' && matrix.jit == ''
       with:
-        draft: true
+        draft: ${{ !endsWith(github.ref_name, '-latest') }}
+        prerelease: ${{ endsWith(github.ref_name, '-latest') }}
         fail_on_unmatched_files: true
+        overwrite_files: ${{ endsWith(github.ref_name, '-latest') }}
         files: |
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2
           src/platforms/rp2/build/src/AtomVM-${{ matrix.board }}-${{ github.ref_name }}.uf2.sha256

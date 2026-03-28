@@ -253,7 +253,9 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        draft: true
+        draft: ${{ !endsWith(github.ref_name, '-latest') }}
+        prerelease: ${{ endsWith(github.ref_name, '-latest') }}
         fail_on_unmatched_files: true
+        overwrite_files: ${{ endsWith(github.ref_name, '-latest') }}
         files: |
           build/AtomVM*

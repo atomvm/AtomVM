@@ -9,6 +9,8 @@ name: ESP32 Sim test
 
 on:
   push:
+    tags-ignore:
+      - '*-latest'
     paths:
       - ".github/workflows/esp32-simtest.yaml"
       - "CMakeLists.txt"

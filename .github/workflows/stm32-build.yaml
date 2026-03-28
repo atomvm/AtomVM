@@ -8,6 +8,8 @@ name: STM32 Build
 
 on:
   push:
+    tags-ignore:
+      - '*-latest'
     paths:
       - '.github/workflows/stm32-build.yaml'
       - 'CMakeLists.txt'
