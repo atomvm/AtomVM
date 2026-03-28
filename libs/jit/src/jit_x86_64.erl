@@ -545,6 +545,28 @@ call_primitive_last(
         stream = Stream0
     } = State0,
     Primitive,
+    []
+) ->
+    % No arguments: use memory-indirect jump, no need to load function pointer
+    PrimAddr =
+        case Primitive of
+            0 -> {0, ?NATIVE_INTERFACE_REG};
+            N -> ?PRIMITIVE(N)
+        end,
+    Call = jit_x86_64_asm:jmpq(PrimAddr),
+    Stream1 = StreamModule:append(Stream0, Call),
+    State0#state{
+        stream = Stream1,
+        available_regs = ?AVAILABLE_REGS_MASK,
+        used_regs = 0,
+        regs = jit_regs:invalidate_all(State0#state.regs)
+    };
+call_primitive_last(
+    #state{
+        stream_module = StreamModule,
+        stream = Stream0
+    } = State0,
+    Primitive,
     Args
 ) ->
     % We need a register for the function pointer that should not be used as a parameter
@@ -1478,6 +1500,10 @@ set_args1({y_reg, X}, Reg) ->
     ];
 set_args1(ArgReg, Reg) when ?IS_GPR(ArgReg) ->
     jit_x86_64_asm:movq(ArgReg, Reg);
+set_args1(0, Reg) ->
+    jit_x86_64_asm:xorl(Reg, Reg);
+set_args1(Arg, Reg) when is_integer(Arg), Arg >= 0, Arg =< 16#FFFFFFFF ->
+    jit_x86_64_asm:movl(Arg, Reg);
 set_args1(Arg, Reg) when is_integer(Arg) andalso Arg >= -16#80000000 andalso Arg < 16#80000000 ->
     jit_x86_64_asm:movq(Arg, Reg);
 set_args1(Arg, Reg) when is_integer(Arg) ->
@@ -2145,8 +2171,9 @@ move_to_native_register_emit(
     Bit = reg_bit(Reg),
     I1 =
         if
-            ?IS_SINT32_T(Imm) -> jit_x86_64_asm:movq(Imm, Reg);
+            Imm =:= 0 -> jit_x86_64_asm:xorl(Reg, Reg);
             Imm >= 0, Imm =< 16#FFFFFFFF -> jit_x86_64_asm:movl(Imm, Reg);
+            ?IS_SINT32_T(Imm) -> jit_x86_64_asm:movq(Imm, Reg);
             true -> jit_x86_64_asm:movabsq(Imm, Reg)
         end,
     Stream1 = StreamModule:append(Stream0, I1),
@@ -2247,8 +2274,9 @@ move_to_native_register(
     I =
         if
             is_atom(RegSrc) -> jit_x86_64_asm:movq(RegSrc, RegDst);
-            ?IS_SINT32_T(RegSrc) -> jit_x86_64_asm:movq(RegSrc, RegDst);
+            RegSrc =:= 0 -> jit_x86_64_asm:xorl(RegDst, RegDst);
             RegSrc >= 0, RegSrc =< 16#FFFFFFFF -> jit_x86_64_asm:movl(RegSrc, RegDst);
+            ?IS_SINT32_T(RegSrc) -> jit_x86_64_asm:movq(RegSrc, RegDst);
             true -> jit_x86_64_asm:movabsq(RegSrc, RegDst)
         end,
     Stream1 = StreamModule:append(Stream0, I),
