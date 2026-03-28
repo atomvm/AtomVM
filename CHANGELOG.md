@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
 - Fixed a bug in `bs_match` `get_tail` logic that occurred with OTP26-compiled beams
 - Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`
+- Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
+of raising `badarg`
 
 ## [0.7.0-alpha.0] - 2026-03-20
 

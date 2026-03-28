@@ -2373,6 +2373,10 @@ static term parse_float(Context *ctx, const char *buf, int len)
         RAISE_ERROR(BADARG_ATOM);
     }
 
+    if (UNLIKELY(!isfinite(fvalue))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     // *_to_float requires that given input is a float
     if (UNLIKELY(!is_valid_float_string(null_terminated_buf, len))) {
         RAISE_ERROR(BADARG_ATOM);
