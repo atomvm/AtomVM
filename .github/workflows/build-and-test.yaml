@@ -495,12 +495,12 @@ jobs:
 
     - name: "Install deps"
       if: matrix.container != ''
-      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev
+      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev socat
 
     - name: "Install deps"
       if: matrix.container == ''
       run: |
-        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libmbedtls-dev libc6-dbg
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libmbedtls-dev libc6-dbg socat
         # Get a more recent valgrind
         sudo snap install valgrind --classic
 
