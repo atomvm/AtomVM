@@ -29,6 +29,7 @@
 #include <globalcontext.h>
 #include <interop.h>
 #include <mailbox.h>
+#include <memory.h>
 #include <platform_defaultatoms.h>
 #include <port.h>
 #include <sdkconfig.h>
@@ -44,18 +45,34 @@
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 #include <esp_log.h>
+#include <esp_mac.h>
 #include <esp_netif.h>
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 #include <lwip/inet.h>
-#if ESP_IDF_VERSION_MAJOR >= 5
-#include <esp_mac.h>
-#endif
 #pragma GCC diagnostic pop
 
+#include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define TCPIP_HOSTNAME_MAX_SIZE 255
+
+// Reduce the maximum number of networks returned for devices with less ram to help mitigate OOM.
+#if defined(CONFIG_IDF_TARGET_ESP32C2)
+#define MAX_SCAN_RESULTS 10
+#elif defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C61) || defined(CONFIG_IDF_TARGET_ESP32C5)
+#define MAX_SCAN_RESULTS 14
+#elif defined(CONFIG_IDF_TARGET_ESP32P4) || defined(CONFIG_SPIRAM_USE_MALLOC)
+#define MAX_SCAN_RESULTS 64
+#else
+#define MAX_SCAN_RESULTS 20
+#endif
+#define DEFAULT_SCAN_RESULT_MAX 6
+#define IDF_DEFAULT_ACTIVE_SCAN_TIME 120
+#define IDF_DEFAULT_PASSIVE_SCAN_TIME 360
+#define SSID_MAX_SIZE 33
+#define BSSID_SIZE 6
 
 #define TAG "network_driver"
 #define PORT_REPLY_SIZE (TUPLE_SIZE(2) + REF_SIZE)
@@ -71,6 +88,7 @@ static const char *const host_atom = ATOM_STR("\x4", "host");
 static const char *const managed_atom = ATOM_STR("\x7", "managed");
 static const char *const max_connections_atom = ATOM_STR("\xF", "max_connections");
 static const char *const psk_atom = ATOM_STR("\x3", "psk");
+static const char *const rssi_atom = ATOM_STR("\x4", "rssi");
 static const char *const sntp_atom = ATOM_STR("\x4", "sntp");
 static const char *const sntp_sync_atom = ATOM_STR("\x9", "sntp_sync");
 static const char *const ssid_atom = ATOM_STR("\x4", "ssid");
@@ -93,20 +111,23 @@ enum
 enum network_cmd
 {
     NetworkInvalidCmd = 0,
-    // TODO add support for scan, ifconfig
     NetworkStartCmd,
     NetworkRssiCmd,
     NetworkStopCmd,
     StaHaltCmd,
-    StaConnectCmd
+    StaConnectCmd,
+    NetworkScanCmd,
+    NetworkScanStopCmd
 };
 
 static const AtomStringIntPair cmd_table[] = {
     { ATOM_STR("\x5", "start"), NetworkStartCmd },
-    { ATOM_STR("\x4", "rssi"), NetworkRssiCmd },
+    { rssi_atom, NetworkRssiCmd },
     { ATOM_STR("\x4", "stop"), NetworkStopCmd },
     { ATOM_STR("\x8", "halt_sta"), StaHaltCmd },
     { ATOM_STR("\x7", "connect"), StaConnectCmd },
+    { ATOM_STR("\x4", "scan"), NetworkScanCmd },
+    { ATOM_STR("\xB", "cancel_scan"), NetworkScanStopCmd },
     SELECT_INT_DEFAULT(NetworkInvalidCmd)
 };
 
@@ -119,10 +140,112 @@ struct ClientData
     bool managed;
 };
 
+struct ScanData
+{
+    uint64_t ref_ticks;
+    uint32_t owner_process_id;
+    uint16_t num_results;
+    GlobalContext *global;
+};
+
+static void scan_done_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+
 static inline term make_atom(GlobalContext *global, AtomString atom_str)
 {
     return globalcontext_make_atom(global, atom_str);
 }
+
+static inline term authmode_to_atom_term(GlobalContext *global, wifi_auth_mode_t mode)
+{
+    term authmode = UNDEFINED_ATOM;
+    switch (mode) {
+        case WIFI_AUTH_OPEN:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x4", "open"));
+            break;
+        case WIFI_AUTH_WEP:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x3", "wep"));
+            break;
+        case WIFI_AUTH_WPA_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x7", "wpa_psk"));
+            break;
+        case WIFI_AUTH_WPA2_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x8", "wpa2_psk"));
+            break;
+        case WIFI_AUTH_WPA_WPA2_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xC", "wpa_wpa2_psk"));
+            break;
+        case WIFI_AUTH_ENTERPRISE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x3", "eap"));
+            break;
+        case WIFI_AUTH_WPA3_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x8", "wpa3_psk"));
+            break;
+        case WIFI_AUTH_WPA2_WPA3_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xD", "wpa2_wpa3_psk"));
+            break;
+        case WIFI_AUTH_WAPI_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x4", "wapi"));
+            break;
+        case WIFI_AUTH_WPA3_ENT_192:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x13", "wpa3_enterprise_192"));
+            break;
+        case WIFI_AUTH_OWE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x3", "owe"));
+            break;
+// NOTE: dummy_ atoms will not be observed in the wild and are not pre-populated to the atom table
+#if (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 4, 0))
+        case WIFI_AUTH_DUMMY1:
+            authmode = make_atom(global, ATOM_STR("\x6", "dummy1"));
+            break;
+        case WIFI_AUTH_DUMMY2:
+            authmode = make_atom(global, ATOM_STR("\x6", "dummy2"));
+            break;
+#if (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 3, 0))
+        case WIFI_AUTH_DUMMY3:
+            authmode = make_atom(global, ATOM_STR("\x6", "dummy3"));
+            break;
+#if (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 2, 0))
+        case WIFI_AUTH_DUMMY4:
+            authmode = make_atom(global, ATOM_STR("\x6", "dummy4"));
+            break;
+        case WIFI_AUTH_DUMMY5:
+            authmode = make_atom(global, ATOM_STR("\x6", "dummy5"));
+            break;
+#endif
+#endif
+#endif
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+        case WIFI_AUTH_WPA3_EXT_PSK:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xC", "wpa3_ext_psk"));
+            break;
+        case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x12", "wpa3_ext_psk_mixed"));
+            break;
+#endif
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
+        case WIFI_AUTH_DPP:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x3", "dpp"));
+            break;
+#endif
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0))
+        case WIFI_AUTH_WPA3_ENTERPRISE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xf", "wpa3_enterprise"));
+            break;
+        case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x14", "wpa2_wpa3_enterprise"));
+            break;
+#endif
+        case WIFI_AUTH_WPA_ENTERPRISE:
+            authmode = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xE", "wpa_enterprise"));
+            break;
+        case WIFI_AUTH_MAX:
+            authmode = ERROR_ATOM;
+            break;
+    }
+    return authmode;
+}
+
+#define UNLIKELY_NOT_ESP_OK(E) UNLIKELY((E) != ESP_OK)
 
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
@@ -133,6 +256,147 @@ static term tuple_from_addr(Heap *heap, uint32_t addr)
     terms[3] = term_from_int(addr & 0xFF);
 
     return port_heap_create_tuple_n(heap, 4, terms);
+}
+
+static bool ensure_scan_atoms_exist(GlobalContext *global)
+{
+    // Atoms needed in return message
+    if (UNLIKELY(globalcontext_make_atom(global, ssid_atom) == term_invalid_term())) {
+        return false;
+    }
+    if (UNLIKELY(globalcontext_make_atom(global, rssi_atom) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const authmode = ATOM_STR("\x8", "authmode");
+    if (UNLIKELY(globalcontext_make_atom(global, authmode) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const bssid = ATOM_STR("\x5", "bssid");
+    if (UNLIKELY(globalcontext_make_atom(global, bssid) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const channel = ATOM_STR("\x7", "channel");
+    if (UNLIKELY(globalcontext_make_atom(global, channel) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const unregister_handler = ATOM_STR("\x12", "unregister_handler");
+    if (UNLIKELY(globalcontext_make_atom(global, unregister_handler) == term_invalid_term())) {
+        return false;
+    }
+
+    // Common auth atoms, not every auth atom is preloaded
+    static const char *const open = ATOM_STR("\x4", "open");
+    if (UNLIKELY(globalcontext_make_atom(global, open) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wep = ATOM_STR("\x3", "wep");
+    if (UNLIKELY(globalcontext_make_atom(global, wep) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa_psk = ATOM_STR("\x7", "wpa_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa2_psk = ATOM_STR("\x8", "wpa2_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa2_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa_wpa2_psk = ATOM_STR("\xC", "wpa_wpa2_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa_wpa2_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa3_psk = ATOM_STR("\x8", "wpa3_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa3_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const eap = ATOM_STR("\x3", "eap");
+    if (UNLIKELY(globalcontext_make_atom(global, eap) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa2_wpa3_psk = ATOM_STR("\xD", "wpa2_wpa3_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa2_wpa3_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wapi = ATOM_STR("\x4", "wapi");
+    if (UNLIKELY(globalcontext_make_atom(global, wapi) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa3_enterprise_192 = ATOM_STR("\x13", "wpa3_enterprise_192");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa3_enterprise_192) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const owe = ATOM_STR("\x3", "owe");
+    if (UNLIKELY(globalcontext_make_atom(global, owe) == term_invalid_term())) {
+        return false;
+    }
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 2, 0))
+    static const char *const wpa3_ext_psk = ATOM_STR("\xC", "wpa3_ext_psk");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa3_ext_psk) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa3_ext_psk_mixed = ATOM_STR("\x12", "wpa3_ext_psk_mixed");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa3_ext_psk_mixed) == term_invalid_term())) {
+        return false;
+    }
+#endif
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 3, 0))
+    static const char *const dpp = ATOM_STR("\x3", "dpp");
+    if (UNLIKELY(globalcontext_make_atom(global, dpp) == term_invalid_term())) {
+        return false;
+    }
+#endif
+#if (ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 0))
+    static const char *const wpa3_enterprise = ATOM_STR("\xF", "wpa3_enterprise");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa3_enterprise) == term_invalid_term())) {
+        return false;
+    }
+    static const char *const wpa2_wpa3_enterprise = ATOM_STR("\x14", "wpa2_wpa3_enterprise");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa2_wpa3_enterprise) == term_invalid_term())) {
+        return false;
+    }
+#endif
+    static const char *const wpa_enterprise = ATOM_STR("\xE", "wpa_enterprise");
+    if (UNLIKELY(globalcontext_make_atom(global, wpa_enterprise) == term_invalid_term())) {
+        return false;
+    }
+    return true;
+}
+
+static term wifi_ap_records_to_list_maybe_gc(GlobalContext *global, wifi_ap_record_t *ap_records, uint16_t num_results, Heap *heap)
+{
+    term ssid_atom_term = globalcontext_existing_term_from_atom_string(global, ssid_atom);
+    term rssi_atom_term = globalcontext_existing_term_from_atom_string(global, rssi_atom);
+    term authmode_atom_term = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x8", "authmode"));
+    term bssid_atom_term = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x5", "bssid"));
+    term channel_atom_term = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\x7", "channel"));
+
+    term networks_data_list = term_nil();
+    for (int i = num_results - 1; i >= 0; i--) {
+
+        term ssid_term;
+        size_t ssid_size = strlen((char *) ap_records[i].ssid);
+        if (ssid_size > 0) {
+            ssid_term = term_from_literal_binary(ap_records[i].ssid, ssid_size, heap, global);
+        } else {
+            static const char *hidden_ap = "(hidden)";
+            ssid_term = term_from_const_binary((const uint8_t *) hidden_ap, strlen(hidden_ap), heap, global);
+        }
+
+        term rssi = term_from_int(ap_records[i].rssi);
+        term authmode = authmode_to_atom_term(global, ap_records[i].authmode);
+        term bssid_term = term_from_literal_binary(ap_records[i].bssid, BSSID_SIZE, heap, global);
+        term channel = term_from_int((int32_t) ap_records[i].primary);
+
+        term ap_data = term_alloc_map(5, heap);
+        term_set_map_assoc(ap_data, 0, authmode_atom_term, authmode);
+        term_set_map_assoc(ap_data, 1, bssid_atom_term, bssid_term);
+        term_set_map_assoc(ap_data, 2, channel_atom_term, channel);
+        term_set_map_assoc(ap_data, 3, rssi_atom_term, rssi);
+        term_set_map_assoc(ap_data, 4, ssid_atom_term, ssid_term);
+
+        networks_data_list = term_list_prepend(ap_data, networks_data_list, heap);
+    }
+    return networks_data_list;
 }
 
 static void send_term(Heap *heap, struct ClientData *data, term t)
@@ -263,21 +527,206 @@ static void send_sntp_sync(struct ClientData *data, struct timeval *tv)
     END_WITH_STACK_HEAP(heap, data->global);
 }
 
-#define UNLIKELY_NOT_ESP_OK(E) UNLIKELY((E) != ESP_OK)
+static void send_scan_error_reason(Context *ctx, term pid, term ref, term reason)
+{
+    size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2);
+    port_ensure_available(ctx, error_size);
+
+    term scan_results_atom = globalcontext_existing_term_from_atom_string(ctx->global, ATOM_STR("\xC", "scan_results"));
+    if (UNLIKELY(term_is_invalid_term(scan_results_atom))) {
+        return;
+    }
+    term ret = port_create_tuple2(ctx, scan_results_atom, port_create_error_tuple(ctx, reason));
+    port_send_reply(ctx, pid, ref, ret);
+}
+
+// heap must be allocated and free'd by the caller
+static void send_scan_error_from_task(GlobalContext *global, uint32_t local_process_id, term reason, uint64_t ref_ticks, Heap heap)
+{
+    term ref = term_from_ref_ticks(ref_ticks, &heap);
+    term pid = term_from_local_process_id(local_process_id);
+    term error_tuple = port_heap_create_error_tuple(&heap, reason);
+    term scan_results_atom = globalcontext_existing_term_from_atom_string(global, ATOM_STR("\xC", "scan_results"));
+    term ret = port_heap_create_tuple2(&heap, scan_results_atom, error_tuple);
+    term msg = port_heap_create_tuple2(&heap, ref, ret);
+    port_send_message_from_task(global, pid, msg);
+}
+
+static void send_scan_results(struct ScanData *data)
+{
+    uint16_t discovered = 0;
+    esp_err_t err = esp_wifi_scan_get_ap_num(&discovered);
+    if (UNLIKELY(err != ESP_OK)) {
+        // the ap_list must be cleared on failures to prevent a memory leak
+        esp_wifi_clear_ap_list();
+        ESP_LOGE(TAG, "Failed to obtain number of networks found, reason: %s", esp_err_to_name(err));
+        const char *error = esp_err_to_name(err);
+        size_t error_len = strlen(error);
+
+        // Handler should always be unregistered befor sending a reply to avoid a race condition,
+        // once the message is sent another scan can be initiated, removing the handler after
+        // sending the reply could remove the new one.
+        err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(error_len), heap);
+        term reason = term_from_const_binary((const uint8_t *) error, (uint16_t) error_len, &heap, data->global);
+        send_scan_error_from_task(data->global, data->owner_process_id, reason, data->ref_ticks, heap);
+        END_WITH_STACK_HEAP(heap, data->global);
+
+        if (UNLIKELY(err != ESP_OK)) {
+            ESP_LOGE(TAG, "Failed to unregister event handler for reason %s, future scans may fail", esp_err_to_name(err));
+        } else {
+            // This cannot be free'd if unregister fails or the next scan_done event will try
+            // to access the free'd data and cause a hard crash.
+            free(data);
+        }
+        return;
+    }
+    ESP_LOGD(TAG, "Scan found %u networks.", discovered);
+
+    uint16_t num_results = data->num_results;
+    uint16_t return_results;
+    if (discovered > num_results) {
+        return_results = num_results;
+    } else {
+        return_results = discovered;
+    }
+    wifi_ap_record_t *ap_records = NULL;
+    if (return_results > 0) {
+        ap_records = (wifi_ap_record_t *) calloc((size_t) return_results, sizeof(wifi_ap_record_t));
+        if (IS_NULL_PTR(ap_records)) {
+            esp_wifi_clear_ap_list();
+            free(ap_records);
+
+            err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+
+            BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2), heap);
+            send_scan_error_from_task(data->global, data->owner_process_id, OUT_OF_MEMORY_ATOM, data->ref_ticks, heap);
+            END_WITH_STACK_HEAP(heap, data->global);
+
+            if (UNLIKELY(err != ESP_OK)) {
+                ESP_LOGE(TAG, "Failed to unregister event handler for reason %s, future scans may fail", esp_err_to_name(err));
+            } else {
+                free(data);
+            }
+            return;
+        }
+        err = esp_wifi_scan_get_ap_records(&return_results, ap_records);
+    } else {
+        esp_wifi_clear_ap_list();
+        err = ESP_OK;
+    }
+
+    if (UNLIKELY(err != ESP_OK)) {
+        esp_wifi_clear_ap_list();
+        free(ap_records);
+        ap_records = NULL;
+        ESP_LOGE(TAG, "Failed to obtain scan results, reason: %s", esp_err_to_name(err));
+        const char *error = esp_err_to_name(err);
+        size_t error_len = strlen(error);
+
+        err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(error_len), heap);
+        term reason = term_from_const_binary((const uint8_t *) error, (uint16_t) error_len, &heap, data->global);
+        send_scan_error_from_task(data->global, data->owner_process_id, reason, data->ref_ticks, heap);
+        END_WITH_STACK_HEAP(heap, data->global);
+
+        if (UNLIKELY(err != ESP_OK)) {
+            ESP_LOGE(TAG, "Failed to unregister event handler for reason %s, future scans may fail", esp_err_to_name(err));
+        } else {
+            free(data);
+        }
+        return;
+    }
+    ESP_LOGD(TAG, "Scan found %i networks", num_results);
+
+    // ap_data example: {scan_results, {NumberResults, [#{ssid => SSID, rssi => DBM, authmode => Mode, bssid => Bssid, chanel => ChNumber}]}}
+    size_t ap_data_size = (TERM_MAP_SIZE(5) + TERM_BINARY_HEAP_SIZE(SSID_MAX_SIZE) + TERM_BINARY_HEAP_SIZE(BSSID_SIZE));
+    size_t results_size = (PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + BOXED_INT_SIZE + LIST_SIZE(return_results, ap_data_size));
+    ESP_LOGD(TAG, "Requesting size '%zu' on heap for scan results", results_size);
+
+    Heap heap;
+    if (UNLIKELY(memory_init_heap(&heap, results_size) != MEMORY_GC_OK)) {
+        esp_wifi_clear_ap_list();
+        free(ap_records);
+        ap_records = NULL;
+        err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2), err_heap);
+        send_scan_error_from_task(data->global, data->owner_process_id, OUT_OF_MEMORY_ATOM, data->ref_ticks, err_heap);
+        END_WITH_STACK_HEAP(err_heap, data->global);
+        if (UNLIKELY(err != ESP_OK)) {
+            ESP_LOGE(TAG, "Failed to unregister event handler for reason %s, future scans may fail", esp_err_to_name(err));
+        } else {
+            free(data);
+        }
+        return;
+    }
+
+    // Unregister the callback, but do not report any problems until after results have been sent.
+    err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+
+    term networks_data_list = term_nil();
+    if (return_results != 0) {
+        networks_data_list = wifi_ap_records_to_list_maybe_gc(data->global, ap_records, return_results, &heap);
+    }
+    free(ap_records);
+    ap_records = NULL;
+
+    term scan_results = port_heap_create_tuple2(&heap, term_from_int(discovered), networks_data_list);
+
+    term scan_results_atom = globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\xC", "scan_results"));
+    term results_tuple = port_heap_create_tuple2(&heap, scan_results_atom, scan_results);
+
+    term ref = term_from_ref_ticks(data->ref_ticks, &heap);
+    term msg = port_heap_create_tuple2(&heap, ref, results_tuple);
+
+    port_send_message_from_task(data->global, term_from_local_process_id(data->owner_process_id), msg);
+    memory_destroy_heap_from_task(&heap, data->global);
+
+    // Send this event unregister error after the good scan results. If this problem is observed, blocking scans
+    // may need the error included along with the good results (since future scans may fail). This should be an
+    // exremely unlikely scenario.
+    if (UNLIKELY(err != ESP_OK)) {
+        ESP_LOGE(TAG, "Failed to unregister event handler for reason %s, future scans may fail", esp_err_to_name(err));
+        const char *error = esp_err_to_name(err);
+        size_t error_len = strlen(error);
+        BEGIN_WITH_STACK_HEAP(PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(error_len), err_heap);
+
+        term reason = term_from_const_binary((const uint8_t *) error, (uint16_t) error_len, &err_heap, data->global);
+        term unregister_handler_atom = globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\x12", "unregister_handler"));
+        term reason_tuple = port_heap_create_tuple2(&err_heap, unregister_handler_atom, reason);
+        term error_tuple = port_heap_create_error_tuple(&err_heap, reason_tuple);
+        term payload = port_heap_create_tuple2(&err_heap, globalcontext_existing_term_from_atom_string(data->global, ATOM_STR("\xC", "scan_results")), error_tuple);
+
+        term ref = term_from_ref_ticks(data->ref_ticks, &err_heap);
+        term msg = port_heap_create_tuple2(&err_heap, ref, payload);
+        term pid = term_from_local_process_id(data->owner_process_id);
+        port_send_message_from_task(data->global, pid, msg);
+        END_WITH_STACK_HEAP(err_heap, data->global);
+    } else {
+        free(data);
+    }
+}
 
 //
-// Event Handler
+// Event Handlers
 //
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
+    // TODO: Change all of the logging in event_handler to debug level, or move it to the
+    // called send_* functions. We should not do any io operations inside the callback handler,
+    // but debug output seems a fair trade off.
     struct ClientData *data = (struct ClientData *) arg;
-
     if (event_base == WIFI_EVENT) {
 
         switch (event_id) {
 
             case WIFI_EVENT_STA_START: {
+                // TODO: expose an erlang callback so applications can choose how to respond to this
+                // event, i.e. start a periodic scan for known networks, or initiate a connection
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_START received.");
                 if (!data->managed) {
                     esp_wifi_connect();
@@ -299,14 +748,14 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
             case WIFI_EVENT_AP_STACONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_AP_STACONNECTED received.");
-                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_base;
+                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *) event_data;
                 send_ap_sta_connected(data, event->mac);
                 break;
             }
 
             case WIFI_EVENT_AP_STADISCONNECTED: {
                 ESP_LOGI(TAG, "WIFI_EVENT_AP_STADISCONNECTED received.");
-                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_base;
+                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *) event_data;
                 send_ap_sta_disconnected(data, event->mac);
                 break;
             }
@@ -328,6 +777,17 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
             case WIFI_EVENT_STA_BEACON_TIMEOUT: {
                 ESP_LOGI(TAG, "WIFI_EVENT_STA_BEACON_TIMEOUT received. Maybe poor signal, or network congestion?");
                 send_sta_beacon_timeout(data);
+                break;
+            }
+
+            case WIFI_EVENT_SCAN_DONE: {
+                ESP_LOGD(TAG, "WiFI network scan complete.");
+                // Assure this wont be optimized away (if logging is disabled or lower than debug), so that
+                // the gen_server doesn't receive spurious "Unhandled wifi event: 1" messages. The real handler
+                // (scan_done_handler) is registered and unregistered per request. We catch this here so that
+                // we can subscribe to all wifi events in network_start, otherwise each event needs to be
+                // subscribed and unsubscribed individually.
+                asm("nop");
                 break;
             }
 
@@ -381,6 +841,17 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
 }
 
+static void scan_done_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+{
+    UNUSED(event_data)
+    struct ScanData *data = (struct ScanData *) arg;
+
+    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_SCAN_DONE) {
+        ESP_LOGD(TAG, "Scan complete.");
+        send_scan_results(data);
+    }
+}
+
 //
 // message processing
 //
@@ -415,6 +886,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
         ESP_LOGE(TAG, "get_sta_wifi_config: Invalid SSID");
         return NULL;
     }
+
     char *psk = NULL;
     if (term_is_invalid_term(pass_term)) {
         ESP_LOGW(TAG, "Warning: Attempting to connect to open network");
@@ -441,7 +913,7 @@ static wifi_config_t *get_sta_wifi_config(term sta_config, GlobalContext *global
         free(psk);
         return NULL;
     }
-    if (UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
+    if (!IS_NULL_PTR(psk) && UNLIKELY(strlen(psk) > sizeof(wifi_config->sta.password))) {
         ESP_LOGE(TAG, "psk cannot be more than %d characters", sizeof(wifi_config->sta.password));
         free(ssid);
         free(psk);
@@ -686,8 +1158,6 @@ static void start_network(Context *ctx, term pid, term ref, term config)
     data->ref_ticks = term_to_ref_ticks(ref);
     data->managed = roaming;
 
-    esp_err_t err;
-
     esp_netif_t *sta_wifi_interface = NULL;
     if ((sta_wifi_config != NULL) || (roaming)) {
         sta_wifi_interface = esp_netif_create_default_wifi_sta();
@@ -709,26 +1179,28 @@ static void start_network(Context *ctx, term pid, term ref, term config)
         }
     }
 
+    esp_err_t err;
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     if (UNLIKELY_NOT_ESP_OK(err = esp_wifi_init(&cfg))) {
-        ESP_LOGE(TAG, "Failed to initialize ESP WiFi");
+        ESP_LOGE(TAG, "Failed to initialize ESP WiFi, reason: %s", esp_err_to_name(err));
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
         goto cleanup;
     }
     if (UNLIKELY((err = esp_wifi_set_storage(WIFI_STORAGE_FLASH)) != ESP_OK)) {
-        ESP_LOGE(TAG, "Failed to set ESP WiFi storage");
+        ESP_LOGE(TAG, "Failed to set ESP WiFi storage, reason: %s", esp_err_to_name(err));
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
         goto cleanup;
     }
 
     if ((err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, data)) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to register wifi event handler");
+        ESP_LOGE(TAG, "Failed to register wifi event handler, reason: %s", esp_err_to_name(err));
         term error = port_create_error_tuple(ctx, term_from_int(err));
         port_send_reply(ctx, pid, ref, error);
         goto cleanup;
     }
+
     if ((err = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, data)) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register got_ip event handler");
         term error = port_create_error_tuple(ctx, term_from_int(err));
@@ -838,7 +1310,6 @@ cleanup:
 
 static void stop_network(Context *ctx)
 {
-
     // Stop sntp (ignore OK, or not configured error)
     esp_sntp_stop();
 
@@ -847,6 +1318,7 @@ static void stop_network(Context *ctx)
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
     esp_event_handler_unregister(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, &event_handler);
     esp_event_handler_unregister(sntp_event_base, SNTP_EVENT_BASE_SYNC, &event_handler);
+    esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
 
     esp_netif_t *sta_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_t *ap_wifi_interface = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
@@ -901,7 +1373,7 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
     term rssi = term_from_int(sta_rssi);
     // {Ref, {rssi, -25}}
     port_ensure_available(ctx, tuple_reply_size);
-    term reply = port_create_tuple2(ctx, make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);
+    term reply = port_create_tuple2(ctx, make_atom(ctx->global, rssi_atom), rssi);
     port_send_reply(ctx, pid, ref, reply);
 }
 
@@ -1033,6 +1505,219 @@ static void sta_reconnect(Context *ctx, term pid, term ref)
     port_send_reply(ctx, pid, ref, OK_ATOM);
 }
 
+static void wifi_scan(Context *ctx, term pid, term ref, term config)
+{
+    static const char *const scan_results = ATOM_STR("\xC", "scan_results");
+    if (UNLIKELY(globalcontext_make_atom(ctx->global, scan_results) == term_invalid_term())) {
+        size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2);
+        port_ensure_available(ctx, error_size);
+
+        term ret = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+        port_send_reply(ctx, pid, ref, ret);
+        return;
+    }
+
+    wifi_mode_t mode;
+    esp_err_t err = esp_wifi_get_mode(&mode);
+    if ((err != ESP_OK) || ((mode != WIFI_MODE_STA) && (mode != WIFI_MODE_APSTA))) {
+        ESP_LOGE(TAG, "WiFi must already be configured in STA or AP+STA mode to use network:wifi_scan/0,1");
+        term reason = make_atom(ctx->global, ATOM_STR("\x10", "unsupported_mode"));
+        send_scan_error_reason(ctx, pid, ref, reason);
+        return;
+    }
+
+    term cfg_results = interop_kv_get_value_default(config, ATOM_STR("\x7", "results"), term_from_int(DEFAULT_SCAN_RESULT_MAX), ctx->global);
+    if (UNLIKELY(!term_is_integer(cfg_results))) {
+        ESP_LOGE(TAG, "results option must be an integer (i.e. {results, 6})");
+        send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+        return;
+    }
+
+    int32_t requested_results = term_to_int(cfg_results);
+    if (UNLIKELY((requested_results < 1) || (requested_results > MAX_SCAN_RESULTS))) {
+        ESP_LOGE(TAG, "results option must be between 1 and %i on this platform.", MAX_SCAN_RESULTS);
+        send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+        return;
+    }
+    uint16_t num_results = (uint16_t) requested_results;
+    ESP_LOGD(TAG, "Scan will return a maximum of %u results", num_results);
+
+    term term_passive = interop_kv_get_value_default(config, ATOM_STR("\x7", "passive"), term_invalid_term(), ctx->global);
+    bool active_scan = true;
+    if (!term_is_invalid_term(term_passive)) {
+        if ((term_passive == TRUE_ATOM) || (term_passive == make_atom(ctx->global, ATOM_STR("\x7", "passive")))) {
+            active_scan = false;
+        } else if (term_passive != FALSE_ATOM) {
+            send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+            return;
+        }
+    }
+
+    term cfg_dwell = interop_kv_get_value_default(config, ATOM_STR("\x5", "dwell"), term_invalid_term(), ctx->global);
+    uint32_t dwell_ms = 0;
+    if (cfg_dwell == term_invalid_term()) {
+        if (active_scan == true) {
+            dwell_ms = IDF_DEFAULT_ACTIVE_SCAN_TIME;
+        } else {
+            dwell_ms = IDF_DEFAULT_PASSIVE_SCAN_TIME;
+        }
+    } else {
+        if (UNLIKELY(!term_is_integer(cfg_dwell))) {
+            ESP_LOGE(TAG, "Channel dwell time milliseconds must be an integer (i.e. {dwell, 250})");
+            send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+            return;
+        }
+        dwell_ms = (uint32_t) term_to_int(cfg_dwell);
+        if (UNLIKELY((dwell_ms < 1lu) || (dwell_ms > 1500lu))) {
+            ESP_LOGE(TAG, "Per channel dwell time milliseconds must be {dwell, 1..1500}");
+            send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+            return;
+        } else {
+            ESP_LOGD(TAG, "Scan will spend %lu ms per channel", dwell_ms);
+        }
+    }
+
+    term term_hidden = interop_kv_get_value_default(config, ATOM_STR("\xB", "show_hidden"), term_invalid_term(), ctx->global);
+    bool show_hidden = false;
+    if (!term_is_invalid_term(term_hidden)) {
+        if ((term_hidden == TRUE_ATOM) || (term_hidden == make_atom(ctx->global, ATOM_STR("\xB", "show_hidden")))) {
+            show_hidden = true;
+        } else if (term_hidden != FALSE_ATOM) {
+            send_scan_error_reason(ctx, pid, ref, BADARG_ATOM);
+            return;
+        }
+    }
+
+    wifi_scan_type_t scan_type = WIFI_SCAN_TYPE_ACTIVE;
+    switch (active_scan) {
+        case false:
+            scan_type = WIFI_SCAN_TYPE_PASSIVE;
+            break;
+        case true:
+            break;
+    }
+
+    wifi_scan_config_t *scan_config = (wifi_scan_config_t *) calloc(1, sizeof(wifi_scan_config_t));
+    if (IS_NULL_PTR(scan_config)) {
+        ESP_LOGE(TAG, "Unable to allocate memory for configuration");
+        send_scan_error_reason(ctx, pid, ref, OUT_OF_MEMORY_ATOM);
+        return;
+    }
+
+    if (scan_type == WIFI_SCAN_TYPE_ACTIVE) {
+        scan_config->scan_time.active.max = dwell_ms;
+        // For fast scans use the same min time as max (like ESP-IDF default), but for longer
+        // per-channel dwell times set the min scan time to 1/2 of the maximum, but never less
+        // than the 120ms min used in the default scan.
+        if (dwell_ms > IDF_DEFAULT_ACTIVE_SCAN_TIME * 2) {
+            scan_config->scan_time.active.min = (dwell_ms / 2);
+        } else {
+            scan_config->scan_time.active.min = dwell_ms;
+        }
+    } else {
+        scan_config->scan_time.passive = dwell_ms;
+        if (dwell_ms > 1000) {
+            // Increase home channel dwell between scanning consecutive channel from 30 to 60ms to prevent beacon timeouts
+            scan_config->home_chan_dwell_time = 60;
+        }
+    }
+
+    scan_config->show_hidden = show_hidden;
+    scan_config->scan_type = scan_type;
+
+    if (UNLIKELY(!ensure_scan_atoms_exist(ctx->global))) {
+        ESP_LOGE(TAG, "Unable to allocate atoms for scan return, atom table exhausted or OOM!");
+        send_scan_error_reason(ctx, pid, ref, OUT_OF_MEMORY_ATOM);
+        free(scan_config);
+        return;
+    }
+
+    struct ScanData *data = malloc(sizeof(struct ScanData));
+    if (IS_NULL_PTR(data)) {
+        ESP_LOGE(TAG, "Failed to allocate ClientData");
+        send_scan_error_reason(ctx, pid, ref, OUT_OF_MEMORY_ATOM);
+        free(scan_config);
+        return;
+    }
+    data->global = ctx->global;
+    data->owner_process_id = term_to_local_process_id(pid);
+    data->ref_ticks = term_to_ref_ticks(ref);
+    data->num_results = num_results;
+
+    if ((err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler, data)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register wifi event handler");
+        send_scan_error_reason(ctx, pid, ref, term_from_int(err));
+        free(data);
+        free(scan_config);
+        return;
+    }
+
+    err = esp_wifi_scan_start(scan_config, false);
+    free(scan_config);
+    scan_config = NULL;
+    if (UNLIKELY(err != ESP_OK)) {
+        const char *err_str = esp_err_to_name(err);
+        size_t error_len = strlen(err_str);
+        size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(error_len);
+        port_ensure_available(ctx, error_size);
+        term reason = term_from_literal_binary((const uint8_t *) err_str, (uint16_t) error_len, &ctx->heap, ctx->global);
+        term scan_results_atom = globalcontext_existing_term_from_atom_string(ctx->global, ATOM_STR("\xC", "scan_results"));
+        term ret = port_create_tuple2(ctx, scan_results_atom, port_create_error_tuple(ctx, reason));
+        err = esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, &scan_done_handler);
+        port_send_reply(ctx, pid, ref, ret);
+        if (UNLIKELY(err != ESP_OK)) {
+            ESP_LOGE(TAG, "Failed to unregister event handler, future scans may fail");
+        } else {
+            free(data);
+        }
+    }
+    return;
+}
+
+static void cancel_scan(Context *ctx, term pid, term ref, term reply_to)
+{
+    term scan_canceled_atom = make_atom(ctx->global, ATOM_STR("\xD", "scan_canceled"));
+    if (UNLIKELY(scan_canceled_atom == term_invalid_term())) {
+        size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(2) + TUPLE_SIZE(2);
+        port_ensure_available(ctx, error_size);
+
+        term ret = port_create_error_tuple(ctx, OUT_OF_MEMORY_ATOM);
+        port_send_reply(ctx, pid, ref, ret);
+        return;
+    }
+
+    esp_err_t err = esp_wifi_scan_stop();
+    if (UNLIKELY(err == ESP_ERR_WIFI_STATE)) {
+        ESP_LOGE(TAG, "Unable to stop wifi scan, wifi is negotiating a connection to an access point");
+
+        size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(3) + TUPLE_SIZE(2);
+        port_ensure_available(ctx, error_size);
+
+        term reason = make_atom(ctx->global, ATOM_STR("\xE", "sta_connecting"));
+        term error_tuple = port_create_error_tuple(ctx, reason);
+        term ret = port_create_tuple3(ctx, scan_canceled_atom, reply_to, error_tuple);
+        port_send_reply(ctx, pid, ref, ret);
+        return;
+
+    } else if (UNLIKELY(err != ESP_OK)) {
+        const char *err_str = esp_err_to_name(err);
+        size_t error_len = strlen(err_str);
+        size_t error_size = PORT_REPLY_SIZE + TUPLE_SIZE(3) + TUPLE_SIZE(2) + TERM_BINARY_HEAP_SIZE(error_len);
+        port_ensure_available(ctx, error_size);
+
+        term reason = term_from_const_binary((const uint8_t *) err_str, (uint16_t) error_len, &ctx->heap, ctx->global);
+        term error_tuple = port_create_error_tuple(ctx, reason);
+        term ret = port_create_tuple3(ctx, scan_canceled_atom, reply_to, error_tuple);
+        port_send_reply(ctx, pid, ref, ret);
+        return;
+    }
+
+    size_t reply_size = PORT_REPLY_SIZE + TUPLE_SIZE(3);
+    port_ensure_available(ctx, reply_size);
+    term reply = port_create_tuple3(ctx, scan_canceled_atom, reply_to, OK_ATOM);
+    port_send_reply(ctx, pid, ref, reply);
+}
+
 static NativeHandlerResult consume_mailbox(Context *ctx)
 {
     bool cmd_terminate = false;
@@ -1071,6 +1756,12 @@ static NativeHandlerResult consume_mailbox(Context *ctx)
             case NetworkStopCmd:
                 cmd_terminate = true;
                 stop_network(ctx);
+                break;
+            case NetworkScanCmd:
+                wifi_scan(ctx, pid, ref, config);
+                break;
+            case NetworkScanStopCmd:
+                cancel_scan(ctx, pid, ref, config);
                 break;
             case StaHaltCmd:
                 sta_disconnect(ctx, pid, ref);
@@ -1140,7 +1831,6 @@ Context *network_driver_create_port(GlobalContext *global, term opts)
 
     Context *ctx = context_new(global);
     ctx->native_handler = consume_mailbox;
-    ctx->platform_data = NULL;
     return ctx;
 }
 

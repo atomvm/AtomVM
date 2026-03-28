@@ -9,9 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
+- Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.
 
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic
+- Changed ESP32-C5 IDF logging to V2 to reduce the compiled size
+- Updated network type db() to dbm() to reflect the actual representation of the type
 
 ### Fixed
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
