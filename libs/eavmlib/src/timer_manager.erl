@@ -60,18 +60,13 @@ start_timer(Time, Dest, Msg) ->
     gen_server:call(?SERVER_NAME, {Time, Dest, Msg}).
 
 %%-----------------------------------------------------------------------------
-%% @hidden
-%% @param   Time time in milliseconds after which to send the timeout message.
-%% @param   Dest Pid or server name to which to send the timeout message.
-%% @param   Msg Message to send to Dest after Time ms.
-%% @param   Options options
-%% @returns a reference that can be used to cancel the timer, if desired.
-%% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
-%%          Time ms, where TimerRef is the reference returned from this function.
-%%
-%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%% @param   TimerRef a timer reference returned from {@link start_timer/3}.
+%% @returns the time in milliseconds left until the timer would have expired,
+%%          or `false' if the timer was not found.
+%% @doc     Cancel a timer.
+%% @end
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef :: reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> false | non_neg_integer().
 cancel_timer(TimerRef) ->
     maybe_start(),
     gen_server:call(?SERVER_NAME, {cancel, TimerRef}).

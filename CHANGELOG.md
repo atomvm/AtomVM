@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ~10% binary size reduction by rewriting module loading logic
 
 ### Fixed
+- Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
 
 ## [0.7.0-alpha.0] - 2026-03-20
