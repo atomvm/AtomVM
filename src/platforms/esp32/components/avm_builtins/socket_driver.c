@@ -49,7 +49,7 @@
 #include <lwip/ip_addr.h>
 #pragma GCC diagnostic pop
 
-//#define ENABLE_TRACE 1
+// #define ENABLE_TRACE 1
 #include "trace.h"
 
 #define TAG "socket_driver"
@@ -69,7 +69,8 @@ static Context *socket_driver_create_port(GlobalContext *global, term opts);
 
 static NativeHandlerResult socket_consume_mailbox(Context *ctx);
 
-static const char *const tcp_error_atom = "\x9" "tcp_error";
+static const char *const tcp_error_atom = "\x9"
+                                          "tcp_error";
 
 static const char *const netconn_event_internal = ATOM_STR("\x1E", "$atomvm_netconn_event_internal");
 static const char *gen_tcp_moniker_atom = ATOM_STR("\xC", "$avm_gen_tcp");
@@ -146,7 +147,7 @@ static term socket_addr_to_tuple(Heap *heap, ip_addr_t *addr)
             break;
         }
         case IPADDR_TYPE_V6:
-            //TODO: implement IPv6
+            // TODO: implement IPv6
             addr_tuple = term_invalid_term();
             break;
 
@@ -223,7 +224,6 @@ struct NetconnEvent
     struct netconn *netconn;
     u16_t len;
 };
-
 
 struct ReadyConnection
 {
@@ -306,7 +306,7 @@ EventListener *socket_events_handler(GlobalContext *glb, EventListener *listener
             } else {
                 // Add it to ready_connections
                 TRACE("Got event for unknown conn: %p, len = %d adding to ready connections list\n", (void *) event.netconn, event.len);
-                struct ReadyConnection *ready = (struct ReadyConnection *) malloc(sizeof (struct ReadyConnection));
+                struct ReadyConnection *ready = (struct ReadyConnection *) malloc(sizeof(struct ReadyConnection));
                 ready->netconn = event.netconn;
                 ready->len = event.len;
                 list_append(&platform->ready_connections, &ready->ready_connection_head);
@@ -558,7 +558,6 @@ static void accept_conn(Context *ctx, struct TCPServerSocketData *tcp_data, uint
     }
 
     do_send_reply(ctx, result_tuple, ref_ticks, pid);
-
 }
 
 static void do_accept(Context *ctx, const GenMessage *gen_message)
@@ -746,7 +745,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
             do_send_socket_error(ctx, ERR_BUF);
             return NativeContinue;
         }
-        term port = term_from_int32(netbuf_fromport(buf));
+        term port = term_from_int28(netbuf_fromport(buf));
         recv_term = term_alloc_tuple(3, &ctx->heap);
         term_put_tuple_element(recv_term, 0, addr_term);
         term_put_tuple_element(recv_term, 1, port);
@@ -763,15 +762,11 @@ static NativeHandlerResult do_receive_data(Context *ctx)
 
     netbuf_delete(buf);
 
-
     if (socket_data->active) {
         term active_tuple = term_alloc_tuple(socket_data->type == TCPClientSocket ? 3 : 5, &ctx->heap);
         term_put_tuple_element(active_tuple, 0, socket_data->type == TCPClientSocket ? TCP_ATOM : UDP_ATOM);
         term socket_pid = term_port_from_local_process_id(ctx->process_id);
-        term socket_wrapper =
-            socket_data->type == UDPSocket ?
-                create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) :
-                create_tcp_socket_wrapper(socket_pid, &ctx->heap, ctx->global);
+        term socket_wrapper = socket_data->type == UDPSocket ? create_udp_socket_wrapper(socket_pid, &ctx->heap, ctx->global) : create_tcp_socket_wrapper(socket_pid, &ctx->heap, ctx->global);
         term_put_tuple_element(active_tuple, 1, socket_wrapper);
         if (socket_data->type == TCPClientSocket) {
             term_put_tuple_element(active_tuple, 2, recv_term);
@@ -782,9 +777,9 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         }
         globalcontext_send_message(ctx->global, socket_data->controlling_process_pid, active_tuple);
         TRACE("sent received to active process (pid=%d): ", (int) socket_data->controlling_process_pid);
-        #ifdef ENABLE_TRACE
-            term_display(stdout, active_tuple, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, active_tuple, ctx);
+#endif
         TRACE("\n");
     } else {
         term ok_tuple = term_alloc_tuple(2, &ctx->heap);
@@ -792,9 +787,9 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         term_put_tuple_element(ok_tuple, 1, recv_term);
         do_send_passive_reply(ctx, socket_data, ok_tuple);
         TRACE("sent received to passive caller (pid=%d): ", (int) socket_data->passive_receiver_process_pid);
-        #ifdef ENABLE_TRACE
-            term_display(stdout, ok_tuple, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, ok_tuple, ctx);
+#endif
         TRACE("\n");
     }
 
@@ -906,7 +901,7 @@ static void do_connect(Context *ctx, const GenMessage *gen_message)
     TRACE("tcp: connecting to: %s\n", address_string);
 
     ip_addr_t remote_ip;
-    //TODO: use dns_gethostbyname instead
+    // TODO: use dns_gethostbyname instead
     err_t status = netconn_gethostbyname(address_string, &remote_ip);
     if (UNLIKELY(status != ERR_OK)) {
         free(address_string);
@@ -1420,9 +1415,9 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         term msg = message->message;
 
         TRACE("message: ");
-        #ifdef ENABLE_TRACE
-            term_display(stdout, msg, ctx);
-        #endif
+#ifdef ENABLE_TRACE
+        term_display(stdout, msg, ctx);
+#endif
         TRACE("\n");
 
         if (term_is_tuple(msg) && term_get_tuple_element(msg, 0) == globalcontext_make_atom(glb, netconn_event_internal)) {
@@ -1447,7 +1442,7 @@ static NativeHandlerResult socket_consume_mailbox(Context *ctx)
         term cmd_name = term_get_tuple_element(gen_message.req, 0);
 
         switch (cmd_name) {
-            //TODO: remove this
+            // TODO: remove this
             case INIT_ATOM:
                 TRACE("init\n");
                 do_init(ctx, &gen_message);

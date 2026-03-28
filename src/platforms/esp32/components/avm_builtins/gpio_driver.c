@@ -69,8 +69,10 @@ static Context *gpio_driver_create_port(GlobalContext *global, term opts);
 #endif
 
 #ifdef CONFIG_AVM_ENABLE_GPIO_PORT_DRIVER
-static const char *const gpio_atom = "\x4" "gpio";
-static const char *const gpio_driver_atom = "\xB" "gpio_driver";
+static const char *const gpio_atom = "\x4"
+                                     "gpio";
+static const char *const gpio_driver_atom = "\xB"
+                                            "gpio_driver";
 #endif
 
 static const AtomStringIntPair pin_mode_table[] = {
@@ -376,7 +378,7 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
 
     term int_msg = term_alloc_tuple(2, &heap);
     term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
-    term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
+    term_put_tuple_element(int_msg, 1, term_from_int11(gpio_num));
 
     globalcontext_send_message(glb, listening_pid, int_msg);
 
@@ -484,7 +486,6 @@ static term gpiodriver_set_int(Context *ctx, int32_t target_pid, term cmd)
     } else {
         target_local_pid = target_pid;
     }
-
 
     /* TODO: GPIO specific atoms should be removed from platform_defaultatoms and constructed within this driver */
     gpio_int_type_t interrupt_type;
@@ -773,32 +774,27 @@ static term nif_gpio_wakeup_enable(Context *ctx, int argc, term argv[])
     return (ret == ESP_OK) ? OK_ATOM : ERROR_ATOM;
 }
 
-static const struct Nif gpio_init_nif =
-{
+static const struct Nif gpio_init_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_init
 };
 
-static const struct Nif gpio_set_pin_mode_nif =
-{
+static const struct Nif gpio_set_pin_mode_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_set_pin_mode
 };
 
-static const struct Nif gpio_set_pin_pull_nif =
-{
+static const struct Nif gpio_set_pin_pull_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_set_pin_pull
 };
 
-static const struct Nif gpio_hold_en_nif =
-{
+static const struct Nif gpio_hold_en_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_hold_en
 };
 
-static const struct Nif gpio_hold_dis_nif =
-{
+static const struct Nif gpio_hold_dis_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_hold_dis
 };
@@ -809,15 +805,13 @@ static const struct Nif gpio_deep_sleep_hold_en_nif = {
     .nif_ptr = nif_gpio_deep_sleep_hold_en
 };
 
-static const struct Nif gpio_deep_sleep_hold_dis_nif =
-{
+static const struct Nif gpio_deep_sleep_hold_dis_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_deep_sleep_hold_dis
 };
 #endif
 
-static const struct Nif gpio_digital_write_nif =
-{
+static const struct Nif gpio_digital_write_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_digital_write
 };
@@ -827,8 +821,7 @@ static const struct Nif gpio_digital_read_nif = {
     .nif_ptr = nif_gpio_digital_read
 };
 
-static const struct Nif gpio_wakeup_enable_nif =
-{
+static const struct Nif gpio_wakeup_enable_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_gpio_wakeup_enable
 };
