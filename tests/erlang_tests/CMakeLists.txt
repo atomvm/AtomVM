@@ -561,6 +561,7 @@ compile_erlang(test_allocate_zero)
 compile_erlang(test_has_map_fields)
 compile_erlang(test_bs_create_bin_accum)
 compile_assembler(test_bs_create_bin_accum_asm)
+compile_erlang(test_no_bs_create_bin)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -1120,6 +1121,7 @@ set(erlang_test_beams
     test_allocate_zero.beam
     test_has_map_fields.beam
     test_bs_create_bin_accum.beam
+    test_no_bs_create_bin.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam

@@ -62,6 +62,10 @@
 #define SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE 1
 #endif
 
+#ifndef SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN
+#define SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN 1
+#endif
+
 // About X macro: https://en.wikipedia.org/wiki/X_macro
 #define X_OPCODE(op_name, num, lower_name, signature) \
     op_name = num,
@@ -3275,6 +3279,7 @@ schedule_in:
                 break;
             }
 
+#if SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN
             case OP_BS_ADD: {
                 uint32_t fail;
                 DECODE_LABEL(fail, pc)
@@ -3297,6 +3302,470 @@ schedule_in:
                 WRITE_REGISTER(dreg, term_from_int((src1_val + src2_val) * unit));
                 break;
             }
+
+            case OP_BS_INIT_BITS: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                uint32_t words;
+                DECODE_LITERAL(words, pc)
+                uint32_t live;
+                DECODE_LITERAL(live, pc)
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc)
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                VERIFY_IS_INTEGER(size, "bs_init_bits", 0);
+                avm_int_t size_val = term_to_int(size);
+                if (size_val % 8 != 0) {
+                    TRACE("bs_init_bits: size_val (" AVM_INT_FMT ") is not evenly divisible by 8\n", size_val);
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                if (flags_value != 0) {
+                    TRACE("bs_init_bits: neither signed nor native or little endian encoding supported.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+
+                TRACE("bs_init_bits/6, fail=%i size=" AVM_INT_FMT " words=%u live=%u dreg=%c%i\n", fail, size_val, (unsigned) words, (unsigned) live, T_DEST_REG(dreg));
+
+                TRIM_LIVE_REGS(live);
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, words + term_binary_heap_size(size_val / 8), live, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                term t = term_create_empty_binary(size_val / 8, &ctx->heap, ctx->global);
+                if (UNLIKELY(term_is_invalid_term(t))) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+
+                ctx->bs = t;
+                ctx->bs_offset = 0;
+
+                WRITE_REGISTER(dreg, t);
+                break;
+            }
+
+            case OP_BS_APPEND: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                term extra;
+                UNUSED(extra);
+                DECODE_COMPACT_TERM(extra, pc)
+                uint32_t live;
+                DECODE_LITERAL(live, pc);
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+                term flags;
+                UNUSED(flags);
+                DECODE_COMPACT_TERM(flags, pc)
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                VERIFY_IS_BINARY(src, "bs_append", 0);
+                VERIFY_IS_INTEGER(size, "bs_append", 0);
+                avm_int_t size_val = term_to_int(size);
+
+                if (size_val % 8 != 0) {
+                    TRACE("bs_append: size_val (" AVM_INT_FMT ") is not evenly divisible by 8\n", size_val);
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                if (unit != 8) {
+                    TRACE("bs_append: unit is not equal to 8; unit=%u\n", (unsigned) unit);
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+
+                size_t src_size = term_binary_size(src);
+                TRIM_LIVE_REGS(live);
+                x_regs[live] = src;
+                if (UNLIKELY(memory_ensure_free_with_roots(ctx, term_binary_heap_size(src_size + size_val / 8), live + 1, x_regs, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+
+                TRACE("bs_append/8, fail=%u size=" AVM_INT_FMT " unit=%u src=0x%" TERM_X_FMT " dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
+                src = x_regs[live];
+                term t = term_create_empty_binary(src_size + size_val / 8, &ctx->heap, ctx->global);
+                if (UNLIKELY(term_is_invalid_term(t))) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                memcpy((void *) term_binary_data(t), (void *) term_binary_data(src), src_size);
+
+                ctx->bs = t;
+                ctx->bs_offset = src_size * 8;
+
+                WRITE_REGISTER(dreg, t);
+                break;
+            }
+
+            case OP_BS_PRIVATE_APPEND: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                term src;
+                const uint8_t *src_pc = pc;
+                DECODE_COMPACT_TERM(src, pc)
+                term flags;
+                UNUSED(flags);
+                DECODE_COMPACT_TERM(flags, pc)
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                VERIFY_IS_BINARY(src, "bs_private_append", 0);
+                VERIFY_IS_INTEGER(size, "bs_private_append", 0);
+                avm_int_t size_val = term_to_int(size);
+
+                if (size_val % 8 != 0) {
+                    TRACE("bs_private_append: size_val (%li) is not evenly divisible by 8\n", (long int) size_val);
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+
+                size_t src_size = term_binary_size(src);
+                if (UNLIKELY(memory_ensure_free_opt(ctx, term_binary_heap_size(src_size + size_val / 8), MEMORY_NO_GC) != MEMORY_GC_OK)) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+                DECODE_COMPACT_TERM(src, src_pc)
+                term t = term_reuse_binary(src, src_size + size_val / 8, &ctx->heap, ctx->global);
+                if (UNLIKELY(term_is_invalid_term(t))) {
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+                }
+
+                ctx->bs = t;
+                ctx->bs_offset = src_size * 8;
+
+                TRACE("bs_private_append/6, fail=%u size=" AVM_INT_FMT " unit=%u src=0x%" TERM_X_FMT " dreg=%c%i\n", (unsigned) fail, size_val, (unsigned) unit, src, T_DEST_REG(dreg));
+                WRITE_REGISTER(dreg, t);
+                break;
+            }
+
+            case OP_BS_PUT_INTEGER: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc);
+
+                VERIFY_IS_ANY_INTEGER(src, "bs_put_integer", 0);
+                VERIFY_IS_INTEGER(size, "bs_put_integer", 0);
+
+                avm_int_t size_value = term_to_int(size);
+
+                if (term_is_int(src)
+                    || term_boxed_size(src) <= BOXED_TERMS_REQUIRED_FOR_INT64) {
+                    avm_int64_t src_value = term_maybe_unbox_int64(src);
+
+                    TRACE("bs_put_integer/5, fail=%u size=" AVM_INT_FMT
+                          " unit=%u flags=%x src=%i\n",
+                        (unsigned) fail, size_value, (unsigned) unit, (int) flags_value,
+                        (unsigned int) src_value);
+
+                    bool result = bitstring_insert_integer(
+                        ctx->bs, ctx->bs_offset, src_value, size_value * unit, flags_value);
+                    if (UNLIKELY(!result)) {
+                        TRACE("bs_put_integer: Failed to insert integer into binary\n");
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                } else {
+                    const intn_digit_t *big_src_value = NULL;
+                    size_t big_len = 0;
+                    intn_integer_sign_t big_sign;
+
+                    term_to_bigint(src, &big_src_value, &big_len, &big_sign);
+
+                    intn_from_integer_options_t intn_flags
+                        = bitstring_flags_to_intn_opts(flags_value);
+                    int byte_offset = ctx->bs_offset / 8;
+                    uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs) + byte_offset;
+                    size_t t_capacity = term_binary_size(ctx->bs);
+                    size_t avail = t_capacity - byte_offset;
+
+                    int written = intn_to_integer_bytes(
+                        big_src_value, big_len, big_sign, intn_flags, dst, avail);
+                    if (UNLIKELY(written < 0)) {
+                        TRACE("bs_put_integer: Failed to insert big integer into binary\n");
+                        RAISE_ERROR(BADARG_ATOM);
+                    }
+                }
+
+                ctx->bs_offset += size_value * unit;
+                break;
+            }
+
+            case OP_BS_PUT_BINARY: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc);
+
+                VERIFY_IS_BINARY(src, "bs_put_binary", 0);
+                unsigned long size_val = 0;
+                if (term_is_integer(size)) {
+                    avm_int_t bit_size = term_to_int(size) * unit;
+                    if (bit_size % 8 != 0) {
+                        TRACE("bs_put_binary: Bit size must be evenly divisible by 8.\n");
+                        RAISE_ERROR(UNSUPPORTED_ATOM);
+                    }
+                    size_val = bit_size / 8;
+                } else if (size == ALL_ATOM) {
+                    size_val = term_binary_size(src);
+                } else {
+                    TRACE("bs_put_binary: Unsupported size term type in put binary: %p\n", (void *) size);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (size_val > term_binary_size(src)) {
+                    TRACE("bs_put_binary: binary data size (%li) larger than source binary size (%li)\n", (long) size_val, (long) term_binary_size(src));
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (flags_value != 0) {
+                    TRACE("bs_put_binary: neither signed nor native or little endian encoding supported.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+
+                if (ctx->bs_offset % 8 != 0) {
+                    TRACE("bs_put_binary: Unsupported bit syntax operation.  Writing binaries must be byte-aligend.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+
+                TRACE("bs_put_binary/5, fail=%u size=%li unit=%u flags=%x src=0x%x\n", (unsigned) fail, size_val, (unsigned) unit, (int) flags_value, (unsigned int) src);
+
+                int result = term_bs_insert_binary(ctx->bs, ctx->bs_offset, src, size_val);
+                if (UNLIKELY(result)) {
+                    TRACE("bs_put_binary: Failed to insert binary into binary: %i\n", result);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                ctx->bs_offset += 8 * size_val;
+                break;
+            }
+
+            case OP_BS_PUT_FLOAT: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term size;
+                DECODE_COMPACT_TERM(size, pc)
+                uint32_t unit;
+                DECODE_LITERAL(unit, pc);
+                uint32_t flags_value;
+                DECODE_LITERAL(flags_value, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc);
+
+                avm_float_t float_value = 0;
+                bool is_number = false;
+                if (term_is_float(src)) {
+                    float_value = term_to_float(src);
+                    is_number = true;
+                } else if (term_is_any_integer(src)) {
+                    float_value = term_conv_to_float(src);
+                    is_number = isfinite(float_value);
+                }
+
+                if (UNLIKELY(!is_number)) {
+                    if (fail == 0) {
+                        RAISE_ERROR(BADARG_ATOM);
+                    } else {
+                        JUMP_TO_LABEL(mod, fail);
+                    }
+                }
+
+                avm_int_t signed_size_value = 64;
+                if (size != term_nil()) {
+                    VERIFY_IS_INTEGER(size, "bs_put_float", fail);
+                    signed_size_value = term_to_int(size);
+                    if (UNLIKELY(signed_size_value != 16 && signed_size_value != 32 && signed_size_value != 64)) {
+                        if (fail == 0) {
+                            RAISE_ERROR(BADARG_ATOM);
+                        } else {
+                            JUMP_TO_LABEL(mod, fail);
+                        }
+                    }
+                }
+
+                bool result;
+                if (signed_size_value == 16) {
+                    result = bitstring_insert_f16(ctx->bs, ctx->bs_offset, float_value, flags_value);
+                } else if (signed_size_value == 32) {
+                    result = bitstring_insert_f32(ctx->bs, ctx->bs_offset, float_value, flags_value);
+                } else {
+                    result = bitstring_insert_f64(ctx->bs, ctx->bs_offset, float_value, flags_value);
+                }
+
+                if (UNLIKELY(!result)) {
+                    TRACE("bs_put_float: Failed to insert float into binary\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+
+                ctx->bs_offset += signed_size_value * unit;
+                break;
+            }
+
+            case OP_BS_PUT_STRING: {
+                uint32_t size;
+                DECODE_LITERAL(size, pc);
+                uint32_t offset;
+                DECODE_LITERAL(offset, pc);
+
+                if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                    TRACE("bs_put_string: Bad state.  ctx->bs is not a binary.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+
+                TRACE("bs_put_string/2, size=%u offset=%u\n", size, offset);
+
+                size_t remaining = 0;
+                const uint8_t *str = module_get_str(mod, offset, &remaining);
+                if (IS_NULL_PTR(str)) {
+                    TRACE("bs_put_string: Bad offset in strings table.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+
+                size_t size_in_bits = size * 8;
+                uint8_t *dst = (uint8_t *) term_binary_data(ctx->bs);
+                bitstring_copy_bits(dst, ctx->bs_offset, str, size_in_bits);
+                ctx->bs_offset += size_in_bits;
+                break;
+            }
+
+            case OP_BS_UTF8_SIZE: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                VERIFY_IS_INTEGER(src, "bs_utf8_size/3", 0);
+                avm_int_t src_value = term_to_int(src);
+                TRACE("bs_utf8_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
+                size_t utf8_size;
+                if (UNLIKELY(!bitstring_utf8_size(src_value, &utf8_size))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                WRITE_REGISTER(dreg, term_from_int(utf8_size));
+                break;
+            }
+
+            case OP_BS_PUT_UTF8: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                uint32_t flags;
+                DECODE_LITERAL(flags, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+
+                VERIFY_IS_INTEGER(src, "bs_put_utf8/3", 0);
+                avm_int_t src_value = term_to_int(src);
+                TRACE("bs_put_utf8/3 flags=%x, src=0x%lx\n", (int) flags, (long) src_value);
+                if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                    TRACE("bs_put_utf8/3: Bad state.  ctx->bs is not a binary.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (ctx->bs_offset % 8 != 0) {
+                    TRACE("bs_put_utf8/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                size_t byte_size;
+                bool result = bitstring_insert_utf8(ctx->bs, ctx->bs_offset, src_value, &byte_size);
+                if (UNLIKELY(!result)) {
+                    TRACE("bs_put_utf8/3: Failed to insert character as utf8 into binary: %i\n", result);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                ctx->bs_offset += byte_size * 8;
+                break;
+            }
+
+            case OP_BS_UTF16_SIZE: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+                DEST_REGISTER(dreg);
+                DECODE_DEST_REGISTER(dreg, pc);
+
+                VERIFY_IS_INTEGER(src, "bs_utf16_size/3", 0);
+                avm_int_t src_value = term_to_int(src);
+                TRACE("bs_utf16_size/3 fail=%i src=0x%lx dreg=%c%i\n", fail, (long) src_value, T_DEST_REG(dreg));
+                size_t utf16_size;
+                if (UNLIKELY(!bitstring_utf16_size(src_value, &utf16_size))) {
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                WRITE_REGISTER(dreg, term_from_int(utf16_size));
+                break;
+            }
+
+            case OP_BS_PUT_UTF16: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                uint32_t flags;
+                DECODE_LITERAL(flags, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+
+                VERIFY_IS_INTEGER(src, "bs_put_utf16/3", 0);
+                avm_int_t src_value = term_to_int(src);
+                TRACE("bs_put_utf16/3 flags=%x, src=" AVM_INT_FMT "\n", (int) flags, src_value);
+                if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                    TRACE("bs_put_utf16: Bad state.  ctx->bs is not a binary.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (ctx->bs_offset % 8 != 0) {
+                    TRACE("bs_put_utf16: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                size_t byte_size;
+                bool result = bitstring_insert_utf16(ctx->bs, ctx->bs_offset, src_value, flags, &byte_size);
+                if (UNLIKELY(!result)) {
+                    TRACE("bs_put_utf16/3: Failed to insert character as utf16 into binary: %i\n", result);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                ctx->bs_offset += byte_size * 8;
+                break;
+            }
+
+            case OP_BS_PUT_UTF32: {
+                uint32_t fail;
+                DECODE_LABEL(fail, pc)
+                uint32_t flags;
+                DECODE_LITERAL(flags, pc)
+                term src;
+                DECODE_COMPACT_TERM(src, pc)
+
+                VERIFY_IS_INTEGER(src, "bs_put_utf32/3", 0);
+                avm_int_t src_value = term_to_int(src);
+                TRACE("bs_put_utf32/3 flags=%x, src=" AVM_INT_FMT "\n", (int) flags, src_value);
+                if (UNLIKELY(!term_is_binary(ctx->bs))) {
+                    TRACE("bs_put_utf32/3: Bad state.  ctx->bs is not a binary.\n");
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                if (ctx->bs_offset % 8 != 0) {
+                    TRACE("bs_put_utf32/3: Unsupported bit syntax operation.  Writing strings must be byte-aligend.\n");
+                    RAISE_ERROR(UNSUPPORTED_ATOM);
+                }
+                bool result = bitstring_insert_utf32(ctx->bs, ctx->bs_offset, src_value, flags);
+                if (UNLIKELY(!result)) {
+                    TRACE("bs_put_utf32/3: Failed to insert integer into binary: %i\n", result);
+                    RAISE_ERROR(BADARG_ATOM);
+                }
+                ctx->bs_offset += 4 * 8;
+                break;
+            }
+#endif
 
             case OP_BS_GET_UTF8: {
                 uint32_t fail;
