@@ -21,7 +21,6 @@
 
 defimpl List.Chars, for: Float do
   def to_charlist(term) do
-    # TODO: :short option not yet supported right now, so :decimals+:compact should be replaced
-    :erlang.float_to_list(term, [{:decimals, 17}, :compact])
+    :erlang.float_to_list(term, [:short])
   end
 end
