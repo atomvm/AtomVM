@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
+- Fixed a bug in `bs_match` `get_tail` logic that occurred with OTP26-compiled beams
 
 ## [0.7.0-alpha.0] - 2026-03-20
 

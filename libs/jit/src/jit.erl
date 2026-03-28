@@ -3168,12 +3168,9 @@ do_get_tail(
     MSt13 = MMod:sub(MSt12, TailBytesReg1, BSOffseBytesReg),
     MSt14 = MMod:add(MSt13, BSBinaryReg, ?TERM_PRIMARY_BOXED),
     {MSt15, ResultTerm} = MMod:call_primitive(MSt14, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg1
+        ctx, BSBinaryReg, {free, BSOffseBytesReg}, {free, TailBytesReg1}
     ]),
-    MSt16 = MMod:shift_left(MSt15, TailBytesReg1, 3),
-    MSt17 = MMod:add(MSt16, BSOffsetReg, TailBytesReg1),
-    MSt18 = MMod:free_native_registers(MSt17, [TailBytesReg1]),
-    {MSt18, ResultTerm, NewMatchState}.
+    {MSt15, ResultTerm, NewMatchState}.
 
 first_pass_bs_match_equal_colon_equal(
     Fail, MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0
