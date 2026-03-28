@@ -45,6 +45,7 @@
 #include "erl_nif_priv.h"
 #include "ets.h"
 #include "external_term.h"
+#include "float_utils.h"
 #include "globalcontext.h"
 #include "interop.h"
 #include "intn.h"
@@ -68,7 +69,7 @@
 #include "zlib.h"
 #endif
 
-#define FLOAT_BUF_SIZE 64
+#define FLOAT_BUF_SIZE DOUBLE_WRITE_TO_ASCII_BUF_LEN
 
 #define RAISE(a, b)                               \
     do {                                          \
@@ -2667,53 +2668,16 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-static int format_float(term value, int scientific, int decimals, int compact, char *out_buf, int outbuf_len)
+static int format_float(term value, double_format_t format, int precision, char *out_buf)
 {
-    // %lf and %f are the same since C99 due to double promotion.
-    const char *format;
-    if (scientific) {
-        format = "%.*e";
-    } else {
-        format = "%.*f";
-    }
-
     avm_float_t float_value = term_to_float(value);
-
-    snprintf(out_buf, outbuf_len, format, decimals, float_value);
-
-    if (compact && !scientific) {
-        int start = 0;
-        int len = strlen(out_buf);
-        for (int i = 0; i < len; i++) {
-            if (out_buf[i] == '.') {
-                start = i + 2;
-                break;
-            }
-        }
-        if (start > 1) {
-            int zero_seq_len = 0;
-            for (int i = start; i < len; i++) {
-                if (out_buf[i] == '0') {
-                    if (zero_seq_len == 0) {
-                        start = i;
-                    }
-                    zero_seq_len++;
-                } else {
-                    zero_seq_len = 0;
-                }
-            }
-            if (zero_seq_len) {
-                out_buf[start] = 0;
-            }
-        }
-    }
-
-    return strlen(out_buf);
+    return avm_float_write_to_ascii_buf(float_value, format, precision, out_buf);
 }
 
-int get_float_format_opts(term opts, int *scientific, int *decimals, int *compact)
+static int get_float_format_opts(term opts, double_format_t *format, int *precision)
 {
     term t = opts;
+    bool has_compact = false;
 
     while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
@@ -2723,24 +2687,32 @@ int get_float_format_opts(term opts, int *scientific, int *decimals, int *compac
             if (!term_is_integer(val_term)) {
                 return 0;
             }
-            *decimals = term_to_int(val_term);
-            if ((*decimals < 0) || (*decimals > FLOAT_BUF_SIZE - 7)) {
-                return 0;
-            }
+            avm_int_t val = term_to_int(val_term);
 
             switch (term_get_tuple_element(head, 0)) {
                 case DECIMALS_ATOM:
-                    *scientific = 0;
+                    if (val < 0 || val > 253) {
+                        return 0;
+                    }
+                    *format = DoubleFormatDecimals;
+                    *precision = val;
                     break;
                 case SCIENTIFIC_ATOM:
-                    *scientific = 1;
+                    if (val < 0 || val > 249) {
+                        return 0;
+                    }
+                    *format = DoubleFormatScientific;
+                    *precision = val;
                     break;
                 default:
                     return 0;
             }
 
         } else if (head == DEFAULTATOMS_COMPACT_ATOM) {
-            *compact = 1;
+            has_compact = true;
+
+        } else if (head == SHORT_ATOM) {
+            *format = DoubleFormatShort;
 
         } else {
             return 0;
@@ -2750,6 +2722,10 @@ int get_float_format_opts(term opts, int *scientific, int *decimals, int *compac
         if (!term_is_list(t)) {
             return 0;
         }
+    }
+
+    if (has_compact && *format == DoubleFormatDecimals) {
+        *format = DoubleFormatDecimalsCompact;
     }
 
     return 1;
@@ -2762,21 +2738,20 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
-    int scientific = 1;
-    int decimals = 20;
-    int compact = 0;
+    double_format_t format = DoubleFormatScientific;
+    int precision = 20;
 
-    term opts = argv[1];
     if (argc == 2) {
+        term opts = argv[1];
         VALIDATE_VALUE(opts, term_is_list);
-        if (UNLIKELY(!get_float_format_opts(opts, &scientific, &decimals, &compact))) {
+        if (UNLIKELY(!get_float_format_opts(opts, &format, &precision))) {
             RAISE_ERROR(BADARG_ATOM);
         }
     }
 
     char float_buf[FLOAT_BUF_SIZE];
-    int len = format_float(float_term, scientific, decimals, compact, float_buf, FLOAT_BUF_SIZE);
-    if (len > FLOAT_BUF_SIZE) {
+    int len = format_float(float_term, format, precision, float_buf);
+    if (UNLIKELY(len < 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2794,21 +2769,20 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
-    int scientific = 1;
-    int decimals = 20;
-    int compact = 0;
+    double_format_t format = DoubleFormatScientific;
+    int precision = 20;
 
-    term opts = argv[1];
     if (argc == 2) {
+        term opts = argv[1];
         VALIDATE_VALUE(opts, term_is_list);
-        if (UNLIKELY(!get_float_format_opts(opts, &scientific, &decimals, &compact))) {
+        if (UNLIKELY(!get_float_format_opts(opts, &format, &precision))) {
             RAISE_ERROR(BADARG_ATOM);
         }
     }
 
     char float_buf[FLOAT_BUF_SIZE];
-    int len = format_float(float_term, scientific, decimals, compact, float_buf, FLOAT_BUF_SIZE);
-    if (len > FLOAT_BUF_SIZE) {
+    int len = format_float(float_term, format, precision, float_buf);
+    if (UNLIKELY(len < 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 

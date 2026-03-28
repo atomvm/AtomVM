@@ -39,6 +39,7 @@ set(HEADER_FILES
     ets_multimap.h
     exportedfunction.h
     external_term.h
+    float_utils.h
     globalcontext.h
     iff.h
     interop.h
@@ -68,6 +69,7 @@ set(HEADER_FILES
     timer_list.h
     trace.h
     unicode.h
+    unlocalized_snprintf.h
     utils.h
     valueshashtable.h
     atomvm_version.h
@@ -88,6 +90,7 @@ set(SOURCE_FILES
     ets.c
     ets_multimap.c
     external_term.c
+    float_utils.c
     globalcontext.c
     iff.c
     interop.c
@@ -105,6 +108,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
+    unlocalized_snprintf.c
     utils.c
     valueshashtable.c
 )
