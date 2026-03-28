@@ -23,7 +23,6 @@ import Kernel, except: [to_string: 1]
 
 defimpl String.Chars, for: Float do
   def to_string(term) do
-    # TODO: :short option not yet supported right now, so :decimals+:compact should be replaced
-    :erlang.float_to_binary(term, [{:decimals, 17}, :compact])
+    :erlang.float_to_binary(term, [:short])
   end
 end
