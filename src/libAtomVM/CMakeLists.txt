@@ -69,7 +69,7 @@ set(HEADER_FILES
     timer_list.h
     trace.h
     unicode.h
-    unlocalized_snprintf.h
+    unlocalized.h
     utils.h
     valueshashtable.h
     atomvm_version.h
@@ -108,7 +108,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
-    unlocalized_snprintf.c
+    unlocalized.c
     utils.c
     valueshashtable.c
 )

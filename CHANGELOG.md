@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic
 - `erlang:float_to_binary/2` and `erlang:float_to_list/2` now accept `{decimals, 0..253}` and `{scientific, 0..249}`
+- `erlang:binary_to_float/1` and `erlang:list_to_float/1` now use locale-independent parsing and
+strict format validation
 
 ### Fixed
 - Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP

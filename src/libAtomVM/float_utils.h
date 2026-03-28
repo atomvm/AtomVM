@@ -31,6 +31,12 @@
 
 #include "term_typedef.h"
 
+#ifdef AVM_USE_SINGLE_PRECISION
+#define FLOAT_UTILS_ENABLE_FLOAT_API
+#else
+#define FLOAT_UTILS_ENABLE_DOUBLE_API
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,23 +53,24 @@ typedef enum
      *  Within (-2^53, 2^53): whichever notation is shorter.
      *  Outside that range: always scientific notation.
      *  Precision parameter is ignored. */
-    DoubleFormatShort,
+    FloatFormatShort,
 
     /** Scientific notation (e.g. "3.14000e+00").
      *  Precision = number of digits after the decimal point. */
-    DoubleFormatScientific,
+    FloatFormatScientific,
 
     /** Fixed-point decimal (e.g. "3.14000").
      *  Precision = max digits after the decimal point. */
-    DoubleFormatDecimals,
+    FloatFormatDecimals,
 
     /** Fixed-point decimal with trailing zeros stripped (e.g. "3.14").
-     *  Like DoubleFormatDecimals but trailing zeros after the decimal
+     *  Like FloatFormatDecimals but trailing zeros after the decimal
      *  point are removed, keeping at least one fractional digit
      *  (e.g. "3.0" not "3."). */
-    DoubleFormatDecimalsCompact
-} double_format_t;
+    FloatFormatDecimalsCompact
+} float_format_t;
 
+#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
 /**
  * @brief Convert a finite double to an ASCII string.
  *
@@ -74,29 +81,30 @@ typedef enum
  *
  * @param value the double to convert
  * @param format output format
- * @param precision digits after decimal point (ignored for DoubleFormatShort)
+ * @param precision digits after decimal point (ignored for FloatFormatShort)
  * @param buf output buffer (at least DOUBLE_WRITE_TO_ASCII_BUF_LEN bytes)
  * @return number of characters written (excluding null terminator),
  *         or -1 if the output was truncated
  */
-int double_write_to_ascii_buf(double value, double_format_t format, int precision, char *buf);
+int double_write_to_ascii_buf(double value, float_format_t format, int precision, char *buf);
+#endif
 
-#ifdef AVM_USE_SINGLE_PRECISION
+#ifdef FLOAT_UTILS_ENABLE_FLOAT_API
 /**
  * @brief Convert a finite float to an ASCII string.
  *
  * Same interface as double_write_to_ascii_buf but for 32-bit floats.
- * For DoubleFormatShort, uses snprintf with trailing-zero removal
+ * For FloatFormatShort, uses snprintf with trailing-zero removal
  * (best-effort, output may be longer than the Grisu3 double version).
  *
  * @param value the float to convert
  * @param format output format
- * @param precision digits after decimal point (ignored for DoubleFormatShort)
+ * @param precision digits after decimal point (ignored for FloatFormatShort)
  * @param buf output buffer (at least DOUBLE_WRITE_TO_ASCII_BUF_LEN bytes)
  * @return number of characters written (excluding null terminator),
  *         or -1 if the output was truncated
  */
-int float_write_to_ascii_buf(float value, double_format_t format, int precision, char *buf);
+int float_write_to_ascii_buf(float value, float_format_t format, int precision, char *buf);
 #endif
 
 /**
@@ -106,9 +114,9 @@ int float_write_to_ascii_buf(float value, double_format_t format, int precision,
  * depending on AVM_USE_SINGLE_PRECISION.
  */
 static inline int avm_float_write_to_ascii_buf(
-    avm_float_t value, double_format_t format, int precision, char *buf)
+    avm_float_t value, float_format_t format, int precision, char *buf)
 {
-#ifdef AVM_USE_SINGLE_PRECISION
+#ifdef FLOAT_UTILS_ENABLE_FLOAT_API
     return float_write_to_ascii_buf(value, format, precision, buf);
 #else
     return double_write_to_ascii_buf(value, format, precision, buf);

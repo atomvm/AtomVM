@@ -64,6 +64,7 @@
 #include "term.h"
 #include "term_typedef.h"
 #include "unicode.h"
+#include "unlocalized.h"
 #include "utils.h"
 #ifdef WITH_ZLIB
 #include "zlib.h"
@@ -2329,56 +2330,10 @@ static term nif_erlang_binary_to_integer(Context *ctx, int argc, term argv[])
     return parse_integer(ctx, bin_data, bin_data_size, base);
 }
 
-static bool is_valid_float_string(const char *str, int len)
-{
-    bool has_point = false;
-    bool scientific = false;
-    for (int i = 0; i < len; i++) {
-        switch (str[i]) {
-            case '.':
-                if (!scientific) {
-                    has_point = true;
-                } else {
-                    return false;
-                }
-                break;
-
-            case 'e':
-                if (!scientific) {
-                    scientific = true;
-                } else {
-                    return false;
-                }
-                break;
-
-            default:
-                continue;
-        }
-    }
-    return has_point;
-}
-
 static term parse_float(Context *ctx, const char *buf, int len)
 {
-    if (UNLIKELY((len == 0) || (len >= FLOAT_BUF_SIZE - 1))) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    char null_terminated_buf[FLOAT_BUF_SIZE];
-    memcpy(null_terminated_buf, buf, len);
-    null_terminated_buf[len] = '\0';
-
     avm_float_t fvalue;
-    if (UNLIKELY(sscanf(null_terminated_buf, AVM_FLOAT_FMT, &fvalue) != 1)) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    if (UNLIKELY(!isfinite(fvalue))) {
-        RAISE_ERROR(BADARG_ATOM);
-    }
-
-    // *_to_float requires that given input is a float
-    if (UNLIKELY(!is_valid_float_string(null_terminated_buf, len))) {
+    if (UNLIKELY(unlocalized_strto_avm_float(buf, len, &fvalue) != 0)) {
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2677,13 +2632,13 @@ static term nif_erlang_integer_to_list_2(Context *ctx, int argc, term argv[])
     return ret;
 }
 
-static int format_float(term value, double_format_t format, int precision, char *out_buf)
+static int format_float(term value, float_format_t format, int precision, char *out_buf)
 {
     avm_float_t float_value = term_to_float(value);
     return avm_float_write_to_ascii_buf(float_value, format, precision, out_buf);
 }
 
-static int get_float_format_opts(term opts, double_format_t *format, int *precision)
+static int get_float_format_opts(term opts, float_format_t *format, int *precision)
 {
     term t = opts;
     bool has_compact = false;
@@ -2703,14 +2658,14 @@ static int get_float_format_opts(term opts, double_format_t *format, int *precis
                     if (val < 0 || val > 253) {
                         return 0;
                     }
-                    *format = DoubleFormatDecimals;
+                    *format = FloatFormatDecimals;
                     *precision = val;
                     break;
                 case SCIENTIFIC_ATOM:
                     if (val < 0 || val > 249) {
                         return 0;
                     }
-                    *format = DoubleFormatScientific;
+                    *format = FloatFormatScientific;
                     *precision = val;
                     break;
                 default:
@@ -2721,7 +2676,7 @@ static int get_float_format_opts(term opts, double_format_t *format, int *precis
             has_compact = true;
 
         } else if (head == SHORT_ATOM) {
-            *format = DoubleFormatShort;
+            *format = FloatFormatShort;
 
         } else {
             return 0;
@@ -2733,8 +2688,8 @@ static int get_float_format_opts(term opts, double_format_t *format, int *precis
         }
     }
 
-    if (has_compact && *format == DoubleFormatDecimals) {
-        *format = DoubleFormatDecimalsCompact;
+    if (has_compact && *format == FloatFormatDecimals) {
+        *format = FloatFormatDecimalsCompact;
     }
 
     return 1;
@@ -2747,7 +2702,7 @@ static term nif_erlang_float_to_binary(Context *ctx, int argc, term argv[])
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
-    double_format_t format = DoubleFormatScientific;
+    float_format_t format = FloatFormatScientific;
     int precision = 20;
 
     if (argc == 2) {
@@ -2778,7 +2733,7 @@ static term nif_erlang_float_to_list(Context *ctx, int argc, term argv[])
     term float_term = argv[0];
     VALIDATE_VALUE(float_term, term_is_float);
 
-    double_format_t format = DoubleFormatScientific;
+    float_format_t format = FloatFormatScientific;
     int precision = 20;
 
     if (argc == 2) {

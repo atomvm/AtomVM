@@ -35,15 +35,19 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "unlocalized_snprintf.h"
+#include "unlocalized.h"
 #include "utils.h"
 
+#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
 _Static_assert(sizeof(double) == sizeof(uint64_t), "double must be 64 bits");
 _Static_assert(DBL_MANT_DIG == 53, "double must be IEEE 754 binary64");
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(disable : 4204)
 #endif
+
+#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
 
 /* ------------------------------------------------------------------ */
 /*  Grisu3 internals                                                  */
@@ -322,6 +326,8 @@ static int32_t write_exponent(int32_t exp, char *dst)
     return (int32_t) exp_len;
 }
 
+#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API — Grisu3 internals */
+
 /*
  * Post-process %g output to match Erlang/OTP short format:
  *  - Ensure decimal point with at least one fractional digit
@@ -386,6 +392,7 @@ static int fixup_g_format(char *buf, int len)
     return len;
 }
 
+#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
 static int32_t dtoa_grisu3(double v, char *dst)
 {
     int32_t d_exp, len, success, decimals, i;
@@ -481,6 +488,7 @@ static int32_t dtoa_grisu3(double v, char *dst)
     s2[len] = '\0';
     return (int32_t) (s2 + len - dst);
 }
+#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API — Grisu3 formatting */
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                        */
@@ -521,25 +529,26 @@ static void strip_trailing_zeros(char *buf, size_t *len)
     buf[*len] = '\0';
 }
 
-int double_write_to_ascii_buf(double value, double_format_t format, int precision, char *buf)
+#ifdef FLOAT_UTILS_ENABLE_DOUBLE_API
+int double_write_to_ascii_buf(double value, float_format_t format, int precision, char *buf)
 {
     int ret;
 
     switch (format) {
-        case DoubleFormatShort:
+        case FloatFormatShort:
             return dtoa_grisu3(value, buf);
 
-        case DoubleFormatScientific:
+        case FloatFormatScientific:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*e", precision, value);
             break;
 
-        case DoubleFormatDecimals:
+        case FloatFormatDecimals:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*f", precision, value);
             break;
 
-        case DoubleFormatDecimalsCompact:
+        case FloatFormatDecimalsCompact:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*f", precision, value);
             if (ret > 0 && ret < DOUBLE_WRITE_TO_ASCII_BUF_LEN) {
@@ -559,12 +568,13 @@ int double_write_to_ascii_buf(double value, double_format_t format, int precisio
     }
     return ret;
 }
+#endif /* FLOAT_UTILS_ENABLE_DOUBLE_API */
 
 /* ------------------------------------------------------------------ */
 /*  32-bit float support (best-effort short via snprintf)             */
 /* ------------------------------------------------------------------ */
 
-#ifdef AVM_USE_SINGLE_PRECISION
+#ifdef FLOAT_UTILS_ENABLE_FLOAT_API
 
 #define F32_SIGN UINT32_C(0x80000000)
 
@@ -607,25 +617,25 @@ static int ftoa_short(float value, char *buf)
     return (s - buf) + slen;
 }
 
-int float_write_to_ascii_buf(float value, double_format_t format, int precision, char *buf)
+int float_write_to_ascii_buf(float value, float_format_t format, int precision, char *buf)
 {
     int ret;
 
     switch (format) {
-        case DoubleFormatShort:
+        case FloatFormatShort:
             return ftoa_short(value, buf);
 
-        case DoubleFormatScientific:
+        case FloatFormatScientific:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*e", precision, (double) value);
             break;
 
-        case DoubleFormatDecimals:
+        case FloatFormatDecimals:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*f", precision, (double) value);
             break;
 
-        case DoubleFormatDecimalsCompact:
+        case FloatFormatDecimalsCompact:
             ret = unlocalized_snprintf(
                 buf, DOUBLE_WRITE_TO_ASCII_BUF_LEN, "%.*f", precision, (double) value);
             if (ret > 0 && ret < DOUBLE_WRITE_TO_ASCII_BUF_LEN) {
@@ -646,4 +656,4 @@ int float_write_to_ascii_buf(float value, double_format_t format, int precision,
     return ret;
 }
 
-#endif /* AVM_USE_SINGLE_PRECISION */
+#endif /* FLOAT_UTILS_ENABLE_FLOAT_API */
