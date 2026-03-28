@@ -5648,7 +5648,6 @@ schedule_in:
                             DECODE_DEST_REGISTER(dreg, pc);
                             j++;
                             WRITE_REGISTER(dreg, t);
-                            bs_offset = total_bytes * 8;
                             break;
                         }
 
