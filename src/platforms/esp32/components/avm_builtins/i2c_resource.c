@@ -146,7 +146,7 @@ static term nif_i2c_open(Context *ctx, int argc, term argv[])
         }
     }
 
-    term send_timeout_ms = interop_kv_get_value_default(opts, ATOM_STR("\xF", "send_timeout_ms"), term_from_int32(DEFAULT_SEND_TIMEOUT_MS), global);
+    term send_timeout_ms = interop_kv_get_value_default(opts, ATOM_STR("\xF", "send_timeout_ms"), term_from_int(DEFAULT_SEND_TIMEOUT_MS), global);
     uint32_t send_timeout_ms_val = portMAX_DELAY;
     if (term_is_integer(send_timeout_ms)) {
         if (term_to_int32(send_timeout_ms) < 0) {
