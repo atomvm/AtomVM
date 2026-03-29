@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added `json` module to estdlib, compatible with Erlang/OTP `json` API
 - Added `Keyword.put_new/3` to exavmlib
+- Added `JSON` module to exavmlib (Elixir wrapper for estdlib `json`)
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
 - Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`

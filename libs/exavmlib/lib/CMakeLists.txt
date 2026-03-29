@@ -98,7 +98,22 @@ set(ELIXIR_MODULES
     String.Chars.List
 )
 
-pack_archive(exavmlib ${ELIXIR_MODULES})
+compile_multi(json.ex
+    JSON
+    JSON.DecodeError
+    JSON.Encoder
+    JSON.Encoder.Atom
+    JSON.Encoder.BitString
+    JSON.Encoder.Float
+    JSON.Encoder.Integer
+    JSON.Encoder.List
+    JSON.Encoder.Map
+    OUTPUT JSON_BEAMS
+)
+
+pack_archive(exavmlib ${ELIXIR_MODULES}
+    EXTRA_BEAMS ${JSON_BEAMS}
+)
 
 include(../../../version.cmake)
 

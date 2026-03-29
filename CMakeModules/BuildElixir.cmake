@@ -18,10 +18,75 @@
 # SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 #
 
+# Compile a single .ex source that defines multiple modules.
+# All module names must be listed, and OUTPUT names the variable
+# that receives the beam paths (for passing to pack_archive).
+#
+# Usage:
+#     compile_multi(json.ex
+#         JSON
+#         JSON.Encoder
+#         JSON.Encoder.Atom
+#         OUTPUT JSON_BEAMS
+#     )
+#     pack_archive(mylib ${MODULES} EXTRA_BEAMS ${JSON_BEAMS})
+#
+macro(compile_multi source_file)
+    find_package(Elixir REQUIRED)
+    set(_cm_modules "")
+    set(_cm_outputs "")
+    set(_cm_outvar "")
+    set(_cm_in_output FALSE)
+    foreach(_arg ${ARGN})
+        if(_arg STREQUAL "OUTPUT")
+            set(_cm_in_output TRUE)
+        elseif(_cm_in_output)
+            set(_cm_outvar "${_arg}")
+        else()
+            list(APPEND _cm_modules "${_arg}")
+            list(APPEND _cm_outputs
+                "${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${_arg}.beam"
+            )
+        endif()
+    endforeach()
+    add_custom_command(
+        OUTPUT ${_cm_outputs}
+        COMMAND mkdir -p
+            ${CMAKE_CURRENT_BINARY_DIR}/beams
+            ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.multi.${_cm_outvar}
+        COMMAND elixirc --no-docs --no-debug-info
+            --ignore-module-conflict
+            -o ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.multi.${_cm_outvar}/
+            ${CMAKE_CURRENT_SOURCE_DIR}/${source_file}
+        COMMAND sh -c
+            "mv ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.multi.${_cm_outvar}/Elixir.*.beam ${CMAKE_CURRENT_BINARY_DIR}/beams/"
+        COMMAND rmdir
+            ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.multi.${_cm_outvar}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${source_file}
+        COMMENT "Compiling ${source_file}"
+        VERBATIM
+    )
+    set(${_cm_outvar} ${_cm_outputs})
+endmacro()
+
 macro(pack_archive avm_name)
     find_package(Elixir REQUIRED)
 
-    foreach(module_name ${ARGN})
+    # Parse EXTRA_BEAMS keyword from arguments
+    set(_pa_modules "")
+    set(_pa_extra "")
+    set(_pa_in_extra FALSE)
+    foreach(_arg ${ARGN})
+        if(_arg STREQUAL "EXTRA_BEAMS")
+            set(_pa_in_extra TRUE)
+        elseif(_pa_in_extra)
+            list(APPEND _pa_extra "${_arg}")
+        else()
+            list(APPEND _pa_modules "${_arg}")
+        endif()
+    endforeach()
+
+    foreach(module_name ${_pa_modules})
         add_custom_command(
             OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam
             COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams ${CMAKE_CURRENT_BINARY_DIR}/beams.tmp.${module_name}
@@ -34,6 +99,8 @@ macro(pack_archive avm_name)
         )
         set(BEAMS ${BEAMS} ${CMAKE_CURRENT_BINARY_DIR}/beams/Elixir.${module_name}.beam)
     endforeach()
+
+    set(BEAMS ${BEAMS} ${_pa_extra})
 
     add_custom_target(
         ${avm_name}_beams ALL
