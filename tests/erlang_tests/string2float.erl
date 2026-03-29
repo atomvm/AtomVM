@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019 Davide Bettio <davide@uninstall.it>
+% Copyright 2019-2026 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -18,12 +18,11 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
--module(bin2float).
+-module(string2float).
 
--export([start/0, id/1, bin2float/1, float_cmp/2, expect_badarg/1]).
+-export([start/0, id/1]).
 
 start() ->
-    %% Original tests (bits 0-8, total 511)
     F1 = bin2float(?MODULE:id(<<"1.5e+03">>)),
     F2 = bin2float(?MODULE:id(<<"1.5">>)),
     F3 = bin2float(?MODULE:id(<<"2.0">>)),
@@ -41,9 +40,8 @@ start() ->
             float_cmp(F6, ?MODULE:id(1000.0)) * 32 +
             float_cmp(F7, ?MODULE:id(0.001)) * 64 +
             float_cmp(F8, ?MODULE:id(0.0)) * 128 +
-            expect_badarg(?MODULE:id({})) * 256,
+            expect_bin_badarg(?MODULE:id({})) * 256,
 
-    %% New valid tests (each adds 1 on success, scaled by 512)
     V1 = float_cmp(bin2float(?MODULE:id(<<"+1.0">>)), ?MODULE:id(1.0)),
     V2 = float_cmp(bin2float(?MODULE:id(<<"+000000000.07">>)), ?MODULE:id(0.07)),
     V3 = float_cmp(bin2float(?MODULE:id(<<"1.0E3">>)), ?MODULE:id(1000.0)),
@@ -55,46 +53,49 @@ start() ->
     V9 = float_cmp(bin2float(?MODULE:id(<<"5.0e-324">>)), ?MODULE:id(0.0)),
     V10 = float_cmp(bin2float(?MODULE:id(<<"2.0e-308">>)), ?MODULE:id(0.0)),
 
-    %% New badarg tests (each adds 1 on success)
-    B1 = expect_badarg(?MODULE:id(<<"1.0e999">>)),
-    B2 = expect_badarg(?MODULE:id(<<"inf">>)),
-    B3 = expect_badarg(?MODULE:id(<<"nan">>)),
-    B4 = expect_badarg(?MODULE:id(<<"1e5">>)),
-    B5 = expect_badarg(?MODULE:id(<<".5">>)),
-    B6 = expect_badarg(?MODULE:id(<<"1.">>)),
-    B7 = expect_badarg(?MODULE:id(<<" 1.0">>)),
-    B8 = expect_badarg(?MODULE:id(<<"1.0 ">>)),
-    B9 = expect_badarg(?MODULE:id(<<"0x1.0p1">>)),
+    B1 = expect_bin_badarg(?MODULE:id(<<"1.0e999">>)),
+    B2 = expect_bin_badarg(?MODULE:id(<<"inf">>)),
+    B3 = expect_bin_badarg(?MODULE:id(<<"nan">>)),
+    B4 = expect_bin_badarg(?MODULE:id(<<"1e5">>)),
+    B5 = expect_bin_badarg(?MODULE:id(<<".5">>)),
+    B6 = expect_bin_badarg(?MODULE:id(<<"1.">>)),
+    B7 = expect_bin_badarg(?MODULE:id(<<" 1.0">>)),
+    B8 = expect_bin_badarg(?MODULE:id(<<"1.0 ">>)),
+    B9 = expect_bin_badarg(?MODULE:id(<<"0x1.0p1">>)),
     %% OTP currently accepts "," as decimal separator (binary_to_float(<<"1,0">>) -> 1.0).
     %% AtomVM rejects it, aligning with OTP's future direction (erlang/otp#9061).
     B10 =
         case erlang:system_info(machine) of
             "BEAM" -> 1;
-            _ -> expect_badarg(?MODULE:id(<<"1,0">>))
+            _ -> expect_bin_badarg(?MODULE:id(<<"1,0">>))
         end,
-    B11 = expect_badarg(?MODULE:id(<<"++1.0">>)),
-    B12 = expect_badarg(?MODULE:id(<<"1..0">>)),
-    B13 = expect_badarg(?MODULE:id(<<"1.0ee3">>)),
-    B14 = expect_badarg(?MODULE:id(<<"1.0e">>)),
-    B15 = expect_badarg(?MODULE:id(<<"1.0e++3">>)),
-    B16 = expect_badarg(?MODULE:id(<<"+.5">>)),
-    B17 = expect_badarg(?MODULE:id(<<"-1.">>)),
-    B18 = expect_badarg(?MODULE:id(<<"1.0f">>)),
-    B19 = expect_badarg(?MODULE:id(<<".">>)),
-    B20 = expect_badarg(?MODULE:id(<<"+">>)),
-    B21 = expect_badarg(?MODULE:id(<<"">>)),
-    B22 = expect_badarg(?MODULE:id(<<"\t1.0">>)),
-    B23 = expect_badarg(?MODULE:id(<<"1.0\n">>)),
+    B11 = expect_bin_badarg(?MODULE:id(<<"++1.0">>)),
+    B12 = expect_bin_badarg(?MODULE:id(<<"1..0">>)),
+    B13 = expect_bin_badarg(?MODULE:id(<<"1.0ee3">>)),
+    B14 = expect_bin_badarg(?MODULE:id(<<"1.0e">>)),
+    B15 = expect_bin_badarg(?MODULE:id(<<"1.0e++3">>)),
+    B16 = expect_bin_badarg(?MODULE:id(<<"+.5">>)),
+    B17 = expect_bin_badarg(?MODULE:id(<<"-1.">>)),
+    B18 = expect_bin_badarg(?MODULE:id(<<"1.0f">>)),
+    B19 = expect_bin_badarg(?MODULE:id(<<".">>)),
+    B20 = expect_bin_badarg(?MODULE:id(<<"+">>)),
+    B21 = expect_bin_badarg(?MODULE:id(<<"">>)),
+    B22 = expect_bin_badarg(?MODULE:id(<<"\t1.0">>)),
+    B23 = expect_bin_badarg(?MODULE:id(<<"1.0\n">>)),
+
+    L1 = float_cmp(list2float(?MODULE:id("1.5")), ?MODULE:id(1.5)),
+    L2 = float_cmp(list2float(?MODULE:id("-1.0")), ?MODULE:id(-1.0)),
+    L3 = float_cmp(list2float(?MODULE:id("1.0e3")), ?MODULE:id(1000.0)),
+    L4 = expect_list_badarg(?MODULE:id("inf")),
 
     NewValid = V1 + V2 + V3 + V4 + V5 + V6 + V7 + V8 + V9 + V10,
     NewBadarg =
         B1 + B2 + B3 + B4 + B5 + B6 + B7 + B8 + B9 + B10 +
             B11 + B12 + B13 + B14 + B15 + B16 + B17 + B18 + B19 + B20 +
             B21 + B22 + B23,
+    ListTests = L1 + L2 + L3 + L4,
 
-    %% R0 = 511, NewValid = 10, NewBadarg = 23
-    %% Total = 511 + (10 + 23) * 512 = 511 + 16896 = 17407
-    R0 + (NewValid + NewBadarg) * 512.
+    R0 + (NewValid + NewBadarg + ListTests) * 512.
 
 bin2float(F) ->
     try ?MODULE:id(erlang:binary_to_float(F)) of
@@ -104,8 +105,24 @@ bin2float(F) ->
         _:_ -> -10000000
     end.
 
-expect_badarg(F) ->
+list2float(F) ->
+    try ?MODULE:id(erlang:list_to_float(F)) of
+        Res -> ?MODULE:id(Res)
+    catch
+        error:badarg -> 0;
+        _:_ -> -10000000
+    end.
+
+expect_bin_badarg(F) ->
     try ?MODULE:id(erlang:binary_to_float(F)) of
+        _Res -> 0
+    catch
+        error:badarg -> 1;
+        _:_ -> 0
+    end.
+
+expect_list_badarg(F) ->
+    try ?MODULE:id(erlang:list_to_float(F)) of
         _Res -> 0
     catch
         error:badarg -> 1;
@@ -121,6 +138,8 @@ float_cmp(F1, F2) ->
 id(I) when is_float(I) ->
     I;
 id(I) when is_binary(I) ->
+    I;
+id(I) when is_list(I) ->
     I;
 id(I) when is_tuple(I) ->
     I.

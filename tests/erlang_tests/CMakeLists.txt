@@ -492,8 +492,7 @@ compile_erlang(float2list2decimals)
 compile_erlang(float2list2scientific)
 compile_erlang(float_bif)
 compile_erlang(float2list2)
-compile_erlang(bin2float)
-compile_erlang(list2float)
+compile_erlang(string2float)
 
 compile_erlang(test_fp_allocate_heap_zero)
 compile_erlang(test_bs_init2_heap_allocation)
@@ -1049,8 +1048,7 @@ set(erlang_test_beams
     float2list2scientific.beam
     float_bif.beam
     float2list2.beam
-    bin2float.beam
-    list2float.beam
+    string2float.beam
 
     test_fp_allocate_heap_zero.beam
     test_bs_init2_heap_allocation.beam
