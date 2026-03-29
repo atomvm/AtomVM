@@ -102,6 +102,9 @@ target_link_libraries(test-enif PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX
 target_link_libraries(test-heap PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 # test-jit_stream_flash includes jit_stream_flash.c and provides its own mock platform implementation
 target_compile_definitions(test-jit_stream_flash PRIVATE TEST_JIT_STREAM_FLASH)
+if (NOT AVM_DISABLE_JIT)
+    target_compile_definitions(test-erlang PRIVATE AVM_JIT_TARGET_ARCH_DIR="${AVM_JIT_TARGET_ARCH}")
+endif()
 target_link_libraries(test-jit_stream_flash PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 target_link_libraries(test-mailbox PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})
 target_link_libraries(test-structs PRIVATE libAtomVM libAtomVM${PLATFORM_LIB_SUFFIX})

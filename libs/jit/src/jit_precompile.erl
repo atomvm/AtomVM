@@ -39,6 +39,7 @@ start() ->
 %% Examples:
 %%   "armv6m" -> {"armv6m", ?JIT_VARIANT_PIC}
 %%   "armv6m+float32" -> {"armv6m", ?JIT_VARIANT_PIC + ?JIT_VARIANT_FLOAT32}
+%%   "armv6m+thumb2" -> {"armv6m", ?JIT_VARIANT_PIC + ?JIT_VARIANT_THUMB2}
 %%   "x86_64" -> {"x86_64", ?JIT_VARIANT_PIC}
 parse_target(Target) ->
     case string:split(Target, "+", all) of
@@ -48,7 +49,9 @@ parse_target(Target) ->
             RequestedVariant = lists:foldl(
                 fun(Variant, Acc) ->
                     case Variant of
-                        "float32" -> Acc + ?JIT_VARIANT_FLOAT32
+                        "float32" -> Acc + ?JIT_VARIANT_FLOAT32;
+                        "thumb2" -> Acc + ?JIT_VARIANT_THUMB2;
+                        _ -> error({unsupported_variant, Variant})
                     end
                 end,
                 ?JIT_VARIANT_PIC,
@@ -133,7 +136,9 @@ compile(Target, Dir, Dwarf, Path) ->
         Stream2 =
             case Dwarf of
                 true ->
-                    Stream0 = jit_dwarf:new(Backend, Module, jit_stream_binary, 0, LineResolver),
+                    Stream0 = jit_dwarf:new(
+                        Backend, Module, jit_stream_binary, 0, LineResolver, RequestedVariant
+                    ),
                     Backend:new(RequestedVariant, jit_dwarf, Stream0);
                 false ->
                     Backend:new(

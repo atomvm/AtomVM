@@ -6325,11 +6325,14 @@ static term nif_jit_variant(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
+    int variant = JIT_VARIANT_PIC;
 #ifdef AVM_USE_SINGLE_PRECISION
-    return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
-#else
-    return term_from_int(JIT_VARIANT_PIC);
+    variant |= JIT_VARIANT_FLOAT32;
 #endif
+#ifdef AVM_JIT_THUMB2
+    variant |= JIT_VARIANT_THUMB2;
+#endif
+    return term_from_int(variant);
 }
 #endif
 
