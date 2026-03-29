@@ -110,8 +110,8 @@ void mailbox_message_dispose(MailboxMessage *m, Heap *heap)
             break;
         }
         case ProcessInfoRequestSignal: {
-            struct BuiltInAtomRequestSignal *request_signal
-                = CONTAINER_OF(m, struct BuiltInAtomRequestSignal, base);
+            struct ProcessInfoRequestSignal *request_signal
+                = CONTAINER_OF(m, struct ProcessInfoRequestSignal, base);
             free(request_signal);
             break;
         }
@@ -291,19 +291,24 @@ void mailbox_send_immediate_signal(Context *c, enum MessageType type, term immed
     mailbox_post_message(c, &immediate_signal->base);
 }
 
-void mailbox_send_built_in_atom_request_signal(
-    Context *c, enum MessageType type, int32_t pid, term atom)
+void mailbox_send_process_info_request_signal(
+    Context *c, int32_t sender_pid, process_info_mode_t mode, const term *atoms, size_t len)
 {
-    struct BuiltInAtomRequestSignal *atom_request = malloc(sizeof(struct BuiltInAtomRequestSignal));
-    if (IS_NULL_PTR(atom_request)) {
+    struct ProcessInfoRequestSignal *signal = malloc(
+        sizeof(struct ProcessInfoRequestSignal) + len * sizeof(term));
+    if (IS_NULL_PTR(signal)) {
         fprintf(stderr, "Failed to allocate memory: %s:%i.\n", __FILE__, __LINE__);
         return;
     }
-    atom_request->base.type = type;
-    atom_request->sender_pid = pid;
-    atom_request->atom = atom;
+    signal->base.type = ProcessInfoRequestSignal;
+    signal->sender_pid = sender_pid;
+    signal->mode = mode;
+    signal->len = len;
+    for (size_t i = 0; i < len; i++) {
+        signal->atoms[i] = atoms[i];
+    }
 
-    mailbox_post_message(c, &atom_request->base);
+    mailbox_post_message(c, &signal->base);
 }
 
 void mailbox_send_ref_signal(Context *c, enum MessageType type, uint64_t ref_ticks)
