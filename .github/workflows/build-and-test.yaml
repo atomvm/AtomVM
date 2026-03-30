@@ -294,6 +294,47 @@ jobs:
           arch: "s390x"
           library-arch: s390x-linux-gnu
 
+        # riscv64 build
+        - os: "ubuntu-24.04"
+          cc: "riscv64-linux-gnu-gcc"
+          cxx: "riscv64-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv64_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-riscv64 libc6-dbg:riscv64 zlib1g-dev:riscv64 libmbedtls-dev:riscv64 qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv64"
+          library-arch: riscv64-linux-gnu
+
+        # riscv64 build + jit
+        - os: "ubuntu-24.04"
+          cc: "riscv64-linux-gnu-gcc"
+          cxx: "riscv64-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=riscv64 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv64_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-riscv64 libc6-dbg:riscv64 zlib1g-dev:riscv64 libmbedtls-dev:riscv64 qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv64"
+          library-arch: riscv64-linux-gnu
+          jit_target_arch: "riscv64"
+
+        # JIT + DWARF build (riscv64)
+        - os: "ubuntu-24.04"
+          cc: "riscv64-linux-gnu-gcc"
+          cxx: "riscv64-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF -DAVM_JIT_TARGET_ARCH=riscv64 -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/riscv64_toolchain.cmake"
+          compiler_pkgs: "crossbuild-essential-riscv64 libc6-dbg:riscv64 zlib1g-dev:riscv64 libmbedtls-dev:riscv64 qemu-user qemu-user-binfmt binfmt-support"
+          arch: "riscv64"
+          library-arch: riscv64-linux-gnu
+          jit_target_arch: "riscv64"
+
         # riscv32-ilp32 build
         - os: "ubuntu-24.04"
           cc: "riscv32-unknown-linux-gnu-gcc"

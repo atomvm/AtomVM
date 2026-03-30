@@ -104,7 +104,7 @@
 -define(DWARF_RDI_REG_X86_64, 5).
 % x0 register in aarch64
 -define(DWARF_X0_REG_AARCH64, 0).
-% a0 register in RISC-V
--define(DWARF_A0_REG_RISCV32, 10).
+% a0 register in RISC-V (same numbering for RV32 and RV64)
+-define(DWARF_A0_REG_RISCV, 10).
 % r0 register in ARM
 -define(DWARF_R0_REG_ARMV6M, 0).
