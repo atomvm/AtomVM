@@ -100,13 +100,49 @@
         16#00, 16#00, 16#06, 16#00, 16#00, 16#00, 16#00, 16#41, 16#51, 16#61, 16#81, 16#91, 16#B1>>
 ).
 
-compile_minimal_x86_64_test() ->
-    Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = ?CODE_CHUNK_0,
-    Stream1 = jit_stream_binary:append(
-        Stream0, jit:beam_chunk_header(LabelsCount, ?JIT_ARCH_X86_64, ?JIT_VARIANT_PIC)
+-ifdef(JIT_DWARF).
+compile_stream_setup(CodeChunk) ->
+    compile_stream_setup_for_backend(jit_x86_64, CodeChunk).
+
+compile_stream_setup_for_backend(Backend, CodeChunk) ->
+    Arch = backend_to_arch(Backend),
+    Stream0 = jit_dwarf:new(Backend, test_module, jit_stream_binary, 0),
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
+    Stream1 = jit_dwarf:append(
+        Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
     ),
-    Stream2 = jit_x86_64:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_dwarf, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    compile_stream_finalize_for_backend(jit_x86_64, Stream3).
+
+compile_stream_finalize_for_backend(Backend, Stream3) ->
+    DwarfStream = Backend:stream(Stream3),
+    jit_dwarf:stream(DwarfStream).
+-else.
+compile_stream_setup(CodeChunk) ->
+    compile_stream_setup_for_backend(jit_x86_64, CodeChunk).
+
+compile_stream_setup_for_backend(Backend, CodeChunk) ->
+    Arch = backend_to_arch(Backend),
+    Stream0 = jit_stream_binary:new(0),
+    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
+    Stream1 = jit_stream_binary:append(
+        Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
+    ),
+    Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    {LabelsCount, Stream2}.
+
+compile_stream_finalize(Stream3) ->
+    compile_stream_finalize_for_backend(jit_x86_64, Stream3).
+
+compile_stream_finalize_for_backend(Backend, Stream3) ->
+    Backend:stream(Stream3).
+-endif.
+
+compile_minimal_x86_64_test() ->
+    {LabelsCount, Stream2} = compile_stream_setup(?CODE_CHUNK_0),
     {_LabelsCount, Stream3} = jit:compile(
         ?CODE_CHUNK_0,
         fun(_) -> undefined end,
@@ -116,7 +152,7 @@ compile_minimal_x86_64_test() ->
         jit_x86_64,
         Stream2
     ),
-    Stream4 = jit_x86_64:stream(Stream3),
+    Stream4 = compile_stream_finalize(Stream3),
     <<16:32, LabelsCount:32, ?JIT_FORMAT_VERSION:16, 1:16, ?JIT_ARCH_X86_64:16, ?JIT_VARIANT_PIC:16,
         0:32, Code/binary>> = Stream4,
     {JumpTable, _} = split_binary(Code, (LabelsCount + 1) * 5),
@@ -126,7 +162,7 @@ compile_minimal_x86_64_test() ->
     {LabelsLinesCode, LabelsLinesTable} = split_binary(LabelsLinesCode0, 8),
     % 48 8d 05 01 00 00 00 	lea    0x1(%rip),%rax
     % c3                   	retq
-    ?assertEqual(<<16#48, 16#8D, 16#05, 1:32/little, 16#C3>>, LabelsLinesCode),
+    <<16#48, 16#8D, 16#05, 1:32/little, 16#C3>> = LabelsLinesCode,
     {ok, LinesTable} = check_labels_table(LabelsCount, LabelsLinesTable),
     ok = check_lines_table(LinesTable),
     ok.
@@ -154,13 +190,7 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk) ->
     end).
 
 compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, ImportResolver) ->
-    Stream0 = jit_stream_binary:new(0),
-    <<16:32, 0:32, _OpcodeMax:32, LabelsCount:32, _FunctionsCount:32, _Opcodes/binary>> = CodeChunk,
-    Arch = backend_to_arch(Backend),
-    Stream1 = jit_stream_binary:append(
-        Stream0, jit:beam_chunk_header(LabelsCount, Arch, ?JIT_VARIANT_PIC)
-    ),
-    Stream2 = Backend:new(?JIT_VARIANT_PIC, jit_stream_binary, Stream1),
+    {LabelsCount, Stream2} = compile_stream_setup_for_backend(Backend, CodeChunk),
 
     AtomResolver = jit_precompile:atom_resolver(AtomChunk),
     LiteralResolver = fun(_) -> test_literal end,
@@ -170,7 +200,7 @@ compile_stream_for_backend(Backend, CodeChunk, AtomChunk, TypeChunk, ImportResol
     {LabelsCount, Stream3} = jit:compile(
         CodeChunk, AtomResolver, LiteralResolver, TypeResolver, ImportResolver, Backend, Stream2
     ),
-    Backend:stream(Stream3).
+    compile_stream_finalize_for_backend(Backend, Stream3).
 
 term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     CompiledCode = compile_stream_for_backend(
@@ -198,7 +228,7 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     % The register value cache eliminates the redundant load after the store,
     % since %rax already holds the value.
     %   48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   31 d2                	xor    %edx,%edx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
@@ -208,7 +238,7 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
 
     % As opposed to (without typed optimization, verify_is_boxed would be emitted):
     %   48 8b 77 30          	mov    0x30(%rdi),%rsi
-    %   48 c7 c2 00 00 00 00 	mov    $0x0,%rdx
+    %   31 d2                	xor    %edx,%edx
     %   ff d0                	callq  *%rax
     %   5a                   	pop    %rdx
     %   5e                   	pop    %rsi
@@ -224,11 +254,11 @@ term_to_int_verify_is_match_state_typed_optimization_x86_64_test() ->
     %   ff e0                	jmpq   *%rax
     %   48 83 e0 fc          	and    $0xfffffffffffffffc,%rax
     ?assertMatch(
-        {_, 24},
+        {_, 19},
         binary:match(
             CompiledCode,
-            <<16#48, 16#8b, 16#77, 16#30, 16#48, 16#c7, 16#c2, 16#00, 16#00, 16#00, 16#00, 16#ff,
-                16#d0, 16#5a, 16#5e, 16#5f, 16#48, 16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
+            <<16#48, 16#8b, 16#77, 16#30, 16#31, 16#d2, 16#ff, 16#d0, 16#5a, 16#5e, 16#5f, 16#48,
+                16#89, 16#47, 16#40, 16#48, 16#83, 16#e0, 16#fc>>
         )
     ),
 

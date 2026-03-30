@@ -22,7 +22,6 @@ macro(pack_archive avm_name)
 
     set(multiValueArgs ERLC_FLAGS MODULES DEPENDS_ON)
     cmake_parse_arguments(PACK_ARCHIVE "" "" "${multiValueArgs}" ${ARGN})
-    list(JOIN PACK_ARCHIVE_ERLC_FLAGS " " PACK_ARCHIVE_ERLC_FLAGS)
 
     # Build -pa flags and file dependencies from DEPENDS_ON
     set(_pack_archive_pa_flags "")
@@ -98,17 +97,23 @@ macro(pack_precompiled_archive avm_name)
             string(REGEX REPLACE "\\+.*$" "" jit_target_arch "${jit_target_arch_variant}")
             set(jit_compiler_modules
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}_asm.beam
             )
 
+            if (NOT AVM_DISABLE_JIT_DWARF)
+                set(jit_precompile_dwarf_flag "dwarf")
+            else()
+                set(jit_precompile_dwarf_flag "")
+            endif()
             foreach(module_name IN LISTS ${PACK_ARCHIVE_MODULES} PACK_ARCHIVE_MODULES PACK_ARCHIVE_UNPARSED_ARGUMENTS)
                 add_custom_command(
                     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/${module_name}.beam
                     COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/
-                        && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${jit_target_arch_variant} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/ ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
+                        && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${jit_target_arch_variant} ${CMAKE_CURRENT_BINARY_DIR}/beams/${jit_target_arch_variant}/ ${jit_precompile_dwarf_flag} ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam
                     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/${module_name}.beam ${jit_compiler_modules} ${jit_deps}
                     COMMENT "Compiling ${module_name}.beam to ${jit_target_arch_variant}"
                     VERBATIM

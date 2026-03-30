@@ -623,6 +623,18 @@ popq(Reg) ->
         {1, Index} -> <<16#41, (16#58 + Index)>>
     end.
 
+jmpq({0, Reg}) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    (case {REX_B, MODRM_RM} of
+        {0, RM} -> <<16#FF, 0:2, 4:3, RM:3>>;
+        {1, RM} -> <<16#41, 16#FF, 0:2, 4:3, RM:3>>
+    end);
+jmpq({Offset, Reg}) when ?IS_SINT8_T(Offset) ->
+    {REX_B, MODRM_RM} = x86_64_x_reg(Reg),
+    (case REX_B of
+        0 -> <<16#FF, 1:2, 4:3, MODRM_RM:3, Offset>>;
+        1 -> <<16#41, 16#FF, 1:2, 4:3, MODRM_RM:3, Offset>>
+    end);
 jmpq({Reg}) ->
     case x86_64_x_reg(Reg) of
         {0, Index} -> <<16#FF, (16#E0 + Index)>>;

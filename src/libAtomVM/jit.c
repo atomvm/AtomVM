@@ -38,6 +38,86 @@
 
 #include <math.h>
 #include <stddef.h>
+#ifndef AVM_NO_JIT_DWARF
+#include <stdlib.h>
+#include <string.h>
+
+#if TERM_BYTES == 4
+// ELF32 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint32_t e_entry;
+    uint32_t e_phoff;
+    uint32_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint32_t sh_flags;
+    uint32_t sh_addr;
+    uint32_t sh_offset;
+    uint32_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint32_t sh_addralign;
+    uint32_t sh_entsize;
+} Elf_Shdr;
+
+#elif TERM_BYTES == 8
+// ELF64 structures
+typedef struct
+{
+    unsigned char e_ident[16];
+    uint16_t e_type;
+    uint16_t e_machine;
+    uint32_t e_version;
+    uint64_t e_entry;
+    uint64_t e_phoff;
+    uint64_t e_shoff;
+    uint32_t e_flags;
+    uint16_t e_ehsize;
+    uint16_t e_phentsize;
+    uint16_t e_phnum;
+    uint16_t e_shentsize;
+    uint16_t e_shnum;
+    uint16_t e_shstrndx;
+} Elf_Ehdr;
+
+typedef struct
+{
+    uint32_t sh_name;
+    uint32_t sh_type;
+    uint64_t sh_flags;
+    uint64_t sh_addr;
+    uint64_t sh_offset;
+    uint64_t sh_size;
+    uint32_t sh_link;
+    uint32_t sh_info;
+    uint64_t sh_addralign;
+    uint64_t sh_entsize;
+} Elf_Shdr;
+
+#else
+#error TERM_BYTES should be 4 or 8
+#endif
+
+// ELF symbol type extraction
+#define ELF_ST_TYPE(info) ((info) &0xf)
+
+#endif
 
 // #define ENABLE_TRACE
 #include "trace.h"
@@ -67,17 +147,17 @@ _Static_assert(
     CALL_EXT_NO_DEALLOC_MFA == -2, "CALL_EXT_NO_DEALLOC_MFA is -2 in libs/jit/src/primitives.hrl");
 
 // Verify offsets in jit_x86_64.erl
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64
-_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_{aarch64,x86_64}.erl");
+#if JIT_ARCH_TARGET == JIT_ARCH_X86_64 || JIT_ARCH_TARGET == JIT_ARCH_AARCH64 || JIT_ARCH_TARGET == JIT_ARCH_RISCV64
+_Static_assert(offsetof(Context, e) == 0x28, "ctx->e is 0x28 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, x) == 0x30, "ctx->x is 0x30 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, cp) == 0xB8, "ctx->cp is 0xB8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, fr) == 0xC0, "ctx->fr is 0xC0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs) == 0xC8, "ctx->bs is 0xC8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 
-_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64}.erl");
-_Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64}.erl");
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_armv6m.erl");
@@ -1965,3 +2045,167 @@ const ModuleNativeInterface module_native_interface = {
 };
 
 #endif
+
+#ifndef AVM_NO_JIT_DWARF
+
+// GDB JIT interface structures and constants
+typedef enum
+{
+    JIT_NOACTION = 0,
+    JIT_REGISTER_FN,
+    JIT_UNREGISTER_FN
+} jit_actions_t;
+
+struct jit_code_entry
+{
+    struct jit_code_entry *next_entry;
+    struct jit_code_entry *prev_entry;
+    const char *symfile_addr;
+    uint64_t symfile_size;
+};
+
+struct jit_descriptor
+{
+    uint32_t version;
+    uint32_t action_flag;
+    struct jit_code_entry *relevant_entry;
+    struct jit_code_entry *first_entry;
+};
+
+// Global GDB JIT interface descriptor
+// This must have C linkage and specific symbol names for GDB to find it
+struct jit_descriptor __jit_debug_descriptor = { 1, 0, NULL, NULL };
+
+// GDB sets breakpoint on this function to be notified of new JIT code
+void __attribute__((noinline)) __jit_debug_register_code(void)
+{
+    // GDB will set a breakpoint here
+}
+
+void jit_debug_register_code(Module *mod, const void *native_code, size_t native_size, ModuleNativeEntryPoint entry_point)
+{
+    UNUSED(mod);
+
+    if (!native_code || native_size < 8) {
+        return;
+    }
+
+    // Parse the NativeCodeChunk header to find where the ELF starts
+    // READ_32_UNALIGNED reads big-endian and converts to native
+    const uint8_t *data = (const uint8_t *) native_code;
+    uint32_t info_size = READ_32_UNALIGNED(data);
+
+    if (info_size + 4 > native_size) {
+        return;
+    }
+
+    // The ELF is embedded right after the info header
+    const uint8_t *elf_start = data + 4 + info_size;
+    size_t remaining = native_size - (4 + info_size);
+
+    if (remaining < sizeof(Elf_Ehdr)) {
+        return;
+    }
+
+    // Check for ELF magic
+    if (elf_start[0] != 0x7f || elf_start[1] != 'E' || elf_start[2] != 'L' || elf_start[3] != 'F') {
+        return;
+    }
+
+    // Compute ELF size from its headers
+    const Elf_Ehdr *ehdr = (const Elf_Ehdr *) elf_start;
+    size_t elf_size = ehdr->e_shoff + (size_t) ehdr->e_shnum * ehdr->e_shentsize;
+    if (elf_size > remaining) {
+        return;
+    }
+
+    // Relocation data follows the ELF: [count:32/little][offset0:32/little]...
+    // These are byte offsets within the ELF of DWARF address fields that need
+    // load_address added. Symbol addresses are NOT included — LLDB auto-relocates
+    // those via .text sh_addr.
+    const uint8_t *reloc_data = elf_start + elf_size;
+    size_t reloc_remaining = remaining - elf_size;
+    uint32_t reloc_count = 0;
+    const uint32_t *reloc_offsets = NULL;
+
+    if (reloc_remaining >= 4) {
+        memcpy(&reloc_count, reloc_data, 4);
+        if (reloc_remaining >= 4 + (size_t) reloc_count * 4) {
+            reloc_offsets = (const uint32_t *) (reloc_data + 4);
+        } else {
+            reloc_count = 0;
+        }
+    }
+
+    // Make a writable copy of the ELF for patching
+    uint8_t *patched_elf = (uint8_t *) malloc(elf_size);
+    if (!patched_elf) {
+        return;
+    }
+    memcpy(patched_elf, elf_start, elf_size);
+
+    uintptr_t load_address = (uintptr_t) entry_point;
+
+    // Patch .text section header: set sh_addr to load_address.
+    // LLDB uses this to auto-relocate symbol table addresses.
+    Elf_Shdr *shdrs = (Elf_Shdr *) (patched_elf + ehdr->e_shoff);
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        if (shdrs[i].sh_type == 1 && (shdrs[i].sh_flags & 6) == 6) {
+            shdrs[i].sh_addr = load_address;
+            break;
+        }
+    }
+
+    // Apply DWARF address relocations: add load_address to each listed offset
+    for (uint32_t i = 0; i < reloc_count; i++) {
+        uint32_t offset;
+        memcpy(&offset, &reloc_offsets[i], 4);
+        if (offset + TERM_BYTES <= elf_size) {
+#if TERM_BYTES == 8
+            uint64_t val;
+            memcpy(&val, patched_elf + offset, 8);
+            val += load_address;
+            memcpy(patched_elf + offset, &val, 8);
+#else
+            uint32_t val;
+            memcpy(&val, patched_elf + offset, 4);
+            val += (uint32_t) load_address;
+            memcpy(patched_elf + offset, &val, 4);
+#endif
+        }
+    }
+
+    // Register with GDB/LLDB JIT interface
+    struct jit_code_entry *entry = malloc(sizeof(struct jit_code_entry));
+    if (!entry) {
+        free(patched_elf);
+        return;
+    }
+
+    entry->next_entry = NULL;
+    entry->prev_entry = NULL;
+    entry->symfile_addr = (const char *) patched_elf;
+    entry->symfile_size = elf_size;
+
+    if (__jit_debug_descriptor.first_entry) {
+        __jit_debug_descriptor.first_entry->prev_entry = entry;
+        entry->next_entry = __jit_debug_descriptor.first_entry;
+    }
+    __jit_debug_descriptor.first_entry = entry;
+
+    __jit_debug_descriptor.action_flag = JIT_REGISTER_FN;
+    __jit_debug_descriptor.relevant_entry = entry;
+    __jit_debug_register_code();
+}
+
+void jit_debug_unregister_code(Context *ctx, Module *mod)
+{
+    UNUSED(ctx);
+    UNUSED(mod);
+
+    // TODO: Implement unregistration
+    // Need to store the jit_code_entry pointer in the module structure
+    // and retrieve it here to properly unregister
+}
+
+#endif // AVM_NO_JIT_DWARF

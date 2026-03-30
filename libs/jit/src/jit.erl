@@ -24,7 +24,8 @@
     stream/1,
     backend/2,
     beam_chunk_header/3,
-    compile/7
+    compile/7,
+    decode_value64/1
 ]).
 
 % NIFs
@@ -51,38 +52,20 @@
 -include("opcodes.hrl").
 -include("primitives.hrl").
 -include("term.hrl").
+-include("compact_term.hrl").
 
--define(COMPACT_LITERAL, 0).
--define(COMPACT_INTEGER, 1).
--define(COMPACT_ATOM, 2).
--define(COMPACT_XREG, 3).
--define(COMPACT_YREG, 4).
--define(COMPACT_LABEL, 5).
--define(COMPACT_EXTENDED, 7).
--define(COMPACT_LARGE_LITERAL, 8).
--define(COMPACT_LARGE_INTEGER, 9).
--define(COMPACT_LARGE_ATOM, 10).
--define(COMPACT_LARGE_XREG, 11).
--define(COMPACT_LARGE_YREG, 12).
-
-% OTP-20+ format
--define(COMPACT_EXTENDED_LIST, 16#17).
--define(COMPACT_EXTENDED_FP_REGISTER, 16#27).
--define(COMPACT_EXTENDED_ALLOCATION_LIST, 16#37).
--define(COMPACT_EXTENDED_LITERAL, 16#47).
-% https://github.com/erlang/otp/blob/master/lib/compiler/src/beam_asm.erl#L433
--define(COMPACT_EXTENDED_TYPED_REGISTER, 16#57).
-
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_WORDS, 0).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS, 1).
--define(COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS, 2).
-
--define(COMPACT_LARGE_IMM_MASK, 16#18).
--define(COMPACT_11BITS_VALUE, 16#8).
--define(COMPACT_NBITS_VALUE, 16#18).
-
--define(COMPACT_LARGE_INTEGER_11BITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_11BITS_VALUE)).
--define(COMPACT_LARGE_INTEGER_NBITS, (?COMPACT_LARGE_INTEGER bor ?COMPACT_NBITS_VALUE)).
+-ifdef(JIT_DWARF).
+-compile({parse_transform, jit_dwarf_pt}).
+-define(DWARF_LABEL(MMod, MSt, Label), MMod:dwarf_label(MSt, Label)).
+-define(DWARF_FUNCTION(MMod, MSt, FunctionName, Arity),
+    MMod:dwarf_function(MSt, (State0#state.atom_resolver)(FunctionName), Arity)
+).
+-define(DWARF_LINE(MMod, MSt, Line), MMod:dwarf_line(MSt, Line)).
+-else.
+-define(DWARF_LABEL(_MMod, MSt, _Label), MSt).
+-define(DWARF_FUNCTION(_MMod, MSt, _FunctionName, _Arity), MSt).
+-define(DWARF_LINE(_MMod, MSt, _Line), MSt).
+-endif.
 
 -define(BOXED_FUN_SIZE, 3).
 -define(FLOAT_SIZE_64, 2).
@@ -178,9 +161,10 @@ first_pass(
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Label, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LABEL ~p\n", [Label]),
-    MSt1 = MMod:add_label(MSt0, Label),
-    ?ASSERT_ALL_NATIVE_FREE(MSt1),
-    first_pass(Rest1, MMod, MSt1, State0);
+    MSt1 = ?DWARF_LABEL(MMod, MSt0, Label),
+    MSt2 = MMod:add_label(MSt1, Label),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    first_pass(Rest1, MMod, MSt2, State0);
 % 2
 first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} = State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -213,8 +197,9 @@ first_pass(<<?OP_FUNC_INFO, Rest0/binary>>, MMod, MSt0, #state{tail_cache = TC} 
                 ]),
                 {MSt4b, State0}
         end,
-    ?ASSERT_ALL_NATIVE_FREE(MSt4),
-    first_pass(Rest3, MMod, MSt4, State1);
+    MSt5 = ?DWARF_FUNCTION(MMod, MSt4, FunctionAtomIndex, Arity),
+    ?ASSERT_ALL_NATIVE_FREE(MSt5),
+    first_pass(Rest3, MMod, MSt5, State1);
 % 3
 first_pass(
     <<?OP_INT_CALL_END>>, MMod, MSt0, #state{labels_count = LabelsCount} = State
@@ -1721,8 +1706,9 @@ first_pass(
 ) ->
     {Line, Rest1} = decode_literal(Rest0),
     ?TRACE("OP_LINE ~p\n", [Line]),
-    Offset = MMod:offset(MSt),
-    first_pass(Rest1, MMod, MSt, State0#state{
+    MSt0 = ?DWARF_LINE(MMod, MSt, Line),
+    Offset = MMod:offset(MSt0),
+    first_pass(Rest1, MMod, MSt0, State0#state{
         line_offsets = [{Line, Offset} | AccLines]
     });
 % 154
@@ -3182,12 +3168,9 @@ do_get_tail(
     MSt13 = MMod:sub(MSt12, TailBytesReg1, BSOffseBytesReg),
     MSt14 = MMod:add(MSt13, BSBinaryReg, ?TERM_PRIMARY_BOXED),
     {MSt15, ResultTerm} = MMod:call_primitive(MSt14, ?PRIM_TERM_MAYBE_CREATE_SUB_BINARY, [
-        ctx, BSBinaryReg, {free, BSOffseBytesReg}, TailBytesReg1
+        ctx, BSBinaryReg, {free, BSOffseBytesReg}, {free, TailBytesReg1}
     ]),
-    MSt16 = MMod:shift_left(MSt15, TailBytesReg1, 3),
-    MSt17 = MMod:add(MSt16, BSOffsetReg, TailBytesReg1),
-    MSt18 = MMod:free_native_registers(MSt17, [TailBytesReg1]),
-    {MSt18, ResultTerm, NewMatchState}.
+    {MSt15, ResultTerm, NewMatchState}.
 
 first_pass_bs_match_equal_colon_equal(
     Fail, MatchState, BSBinaryReg, BSOffsetReg, J0, Rest0, MMod, MSt0
@@ -3782,15 +3765,14 @@ op_gc_bif2_mul(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
             {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
             % Strip tag from Reg1: value1 << 4
             {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-            % Strip tag from Reg2 and shift right by 4 to get raw value2
-            {MSt4, Reg2} = MMod:and_(MSt3, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt5, Reg2} = MMod:shift_right(MSt4, {free, Reg2}, 4),
+            % Shift right by 4 to get raw value2 (shift discards the 4 tag bits)
+            {MSt4, Reg2} = MMod:shift_right(MSt3, {free, Reg2}, 4),
             % Multiply: (value1 << 4) * value2 = (value1 * value2) << 4
-            MSt6 = MMod:mul(MSt5, Reg1, Reg2),
+            MSt5 = MMod:mul(MSt4, Reg1, Reg2),
             % Add tag back
-            MSt7 = MMod:or_(MSt6, Reg1, ?TERM_INTEGER_TAG),
-            MSt8 = MMod:move_to_vm_register(MSt7, Reg1, Dest),
-            MMod:free_native_registers(MSt8, [Reg1, Reg2, Dest]);
+            MSt6 = MMod:or_(MSt5, Reg1, ?TERM_INTEGER_TAG),
+            MSt7 = MMod:move_to_vm_register(MSt6, Reg1, Dest),
+            MMod:free_native_registers(MSt7, [Reg1, Reg2, Dest]);
         false ->
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.
@@ -3952,26 +3934,27 @@ op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
     case can_inline_pow2_div(Range1, Arg2Value, MMod) of
         true ->
             % Power-of-2 division: X div 2^k = X >> k for non-negative X
+            % The shift by (4+Shift) discards both the 4 tag bits and applies
+            % the division shift in one operation, so no AND to strip tags is needed.
             Shift = log2_pow2(Arg2Value),
             {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
-            {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4 + Shift),
-            MSt4 = MMod:shift_left(MSt3, Reg1, 4),
-            MSt5 = MMod:or_(MSt4, Reg1, ?TERM_INTEGER_TAG),
-            MSt6 = MMod:move_to_vm_register(MSt5, Reg1, Dest),
-            MMod:free_native_registers(MSt6, [Reg1, Dest]);
+            {MSt2, Reg1} = MMod:shift_right_arith(MSt1, {free, Reg1}, 4 + Shift),
+            MSt3 = MMod:shift_left(MSt2, Reg1, 4),
+            MSt4 = MMod:or_(MSt3, Reg1, ?TERM_INTEGER_TAG),
+            MSt5 = MMod:move_to_vm_register(MSt4, Reg1, Dest),
+            MMod:free_native_registers(MSt5, [Reg1, Dest]);
         false ->
             case can_inline_div(Range1, Range2, MMod) of
                 true ->
                     {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
-                    {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-                    {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
-                    {MSt4, Reg2} = MMod:move_to_native_register(MSt3, Arg2Value),
-                    {MSt5, QuotientReg} = MMod:div_(MSt4, Reg1, Reg2),
-                    MSt6 = MMod:shift_left(MSt5, QuotientReg, 4),
-                    MSt7 = MMod:or_(MSt6, QuotientReg, ?TERM_INTEGER_TAG),
-                    MSt8 = MMod:move_to_vm_register(MSt7, QuotientReg, Dest),
-                    MMod:free_native_registers(MSt8, [QuotientReg, Reg1, Reg2, Dest]);
+                    % Shift right by 4 discards the tag bits
+                    {MSt2, Reg1} = MMod:shift_right_arith(MSt1, {free, Reg1}, 4),
+                    {MSt3, Reg2} = MMod:move_to_native_register(MSt2, Arg2Value),
+                    {MSt4, QuotientReg} = MMod:div_(MSt3, Reg1, Reg2),
+                    MSt5 = MMod:shift_left(MSt4, QuotientReg, 4),
+                    MSt6 = MMod:or_(MSt5, QuotientReg, ?TERM_INTEGER_TAG),
+                    MSt7 = MMod:move_to_vm_register(MSt6, QuotientReg, Dest),
+                    MMod:free_native_registers(MSt7, [QuotientReg, Reg1, Reg2, Dest]);
                 false ->
                     op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
             end
@@ -3981,15 +3964,14 @@ op_gc_bif2_div(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
         true ->
             {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
             {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
-            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt4, Reg1} = MMod:shift_right_arith(MSt3, {free, Reg1}, 4),
-            {MSt5, Reg2} = MMod:and_(MSt4, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt6, Reg2} = MMod:shift_right_arith(MSt5, {free, Reg2}, 4),
-            {MSt7, QuotientReg} = MMod:div_(MSt6, Reg1, Reg2),
-            MSt8 = MMod:shift_left(MSt7, QuotientReg, 4),
-            MSt9 = MMod:or_(MSt8, QuotientReg, ?TERM_INTEGER_TAG),
-            MSt10 = MMod:move_to_vm_register(MSt9, QuotientReg, Dest),
-            MMod:free_native_registers(MSt10, [QuotientReg, Reg1, Reg2, Dest]);
+            % Shift right by 4 discards the tag bits
+            {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
+            {MSt4, Reg2} = MMod:shift_right_arith(MSt3, {free, Reg2}, 4),
+            {MSt5, QuotientReg} = MMod:div_(MSt4, Reg1, Reg2),
+            MSt6 = MMod:shift_left(MSt5, QuotientReg, 4),
+            MSt7 = MMod:or_(MSt6, QuotientReg, ?TERM_INTEGER_TAG),
+            MSt8 = MMod:move_to_vm_register(MSt7, QuotientReg, Dest),
+            MMod:free_native_registers(MSt8, [QuotientReg, Reg1, Reg2, Dest]);
         false ->
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.
@@ -4011,14 +3993,14 @@ op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
             case can_inline_div(Range1, Range2, MMod) of
                 true ->
                     {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
-                    {MSt2, Reg1} = MMod:and_(MSt1, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-                    {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
-                    {MSt4, Reg2} = MMod:move_to_native_register(MSt3, Arg2Value),
-                    {MSt5, RemReg} = MMod:rem_(MSt4, Reg1, Reg2),
-                    MSt6 = MMod:shift_left(MSt5, RemReg, 4),
-                    MSt7 = MMod:or_(MSt6, RemReg, ?TERM_INTEGER_TAG),
-                    MSt8 = MMod:move_to_vm_register(MSt7, RemReg, Dest),
-                    MMod:free_native_registers(MSt8, [RemReg, Reg1, Reg2, Dest]);
+                    % Shift right by 4 discards the tag bits
+                    {MSt2, Reg1} = MMod:shift_right_arith(MSt1, {free, Reg1}, 4),
+                    {MSt3, Reg2} = MMod:move_to_native_register(MSt2, Arg2Value),
+                    {MSt4, RemReg} = MMod:rem_(MSt3, Reg1, Reg2),
+                    MSt5 = MMod:shift_left(MSt4, RemReg, 4),
+                    MSt6 = MMod:or_(MSt5, RemReg, ?TERM_INTEGER_TAG),
+                    MSt7 = MMod:move_to_vm_register(MSt6, RemReg, Dest),
+                    MMod:free_native_registers(MSt7, [RemReg, Reg1, Reg2, Dest]);
                 false ->
                     op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
             end
@@ -4028,15 +4010,14 @@ op_gc_bif2_rem(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest, Range1, Range
         true ->
             {MSt1, Reg1} = MMod:move_to_native_register(MSt0, Arg1),
             {MSt2, Reg2} = MMod:move_to_native_register(MSt1, Arg2),
-            {MSt3, Reg1} = MMod:and_(MSt2, {free, Reg1}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt4, Reg1} = MMod:shift_right_arith(MSt3, {free, Reg1}, 4),
-            {MSt5, Reg2} = MMod:and_(MSt4, {free, Reg2}, bnot (?TERM_IMMED_TAG_MASK)),
-            {MSt6, Reg2} = MMod:shift_right_arith(MSt5, {free, Reg2}, 4),
-            {MSt7, RemReg} = MMod:rem_(MSt6, Reg1, Reg2),
-            MSt8 = MMod:shift_left(MSt7, RemReg, 4),
-            MSt9 = MMod:or_(MSt8, RemReg, ?TERM_INTEGER_TAG),
-            MSt10 = MMod:move_to_vm_register(MSt9, RemReg, Dest),
-            MMod:free_native_registers(MSt10, [RemReg, Reg1, Reg2, Dest]);
+            % Shift right by 4 discards the tag bits
+            {MSt3, Reg1} = MMod:shift_right_arith(MSt2, {free, Reg1}, 4),
+            {MSt4, Reg2} = MMod:shift_right_arith(MSt3, {free, Reg2}, 4),
+            {MSt5, RemReg} = MMod:rem_(MSt4, Reg1, Reg2),
+            MSt6 = MMod:shift_left(MSt5, RemReg, 4),
+            MSt7 = MMod:or_(MSt6, RemReg, ?TERM_INTEGER_TAG),
+            MSt8 = MMod:move_to_vm_register(MSt7, RemReg, Dest),
+            MMod:free_native_registers(MSt8, [RemReg, Reg1, Reg2, Dest]);
         false ->
             op_gc_bif2_default(MMod, MSt0, FailLabel, Live, Bif, Arg1, Arg2, Dest)
     end.

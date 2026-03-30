@@ -27,13 +27,19 @@ macro(jit_precompile module_name)
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
         )
+        if (NOT AVM_DISABLE_JIT_DWARF)
+            set(jit_precompile_dwarf_flag "dwarf")
+        else()
+            set(jit_precompile_dwarf_flag "")
+        endif()
         add_custom_command(
             OUTPUT ${AVM_JIT_TARGET_ARCH}/${module_name}.beam
             COMMAND mkdir -p ${AVM_JIT_TARGET_ARCH}
-                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${module_name}.beam
+                && erl -pa ${CMAKE_BINARY_DIR}/libs/jit/src/beams/ -noshell -s jit_precompile -s init stop -- ${AVM_JIT_TARGET_ARCH} ${AVM_JIT_TARGET_ARCH}/ ${jit_precompile_dwarf_flag} ${module_name}.beam
             DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam ${jit_compiler_modules} jit
             COMMENT "Compiling ${module_name}.beam to ${AVM_JIT_TARGET_ARCH}"
             VERBATIM
@@ -421,6 +427,7 @@ compile_erlang(test_binaries_ordering)
 compile_erlang(test_lists_ordering)
 compile_erlang(test_tuples_ordering)
 compile_erlang(test_types_ordering)
+compile_erlang(test_cmp_term)
 compile_erlang(test_bigintegers_ordering)
 compile_erlang(test_refs_ordering)
 compile_erlang(test_atom_ordering)
@@ -432,6 +439,7 @@ compile_erlang(test_ordering_0)
 compile_erlang(test_ordering_1)
 compile_erlang(test_bs)
 compile_erlang(test_bs_int)
+compile_erlang(test_bs_int_any_flags)
 compile_erlang(test_bs_int_unaligned)
 compile_erlang(test_bs_start_match_live)
 compile_erlang(test_bs_utf)
@@ -479,12 +487,12 @@ compile_erlang(float2bin)
 compile_erlang(float2bin2decimals)
 compile_erlang(float2bin2scientific)
 compile_erlang(float2bin2)
+compile_erlang(float_to_short)
 compile_erlang(float2list2decimals)
 compile_erlang(float2list2scientific)
 compile_erlang(float_bif)
 compile_erlang(float2list2)
-compile_erlang(bin2float)
-compile_erlang(list2float)
+compile_erlang(string2float)
 
 compile_erlang(test_fp_allocate_heap_zero)
 compile_erlang(test_bs_init2_heap_allocation)
@@ -548,9 +556,12 @@ compile_erlang(bs_get_integer_fixed_size)
 compile_erlang(bs_get_float_dynamic_size)
 compile_erlang(test_is_not_equal)
 compile_assembler(test_is_not_equal_asm)
+compile_erlang(test_make_fun2)
+compile_erlang(test_allocate_zero)
 compile_erlang(test_has_map_fields)
 compile_erlang(test_bs_create_bin_accum)
 compile_assembler(test_bs_create_bin_accum_asm)
+compile_erlang(test_no_bs_create_bin)
 compile_erlang(bs_context_to_binary_with_offset)
 compile_erlang(bs_restore2_start_offset)
 compile_erlang(test_refc_binaries)
@@ -627,6 +638,7 @@ compile_assembler(test_op_bs_create_bin_asm)
 
 compile_erlang(test_op_bs_test_unit)
 compile_erlang(test_bs_match_ensure_at_least)
+compile_erlang(test_bs_match_get_tail)
 
 compile_assembler(bs_get_binary2_all_asm)
 
@@ -971,6 +983,7 @@ set(erlang_test_beams
     test_lists_ordering.beam
     test_tuples_ordering.beam
     test_types_ordering.beam
+    test_cmp_term.beam
     test_bigintegers_ordering.beam
     test_refs_ordering.beam
     test_atom_ordering.beam
@@ -982,6 +995,7 @@ set(erlang_test_beams
     test_ordering_1.beam
     test_bs.beam
     test_bs_int.beam
+    test_bs_int_any_flags.beam
     test_bs_int_unaligned.beam
     test_bs_start_match_live.beam
     test_bs_utf.beam
@@ -1029,12 +1043,12 @@ set(erlang_test_beams
     float2bin2decimals.beam
     float2bin2scientific.beam
     float2bin2.beam
+    float_to_short.beam
     float2list2decimals.beam
     float2list2scientific.beam
     float_bif.beam
     float2list2.beam
-    bin2float.beam
-    list2float.beam
+    string2float.beam
 
     test_fp_allocate_heap_zero.beam
     test_bs_init2_heap_allocation.beam
@@ -1103,8 +1117,11 @@ set(erlang_test_beams
     bs_get_float_dynamic_size.beam
     test_is_not_equal.beam
     test_is_not_equal_asm.beam
+    test_make_fun2.beam
+    test_allocate_zero.beam
     test_has_map_fields.beam
     test_bs_create_bin_accum.beam
+    test_no_bs_create_bin.beam
     bs_context_to_binary_with_offset.beam
     bs_restore2_start_offset.beam
     bs_append_extra_words.beam
@@ -1183,6 +1200,7 @@ set(erlang_test_beams
     test_op_bs_start_match.beam
     test_op_bs_test_unit.beam
     test_bs_match_ensure_at_least.beam
+    test_bs_match_get_tail.beam
     test_op_bs_create_bin.beam
 
     bigint.beam

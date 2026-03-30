@@ -39,6 +39,7 @@ set(HEADER_FILES
     ets_multimap.h
     exportedfunction.h
     external_term.h
+    float_utils.h
     globalcontext.h
     iff.h
     interop.h
@@ -49,7 +50,7 @@ set(HEADER_FILES
     mailbox.h
     memory.h
     module.h
-    opcodes.h
+    opcodes.def
     opcodesswitch.h
     overflow_helpers.h
     nifs.h
@@ -68,6 +69,7 @@ set(HEADER_FILES
     timer_list.h
     trace.h
     unicode.h
+    unlocalized.h
     utils.h
     valueshashtable.h
     atomvm_version.h
@@ -88,6 +90,7 @@ set(SOURCE_FILES
     ets.c
     ets_multimap.c
     external_term.c
+    float_utils.c
     globalcontext.c
     iff.c
     interop.c
@@ -105,6 +108,7 @@ set(SOURCE_FILES
     term.c
     timer_list.c
     unicode.c
+    unlocalized.c
     utils.c
     valueshashtable.c
 )
@@ -182,6 +186,9 @@ endif()
 if (NOT AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
     target_compile_definitions(libAtomVM PUBLIC AVM_NO_EMU)
 endif()
+if (AVM_DISABLE_JIT_DWARF OR AVM_DISABLE_JIT)
+    target_compile_definitions(libAtomVM PUBLIC AVM_NO_JIT_DWARF)
+endif()
 
 if(HAVE_PLATFORM_SMP_H)
     target_compile_definitions(libAtomVM PUBLIC HAVE_PLATFORM_SMP_H)
@@ -202,6 +209,7 @@ endif()
 if(AVM_MINIMAL_OPCODES)
     target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_BS_MATCH=0)
     target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE=0)
+    target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN=0)
 endif()
 
 include(CheckIncludeFile)
@@ -244,6 +252,7 @@ define_if_function_exists(libAtomVM fstat "sys/stat.h" PRIVATE HAVE_FSTAT)
 define_if_function_exists(libAtomVM unlink "unistd.h" PRIVATE HAVE_UNLINK)
 define_if_function_exists(libAtomVM rmdir "unistd.h" PRIVATE HAVE_RMDIR)
 define_if_function_exists(libAtomVM execve "unistd.h" PRIVATE HAVE_EXECVE)
+define_if_function_exists(libAtomVM tcgetattr "termios.h" PRIVATE HAVE_TCGETATTR)
 define_if_function_exists(libAtomVM closefrom "unistd.h" PRIVATE HAVE_CLOSEFROM)
 define_if_function_exists(libAtomVM getcwd "unistd.h" PUBLIC HAVE_GETCWD)
 define_if_symbol_exists(libAtomVM POSIX_SPAWN_CLOEXEC_DEFAULT "spawn.h" PRIVATE HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)

@@ -397,6 +397,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_lists_ordering, 7),
     TEST_CASE_EXPECTED(test_tuples_ordering, 7),
     TEST_CASE_EXPECTED(test_types_ordering, 1),
+    TEST_CASE_EXPECTED(test_cmp_term, 1),
     TEST_CASE_EXPECTED(test_bigintegers_ordering, 7),
     TEST_CASE_EXPECTED(test_refs_ordering, 7),
     TEST_CASE_EXPECTED(test_atom_ordering, 7),
@@ -412,6 +413,7 @@ struct Test tests[] = {
     TEST_CASE(test_undef),
     TEST_CASE(test_bs),
     TEST_CASE(test_bs_int),
+    TEST_CASE(test_bs_int_any_flags),
     TEST_CASE(test_bs_int_unaligned),
     TEST_CASE(test_bs_start_match_live),
     TEST_CASE(test_bs_utf),
@@ -463,12 +465,12 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(float2bin2scientific, 31),
     TEST_CASE_EXPECTED(float2bin2decimals, 255),
     TEST_CASE_EXPECTED(float2bin2, 31),
+    TEST_CASE(float_to_short),
     TEST_CASE_EXPECTED(float2list2scientific, 31),
     TEST_CASE(float_bif),
     TEST_CASE_EXPECTED(float2list2decimals, 255),
     TEST_CASE_EXPECTED(float2list2, 31),
-    TEST_CASE_EXPECTED(bin2float, 511),
-    TEST_CASE_EXPECTED(list2float, 511),
+    TEST_CASE_EXPECTED(string2float, 19455),
     TEST_CASE(floatmath),
     TEST_CASE(floatext),
     TEST_CASE(bif_bin_arith_ops),
@@ -531,8 +533,11 @@ struct Test tests[] = {
     TEST_CASE(bs_get_integer_fixed_size),
     TEST_CASE(bs_get_float_dynamic_size),
     TEST_CASE(test_is_not_equal),
+    TEST_CASE(test_make_fun2),
+    TEST_CASE(test_allocate_zero),
     TEST_CASE(test_has_map_fields),
     TEST_CASE(test_bs_create_bin_accum),
+    TEST_CASE(test_no_bs_create_bin),
     TEST_CASE_EXPECTED(bs_context_to_binary_with_offset, 42),
     TEST_CASE_EXPECTED(bs_restore2_start_offset, 823),
 
@@ -568,6 +573,7 @@ struct Test tests[] = {
     TEST_CASE(test_op_bs_start_match),
     TEST_CASE(test_op_bs_test_unit),
     TEST_CASE(test_bs_match_ensure_at_least),
+    TEST_CASE(test_bs_match_get_tail),
     TEST_CASE(test_op_bs_create_bin),
 
     TEST_CASE(test_multi_value_comprehension),
@@ -749,6 +755,11 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
 #elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
         if (chdir("riscv32") != 0) {
             perror("Error: cannot find riscv32 directory");
+            return EXIT_FAILURE;
+        }
+#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV64
+        if (chdir("riscv64") != 0) {
+            perror("Error: cannot find riscv64 directory");
             return EXIT_FAILURE;
         }
 #else

@@ -157,6 +157,7 @@ erlang:module_loaded/1,&module_loaded_nif
 erlang:nif_error/1,&nif_error_nif
 erlang:list_to_bitstring/1, &list_to_bitstring_nif
 erts_debug:flat_size/1, &flat_size_nif
+erts_internal:cmp_term/2, &erts_internal_cmp_term_nif
 file:get_cwd/0, IF_HAVE_GETCWD_PATHMAX(&file_get_cwd_nif)
 ets:new/2, &ets_new_nif
 ets:lookup/2, &ets_lookup_nif
@@ -203,6 +204,9 @@ atomvm:posix_clock_settime/2, IF_HAVE_CLOCK_SETTIME_OR_SETTIMEOFDAY(&atomvm_posi
 atomvm:posix_opendir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_opendir_nif)
 atomvm:posix_closedir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_closedir_nif)
 atomvm:posix_readdir/1, IF_HAVE_OPENDIR_READDIR_CLOSEDIR(&atomvm_posix_readdir_nif)
+atomvm:posix_tcgetattr/1, IF_HAVE_TCGETATTR(&atomvm_posix_tcgetattr_nif)
+atomvm:posix_tcsetattr/3, IF_HAVE_TCGETATTR(&atomvm_posix_tcsetattr_nif)
+atomvm:posix_tcflush/2, IF_HAVE_TCGETATTR(&atomvm_posix_tcflush_nif)
 atomvm:get_creation/0, &atomvm_get_creation_nif
 code:load_abs/1, &code_load_abs_nif
 code:load_binary/3, &code_load_binary_nif

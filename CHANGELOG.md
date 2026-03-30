@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0-alpha.1] - Unreleased
+
+### Added
+- Added `erlang:node/1` BIF
+- Added `erts_internal:cmp_term/2`
+- Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`
+- Added generic unix support for uart using POSIX nifs
+- Added RISC-V 64-bit (RV64IMAC) JIT backend
+- Added DWARF debug information support for JIT-compiled code
+
+### Changed
+- ~10% binary size reduction by rewriting module loading logic
+- `erlang:float_to_binary/2` and `erlang:float_to_list/2` now accept `{decimals, 0..253}` and `{scientific, 0..249}`
+- `erlang:binary_to_float/1` and `erlang:list_to_float/1` now use locale-independent parsing and
+strict format validation
+
+### Fixed
+- Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP
+- Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
+- Fixed a bug in `bs_match` `get_tail` logic that occurred with OTP26-compiled beams
+- Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`
+- Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
+of raising `badarg`
+
 ## [0.7.0-alpha.0] - 2026-03-20
 
 ### Added

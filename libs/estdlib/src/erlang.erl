@@ -65,6 +65,7 @@
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
+    binary_to_float/1,
     binary_to_integer/1,
     binary_to_integer/2,
     binary_to_list/1,
@@ -162,6 +163,7 @@
     length/1,
     list_to_float/1,
     node/0,
+    node/1,
     round/1,
     self/0,
     setelement/3,
@@ -182,13 +184,6 @@
     raise_stacktrace/0
 ]).
 
-%%
-%% TODO Correct the following bugs
-%% * cancel_timer should be renamed cancel, per the OTP documentation
-%% * return value needs to be {ok, cancel} or {error, Reason}
-%% * review API documentation for timer functions in this module
-%%
-
 -type atom_encoding() :: latin1 | utf8 | unicode.
 
 -type mem_type() :: binary.
@@ -198,9 +193,10 @@
 }.
 
 -type float_format_option() ::
-    {decimals, Decimals :: 0..57}
-    | {scientific, Decimals :: 0..57}
-    | compact.
+    {decimals, Decimals :: 0..253}
+    | {scientific, Decimals :: 0..249}
+    | compact
+    | short.
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
 
@@ -254,7 +250,6 @@ start_timer(Time, Dest, Msg) ->
     start_timer(Time, Dest, Msg, []).
 
 %%-----------------------------------------------------------------------------
-%% @hidden
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
 %% @param   Msg Message to send to Dest after Time ms.
@@ -273,19 +268,22 @@ start_timer(Time, Dest, Msg, _Options) ->
     timer_manager:start_timer(Time, Dest, Msg).
 
 %%-----------------------------------------------------------------------------
-%% @hidden
-%% @param   Time time in milliseconds after which to send the timeout message.
-%% @param   Dest Pid or server name to which to send the timeout message.
-%% @param   Msg Message to send to Dest after Time ms.
-%% @param   Options options
-%% @returns a reference that can be used to cancel the timer, if desired.
-%% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
-%%          Time ms, where TimerRef is the reference returned from this function.
+%% @param   TimerRef a timer reference returned from {@link start_timer/3} or
+%%          {@link start_timer/4}.
+%% @returns the time in milliseconds left until the timer would have expired,
+%%          or `false' if the timer was not found (e.g., it had already expired
+%%          or been cancelled).
+%% @doc     Cancel a timer.
 %%
-%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%%          If the timer is found and has not yet fired, it is cancelled and the
+%%          remaining time is returned.  If the timer has already expired or does
+%%          not exist, `false' is returned.
+%%
+%%          <em><b>Note.</b>  Even if `false' is returned, a timeout message may
+%%          already have been placed in the caller's message queue.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef :: reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> false | non_neg_integer().
 cancel_timer(TimerRef) ->
     timer_manager:cancel_timer(TimerRef).
 
@@ -816,6 +814,41 @@ binary_to_atom(_Binary, _Encoding) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
+%% @param   Binary  Binary containing a text representation of a float
+%% @returns the float represented by the binary
+%% @doc     Parse the text in a given binary as a floating point number.
+%%
+%% The float string format is the same as the format for Erlang float
+%% literals except that underscores and based floats are not permitted:
+%% ```
+%% [+|-] DIGITS "." DIGITS [("e"|"E") [+|-] DIGITS]
+%% '''
+%% where `DIGITS' is one or more decimal digits (`0'..`9').
+%%
+%% Examples of accepted inputs:
+%% <ul>
+%%   <li>`<<"1.5">>' -> `1.5'</li>
+%%   <li>`<<"-1.0">>' -> `-1.0'</li>
+%%   <li>`<<"+1.0e+3">>' -> `1.0e3'</li>
+%%   <li>`<<"0.0e999">>' -> `0.0' (zero stays zero)</li>
+%%   <li>`<<"1.0e-999">>' -> `0.0' (underflow)</li>
+%% </ul>
+%%
+%% Raises `badarg' if the binary does not represent a valid float:
+%% no decimal point (`<<"1e5">>'), missing digits around the dot
+%% (`<<".5">>' or `<<"1.">>'), overflow (`<<"1.0e999">>'),
+%% whitespace, hex floats, or special values like `<<"inf">>'.
+%%
+%% <em>AtomVM-specific notes:</em> commas are not accepted as
+%% decimal separators.  Input strings longer than 255 bytes raise
+%% `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_float(Binary :: binary()) -> float().
+binary_to_float(_Binary) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
 %% @param   Binary  Binary to parse for integer
 %% @returns the integer represented by the binary
 %% @doc     Parse the text in a given binary as an integer.
@@ -882,6 +915,8 @@ atom_to_list(_Atom) ->
 %% @param   Float   Float to convert
 %% @returns a binary with a text representation of the float
 %% @doc     Convert a float to a binary.
+%%
+%% Equivalent to `float_to_binary(Float, [{scientific, 20}])'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float()) -> binary().
@@ -893,6 +928,42 @@ float_to_binary(_Float) ->
 %% @param   Options Options for conversion
 %% @returns a binary with a text representation of the float
 %% @doc     Convert a float to a binary.
+%%
+%% Supported options:
+%% <ul>
+%%   <li>`short' - shortest representation that round-trips back to the same
+%%       float value.  Uses fixed-point for values in a normal range and
+%%       scientific notation for very large or very small values.</li>
+%%   <li>`{decimals, N}' - fixed-point decimal notation with N digits after
+%%       the decimal point (0..253).</li>
+%%   <li>`{scientific, N}' - scientific notation with N digits after the
+%%       decimal point (0..249).</li>
+%%   <li>`compact' - strip trailing zeros when used with `{decimals, N}'.
+%%       Has no effect with `short' or `{scientific, N}'.</li>
+%% </ul>
+%%
+%% When multiple format options are given, the last one wins.
+%%
+%% <em>AtomVM-specific notes:</em> AtomVM uses Grisu3 for `short'
+%% formatting instead of Ryu (used by Erlang/OTP).  Grisu3 produces
+%% the shortest output for most values, but for a small fraction
+%% (~0.5%) it falls back to a longer 17-digit representation.  The
+%% output is always correct for round-trip, just not always the
+%% shortest possible.
+%%
+%% Example: `float_to_binary(1.0e23, [short])' returns
+%% `<<"1.0e23">>' on Erlang/OTP but
+%% `<<"9.9999999999999992e22">>' on AtomVM.
+%%
+%% When built with 32-bit floats (`AVM_USE_32BIT_FLOAT'), `short'
+%% uses a best-effort algorithm and the output may also be longer
+%% than on Erlang/OTP.  For example, `float_to_binary(3.14, [short])'
+%% returns `<<"3.1400001">>' because `3.14' rounds to a different
+%% 32-bit float value, and the best-effort formatter uses 9
+%% significant digits instead of finding the shortest roundtrip
+%% (`<<"3.14">>') like Ryu would.
+%% Very large precision values with `{decimals, N}' may raise
+%% `badarg' for large magnitude numbers due to buffer size limits.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float(), Options :: [float_format_option()]) -> binary().
@@ -903,6 +974,8 @@ float_to_binary(_Float, _Options) ->
 %% @param   Float   Float to convert
 %% @returns a string with a text representation of the float
 %% @doc     Convert a float to a string.
+%%
+%% Equivalent to `float_to_list(Float, [{scientific, 20}])'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float()) -> string().
@@ -914,6 +987,8 @@ float_to_list(_Float) ->
 %% @param   Options Options for conversion
 %% @returns a string with a text representation of the float
 %% @doc     Convert a float to a string.
+%%
+%% Same options as {@link float_to_binary/2}.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float(), Options :: [float_format_option()]) -> string().
@@ -1926,8 +2001,10 @@ length(_List) ->
 %%-----------------------------------------------------------------------------
 %% @param   String  a string representation of a float
 %% @returns the float represented by the string
-%% @doc     Parse a string to a floating point number.
-%% Errors with `badarg' if the string is not a valid float representation.
+%% @doc     Parse a string (list of characters) as a floating point number.
+%%
+%% Same format and behavior as {@link binary_to_float/1} but takes a
+%% string (character list) instead of a binary.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec list_to_float(String :: string()) -> float().
@@ -1942,6 +2019,17 @@ list_to_float(_String) ->
 %%-----------------------------------------------------------------------------
 -spec node() -> node().
 node() ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Item  a pid, port, or reference
+%% @returns the node name associated with `Item'
+%% @doc     Return the node name for a pid, port, or reference.
+%% Raises `badarg' if `Item' is not a pid, port, or reference.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec node(Item :: pid() | port() | reference()) -> node().
+node(_Item) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

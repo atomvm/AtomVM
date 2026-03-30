@@ -849,8 +849,14 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
     return (ModuleNativeEntryPoint) (native_code_mmap + offset);
 #endif
 #else
-    UNUSED(size);
-    return (ModuleNativeEntryPoint) (native_code + offset);
+    // x86_64: mmap RWX so debuggers can set software breakpoints
+    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (native_code_mmap == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
+        return NULL;
+    }
+    memcpy(native_code_mmap, native_code, size);
+    return (ModuleNativeEntryPoint) (native_code_mmap + offset);
 #endif
 }
 

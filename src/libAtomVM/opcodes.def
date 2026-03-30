@@ -1,0 +1,265 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2019-2026 Davide Bettio <davide@uninstall.it>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+/*
+ * Signature letters (OTP-aligned, see erts/emulator/internal_doc/beam_makeops.md)
+ *
+ * DECODE_COMPACT_TERM:
+ *   s  source term (register or constant)
+ *   c  constant-only source
+ *
+ * DECODE_DEST_REGISTER:
+ *   d  destination register (X or Y)
+ *   S  source register only (X or Y, read not written)
+ *
+ * DECODE_XREG:
+ *   x  X register
+ *
+ * DECODE_YREG:
+ *   y  Y register
+ *
+ * DECODE_ATOM:
+ *   a  atom constant
+ *
+ * DECODE_LABEL:
+ *   f  failure label (non-zero, branch/call target)
+ *   j  fail label (0 = no fail / fall through)
+ *
+ * DECODE_LITERAL:
+ *   t  small word / immediate (up to 12 bits)
+ *   I  wider word / immediate (up to 32 bits)
+ *   A  arity
+ *   P  tuple/byte offset
+ *   Q  stack/frame offset
+ *   e  export/import entry index
+ *   b  BIF index
+ *   F  fun/lambda entry index
+ *
+ * DECODE_FP_REGISTER:
+ *   l  floating point register
+ *
+ * DECODE_ATOM_OR_LABEL:
+ *   m  atom-or-label (e.g. bs_start_match4 fail arg)
+ *
+ * DECODE_ALLOCATOR_LIST:
+ *   z  allocator list (e.g. test_heap, allocate_heap)
+ *
+ * Extended list loop:
+ *   [X]  DECODE_EXTENDED_LIST_TAG + DECODE_LITERAL(count), then repeat X
+ *        until count items are consumed. Each decoded character inside the
+ *        brackets decrements the count; when it reaches 0 the loop ends.
+ *        Example: [sf] with count=6 decodes 3 pairs of (source, label).
+ *
+ * End of code section:
+ *   $  stop parsing and return offset (used by int_call_end)
+ *
+ * Handler placeholder:
+ *   -  no-op (custom handler does the decoding)
+ */
+
+// Remember to keep this list in sync with libs/jit/src/opcodes.hrl
+
+X_OPCODE_HANDLER(OP_LABEL, 1, label, "I") // label definition id: DECODE_LITERAL, not DECODE_LABEL
+X_OPCODE(OP_FUNC_INFO, 2, func_info, "aaA")
+X_OPCODE(OP_INT_CALL_END, 3, int_call_end, "$")
+X_OPCODE(OP_CALL, 4, call, "Af")
+X_OPCODE(OP_CALL_LAST, 5, call_last, "AfQ")
+X_OPCODE(OP_CALL_ONLY, 6, call_only, "Af")
+X_OPCODE(OP_CALL_EXT, 7, call_ext, "Ae")
+X_OPCODE(OP_CALL_EXT_LAST, 8, call_ext_last, "AeQ")
+X_OPCODE(OP_BIF0, 9, bif0, "bd")
+X_OPCODE(OP_BIF1, 10, bif1, "jbsd")
+X_OPCODE(OP_BIF2, 11, bif2, "jbssd")
+X_OPCODE(OP_ALLOCATE, 12, allocate, "tt")
+X_OPCODE(OP_ALLOCATE_HEAP, 13, allocate_heap, "tzt")
+X_OPCODE(OP_ALLOCATE_ZERO, 14, allocate_zero, "tt")
+X_OPCODE_REMOVED(OP_ALLOCATE_HEAP_ZERO, 15, allocate_heap_zero)
+X_OPCODE(OP_TEST_HEAP, 16, test_heap, "zt")
+X_OPCODE(OP_KILL, 17, kill, "y")
+X_OPCODE(OP_DEALLOCATE, 18, deallocate, "Q")
+X_OPCODE(OP_RETURN, 19, return, "")
+X_OPCODE(OP_SEND, 20, send, "")
+X_OPCODE(OP_REMOVE_MESSAGE, 21, remove_message, "")
+X_OPCODE(OP_TIMEOUT, 22, timeout, "")
+X_OPCODE(OP_LOOP_REC, 23, loop_rec, "fd")
+X_OPCODE(OP_LOOP_REC_END, 24, loop_rec_end, "f")
+X_OPCODE(OP_WAIT, 25, wait, "f")
+X_OPCODE(OP_WAIT_TIMEOUT, 26, wait_timeout, "fs")
+X_OPCODE_SKIP(27)
+X_OPCODE_SKIP(28)
+X_OPCODE_SKIP(29)
+X_OPCODE_SKIP(30)
+X_OPCODE_SKIP(31)
+X_OPCODE_SKIP(32)
+X_OPCODE_SKIP(33)
+X_OPCODE_SKIP(34)
+X_OPCODE_SKIP(35)
+X_OPCODE_SKIP(36)
+X_OPCODE_SKIP(37)
+X_OPCODE_SKIP(38)
+X_OPCODE(OP_IS_LT, 39, is_lt, "jss")
+X_OPCODE(OP_IS_GE, 40, is_ge, "jss")
+X_OPCODE(OP_IS_EQUAL, 41, is_equal, "jss")
+X_OPCODE(OP_IS_NOT_EQUAL, 42, is_not_equal, "jss")
+X_OPCODE(OP_IS_EQ_EXACT, 43, is_eq_exact, "jss")
+X_OPCODE(OP_IS_NOT_EQ_EXACT, 44, is_not_eq_exact, "jss")
+X_OPCODE(OP_IS_INTEGER, 45, is_integer, "fs")
+X_OPCODE(OP_IS_FLOAT, 46, is_float, "fs")
+X_OPCODE(OP_IS_NUMBER, 47, is_number, "fs")
+X_OPCODE(OP_IS_ATOM, 48, is_atom, "fs")
+X_OPCODE(OP_IS_PID, 49, is_pid, "fs")
+X_OPCODE(OP_IS_REFERENCE, 50, is_reference, "fs")
+X_OPCODE(OP_IS_PORT, 51, is_port, "fs")
+X_OPCODE(OP_IS_NIL, 52, is_nil, "fs")
+X_OPCODE(OP_IS_BINARY, 53, is_binary, "fs")
+X_OPCODE_SKIP(54)
+X_OPCODE(OP_IS_LIST, 55, is_list, "fs")
+X_OPCODE(OP_IS_NONEMPTY_LIST, 56, is_nonempty_list, "fs")
+X_OPCODE(OP_IS_TUPLE, 57, is_tuple, "fs")
+X_OPCODE(OP_TEST_ARITY, 58, test_arity, "fsA")
+X_OPCODE(OP_SELECT_VAL, 59, select_val, "sf[sf]")
+X_OPCODE(OP_SELECT_TUPLE_ARITY, 60, select_tuple_arity, "sf[If]")
+X_OPCODE(OP_JUMP, 61, jump, "f")
+X_OPCODE(OP_CATCH, 62, catch, "df")
+X_OPCODE(OP_CATCH_END, 63, catch_end, "d")
+X_OPCODE(OP_MOVE, 64, move, "sd")
+X_OPCODE(OP_GET_LIST, 65, get_list, "sdd")
+X_OPCODE(OP_GET_TUPLE_ELEMENT, 66, get_tuple_element, "sPd")
+X_OPCODE(OP_SET_TUPLE_ELEMENT, 67, set_tuple_element, "ssP")
+X_OPCODE_SKIP(68)
+X_OPCODE(OP_PUT_LIST, 69, put_list, "ssd")
+X_OPCODE_REMOVED(OP_PUT_TUPLE, 70, put_tuple)
+X_OPCODE_REMOVED(OP_PUT, 71, put)
+X_OPCODE(OP_BADMATCH, 72, badmatch, "s")
+X_OPCODE(OP_IF_END, 73, if_end, "")
+X_OPCODE(OP_CASE_END, 74, case_end, "s")
+X_OPCODE(OP_CALL_FUN, 75, call_fun, "A")
+X_OPCODE_SKIP(76)
+X_OPCODE(OP_IS_FUNCTION, 77, is_function, "fs")
+X_OPCODE(OP_CALL_EXT_ONLY, 78, call_ext_only, "Ae")
+X_OPCODE_SKIP(79)
+X_OPCODE_SKIP(80)
+X_OPCODE_SKIP(81)
+X_OPCODE_SKIP(82)
+X_OPCODE_SKIP(83)
+X_OPCODE_SKIP(84)
+X_OPCODE_SKIP(85)
+X_OPCODE_SKIP(86)
+X_OPCODE_SKIP(87)
+X_OPCODE_SKIP(88)
+X_OPCODE(OP_BS_PUT_INTEGER, 89, bs_put_integer, "fstIs")
+X_OPCODE(OP_BS_PUT_BINARY, 90, bs_put_binary, "fstIs")
+X_OPCODE(OP_BS_PUT_FLOAT, 91, bs_put_float, "fstIs")
+X_OPCODE(OP_BS_PUT_STRING, 92, bs_put_string, "tt")
+X_OPCODE_SKIP(93)
+X_OPCODE_REMOVED(OP_FCLEARERROR, 94, fclearerror)
+X_OPCODE_REMOVED(OP_FCHECKERROR, 95, fcheckerror)
+X_OPCODE_HANDLER(OP_FMOVE, 96, fmove, "-")
+X_OPCODE(OP_FCONV, 97, fconv, "sl")
+X_OPCODE(OP_FADD, 98, fadd, "jlll")
+X_OPCODE(OP_FSUB, 99, fsub, "jlll")
+X_OPCODE(OP_FMUL, 100, fmul, "jlll")
+X_OPCODE(OP_FDIV, 101, fdiv, "jlll")
+X_OPCODE(OP_FNEGATE, 102, fnegate, "jll")
+X_OPCODE(OP_MAKE_FUN2, 103, make_fun2, "F")
+X_OPCODE(OP_TRY, 104, try, "df")
+X_OPCODE(OP_TRY_END, 105, try_end, "d")
+X_OPCODE(OP_TRY_CASE, 106, try_case, "d")
+X_OPCODE(OP_TRY_CASE_END, 107, try_case_end, "s")
+X_OPCODE(OP_RAISE, 108, raise, "ss")
+X_OPCODE_REMOVED(OP_BS_INIT2, 109, bs_init2)
+X_OPCODE_SKIP(110)
+X_OPCODE(OP_BS_ADD, 111, bs_add, "fsstd")
+X_OPCODE(OP_APPLY, 112, apply, "A")
+X_OPCODE(OP_APPLY_LAST, 113, apply_last, "AQ")
+X_OPCODE(OP_IS_BOOLEAN, 114, is_boolean, "fs")
+X_OPCODE(OP_IS_FUNCTION2, 115, is_function2, "fss")
+X_OPCODE_REMOVED(OP_BS_START_MATCH2, 116, bs_start_match2)
+X_OPCODE(OP_BS_GET_INTEGER2, 117, bs_get_integer2, "fststId")
+X_OPCODE(OP_BS_GET_FLOAT2, 118, bs_get_float2, "fststId")
+X_OPCODE(OP_BS_GET_BINARY2, 119, bs_get_binary2, "fststId")
+X_OPCODE(OP_BS_SKIP_BITS2, 120, bs_skip_bits2, "fsstI")
+X_OPCODE(OP_BS_TEST_TAIL2, 121, bs_test_tail2, "fst")
+X_OPCODE_REMOVED(OP_BS_SAVE2, 122, bs_save2)
+X_OPCODE_REMOVED(OP_BS_RESTORE2, 123, bs_restore2)
+X_OPCODE(OP_GC_BIF1, 124, gc_bif1, "jtbsd")
+X_OPCODE(OP_GC_BIF2, 125, gc_bif2, "jtbssd")
+X_OPCODE_SKIP(126)
+X_OPCODE_SKIP(127)
+X_OPCODE_SKIP(128)
+X_OPCODE(OP_IS_BITSTR, 129, is_bitstr, "fs")
+X_OPCODE_REMOVED(OP_BS_CONTEXT_TO_BINARY, 130, bs_context_to_binary)
+X_OPCODE(OP_BS_TEST_UNIT, 131, bs_test_unit, "fst")
+X_OPCODE(OP_BS_MATCH_STRING, 132, bs_match_string, "fstI")
+X_OPCODE(OP_BS_INIT_WRITABLE, 133, bs_init_writable, "")
+X_OPCODE(OP_BS_APPEND, 134, bs_append, "fssttssd")
+X_OPCODE(OP_BS_PRIVATE_APPEND, 135, bs_private_append, "fstssd")
+X_OPCODE(OP_TRIM, 136, trim, "tt")
+X_OPCODE(OP_BS_INIT_BITS, 137, bs_init_bits, "fstttd")
+X_OPCODE(OP_BS_GET_UTF8, 138, bs_get_utf8, "fsssd")
+X_OPCODE(OP_BS_SKIP_UTF8, 139, bs_skip_utf8, "fsss")
+X_OPCODE(OP_BS_GET_UTF16, 140, bs_get_utf16, "fssId")
+X_OPCODE(OP_BS_SKIP_UTF16, 141, bs_skip_utf16, "fssI")
+X_OPCODE(OP_BS_GET_UTF32, 142, bs_get_utf32, "fssId")
+X_OPCODE(OP_BS_SKIP_UTF32, 143, bs_skip_utf32, "fssI")
+X_OPCODE(OP_BS_UTF8_SIZE, 144, bs_utf8_size, "fsd")
+X_OPCODE(OP_BS_PUT_UTF8, 145, bs_put_utf8, "fts")
+X_OPCODE(OP_BS_UTF16_SIZE, 146, bs_utf16_size, "fsd")
+X_OPCODE(OP_BS_PUT_UTF16, 147, bs_put_utf16, "fts")
+X_OPCODE(OP_BS_PUT_UTF32, 148, bs_put_utf32, "fts")
+X_OPCODE_SKIP(149)
+X_OPCODE_REMOVED(OP_RECV_MARK, 150, recv_mark)
+X_OPCODE_REMOVED(OP_RECV_SET, 151, recv_set)
+X_OPCODE(OP_GC_BIF3, 152, gc_bif3, "jtbsssd")
+X_OPCODE_HANDLER(OP_LINE, 153, line, "-")
+X_OPCODE(OP_PUT_MAP_ASSOC, 154, put_map_assoc, "fsdt[ss]")
+X_OPCODE(OP_PUT_MAP_EXACT, 155, put_map_exact, "fsdt[ss]")
+X_OPCODE(OP_IS_MAP, 156, is_map, "fs")
+X_OPCODE(OP_HAS_MAP_FIELDS, 157, has_map_fields, "fs[s]")
+X_OPCODE(OP_GET_MAP_ELEMENTS, 158, get_map_elements, "fs[sd]")
+X_OPCODE(OP_IS_TAGGED_TUPLE, 159, is_tagged_tuple, "fsAa")
+X_OPCODE(OP_BUILD_STACKTRACE, 160, build_stacktrace, "")
+X_OPCODE(OP_RAW_RAISE, 161, raw_raise, "")
+X_OPCODE(OP_GET_HD, 162, get_hd, "sd")
+X_OPCODE(OP_GET_TL, 163, get_tl, "sd")
+X_OPCODE(OP_PUT_TUPLE2, 164, put_tuple2, "d[s]")
+X_OPCODE(OP_BS_GET_TAIL, 165, bs_get_tail, "sdt")
+X_OPCODE(OP_BS_START_MATCH3, 166, bs_start_match3, "fstd")
+X_OPCODE(OP_BS_GET_POSITION, 167, bs_get_position, "sdt")
+X_OPCODE(OP_BS_SET_POSITION, 168, bs_set_position, "ss")
+X_OPCODE(OP_SWAP, 169, swap, "dd")
+X_OPCODE(OP_BS_START_MATCH4, 170, bs_start_match4, "mtsd")
+X_OPCODE(OP_MAKE_FUN3, 171, make_fun3, "Fd[s]")
+X_OPCODE(OP_INIT_YREGS, 172, init_yregs, "[y]")
+X_OPCODE(OP_RECV_MARKER_BIND, 173, recv_marker_bind, "SS")
+X_OPCODE(OP_RECV_MARKER_CLEAR, 174, recv_marker_clear, "S")
+X_OPCODE(OP_RECV_MARKER_RESERVE, 175, recv_marker_reserve, "d")
+X_OPCODE(OP_RECV_MARKER_USE, 176, recv_marker_use, "S")
+X_OPCODE(OP_BS_CREATE_BIN, 177, bs_create_bin, "jzttd[aIIsss]")
+X_OPCODE(OP_CALL_FUN2, 178, call_fun2, "sAs")
+X_OPCODE_SKIP(179)
+X_OPCODE(OP_BADRECORD, 180, badrecord, "s")
+X_OPCODE(OP_UPDATE_RECORD, 181, update_record, "aAsd[Is]")
+X_OPCODE_HANDLER(OP_BS_MATCH, 182, bs_match, "fs-")
+X_OPCODE_SKIP(183)
+X_OPCODE_SKIP(184)
+X_OPCODE(OP_BIF3, 185, bif3, "jbsssd")
+
+// Remember to keep this list in sync with libs/jit/src/opcodes.hrl

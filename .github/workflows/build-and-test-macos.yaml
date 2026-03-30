@@ -59,6 +59,12 @@ jobs:
           mbedtls: "mbedtls@3"
           cmake_opts_other: "-DAVM_DISABLE_JIT=OFF"
 
+        # JIT + DWARF build (macOS aarch64)
+        - os: "macos-15"
+          otp: "28"
+          mbedtls: "mbedtls@3"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF"
+
     steps:
     # Setup
     - name: "Checkout repo"
@@ -80,7 +86,7 @@ jobs:
           https://cdn.jsdelivr.net/hex
 
     - name: "Install deps"
-      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen ${{ matrix.mbedtls }}
+      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen socat ${{ matrix.mbedtls }}
 
     - name: "Install Gleam"
       run: |

@@ -918,7 +918,18 @@ jmpq_test_() ->
         ?_assertAsmEqual(<<16#41, 16#FF, 16#E0>>, "jmp *%r8", jit_x86_64_asm:jmpq({r8})),
         ?_assertAsmEqual(<<16#41, 16#FF, 16#E1>>, "jmp *%r9", jit_x86_64_asm:jmpq({r9})),
         ?_assertAsmEqual(<<16#41, 16#FF, 16#E2>>, "jmp *%r10", jit_x86_64_asm:jmpq({r10})),
-        ?_assertAsmEqual(<<16#41, 16#FF, 16#E3>>, "jmp *%r11", jit_x86_64_asm:jmpq({r11}))
+        ?_assertAsmEqual(<<16#41, 16#FF, 16#E3>>, "jmp *%r11", jit_x86_64_asm:jmpq({r11})),
+        % jmpq memory-indirect with zero offset
+        ?_assertAsmEqual(<<16#FF, 16#22>>, "jmp *(%rdx)", jit_x86_64_asm:jmpq({0, rdx})),
+        ?_assertAsmEqual(<<16#FF, 16#20>>, "jmp *(%rax)", jit_x86_64_asm:jmpq({0, rax})),
+        ?_assertAsmEqual(<<16#41, 16#FF, 16#20>>, "jmp *(%r8)", jit_x86_64_asm:jmpq({0, r8})),
+        % jmpq memory-indirect with sint8 offset
+        ?_assertAsmEqual(
+            <<16#FF, 16#62, 16#10>>, "jmp *0x10(%rdx)", jit_x86_64_asm:jmpq({16, rdx})
+        ),
+        ?_assertAsmEqual(
+            <<16#41, 16#FF, 16#60, 16#08>>, "jmp *0x8(%r8)", jit_x86_64_asm:jmpq({8, r8})
+        )
     ].
 
 leaq_rel32_test_() ->

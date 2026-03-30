@@ -18,12 +18,15 @@
  * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
  */
 
+// #define ENABLE_TRACE
+
 #include "module.h"
 
 #include "atom.h"
 #include "atom_table.h"
 #include "bif.h"
 #include "context.h"
+#include "defaultatoms.h"
 #include "external_term.h"
 #include "globalcontext.h"
 #include "iff.h"
@@ -35,10 +38,15 @@
 #include "term.h"
 #include "utils.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-// #define ENABLE_TRACE
+#ifdef ENABLE_TRACE
+#include "debug.h"
+#endif
+
 #include "trace.h"
 
 #ifdef WITH_ZLIB
@@ -94,12 +102,771 @@ struct LineRefOffset
     unsigned int offset;
 };
 
-#ifndef AVM_NO_EMU
-#define IMPL_CODE_LOADER 1
-#include "opcodesswitch.h"
-#undef TRACE
-#undef IMPL_CODE_LOADER
+#ifdef ENABLE_TRACE
+typedef struct
+{
+    int reg_type;
+    int index;
+} dreg_t;
+
+typedef dreg_t dreg_gc_safe_t;
+
+#define DEST_REGISTER(reg) dreg_t reg
+
+#define T_DEST_REG(dreg) \
+    reg_type_c((dreg).reg_type), (int) ((dreg).index)
+
+#define T_DEST_REG_GC_SAFE(dreg) T_DEST_REG(dreg)
+#else
+
+#define DEST_REGISTER(...)
+
 #endif
+
+// This macro does not decode all cases but cases we actually observe in opcodes
+// below. More specific decoding is performed when we know the type of the
+// argument
+#define DECODE_COMPACT_TERM(dest_term, decode_pc)                                                                                   \
+    {                                                                                                                               \
+        uint8_t first_byte = *(decode_pc)++;                                                                                        \
+        switch (first_byte & 0xF) {                                                                                                 \
+            case COMPACT_LARGE_LITERAL:                                                                                             \
+            case COMPACT_LITERAL:                                                                                                   \
+                switch (((first_byte) >> 3) & 0x3) {                                                                                \
+                    case 0:                                                                                                         \
+                    case 2:                                                                                                         \
+                        dest_term = term_from_int4(first_byte >> 4);                                                                \
+                        break;                                                                                                      \
+                                                                                                                                    \
+                    case 1:                                                                                                         \
+                        dest_term = term_from_int(((first_byte & 0xE0) << 3) | *(decode_pc)++);                                     \
+                        break;                                                                                                      \
+                                                                                                                                    \
+                    case 3: {                                                                                                       \
+                        uint8_t sz = (first_byte >> 5) + 2;                                                                         \
+                        avm_int_t val = 0;                                                                                          \
+                        for (uint8_t vi = 0; vi < sz; vi++) {                                                                       \
+                            val <<= 8;                                                                                              \
+                            val |= *(decode_pc)++;                                                                                  \
+                        }                                                                                                           \
+                        dest_term = term_from_int(val);                                                                             \
+                        break;                                                                                                      \
+                    }                                                                                                               \
+                    default:                                                                                                        \
+                        UNREACHABLE(); /* help gcc 8.4 */                                                                           \
+                }                                                                                                                   \
+                break;                                                                                                              \
+                                                                                                                                    \
+            case COMPACT_INTEGER:                                                                                                   \
+                switch (((first_byte) >> 3) & 0x3) {                                                                                \
+                    case 0:                                                                                                         \
+                    case 2:                                                                                                         \
+                        break;                                                                                                      \
+                                                                                                                                    \
+                    default:                                                                                                        \
+                        fprintf(stderr, "Operand not a small integer: %x, or unsupported encoding\n", (first_byte));                \
+                        AVM_ABORT();                                                                                                \
+                        break;                                                                                                      \
+                }                                                                                                                   \
+                break;                                                                                                              \
+                                                                                                                                    \
+            case COMPACT_ATOM:                                                                                                      \
+            case COMPACT_XREG:                                                                                                      \
+            case COMPACT_YREG:                                                                                                      \
+                break;                                                                                                              \
+                                                                                                                                    \
+            case COMPACT_EXTENDED:                                                                                                  \
+                switch (first_byte) {                                                                                               \
+                    case COMPACT_EXTENDED_LITERAL: {                                                                                \
+                        uint8_t first_extended_byte = *(decode_pc)++;                                                               \
+                        switch (((first_extended_byte) >> 3) & 0x3) {                                                               \
+                            case 0:                                                                                                 \
+                            case 2:                                                                                                 \
+                                break;                                                                                              \
+                                                                                                                                    \
+                            case 1:                                                                                                 \
+                                (decode_pc)++;                                                                                      \
+                                break;                                                                                              \
+                                                                                                                                    \
+                            case 3: {                                                                                               \
+                                uint8_t sz = (first_extended_byte >> 5) + 2;                                                        \
+                                decode_pc += sz;                                                                                    \
+                                break;                                                                                              \
+                            }                                                                                                       \
+                            default:                                                                                                \
+                                UNREACHABLE(); /* help gcc 8.4 */                                                                   \
+                        }                                                                                                           \
+                        break;                                                                                                      \
+                    }                                                                                                               \
+                    case COMPACT_EXTENDED_TYPED_REGISTER: {                                                                         \
+                        uint8_t reg_byte = *(decode_pc)++;                                                                          \
+                        switch (reg_byte & 0x0F) {                                                                                  \
+                            case COMPACT_XREG:                                                                                      \
+                            case COMPACT_YREG:                                                                                      \
+                                break;                                                                                              \
+                            case COMPACT_LARGE_XREG:                                                                                \
+                            case COMPACT_LARGE_YREG:                                                                                \
+                                (decode_pc)++;                                                                                      \
+                                break;                                                                                              \
+                            default:                                                                                                \
+                                fprintf(stderr, "Unexpected reg byte %x @ %" PRIuPTR "\n",                                          \
+                                    (int) reg_byte, (uintptr_t) ((decode_pc) -1));                                                  \
+                                AVM_ABORT();                                                                                        \
+                        }                                                                                                           \
+                        int type_index;                                                                                             \
+                        DECODE_LITERAL(type_index, decode_pc)                                                                       \
+                        UNUSED(type_index);                                                                                         \
+                        break;                                                                                                      \
+                    }                                                                                                               \
+                    default:                                                                                                        \
+                        fprintf(stderr, "Unexpected extended %x @ %" PRIuPTR "\n", (int) first_byte, (uintptr_t) ((decode_pc) -1)); \
+                        AVM_ABORT();                                                                                                \
+                        break;                                                                                                      \
+                }                                                                                                                   \
+                break;                                                                                                              \
+                                                                                                                                    \
+            case COMPACT_LARGE_INTEGER:                                                                                             \
+            case COMPACT_LARGE_ATOM:                                                                                                \
+                switch (first_byte & COMPACT_LARGE_IMM_MASK) {                                                                      \
+                    case COMPACT_11BITS_VALUE:                                                                                      \
+                        (decode_pc)++;                                                                                              \
+                        break;                                                                                                      \
+                    case COMPACT_NBITS_VALUE: {                                                                                     \
+                        int sz = (first_byte >> 5) + 2;                                                                             \
+                        if (LIKELY(sz <= 8)) {                                                                                      \
+                            (decode_pc) += sz;                                                                                      \
+                        } else {                                                                                                    \
+                            (decode_pc) += decode_nbits_integer(NULL, (decode_pc), NULL);                                           \
+                        }                                                                                                           \
+                        break;                                                                                                      \
+                    }                                                                                                               \
+                    default:                                                                                                        \
+                        assert((first_byte & 0x30) != COMPACT_LARGE_INTEGER);                                                       \
+                        break;                                                                                                      \
+                }                                                                                                                   \
+                break;                                                                                                              \
+                                                                                                                                    \
+            case COMPACT_LARGE_XREG:                                                                                                \
+            case COMPACT_LARGE_YREG:                                                                                                \
+                (decode_pc)++;                                                                                                      \
+                break;                                                                                                              \
+                                                                                                                                    \
+            default:                                                                                                                \
+                fprintf(stderr, "unknown compact term type: %i\n", ((first_byte) &0xF));                                            \
+                AVM_ABORT();                                                                                                        \
+                break;                                                                                                              \
+        }                                                                                                                           \
+    }
+
+#define DECODE_EXTENDED_LIST_TAG(decode_pc)                                                    \
+    {                                                                                          \
+        if ((*(decode_pc)++) != COMPACT_EXTENDED_LIST) {                                       \
+            fprintf(stderr, "Unexpected operand, expected a list, got %x\n", (decode_pc)[-1]); \
+            AVM_ABORT();                                                                       \
+        }                                                                                      \
+    }
+
+#define DECODE_NIL(decode_pc)                                                               \
+    {                                                                                       \
+        if ((*(decode_pc)++) != COMPACT_ATOM) {                                             \
+            fprintf(stderr, "Unexpected operand, expected nil, got %x\n", (decode_pc)[-1]); \
+            AVM_ABORT();                                                                    \
+        }                                                                                   \
+    }
+
+#ifdef ENABLE_TRACE
+
+#define DECODE_DEST_REGISTER(dreg, decode_pc)                                 \
+    {                                                                         \
+        uint8_t first_byte = *(decode_pc)++;                                  \
+        uint8_t reg_type = first_byte & 0xF;                                  \
+        (dreg).reg_type = reg_type;                                           \
+        switch (reg_type) {                                                   \
+            case COMPACT_XREG:                                                \
+            case COMPACT_YREG:                                                \
+                (dreg).index = first_byte >> 4;                               \
+                break;                                                        \
+            case COMPACT_LARGE_XREG:                                          \
+            case COMPACT_LARGE_YREG:                                          \
+                (dreg).index = (((first_byte & 0xE0) << 3) | *(decode_pc)++); \
+                break;                                                        \
+            default:                                                          \
+                AVM_ABORT();                                                  \
+        }                                                                     \
+    }
+
+#else /* ENABLE_TRACE */
+
+#define DECODE_DEST_REGISTER(dreg, decode_pc) \
+    {                                         \
+        uint8_t first_byte = *(decode_pc)++;  \
+        uint8_t reg_type = first_byte & 0xF;  \
+        switch (reg_type) {                   \
+            case COMPACT_XREG:                \
+            case COMPACT_YREG:                \
+                break;                        \
+            case COMPACT_LARGE_XREG:          \
+            case COMPACT_LARGE_YREG:          \
+                (decode_pc)++;                \
+                break;                        \
+            default:                          \
+                AVM_ABORT();                  \
+        }                                     \
+    }
+
+#endif /* ENABLE_TRACE */
+
+#define DECODE_FP_REGISTER(freg, decode_pc)                                                            \
+    {                                                                                                  \
+        if ((*(decode_pc)++) != COMPACT_EXTENDED_FP_REGISTER) {                                        \
+            fprintf(stderr, "Unexpected operand, expected an fp register, got %x\n", (decode_pc)[-1]); \
+            AVM_ABORT();                                                                               \
+        }                                                                                              \
+        DECODE_LITERAL(freg, decode_pc);                                                               \
+        if (freg > MAX_REG) {                                                                          \
+            fprintf(stderr, "FP register index %u > MAX_REG = %d\n", (unsigned) freg, MAX_REG);        \
+            AVM_ABORT();                                                                               \
+        }                                                                                              \
+    }
+
+#define DECODE_VALUE32(val, decode_pc)                                                              \
+    {                                                                                               \
+        uint8_t first_byte = *(decode_pc)++;                                                        \
+        switch (((first_byte) >> 3) & 0x3) {                                                        \
+            case 0:                                                                                 \
+            case 2:                                                                                 \
+                val = first_byte >> 4;                                                              \
+                break;                                                                              \
+                                                                                                    \
+            case 1:                                                                                 \
+                val = ((first_byte & 0xE0) << 3) | *(decode_pc)++;                                  \
+                break;                                                                              \
+                                                                                                    \
+            case 3: {                                                                               \
+                uint8_t sz = (first_byte >> 5) + 2;                                                 \
+                if (sz > 4) {                                                                       \
+                    fprintf(stderr, "Unexpected operand, expected a literal of at most 4 bytes\n"); \
+                    AVM_ABORT();                                                                    \
+                }                                                                                   \
+                val = 0;                                                                            \
+                for (uint8_t vi = 0; vi < sz; vi++) {                                               \
+                    val <<= 8;                                                                      \
+                    val |= *(decode_pc)++;                                                          \
+                }                                                                                   \
+                break;                                                                              \
+            }                                                                                       \
+            default:                                                                                \
+                UNREACHABLE(); /* help gcc 8.4 */                                                   \
+        }                                                                                           \
+    }
+
+#define DECODE_ATOM(atom, decode_pc)                                                      \
+    {                                                                                     \
+        if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_ATOM)) {                              \
+            fprintf(stderr, "Unexpected operand, expected an atom (%x)\n", *(decode_pc)); \
+            AVM_ABORT();                                                                  \
+        }                                                                                 \
+        uint32_t atom_ix;                                                                 \
+        DECODE_VALUE32(atom_ix, decode_pc);                                               \
+        atom = module_get_atom_term_by_id(mod, atom_ix);                                  \
+    }
+
+#define DECODE_LABEL(label, decode_pc)                                                    \
+    {                                                                                     \
+        if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_LABEL)) {                             \
+            fprintf(stderr, "Unexpected operand, expected a label (%x)\n", *(decode_pc)); \
+            AVM_ABORT();                                                                  \
+        }                                                                                 \
+        DECODE_VALUE32(label, decode_pc);                                                 \
+    }
+
+#define DECODE_ATOM_OR_LABEL(atom, label, decode_pc)                                                   \
+    {                                                                                                  \
+        if ((*(decode_pc) &0x7) != COMPACT_ATOM) {                                                     \
+            if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_LABEL)) {                                      \
+                fprintf(stderr, "Unexpected operand, expected an atom or label (%x)\n", *(decode_pc)); \
+                AVM_ABORT();                                                                           \
+            }                                                                                          \
+            atom = term_invalid_term();                                                                \
+            DECODE_VALUE32(label, decode_pc);                                                          \
+        } else {                                                                                       \
+            uint32_t atom_ix;                                                                          \
+            DECODE_VALUE32(atom_ix, decode_pc);                                                        \
+            atom = module_get_atom_term_by_id(mod, atom_ix);                                           \
+        }                                                                                              \
+    }
+
+#define DECODE_LITERAL(literal, decode_pc)                                                  \
+    {                                                                                       \
+        if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_LITERAL)) {                             \
+            fprintf(stderr, "Unexpected operand, expected a literal (%x)\n", *(decode_pc)); \
+            AVM_ABORT();                                                                    \
+        }                                                                                   \
+        DECODE_VALUE32(literal, decode_pc);                                                 \
+    }
+
+#define DECODE_XREG(reg, decode_pc)                                                         \
+    {                                                                                       \
+        if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_XREG)) {                                \
+            fprintf(stderr, "Unexpected operand, expected an xreg (%x)\n", *(decode_pc));   \
+            AVM_ABORT();                                                                    \
+        }                                                                                   \
+        DECODE_VALUE32(reg, decode_pc);                                                     \
+        if (reg > MAX_REG) {                                                                \
+            fprintf(stderr, "Register index %u > MAX_REG = %d\n", (unsigned) reg, MAX_REG); \
+            AVM_ABORT();                                                                    \
+        }                                                                                   \
+    }
+
+#define DECODE_YREG(reg, decode_pc)                                                      \
+    {                                                                                    \
+        if (UNLIKELY((*(decode_pc) &0x7) != COMPACT_YREG)) {                             \
+            fprintf(stderr, "Unexpected operand, expected a yreg (%x)\n", *(decode_pc)); \
+            AVM_ABORT();                                                                 \
+        }                                                                                \
+        DECODE_VALUE32(reg, decode_pc);                                                  \
+    }
+
+#define IS_EXTENDED_ALLOCATOR(decode_pc) \
+    (*decode_pc) == COMPACT_EXTENDED_ALLOCATION_LIST
+
+#define DECODE_ALLOCATOR_LIST(need, decode_pc)                                      \
+    if (IS_EXTENDED_ALLOCATOR(decode_pc)) {                                         \
+        need = 0;                                                                   \
+        (decode_pc)++; /* skip list tag */                                          \
+        uint32_t list_size;                                                         \
+        DECODE_LITERAL(list_size, (decode_pc));                                     \
+        uint32_t allocator_tag;                                                     \
+        uint32_t allocator_size;                                                    \
+        for (uint32_t j = 0; j < list_size; j++) {                                  \
+            DECODE_LITERAL(allocator_tag, (decode_pc));                             \
+            DECODE_LITERAL(allocator_size, (decode_pc));                            \
+            if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FLOATS) {      \
+                allocator_size *= FLOAT_SIZE;                                       \
+            } else if (allocator_tag == COMPACT_EXTENDED_ALLOCATOR_LIST_TAG_FUNS) { \
+                allocator_size *= BOXED_FUN_SIZE;                                   \
+            }                                                                       \
+            need += allocator_size;                                                 \
+        }                                                                           \
+    } else {                                                                        \
+        DECODE_LITERAL(need, decode_pc);                                            \
+    }
+
+#ifndef AVM_NO_EMU
+
+static size_t decode_nbits_integer(Context *ctx, const uint8_t *encoded, term *out_term)
+{
+    UNUSED(ctx);
+    UNUSED(out_term);
+
+    const uint8_t *new_encoded = encoded;
+    uint32_t len;
+    DECODE_LITERAL(len, new_encoded);
+    // TODO: check this: actually should be enough: len = *(new_encoded)++ >> 4;
+    // it seems that likely range is something like from 9 (9 + 0) to 24 (9 + 15)
+    // that is 192 bits integer
+
+    len += 9;
+
+    return (new_encoded - encoded) + len;
+}
+
+// About X macro: https://en.wikipedia.org/wiki/X_macro
+#define X_OPCODE(op_name, num, lower_name, signature) \
+    signature,
+
+#define X_OPCODE_HANDLER(op_name, num, lower_name, signature) \
+    signature,
+
+#define X_OPCODE_REMOVED(op_name, num, lower_name) \
+    NULL,
+
+#define X_OPCODE_SKIP(...) \
+    NULL,
+
+static const char *const opcode_signatures[] = {
+    NULL,
+#include "opcodes.def"
+};
+
+#undef X_OPCODE
+#undef X_OPCODE_HANDLER
+#undef X_OPCODE_REMOVED
+#undef X_OPCODE_SKIP
+
+#define OPCODE_SIGNATURES_LEN (sizeof(opcode_signatures) / sizeof(opcode_signatures[0]))
+
+#ifdef ENABLE_TRACE
+
+#define X_OPCODE(op_name, num, lower_name, signature) \
+    #lower_name,
+
+#define X_OPCODE_HANDLER(op_name, num, lower_name, signature) \
+    #lower_name,
+
+#define X_OPCODE_REMOVED(op_name, num, lower_name) \
+    #lower_name,
+
+#define X_OPCODE_SKIP(...) \
+    NULL,
+
+static const char *const opcode_names[] = {
+    NULL,
+#include "opcodes.def"
+};
+
+#undef X_OPCODE
+#undef X_OPCODE_HANDLER
+#undef X_OPCODE_REMOVED
+#undef X_OPCODE_SKIP
+
+#endif /* ENABLE_TRACE */
+
+typedef void (*label_opcode_handler_t)(Module *mod, struct ListHead *line_refs,
+    const uint8_t **current_pc, int arg_index, uint32_t u32_arg);
+
+static void handle_fmove_opcode(Module *mod, struct ListHead *line_refs, const uint8_t **current_pc,
+    int arg_index, uint32_t u32_arg)
+{
+    UNUSED(mod);
+    UNUSED(line_refs);
+    UNUSED(arg_index);
+    UNUSED(u32_arg);
+
+    const uint8_t *pc = *current_pc;
+    if (*pc == COMPACT_EXTENDED_FP_REGISTER) {
+        uint32_t freg;
+        DECODE_FP_REGISTER(freg, pc);
+        UNUSED(freg);
+        DEST_REGISTER(dreg);
+        DECODE_DEST_REGISTER(dreg, pc);
+
+    } else {
+        term src;
+        DECODE_COMPACT_TERM(src, pc);
+        UNUSED(src);
+        uint32_t freg;
+        DECODE_FP_REGISTER(freg, pc);
+        UNUSED(freg);
+    }
+    *current_pc = pc;
+}
+
+static void handle_bs_match_opcode(Module *mod, struct ListHead *line_refs,
+    const uint8_t **current_pc, int arg_index, uint32_t u32_arg)
+{
+    UNUSED(mod);
+    UNUSED(line_refs);
+    UNUSED(u32_arg);
+
+    if (arg_index != 2) {
+        return;
+    }
+
+    const uint8_t *pc = *current_pc;
+    DECODE_EXTENDED_LIST_TAG(pc);
+    int list_len;
+    DECODE_LITERAL(list_len, pc);
+    int j = 0;
+    while (j < list_len) {
+        term command;
+        DECODE_ATOM(command, pc);
+        j++;
+        uint32_t tmp;
+        term t;
+        DEST_REGISTER(dreg);
+
+        UNUSED(tmp);
+        UNUSED(t);
+        switch (command) {
+            case ENSURE_AT_LEAST_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                break;
+            case ENSURE_EXACTLY_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                break;
+            case INTEGER_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_COMPACT_TERM(t, pc);
+                j++;
+                DECODE_COMPACT_TERM(t, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_DEST_REGISTER(dreg, pc);
+                j++;
+                break;
+            case BINARY_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_COMPACT_TERM(t, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_DEST_REGISTER(dreg, pc);
+                j++;
+                break;
+            case GET_TAIL_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_DEST_REGISTER(dreg, pc);
+                j++;
+                break;
+            case EQUAL_COLON_EQUAL_ATOM:
+                DECODE_NIL(pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                break;
+            case SKIP_ATOM:
+                DECODE_LITERAL(tmp, pc);
+                j++;
+                break;
+            default:
+                fprintf(stderr, "bs_match loader: unknown command %i\n",
+                    (int) term_to_atom_index(command));
+                AVM_ABORT();
+        }
+    }
+    *current_pc = pc;
+}
+
+static void handle_label_opcode(Module *mod, struct ListHead *line_refs, const uint8_t **current_pc,
+    int arg_index, uint32_t u32_arg)
+{
+    UNUSED(line_refs);
+    UNUSED(arg_index);
+
+    module_add_label(mod, u32_arg, *current_pc);
+}
+
+static void handle_line_opcode(Module *mod, struct ListHead *line_refs, const uint8_t **current_pc,
+    int arg_index, uint32_t u32_arg)
+{
+    UNUSED(arg_index);
+    UNUSED(u32_arg);
+
+    const uint8_t *pc = *current_pc;
+    unsigned int offset = pc - mod->code->code;
+    uint32_t line_ref;
+    DECODE_LITERAL(line_ref, pc);
+    *current_pc = pc;
+
+    module_insert_line_ref_offset(mod, line_refs, line_ref, offset);
+}
+
+#define X_OPCODE(op_name, num, lower_name, signature) \
+    NULL,
+
+#define X_OPCODE_HANDLER(op_name, num, lower_name, signature) \
+    handle_##lower_name##_opcode,
+
+#define X_OPCODE_REMOVED(op_name, num, lower_name) \
+    NULL,
+
+#define X_OPCODE_SKIP(...) \
+    NULL,
+
+static label_opcode_handler_t const opcode_handlers[] = {
+    NULL,
+#include "opcodes.def"
+};
+
+#undef X_OPCODE
+#undef X_OPCODE_HANDLER
+#undef X_OPCODE_REMOVED
+#undef X_OPCODE_SKIP
+
+static int parse_core_chunk(Module *mod, struct ListHead *line_refs)
+{
+    TRACE("-- Loading code\n");
+    SMP_MODULE_LOCK(mod);
+    const uint8_t *code = mod->code->code;
+    const uint8_t *pc = code;
+
+    while (1) {
+        uint8_t opcode = *pc++;
+
+        if (UNLIKELY(opcode >= OPCODE_SIGNATURES_LEN)) {
+            fprintf(stderr, "missing opcode: %i\n", (int) opcode);
+            AVM_ABORT();
+        }
+
+        const char *opcode_signature = opcode_signatures[opcode];
+
+        TRACE("%s", opcode_names[opcode]);
+
+        if (opcode_signature == NULL) {
+            fprintf(stderr, "missing opcode: %i\n", (int) opcode);
+            AVM_ABORT();
+        }
+
+        uint32_t u32_arg = 0;
+
+        int arg_index = 0;
+        int list_remaining = 0;
+        int loop_start = 0;
+
+        while (opcode_signature[arg_index]) {
+            switch (opcode_signature[arg_index]) {
+                case '[': /* list loop: decode extended list tag + count */ {
+                    DECODE_EXTENDED_LIST_TAG(pc);
+                    DECODE_LITERAL(list_remaining, pc);
+                    TRACE(" [%i]", list_remaining);
+                    arg_index++;
+                    loop_start = arg_index;
+                    int body_len = 0;
+                    while (opcode_signature[arg_index + body_len] != ']') {
+                        body_len++;
+                    }
+                    if (list_remaining == 0) {
+                        arg_index += body_len + 1;
+                    } else if (body_len > 1 && (list_remaining % body_len) != 0) {
+                        fprintf(stderr, "Invalid list length %i, not a multiple of %i\n",
+                            list_remaining, body_len);
+                        AVM_ABORT();
+                    }
+                    continue;
+                }
+
+                case ']': /* end list: jump back if items remain */ {
+                    if (list_remaining > 0) {
+                        arg_index = loop_start;
+                    } else {
+                        arg_index++;
+                    }
+                    continue;
+                }
+
+                case 's': /* source term */
+                case 'c': /* constant */ {
+                    term t;
+                    DECODE_COMPACT_TERM(t, pc);
+                    UNUSED(t);
+                    TRACE(" s");
+                    break;
+                }
+
+                case 'd': /* destination register */
+                case 'S': /* source register */ {
+                    DEST_REGISTER(dreg);
+                    DECODE_DEST_REGISTER(dreg, pc);
+                    TRACE(" %c%i", T_DEST_REG(dreg));
+                    break;
+                }
+
+                case 'x': /* x register */ {
+                    uint32_t reg;
+                    DECODE_XREG(reg, pc);
+                    USED_BY_TRACE(reg);
+                    TRACE(" x%u", reg);
+                    break;
+                }
+
+                case 'y': /* y register */ {
+                    uint32_t reg;
+                    DECODE_YREG(reg, pc);
+                    USED_BY_TRACE(reg);
+                    TRACE(" y%u", reg);
+                    break;
+                }
+
+                case 'a': /* atom */ {
+                    term atom;
+                    DECODE_ATOM(atom, pc);
+                    USED_BY_TRACE(atom);
+                    TRACE(" a%lu", (unsigned long) term_to_atom_index(atom));
+                    break;
+                }
+
+                case 'j': /* fail label (0 allowed) */
+                case 'f': /* fail label (non-zero) */ {
+                    DECODE_LABEL(u32_arg, pc);
+                    TRACE(" f%u", u32_arg);
+                    break;
+                }
+
+                case 'm': /* atom or label */ {
+                    term atom;
+                    uint32_t label = 0;
+                    DECODE_ATOM_OR_LABEL(atom, label, pc);
+                    UNUSED(atom);
+                    USED_BY_TRACE(label);
+                    TRACE(" m%u", label);
+                    break;
+                }
+
+                case 't': /* small word (12 bits) */
+                case 'I': /* wider word (32 bits) */
+                case 'A': /* arity */
+                case 'P': /* tuple/byte offset */
+                case 'Q': /* stack/frame offset */
+                case 'e': /* export/import index */
+                case 'b': /* BIF index */
+                case 'F': /* fun/lambda index */ {
+                    DECODE_LITERAL(u32_arg, pc);
+                    TRACE(" %c%u", opcode_signature[arg_index], u32_arg);
+                    break;
+                }
+
+                case 'l': /* floating point register */ {
+                    uint32_t reg;
+                    DECODE_FP_REGISTER(reg, pc);
+                    USED_BY_TRACE(reg);
+                    TRACE(" l%u", reg);
+                    break;
+                }
+
+                case 'z': /* allocator list */ {
+                    uint32_t need;
+                    DECODE_ALLOCATOR_LIST(need, pc);
+                    USED_BY_TRACE(need);
+                    TRACE(" z%u", need);
+                    break;
+                }
+
+                case '$': /* end of code section */ {
+                    SMP_MODULE_UNLOCK(mod);
+                    return pc - code - 1;
+                }
+
+                case '-': /* handler placeholder */ {
+                    break;
+                }
+
+                default: {
+                    fprintf(stderr, "unknown signature: %c\n", opcode_signature[arg_index]);
+                    AVM_ABORT();
+                }
+            }
+
+            list_remaining--;
+
+            label_opcode_handler_t opcode_handler = opcode_handlers[opcode];
+            if (opcode_handler) {
+                opcode_handler(mod, line_refs, &pc, arg_index, u32_arg);
+            }
+
+            arg_index++;
+        }
+        TRACE("\n");
+    }
+
+    return 0;
+}
+
+#endif /* AVM_NO_EMU */
 
 static enum ModuleLoadResult module_populate_atoms_table(Module *this_module, uint8_t *table_data, GlobalContext *glb)
 {
@@ -365,6 +1132,13 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
                     ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
                     module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
+
+#ifndef AVM_NO_JIT_DWARF
+                    // Register debug info with debugger (will check for embedded ELF)
+                    const void *chunk_start = (const uint8_t *) &native_code->info_size;
+                    size_t chunk_size = ENDIAN_SWAP_32(native_code->size);
+                    jit_debug_register_code(mod, chunk_start, chunk_size, module_entry_point);
+#endif
                     break;
                 }
             }
@@ -445,7 +1219,7 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 #ifndef AVM_NO_EMU
         struct ListHead line_refs;
         list_init(&line_refs);
-        mod->end_instruction_ii = read_core_chunk(mod, &line_refs);
+        mod->end_instruction_ii = parse_core_chunk(mod, &line_refs);
 
         // Create the list of offsets if the module has line informations.
         if (mod->line_refs_table != NULL) {
@@ -490,6 +1264,11 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
 
 COLD_FUNC void module_destroy(Module *module)
 {
+#ifndef AVM_NO_JIT_DWARF
+    // Unregister DWARF debug info from debugger if it was registered
+    jit_debug_unregister_code(NULL, module);
+#endif
+
     free(module->labels);
     free(module->imported_funcs);
     free(module->literals_table);

@@ -23,7 +23,9 @@ project(jit)
 include(BuildErlang)
 
 set(ERLANG_MODULES
+    jit_dwarf_pt
     jit
+    jit_dwarf
     jit_precompile
     jit_regs
     jit_stream_binary
@@ -35,13 +37,30 @@ set(ERLANG_MODULES
     jit_armv6m_asm
     jit_riscv32
     jit_riscv32_asm
+    jit_riscv64
+    jit_riscv64_asm
     jit_x86_64
     jit_x86_64_asm
 )
 
-pack_precompiled_archive(jit ${ERLANG_MODULES})
-
 include(../../../version.cmake)
+
+if (NOT AVM_DISABLE_JIT_DWARF)
+    set(erlc_flags -DJIT_DWARF -DATOMVM_VERSION=\"${ATOMVM_BASE_VERSION}\" -pa ${CMAKE_CURRENT_BINARY_DIR}/beams)
+else()
+    set(erlc_flags)
+endif()
+
+pack_precompiled_archive(jit ERLC_FLAGS ${erlc_flags} MODULES ${ERLANG_MODULES})
+
+if (NOT AVM_DISABLE_JIT_DWARF)
+    # jit.beam needs jit_dwarf_pt.beam compiled first (parse transform dependency)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/jit.beam
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf_pt.beam
+        APPEND
+    )
+endif()
 
 set(JIT_VERSION ${ATOMVM_BASE_VERSION})
 
