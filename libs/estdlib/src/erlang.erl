@@ -65,6 +65,7 @@
     iolist_to_binary/1,
     binary_to_atom/1,
     binary_to_atom/2,
+    binary_to_float/1,
     binary_to_integer/1,
     binary_to_integer/2,
     binary_to_list/1,
@@ -810,6 +811,41 @@ binary_to_atom(_Binary) ->
 %%-----------------------------------------------------------------------------
 -spec binary_to_atom(Binary :: binary(), Encoding :: atom_encoding()) -> atom().
 binary_to_atom(_Binary, _Encoding) ->
+    erlang:nif_error(undefined).
+
+%%-----------------------------------------------------------------------------
+%% @param   Binary  Binary containing a text representation of a float
+%% @returns the float represented by the binary
+%% @doc     Parse the text in a given binary as a floating point number.
+%%
+%% The float string format is the same as the format for Erlang float
+%% literals except that underscores and based floats are not permitted:
+%% ```
+%% [+|-] DIGITS "." DIGITS [("e"|"E") [+|-] DIGITS]
+%% '''
+%% where `DIGITS' is one or more decimal digits (`0'..`9').
+%%
+%% Examples of accepted inputs:
+%% <ul>
+%%   <li>`<<"1.5">>' -> `1.5'</li>
+%%   <li>`<<"-1.0">>' -> `-1.0'</li>
+%%   <li>`<<"+1.0e+3">>' -> `1.0e3'</li>
+%%   <li>`<<"0.0e999">>' -> `0.0' (zero stays zero)</li>
+%%   <li>`<<"1.0e-999">>' -> `0.0' (underflow)</li>
+%% </ul>
+%%
+%% Raises `badarg' if the binary does not represent a valid float:
+%% no decimal point (`<<"1e5">>'), missing digits around the dot
+%% (`<<".5">>' or `<<"1.">>'), overflow (`<<"1.0e999">>'),
+%% whitespace, hex floats, or special values like `<<"inf">>'.
+%%
+%% <em>AtomVM-specific notes:</em> commas are not accepted as
+%% decimal separators.  Input strings longer than 255 bytes raise
+%% `badarg'.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec binary_to_float(Binary :: binary()) -> float().
+binary_to_float(_Binary) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------
@@ -1965,8 +2001,10 @@ length(_List) ->
 %%-----------------------------------------------------------------------------
 %% @param   String  a string representation of a float
 %% @returns the float represented by the string
-%% @doc     Parse a string to a floating point number.
-%% Errors with `badarg' if the string is not a valid float representation.
+%% @doc     Parse a string (list of characters) as a floating point number.
+%%
+%% Same format and behavior as {@link binary_to_float/1} but takes a
+%% string (character list) instead of a binary.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec list_to_float(String :: string()) -> float().
