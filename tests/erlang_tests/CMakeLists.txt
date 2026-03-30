@@ -487,6 +487,7 @@ compile_erlang(float2bin)
 compile_erlang(float2bin2decimals)
 compile_erlang(float2bin2scientific)
 compile_erlang(float2bin2)
+compile_erlang(float_to_short)
 compile_erlang(float2list2decimals)
 compile_erlang(float2list2scientific)
 compile_erlang(float_bif)
@@ -1042,6 +1043,7 @@ set(erlang_test_beams
     float2bin2decimals.beam
     float2bin2scientific.beam
     float2bin2.beam
+    float_to_short.beam
     float2list2decimals.beam
     float2list2scientific.beam
     float_bif.beam

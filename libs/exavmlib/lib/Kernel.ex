@@ -85,7 +85,7 @@ defmodule Kernel do
         |> :erlang.list_to_binary()
 
       t when is_float(t) ->
-        :erlang.float_to_binary(term, [{:decimals, 17}, :compact])
+        :erlang.float_to_binary(term, [:short])
 
       t when is_map(t) ->
         [?%, ?{ | t |> inspect_kv() |> join(?})]

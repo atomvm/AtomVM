@@ -199,9 +199,10 @@
 }.
 
 -type float_format_option() ::
-    {decimals, Decimals :: 0..57}
-    | {scientific, Decimals :: 0..57}
-    | compact.
+    {decimals, Decimals :: 0..253}
+    | {scientific, Decimals :: 0..249}
+    | compact
+    | short.
 
 -type demonitor_option() :: flush | {flush, boolean()} | info | {info, boolean()}.
 
@@ -883,6 +884,8 @@ atom_to_list(_Atom) ->
 %% @param   Float   Float to convert
 %% @returns a binary with a text representation of the float
 %% @doc     Convert a float to a binary.
+%%
+%% Equivalent to `float_to_binary(Float, [{scientific, 20}])'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float()) -> binary().
@@ -894,6 +897,42 @@ float_to_binary(_Float) ->
 %% @param   Options Options for conversion
 %% @returns a binary with a text representation of the float
 %% @doc     Convert a float to a binary.
+%%
+%% Supported options:
+%% <ul>
+%%   <li>`short' - shortest representation that round-trips back to the same
+%%       float value.  Uses fixed-point for values in a normal range and
+%%       scientific notation for very large or very small values.</li>
+%%   <li>`{decimals, N}' - fixed-point decimal notation with N digits after
+%%       the decimal point (0..253).</li>
+%%   <li>`{scientific, N}' - scientific notation with N digits after the
+%%       decimal point (0..249).</li>
+%%   <li>`compact' - strip trailing zeros when used with `{decimals, N}'.
+%%       Has no effect with `short' or `{scientific, N}'.</li>
+%% </ul>
+%%
+%% When multiple format options are given, the last one wins.
+%%
+%% <em>AtomVM-specific notes:</em> AtomVM uses Grisu3 for `short'
+%% formatting instead of Ryu (used by Erlang/OTP).  Grisu3 produces
+%% the shortest output for most values, but for a small fraction
+%% (~0.5%) it falls back to a longer 17-digit representation.  The
+%% output is always correct for round-trip, just not always the
+%% shortest possible.
+%%
+%% Example: `float_to_binary(1.0e23, [short])' returns
+%% `<<"1.0e23">>' on Erlang/OTP but
+%% `<<"9.9999999999999992e22">>' on AtomVM.
+%%
+%% When built with 32-bit floats (`AVM_USE_32BIT_FLOAT'), `short'
+%% uses a best-effort algorithm and the output may also be longer
+%% than on Erlang/OTP.  For example, `float_to_binary(3.14, [short])'
+%% returns `<<"3.1400001">>' because `3.14' rounds to a different
+%% 32-bit float value, and the best-effort formatter uses 9
+%% significant digits instead of finding the shortest roundtrip
+%% (`<<"3.14">>') like Ryu would.
+%% Very large precision values with `{decimals, N}' may raise
+%% `badarg' for large magnitude numbers due to buffer size limits.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_binary(Float :: float(), Options :: [float_format_option()]) -> binary().
@@ -904,6 +943,8 @@ float_to_binary(_Float, _Options) ->
 %% @param   Float   Float to convert
 %% @returns a string with a text representation of the float
 %% @doc     Convert a float to a string.
+%%
+%% Equivalent to `float_to_list(Float, [{scientific, 20}])'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float()) -> string().
@@ -915,6 +956,8 @@ float_to_list(_Float) ->
 %% @param   Options Options for conversion
 %% @returns a string with a text representation of the float
 %% @doc     Convert a float to a string.
+%%
+%% Same options as {@link float_to_binary/2}.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec float_to_list(Float :: float(), Options :: [float_format_option()]) -> string().
