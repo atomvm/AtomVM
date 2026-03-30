@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erlang:float_to_binary/2` and `erlang:float_to_list/2` now accept `{decimals, 0..253}` and `{scientific, 0..249}`
 
 ### Fixed
+- Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP
 - Fixed map type ordering in term comparison to match OTP specification (maps should order between tuples and nil)
 - Fixed a bug in `bs_match` `get_tail` logic that occurred with OTP26-compiled beams
 - Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`

@@ -183,13 +183,6 @@
     raise_stacktrace/0
 ]).
 
-%%
-%% TODO Correct the following bugs
-%% * cancel_timer should be renamed cancel, per the OTP documentation
-%% * return value needs to be {ok, cancel} or {error, Reason}
-%% * review API documentation for timer functions in this module
-%%
-
 -type atom_encoding() :: latin1 | utf8 | unicode.
 
 -type mem_type() :: binary.
@@ -256,7 +249,6 @@ start_timer(Time, Dest, Msg) ->
     start_timer(Time, Dest, Msg, []).
 
 %%-----------------------------------------------------------------------------
-%% @hidden
 %% @param   Time time in milliseconds after which to send the timeout message.
 %% @param   Dest Pid or server name to which to send the timeout message.
 %% @param   Msg Message to send to Dest after Time ms.
@@ -275,19 +267,22 @@ start_timer(Time, Dest, Msg, _Options) ->
     timer_manager:start_timer(Time, Dest, Msg).
 
 %%-----------------------------------------------------------------------------
-%% @hidden
-%% @param   Time time in milliseconds after which to send the timeout message.
-%% @param   Dest Pid or server name to which to send the timeout message.
-%% @param   Msg Message to send to Dest after Time ms.
-%% @param   Options options
-%% @returns a reference that can be used to cancel the timer, if desired.
-%% @doc     Start a timer, and send {timeout, TimerRef, Msg} to Dest after
-%%          Time ms, where TimerRef is the reference returned from this function.
+%% @param   TimerRef a timer reference returned from {@link start_timer/3} or
+%%          {@link start_timer/4}.
+%% @returns the time in milliseconds left until the timer would have expired,
+%%          or `false' if the timer was not found (e.g., it had already expired
+%%          or been cancelled).
+%% @doc     Cancel a timer.
 %%
-%%          <em><b>Note.</b>  The Options argument is currently ignored.</em>
+%%          If the timer is found and has not yet fired, it is cancelled and the
+%%          remaining time is returned.  If the timer has already expired or does
+%%          not exist, `false' is returned.
+%%
+%%          <em><b>Note.</b>  Even if `false' is returned, a timeout message may
+%%          already have been placed in the caller's message queue.</em>
 %% @end
 %%-----------------------------------------------------------------------------
--spec cancel_timer(TimerRef :: reference()) -> ok.
+-spec cancel_timer(TimerRef :: reference()) -> false | non_neg_integer().
 cancel_timer(TimerRef) ->
     timer_manager:cancel_timer(TimerRef).
 

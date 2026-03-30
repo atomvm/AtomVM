@@ -25,6 +25,8 @@
 test() ->
     ok = test_start_timer(),
     ok = test_cancel_timer(),
+    ok = test_cancel_timer_after_expiry(),
+    ok = test_erlang_cancel_timer(),
     pong = test_send_after(),
     ok.
 
@@ -44,6 +46,26 @@ test_cancel_timer() ->
     ?ASSERT_TRUE(R > 0),
     ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
     R2 = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_EQUALS(false, R2),
+    ok.
+
+test_cancel_timer_after_expiry() ->
+    ?ASSERT_MATCH(timer_manager:get_timer_refs(), []),
+    TimerRef = timer_manager:start_timer(10, self(), test_cancel_after_expiry),
+    receive
+        {timeout, TimerRef, test_cancel_after_expiry} -> ok
+    after 5000 -> throw(timeout)
+    end,
+    R = timer_manager:cancel_timer(TimerRef),
+    ?ASSERT_EQUALS(false, R),
+    ok.
+
+test_erlang_cancel_timer() ->
+    TimerRef = erlang:start_timer(60000, self(), test_erlang_cancel),
+    R = erlang:cancel_timer(TimerRef),
+    ?ASSERT_TRUE(is_integer(R)),
+    ?ASSERT_TRUE(R > 0),
+    R2 = erlang:cancel_timer(TimerRef),
     ?ASSERT_EQUALS(false, R2),
     ok.
 
