@@ -209,6 +209,7 @@ endif()
 if(AVM_MINIMAL_OPCODES)
     target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_BS_MATCH=0)
     target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_SSA_OPT_BS_ENSURE=0)
+    target_compile_definitions(libAtomVM PUBLIC SUPPORT_COMPILER_OPT_NO_BS_CREATE_BIN=0)
 endif()
 
 include(CheckIncludeFile)
