@@ -40,6 +40,7 @@ set(ERLANG_MODULES
     test_net
     test_net_kernel
     test_os
+    test_uart
     test_proc_lib
     test_sets
     test_spawn
@@ -60,4 +61,4 @@ set(ERLANG_MODULES
 )
 
 pack_archive(test_estdlib_lib ${ERLANG_MODULES})
-pack_test(test_estdlib estdlib eavmlib avm_network etest)
+pack_test(test_estdlib estdlib eavmlib avm_network avm_unix etest)

@@ -1096,6 +1096,11 @@ DEFINE_MATH_NIF(tanh)
 #else
 #define IF_HAVE_GETCWD_PATHMAX(expr) NULL
 #endif
+#if HAVE_OPEN && HAVE_CLOSE && HAVE_TCGETATTR
+#define IF_HAVE_TCGETATTR(expr) (expr)
+#else
+#define IF_HAVE_TCGETATTR(expr) NULL
+#endif
 #ifndef AVM_NO_JIT
 #define IF_HAVE_JIT(expr) (expr)
 #else
