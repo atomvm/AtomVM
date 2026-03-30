@@ -672,7 +672,7 @@ void gpio_interrupt_callback(Context *ctx, uint32_t exti)
             term gpio_tuple = term_alloc_tuple(2, &heap);
             term_put_tuple_element(int_msg, 0, globalcontext_make_atom(ctx->global, gpio_interrupt_atom));
             term_put_tuple_element(gpio_tuple, 0, gpio_bank);
-            term_put_tuple_element(gpio_tuple, 1, term_from_int32((int32_t) gpio_pin));
+            term_put_tuple_element(gpio_tuple, 1, term_from_int11(gpio_pin));
             term_put_tuple_element(int_msg, 1, gpio_tuple);
 
             globalcontext_send_message(ctx->global, listening_pid, int_msg);
