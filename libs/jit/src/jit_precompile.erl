@@ -120,6 +120,7 @@ compile(Target, Dir, Dwarf, Path) ->
                 "armv6m" -> ?JIT_ARCH_ARMV6M;
                 "riscv32" -> ?JIT_ARCH_RISCV32;
                 "riscv64" -> ?JIT_ARCH_RISCV64;
+                "arm32" -> ?JIT_ARCH_ARM32;
                 _ -> error({unsupported_target, Target})
             end,
 

@@ -108,3 +108,4 @@
 -define(DWARF_A0_REG_RISCV, 10).
 % r0 register in ARM
 -define(DWARF_R0_REG_ARMV6M, 0).
+-define(DWARF_R0_REG_ARM32, 0).

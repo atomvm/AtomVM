@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`
 - Added generic unix support for uart using POSIX nifs
 - Added RISC-V 64-bit (RV64IMAC) JIT backend
+- Added arm32 JIT backend
 - Added DWARF debug information support for JIT-compiled code
 
 ### Changed
