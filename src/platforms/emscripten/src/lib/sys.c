@@ -771,6 +771,8 @@ term sys_get_info(Context *ctx, term key)
     return UNDEFINED_ATOM;
 }
 
+#ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
 #ifndef MBEDTLS_THREADING_C
@@ -837,3 +839,6 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     struct EmscriptenPlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
+#endif
+
+#endif
