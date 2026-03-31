@@ -47,19 +47,24 @@ target_compile_features(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC c_std_11)
 
 target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC libAtomVM)
 target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC ATOMVM_HAS_MBEDTLS)
-target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedcrypto)
+target_link_libraries(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC MbedTLS::mbedtls)
 include(CheckCSourceCompiles)
-get_target_property(_mbedcrypto_includes MbedTLS::mbedcrypto INTERFACE_INCLUDE_DIRECTORIES)
-set(CMAKE_REQUIRED_INCLUDES ${_mbedcrypto_includes})
+get_target_property(_mbedtls_includes MbedTLS::mbedtls INTERFACE_INCLUDE_DIRECTORIES)
+set(CMAKE_REQUIRED_INCLUDES ${_mbedtls_includes})
+set(_avm_try_compile_target_type ${CMAKE_TRY_COMPILE_TARGET_TYPE})
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 check_c_source_compiles("
     #include <mbedtls/version.h>
     #ifndef MBEDTLS_PSA_CRYPTO_C
     #error PSA Crypto not available
     #endif
+    #include <psa/crypto.h>
     int main(void) { return 0; }
 " HAVE_PSA_CRYPTO)
+set(CMAKE_TRY_COMPILE_TARGET_TYPE ${_avm_try_compile_target_type})
 unset(CMAKE_REQUIRED_INCLUDES)
-unset(_mbedcrypto_includes)
+unset(_avm_try_compile_target_type)
+unset(_mbedtls_includes)
 if (HAVE_PSA_CRYPTO)
     target_compile_definitions(libAtomVM${PLATFORM_LIB_SUFFIX} PUBLIC HAVE_PSA_CRYPTO)
 endif()

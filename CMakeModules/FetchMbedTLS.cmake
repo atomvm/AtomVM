@@ -20,10 +20,12 @@
 
 include(FetchContent)
 
+set(AVM_FETCH_MBEDTLS_GIT_TAG "v3.6.3.1" CACHE STRING "MbedTLS git tag to fetch for Emscripten builds")
+
 FetchContent_Declare(
   mbedtls
   GIT_REPOSITORY http://github.com/mbed-TLS/mbedtls.git
-  GIT_TAG        v3.6.3.1
+  GIT_TAG        ${AVM_FETCH_MBEDTLS_GIT_TAG}
   GIT_SHALLOW    1
 )
 
