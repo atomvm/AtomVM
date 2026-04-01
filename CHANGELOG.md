@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added arm32 JIT backend
 - Added DWARF debug information support for JIT-compiled code
 - Added I2C and SPI APIs to rp2 platform
+- Added `code:get_object_code/1`
 
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic
