@@ -125,7 +125,7 @@ Context *context_new(GlobalContext *glb)
 
     context_set_exception_class(ctx, term_nil());
     ctx->exception_reason = term_nil();
-    ctx->exception_stacktrace = term_nil();
+    ctx->exception_stacktrace = term_invalid_term();
 
     ctx->exit_reason = NORMAL_ATOM;
 

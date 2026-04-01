@@ -288,9 +288,9 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
     TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
-        ctx->exception_stacktrace
-            = stacktrace_create_raw(ctx, jit_state->module, offset);
+    if (offset || term_is_invalid_term(ctx->exception_stacktrace)
+        || term_is_list(ctx->exception_stacktrace)) {
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, jit_state->module, offset);
     }
 
     // Copy exception fields to x registers and clear them
@@ -299,7 +299,7 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     ctx->x[2] = ctx->exception_stacktrace;
     context_set_exception_class(ctx, term_nil());
     ctx->exception_reason = term_nil();
-    ctx->exception_stacktrace = term_nil();
+    ctx->exception_stacktrace = term_invalid_term();
 
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {

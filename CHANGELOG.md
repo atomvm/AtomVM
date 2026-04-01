@@ -29,6 +29,8 @@ strict format validation
 - Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`
 - Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
 of raising `badarg`
+- Fixed `erlang:raise/3` with a built stacktrace causing an assertion failure when the re-raised
+exception passes through a non-matching catch clause
 
 ## [0.7.0-alpha.0] - 2026-03-20
 
