@@ -174,6 +174,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_display_string(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
@@ -415,6 +416,11 @@ static const struct Nif delete_element_nif = {
 static const struct Nif display_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
+};
+
+static const struct Nif display_string_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_display_string
 };
 
 static const struct Nif erase_0_nif = {
@@ -2039,9 +2045,12 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
     term env_var_list = argv[0];
     VALIDATE_VALUE(env_var_list, term_is_list);
 
-    int ok;
-    char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
-    if (UNLIKELY(!ok)) {
+    interop_utf8_string_result_t utf8_result;
+    char *env_var = interop_list_to_utf8_string(env_var_list, NULL, &utf8_result);
+    if (UNLIKELY(IS_NULL_PTR(env_var))) {
+        if (utf8_result == InteropUTF8StringMemoryAllocFail) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2867,6 +2876,75 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     printf("\n");
 
     return TRUE_ATOM;
+}
+
+static term display_string_flush(Context *ctx, FILE *fd)
+{
+    errno = 0;
+    if (UNLIKELY(fflush(fd) == EOF)) {
+        int err = errno ? errno : EIO;
+        clearerr(fd);
+        RAISE_ERROR(posix_errno_to_term(err, ctx->global));
+    }
+
+    return TRUE_ATOM;
+}
+
+static term display_string_write(Context *ctx, FILE *fd, const void *buf, size_t len)
+{
+    errno = 0;
+    if (len > 0) {
+        size_t written = fwrite(buf, 1, len, fd);
+        if (UNLIKELY(written != len)) {
+            int err = errno ? errno : EIO;
+            clearerr(fd);
+            RAISE_ERROR(posix_errno_to_term(err, ctx->global));
+        }
+    }
+
+    return display_string_flush(ctx, fd);
+}
+
+static term nif_erlang_display_string(Context *ctx, int argc, term argv[])
+{
+    term device = (argc == 1) ? STDERR_ATOM : argv[0];
+    term string = argv[argc - 1];
+
+    FILE *fd;
+
+    if (device == STDOUT_ATOM) {
+        fd = stdout;
+    } else if (device == STDERR_ATOM) {
+        fd = stderr;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (term_is_binary(string)) {
+        size_t len = term_binary_size(string);
+        return display_string_write(ctx, fd, term_binary_data(string), len);
+    } else if (term_is_nil(string)) {
+        return display_string_flush(ctx, fd);
+    } else if (term_is_list(string)) {
+        size_t len;
+        interop_utf8_string_result_t utf8_result;
+        char *buf = interop_list_to_utf8_string(string, &len, &utf8_result);
+        if (UNLIKELY(IS_NULL_PTR(buf))) {
+            switch (utf8_result) {
+                case InteropUTF8StringBadArg:
+                    RAISE_ERROR(BADARG_ATOM);
+                case InteropUTF8StringMemoryAllocFail:
+                default:
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
+
+        term result = display_string_write(ctx, fd, buf, len);
+        free(buf);
+        return result;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
 }
 
 // process_flag/3 work on a subset of flags, target is locked.
