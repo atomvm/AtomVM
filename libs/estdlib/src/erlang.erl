@@ -55,6 +55,8 @@
     loaded/0,
     module_loaded/1,
     display/1,
+    display_string/1,
+    display_string/2,
     list_to_atom/1,
     list_to_existing_atom/1,
     list_to_binary/1,
@@ -697,6 +699,14 @@ module_loaded(_Module) ->
 %%-----------------------------------------------------------------------------
 -spec display(Term :: any()) -> true.
 display(_Term) ->
+    erlang:nif_error(undefined).
+
+-spec display_string(String :: string() | binary()) -> true.
+display_string(_String) ->
+    erlang:nif_error(undefined).
+
+-spec display_string(Device :: stdout | stderr, String :: string() | binary()) -> true.
+display_string(_Device, _String) ->
     erlang:nif_error(undefined).
 
 %%-----------------------------------------------------------------------------

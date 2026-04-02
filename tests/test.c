@@ -192,6 +192,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_binary_to_existing_atom, 9),
     TEST_CASE_EXPECTED(test_atom_to_list, 1),
     TEST_CASE(test_display),
+    TEST_CASE(test_display_string),
     TEST_CASE(test_integer_to_list),
     TEST_CASE_EXPECTED(test_list_to_integer, 99),
     TEST_CASE_EXPECTED(test_abs, 5),

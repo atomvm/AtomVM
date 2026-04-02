@@ -139,7 +139,7 @@ char *interop_list_to_string(term list, int *ok)
     return str;
 }
 
-char *interop_list_to_utf8_string(term list, int *ok)
+char *interop_list_to_utf8_string(term list, size_t *out_size, interop_utf8_string_result_t *result)
 {
     size_t byte_len = 0;
 
@@ -147,12 +147,12 @@ char *interop_list_to_utf8_string(term list, int *ok)
     while (term_is_nonempty_list(t)) {
         term head = term_get_list_head(t);
         if (UNLIKELY(!term_is_integer(head))) {
-            *ok = 0;
+            *result = InteropUTF8StringBadArg;
             return NULL;
         }
         avm_int_t codepoint = term_to_int(head);
         if (UNLIKELY(codepoint < 0)) {
-            *ok = 0;
+            *result = InteropUTF8StringBadArg;
             return NULL;
         } else if (codepoint <= 127) {
             byte_len++;
@@ -160,7 +160,7 @@ char *interop_list_to_utf8_string(term list, int *ok)
             size_t codepoint_size;
             bool is_encodable = bitstring_utf8_encode(codepoint, NULL, &codepoint_size);
             if (UNLIKELY(!is_encodable)) {
-                *ok = 0;
+                *result = InteropUTF8StringBadArg;
                 return NULL;
             }
             byte_len += codepoint_size;
@@ -169,13 +169,13 @@ char *interop_list_to_utf8_string(term list, int *ok)
     }
 
     if (!term_is_nil(t)) {
-        *ok = 0;
+        *result = InteropUTF8StringBadArg;
         return NULL;
     }
 
     uint8_t *str = malloc(byte_len + 1);
     if (IS_NULL_PTR(str)) {
-        *ok = 0;
+        *result = InteropUTF8StringMemoryAllocFail;
         return NULL;
     }
 
@@ -184,14 +184,20 @@ char *interop_list_to_utf8_string(term list, int *ok)
     while (i < byte_len) {
         term codepoint_term = term_get_list_head(t);
         size_t codepoint_size;
-        // list has been previously checked, no need to check again
-        bitstring_utf8_encode(term_to_int(codepoint_term), &str[i], &codepoint_size);
+        if (UNLIKELY(!bitstring_utf8_encode(term_to_int(codepoint_term), &str[i], &codepoint_size))) {
+            free(str);
+            *result = InteropUTF8StringBadArg;
+            return NULL;
+        }
         t = term_get_list_tail(t);
         i += codepoint_size;
     }
     str[byte_len] = 0;
 
-    *ok = 1;
+    if (out_size) {
+        *out_size = byte_len;
+    }
+    *result = InteropUTF8StringOk;
     return (char *) str;
 }
 
