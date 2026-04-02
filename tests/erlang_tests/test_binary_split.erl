@@ -31,7 +31,17 @@ start() ->
     ok = split_compare(<<"Test">>, <<>>),
     ok = split_compare2(<<"Test">>, <<>>),
     ok = split_compare2(<<"helloSEPARATORworld">>, <<"hello">>, <<"world">>),
+    ok = split_compare_expected([<<"f">>, <<"bar">>], <<"foobar">>, [<<"oo">>, <<"o">>]),
+    ok = split_compare_expected([<<>>, <<>>, <<>>], <<"aba">>, [<<"a">>, <<"ab">>], [global]),
+    ok = split_compare_expected([<<>>, <<"a">>], <<":a::">>, <<":">>, [global, trim]),
+    ok = split_compare_expected([<<"a">>], <<":a::">>, <<":">>, [global, trim_all]),
+    ok = split_compare_expected([], <<>>, <<":">>, [trim]),
+    ok = split_compare_expected([<<"abc">>], <<"abc">>, [<<"z">>, <<"y">>], [trim_all]),
+    ok = split_compare_expected([<<"a">>], <<"a">>, <<":">>, [global | foo]),
     ok = fail_split(<<>>),
+    ok = fail_split([]),
+    ok = fail_split([<<>>]),
+    ok = fail_split([foo]),
     ok = fail_split({1, 2}),
     ok = fail_split2({1, 2}),
     case erlang:system_info(machine) of
@@ -57,6 +67,18 @@ split_compare2(Bin, Part1, Part2) ->
     [A, B] = binary:split(Bin, <<"SEPARATOR">>),
     ok = compare_bin(Part1, A),
     ok = compare_bin(B, Part2).
+
+split_compare_expected(Expected, Bin, Pattern) ->
+    split_compare_expected(Expected, Bin, Pattern, []).
+
+split_compare_expected(Expected, Bin, Pattern, Options) ->
+    compare_bin_list(Expected, binary:split(Bin, Pattern, Options)).
+
+compare_bin_list([], []) ->
+    ok;
+compare_bin_list([ExpectedHead | ExpectedTail], [ActualHead | ActualTail]) ->
+    ok = compare_bin(ExpectedHead, ActualHead),
+    compare_bin_list(ExpectedTail, ActualTail).
 
 compare_bin(Bin1, Bin2) ->
     compare_bin(Bin1, Bin2, byte_size(Bin1) - 1).
