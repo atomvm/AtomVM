@@ -28,7 +28,6 @@ set(ERLANG_MODULES
     console
     gpio_hal
     i2c_hal
-    json_encoder
     logger_manager
     port
     spi_hal

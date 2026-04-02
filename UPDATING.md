@@ -30,6 +30,8 @@ rather than copy sdkconfig.release-defaults.in to sdkconfig.defaults.in (which s
 `reconfigure` or `set-target` to be run to pick up the changes), this may also be combined with the
 `ATOMVM_ELIXIR_SUPPORT` option. For example, an Elixir-supported release build is configured using:
 `idf.py -DATOMVM_ELIXIR_SUPPORT=on -DATOMVM_RELEASE=on set-target ${CHIP}`
+- `json_encoder` module has been removed, use new (and standard) `json` module. New module uses
+standard Erlang/OTP API, that takes maps instead of proplists.
 
 ## v0.6.4 -> v0.6.5
 

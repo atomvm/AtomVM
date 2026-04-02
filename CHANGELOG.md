@@ -35,6 +35,9 @@ strict format validation
 - Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
 of raising `badarg`
 
+### Removed
+- Removed old `json_encoder` module (now standard Erlang/OTP `json` module is available)
+
 ## [0.7.0-alpha.0] - 2026-03-20
 
 ### Added
