@@ -255,10 +255,6 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
 
     term frame_info;
 
-    // on OTP <= 22 module_atom is set to erlang, when calling a function such as erlang:throw
-    // making this heuristic unreliable since hides the throw caller from the stacktrace
-    // this means that either this heuristic is not 100% correct, or something changed in OTP-23
-    // anyway on OTP >= 23 seem to work as expected.
     if (module_atom == UNDEFINED_ATOM) {
         // module_atom has not been provided, let's use mod->module_index
 
