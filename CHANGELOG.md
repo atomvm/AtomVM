@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-alpha.1] - Unreleased
 
 ### Added
+- Added `json` module to estdlib, compatible with Erlang/OTP `json` API
+- Added `Keyword.put_new/3` to exavmlib
+- Added `JSON` module to exavmlib (Elixir wrapper for estdlib `json`)
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
 - Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`
@@ -31,6 +34,9 @@ strict format validation
 - Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`
 - Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
 of raising `badarg`
+
+### Removed
+- Removed old `json_encoder` module (now standard Erlang/OTP `json` module is available)
 
 ## [0.7.0-alpha.0] - 2026-03-20
 

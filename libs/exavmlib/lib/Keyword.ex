@@ -7,6 +7,9 @@
 # merge/2 take/2 pop/2/3 pop!/2 keyword?/1 has_key?/2 split/2 from:
 # https://github.com/elixir-lang/elixir/blob/v1.16/lib/elixir/lib/keyword.ex
 #
+# put_new/3 from:
+# https://github.com/elixir-lang/elixir/blob/main/lib/elixir/lib/keyword.ex
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -92,6 +95,13 @@ defmodule Keyword do
 
   def put(keywords, key, value) when is_list(keywords) and is_atom(key) do
     [{key, value} | delete(keywords, key)]
+  end
+
+  def put_new(keywords, key, value) when is_list(keywords) and is_atom(key) do
+    case :lists.keyfind(key, 1, keywords) do
+      {^key, _} -> keywords
+      false -> [{key, value} | keywords]
+    end
   end
 
   def delete(keywords, key) when is_list(keywords) and is_atom(key) do

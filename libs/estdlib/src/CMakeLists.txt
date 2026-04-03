@@ -55,6 +55,7 @@ set(ERLANG_MODULES
     init
     io_lib
     io
+    json
     lists
     maps
     math

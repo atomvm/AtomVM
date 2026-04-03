@@ -1,7 +1,7 @@
 %
 % This file is part of AtomVM.
 %
-% Copyright 2019-2020 Davide Bettio <davide@uninstall.it>
+% Copyright 2019-2026 Davide Bettio <davide@uninstall.it>
 %
 % Licensed under the Apache License, Version 2.0 (the "License");
 % you may not use this file except in compliance with the License.
@@ -62,18 +62,18 @@ handle_req("GET", [], Conn) ->
     Body = [<<"<html><body><h1>">>, TimeString, <<"</h1></body></html>">>],
     http_server:reply(200, Body, Conn);
 handle_req("GET", ["system", "info"], Conn) ->
-    SysInfo = [
-        {atom_count, erlang:system_info(atom_count)},
-        {process_count, erlang:system_info(process_count)},
-        {port_count, erlang:system_info(port_count)},
-        {word_size, erlang:system_info(wordsize)},
-        {system_architecture, erlang:system_info(system_architecture)}
-    ],
-    Body = json_encoder:encode(SysInfo),
+    SysInfo = #{
+        atom_count => erlang:system_info(atom_count),
+        process_count => erlang:system_info(process_count),
+        port_count => erlang:system_info(port_count),
+        word_size => erlang:system_info(wordsize),
+        system_architecture => erlang:system_info(system_architecture)
+    },
+    Body = json:encode(SysInfo),
     http_server:reply(200, Body, Conn);
 handle_req("GET", ["processes", PidString, "info"], Conn) ->
     {Code, ProcInfo} = try_proc_info_list(PidString),
-    Body = json_encoder:encode(ProcInfo),
+    Body = json:encode(ProcInfo),
     http_server:reply(Code, Body, Conn);
 handle_req(Method, Path, Conn) ->
     io:format("Method: ~p Path: ~p~n", [Method, Path]),
