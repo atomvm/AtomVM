@@ -119,7 +119,7 @@ $ rebar3 atomvm esp32_flash --port /dev/ttyUSB0 --baud 921600
 ...
 ===> esptool.py --chip auto --port /dev/ttyUSB0 --baud 921600 --before default_reset
     --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect
-    0x210000 atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
+    0x250000 atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
 ```
 
 ```{tip}
@@ -147,14 +147,14 @@ You can now use a serial console program such as [minicom](https://en.wikipedia.
         ###########################################################
 
     I (852) AtomVM: Starting AtomVM revision 0.6.0-alpha.1
-    I (862) sys: Loaded BEAM partition boot.avm at address 0x1d0000 (size=262144 bytes)
+    I (862) sys: Loaded BEAM partition boot.avm at address 0x1d0000 (size=524288 bytes)
     I (882) network_driver: Initialized network interface
     I (882) network_driver: Created default event loop
     I (902) AtomVM: Found startup beam esp32init.beam
     I (922) AtomVM: Starting esp32init.beam...
     ---
     AtomVM init.
-    I (932) sys: Loaded BEAM partition main.avm at address 0x210000 (size=1048576
+    I (932) sys: Loaded BEAM partition main.avm at address 0x250000 (size=1048576
     bytes)
     Starting application...
     Hello World

@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `erlang:float_to_binary/2` and `erlang:float_to_list/2` now accept `{decimals, 0..253}` and `{scientific, 0..249}`
 - `erlang:binary_to_float/1` and `erlang:list_to_float/1` now use locale-independent parsing and
 strict format validation
+- ESP32: the `boot.avm` partition for Erlang-only images has been increased from 256KB to 512KB,
+matching the Elixir partition layout. The `main.avm` offset is now `0x250000` for all images
+(previously `0x210000` for Erlang-only).
 
 ### Fixed
 - Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP

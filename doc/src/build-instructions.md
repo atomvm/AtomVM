@@ -505,9 +505,9 @@ The flash layout is roughly as follows (not to scale):
     |    (factory)    |             |
     |                 |             |
     +-----------------+             |
-    |     boot.avm    | 256-512KB   v
-    +-----------------+  ------------- 0x210000 for Erlang only images or
-    |                 |             ^  0x250000 for images with Elixir modules
+    |     boot.avm    | 512KB       v
+    +-----------------+  ------------- 0x250000
+    |                 |             ^
     |                 |             |
     |     main.avm    | 1MB+        | Erlang/Elixir
     |                 |             | Application
@@ -524,11 +524,13 @@ The following table summarizes the partitions created on the ESP32 when deployin
 | NVS | 0x9000 | 24kB | Space for non-volatile storage. |
 | PHY_INIT | 0xF000 | 4kB | Initialization data for physical layer radio signal data. |
 | AtomVM virtual machine | 0x10000 | 1.75mB | The AtomVM virtual machine (compiled from C code). |
-| boot.avm | 0x1D0000 | 256k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
-| main.avm | `0x210000` \| `0x250000` | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
+| boot.avm | 0x1D0000 | 512k | The AtomVM BEAM library, compiled from Erlang and Elixir files in the AtomVM source tree. |
+| main.avm | 0x250000 | 1mB | The user application.  This is where users flash their compiled Erlang/Elixir code |
 
-```{warning}
-There is an important difference in the partition layout between the minimal images and those build with Elixir support. To accommodate the extra Elixir modules the boot.avm partition on these images is larger, and the application offset is moved accordingly. When working with Elixir supported images it is important to always use the offset `0x250000` whether using `mix` or the `atomvm_rebar3_plugin` (possibly to test an Erlang app), otherwise part of the boot.avm partition (specifically the area where many Elixir modules are located) will be overwritten with the application, but the VM will still be trying to load from the later `0x250000` offset. This should be kept in mind reading the rest of build instructions, and [AtomVM Tooling](./atomvm-tooling.md) sections of the docs that cover the use of rebar3, for these sections an Erlang only image is assumed.
+```{note}
+Since v0.7.0-alpha.1, both Erlang-only and Elixir-supported images use the same partition layout
+and the same `main.avm` offset of `0x250000`. Previous versions used `0x210000` for Erlang-only
+images.
 ```
 
 ### The `boot.avm` and `main.avm` partitions
@@ -537,7 +539,7 @@ The `boot.avm` and `main.avm` partitions are intended to store Erlang/Elixir lib
 
 The `boot.avm` partition is intended for core Erlang/Elixir libraries that are built as part of the AtomVM build.  The release image of AtomVM (see below) includes both the AtomVM virtual machine and the `boot.avm` partition, which includes the BEAM files from the `estdlib` and `eavmlib` libraries.
 
-In contrast, the `main.avm` partition is intended for user applications.  Currently, the `main.avm` partition starts at address `0x210000` for thin images or `0x250000` for images with Elixir modules, and it is to that location to which application developers should flash their application AVM files.
+In contrast, the `main.avm` partition is intended for user applications.  Currently, the `main.avm` partition starts at address `0x250000`, and it is to that location to which application developers should flash their application AVM files.
 
 The AtomVM search path for BEAM modules starts in the `main.avm` partition and falls back to `boot.avm`.  Users should not have a need to override any functionality in the `boot.avm` partition, but if necessary, a BEAM module of the same name in the `main.avm` partition will be loaded instead of the version in the `boot.avm` partition.
 
@@ -580,7 +582,7 @@ Wrote AtomVM Virtual Machine at offset 0x10000 (65536)
 Wrote AtomVM Core BEAM Library at offset 0x1D0000 (1114112)
 ```
 
-Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x210000`, (or `0x250000` for Elixir images)
+Users can then use the `esptool.py` directly to flash the entire image to the ESP32 device, and then flash their applications to the `main.app` partition at address `0x250000`.
 
 But first, it is a good idea to erase the flash, e.g.,
 
