@@ -23,14 +23,21 @@ project (erlang_tests)
 
 macro(jit_precompile module_name)
     if(NOT AVM_DISABLE_JIT)
+        # Extract base architecture for module dependencies
+        string(REGEX REPLACE "\\+.*$" "" _jit_base_arch "${AVM_JIT_TARGET_ARCH}")
         set(jit_compiler_modules
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}_asm.beam
         )
+        if("${AVM_JIT_TARGET_ARCH}" MATCHES "thumb2")
+            list(APPEND jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+            )
+        endif()
         if (NOT AVM_DISABLE_JIT_DWARF)
             set(jit_precompile_dwarf_flag "dwarf")
         else()
@@ -63,6 +70,7 @@ function(compile_erlang module_name)
         COMMAND erlc ${erlc_define} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl ${COMPILE_ERLANG_DEPENDS}
         COMMENT "Compiling ${module_name}.erl"
+        VERBATIM
     )
     jit_precompile(${module_name})
 endfunction()

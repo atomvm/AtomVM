@@ -739,39 +739,10 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
     }
 #ifndef AVM_NO_JIT
     if (!beam) {
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
-        if (chdir("x86_64") != 0) {
-            perror("Error: cannot find x86_64 directory");
+        if (chdir(AVM_JIT_TARGET_ARCH_DIR) != 0) {
+            perror("Error: cannot find " AVM_JIT_TARGET_ARCH_DIR " directory");
             return EXIT_FAILURE;
         }
-#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
-        if (chdir("aarch64") != 0) {
-            perror("Error: cannot find aarch64 directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
-        if (chdir("armv6m") != 0) {
-            perror("Error: cannot find armv6m directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARM32
-        if (chdir("arm32") != 0) {
-            perror("Error: cannot find arm32 directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
-        if (chdir("riscv32") != 0) {
-            perror("Error: cannot find riscv32 directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV64
-        if (chdir("riscv64") != 0) {
-            perror("Error: cannot find riscv64 directory");
-            return EXIT_FAILURE;
-        }
-#else
-#error Unknown JIT target
-#endif
     }
 #endif
 

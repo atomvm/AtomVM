@@ -21,7 +21,8 @@ The JIT compiler supports the following target architectures:
 * `x86_64` — 64-bit x86 (Linux, macOS, FreeBSD)
 * `aarch64` — 64-bit ARM (Linux, macOS)
 * `arm32` — 32-bit ARM (Linux)
-* `armv6m` — ARM Cortex-M0+ (Raspberry Pi Pico, STM32)
+* `armv6m` — ARM Cortex-M0+ (Raspberry Pi Pico, STM32 with Cortex-M0/M0+)
+* `armv6m+thumb2` — ARM Cortex-M3+ with Thumb-2 support, ARMv7-M or later (Raspberry Pi Pico 2, STM32 with Cortex-M3/M4/M7/M33)
 * `riscv32` — 32-bit RISC-V
 * `riscv64` — 64-bit RISC-V
 
@@ -176,5 +177,5 @@ $ riscv64-elf-objdump -d module.elf
 |--------|---------|-------------|
 | `AVM_DISABLE_JIT` | `ON` | Disable JIT compilation |
 | `AVM_DISABLE_JIT_DWARF` | `ON` | Disable DWARF debug information in JIT |
-| `AVM_JIT_TARGET_ARCH` | auto-detected | Target architecture (`x86_64`, `aarch64`, `arm32`, `armv6m`, `riscv32`, `riscv64`) |
+| `AVM_JIT_TARGET_ARCH` | auto-detected | Target architecture (`x86_64`, `aarch64`, `arm32`, `armv6m`, `armv6m+thumb2`, `riscv32`, `riscv64`) |
 | `AVM_DISABLE_SMP` | `OFF` | Disable SMP support |

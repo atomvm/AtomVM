@@ -21,6 +21,7 @@
 -module(jit_dwarf).
 
 -include("jit_dwarf.hrl").
+-include_lib("jit.hrl").
 
 -record(dwarf, {
     % Backend module (jit_armv6m, etc.)
@@ -40,7 +41,9 @@
     reg_locations = [] :: [{non_neg_integer(), [{non_neg_integer(), non_neg_integer()}]}],
     stream_module :: module(),
     stream :: any(),
-    line_resolver :: fun((non_neg_integer()) -> false | {ok, binary(), pos_integer()})
+    line_resolver :: fun((non_neg_integer()) -> false | {ok, binary(), pos_integer()}),
+    % JIT variant flags (for ARM attributes generation)
+    variant = 0 :: non_neg_integer()
 }).
 
 -type state() :: #dwarf{}.
@@ -48,6 +51,7 @@
 -export([
     new/4,
     new/5,
+    new/6,
     extract_x_reg_locations/2,
     opcode/2,
     opcode/3,
@@ -74,7 +78,7 @@
 %%-----------------------------------------------------------------------------
 -spec new(module(), module(), module(), pos_integer()) -> state().
 new(Backend, ModuleName, StreamModule, MaxSize) ->
-    new(Backend, ModuleName, StreamModule, MaxSize, fun(_) -> false end).
+    new(Backend, ModuleName, StreamModule, MaxSize, fun(_) -> false end, 0).
 
 %%-----------------------------------------------------------------------------
 %% @returns A new state
@@ -85,6 +89,22 @@ new(Backend, ModuleName, StreamModule, MaxSize) ->
     (non_neg_integer()) -> false | {ok, binary(), pos_integer()}
 )) -> state().
 new(Backend, ModuleName, StreamModule, MaxSize, LineResolver) ->
+    new(Backend, ModuleName, StreamModule, MaxSize, LineResolver, 0).
+
+%%-----------------------------------------------------------------------------
+%% @returns A new state
+%% @doc     Create a new state with the proxied stream and variant.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec new(
+    module(),
+    module(),
+    module(),
+    pos_integer(),
+    fun((non_neg_integer()) -> false | {ok, binary(), pos_integer()}),
+    non_neg_integer()
+) -> state().
+new(Backend, ModuleName, StreamModule, MaxSize, LineResolver, Variant) ->
     Stream = StreamModule:new(MaxSize),
     #dwarf{
         backend = Backend,
@@ -92,6 +112,7 @@ new(Backend, ModuleName, StreamModule, MaxSize, LineResolver) ->
         stream_module = StreamModule,
         stream = Stream,
         line_resolver = LineResolver,
+        variant = Variant,
         % Add jump table symbol at offset 0, size will be calculated
         opcodes = [{0, jump_table, 0}]
     }.
@@ -371,7 +392,7 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
     {Sections, SectionRelocs} =
         case Backend of
             jit_armv6m ->
-                ArmAttributesSection = generate_arm_attributes_section(),
+                ArmAttributesSection = generate_arm_attributes_section(State#dwarf.variant),
                 {
                     BaseSections ++ [{<<".ARM.attributes">>, ArmAttributesSection}],
                     BaseSectionRelocs ++ [[]]
@@ -439,24 +460,37 @@ find_section_index_helper(SectionName, [_ | Rest], Index) ->
 
 %% Find .symtab section index in section headers
 
-%% Generate ARM attributes section for ARMv6-M
-generate_arm_attributes_section() ->
+%% Generate ARM attributes section
+%% Variant is used to select between ARMv6-M (Thumb-1) and ARMv7-M (Thumb-2) attributes.
+generate_arm_attributes_section(Variant) ->
     % ARM EABI attributes format according to ARM IHI 0045E
+    Thumb2 = (Variant band ?JIT_VARIANT_THUMB2) =/= 0,
+
+    % CPU_arch and THUMB_ISA_use depend on the variant
+    {CpuArch, ThumbIsaUse} =
+        case Thumb2 of
+            true ->
+                % ARMv7 (value 10), Thumb-2 (value 2)
+                {10, 2};
+            false ->
+                % ARMv6-M (value 11), Thumb-1 only (value 1)
+                {11, 1}
+        end,
 
     % Build the tag-value pairs for file attributes
     TagValuePairs = <<
-        % CPU_arch attribute: ARMv6S-M (value 11)
+        % CPU_arch attribute
         6,
-        11,
+        CpuArch,
         % CPU_arch_profile attribute: 'M' profile (value 77 = 'M')
         7,
         77,
         % ARM_ISA_use attribute: No ARM ISA (value 0)
         8,
         0,
-        % THUMB_ISA_use attribute: Thumb-1 only (value 1)
+        % THUMB_ISA_use attribute
         9,
-        1,
+        ThumbIsaUse,
         % FP_arch attribute: No FP (value 0)
         10,
         0,

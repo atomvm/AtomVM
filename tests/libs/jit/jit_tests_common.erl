@@ -88,6 +88,8 @@ find_binutils_beam(Arch) ->
         case Arch of
             riscv32 ->
                 Prefixes0 ++ toolchain_prefixes(riscv64);
+            arm_thumb2 ->
+                Prefixes0 ++ toolchain_prefixes(arm);
             _ ->
                 Prefixes0
         end,
@@ -121,6 +123,8 @@ get_asm_header(arm) ->
     ".arch armv6-m\n.thumb\n.syntax unified\n";
 get_asm_header(arm32) ->
     ".arch armv6\n.arm\n.syntax unified\n";
+get_asm_header(arm_thumb2) ->
+    ".arch armv7-m\n.thumb\n.syntax unified\n";
 get_asm_header(aarch64) ->
     ".text\n";
 get_asm_header(x86_64) ->
@@ -135,6 +139,8 @@ get_asm_header(riscv64) ->
 get_as_flags(arm) ->
     "";
 get_as_flags(arm32) ->
+    "";
+get_as_flags(arm_thumb2) ->
     "";
 get_as_flags(aarch64) ->
     "";
@@ -335,6 +341,8 @@ get_objdump_flags(x86_64) ->
     "-m i386:x86-64";
 get_objdump_flags(riscv32) ->
     "-m riscv:rv32";
+get_objdump_flags(arm_thumb2) ->
+    "-marm --disassembler-options=force-thumb";
 get_objdump_flags(riscv64) ->
     "-m riscv:rv64".
 
