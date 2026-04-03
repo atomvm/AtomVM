@@ -663,6 +663,7 @@ compile_erlang(test_lists_keyfind)
 compile_erlang(test_reraise)
 compile_erlang(reraise_reraiser)
 compile_erlang(reraise_raiser)
+compile_erlang(test_raise_built_stacktrace)
 
 compile_erlang(stacktrace_function_args)
 compile_erlang(test_multi_value_comprehension)
@@ -1221,6 +1222,7 @@ set(erlang_test_beams
     test_reraise.beam
     reraise_reraiser.beam
     reraise_raiser.beam
+    test_raise_built_stacktrace.beam
 
     stacktrace_function_args.beam
 
