@@ -22,9 +22,8 @@ handling code.
 - ESP32 builds with Elixir support may be configured without making changes to git-tracked files
 using `idf.py -DATOMVM_ELIXIR_SUPPORT=on set-target ${CHIP}` instead of copying
 partitions-elixir.csv to partitions.csv. This configures the build to use partitions-elixir.csv for
-the partition table. The `main.avm` offset in the partition table will determine which flavor of
-esp32boot libraries to include for the `idf.py flash` task and the image assembled by
-`build/mkimage.sh`.
+the partition table. The `ATOMVM_ELIXIR_SUPPORT` option will determine which flavor of esp32boot
+libraries to include for the `idf.py flash` task and the image assembled by `build/mkimage.sh`.
 - ESP32 release builds may be configured with `idf.py -DATOMVM_RELEASE=on set-target ${CHIP}`
 rather than copy sdkconfig.release-defaults.in to sdkconfig.defaults.in (which still requires a
 `reconfigure` or `set-target` to be run to pick up the changes), this may also be combined with the
@@ -32,6 +31,10 @@ rather than copy sdkconfig.release-defaults.in to sdkconfig.defaults.in (which s
 `idf.py -DATOMVM_ELIXIR_SUPPORT=on -DATOMVM_RELEASE=on set-target ${CHIP}`
 - `json_encoder` module has been removed, use new (and standard) `json` module. New module uses
 standard Erlang/OTP API, that takes maps instead of proplists.
+- ESP32: the `boot.avm` partition has been increased from 256KB to 512KB for Erlang-only images.
+The `main.avm` offset is now `0x250000` for all images (previously `0x210000` for Erlang-only).
+Update flashing offsets in your tooling, build scripts, and `mix.exs` or `rebar.config` if you
+were using the `0x210000` offset.
 
 ## v0.6.4 -> v0.6.5
 
