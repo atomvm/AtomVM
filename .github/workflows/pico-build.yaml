@@ -52,8 +52,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: "28.1"
-          rebar3-version: "3.24.0"
+          otp-version: "28"
+          rebar3-version: "3.25.1"
           hexpm-mirrors: |
             https://builds.hex.pm
             https://repo.hex.pm
@@ -112,8 +112,8 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "28.1"
-        rebar3-version: "3.24.0"
+        otp-version: "28"
+        rebar3-version: "3.25.1"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
