@@ -58,7 +58,7 @@ test() ->
     ok.
 
 test_y() ->
-    lists:foreach(fun run_y_test/1, y_tests()),
+    lists:foreach(fun run_y_test/1, filter_precision(y_tests())),
     ok.
 
 test_n() ->
@@ -74,7 +74,7 @@ test_t() ->
     ok.
 
 test_y_roundtrip() ->
-    lists:foreach(fun run_y_roundtrip/1, y_tests()),
+    lists:foreach(fun run_y_roundtrip/1, filter_precision(y_tests())),
     ok.
 
 test_i_roundtrip() ->
@@ -124,6 +124,25 @@ resolve({external_term, Enc}) ->
     binary_to_term(base64:decode(Enc));
 resolve(Term) ->
     Term.
+
+%% Filter out test cases containing float values that exceed single-precision range.
+filter_precision(Tests) ->
+    case is_single_precision() of
+        true -> [T || T = {Name, _, _} <- Tests, not requires_double(Name)];
+        false -> Tests
+    end.
+
+is_single_precision() ->
+    case erlang:system_info(machine) of
+        "BEAM" -> false;
+        "ATOM" -> erlang:system_info(avm_floatsize) =:= 4
+    end.
+
+%% Test cases with float values exceeding float32 range (~3.4e38).
+requires_double("y_number.json") -> true;
+requires_double("y_number_real_exponent.json") -> true;
+requires_double("y_number_real_fraction_exponent.json") -> true;
+requires_double(_) -> false.
 
 to_bin(IoData) -> iolist_to_binary(IoData).
 
@@ -380,7 +399,12 @@ test_encode_basic() ->
     <<"9007199254740993">> = to_bin(json:encode(9007199254740993)),
 
     <<"1.0">> = to_bin(json:encode(1.0)),
-    <<"3.14">> = to_bin(json:encode(3.14)),
+    case is_single_precision() of
+        true ->
+            <<"3.1400001">> = to_bin(json:encode(3.14));
+        false ->
+            <<"3.14">> = to_bin(json:encode(3.14))
+    end,
     <<"-2.5">> = to_bin(json:encode(-2.5)),
     <<"-0.0">> = to_bin(json:encode(-0.0)),
 
