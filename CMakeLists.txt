@@ -81,8 +81,10 @@ if(NOT AVM_BUILD_RUNTIME_ONLY)
     add_subdirectory(tests)
 endif()
 
-add_subdirectory(tools/packbeam)
-add_subdirectory(tools/uf2tool)
+if(Erlang_FOUND)
+    add_subdirectory(tools/packbeam)
+    add_subdirectory(tools/uf2tool)
+endif()
 
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
     add_custom_target(dialyzer COMMENT "Run dialyzer")

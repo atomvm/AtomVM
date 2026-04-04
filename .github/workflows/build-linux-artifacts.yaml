@@ -15,12 +15,13 @@ permissions:
   contents: write
 
 env:
-  otp_version: 24
-  elixir_version: 1.14
+  otp_version: 28
+  elixir_version: 1.19
+  rebar3_version: 3.25.1
 
 jobs:
   compile_tests:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -29,6 +30,11 @@ jobs:
       with:
         otp-version: ${{ env.otp_version }}
         elixir-version: ${{ env.elixir_version }}
+        rebar3-version: ${{ env.rebar3_version }}
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: apt update
       run: sudo apt update

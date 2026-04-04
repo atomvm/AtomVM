@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build-libraries:
-    runs-on: "ubuntu-22.04"
+    runs-on: "ubuntu-24.04"
     strategy:
       fail-fast: false
 
@@ -28,8 +28,14 @@ jobs:
 
     - uses: erlef/setup-beam@v1
       with:
-        otp-version: "24"
-        elixir-version: "1.11"
+        otp-version: "28"
+        elixir-version: "1.19"
+        rebar3-version: "3.25.1"
+        gleam-version: "1.15.2"
+        hexpm-mirrors: |
+          https://builds.hex.pm
+          https://repo.hex.pm
+          https://cdn.jsdelivr.net/hex
 
     - name: "APT update"
       run: sudo apt update -y
