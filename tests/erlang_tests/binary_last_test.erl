@@ -23,10 +23,25 @@
 -export([start/0, id/1, lastp10/1]).
 
 start() ->
-    lastp10(id(<<"HelloWorld">>)) + lastp10safe(<<>>) + lastp10safe(42) + lastp10safe({<<>>}).
+    lastp10(id(<<"HelloWorld">>)) + lastp10safe(<<>>) + lastp10safe(42) + lastp10safe({<<>>}) +
+        high_byte_last_test(id(<<1, 2, 200>>)) +
+        high_byte_last_boundary_test(id(<<1, 2, 128>>)) +
+        high_byte_last_max_test(id(<<1, 2, 255>>)).
 
 lastp10(Bin) ->
     binary:last(Bin) + 10.
+
+high_byte_last_test(Bin) ->
+    200 = binary:last(Bin),
+    0.
+
+high_byte_last_boundary_test(Bin) ->
+    128 = binary:last(Bin),
+    0.
+
+high_byte_last_max_test(Bin) ->
+    255 = binary:last(Bin),
+    0.
 
 lastp10safe(Bin) ->
     try lastp10(Bin) of

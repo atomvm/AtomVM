@@ -23,10 +23,15 @@
 -export([start/0, id/1, atp10/1]).
 
 start() ->
-    atp10(id(<<"HelloWorld">>)) + atp10safe(id(<<"">>)) + atp10safe(42).
+    atp10(id(<<"HelloWorld">>)) + atp10safe(id(<<"">>)) + atp10safe(42) +
+        high_byte_test(id(<<200>>)).
 
 atp10(Bin) ->
     binary:at(Bin, 4) + 10.
+
+high_byte_test(Bin) ->
+    200 = binary:at(Bin, 0),
+    0.
 
 atp10safe(Bin) ->
     try atp10(Bin) of

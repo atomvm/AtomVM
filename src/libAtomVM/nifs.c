@@ -3410,7 +3410,7 @@ static term nif_binary_at_2(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_from_int11(term_binary_data(bin_term)[pos]);
+    return term_from_int11((uint8_t) term_binary_data(bin_term)[pos]);
 }
 
 static term nif_binary_copy(Context *ctx, int argc, term argv[])
@@ -3456,7 +3456,7 @@ static term nif_binary_first_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_from_int11(term_binary_data(bin_term)[0]);
+    return term_from_int11((uint8_t) term_binary_data(bin_term)[0]);
 }
 
 static term nif_binary_last_1(Context *ctx, int argc, term argv[])
@@ -3473,7 +3473,7 @@ static term nif_binary_last_1(Context *ctx, int argc, term argv[])
         RAISE_ERROR(BADARG_ATOM);
     }
 
-    return term_from_int11(term_binary_data(bin_term)[size - 1]);
+    return term_from_int11((uint8_t) term_binary_data(bin_term)[size - 1]);
 }
 
 static term nif_binary_part_3(Context *ctx, int argc, term argv[])
