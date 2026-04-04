@@ -34,6 +34,7 @@ set(ERLANG_MODULES
     test_gen_tcp
     test_inet
     test_io_lib
+    test_json
     test_lists
     test_logger
     test_maps

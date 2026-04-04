@@ -84,9 +84,6 @@ endif ()
 mark_as_advanced(CMAKE_TOOLCHAIN_FILE)
 
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
-if (NOT AVM_DISABLE_JIT)
-    set(AVM_JIT_TARGET_ARCH "armv6m")
-endif()
 
 if ((NOT ${CMAKE_C_COMPILER_ID} STREQUAL "GNU") OR
     (NOT ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU") OR
@@ -130,6 +127,16 @@ set(HAVE_RMDIR "" CACHE INTERNAL "Have symbol rmdir" FORCE)
 
 # Include device detection (sets STM32_FAMILY, CPU flags, HAL defines, etc.)
 include(cmake/stm32_device.cmake)
+
+# Set JIT target architecture based on detected CPU (needs STM32_CPU from stm32_device.cmake)
+if (NOT AVM_DISABLE_JIT)
+    # Cortex-M0/M0+ are ARMv6-M (Thumb-1 only), all others support Thumb-2
+    if (STM32_CPU MATCHES "cortex-m0")
+        set(AVM_JIT_TARGET_ARCH "armv6m")
+    else()
+        set(AVM_JIT_TARGET_ARCH "armv6m+thumb2")
+    endif()
+endif()
 
 # Include auto-device configuration (escript query for clock, ROM, etc.)
 include(cmake/atomvm_dev_config.cmake)

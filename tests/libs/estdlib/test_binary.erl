@@ -35,6 +35,20 @@ test_split() ->
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"ooz">>), [<<"foobar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>), [<<"f">>, <<"obar">>]),
     ?ASSERT_MATCH(binary:split(<<"foobar">>, <<"o">>, [global]), [<<"f">>, <<>>, <<"bar">>]),
+    ?ASSERT_MATCH(binary:split(<<"foobar">>, [<<"oo">>, <<"o">>]), [<<"f">>, <<"bar">>]),
+    ?ASSERT_MATCH(binary:split(<<"aba">>, [<<"a">>, <<"ab">>], [global]), [<<>>, <<>>, <<>>]),
+    ?ASSERT_MATCH(binary:split(<<":a::">>, <<":">>, [global, trim]), [<<>>, <<"a">>]),
+    ?ASSERT_MATCH(binary:split(<<":a::">>, <<":">>, [global, trim_all]), [<<"a">>]),
+    ?ASSERT_MATCH(binary:split(<<>>, <<":">>, [trim]), []),
+    ?ASSERT_EXCEPTION(binary:split(<<"a">>, []), error, badarg),
+    ?ASSERT_EXCEPTION(binary:split(<<"a">>, [<<>>]), error, badarg),
+    ?ASSERT_EXCEPTION(binary:split(<<"a">>, [foo]), error, badarg),
+    ?ASSERT_EXCEPTION(binary:split(<<"a">>, <<":">>, [foo]), error, badarg),
+    ?ASSERT_MATCH(binary:split(<<"a">>, <<":">>, [global | foo]), [<<"a">>]),
+    ?ASSERT_MATCH(binary:split(<<"aba">>, [<<"a">>, <<"ab">>]), [<<>>, <<"a">>]),
+    ?ASSERT_MATCH(binary:split(<<"aba">>, [<<"ab">>, <<"a">>]), [<<>>, <<"a">>]),
+    ?ASSERT_MATCH(binary:split(<<":">>, <<":">>, [trim]), []),
+    ?ASSERT_MATCH(binary:split(<<":">>, <<":">>, [trim_all]), []),
     ok.
 
 test_list_to_bin() ->

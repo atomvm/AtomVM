@@ -158,31 +158,17 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
-_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in jit/src/jit_armv6m.erl");
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in 32-bit backends");
+_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in 32-bit backends");
+_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in 32-bit backends");
+_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in 32-bit backends");
+_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in 32-bit backends");
+_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in 32-bit backends");
 
-_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_armv6m.erl");
-_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_armv6m.erl");
-
-_Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
-
-#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
-_Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(Context, fr) == 0x60, "ctx->fr is 0x60 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(Context, bs) == 0x64, "ctx->bs is 0x64 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in jit/src/jit_riscv32.erl");
-
-_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in jit/src/jit_riscv32.erl");
-_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in jit/src/jit_riscv32.erl");
+_Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in 32-bit backends");
+_Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in 32-bit backends");
+_Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in 32-bit backends");
 
 _Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 
@@ -302,9 +288,9 @@ static Context *jit_terminate_context(Context *ctx, JITState *jit_state)
 static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
 {
     TRACE("jit_handle_error: ctx->process_id = %" PRId32 ", offset = %d\n", ctx->process_id, offset);
-    if (offset || term_is_invalid_term(ctx->exception_stacktrace)) {
-        ctx->exception_stacktrace
-            = stacktrace_create_raw(ctx, jit_state->module, offset);
+    if (offset || term_is_invalid_term(ctx->exception_stacktrace)
+        || term_is_list(ctx->exception_stacktrace)) {
+        ctx->exception_stacktrace = stacktrace_create_raw(ctx, jit_state->module, offset);
     }
 
     // Copy exception fields to x registers and clear them
@@ -313,7 +299,7 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     ctx->x[2] = ctx->exception_stacktrace;
     context_set_exception_class(ctx, term_nil());
     ctx->exception_reason = term_nil();
-    ctx->exception_stacktrace = term_nil();
+    ctx->exception_stacktrace = term_invalid_term();
 
     int target_label = context_get_catch_label(ctx, &jit_state->module);
     if (target_label) {

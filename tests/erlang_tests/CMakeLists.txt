@@ -23,14 +23,21 @@ project (erlang_tests)
 
 macro(jit_precompile module_name)
     if(NOT AVM_DISABLE_JIT)
+        # Extract base architecture for module dependencies
+        string(REGEX REPLACE "\\+.*$" "" _jit_base_arch "${AVM_JIT_TARGET_ARCH}")
         set(jit_compiler_modules
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_precompile.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_stream_binary.beam
             ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_dwarf.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}.beam
-            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${AVM_JIT_TARGET_ARCH}_asm.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}.beam
+            ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${_jit_base_arch}_asm.beam
         )
+        if("${AVM_JIT_TARGET_ARCH}" MATCHES "thumb2")
+            list(APPEND jit_compiler_modules
+                ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+            )
+        endif()
         if (NOT AVM_DISABLE_JIT_DWARF)
             set(jit_precompile_dwarf_flag "dwarf")
         else()
@@ -63,6 +70,7 @@ function(compile_erlang module_name)
         COMMAND erlc ${erlc_define} ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl ${COMPILE_ERLANG_DEPENDS}
         COMMENT "Compiling ${module_name}.erl"
+        VERBATIM
     )
     jit_precompile(${module_name})
 endfunction()
@@ -214,6 +222,7 @@ compile_erlang(test_binary_to_atom)
 compile_erlang(test_binary_to_existing_atom)
 compile_erlang(test_atom_to_list)
 compile_erlang(test_display)
+compile_erlang(test_display_string)
 compile_erlang(test_integer_to_list)
 compile_erlang(test_list_to_integer)
 compile_erlang(test_abs)
@@ -599,6 +608,7 @@ compile_erlang(test_code_ensure_loaded)
 compile_erlang(test_add_avm_pack_binary DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/code_load_pack_data.hrl)
 compile_erlang(test_add_avm_pack_file)
 compile_erlang(test_close_avm_pack DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/code_load_pack_data.hrl)
+compile_erlang(test_code_get_object_code DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/export_test_module_data.hrl)
 
 compile_erlang(test_module_info)
 compile_erlang(erlang_module_loaded)
@@ -653,6 +663,7 @@ compile_erlang(test_lists_keyfind)
 compile_erlang(test_reraise)
 compile_erlang(reraise_reraiser)
 compile_erlang(reraise_raiser)
+compile_erlang(test_raise_built_stacktrace)
 
 compile_erlang(stacktrace_function_args)
 compile_erlang(test_multi_value_comprehension)
@@ -767,6 +778,7 @@ set(erlang_test_beams
     test_binary_to_existing_atom.beam
     test_atom_to_list.beam
     test_display.beam
+    test_display_string.beam
     test_integer_to_list.beam
     test_list_to_integer.beam
     test_abs.beam
@@ -1157,6 +1169,7 @@ set(erlang_test_beams
     test_add_avm_pack_binary.beam
     test_add_avm_pack_file.beam
     test_close_avm_pack.beam
+    test_code_get_object_code.beam
 
     test_module_info.beam
     erlang_module_loaded.beam
@@ -1209,6 +1222,7 @@ set(erlang_test_beams
     test_reraise.beam
     reraise_reraiser.beam
     reraise_raiser.beam
+    test_raise_built_stacktrace.beam
 
     stacktrace_function_args.beam
 

@@ -59,6 +59,7 @@
 ]).
 
 -export_type([
+    arm_gpr_register/0,
     cc/0
 ]).
 

@@ -152,6 +152,7 @@ static NativeHandlerResult process_console_mailbox(Context *ctx);
 
 static term make_list_from_utf8_buf(const uint8_t *buf, size_t buf_len, Context *ctx);
 static term make_list_from_ascii_buf(const uint8_t *buf, size_t len, Context *ctx);
+static bool is_valid_pattern(term t);
 
 static term nif_binary_at_2(Context *ctx, int argc, term argv[]);
 static term nif_binary_copy(Context *ctx, int argc, term argv[]);
@@ -174,6 +175,7 @@ static term nif_erlang_binary_to_list_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_binary_to_existing_atom_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_concat_2(Context *ctx, int argc, term argv[]);
 static term nif_erlang_display_1(Context *ctx, int argc, term argv[]);
+static term nif_erlang_display_string(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_0(Context *ctx, int argc, term argv[]);
 static term nif_erlang_erase_1(Context *ctx, int argc, term argv[]);
 static term nif_erlang_error(Context *ctx, int argc, term argv[]);
@@ -264,6 +266,7 @@ static term nif_code_all_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_load_abs(Context *ctx, int argc, term argv[]);
 static term nif_code_load_binary(Context *ctx, int argc, term argv[]);
 static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[]);
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[]);
 static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[]);
 static term nif_code_server_resume(Context *ctx, int argc, term argv[]);
 #ifndef AVM_NO_JIT
@@ -414,6 +417,11 @@ static const struct Nif delete_element_nif = {
 static const struct Nif display_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_erlang_display_1
+};
+
+static const struct Nif display_string_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_erlang_display_string
 };
 
 static const struct Nif erase_0_nif = {
@@ -854,6 +862,11 @@ static const struct Nif code_load_binary_nif = {
 static const struct Nif code_ensure_loaded_nif = {
     .base.type = NIFFunctionType,
     .nif_ptr = nif_code_ensure_loaded
+};
+
+static const struct Nif code_get_object_code_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_code_get_object_code
 };
 
 static const struct Nif code_server_is_loaded_nif = {
@@ -2033,9 +2046,12 @@ static term nif_os_getenv_1(Context *ctx, int argc, term argv[])
     term env_var_list = argv[0];
     VALIDATE_VALUE(env_var_list, term_is_list);
 
-    int ok;
-    char *env_var = interop_list_to_utf8_string(env_var_list, &ok);
-    if (UNLIKELY(!ok)) {
+    interop_utf8_string_result_t utf8_result;
+    char *env_var = interop_list_to_utf8_string(env_var_list, NULL, &utf8_result);
+    if (UNLIKELY(IS_NULL_PTR(env_var))) {
+        if (utf8_result == InteropUTF8StringMemoryAllocFail) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
         RAISE_ERROR(BADARG_ATOM);
     }
 
@@ -2863,6 +2879,75 @@ static term nif_erlang_display_1(Context *ctx, int argc, term argv[])
     return TRUE_ATOM;
 }
 
+static term display_string_flush(Context *ctx, FILE *fd)
+{
+    errno = 0;
+    if (UNLIKELY(fflush(fd) == EOF)) {
+        int err = errno ? errno : EIO;
+        clearerr(fd);
+        RAISE_ERROR(posix_errno_to_term(err, ctx->global));
+    }
+
+    return TRUE_ATOM;
+}
+
+static term display_string_write(Context *ctx, FILE *fd, const void *buf, size_t len)
+{
+    errno = 0;
+    if (len > 0) {
+        size_t written = fwrite(buf, 1, len, fd);
+        if (UNLIKELY(written != len)) {
+            int err = errno ? errno : EIO;
+            clearerr(fd);
+            RAISE_ERROR(posix_errno_to_term(err, ctx->global));
+        }
+    }
+
+    return display_string_flush(ctx, fd);
+}
+
+static term nif_erlang_display_string(Context *ctx, int argc, term argv[])
+{
+    term device = (argc == 1) ? STDERR_ATOM : argv[0];
+    term string = argv[argc - 1];
+
+    FILE *fd;
+
+    if (device == STDOUT_ATOM) {
+        fd = stdout;
+    } else if (device == STDERR_ATOM) {
+        fd = stderr;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (term_is_binary(string)) {
+        size_t len = term_binary_size(string);
+        return display_string_write(ctx, fd, term_binary_data(string), len);
+    } else if (term_is_nil(string)) {
+        return display_string_flush(ctx, fd);
+    } else if (term_is_list(string)) {
+        size_t len;
+        interop_utf8_string_result_t utf8_result;
+        char *buf = interop_list_to_utf8_string(string, &len, &utf8_result);
+        if (UNLIKELY(IS_NULL_PTR(buf))) {
+            switch (utf8_result) {
+                case InteropUTF8StringBadArg:
+                    RAISE_ERROR(BADARG_ATOM);
+                case InteropUTF8StringMemoryAllocFail:
+                default:
+                    RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
+        }
+
+        term result = display_string_write(ctx, fd, buf, len);
+        free(buf);
+        return result;
+    } else {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+}
+
 // process_flag/3 work on a subset of flags, target is locked.
 static term nif_erlang_process_flag_3(Context *ctx, Context *target, term flag, term value)
 {
@@ -3416,76 +3501,219 @@ static term nif_binary_part_3(Context *ctx, int argc, term argv[])
     return term_maybe_create_sub_binary(pattern_term, slice.pos, slice.len, &ctx->heap, ctx->global);
 }
 
+typedef struct
+{
+    const char *data;
+    size_t size;
+} SplitPattern;
+
+static void init_split_patterns(term pattern_term, SplitPattern *patterns, size_t *shortest_pattern_length)
+{
+    size_t shortest = SIZE_MAX;
+
+    if (term_is_binary(pattern_term)) {
+        patterns[0].data = term_binary_data(pattern_term);
+        patterns[0].size = term_binary_size(pattern_term);
+        shortest = patterns[0].size;
+    } else {
+        size_t index = 0;
+        term list = pattern_term;
+        while (term_is_nonempty_list(list)) {
+            term pattern = term_get_list_head(list);
+            patterns[index].data = term_binary_data(pattern);
+            patterns[index].size = term_binary_size(pattern);
+            if (patterns[index].size < shortest) {
+                shortest = patterns[index].size;
+            }
+            list = term_get_list_tail(list);
+            index++;
+        }
+    }
+
+    *shortest_pattern_length = shortest;
+}
+
+static const char *find_pattern(const char *binary, size_t binary_size, const SplitPattern *patterns,
+    size_t pattern_count, size_t *matched_pattern_index)
+{
+    const char *best_match = NULL;
+    size_t best_match_size = 0;
+    size_t best_match_index = 0;
+
+    for (size_t i = 0; i < pattern_count; i++) {
+        size_t pattern_size = patterns[i].size;
+        if (binary_size < pattern_size) {
+            continue;
+        }
+
+        const char *candidate = memmem(binary, binary_size, patterns[i].data, pattern_size);
+        if (candidate == NULL) {
+            continue;
+        }
+
+        if (best_match == NULL || candidate < best_match || (candidate == best_match && pattern_size > best_match_size)) {
+            best_match = candidate;
+            best_match_size = pattern_size;
+            best_match_index = i;
+        }
+    }
+
+    if (best_match != NULL) {
+        *matched_pattern_index = best_match_index;
+    }
+
+    return best_match;
+}
+
+static inline bool term_is_empty_binary(term t)
+{
+    return term_is_binary(t) && term_binary_size(t) == 0;
+}
+
+static term trim_split_result(term list, bool trim, bool trim_all)
+{
+    if (trim_all) {
+        term trimmed_list = term_nil();
+        term prev_kept = term_nil();
+        bool has_prev_kept = false;
+
+        term cursor = list;
+        while (term_is_nonempty_list(cursor)) {
+            term head = term_get_list_head(cursor);
+            term next = term_get_list_tail(cursor);
+
+            if (!term_is_empty_binary(head)) {
+                if (!has_prev_kept) {
+                    trimmed_list = cursor;
+                } else {
+                    term_get_list_ptr(prev_kept)[LIST_TAIL_INDEX] = cursor;
+                }
+                prev_kept = cursor;
+                has_prev_kept = true;
+            }
+
+            cursor = next;
+        }
+
+        if (has_prev_kept) {
+            term_get_list_ptr(prev_kept)[LIST_TAIL_INDEX] = term_nil();
+        }
+
+        return trimmed_list;
+    }
+
+    if (trim) {
+        term last_non_empty = term_nil();
+        bool has_last_non_empty = false;
+
+        term cursor = list;
+        while (term_is_nonempty_list(cursor)) {
+            if (!term_is_empty_binary(term_get_list_head(cursor))) {
+                last_non_empty = cursor;
+                has_last_non_empty = true;
+            }
+            cursor = term_get_list_tail(cursor);
+        }
+
+        if (!has_last_non_empty) {
+            return term_nil();
+        }
+
+        term_get_list_ptr(last_non_empty)[LIST_TAIL_INDEX] = term_nil();
+    }
+
+    return list;
+}
+
 static term nif_binary_split(Context *ctx, int argc, term argv[])
 {
     term bin_term = argv[0];
     term pattern_term = argv[1];
 
     VALIDATE_VALUE(bin_term, term_is_binary);
-    VALIDATE_VALUE(pattern_term, term_is_binary);
+    VALIDATE_VALUE(pattern_term, is_valid_pattern);
 
     bool global = false;
+    bool trim = false;
+    bool trim_all = false;
     if (argc == 3) {
         term options = argv[2];
         if (UNLIKELY(!term_is_list(options))) {
             RAISE_ERROR(BADARG_ATOM);
         }
-        if (term_is_nonempty_list(options)) {
+        // Match BEAM semantics and ignore an improper tail after a valid
+        // option prefix, e.g. [global | foo].
+        while (term_is_nonempty_list(options)) {
             term head = term_get_list_head(options);
-            term tail = term_get_list_tail(options);
-            if (UNLIKELY(head != GLOBAL_ATOM)) {
-                RAISE_ERROR(BADARG_ATOM);
+            switch (head) {
+                case GLOBAL_ATOM:
+                    global = true;
+                    break;
+                case TRIM_ATOM:
+                    trim = true;
+                    break;
+                case TRIM_ALL_ATOM:
+                    trim_all = true;
+                    break;
+                default:
+                    RAISE_ERROR(BADARG_ATOM);
             }
-            if (UNLIKELY(!term_is_nil(tail))) {
-                RAISE_ERROR(BADARG_ATOM);
-            }
-            global = true;
+            options = term_get_list_tail(options);
         }
     }
 
-    int bin_size = term_binary_size(bin_term);
-    int pattern_size = term_binary_size(pattern_term);
-
-    if (UNLIKELY(pattern_size == 0)) {
-        RAISE_ERROR(BADARG_ATOM);
+    size_t pattern_count = 1;
+    if (term_is_list(pattern_term)) {
+        int proper = 0;
+        pattern_count = term_list_length(pattern_term, &proper);
+        if (UNLIKELY(!proper)) {
+            RAISE_ERROR(BADARG_ATOM);
+        }
     }
 
+    SplitPattern *patterns = malloc(sizeof(SplitPattern) * pattern_count);
+    if (IS_NULL_PTR(patterns)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    size_t shortest_pattern_length = 0;
+    init_split_patterns(pattern_term, patterns, &shortest_pattern_length);
+
+    size_t bin_size = term_binary_size(bin_term);
     const char *bin_data = term_binary_data(bin_term);
-    const char *pattern_data = term_binary_data(pattern_term);
 
     // Count segments first to allocate memory once.
     size_t num_segments = 1;
     const char *temp_bin_data = bin_data;
-    int temp_bin_size = bin_size;
+    size_t temp_bin_size = bin_size;
     size_t heap_size = 0;
     do {
-        const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
+        size_t matched_pattern_index = 0;
+        const char *found = find_pattern(temp_bin_data, temp_bin_size, patterns, pattern_count, &matched_pattern_index);
         if (!found) {
             break;
         }
         num_segments++;
         heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], found - temp_bin_data);
-        int next_search_offset = found - temp_bin_data + pattern_size;
+        size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
         temp_bin_data += next_search_offset;
         temp_bin_size -= next_search_offset;
-    } while (global && temp_bin_size >= pattern_size);
+    } while (global && temp_bin_size >= shortest_pattern_length);
 
     heap_size += CONS_SIZE + term_sub_binary_heap_size(argv[0], temp_bin_size);
 
     term result_list = term_nil();
 
-    if (num_segments == 1) {
-        // not found
-        if (UNLIKELY(memory_ensure_free_with_roots(ctx, LIST_SIZE(1, 0), 1, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
-        }
-
-        return term_list_prepend(argv[0], result_list, &ctx->heap);
+    size_t needed_heap_size = num_segments == 1 ? LIST_SIZE(1, 0) : heap_size;
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, needed_heap_size, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        free(patterns);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
 
-    // binary:split/2,3 always return sub binaries, except when copied binaries are as small as sub-binaries.
-    if (UNLIKELY(memory_ensure_free_with_roots(ctx, heap_size, 2, argv, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
-        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    if (num_segments == 1) {
+        result_list = term_list_prepend(argv[0], result_list, &ctx->heap);
+        free(patterns);
+        return trim_split_result(result_list, trim, trim_all);
     }
 
     // Allocate list first
@@ -3493,16 +3721,17 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
         result_list = term_list_prepend(term_nil(), result_list, &ctx->heap);
     }
 
-    // Reset pointers after allocation
+    // Reset pointers after allocation / possible GC.
     bin_data = term_binary_data(argv[0]);
-    pattern_data = term_binary_data(argv[1]);
+    init_split_patterns(argv[1], patterns, &shortest_pattern_length);
 
     term list_cursor = result_list;
     temp_bin_data = bin_data;
     temp_bin_size = bin_size;
     term *list_ptr = term_get_list_ptr(list_cursor);
     do {
-        const char *found = (const char *) memmem(temp_bin_data, temp_bin_size, pattern_data, pattern_size);
+        size_t matched_pattern_index = 0;
+        const char *found = find_pattern(temp_bin_data, temp_bin_size, patterns, pattern_count, &matched_pattern_index);
 
         if (found) {
             term tok = term_maybe_create_sub_binary(argv[0], temp_bin_data - bin_data, found - temp_bin_data, &ctx->heap, ctx->global);
@@ -3511,7 +3740,7 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
             list_cursor = list_ptr[LIST_TAIL_INDEX];
             list_ptr = term_get_list_ptr(list_cursor);
 
-            int next_search_offset = found - temp_bin_data + pattern_size;
+            size_t next_search_offset = (found - temp_bin_data) + patterns[matched_pattern_index].size;
             temp_bin_data += next_search_offset;
             temp_bin_size -= next_search_offset;
         }
@@ -3523,7 +3752,9 @@ static term nif_binary_split(Context *ctx, int argc, term argv[])
         }
     } while (!term_is_nil(list_cursor));
 
-    return result_list;
+    free(patterns);
+
+    return trim_split_result(result_list, trim, trim_all);
 }
 
 static term nif_binary_replace(Context *ctx, int argc, term argv[])
@@ -5999,6 +6230,62 @@ static term nif_code_ensure_loaded(Context *ctx, int argc, term argv[])
     return result;
 }
 
+static term nif_code_get_object_code(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+    term module_atom = argv[0];
+    VALIDATE_VALUE(module_atom, term_is_atom);
+
+    size_t module_name_len;
+    const uint8_t *module_name = atom_table_get_atom_string(
+        ctx->global->atom_table, term_to_atom_index(module_atom), &module_name_len);
+
+    size_t filename_size = module_name_len + strlen(".beam") + 1;
+    char *module_file_name = malloc(filename_size);
+    if (IS_NULL_PTR(module_file_name)) {
+        return ERROR_ATOM;
+    }
+    memcpy(module_file_name, module_name, module_name_len);
+    strcpy(module_file_name + module_name_len, ".beam");
+    // TODO: fix this, make this NIF work like on the BEAM.
+    //
+    // Our NIF returns a valid module also for modules loaded from a binary with code:load_binary/3.
+    //
+    // On the BEAM, it opens a file from the filesystem, regardless if it is a valid .beam module.
+    // So on the BEAM it cannot find on the filesystem the modules loaded from binaries,
+    // and it fails.
+    // Basically, on the BEAM this NIF is more about loading a file from the loader search path.
+    Module *module = globalcontext_get_module(ctx->global, term_to_atom_index(module_atom));
+
+    if (UNLIKELY(!module)) {
+        free(module_file_name);
+        return ERROR_ATOM;
+    }
+    size_t result_size = TUPLE_SIZE(3) + term_binary_heap_size(module->binary_size)
+        + LIST_SIZE(filename_size - 1, 1);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, result_size, 1, &module_atom, MEMORY_CAN_SHRINK)
+            != MEMORY_GC_OK)) {
+        free(module_file_name);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    // Note: this assumes constness of module->binary and could be use-after-free if we allowed
+    // changing module bitcode at runtime.
+    // TODO: update this code when module unloading will be supported.
+    term binary = term_from_literal_binary(
+        (void *) module->binary, module->binary_size, &ctx->heap, ctx->global);
+    // TODO: this code has to be changed to return the complete path
+    term filename_term
+        = term_from_string((const uint8_t *) module_file_name, filename_size - 1, &ctx->heap);
+    term result = term_alloc_tuple(3, &ctx->heap);
+
+    term_put_tuple_element(result, 0, module_atom);
+    term_put_tuple_element(result, 1, binary);
+    term_put_tuple_element(result, 2, filename_term);
+
+    free(module_file_name);
+    return result;
+}
+
 static term nif_code_server_is_loaded(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -6250,6 +6537,8 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_RISCV32_ATOM;
 #elif JIT_ARCH_TARGET == JIT_ARCH_RISCV64
     return JIT_RISCV64_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARM32
+    return JIT_ARM32_ATOM;
 #else
 #error Unknown JIT target
 #endif
@@ -6261,11 +6550,14 @@ static term nif_jit_variant(Context *ctx, int argc, term argv[])
     UNUSED(argc);
     UNUSED(argv);
 
+    int variant = JIT_VARIANT_PIC;
 #ifdef AVM_USE_SINGLE_PRECISION
-    return term_from_int(JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC);
-#else
-    return term_from_int(JIT_VARIANT_PIC);
+    variant |= JIT_VARIANT_FLOAT32;
 #endif
+#ifdef AVM_JIT_THUMB2
+    variant |= JIT_VARIANT_THUMB2;
+#endif
+    return term_from_int(variant);
 }
 #endif
 

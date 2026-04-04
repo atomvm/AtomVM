@@ -111,10 +111,30 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
 {
     term exception_class = context_exception_class(ctx);
 
-    if (term_is_nonempty_list(ctx->exception_stacktrace)) {
-        // there is already a built stacktrace, nothing to do here
-        // (this happens when re-raising with raise/3
-        return ctx->exception_stacktrace;
+    if (term_is_list(ctx->exception_stacktrace)) {
+        // Already a built stacktrace (possibly empty) from erlang:raise/3
+        // NIF (via RAISE_WITH_STACKTRACE) or OP_RAW_RAISE. Wrap it in a raw
+        // 6-tuple so OP_RAISE can extract the exception class and
+        // stacktrace_build can return the list as-is.
+        ctx->x[0] = ctx->exception_stacktrace;
+        ctx->x[1] = ctx->exception_reason;
+        // NOLINT(term-use-after-gc) exception_class is always an atom
+        if (UNLIKELY(memory_ensure_free_with_roots(ctx, TUPLE_SIZE(6), 2, ctx->x, MEMORY_CAN_SHRINK)
+                != MEMORY_GC_OK)) {
+            fprintf(stderr, "WARNING: Unable to allocate heap space for raw stacktrace\n");
+            return OUT_OF_MEMORY_ATOM;
+        }
+        ctx->exception_stacktrace = ctx->x[0];
+        ctx->exception_reason = ctx->x[1];
+        term built_stacktrace = ctx->exception_stacktrace;
+        term stack_info = term_alloc_tuple(6, &ctx->heap);
+        term_put_tuple_element(stack_info, 0, term_from_int(0));
+        term_put_tuple_element(stack_info, 1, term_from_int(0));
+        term_put_tuple_element(stack_info, 2, term_from_int(0));
+        term_put_tuple_element(stack_info, 3, term_from_int(0));
+        term_put_tuple_element(stack_info, 4, built_stacktrace);
+        term_put_tuple_element(stack_info, 5, exception_class);
+        return stack_info;
     }
 
     // Check if EXCEPTION_USE_LIVE_REGS_FLAG is set
@@ -235,10 +255,6 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
 
     term frame_info;
 
-    // on OTP <= 22 module_atom is set to erlang, when calling a function such as erlang:throw
-    // making this heuristic unreliable since hides the throw caller from the stacktrace
-    // this means that either this heuristic is not 100% correct, or something changed in OTP-23
-    // anyway on OTP >= 23 seem to work as expected.
     if (module_atom == UNDEFINED_ATOM) {
         // module_atom has not been provided, let's use mod->module_index
 
@@ -365,12 +381,6 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 {
     GlobalContext *glb = ctx->global;
 
-    if (term_is_nonempty_list(*stack_info)) {
-        // stacktrace has been already built. Nothing to do here
-        // This may happen when re-raising with raise/3
-        return *stack_info;
-    }
-
     if (*stack_info == OUT_OF_MEMORY_ATOM) {
         return *stack_info;
     }
@@ -382,6 +392,15 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
     int num_aux_terms = term_to_int(term_get_tuple_element(*stack_info, 1));
     int filename_lens = term_to_int(term_get_tuple_element(*stack_info, 2));
     int num_mods = term_to_int(term_get_tuple_element(*stack_info, 3));
+
+    // Pre-built stacktrace from erlang:raise/3: element 4 already holds
+    // the built list, num_frames == 0. Return the list directly.
+    if (num_frames == 0) {
+        term raw_stacktrace = term_get_tuple_element(*stack_info, 4);
+        if (term_is_list(raw_stacktrace)) {
+            return raw_stacktrace;
+        }
+    }
 
     struct ModulePathPair *module_paths = malloc(num_mods * sizeof(struct ModulePathPair));
     if (IS_NULL_PTR(module_paths)) {

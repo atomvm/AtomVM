@@ -29,8 +29,10 @@
 -define(JIT_ARCH_ARMV6M, 3).
 -define(JIT_ARCH_RISCV32, 4).
 -define(JIT_ARCH_RISCV64, 5).
+-define(JIT_ARCH_ARM32, 6).
 
 -define(JIT_VARIANT_PIC, 1).
 -define(JIT_VARIANT_FLOAT32, 2).
+-define(JIT_VARIANT_THUMB2, 4).
 
 -define(MAX_REG, 16).

@@ -36,7 +36,7 @@ jobs:
   compile_tests:
 
     runs-on: ubuntu-24.04
-    container: erlang:27
+    container: erlang:28
     permissions:
       actions: read
       contents: read

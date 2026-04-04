@@ -103,6 +103,11 @@ macro(pack_precompiled_archive avm_name)
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}.beam
                 ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_${jit_target_arch}_asm.beam
             )
+            if("${jit_target_arch_variant}" MATCHES "thumb2")
+                list(APPEND jit_compiler_modules
+                    ${CMAKE_BINARY_DIR}/libs/jit/src/beams/jit_armv7m_asm.beam
+                )
+            endif()
 
             if (NOT AVM_DISABLE_JIT_DWARF)
                 set(jit_precompile_dwarf_flag "dwarf")

@@ -5245,9 +5245,11 @@ schedule_in:
 
                 TRACE("raw_raise/0\n");
 
-                // This is an optimization from the compiler where we don't need to call
-                // stacktrace_create_raw here because the stack trace has already been created
-                // and set in x[2].
+                // The compiler emits raw_raise for erlang:raise/3 calls.
+                // x_regs[2] may hold a built stacktrace (list of {M,F,A,Loc}
+                // tuples). We use HANDLE_ERROR() instead of a bare goto so
+                // stacktrace_create_raw_mfa wraps it into a raw 6-tuple that
+                // OP_RAISE can later process.
                 term ex_class = x_regs[0];
                 if (UNLIKELY(ex_class != ERROR_ATOM && ex_class != LOWERCASE_EXIT_ATOM && ex_class != THROW_ATOM)) {
                     x_regs[0] = BADARG_ATOM;
@@ -5255,7 +5257,7 @@ schedule_in:
                     context_set_exception_class(ctx, x_regs[0]);
                     ctx->exception_reason = x_regs[1];
                     ctx->exception_stacktrace = x_regs[2];
-                    goto handle_error;
+                    HANDLE_ERROR();
                 }
                 break;
             }
@@ -6229,7 +6231,7 @@ schedule_in:
         x_regs[2] = ctx->exception_stacktrace;
         context_set_exception_class(ctx, term_nil());
         ctx->exception_reason = term_nil();
-        ctx->exception_stacktrace = term_nil();
+        ctx->exception_stacktrace = term_invalid_term();
 
         int target_label = context_get_catch_label(ctx, &mod);
         if (target_label) {

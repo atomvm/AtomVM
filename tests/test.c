@@ -192,6 +192,7 @@ struct Test tests[] = {
     TEST_CASE_EXPECTED(test_binary_to_existing_atom, 9),
     TEST_CASE_EXPECTED(test_atom_to_list, 1),
     TEST_CASE(test_display),
+    TEST_CASE(test_display_string),
     TEST_CASE(test_integer_to_list),
     TEST_CASE_EXPECTED(test_list_to_integer, 99),
     TEST_CASE_EXPECTED(test_abs, 5),
@@ -565,6 +566,7 @@ struct Test tests[] = {
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_binary, 24),
     TEST_CASE_ATOMVM_ONLY(test_add_avm_pack_file, 24),
     TEST_CASE_ATOMVM_ONLY(test_close_avm_pack, 0),
+    TEST_CASE(test_code_get_object_code),
 
     TEST_CASE(test_module_info),
     TEST_CASE(erlang_module_loaded),
@@ -633,6 +635,7 @@ struct Test tests[] = {
     TEST_CASE(test_lists_keyfind),
 
     TEST_CASE_COND(test_reraise, 0, SKIP_STACKTRACES),
+    TEST_CASE_COND(test_raise_built_stacktrace, 0, SKIP_STACKTRACES),
     TEST_CASE_COND(stacktrace_function_args, 0, SKIP_STACKTRACES),
 
     TEST_CASE(test_inline_arith),
@@ -737,34 +740,10 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
     }
 #ifndef AVM_NO_JIT
     if (!beam) {
-#if JIT_ARCH_TARGET == JIT_ARCH_X86_64
-        if (chdir("x86_64") != 0) {
-            perror("Error: cannot find x86_64 directory");
+        if (chdir(AVM_JIT_TARGET_ARCH_DIR) != 0) {
+            perror("Error: cannot find " AVM_JIT_TARGET_ARCH_DIR " directory");
             return EXIT_FAILURE;
         }
-#elif JIT_ARCH_TARGET == JIT_ARCH_AARCH64
-        if (chdir("aarch64") != 0) {
-            perror("Error: cannot find aarch64 directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
-        if (chdir("armv6m") != 0) {
-            perror("Error: cannot find armv6m directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV32
-        if (chdir("riscv32") != 0) {
-            perror("Error: cannot find riscv32 directory");
-            return EXIT_FAILURE;
-        }
-#elif JIT_ARCH_TARGET == JIT_ARCH_RISCV64
-        if (chdir("riscv64") != 0) {
-            perror("Error: cannot find riscv64 directory");
-            return EXIT_FAILURE;
-        }
-#else
-#error Unknown JIT target
-#endif
     }
 #endif
 

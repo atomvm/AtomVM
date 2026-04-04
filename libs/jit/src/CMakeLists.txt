@@ -33,8 +33,11 @@ set(ERLANG_MODULES
     jit_stream_mmap
     jit_aarch64
     jit_aarch64_asm
+    jit_arm32
+    jit_arm32_asm
     jit_armv6m
     jit_armv6m_asm
+    jit_armv7m_asm
     jit_riscv32
     jit_riscv32_asm
     jit_riscv64

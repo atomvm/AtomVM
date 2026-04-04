@@ -35,6 +35,7 @@ defmodule Tests do
     :ok = test_chars_protocol()
     :ok = test_inspect()
     :ok = test_base()
+    :ok = test_json()
     :ok = test_gen_server()
     :ok = test_supervisor()
     :ok = IO.puts("Finished Elixir tests")
@@ -556,6 +557,92 @@ defmodule Tests do
       rescue
         ArgumentError -> :exp_err
       end
+
+    :ok
+  end
+
+  defp test_json() do
+    {:ok, nil} = JSON.decode("null")
+    {:ok, true} = JSON.decode("true")
+    {:ok, false} = JSON.decode("false")
+    {:ok, 42} = JSON.decode("42")
+    {:ok, 3.14} = JSON.decode("3.14")
+    {:ok, "hello"} = JSON.decode(~s("hello"))
+    {:ok, [1, 2, 3]} = JSON.decode("[1,2,3]")
+    {:ok, %{"a" => 1}} = JSON.decode(~s({"a":1}))
+
+    {:ok, [nil, true, false]} = JSON.decode("[null, true, false]")
+
+    {:ok, %{"coord" => %{"lat" => 37.0198}}} =
+      JSON.decode(~s({"coord": {"lat": 37.0198}}))
+
+    {:error, {:unexpected_end, _}} = JSON.decode("")
+    {:error, {:invalid_byte, _, _}} = JSON.decode("x")
+    {:error, {:invalid_byte, _, _}} = JSON.decode("[1] extra")
+
+    {nil, :ok, ""} = JSON.decode("null", :ok, [])
+    {:none, :ok, ""} = JSON.decode("null", :ok, null: :none)
+
+    decoders = [
+      object_start: fn _ -> [] end,
+      object_push: fn k, v, acc -> [{k, v} | acc] end,
+      object_finish: fn acc, old_acc -> {Enum.reverse(acc), old_acc} end
+    ]
+
+    {[{"a", 1}, {"b", 2}], :ok, ""} = JSON.decode(~s({"a":1,"b":2}), :ok, decoders)
+
+    42 = JSON.decode!("42")
+    [1, nil, "test"] = JSON.decode!("[1,null,\"test\"]")
+
+    :got_error =
+      try do
+        JSON.decode!("")
+      rescue
+        _e in [JSON.DecodeError] -> :got_error
+      end
+
+    :got_error =
+      try do
+        JSON.decode!("x")
+      rescue
+        _e in [JSON.DecodeError] -> :got_error
+      end
+
+    "null" = JSON.encode!(nil)
+    "true" = JSON.encode!(true)
+    "false" = JSON.encode!(false)
+    "42" = JSON.encode!(42)
+    "-1" = JSON.encode!(-1)
+    ~s("hello") = JSON.encode!("hello")
+    ~s("hello\\nworld") = JSON.encode!("hello\nworld")
+
+    ~s("hello") = JSON.encode!(:hello)
+
+    "[]" = JSON.encode!([])
+    "[1,2,3]" = JSON.encode!([1, 2, 3])
+    ~s([1,"two",true,null]) = JSON.encode!([1, "two", true, nil])
+
+    "{}" = JSON.encode!(%{})
+    decoded = JSON.decode!(JSON.encode!(%{"a" => 1, "b" => 2}))
+    1 = decoded["a"]
+    2 = decoded["b"]
+
+    atom_decoded = JSON.decode!(JSON.encode!(%{foo: 1, bar: 2}))
+    1 = atom_decoded["foo"]
+    2 = atom_decoded["bar"]
+
+    nested = %{"a" => [1, %{"b" => true}]}
+    ^nested = JSON.decode!(JSON.encode!(nested))
+
+    iodata = JSON.encode_to_iodata!([1, 2, 3])
+    "[1,2,3]" = IO.iodata_to_binary(iodata)
+
+    terms = [42, -1, 3.14, true, false, nil, "hello", "", [], [1, 2, 3], %{}, %{"k" => "v"}]
+
+    :ok =
+      Enum.each(terms, fn term ->
+        ^term = JSON.decode!(JSON.encode!(term))
+      end)
 
     :ok
   end

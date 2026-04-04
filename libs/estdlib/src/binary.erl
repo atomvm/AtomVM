@@ -172,13 +172,12 @@ part(_Binary, _Pos, _Len) ->
 %% @equiv split(Binary, Pattern, [])
 %% @param   Binary  binary to split
 %% @param   Pattern pattern to perform the split
-%% @return a list composed of one or two binaries
+%% @return a list of binaries
 %% @doc Split a binary according to pattern.
 %% If pattern is not found, returns a singleton list with the passed binary.
-%% Unlike Erlang/OTP, pattern must be a binary.
 %% @end
 %%-----------------------------------------------------------------------------
--spec split(Binary :: binary(), Pattern :: binary()) -> [binary()].
+-spec split(Binary :: binary(), Pattern :: binary() | [binary(), ...]) -> [binary()].
 split(_Binary, _Pattern) ->
     erlang:nif_error(undefined).
 
@@ -186,14 +185,16 @@ split(_Binary, _Pattern) ->
 %% @param   Binary  binary to split
 %% @param   Pattern pattern to perform the split
 %% @param   Options options for the split
-%% @return a list composed of one or two binaries
+%% @return a list of binaries
 %% @doc Split a binary according to pattern.
 %% If pattern is not found, returns a singleton list with the passed binary.
-%% Unlike Erlang/OTP, pattern must be a binary.
-%% Only implemented option is `global'
+%% Pattern can be a binary or a non-empty list of non-empty binaries.
+%% Implemented options are `global', `trim', and `trim_all'.
 %% @end
 %%-----------------------------------------------------------------------------
--spec split(Binary :: binary(), Pattern :: binary(), Option :: [global]) -> [binary()].
+-spec split(
+    Binary :: binary(), Pattern :: binary() | [binary(), ...], Option :: [global | trim | trim_all]
+) -> [binary()].
 split(_Binary, _Pattern, _Option) ->
     erlang:nif_error(undefined).
 

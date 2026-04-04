@@ -75,10 +75,15 @@ option(AVM_REBOOT_ON_NOT_OK "Reboot Pico if result is not ok" OFF)
 option(AVM_CREATE_STACKTRACES "Create stacktraces" ON)
 option(AVM_DISABLE_JIT "Disable just in time compilation." ON)
 option(AVM_PRINT_PROCESS_CRASH_DUMPS "Print crash reports when processes die with non-standard reasons" ON)
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
-    # We only have armv6m for now, which all cortex-m should support
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m0")
+    # Cortex-M0/M0+ (e.g. RP2040): ARMv6-M, Thumb-1 only
     if (NOT AVM_DISABLE_JIT)
         set(AVM_JIT_TARGET_ARCH "armv6m")
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
+    # Cortex-M3/M4/M7/M33 (e.g. RP2350): ARMv7-M or ARMv8-M, Thumb-2 support
+    if (NOT AVM_DISABLE_JIT)
+        set(AVM_JIT_TARGET_ARCH "armv6m+thumb2")
     endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^hazard3$")
     # Pico2 RISC-V processor (Hazard3)

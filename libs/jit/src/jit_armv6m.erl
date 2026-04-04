@@ -146,19 +146,22 @@
 ).
 
 -type stream() :: any().
+-type branch_type() ::
+    {adr, armv6m_register()} | b_w | {far_branch, non_neg_integer(), armv6m_register()}.
 
 -record(state, {
     stream_module :: module(),
     stream :: stream(),
     offset :: non_neg_integer(),
-    branches :: [{non_neg_integer(), non_neg_integer(), non_neg_integer()}],
+    branches :: [{non_neg_integer(), non_neg_integer(), branch_type()}],
     jump_table_start :: non_neg_integer(),
     available_regs :: non_neg_integer(),
     used_regs :: non_neg_integer(),
     labels :: [{integer() | reference(), integer()}],
     variant :: non_neg_integer(),
     literal_pool :: [{non_neg_integer(), armv6m_register(), non_neg_integer()}],
-    regs :: jit_regs:regs()
+    regs :: jit_regs:regs(),
+    thumb2 :: boolean()
 }).
 
 -type state() :: #state{}.
@@ -203,8 +206,8 @@
 -define(MODULE_INDEX(ModuleReg), {ModuleReg, 0}).
 
 -define(JUMP_TABLE_ENTRY_SIZE, 12).
+-define(JUMP_TABLE_ENTRY_SIZE_THUMB2, 6).
 
-% aarch64 ABI specific
 %% ARMv6-M register mappings
 
 %% IP can be used as an additional scratch register
@@ -300,7 +303,8 @@ new(Variant, StreamModule, Stream) ->
         labels = [],
         variant = Variant,
         literal_pool = [],
-        regs = jit_regs:new()
+        regs = jit_regs:new(),
+        thumb2 = (Variant band ?JIT_VARIANT_THUMB2) =/= 0
     }.
 
 %%-----------------------------------------------------------------------------
@@ -415,13 +419,19 @@ assert_all_native_free(State) ->
 %% 0 (special entry for lines and labels information) to LabelsCount included
 %% (special entry for OP_INT_CALL_END).
 %%
-%% On this platform, each jump table entry is 12 bytes.
+%% On ARMv6-M (Thumb-1), each jump table entry is 12 bytes:
 %% ```
 %% ldr r3, pc+4
 %% push {r1, r4, r5, r6, r7, lr}
 %% add pc, pc, r3
 %% nop()
 %% offset_to_label0
+%% ```
+%%
+%% On ARMv7-M/ARMv8-M (Thumb-2 variant), each jump table entry is 6 bytes:
+%% ```
+%% push {r1, r4, r5, r6, r7, lr}
+%% b.w offset_to_label0
 %% ```
 %%
 %% @end
@@ -437,11 +447,25 @@ jump_table(#state{stream_module = StreamModule, stream = Stream0} = State, Label
 jump_table0(State, N, LabelsCount) when N > LabelsCount ->
     State;
 jump_table0(
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = true} = State,
+    N,
+    LabelsCount
+) ->
+    % Thumb-2 jump table entry: push + b.w (6 bytes)
+    I1 = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
+    % Placeholder b.w - will be patched by update_branches
+    I2 = <<16#FFFF:16, 16#FFFF:16>>,
+
+    JumpEntry = <<I1/binary, I2/binary>>,
+    Stream1 = StreamModule:append(Stream0, JumpEntry),
+
+    jump_table0(State#state{stream = Stream1}, N + 1, LabelsCount);
+jump_table0(
     #state{stream_module = StreamModule, stream = Stream0} = State,
     N,
     LabelsCount
 ) ->
-    % Create jump table entry with calculated offsets - all at emit time
+    % ARMv6-M jump table entry: ldr + push + add pc + nop + literal (12 bytes)
     I1 = jit_armv6m_asm:ldr(r3, {pc, 4}),
     I2 = jit_armv6m_asm:push([r1, r4, r5, r6, r7, lr]),
     I3 = jit_armv6m_asm:add(pc, r3),
@@ -469,6 +493,8 @@ patch_branch(StreamModule, Stream, Offset, Type, LabelOffset) ->
         case Type of
             {adr, Reg} when Rel rem 4 =:= 0 -> jit_armv6m_asm:adr(Reg, Rel);
             {adr, Reg} when Rel rem 4 =:= 2 -> jit_armv6m_asm:adr(Reg, Rel + 2);
+            b_w ->
+                jit_armv7m_asm:b_w(Rel - 4);
             {far_branch, Size, TempReg} ->
                 % Check if branch can now be optimized to near branch
                 if
@@ -917,6 +943,11 @@ jump_to_continuation(
     State2 = State1#state{stream = Stream2, available_regs = ?AVAILABLE_REGS_MASK, used_regs = 0},
     flush_literal_pool(State2).
 
+branch_to_offset_code(#state{thumb2 = true}, Offset, TargetOffset) ->
+    % Thumb-2: b.w has +-16MB range, always sufficient
+    % b.w offset is relative to PC (instruction address + 4)
+    Rel = TargetOffset - (Offset + 4),
+    jit_armv7m_asm:b_w(Rel);
 branch_to_offset_code(_State, Offset, TargetOffset) when
     TargetOffset - Offset =< 2050, TargetOffset - Offset >= -2044
 ->
@@ -952,6 +983,13 @@ branch_to_offset_code(
 branch_to_label_code(State, Offset, Label, {Label, LabelOffset}) ->
     CodeBlock = branch_to_offset_code(State, Offset, LabelOffset),
     {State, CodeBlock};
+branch_to_label_code(
+    #state{branches = Branches, thumb2 = true} = State0, Offset, Label, false
+) ->
+    CodeBlock = <<16#FFFF:16, 16#FFFF:16>>,
+    Reloc = {Label, Offset, b_w},
+    State1 = State0#state{branches = [Reloc | Branches]},
+    {State1, CodeBlock};
 branch_to_label_code(
     #state{available_regs = Available, branches = Branches} = State0, Offset, Label, false
 ) when Available =/= 0 ->
@@ -3170,7 +3208,12 @@ set_continuation_to_label(
     Temp1 = first_avail(Avail),
     Temp2 = first_avail(Avail band (bnot reg_bit(Temp1))),
     % Calculate jump table entry offset
-    JumpTableEntryOffset = (Label * ?JUMP_TABLE_ENTRY_SIZE) + JumpTableOffset,
+    EntrySize =
+        case State#state.thumb2 of
+            true -> ?JUMP_TABLE_ENTRY_SIZE_THUMB2;
+            false -> ?JUMP_TABLE_ENTRY_SIZE
+        end,
+    JumpTableEntryOffset = (Label * EntrySize) + JumpTableOffset,
 
     AdrOffset = StreamModule:offset(Stream0),
     % ADR Temp, +.4 means we're storing PC value in Temp1.
@@ -3493,6 +3536,26 @@ mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Re
 ->
     I = jit_armv6m_asm:movs(Reg, Val),
     Stream1 = StreamModule:append(Stream0, I),
+    State#state{stream = Stream1};
+mov_immediate(
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = true} = State, Reg, Val
+) when
+    Val > 255 andalso Val =< 65535
+->
+    I = jit_armv7m_asm:movw(Reg, Val),
+    Stream1 = StreamModule:append(Stream0, I),
+    State#state{stream = Stream1};
+mov_immediate(
+    #state{stream_module = StreamModule, stream = Stream0, thumb2 = true} = State, Reg, Val
+) when
+    ?IS_SIGNED_OR_UNSIGNED_INT32_T(Val)
+->
+    UVal = Val band 16#FFFFFFFF,
+    Lo16 = UVal band 16#FFFF,
+    Hi16 = (UVal bsr 16) band 16#FFFF,
+    I1 = jit_armv7m_asm:movw(Reg, Lo16),
+    I2 = jit_armv7m_asm:movt(Reg, Hi16),
+    Stream1 = StreamModule:append(Stream0, <<I1/binary, I2/binary>>),
     State#state{stream = Stream1};
 mov_immediate(#state{stream_module = StreamModule, stream = Stream0} = State, Reg, Val) when
     Val >= -255 andalso Val < 0
@@ -4192,30 +4255,43 @@ add_label(
         stream = Stream0,
         jump_table_start = JumpTableStart,
         branches = Branches,
-        labels = Labels
+        labels = Labels,
+        thumb2 = Thumb2
     } = State,
     Label,
     LabelOffset
 ) when is_integer(Label) ->
-    % Patch the jump table entry immediately
-    % Each jump table entry is 12 bytes:
-    % - ldr r3, [pc, 4] (2 bytes) at offset 0
-    % - push {...} (2 bytes) at offset 2
-    % - add pc, r3 (2 bytes) at offset 4
-    % - nop (2 bytes) at offset 6
-    % - data (4 bytes) at offset 8
-    JumpTableEntryStart = JumpTableStart + Label * 12,
-    DataOffset = JumpTableEntryStart + 8,
-    AddInstrOffset = JumpTableEntryStart + 4,
-
-    % Calculate offset from 'add pc, r3' instruction to target label
-    % When 'add pc, r3' executes, PC reads as AddInstrOffset + 4
-    % Result goes through BXWritePC, so bit 0 must be 1 for Thumb mode
-    AddPC = AddInstrOffset + 4,
-    RelativeOffset = LabelOffset - AddPC + 1,
-    DataBytes = <<RelativeOffset:32/little>>,
-
-    Stream1 = StreamModule:replace(Stream0, DataOffset, DataBytes),
+    Stream1 =
+        case Thumb2 of
+            true ->
+                % Thumb-2 jump table entry is 6 bytes:
+                % - push {...} (2 bytes) at offset 0
+                % - b.w <offset> (4 bytes) at offset 2
+                JumpTableEntryStart = JumpTableStart + Label * ?JUMP_TABLE_ENTRY_SIZE_THUMB2,
+                BranchInstrOffset = JumpTableEntryStart + 2,
+                % b.w offset is relative to instruction address + 4
+                BranchPC = BranchInstrOffset + 4,
+                RelativeOffset = LabelOffset - BranchPC,
+                BranchBytes = jit_armv7m_asm:b_w(RelativeOffset),
+                StreamModule:replace(Stream0, BranchInstrOffset, BranchBytes);
+            false ->
+                % ARMv6-M jump table entry is 12 bytes:
+                % - ldr r3, [pc, 4] (2 bytes) at offset 0
+                % - push {...} (2 bytes) at offset 2
+                % - add pc, r3 (2 bytes) at offset 4
+                % - nop (2 bytes) at offset 6
+                % - data (4 bytes) at offset 8
+                JumpTableEntryStart = JumpTableStart + Label * ?JUMP_TABLE_ENTRY_SIZE,
+                DataOffset = JumpTableEntryStart + 8,
+                AddInstrOffset = JumpTableEntryStart + 4,
+                % Calculate offset from 'add pc, r3' instruction to target label
+                % When 'add pc, r3' executes, PC reads as AddInstrOffset + 4
+                % Result goes through BXWritePC, so bit 0 must be 1 for Thumb mode
+                AddPC = AddInstrOffset + 4,
+                RelativeOffset = LabelOffset - AddPC + 1,
+                DataBytes = <<RelativeOffset:32/little>>,
+                StreamModule:replace(Stream0, DataOffset, DataBytes)
+        end,
 
     % Eagerly patch any branches targeting this label
     {Stream2, RemainingBranches} = patch_branches_for_label(

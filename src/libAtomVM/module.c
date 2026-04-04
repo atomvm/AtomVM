@@ -1114,6 +1114,8 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
     mod->fun_table = beam_file + offsets[FUNT];
     mod->str_table = beam_file + offsets[STRT];
     mod->str_table_len = sizes[STRT];
+    mod->binary = beam_file;
+    mod->binary_size = size;
 #ifndef AVM_NO_JIT
     if (offsets[AVMN]) {
         NativeCodeChunk *native_code = (NativeCodeChunk *) (beam_file + offsets[AVMN]);
@@ -1122,11 +1124,12 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
             fprintf(stderr, "Unknown native code chunk version (%d)\n", ENDIAN_SWAP_16(native_code->version));
         } else {
             for (int arch_index = 0; arch_index < ENDIAN_SWAP_16(native_code->architectures_count); arch_index++) {
-                uint16_t runtime_variant;
+                uint16_t runtime_variant = JIT_VARIANT_PIC;
 #ifdef AVM_USE_SINGLE_PRECISION
-                runtime_variant = JIT_VARIANT_FLOAT32 | JIT_VARIANT_PIC;
-#else
-                runtime_variant = JIT_VARIANT_PIC;
+                runtime_variant |= JIT_VARIANT_FLOAT32;
+#endif
+#ifdef AVM_JIT_THUMB2
+                runtime_variant |= JIT_VARIANT_THUMB2;
 #endif
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
                     size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);

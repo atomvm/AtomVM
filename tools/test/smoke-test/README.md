@@ -186,7 +186,7 @@ To run an example program, `cd` into the appropriate example directory, and buil
     ===> Verifying dependencies...
     ===> Analyzing applications...
     ===> Compiling hello_world
-    ===> esptool.py --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x210000 .../atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
+    ===> esptool.py --chip auto --port /dev/tty.usbserial-0164A0E0 --baud 921600 --before default_reset --after hard_reset write_flash -u --flash_mode keep --flash_freq keep --flash_size detect 0x250000 .../atomvm_examples/erlang/hello_world/_build/default/lib/hello_world.avm
 
     esptool.py v3.3.4-dev
     Serial port /dev/tty.usbserial-0164A0E0
@@ -236,14 +236,14 @@ For example:
     ###########################################################
 
     I (780) AtomVM: Starting AtomVM revision 0.6.0-alpha.1
-    I (790) sys: Loaded BEAM partition boot.avm at address 0x1d0000 (size=262144 bytes)
+    I (790) sys: Loaded BEAM partition boot.avm at address 0x1d0000 (size=524288 bytes)
     I (810) network_driver: Initialized network interface
     I (810) network_driver: Created default event loop
     I (830) AtomVM: Found startup beam esp32init.beam
     I (830) AtomVM: Starting esp32init.beam...
     ---
     AtomVM init.
-    I (840) sys: Loaded BEAM partition main.avm at address 0x210000 (size=1048576 bytes)
+    I (840) sys: Loaded BEAM partition main.avm at address 0x250000 (size=1048576 bytes)
     Starting application...
     Hello World
     AtomVM finished with return value: ok

@@ -7,18 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.7.0-alpha.1] - Unreleased
 
 ### Added
+- Added `json` module to estdlib, compatible with Erlang/OTP `json` API
+- Added `Keyword.put_new/3` to exavmlib
+- Added `JSON` module to exavmlib (Elixir wrapper for estdlib `json`)
 - Added `erlang:node/1` BIF
 - Added `erts_internal:cmp_term/2`
 - Added `short` option to `erlang:float_to_binary/2` and `erlang:float_to_list/2`
 - Added generic unix support for uart using POSIX nifs
 - Added RISC-V 64-bit (RV64IMAC) JIT backend
+- Added arm32 JIT backend
 - Added DWARF debug information support for JIT-compiled code
+- Added I2C and SPI APIs to rp2 platform
+- Added `code:get_object_code/1`
+- Added `erlang:display_string/1` and `erlang:display_string/2`
+- Added Thumb-2 support to armv6m JIT backend, optimizing code for ARMv7-M and later cores
+- Added support for `binary:split/2,3` list patterns and `trim` / `trim_all` options
+- Added `timer:send_after/2`, `timer:send_after/3` and `timer:apply_after/4`
 
 ### Changed
 - ~10% binary size reduction by rewriting module loading logic
 - `erlang:float_to_binary/2` and `erlang:float_to_list/2` now accept `{decimals, 0..253}` and `{scientific, 0..249}`
 - `erlang:binary_to_float/1` and `erlang:list_to_float/1` now use locale-independent parsing and
 strict format validation
+- ESP32: the `boot.avm` partition for Erlang-only images has been increased from 256KB to 512KB,
+matching the Elixir partition layout. The `main.avm` offset is now `0x250000` for all images
+(previously `0x210000` for Erlang-only).
 
 ### Fixed
 - Fixed `erlang:cancel_timer/1` return type spec and documentation to match OTP
@@ -27,6 +40,11 @@ strict format validation
 - Fixed locale-dependent decimal separator in `erlang:float_to_binary` and `erlang:float_to_list`
 - Fixed `erlang:binary_to_float/1` and `erlang:list_to_float/1` returning `inf` for overflow instead
 of raising `badarg`
+- Fixed `erlang:raise/3` with a built stacktrace causing an assertion failure when the re-raised
+exception passes through a non-matching catch clause
+
+### Removed
+- Removed old `json_encoder` module (now standard Erlang/OTP `json` module is available)
 
 ## [0.7.0-alpha.0] - 2026-03-20
 

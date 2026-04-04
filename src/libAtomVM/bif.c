@@ -2154,12 +2154,21 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
         return term_invalid_term();
     }
 
-    char *atom_string = interop_list_to_utf8_string(a_list, &ok);
-    if (UNLIKELY(!ok)) {
-        *error_reason = OUT_OF_MEMORY_ATOM;
+    size_t atom_string_len;
+    interop_utf8_string_result_t utf8_result;
+    char *atom_string = interop_list_to_utf8_string(a_list, &atom_string_len, &utf8_result);
+    if (UNLIKELY(IS_NULL_PTR(atom_string))) {
+        switch (utf8_result) {
+            case InteropUTF8StringBadArg:
+                *error_reason = BADARG_ATOM;
+                break;
+            case InteropUTF8StringMemoryAllocFail:
+            default:
+                *error_reason = OUT_OF_MEMORY_ATOM;
+                break;
+        }
         return term_invalid_term();
     }
-    size_t atom_string_len = strlen(atom_string);
 
     enum AtomTableCopyOpt atom_opts = AtomTableCopyAtom;
     if (!create_new) {
@@ -2167,6 +2176,7 @@ static term list_to_atom(Context *ctx, term a_list, bool create_new, term *error
     }
     atom_index_t global_atom_index;
     enum AtomTableEnsureAtomResult ensure_result = atom_table_ensure_atom(ctx->global->atom_table, (const uint8_t *) atom_string, atom_string_len, atom_opts, &global_atom_index);
+    free(atom_string);
     switch (ensure_result) {
         case AtomTableEnsureAtomNotFound:
         case AtomTableEnsureAtomInvalidLen: {

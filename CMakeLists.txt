@@ -57,6 +57,8 @@ if (NOT AVM_DISABLE_JIT AND NOT DEFINED AVM_JIT_TARGET_ARCH)
         set(AVM_JIT_TARGET_ARCH "aarch64")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^cortex-m.+$")
         set(AVM_JIT_TARGET_ARCH "armv6m")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^arm.+$")
+        set(AVM_JIT_TARGET_ARCH "arm32")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^riscv64$")
         set(AVM_JIT_TARGET_ARCH "riscv64")
     else()
@@ -64,7 +66,7 @@ if (NOT AVM_DISABLE_JIT AND NOT DEFINED AVM_JIT_TARGET_ARCH)
     endif()
 endif()
 
-set(AVM_PRECOMPILED_TARGETS "x86_64;aarch64;armv6m;armv6m+float32;riscv32;riscv64" CACHE STRING "Targets to precompile code to if AVM_DISABLE_JIT is OFF or AVM_ENABLE_PRECOMPILED is ON")
+set(AVM_PRECOMPILED_TARGETS "x86_64;aarch64;arm32;armv6m;armv6m+float32;armv6m+thumb2;riscv32;riscv64" CACHE STRING "Targets to precompile code to if AVM_DISABLE_JIT is OFF or AVM_ENABLE_PRECOMPILED is ON")
 
 if((${CMAKE_SYSTEM_NAME} STREQUAL "Darwin") OR
    (${CMAKE_SYSTEM_NAME} STREQUAL "Linux") OR
@@ -79,8 +81,10 @@ if(NOT AVM_BUILD_RUNTIME_ONLY)
     add_subdirectory(tests)
 endif()
 
-add_subdirectory(tools/packbeam)
-add_subdirectory(tools/uf2tool)
+if(Erlang_FOUND)
+    add_subdirectory(tools/packbeam)
+    add_subdirectory(tools/uf2tool)
+endif()
 
 if (NOT "${CMAKE_GENERATOR}" MATCHES "Xcode")
     add_custom_target(dialyzer COMMENT "Run dialyzer")
