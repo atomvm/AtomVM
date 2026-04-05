@@ -1939,26 +1939,42 @@ term nif_erlang_universaltime_0(Context *ctx, int argc, term argv[])
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
 }
 
-// Workaround for newlib setenv memory leak: use putenv with a fixed-size
-// static buffer. The buffer is installed once and then modified in place.
+// Workaround for newlib/picolibc setenv memory leak: use putenv with a
+// fixed-size static buffer. The buffer is installed once via putenv and then
+// modified in place so repeated TZ changes never allocate.
 // See: https://github.com/espressif/esp-idf/issues/3046
+// Both newlib and picolibc leak the old "NAME=value" string on overwrite.
+#if defined(__NEWLIB__) || defined(__PICOLIBC__)
+#define AVM_TZ_SETENV_LEAKS 1
+#else
+#define AVM_TZ_SETENV_LEAKS 0
+#endif
 
+#if AVM_TZ_SETENV_LEAKS
+
+// Max TZ value length is 60 bytes; longest POSIX TZ strings (e.g.
+// "CET-1CEST,M3.5.0/2,M10.5.0/3") are well under this limit.
 #define TZ_BUFFER_SIZE 64
+#define TZ_MAX_VALUE_LEN (TZ_BUFFER_SIZE - 4) // 3 for "TZ=" + 1 for '\0'
 
 static char tz_buffer[TZ_BUFFER_SIZE] = "TZ=";
 static bool tz_buffer_installed = false;
 static char *tz_env_value = NULL;
 
-static void set_tz_value(const char *tz)
+// Write a TZ value into the static buffer. Returns false if the value is
+// too long to fit (the buffer is left unchanged in that case).
+// Caller must hold env_spinlock.
+static bool set_tz_value(const char *tz)
 {
     size_t tz_len = strlen(tz);
-    if (tz_len > TZ_BUFFER_SIZE - 4) {
-        tz_len = TZ_BUFFER_SIZE - 4;
+    if (tz_len > TZ_MAX_VALUE_LEN) {
+        return false;
     }
     if (!tz_buffer_installed) {
-        memset(tz_buffer + 3, ' ', TZ_BUFFER_SIZE - 4);
-        tz_buffer[TZ_BUFFER_SIZE - 1] = '\0';
-        putenv(tz_buffer);
+        memset(tz_buffer + 3, 0, TZ_BUFFER_SIZE - 3);
+        if (putenv(tz_buffer) != 0) {
+            return false;
+        }
         tz_buffer_installed = true;
         tz_env_value = getenv("TZ");
         if (tz_env_value == NULL) {
@@ -1966,9 +1982,11 @@ static void set_tz_value(const char *tz)
         }
     }
     memcpy(tz_env_value, tz, tz_len);
-    memset(tz_env_value + tz_len, ' ', (TZ_BUFFER_SIZE - 4) - tz_len);
-    tz_env_value[TZ_BUFFER_SIZE - 4] = '\0';
+    memset(tz_env_value + tz_len, 0, TZ_MAX_VALUE_LEN - tz_len);
+    return true;
 }
+
+#endif // AVM_TZ_SETENV_LEAKS
 
 term nif_erlang_localtime(Context *ctx, int argc, term argv[])
 {
@@ -1997,15 +2015,38 @@ term nif_erlang_localtime(Context *ctx, int argc, term argv[])
         char *oldtz_env = getenv("TZ");
         if (oldtz_env) {
             oldtz = strdup(oldtz_env);
+            if (UNLIKELY(oldtz == NULL)) {
+#ifndef AVM_NO_SMP
+                smp_spinlock_unlock(&ctx->global->env_spinlock);
+#endif
+                free(tz);
+                RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+            }
         }
+
+#if AVM_TZ_SETENV_LEAKS
         set_tz_value(tz);
+#else
+        setenv("TZ", tz, 1);
+#endif
         tzset();
         localtime = localtime_r(&ts.tv_sec, &storage);
+
         if (oldtz) {
+#if AVM_TZ_SETENV_LEAKS
             set_tz_value(oldtz);
+#else
+            setenv("TZ", oldtz, 1);
+#endif
             free(oldtz);
         } else {
-            set_tz_value("");
+#if AVM_TZ_SETENV_LEAKS
+            // Cannot truly unset TZ with the static buffer approach.
+            // Setting to "UTC0" gives well-defined UTC behavior.
+            set_tz_value("UTC0");
+#else
+            unsetenv("TZ");
+#endif
         }
         tzset();
     } else {
@@ -2017,6 +2058,11 @@ term nif_erlang_localtime(Context *ctx, int argc, term argv[])
 #endif
 
     free(tz);
+
+    if (UNLIKELY(localtime == NULL)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
     return build_datetime_from_tm(ctx, localtime);
 }
 
