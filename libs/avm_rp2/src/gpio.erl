@@ -76,7 +76,7 @@
 %% Event type that will trigger a `gpio_interrupt'.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Pid
 %% @doc     Start the GPIO driver
 %%
 %%          Returns the pid of the active GPIO driver process, otherwise the GPIO
@@ -85,7 +85,7 @@
 %%          that require a GPIO pid as a parameter.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start() -> gpio() | {error, Reason :: atom()} | error.
+-spec start() -> gpio().
 start() ->
     case whereis(gpio) of
         undefined ->
@@ -95,7 +95,7 @@ start() ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @returns Pid | error | {error, Reason}
+%% @returns Pid
 %% @doc     Start the GPIO driver
 %%
 %%          The GPIO driver process will be started and registered as `gpio'. If the
@@ -103,7 +103,7 @@ start() ->
 %%          `gpio:start/0' the command will fail.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open() -> gpio() | {error, Reason :: atom()} | error.
+-spec open() -> gpio().
 open() ->
     Pid = spawn(fun gpio_loop/0),
     register(gpio, Pid),
