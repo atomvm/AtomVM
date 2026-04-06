@@ -2055,45 +2055,38 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
 
 term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
-    struct timespec ts;
+    if (UNLIKELY(!term_is_int64(argv[0]))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
     avm_int64_t value = term_maybe_unbox_int64(argv[0]);
 
+    avm_int64_t divisor;
     if (argv[1] == SECOND_ATOM) {
-        ts.tv_sec = (time_t) value;
-        ts.tv_nsec = 0;
-
+        divisor = 1;
     } else if (argv[1] == MILLISECOND_ATOM) {
-        ts.tv_sec = (time_t) (value / 1000);
-        ts.tv_nsec = (value % 1000) * 1000000;
-
+        divisor = 1000;
     } else if (argv[1] == MICROSECOND_ATOM) {
-        ts.tv_sec = (time_t) (value / 1000000);
-        ts.tv_nsec = (value % 1000000) * 1000;
-
+        divisor = INT64_C(1000000);
     } else if (argv[1] == NANOSECOND_ATOM || argv[1] == NATIVE_ATOM) {
-        ts.tv_sec = (time_t) (value / INT64_C(1000000000));
-        ts.tv_nsec = value % INT64_C(1000000000);
-
+        divisor = INT64_C(1000000000);
     } else if (term_is_int64(argv[1])) {
-        avm_int64_t parts_per_second = term_maybe_unbox_int64(argv[1]);
-        if (UNLIKELY(parts_per_second <= 0)) {
+        divisor = term_maybe_unbox_int64(argv[1]);
+        if (UNLIKELY(divisor <= 0)) {
             RAISE_ERROR(BADARG_ATOM);
         }
-        if (UNLIKELY(!term_is_int64(argv[0]))) {
-            RAISE_ERROR(BADARG_ATOM);
-        }
-        ts.tv_sec = (time_t) (value / parts_per_second);
-        if ((value % parts_per_second) < 0) {
-            ts.tv_sec -= 1;
-        }
-        ts.tv_nsec = 0;
-
     } else {
         RAISE_ERROR(BADARG_ATOM);
     }
+
+    // Floor division: round negative fractional seconds toward negative infinity
+    avm_int64_t quotient = value / divisor;
+    avm_int64_t remainder = value % divisor;
+    struct timespec ts = {
+        .tv_sec = (time_t) (quotient - (remainder < 0)),
+        .tv_nsec = 0
+    };
 
     struct tm broken_down_time;
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));

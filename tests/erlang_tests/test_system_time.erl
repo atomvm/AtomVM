@@ -131,6 +131,13 @@ test_system_time_to_universal_time() ->
     {{2023, 7, 8}, {20, 19, 39}} = calendar:system_time_to_universal_time(1688847579, second),
 
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, second),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, millisecond),
+    {{1969, 12, 31}, {23, 59, 58}} = calendar:system_time_to_universal_time(-1001, millisecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, microsecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, nanosecond),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, native),
+
+    ok = expect(fun() -> calendar:system_time_to_universal_time(not_an_integer, second) end, badarg),
 
     ok = test_nanosecond_universal_time(),
     ok = test_native_universal_time(),
