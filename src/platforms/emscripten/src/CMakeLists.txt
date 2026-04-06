@@ -34,7 +34,7 @@ if (NOT AVM_DISABLE_JIT)
 else()
     set(JIT_LINK_FLAGS -sEXPORTED_RUNTIME_METHODS=ccall)
 endif()
-target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js)
+target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_options(AtomVM PRIVATE -sASSERTIONS=2 -sSAFE_HEAP -sSTACK_OVERFLOW_CHECK)
