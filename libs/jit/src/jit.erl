@@ -1186,12 +1186,12 @@ first_pass(<<?OP_RAISE, Rest0/binary>>, MMod, MSt0, State0) ->
 first_pass(<<?OP_APPLY, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
-    {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
-    {MSt2, Function} = read_any_xreg(Arity + 1, MMod, MSt1),
     ?TRACE("OP_APPLY ~p\n", [Arity]),
-    MSt3 = verify_is_atom(Module, 0, MMod, MSt2),
-    MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
-    MSt5 = MMod:decrement_reductions_and_maybe_schedule_next(MSt4),
+    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+    {MSt2, Module} = read_any_xreg(Arity, MMod, MSt1),
+    {MSt3, Function} = read_any_xreg(Arity + 1, MMod, MSt2),
+    MSt4 = verify_is_atom(Module, 0, MMod, MSt3),
+    MSt5 = verify_is_atom(Function, 0, MMod, MSt4),
     MSt6 = MMod:call_primitive_with_cp(MSt5, ?PRIM_APPLY, [
         ctx, jit_state, offset, {free, Module}, {free, Function}, Arity
     ]),
@@ -1202,12 +1202,12 @@ first_pass(<<?OP_APPLY_LAST, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {Arity, Rest1} = decode_literal(Rest0),
     {NWords, Rest2} = decode_literal(Rest1),
-    {MSt1, Module} = read_any_xreg(Arity, MMod, MSt0),
-    {MSt2, Function} = read_any_xreg(Arity + 1, MMod, MSt1),
     ?TRACE("OP_APPLY_LAST ~p, ~p\n", [Arity, NWords]),
-    MSt3 = verify_is_atom(Module, 0, MMod, MSt2),
-    MSt4 = verify_is_atom(Function, 0, MMod, MSt3),
-    MSt5 = MMod:decrement_reductions_and_maybe_schedule_next(MSt4),
+    MSt1 = MMod:decrement_reductions_and_maybe_schedule_next(MSt0),
+    {MSt2, Module} = read_any_xreg(Arity, MMod, MSt1),
+    {MSt3, Function} = read_any_xreg(Arity + 1, MMod, MSt2),
+    MSt4 = verify_is_atom(Module, 0, MMod, MSt3),
+    MSt5 = verify_is_atom(Function, 0, MMod, MSt4),
     MSt6 = MMod:move_to_cp(MSt5, {y_reg, NWords}),
     MSt7 = MMod:increment_sp(MSt6, NWords + 1),
     MSt8 = MMod:call_primitive_last(MSt7, ?PRIM_APPLY, [
@@ -2442,11 +2442,11 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
     {MSt1, Tag, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
     {ArgsCount, Rest2} = decode_literal(Rest1),
-    {MSt2, Fun, Rest3} = decode_typed_compact_term(Rest2, MMod, MSt1, State0),
-    ?TRACE("OP_CALL_FUN2 ~p, ~p, ~p\n", [Tag, ArgsCount, Fun]),
+    ?TRACE("OP_CALL_FUN2 ~p, ~p\n", [Tag, ArgsCount]),
     % We ignore Tag (could be literal 0 or atom unsafe)
-    MSt3 = MMod:free_native_registers(MSt2, [Tag]),
-    MSt4 = MMod:decrement_reductions_and_maybe_schedule_next(MSt3),
+    MSt2 = MMod:free_native_registers(MSt1, [Tag]),
+    MSt3 = MMod:decrement_reductions_and_maybe_schedule_next(MSt2),
+    {MSt4, Fun, Rest3} = decode_typed_compact_term(Rest2, MMod, MSt3, State0),
     {MSt5, Reg} = verify_is_function(Fun, MMod, MSt4),
     MSt6 = MMod:call_primitive_with_cp(MSt5, ?PRIM_CALL_FUN, [
         ctx, jit_state, offset, {free, Reg}, ArgsCount
