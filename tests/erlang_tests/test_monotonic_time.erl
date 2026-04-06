@@ -39,6 +39,7 @@ start() ->
 
     ok = test_native_monotonic_time(),
     ok = test_integer_time_unit(),
+    ok = test_non_power_of_10_integer_time_unit(),
     ok = test_bad_integer_time_unit(),
 
     1.
@@ -97,7 +98,23 @@ test_integer_time_unit() ->
 
     ok.
 
+test_non_power_of_10_integer_time_unit() ->
+    ok = test_integer_time_unit_monotonicity(256),
+    ok = test_integer_time_unit_monotonicity(48000),
+    ok.
+
 test_bad_integer_time_unit() ->
     ok = expect(fun() -> erlang:monotonic_time(0) end, badarg),
     ok = expect(fun() -> erlang:monotonic_time(-1) end, badarg),
+    ok.
+
+test_integer_time_unit_monotonicity(PartsPerSecond) ->
+    T1 = erlang:monotonic_time(PartsPerSecond),
+    receive
+    after 1 -> ok
+    end,
+    T2 = erlang:monotonic_time(PartsPerSecond),
+    true = is_integer(T1),
+    true = is_integer(T2),
+    true = T2 >= T1,
     ok.

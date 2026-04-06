@@ -35,6 +35,7 @@ start() ->
     ok = test_time_unit_ratios(),
 
     ok = test_integer_time_unit(),
+    ok = test_non_power_of_10_integer_time_unit(),
     ok = test_bad_integer_time_unit(),
 
     ok = expect(fun() -> erlang:system_time(not_a_time_unit) end, badarg),
@@ -137,7 +138,9 @@ test_system_time_to_universal_time() ->
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, nanosecond),
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, native),
 
-    ok = expect(fun() -> calendar:system_time_to_universal_time(not_an_integer, second) end, badarg),
+    ok = expect(
+        fun() -> calendar:system_time_to_universal_time(not_an_integer, second) end, badarg
+    ),
 
     ok = test_nanosecond_universal_time(),
     ok = test_native_universal_time(),
@@ -207,6 +210,11 @@ test_integer_time_unit() ->
 
     ok.
 
+test_non_power_of_10_integer_time_unit() ->
+    ok = test_integer_parts_per_second_ratio(256),
+    ok = test_integer_parts_per_second_ratio(48000),
+    ok.
+
 test_integer_unit_universal_time() ->
     %% integer 1 = seconds
     {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1),
@@ -218,11 +226,20 @@ test_integer_unit_universal_time() ->
     {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000, 1000),
     {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1001, 1000),
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000),
+    {{1969, 12, 31}, {23, 59, 58}} = calendar:system_time_to_universal_time(-1001, 1000),
 
     %% integer 1000000 = microseconds
     {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(0, 1000000),
     {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(1000000, 1000000),
     {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 1000000),
+
+    %% integer 256 and 48000 = arbitrary parts per second
+    {{1970, 1, 1}, {0, 0, 0}} = calendar:system_time_to_universal_time(255, 256),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(256, 256),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 256),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-255, 256),
+    {{1970, 1, 1}, {0, 0, 1}} = calendar:system_time_to_universal_time(48000, 48000),
+    {{1969, 12, 31}, {23, 59, 59}} = calendar:system_time_to_universal_time(-1, 48000),
 
     ok.
 
@@ -232,5 +249,18 @@ test_bad_integer_time_unit() ->
     ok.
 
 test_bad_integer_unit_universal_time() ->
+    ok = expect(
+        fun() -> calendar:system_time_to_universal_time(not_an_integer, second) end, badarg
+    ),
+    ok = expect(fun() -> calendar:system_time_to_universal_time(not_an_integer, 1000) end, badarg),
     ok = expect(fun() -> calendar:system_time_to_universal_time(0, 0) end, badarg),
+    ok = expect(fun() -> calendar:system_time_to_universal_time(0, -1) end, badarg),
+    ok.
+
+test_integer_parts_per_second_ratio(PartsPerSecond) ->
+    Seconds = erlang:system_time(second),
+    Parts = erlang:system_time(PartsPerSecond),
+    true = is_integer(Parts) andalso Parts > 0,
+    true = Parts >= Seconds * PartsPerSecond,
+    true = Parts < Seconds * PartsPerSecond + (PartsPerSecond * 2),
     ok.
