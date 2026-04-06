@@ -712,6 +712,7 @@ functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Fixed numerous bugs in memory allocations that could crash the VM
 - Fixed SNTP support that had been broken in IDF 4.x builds
 - Fixed `erlang:send/2` not sending to registered name
+- Fixed sign of `binary:at/2`, `binary:first/1` and `binary:last/1` results
 
 ### Breaking Changes
 
