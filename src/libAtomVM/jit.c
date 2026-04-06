@@ -158,7 +158,7 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32 || JIT_ARCH_TARGET == JIT_ARCH_WASM32
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in 32-bit backends");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in 32-bit backends");
 _Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in 32-bit backends");
@@ -170,8 +170,6 @@ _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in 3
 _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in 32-bit backends");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in 32-bit backends");
 
-_Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
-
 #else
 #error Unknown jit target
 #endif
@@ -180,6 +178,16 @@ _Static_assert(sizeof(size_t) == 4, "size_t is expected to be 32 bits");
 _Static_assert(sizeof(avm_float_t) == 0x4, "sizeof(avm_float_t) is 0x4 for single precision");
 #else
 _Static_assert(sizeof(avm_float_t) == 0x8, "sizeof(avm_float_t) is 0x8 for double precision");
+#endif
+
+// Convert a label number to a continuation value for jit_state->continuation.
+// For WASM (JIT_JUMPTABLE_IS_DATA), stores (label + 1) encoding that the
+// dispatch loop converts to a function pointer.
+// For other archs, stores the actual function pointer directly.
+#ifdef JIT_JUMPTABLE_IS_DATA
+#define JIT_CONTINUATION_FOR_LABEL(mod, label) ((NativeContinuation) ((label) + 1))
+#else
+#define JIT_CONTINUATION_FOR_LABEL(mod, label) module_get_native_entry_point(mod, label)
 #endif
 
 #define PROCESS_MAYBE_TRAP_RETURN_VALUE(return_value, offset) \
@@ -259,12 +267,19 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
         // return to emulated
         const uint8_t *code = mod->code->code;
         const uint8_t *pc = code + ((ctx->cp & 0xFFFFFF) >> 2);
-        jit_state->continuation = pc;
+        jit_state->continuation_pc = pc;
     } else {
 #endif
-        // return to native using pointer arithmetics on function pointers
-        const void *native_pc = ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2);
-        jit_state->continuation = (ModuleNativeEntryPoint) native_pc;
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: continuation stores (label + 1) for the dispatch loop to convert.
+        int label = ((ctx->cp & 0xFFFFFF) >> 2) / JIT_JUMPTABLE_ENTRY_SIZE;
+        TRACE("jit_return: cp=0x%x mod=%d label=%d\n", (unsigned) ctx->cp, module_index, label);
+        jit_state->continuation = (NativeContinuation) (label + 1);
+#else
+    // return to native using pointer arithmetics on function pointers
+    const void *native_pc = ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2);
+    jit_state->continuation = (NativeContinuation) native_pc;
+#endif
 #ifndef AVM_NO_EMU
     }
 #endif
@@ -305,7 +320,7 @@ static Context *jit_handle_error(Context *ctx, JITState *jit_state, int offset)
     if (target_label) {
         if (jit_state->module->native_code) {
             // catch label is in native code.
-            jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
+            jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, target_label);
         } else {
             // Native case
             // jit_state->continuation = jit_state->module->labels[target_label];
@@ -459,7 +474,7 @@ enum TrapAndLoadResult jit_trap_and_load(Context *ctx, Module *mod, uint32_t lab
     // We exceptionally store the label in this field, used by context_process_code_server_resume_signal
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
-    ctx->saved_function_ptr = (void *) (uintptr_t) label;
+    ctx->saved_function_ptr = (NativeContinuation) (uintptr_t) label;
 #pragma GCC diagnostic pop
     context_update_flags(ctx, ~NoFlags, Trap);
     return TRAP_AND_LOAD_OK;
@@ -537,13 +552,17 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
                 }
                 return scheduler_wait(ctx);
             } else {
+                int target_label = jump->label;
                 // Fix exported function for next call, if any
-                ((struct ModuleFunction *) jump)->entry_point = module_get_native_entry_point(jump->target, jump->label);
+#ifndef JIT_JUMPTABLE_IS_DATA
+                // label and entry_point are union, wasm uses label
+                ((struct ModuleFunction *) jump)->entry_point = module_get_native_entry_point(jump->target, target_label);
+#endif
                 ((struct ModuleFunction *) jump)->base.type = ModuleNativeFunction;
                 SMP_MODULE_UNLOCK(jit_state->module);
 
                 jit_state->module = jump->target;
-                jit_state->continuation = jump->entry_point;
+                jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jump->target, target_label);
             }
             break;
         }
@@ -554,10 +573,12 @@ static Context *jit_call_ext(Context *ctx, JITState *jit_state, int offset, int 
             }
 
             const struct ModuleFunction *jump = EXPORTED_FUNCTION_TO_MODULE_FUNCTION(func);
-            // clang cannot tail-optimize this, so return to loop to avoid any stack overflow
-            // __attribute__((musttail)) return jump->entry_point(ctx, jit_state, &module_native_interface);
             jit_state->module = jump->target;
+#ifdef JIT_JUMPTABLE_IS_DATA
+            jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jump->target, jump->label);
+#else
             jit_state->continuation = jump->entry_point;
+#endif
             break;
         }
         case BIFFunctionType: {
@@ -674,7 +695,7 @@ static TermCompareResult jit_term_compare(Context *ctx, JITState *jit_state, ter
     if (UNLIKELY(result == 0)) {
         set_error(ctx, jit_state, 0, OUT_OF_MEMORY_ATOM);
     }
-    TRACE("jit_term_compare: t=%p other=%p opts=%d, result=%d\n", (void *) t, (void *) other, opts, result);
+    TRACE("jit_term_compare: t=0x%lx other=0x%lx opts=%d result=%d\n", (unsigned long) t, (unsigned long) other, opts, result);
     return result;
 }
 
@@ -706,8 +727,7 @@ static term jit_put_list(Context *ctx, term head, term tail)
 {
     TRACE("jit_put_list: head=%p tail=%p\n", (void *) head, (void *) tail);
     term *list_elem = term_list_alloc(&ctx->heap);
-    term t = term_list_init_prepend(list_elem, head, tail);
-    return t;
+    return term_list_init_prepend(list_elem, head, tail);
 }
 
 static term jit_module_load_literal(Context *ctx, JITState *jit_state, int index)
@@ -977,8 +997,18 @@ static Context *jit_process_signal_messages(Context *ctx, JITState *jit_state)
                 break;
             }
             case CodeServerResumeSignal: {
+#ifdef JIT_JUMPTABLE_IS_DATA
+                // WASM: saved_function_ptr contains raw label (set by jit_trap_and_load)
+                // Save it before context_process_code_server_resume_signal converts it
+                uint32_t resume_label = (uint32_t) ctx->saved_function_ptr;
+#endif
                 context_process_code_server_resume_signal(ctx);
+#ifdef JIT_JUMPTABLE_IS_DATA
+                // WASM: continuation expects (label + 1) encoding
+                jit_state->continuation = (NativeContinuation) (resume_label + 1);
+#else
                 jit_state->continuation = ctx->saved_function_ptr;
+#endif
                 break;
             }
             case NormalMessage: {
@@ -1084,7 +1114,7 @@ static Context *jit_wait_timeout(Context *ctx, JITState *jit_state, term timeout
         // If there are match clauses (loop_rec was executed), jump to
         // loop_rec to scan them.
         if (ctx->mailbox.receive_has_match_clauses && mailbox_has_next(&ctx->mailbox)) {
-            jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
+            jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, label);
             return ctx;
         }
         return jit_schedule_wait_cp(ctx, jit_state);
@@ -1105,7 +1135,7 @@ static Context *jit_wait_timeout_trap_handler(Context *ctx, JITState *jit_state,
     }
 
     // Messages available, jump to loop_rec to scan them.
-    jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
+    jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, label);
     return ctx;
 }
 
@@ -1225,7 +1255,7 @@ static Context *jit_call_fun(Context *ctx, JITState *jit_state, int offset, term
     if (fun_module->native_code) {
         // JIT case
         jit_state->module = fun_module;
-        jit_state->continuation = module_get_native_entry_point(jit_state->module, label);
+        jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, label);
     } else {
         // Native case
         // jit_state->module = fun_module;
@@ -1699,7 +1729,7 @@ static Context *jit_apply(Context *ctx, JITState *jit_state, int offset, term mo
         if (target_module->native_code) {
             // catch label is in native code.
             jit_state->module = target_module;
-            jit_state->continuation = module_get_native_entry_point(jit_state->module, target_label);
+            jit_state->continuation = JIT_CONTINUATION_FOR_LABEL(jit_state->module, target_label);
         } else {
             // Native case
             // jit_state->module = target_module;

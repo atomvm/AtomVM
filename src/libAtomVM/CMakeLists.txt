@@ -113,7 +113,7 @@ set(SOURCE_FILES
     valueshashtable.c
 )
 
-if(NOT AVM_DISABLE_JIT)
+if(NOT AVM_DISABLE_JIT OR AVM_ENABLE_PRECOMPILED)
     set(HEADER_FILES ${HEADER_FILES}
         jit.h
     )

@@ -6,6 +6,7 @@
 *.avm
 *.beam
 *.o
+erl_crash.dump
 build/**
 xcode/**
 examples/**/build

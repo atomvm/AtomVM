@@ -25,6 +25,7 @@ The JIT compiler supports the following target architectures:
 * `armv6m+thumb2` — ARM Cortex-M3+ with Thumb-2 support, ARMv7-M or later (Raspberry Pi Pico 2, STM32 with Cortex-M3/M4/M7/M33)
 * `riscv32` — 32-bit RISC-V
 * `riscv64` — 64-bit RISC-V
+* `wasm32` — WebAssembly (Emscripten)
 
 ### Requirements
 
