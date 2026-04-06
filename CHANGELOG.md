@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0-alpha.1] - Unreleased
+## [0.7.0-alpha.1] - 2026-04-06
 
 ### Added
 - Added `json` module to estdlib, compatible with Erlang/OTP `json` API
@@ -44,6 +44,7 @@ of raising `badarg`
 exception passes through a non-matching catch clause
 
 ### Removed
+- Removed support for OTP versions < 26
 - Removed old `json_encoder` module (now standard Erlang/OTP `json` module is available)
 
 ## [0.7.0-alpha.0] - 2026-03-20
@@ -177,10 +178,6 @@ table.
 - ESP32 ports now flash a complete working image using the `idf.py flash` task.
 - ESP32 platform now uses reproducible builds.
 - C API: `externalterm` module was renamed to `external_term` and it has a completely new API
-
-### Removed
-
-- Removed support for OTP versions < 26
 
 ### Fixed
 
