@@ -86,41 +86,47 @@ test_infinity() ->
 
 test_send_after_2() ->
     {ok, _TRef} = timer:send_after(500, hello),
-    receive
-        hello -> {error, too_early}
-    after 250 ->
-        ok
-    end,
-    receive
-        hello -> ok
-    after 10000 ->
-        {error, timeout}
-    end.
+    ok =
+        receive
+            hello -> {error, too_early}
+        after 250 ->
+            ok
+        end,
+    ok =
+        receive
+            hello -> ok
+        after 10000 ->
+            {error, timeout}
+        end.
 
 test_send_after_3() ->
     Self = self(),
     {ok, _TRef} = timer:send_after(500, Self, hello_dest),
-    receive
-        hello_dest -> {error, too_early}
-    after 250 ->
-        ok
-    end,
-    receive
-        hello_dest -> ok
-    after 10000 ->
-        {error, timeout}
-    end.
+    ok =
+        receive
+            hello_dest -> {error, too_early}
+        after 250 ->
+            ok
+        end,
+    ok =
+        receive
+            hello_dest -> ok
+        after 10000 ->
+            {error, timeout}
+        end.
 
 test_apply_after() ->
     Self = self(),
     {ok, _TRef} = timer:apply_after(500, erlang, send, [Self, apply_result]),
-    receive
-        apply_result -> {error, too_early}
-    after 250 ->
-        ok
-    end,
-    receive
-        apply_result -> ok
-    after 10000 ->
-        {error, timeout}
-    end.
+    ok =
+        receive
+            apply_result -> {error, too_early}
+        after 250 ->
+            ok
+        end,
+    ok =
+        receive
+            apply_result -> ok
+        after 10000 ->
+            {error, timeout}
+        end.
