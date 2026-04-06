@@ -1971,7 +1971,12 @@ static bool set_tz_value(const char *tz)
         return false;
     }
     if (!tz_buffer_installed) {
-        memset(tz_buffer + 3, 0, TZ_BUFFER_SIZE - 3);
+        // Install a full-width placeholder first. Some libc implementations
+        // copy the environment string instead of keeping our static buffer, and
+        // installing just "TZ=" would leave too little storage for later
+        // in-place updates.
+        memset(tz_buffer + 3, ' ', TZ_MAX_VALUE_LEN);
+        tz_buffer[3 + TZ_MAX_VALUE_LEN] = '\0';
         if (putenv(tz_buffer) != 0) {
             return false;
         }
@@ -1983,6 +1988,7 @@ static bool set_tz_value(const char *tz)
     }
     memcpy(tz_env_value, tz, tz_len);
     memset(tz_env_value + tz_len, 0, TZ_MAX_VALUE_LEN - tz_len);
+    tz_env_value[TZ_MAX_VALUE_LEN] = '\0';
     return true;
 }
 
