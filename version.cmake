@@ -19,5 +19,5 @@
 #
 
 # Please, keep also in sync src/libAtomVM/atomvm_version.h
-set(ATOMVM_BASE_VERSION "0.7.0-alpha.1")
+set(ATOMVM_BASE_VERSION "0.7.0-beta.0")
 set(ATOMVM_DEV TRUE)
