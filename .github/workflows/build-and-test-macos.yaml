@@ -72,14 +72,11 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: "Normalize ImageOS for setup-beam"
-      if: matrix.os == 'macos-26'
-      run: echo "ImageOS=macos15" >> "$GITHUB_ENV"
-
     - uses: erlef/setup-beam@v1
       with:
         otp-version: ${{ matrix.otp }}
         rebar3-version: ${{ fromJSON('{"26":"3.25.1","27":"3.25.1","28":"3.26"}')[matrix.otp] || '3' }}
+        gleam-version: "1.15.2"
         hexpm-mirrors: |
           https://builds.hex.pm
           https://repo.hex.pm
@@ -87,12 +84,6 @@ jobs:
 
     - name: "Install deps"
       run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf doxygen socat ${{ matrix.mbedtls }}
-
-    - name: "Install Gleam"
-      run: |
-        # Reuse the OTP/rebar3 installed by setup-beam instead of Homebrew dependencies.
-        HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install --ignore-dependencies gleam
-        gleam --version
 
     - name: "Workaround for nxdomain random issues"
       run: |
