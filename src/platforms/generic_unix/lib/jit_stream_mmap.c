@@ -54,11 +54,18 @@ const ErlNifResourceTypeInit jit_stream_mmap_resource_type_init = {
     .dtor = jit_stream_mmap_dtor
 };
 
+// sys_release_native_code expects a size_t header (NativeCodeMmapHeader in sys.c)
+// prepended before entry_point so it can recover the mmap base and size.
+// We reserve sizeof(size_t) at the start of every mmap for this header.
+#define JIT_MMAP_HEADER_SIZE sizeof(size_t)
+
 struct JITStreamMMap
 {
-    uint8_t *stream_base;
+    uint8_t *mmap_base; // real mmap base (includes header)
+    uint8_t *stream_base; // code area = mmap_base + JIT_MMAP_HEADER_SIZE
     size_t stream_offset;
-    size_t stream_size;
+    size_t stream_size; // usable code area size
+    size_t mmap_total; // total mmap allocation size
 };
 
 static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
@@ -67,27 +74,34 @@ static term nif_jit_stream_mmap_new(Context *ctx, int argc, term argv[])
     VALIDATE_VALUE(argv[0], term_is_integer);
 
     size_t size = term_to_int(argv[0]);
+    size_t total = JIT_MMAP_HEADER_SIZE + size;
 
     int prot = PROT_READ | PROT_WRITE | PROT_EXEC;
     int flags = MAP_PRIVATE | MAP_ANONYMOUS | ATOMVM_MAP_JIT;
     int fd = -1;
     off_t offset = 0;
 
-    uint8_t *addr = (uint8_t *) mmap(0, size, prot, flags, fd, offset);
+    uint8_t *addr = (uint8_t *) mmap(0, total, prot, flags, fd, offset);
     if (addr == MAP_FAILED) {
-        fprintf(stderr, "Could not allocate mmap for JIT: size=%zu, errno=%d\n", size, errno);
+        fprintf(stderr, "Could not allocate mmap for JIT: size=%zu, errno=%d\n", total, errno);
         RAISE_ERROR(BADARG_ATOM);
     }
+
+    // Write the total mmap size into the header so sys_release_native_code
+    // can recover it (it reads *(size_t *)(entry_point - sizeof(size_t))).
+    *((size_t *) addr) = total;
 
     // Return a resource object
     struct JITStreamMMap *js = enif_alloc_resource(jit_stream_mmap_resource_type, sizeof(struct JITStreamMMap));
     if (IS_NULL_PTR(js)) {
-        munmap(addr, size);
+        munmap(addr, total);
         RAISE_ERROR(OUT_OF_MEMORY_ATOM);
     }
-    js->stream_base = addr;
+    js->mmap_base = addr;
+    js->stream_base = addr + JIT_MMAP_HEADER_SIZE;
     js->stream_offset = 0;
     js->stream_size = size;
+    js->mmap_total = total;
 
     if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_REFERENCE_RESOURCE_SIZE) != MEMORY_GC_OK)) {
         enif_release_resource(js);
@@ -265,18 +279,19 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
     }
     struct JITStreamMMap *js_obj = (struct JITStreamMMap *) js_obj_ptr;
 
-    if (IS_NULL_PTR(js_obj->stream_base)) {
+    if (IS_NULL_PTR(js_obj->mmap_base)) {
         return NULL;
     }
 
 #if JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
     // Set thumb bit for armv6m
-    ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base + 1;
+    ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) ((uintptr_t) js_obj->stream_base | 1);
 #else
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
 #endif
 
-    // Prevent module from being unmapped by dtor
+    // Prevent module from being unmapped by dtor — ownership transfers to Module
+    js_obj->mmap_base = NULL;
     js_obj->stream_base = NULL;
     return result;
 }
@@ -286,8 +301,8 @@ static void jit_stream_mmap_dtor(ErlNifEnv *caller_env, void *obj)
     UNUSED(caller_env);
 
     struct JITStreamMMap *js_obj = (struct JITStreamMMap *) obj;
-    if (js_obj->stream_base) {
-        munmap(js_obj->stream_base, js_obj->stream_size);
+    if (js_obj->mmap_base) {
+        munmap(js_obj->mmap_base, js_obj->mmap_total);
     }
 }
 

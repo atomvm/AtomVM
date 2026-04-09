@@ -1156,8 +1156,17 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 runtime_variant |= JIT_VARIANT_THUMB2;
 #endif
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
-                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
-                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
+                    size_t arch_offset = ENDIAN_SWAP_32(native_code->architectures[arch_index].offset);
+                    size_t arch_code_size;
+                    if (arch_index + 1 < ENDIAN_SWAP_16(native_code->architectures_count)) {
+                        arch_code_size = ENDIAN_SWAP_32(native_code->architectures[arch_index + 1].offset) - arch_offset;
+                    } else {
+                        size_t code_section_size = ENDIAN_SWAP_32(native_code->size) - sizeof(native_code->info_size) - ENDIAN_SWAP_32(native_code->info_size);
+                        arch_code_size = code_section_size - arch_offset;
+                    }
+                    size_t header_offset = ENDIAN_SWAP_32(native_code->info_size) + arch_offset + sizeof(native_code->info_size);
+                    const uint8_t *arch_code = (const uint8_t *) &native_code->info_size + header_offset;
+                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code(arch_code, arch_code_size);
                     module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
 
 #ifndef AVM_NO_JIT_DWARF
@@ -1304,6 +1313,11 @@ COLD_FUNC void module_destroy(Module *module)
     if (module->free_literals_data) {
         free(module->literals_data);
     }
+#ifndef AVM_NO_JIT
+    if (module->native_code) {
+        sys_release_native_code(module->native_code);
+    }
+#endif
 #ifndef AVM_NO_SMP
     smp_mutex_destroy(module->mutex);
 #endif

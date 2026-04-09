@@ -223,12 +223,21 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
     return compile_wasm_stream(data, data_size);
 }
 
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+void sys_release_native_code(ModuleNativeEntryPoint entry_point)
 {
-    if (offset >= size) {
-        return NULL;
+    ModuleNativeEntryPoint *func_table = (ModuleNativeEntryPoint *) entry_point;
+    struct JITWasmHeader *header = (struct JITWasmHeader *) (uintptr_t) func_table[-1];
+    if (!IS_NULL_PTR(header)) {
+        free(header->wasm_binary);
+        free(header->lines_metadata);
+        free(header);
     }
-    return compile_wasm_stream(native_code + offset, size - offset);
+    free(&func_table[-1]);
+}
+
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
+{
+    return compile_wasm_stream(code, code_size);
 }
 
 bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *version, ModuleNativeEntryPoint *entry_point, uint32_t *labels)
