@@ -80,7 +80,9 @@ get_non_networking_tests(_OTPVersion) ->
         test_os,
         test_file,
         test_filename,
-        test_uart
+        test_serial_dist,
+        test_uart,
+        test_serial_dist_socat
     ].
 
 get_networking_tests() ->
