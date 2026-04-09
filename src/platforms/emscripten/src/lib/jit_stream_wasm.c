@@ -28,6 +28,7 @@
 
 #ifndef AVM_NO_JIT
 
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -43,6 +44,26 @@
 #include "sys.h"
 #include "term.h"
 
+// Stable module ID counter to prevent ABA aliasing
+#ifndef AVM_NO_SMP
+static _Atomic uint32_t jit_next_module_id = 1;
+#else
+static uint32_t jit_next_module_id = 1;
+#endif
+
+// Cross-thread invalidation ring: when a module is released, its ID and entry
+// count are pushed here so other threads can lazily call removeFunction().
+#ifndef AVM_NO_SMP
+#define JIT_INVALIDATION_RING_SIZE 64
+struct JITInvalidation
+{
+    uint32_t module_id;
+    uint32_t num_entries;
+};
+static struct JITInvalidation jit_invalidation_ring[JIT_INVALIDATION_RING_SIZE];
+static _Atomic uint32_t jit_invalidation_write_idx = 0;
+#endif
+
 static term nif_jit_stream_module(Context *ctx, int argc, term argv[])
 {
     UNUSED(argc);
@@ -56,14 +77,74 @@ static const struct Nif jit_stream_module_nif = {
     .nif_ptr = nif_jit_stream_module
 };
 
-// Lazily compile the WASM module on this thread and return the addFunction
-// index for the given label. Module._jitCache is thread-local.
-EM_JS(int, jit_get_thread_func_ptr, (const uint8_t *wasm_binary, int wasm_size, int num_entries, int label), {
-    if (!Module._jitCache) {
-        Module._jitCache = new Map();
+// Remove per-thread wasmTable entries for a released module, and post to the
+// invalidation ring so other threads clean up their own entries lazily.
+// ring_ptr/ring_size/write_idx_ptr are 0 in non-SMP builds.
+EM_JS_DEPS(jit_release_module, "$removeFunction")
+// clang-format off
+EM_JS(void, jit_release_module, (uint32_t module_id, int num_entries, int ring_ptr, int ring_size, int write_idx_ptr), {
+    // Remove from this thread's cache
+    var cache = Module._jitCache && Module._jitCache.get(module_id);
+    if (cache) {
+        for (var i = 0; i < num_entries; i++) {
+            if (cache[i]) {
+                removeFunction(cache[i]);
+            }
+        }
+        Module._jitCache.delete(module_id);
     }
 
-    var cache = Module._jitCache.get(wasm_binary);
+    // Notify other threads via ring (SMP only).
+    // Use a CAS loop so the write index is only advanced after the entry is written.
+    if (ring_ptr) {
+        var int32View = new Int32Array(HEAPU8.buffer);
+        var oldIdx;
+        do {
+            oldIdx = Atomics.load(int32View, write_idx_ptr >> 2);
+            var slot = oldIdx % ring_size;
+            var entryBase = (ring_ptr + slot * 8) >> 2;
+            Atomics.store(int32View, entryBase, module_id);
+            Atomics.store(int32View, entryBase + 1, num_entries);
+        } while (Atomics.compareExchange(int32View, write_idx_ptr >> 2, oldIdx, oldIdx + 1) !== oldIdx);
+    }
+})
+// clang-format on
+
+// Lazily compile the WASM module on this thread and return the addFunction
+// index for the given label. Module._jitCache is thread-local, keyed by stable
+// module_id to prevent ABA aliasing when C memory is freed and reused.
+// ring_ptr/ring_size/write_idx_ptr are 0 in non-SMP builds.
+EM_JS_DEPS(jit_get_thread_func_ptr, "$addFunction,$removeFunction")
+EM_JS(int, jit_get_thread_func_ptr, (uint32_t module_id, const uint8_t *wasm_binary, int wasm_size, int num_entries, int label, int ring_ptr, int ring_size, int write_idx_ptr), {
+    if (!Module._jitCache) {
+        Module._jitCache = new Map();
+        Module._jitReadIdx = 0;
+    }
+
+    // Drain invalidation ring: call removeFunction for any modules released
+    // by other threads since we last checked (SMP only).
+    if (ring_ptr) {
+        var int32View = new Int32Array(HEAPU8.buffer);
+        var writeIdx = Atomics.load(int32View, write_idx_ptr >> 2);
+        while (Module._jitReadIdx < writeIdx) {
+            var slot = Module._jitReadIdx % ring_size;
+            var entryBase = (ring_ptr + slot * 8) >> 2;
+            var entryModuleId = Atomics.load(int32View, entryBase);
+            var entryNumEntries = Atomics.load(int32View, entryBase + 1);
+            var staleCache = Module._jitCache.get(entryModuleId);
+            if (staleCache) {
+                for (var j = 0; j < entryNumEntries; j++) {
+                    if (staleCache[j]) {
+                        removeFunction(staleCache[j]);
+                    }
+                }
+                Module._jitCache.delete(entryModuleId);
+            }
+            Module._jitReadIdx++;
+        }
+    }
+
+    var cache = Module._jitCache.get(module_id);
     if (!cache) {
         try {
             var bytes = new Uint8Array(HEAPU8.buffer, wasm_binary, wasm_size);
@@ -83,7 +164,7 @@ EM_JS(int, jit_get_thread_func_ptr, (const uint8_t *wasm_binary, int wasm_size, 
                     cache[i] = addFunction(func, 'iiii');
                 }
             }
-            Module._jitCache.set(wasm_binary, cache);
+            Module._jitCache.set(module_id, cache);
         } catch (e) {
             err("JIT per-thread WASM compilation failed: " + e.message);
             return 0;
@@ -103,6 +184,7 @@ struct JITWasmHeader
     uint8_t *wasm_binary;
     uint32_t wasm_binary_size;
     uint32_t num_entries;
+    uint32_t module_id;
 };
 
 /**
@@ -132,7 +214,13 @@ ModuleNativeEntryPoint jit_wasm_get_entry_point(const void *native_code, int lab
     if (IS_NULL_PTR(header) || IS_NULL_PTR(header->wasm_binary)) {
         return NULL;
     }
-    int fp = jit_get_thread_func_ptr(header->wasm_binary, header->wasm_binary_size, header->num_entries, label);
+#ifndef AVM_NO_SMP
+    int fp = jit_get_thread_func_ptr(header->module_id, header->wasm_binary, header->wasm_binary_size, header->num_entries, label,
+        (int) (uintptr_t) jit_invalidation_ring, JIT_INVALIDATION_RING_SIZE,
+        (int) (uintptr_t) &jit_invalidation_write_idx);
+#else
+    int fp = jit_get_thread_func_ptr(header->module_id, header->wasm_binary, header->wasm_binary_size, header->num_entries, label, 0, 0, 0);
+#endif
     return (ModuleNativeEntryPoint) (uintptr_t) fp;
 }
 
@@ -187,6 +275,11 @@ static ModuleNativeEntryPoint compile_wasm_stream(const uint8_t *data, size_t da
     memcpy(header->wasm_binary, wasm_data, wasm_size);
     header->wasm_binary_size = wasm_size;
     header->num_entries = num_entries;
+#ifndef AVM_NO_SMP
+    header->module_id = atomic_fetch_add_explicit(&jit_next_module_id, 1, memory_order_relaxed);
+#else
+    header->module_id = jit_next_module_id++;
+#endif
 
     header->lines_metadata = NULL;
     if (lines_offset > 0 && lines_offset < data_size) {
@@ -228,6 +321,13 @@ void sys_release_native_code(ModuleNativeEntryPoint entry_point)
     ModuleNativeEntryPoint *func_table = (ModuleNativeEntryPoint *) entry_point;
     struct JITWasmHeader *header = (struct JITWasmHeader *) (uintptr_t) func_table[-1];
     if (!IS_NULL_PTR(header)) {
+#ifndef AVM_NO_SMP
+        jit_release_module(header->module_id, header->num_entries,
+            (int) (uintptr_t) jit_invalidation_ring, JIT_INVALIDATION_RING_SIZE,
+            (int) (uintptr_t) &jit_invalidation_write_idx);
+#else
+        jit_release_module(header->module_id, header->num_entries, 0, 0, 0);
+#endif
         free(header->wasm_binary);
         free(header->lines_metadata);
         free(header);
