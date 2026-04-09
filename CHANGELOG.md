@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added Erlang distribution over serial (uart)
 - Added WASM32 JIT backend for Emscripten platform
 - Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.
+- Added support for `nif_start`, `executable_line` and `debug_line` opcodes
+- Added named variable debugging support in DWARF when modules are compiled with `beam_debug_info`
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type

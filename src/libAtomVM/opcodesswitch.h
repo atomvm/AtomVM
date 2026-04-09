@@ -6277,6 +6277,43 @@ schedule_in:
                     break;
                 }
 #endif
+
+                case OP_NIF_START: {
+                    TRACE("nif_start/0\n");
+                    break;
+                }
+
+#if MAXIMUM_OTP_COMPILER_VERSION >= 27
+                case OP_EXECUTABLE_LINE: {
+                    term location;
+                    DECODE_COMPACT_TERM(location, pc);
+                    uint32_t line_number;
+                    DECODE_LITERAL(line_number, pc);
+
+                    TRACE("executable_line/2 location=0x%" TERM_X_FMT ", line=%u\n", location, line_number);
+
+                    USED_BY_TRACE(location);
+                    break;
+                }
+#endif
+
+#if MAXIMUM_OTP_COMPILER_VERSION >= 28
+                case OP_DEBUG_LINE: {
+                    term kind;
+                    DECODE_COMPACT_TERM(kind, pc);
+                    uint32_t location_index;
+                    DECODE_LITERAL(location_index, pc);
+                    uint32_t index;
+                    DECODE_LITERAL(index, pc);
+                    uint32_t live;
+                    DECODE_LITERAL(live, pc);
+
+                    TRACE("debug_line/4 kind=0x%" TERM_X_FMT ", location=%u, index=%u, live=%u\n", kind, location_index, index, live);
+
+                    USED_BY_TRACE(kind);
+                    break;
+                }
+#endif
             }
 
             default:
