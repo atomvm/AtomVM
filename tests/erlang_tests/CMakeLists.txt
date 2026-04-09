@@ -611,6 +611,8 @@ compile_erlang(test_close_avm_pack DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load
 compile_erlang(test_code_get_object_code DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/code_load/export_test_module_data.hrl)
 
 compile_erlang(test_module_info)
+compile_erlang(test_executable_line)
+compile_erlang(test_debug_line)
 compile_erlang(erlang_module_loaded)
 compile_erlang(test_erlang_loaded)
 
@@ -1172,6 +1174,8 @@ set(erlang_test_beams
     test_code_get_object_code.beam
 
     test_module_info.beam
+    test_executable_line.beam
+    test_debug_line.beam
     erlang_module_loaded.beam
     test_erlang_loaded.beam
 

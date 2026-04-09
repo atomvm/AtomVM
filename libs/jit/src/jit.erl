@@ -24,7 +24,7 @@
     stream/1,
     backend/2,
     beam_chunk_header/3,
-    compile/7,
+    compile/8,
     decode_value64/1
 ]).
 
@@ -61,10 +61,12 @@
     MMod:dwarf_function(MSt, (State0#state.atom_resolver)(FunctionName), Arity)
 ).
 -define(DWARF_LINE(MMod, MSt, Line), MMod:dwarf_line(MSt, Line)).
+-define(DWARF_VARIABLES(MMod, MSt, Vars), MMod:dwarf_variables(MSt, Vars)).
 -else.
 -define(DWARF_LABEL(_MMod, MSt, _Label), MSt).
 -define(DWARF_FUNCTION(_MMod, MSt, _FunctionName, _Arity), MSt).
 -define(DWARF_LINE(_MMod, MSt, _Line), MSt).
+-define(DWARF_VARIABLES(_MMod, MSt, _Vars), MSt).
 -endif.
 
 -define(BOXED_FUN_SIZE, 3).
@@ -90,6 +92,9 @@
     literal_resolver :: fun((integer()) -> any()),
     type_resolver :: fun((integer()) -> any()),
     import_resolver :: fun((integer()) -> {atom(), atom(), non_neg_integer()}),
+    debug_info_resolver :: fun(
+        (integer()) -> [{binary(), {x, integer()} | {y, integer()} | {value, any()}}] | false
+    ),
     tail_cache :: [{tuple(), non_neg_integer()}]
 }).
 
@@ -124,6 +129,7 @@ compile(
     LiteralResolver,
     TypeResolver,
     ImportResolver,
+    DebugInfoResolver,
     MMod,
     MSt0
 ) when OpcodeMax =< ?OPCODE_MAX ->
@@ -134,6 +140,7 @@ compile(
         literal_resolver = LiteralResolver,
         type_resolver = TypeResolver,
         import_resolver = ImportResolver,
+        debug_info_resolver = DebugInfoResolver,
         tail_cache = []
     },
     MSt1 = MMod:jump_table(MSt0, LabelsCount),
@@ -147,11 +154,21 @@ compile(
     _LiteralResolver,
     _TypeResolver,
     _ImportResolver,
+    _DebugInfoResolver,
     _MMod,
     _MSt
 ) ->
     error(badarg, [OpcodeMax]);
-compile(CodeChunk, _AtomResolver, _LiteralResolver, _TypeResolver, _ImportResolver, _MMod, _MSt) ->
+compile(
+    CodeChunk,
+    _AtomResolver,
+    _LiteralResolver,
+    _TypeResolver,
+    _ImportResolver,
+    _DebugInfoResolver,
+    _MMod,
+    _MSt
+) ->
     error(badarg, [CodeChunk]).
 
 % 1
@@ -2433,6 +2450,11 @@ first_pass(<<?OP_CALL_FUN2, Rest0/binary>>, MMod, MSt0, State0) ->
     ]),
     ?ASSERT_ALL_NATIVE_FREE(MSt6),
     first_pass(Rest3, MMod, MSt6, State0);
+% 179
+first_pass(<<?OP_NIF_START, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    ?TRACE("OP_NIF_START\n", []),
+    first_pass(Rest0, MMod, MSt0, State0);
 % 180
 first_pass(<<?OP_BADRECORD, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),
@@ -2541,6 +2563,38 @@ first_pass(<<?OP_BS_MATCH, Rest0/binary>>, MMod, MSt0, State0) ->
     MSt9 = MMod:free_native_registers(MSt8, [BSBinaryReg, NewBSOffsetReg, MatchStateReg2]),
     ?ASSERT_ALL_NATIVE_FREE(MSt9),
     first_pass(Rest4, MMod, MSt9, State0);
+% 183
+first_pass(<<?OP_EXECUTABLE_LINE, Rest0/binary>>, MMod, MSt0, State0) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    {MSt1, {literal, _Location}, Rest1} = decode_compact_term(Rest0, MMod, MSt0, State0),
+    {_LineNum, Rest2} = decode_literal(Rest1),
+    ?TRACE("OP_EXECUTABLE_LINE ~p, ~p\n", [_Location, _LineNum]),
+    MSt2 = ?DWARF_LINE(MMod, MSt1, _Location),
+    ?ASSERT_ALL_NATIVE_FREE(MSt2),
+    first_pass(Rest2, MMod, MSt2, State0);
+% 184
+first_pass(
+    <<?OP_DEBUG_LINE, Rest0/binary>>,
+    MMod,
+    MSt0,
+    #state{debug_info_resolver = DebugInfoResolver} = State0
+) ->
+    ?ASSERT_ALL_NATIVE_FREE(MSt0),
+    Rest1 = skip_compact_term(Rest0),
+    {MSt1, {literal, _Location}, Rest2} = decode_compact_term(Rest1, MMod, MSt0, State0),
+    {Index, Rest3} = decode_literal(Rest2),
+    {_Live, Rest4} = decode_literal(Rest3),
+    ?TRACE("OP_DEBUG_LINE ~p, ~p, ~p\n", [_Location, Index, _Live]),
+    MSt2 = ?DWARF_LINE(MMod, MSt1, _Location),
+    MSt3 =
+        case DebugInfoResolver(Index) of
+            false ->
+                MSt2;
+            _VarMappings ->
+                ?DWARF_VARIABLES(MMod, MSt2, _VarMappings)
+        end,
+    ?ASSERT_ALL_NATIVE_FREE(MSt3),
+    first_pass(Rest4, MMod, MSt3, State0);
 % 185
 first_pass(<<?OP_BIF3, Rest0/binary>>, MMod, MSt0, State0) ->
     ?ASSERT_ALL_NATIVE_FREE(MSt0),

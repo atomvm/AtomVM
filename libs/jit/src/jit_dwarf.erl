@@ -24,9 +24,7 @@
 -include_lib("jit.hrl").
 
 -record(dwarf, {
-    % Backend module (jit_armv6m, etc.)
     backend :: module(),
-    % Current module being compiled
     module_name :: module(),
     opcodes = [] :: [{Offset :: non_neg_integer(), Opcode :: atom(), Size :: non_neg_integer()}],
     labels = [] :: [{Offset :: non_neg_integer(), Label :: non_neg_integer()}],
@@ -36,13 +34,11 @@
     lines = [] :: [
         {Offset :: non_neg_integer(), Filename :: binary(), LineNumber :: pos_integer()}
     ],
-    % Register locations: [{Offset, [{XRegIndex, DwarfRegNum}]}]
-    % Records which x registers are cached in native registers at each opcode boundary
     reg_locations = [] :: [{non_neg_integer(), [{non_neg_integer(), non_neg_integer()}]}],
+    variables = [] :: [{non_neg_integer(), [{binary(), {x | y, non_neg_integer()}}]}],
     stream_module :: module(),
     stream :: any(),
     line_resolver :: fun((non_neg_integer()) -> false | {ok, binary(), pos_integer()}),
-    % JIT variant flags (for ARM attributes generation)
     variant = 0 :: non_neg_integer()
 }).
 
@@ -58,6 +54,7 @@
     label/2,
     function/3,
     line/2,
+    variables/2,
     stream/1,
     elf/2
 ]).
@@ -72,8 +69,7 @@
 ]).
 
 %%-----------------------------------------------------------------------------
-%% @returns A new state
-%% @doc     Create a new state with the proxied stream and no line resolver.
+%% @doc Create a new state with the proxied stream and no line resolver.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec new(module(), module(), module(), pos_integer()) -> state().
@@ -81,8 +77,7 @@ new(Backend, ModuleName, StreamModule, MaxSize) ->
     new(Backend, ModuleName, StreamModule, MaxSize, fun(_) -> false end, 0).
 
 %%-----------------------------------------------------------------------------
-%% @returns A new state
-%% @doc     Create a new state with the proxied stream.
+%% @doc Create a new state with the proxied stream.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec new(module(), module(), module(), pos_integer(), fun(
@@ -92,8 +87,7 @@ new(Backend, ModuleName, StreamModule, MaxSize, LineResolver) ->
     new(Backend, ModuleName, StreamModule, MaxSize, LineResolver, 0).
 
 %%-----------------------------------------------------------------------------
-%% @returns A new state
-%% @doc     Create a new state with the proxied stream and variant.
+%% @doc Create a new state with the proxied stream and variant.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec new(
@@ -118,9 +112,7 @@ new(Backend, ModuleName, StreamModule, MaxSize, LineResolver, Variant) ->
     }.
 
 %%-----------------------------------------------------------------------------
-%% @param Stream    stream to get the offset from
-%% @returns The current offset
-%% @doc     Get the current offset in the stream
+%% @doc Get the current offset in the stream.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec offset(state()) -> non_neg_integer().
@@ -128,10 +120,7 @@ offset(#dwarf{stream_module = StreamModule, stream = Stream}) ->
     StreamModule:offset(Stream).
 
 %%-----------------------------------------------------------------------------
-%% @param Stream    stream to append to
-%% @param Binary    binary to append to the stream
-%% @returns The updated stream
-%% @doc     Append a binary to the stream
+%% @doc Append a binary to the stream.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec append(state(), binary()) -> state().
@@ -139,17 +128,17 @@ append(#dwarf{stream_module = StreamModule, stream = Stream0} = State, Binary) -
     Stream1 = StreamModule:append(Stream0, Binary),
     State#dwarf{stream = Stream1}.
 
+%%-----------------------------------------------------------------------------
+%% @doc Flush the underlying stream.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec flush(state()) -> state().
 flush(#dwarf{stream_module = StreamModule, stream = Stream0} = State) ->
     Stream1 = StreamModule:flush(Stream0),
     State#dwarf{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
-%% @param Stream        stream to update
-%% @param Offset        offset to update from
-%% @param Replacement   binary to write at offset
-%% @returns The updated stream
-%% @doc     Replace bytes at a given offset
+%% @doc Replace bytes at a given offset.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec replace(state(), non_neg_integer(), binary()) -> state().
@@ -158,12 +147,7 @@ replace(#dwarf{stream_module = StreamModule, stream = Stream0} = State, Offset, 
     State#dwarf{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
-%% @param Stream        stream to update
-%% @param Offset        offset to update from
-%% @param Length        length of the section to update
-%% @param MapFunction   function that updates the binary
-%% @returns The updated stream
-%% @doc     Replace bytes at a given offset calling a map function
+%% @doc Replace bytes at a given offset by applying a map function.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec map(state(), non_neg_integer(), pos_integer(), fun((binary()) -> binary())) -> state().
@@ -172,13 +156,9 @@ map(#dwarf{stream_module = StreamModule, stream = Stream0} = State, Offset, Leng
     State#dwarf{stream = Stream1}.
 
 %%-----------------------------------------------------------------------------
-%% @param State    current state
-%% @param Opcode   the opcode atom to record
-%% @returns The updated state with opcode recorded at current offset
-%% @doc     Record an opcode at the current stream offset
+%% @doc Extract x register to DWARF register number mappings from a jit_regs state.
 %% @end
 %%-----------------------------------------------------------------------------
-%% @doc Extract x register → DWARF register number mappings from jit_regs state.
 -spec extract_x_reg_locations(jit_regs:regs(), fun((atom()) -> non_neg_integer())) ->
     [{non_neg_integer(), non_neg_integer()}].
 extract_x_reg_locations(Regs, DwarfRegNumFn) ->
@@ -192,13 +172,20 @@ extract_x_reg_locations(Regs, DwarfRegNumFn) ->
         Contents
     ).
 
-%% opcode/2: convenience wrapper with no register location info
+%%-----------------------------------------------------------------------------
+%% @doc Record an opcode at the current stream offset, with no register location info.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec opcode
     (state(), binary() | integer()) -> state();
     (any(), binary() | integer()) -> any().
 opcode(State, Opcode) ->
     opcode(State, Opcode, []).
 
+%%-----------------------------------------------------------------------------
+%% @doc Record an opcode at the current stream offset with register location info.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec opcode
     (state(), binary() | integer(), [{non_neg_integer(), non_neg_integer()}]) -> state();
     (any(), binary() | integer(), [{non_neg_integer(), non_neg_integer()}]) -> any().
@@ -220,10 +207,7 @@ opcode(BackendStateDwarfDisabled, _Opcode, _XRegMap) ->
     BackendStateDwarfDisabled.
 
 %%-----------------------------------------------------------------------------
-%% @param State    current state
-%% @param Label    the label number to record
-%% @returns The updated state with label recorded at current offset
-%% @doc     Record a label at the current stream offset
+%% @doc Record a label at the current stream offset.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec label
@@ -235,7 +219,6 @@ label(
     Label
 ) ->
     Offset = StreamModule:offset(Stream),
-    % Update size of previous opcode before adding label
     Opcodes1 = update_previous_opcode_size(Opcodes0, Offset),
     Labels1 = [{Offset, Label} | Labels0],
     State#dwarf{labels = Labels1, opcodes = Opcodes1};
@@ -243,11 +226,7 @@ label(BackendStateDwarfDisabled, _Label) ->
     BackendStateDwarfDisabled.
 
 %%-----------------------------------------------------------------------------
-%% @param State         current state
-%% @param FunctionName  the function name atom to record
-%% @param Arity         the function arity
-%% @returns The updated state with function recorded at current offset
-%% @doc     Record a function at the current stream offset
+%% @doc Record a function at the current stream offset.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec function
@@ -265,10 +244,7 @@ function(BackendStateDwarfDisabled, _FunctionName, _Arity) ->
     BackendStateDwarfDisabled.
 
 %%-----------------------------------------------------------------------------
-%% @param State    current state
-%% @param Line     the line number to record
-%% @returns The updated state with line recorded at current offset
-%% @doc     Record a line number at the current stream offset
+%% @doc Record a line number at the current stream offset.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec line
@@ -287,62 +263,81 @@ line(
     Offset = StreamModule:offset(Stream),
     case LineResolver(LineRef) of
         {ok, Filename, LineNumber} ->
-            % Check if this is the first time we see the module file and add line 1 at offset 0
             Lines1 = maybe_add_initial_line(Lines0, ModuleName, Filename),
             Lines2 = [{Offset, Filename, LineNumber} | Lines1],
             State#dwarf{lines = Lines2};
         false ->
-            % No line information available, skip storing this line
             State
     end;
 line(BackendStateDwarfDisabled, _LineRef) ->
     BackendStateDwarfDisabled.
 
-%% Helper function to add line 1 at offset 0 for the module file if not already present
 maybe_add_initial_line(Lines, ModuleName, Filename) ->
     ExpectedBasename = <<(atom_to_binary(ModuleName, utf8))/binary, ".erl">>,
     Basename = lists:last(binary:split(Filename, <<"/">>, [global])),
     case Basename =:= ExpectedBasename of
         true ->
-            % This is the module file, check if we already have an entry at offset 0
             case lists:any(fun({Offset, _, _}) -> Offset =:= 0 end, Lines) of
                 false ->
                     % Add line 1 at offset 0 for the jump table
                     [{0, Filename, 1} | Lines];
                 true ->
-                    % Already have an entry at offset 0, don't duplicate
                     Lines
             end;
         false ->
-            % Not the module file, no change needed
             Lines
     end.
 
-%% Helper function to update the size of the most recent opcode
+%%-----------------------------------------------------------------------------
+%% @doc Record variable mappings at the current stream offset.
+%%      Only x and y register locations are stored.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec variables
+    (state(), [{term(), term()}]) -> state();
+    (any(), any()) -> any().
+variables(
+    #dwarf{
+        stream_module = StreamModule,
+        stream = Stream,
+        variables = Vars0
+    } = State,
+    VarMappings
+) when is_list(VarMappings) ->
+    Offset = StreamModule:offset(Stream),
+    RegMappings = [
+        {Name, Loc}
+     || {Name, Loc} <- VarMappings, element(1, Loc) =:= x orelse element(1, Loc) =:= y
+    ],
+    case RegMappings of
+        [] -> State;
+        _ -> State#dwarf{variables = [{Offset, RegMappings} | Vars0]}
+    end;
+variables(BackendStateDwarfDisabled, _VarMappings) ->
+    BackendStateDwarfDisabled.
+
 update_previous_opcode_size([], _NewOffset) ->
-    % No previous opcode to update
     [];
 update_previous_opcode_size([{Offset, Opcode, 0} | Rest], NewOffset) ->
-    % Update the size of the most recent opcode
     Size = NewOffset - Offset,
     [{Offset, Opcode, Size} | Rest];
 update_previous_opcode_size([{Offset, Opcode, Size} | Rest], _NewOffset) when Size > 0 ->
-    % Previous opcode already has a calculated size, don't change it
     [{Offset, Opcode, Size} | Rest];
 update_previous_opcode_size(Opcodes, _NewOffset) ->
-    % Unexpected format, return unchanged
     Opcodes.
 
+%%-----------------------------------------------------------------------------
+%% @doc Return the underlying stream.
+%% @end
+%%-----------------------------------------------------------------------------
 -spec stream(state()) -> any().
 stream(#dwarf{stream = Stream}) ->
     Stream.
 
 %%-----------------------------------------------------------------------------
-%% @param State    DWARF state containing debug information
-%% @returns {ok, binary(), binary()} with ELF structure containing DWARF info,
-%%          (without and with native code in .text) or false if not compiled
-%%          with JIT_DWARF
-%% @doc     Generate ELF binaries with DWARF debug sections
+%% @returns `{ok, TextSectionOffset, ElfBinary}' when compiled with JIT_DWARF,
+%%          or `false' otherwise.
+%% @doc     Generate an ELF binary with DWARF debug sections for the given native code.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec elf(state(), binary()) -> {ok, non_neg_integer(), binary()} | false.
@@ -350,17 +345,20 @@ stream(#dwarf{stream = Stream}) ->
 elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
     SourceFile = <<(atom_to_binary(ModuleName, utf8))/binary, ".erl">>,
 
-    % Generate location lists for x registers
-    {DebugLocSection, LocListOffsets} = generate_debug_loc_section(State),
+    {DebugLocSection0, LocListOffsets} = generate_debug_loc_section(State),
 
-    % Generate DWARF sections with relocation offsets for address fields
+    {DebugLocSection, NamedVarLocOffsets} =
+        generate_named_var_loc_section(State, DebugLocSection0),
+
     {DebugInfoSection, DebugInfoRelocs} =
-        generate_debug_info_section_with_opcodes(State, SourceFile, LocListOffsets),
-    DebugLineSection = generate_debug_line_section(State, SourceFile),
+        generate_debug_info_section_with_opcodes(
+            State, SourceFile, LocListOffsets, NamedVarLocOffsets
+        ),
+    {DebugLineSection, DebugLineRelocs} = generate_debug_line_section(State, SourceFile),
     DebugAbbrevSection = generate_debug_abbrev_section_with_opcodes(),
     DebugStrSection = generate_debug_str_section(State, SourceFile),
     {DebugArangesSection, ArangesRelocs} = generate_debug_aranges_section(State),
-    % Generate symbol table sections for function names (no relocs — LLDB auto-relocates via sh_addr)
+    % Generate symbol table sections for function names (no relocs, LLDB auto-relocates via sh_addr)
     {SymtabSection, StrtabSection} = generate_symbol_table(State, Backend),
 
     % Create sections list (order matters for reloc offset computation)
@@ -376,11 +374,11 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
     ],
 
     % Per-section DWARF reloc offsets (matching BaseSections order)
-    % Note: .debug_loc addresses are NOT relocated — LLDB uses the CU base
+    % Note: .debug_loc addresses are NOT relocated, LLDB uses the CU base
     % address (DW_AT_low_pc) to resolve them automatically.
     BaseSectionRelocs = [
         DebugInfoRelocs,
-        [],
+        DebugLineRelocs,
         [],
         [],
         ArangesRelocs,
@@ -407,11 +405,9 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
                 {BaseSections, BaseSectionRelocs}
         end,
 
-    % Create complete ELF with text section and debug sections
     {CombinedELF, TextSectionOffset, SectionFileOffsets} =
         create_elf_with_text_and_debug_sections(Backend, Sections, NativeCode),
 
-    % Compute ELF-global reloc offsets
     AllRelocs = lists:flatmap(
         fun({FileOffset, WithinSectionRelocs}) ->
             [FileOffset + R || R <- WithinSectionRelocs]
@@ -419,7 +415,6 @@ elf(#dwarf{module_name = ModuleName, backend = Backend} = State, NativeCode) ->
         lists:zip(SectionFileOffsets, SectionRelocs)
     ),
 
-    % Encode reloc table appended after ELF
     RelocCount = length(AllRelocs),
     RelocData = <<RelocCount:32/little, (<<<<Off:32/little>> || Off <- AllRelocs>>)/binary>>,
 
@@ -431,7 +426,11 @@ elf(_State, _NativeCode) ->
 
 -ifdef(JIT_DWARF).
 
-%% Map JIT backend to ELF machine type
+%%-----------------------------------------------------------------------------
+%% @doc Map JIT backend atom to ELF machine type constant.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec backend_to_machine_type(module()) -> non_neg_integer().
 backend_to_machine_type(jit_x86_64) -> ?EM_X86_64;
 backend_to_machine_type(jit_aarch64) -> ?EM_AARCH64;
 backend_to_machine_type(jit_armv6m) -> ?EM_ARM;
@@ -439,7 +438,6 @@ backend_to_machine_type(jit_arm32) -> ?EM_ARM;
 backend_to_machine_type(jit_riscv32) -> ?EM_RISCV;
 backend_to_machine_type(jit_riscv64) -> ?EM_RISCV.
 
-%% Map JIT backend to ELF flags
 backend_to_elf_flags(jit_armv6m) ->
     ?EF_ARM_EABI_VER5 bor ?EF_ARM_ABI_FLOAT_SOFT bor ?EF_ARM_ARCH_V6M;
 backend_to_elf_flags(jit_arm32) ->
@@ -447,7 +445,6 @@ backend_to_elf_flags(jit_arm32) ->
 backend_to_elf_flags(_) ->
     0.
 
-%% Find section index by name
 find_section_index(SectionName, SectionNames) ->
     find_section_index_helper(SectionName, SectionNames, 0).
 
@@ -458,15 +455,16 @@ find_section_index_helper(SectionName, [SectionName | _], Index) ->
 find_section_index_helper(SectionName, [_ | Rest], Index) ->
     find_section_index_helper(SectionName, Rest, Index + 1).
 
-%% Find .symtab section index in section headers
-
-%% Generate ARM attributes section
-%% Variant is used to select between ARMv6-M (Thumb-1) and ARMv7-M (Thumb-2) attributes.
+%%-----------------------------------------------------------------------------
+%% @param   Variant selects between ARMv6-M (Thumb-1) and ARMv7-M (Thumb-2) attributes.
+%% @doc     Generate the .ARM.attributes ELF section.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_arm_attributes_section(non_neg_integer()) -> binary().
 generate_arm_attributes_section(Variant) ->
     % ARM EABI attributes format according to ARM IHI 0045E
     Thumb2 = (Variant band ?JIT_VARIANT_THUMB2) =/= 0,
 
-    % CPU_arch and THUMB_ISA_use depend on the variant
     {CpuArch, ThumbIsaUse} =
         case Thumb2 of
             true ->
@@ -477,7 +475,6 @@ generate_arm_attributes_section(Variant) ->
                 {11, 1}
         end,
 
-    % Build the tag-value pairs for file attributes
     TagValuePairs = <<
         % CPU_arch attribute
         6,
@@ -508,10 +505,8 @@ generate_arm_attributes_section(Variant) ->
         1
     >>,
 
-    % Calculate file attributes subsection length (tag + length field + tag-value pairs)
     FileAttributesLength = 1 + 4 + byte_size(TagValuePairs),
 
-    % Build file attributes subsection
     FileAttributes = <<
         % File attributes tag
         1,
@@ -521,14 +516,12 @@ generate_arm_attributes_section(Variant) ->
         TagValuePairs/binary
     >>,
 
-    % Build vendor subsection ("aeabi" + null + file attributes)
     VendorContent = <<"aeabi", 0, FileAttributes/binary>>,
     VendorLength = byte_size(VendorContent),
 
     % Calculate total section length (format version + vendor length + vendor content)
     TotalLength = 1 + 4 + VendorLength,
 
-    % Build final section according to ARM EABI spec
     <<
         % Format version 'A'
         $A,
@@ -590,7 +583,6 @@ generate_arm32_attributes_section() ->
     >>.
 
 generate_debug_str_section(#dwarf{module_name = ModuleName}, SourceFile) ->
-    % String table: null-terminated strings
     Strings = [
         % Index 0: empty string
         <<0>>,
@@ -610,7 +602,6 @@ generate_debug_str_section(#dwarf{module_name = ModuleName}, SourceFile) ->
     iolist_to_binary(Strings).
 
 generate_debug_aranges_section(#dwarf{backend = Backend} = State) ->
-    % Get word size and calculate address range
     WordSize = Backend:word_size(),
     WordSizeInBits = WordSize * 8,
     {LowPC, HighPC} = calculate_address_range(State),
@@ -618,7 +609,6 @@ generate_debug_aranges_section(#dwarf{backend = Backend} = State) ->
 
     % Calculate padding needed to align descriptor to 2*address_size
     % Header so far: version(2) + debug_info_offset(4) + addr_size(1) + seg_size(1) = 8 bytes
-    % Need to align to 2*WordSize boundary
     HeaderSize = 8,
     TupleAlignment = 2 * WordSize,
     PaddingSize = (TupleAlignment - (HeaderSize rem TupleAlignment)) rem TupleAlignment,
@@ -715,7 +705,8 @@ generate_debug_info_section_with_opcodes(
         backend = Backend
     } = State,
     SourceFile,
-    LocListOffsets
+    LocListOffsets,
+    NamedVarLocOffsets
 ) ->
     {LowPC, HighPC} = calculate_address_range(State),
 
@@ -748,12 +739,10 @@ generate_debug_info_section_with_opcodes(
     % So we need to add 4 bytes for the length field
     % CompileUnitContent already includes the header (version + abbrev_offset + addr_size)
     TypeDIEsBaseOffset = 4 + byte_size(CompileUnitContent),
-    % Generate type DIEs and get the Context* type offset
     {TypeDIEs, ContextPtrTypeOffset} = generate_type_dies(State, TypeDIEsBaseOffset),
 
     TermTypeOffset = TypeDIEsBaseOffset,
 
-    % Generate DIEs for functions (with x register variables as children), opcodes and labels
     {FunctionDIEs, FuncRelocs0} = generate_function_dies_with_module(
         Functions,
         ModuleName,
@@ -761,7 +750,8 @@ generate_debug_info_section_with_opcodes(
         ContextPtrTypeOffset,
         HighPC,
         LocListOffsets,
-        TermTypeOffset
+        TermTypeOffset,
+        NamedVarLocOffsets
     ),
     {OpcodeDIEs, OpcodeRelocs0} = generate_opcode_dies(Opcodes, Backend),
     {LabelDIEs, LabelRelocs0} = generate_label_dies(Labels, Backend),
@@ -785,7 +775,12 @@ generate_debug_info_section_with_opcodes(
 
     {<<UnitLength:32/little, Content/binary>>, AllRelocs}.
 
-generate_debug_line_section(#dwarf{lines = Lines}, SourceFile) ->
+generate_debug_line_section(
+    #dwarf{backend = Backend, lines = Lines, functions = Functions}, SourceFile
+) ->
+    WordSize = Backend:word_size(),
+    WordSizeInBits = WordSize * 8,
+
     % Standard opcode lengths (for opcodes 1-12)
     StdOpcodeLengths = <<0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1>>,
 
@@ -796,10 +791,8 @@ generate_debug_line_section(#dwarf{lines = Lines}, SourceFile) ->
             _ -> lists:usort([Filename || {_Offset, Filename, _LineNum} <- Lines])
         end,
 
-    % Split paths into directories and filenames
     {Directories, FileEntries} = build_file_table(UniqueFullPaths),
 
-    % Build directory and file table binaries
     DirectoryTable = iolist_to_binary([<<(list_to_binary(Dir))/binary, 0>> || Dir <- Directories]),
     FileTableEntries = iolist_to_binary([
         <<(list_to_binary(FName))/binary, 0, (encode_uleb128(DirIdx))/binary, 0, 0>>
@@ -807,20 +800,35 @@ generate_debug_line_section(#dwarf{lines = Lines}, SourceFile) ->
     ]),
     FileTable = <<DirectoryTable/binary, 0, FileTableEntries/binary, 0>>,
 
-    % Line number program
     FileMapping = lists:zip(UniqueFullPaths, lists:seq(1, length(FileEntries))),
-    Program = generate_line_program(Lines, FileMapping),
+    FuncStartOffsets = sets:from_list([Offset || {Offset, _Name, _Arity} <- Functions]),
+    Program = generate_line_program(Lines, FileMapping, FuncStartOffsets),
+
+    % DW_LNE_set_address to set initial address (patched via relocation)
+    SetAddress = <<0, (1 + WordSize), 2, 0:WordSizeInBits/little>>,
 
     % Header fixed fields (after version and header_length)
-    HeaderFixedFields = <<2, 1, 1, (-5):8/signed, 14, 13>>,
+    % min_inst_length=1, max_ops_per_inst=1, default_is_stmt=1, line_base=-5, line_range=14, opcode_base=13
+    HeaderFixedFields = <<1, 1, 1, (-5):8/signed, 14, 13>>,
     HeaderLength =
         byte_size(HeaderFixedFields) + byte_size(StdOpcodeLengths) + byte_size(FileTable),
     Header = <<4:16/little, HeaderLength:32/little, HeaderFixedFields/binary>>,
 
-    Content = <<Header/binary, StdOpcodeLengths/binary, FileTable/binary, Program/binary>>,
-    <<(byte_size(Content)):32/little, Content/binary>>.
+    Content =
+        <<Header/binary, StdOpcodeLengths/binary, FileTable/binary, SetAddress/binary,
+            Program/binary>>,
+    SectionData = <<(byte_size(Content)):32/little, Content/binary>>,
 
-%% Build directory list and file entries from full paths
+    % Relocation offset: the address field in DW_LNE_set_address
+    % Layout: unit_length(4) + version(2) + header_length(4) + HeaderLength + set_address_header(3)
+    SetAddressRelocOffset = 4 + 2 + 4 + HeaderLength + 3,
+    {SectionData, [SetAddressRelocOffset]}.
+
+%%-----------------------------------------------------------------------------
+%% @doc Build directory list and file entries from full paths for the DWARF line table.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec build_file_table([binary()]) -> {[string()], [{string(), non_neg_integer()}]}.
 build_file_table(Paths) ->
     {Dirs, Files, _} = lists:foldl(
         fun(FullPath, {DirAcc, FileAcc, FileSet}) ->
@@ -852,9 +860,7 @@ add_file_entry(FileKey, DirAcc, FileAcc, FileSet) ->
     end.
 
 create_elf_header_and_sections(Backend, Sections) ->
-    % Determine ELF format based on backend word size
     WordSize = Backend:word_size(),
-    % 32 or 64 bits
     WordSizeInBits = WordSize * 8,
     ElfClass =
         case WordSize of
@@ -862,38 +868,27 @@ create_elf_header_and_sections(Backend, Sections) ->
             4 -> ?ELFCLASS32
         end,
 
-    % ELF format dependent sizes
+    % ELF64: {64, 64}, ELF32: {52, 40}
     {ElfHeaderSize, SectionHeaderSize} =
         case WordSize of
-            % ELF64
             8 -> {64, 64};
-            % ELF32
             4 -> {52, 40}
         end,
 
-    % Create section name string table (dynamic based on sections)
     SectionNames =
         [<<>>] ++ [SectionName || {SectionName, _Section} <- Sections] ++ [<<".shstrtab">>],
     ShStrTab = create_string_table(SectionNames),
 
-    % Calculate offsets
-    % null + debug sections + shstrtab
     SectionCount = length(SectionNames),
-
-    % String table index is the last section
     ShStrTabIndex = SectionCount - 1,
 
-    % Section data layout: debug sections + string table
     {SectionData, SectionOffsets} = layout_sections(Sections, ShStrTab, ElfHeaderSize),
 
-    % Section headers start after all section data
     SectionHeaderOffset = ElfHeaderSize + byte_size(SectionData),
 
-    % Get machine type and flags for this backend
     MachineType = backend_to_machine_type(Backend),
     ElfFlags = backend_to_elf_flags(Backend),
 
-    % ELF header
     ElfHeader = <<
         % Magic
         ?EI_MAG0,
@@ -926,34 +921,203 @@ create_elf_header_and_sections(Backend, Sections) ->
         1:32/little,
         % Entry point - 32 or 64 bit depending on word size
         0:WordSizeInBits/little,
-        % Program header offset - 32 or 64 bit depending on word size
+        % Program header offset - none
         0:WordSizeInBits/little,
-        % Section header offset - 32 or 64 bit depending on word size
+        % Section header offset
         SectionHeaderOffset:WordSizeInBits/little,
-        % Flags
         ElfFlags:32/little,
-        % ELF header size
         ElfHeaderSize:16/little,
-        % Program header entry size
+        % Program header entry size and count - none
         0:16/little,
-        % Program header count
         0:16/little,
-        % Section header entry size
         SectionHeaderSize:16/little,
-        % Section count
         SectionCount:16/little,
         % String table index (.shstrtab)
         ShStrTabIndex:16/little
     >>,
 
-    % Generate section headers
     SectionHeaders = create_section_headers_proper(
         SectionNames, Sections, SectionOffsets, ShStrTab, Backend, WordSizeInBits
     ),
 
     <<ElfHeader/binary, SectionData/binary, SectionHeaders/binary>>.
 
-%% Generate DW_TAG_variable DIEs for x registers with location list references.
+%%-----------------------------------------------------------------------------
+%% @returns `{UpdatedSection, [{VarName, FuncStartOffset, LocListOffset}]}'
+%%          where FuncStartOffset helps associate variables with functions.
+%% @doc     Generate location lists for named variables from debug_line opcodes.
+%%          Appends to existing DebugLocSection.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_named_var_loc_section(state(), binary()) ->
+    {binary(), [{binary(), non_neg_integer(), non_neg_integer()}]}.
+generate_named_var_loc_section(
+    #dwarf{variables = Variables, functions = Functions, backend = Backend} = State,
+    DebugLocSection0
+) ->
+    case Variables of
+        [] ->
+            {DebugLocSection0, []};
+        _ ->
+            WordSize = Backend:word_size(),
+            WSBits = WordSize * 8,
+            CtxRegNum = Backend:dwarf_ctx_register(),
+            XArrayOffset =
+                case WordSize of
+                    8 -> 16#30;
+                    4 -> 16#18
+                end,
+            {_LowPC, HighPC} = calculate_address_range(State),
+            SortedVars = lists:sort(fun({A, _}, {B, _}) -> A =< B end, Variables),
+            SortedFuncs = lists:sort([{Off, FN, Ar} || {Off, FN, Ar} <- Functions, Off >= 0]),
+            FuncRanges = compute_func_ranges(SortedFuncs, HighPC),
+            PerFuncVars = collect_vars_per_function(SortedVars, FuncRanges),
+            lists:foldl(
+                fun({FuncStart, FuncEnd, VarName, VarSnapshots}, {AccSection, AccOffsets}) ->
+                    LocList = build_named_var_loc_list(
+                        VarSnapshots, FuncEnd, WordSize, WSBits, CtxRegNum, XArrayOffset
+                    ),
+                    case LocList of
+                        <<>> ->
+                            {AccSection, AccOffsets};
+                        _ ->
+                            Offset = byte_size(AccSection),
+                            {<<AccSection/binary, LocList/binary>>, [
+                                {VarName, FuncStart, Offset} | AccOffsets
+                            ]}
+                    end
+                end,
+                {DebugLocSection0, []},
+                PerFuncVars
+            )
+    end.
+
+compute_func_ranges([], _HighPC) ->
+    [];
+compute_func_ranges(Sorted, HighPC) ->
+    Starts = [Off || {Off, _, _} <- Sorted],
+    Ends = tl(Starts) ++ [HighPC],
+    lists:zip(Starts, Ends).
+
+%%-----------------------------------------------------------------------------
+%% @returns `[{FuncStart, FuncEnd, VarName, [{Offset, {x|y, N}}]}]'
+%% @doc     Collect variable snapshots per function.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec collect_vars_per_function(
+    [{non_neg_integer(), [{term(), {x | y, non_neg_integer()}}]}],
+    [{non_neg_integer(), non_neg_integer()}]
+) ->
+    [
+        {non_neg_integer(), non_neg_integer(), term(), [
+            {non_neg_integer(), {x | y, non_neg_integer()}}
+        ]}
+    ].
+collect_vars_per_function(SortedVars, FuncRanges) ->
+    lists:flatmap(
+        fun({FuncStart, FuncEnd}) ->
+            FuncSnapshots = [
+                {Off, Mappings}
+             || {Off, Mappings} <- SortedVars, Off >= FuncStart, Off < FuncEnd
+            ],
+            AllVarNames = lists:usort(
+                lists:flatmap(
+                    fun({_Off, Mappings}) ->
+                        [Name || {Name, _Loc} <- Mappings]
+                    end,
+                    FuncSnapshots
+                )
+            ),
+            [
+                {FuncStart, FuncEnd, VarName, [
+                    {Off, Loc}
+                 || {Off, Mappings} <- FuncSnapshots,
+                    {N, Loc} <- Mappings,
+                    N =:= VarName
+                ]}
+             || VarName <- AllVarNames
+            ]
+        end,
+        FuncRanges
+    ).
+
+%%-----------------------------------------------------------------------------
+%% @param   VarSnapshots `[{Offset, {x|y, N}}]' sorted by offset.
+%% @doc     Build a DWARF location list for a named variable.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec build_named_var_loc_list(
+    [{non_neg_integer(), {x | y, non_neg_integer()}}],
+    non_neg_integer(),
+    4 | 8,
+    32 | 64,
+    non_neg_integer(),
+    non_neg_integer()
+) -> binary().
+build_named_var_loc_list(VarSnapshots, FuncEnd, WordSize, WSBits, CtxRegNum, XArrayOffset) ->
+    %% Each snapshot defines the variable location from that offset until the next snapshot
+    Ranges = build_named_var_ranges(VarSnapshots, FuncEnd),
+    LocEntries = lists:filtermap(
+        fun
+            ({Start, End, _}) when Start =:= End -> false;
+            ({Start, End, {x, N}}) ->
+                MemOffset = XArrayOffset + N * WordSize,
+                BregOp = 16#70 + CtxRegNum,
+                Expr = <<BregOp, (encode_sleb128(MemOffset))/binary>>,
+                {true,
+                    <<Start:WSBits/little, End:WSBits/little, (byte_size(Expr)):16/little,
+                        Expr/binary>>};
+            ({_Start, _End, {y, _N}}) ->
+                %% TODO: y register (stack frame) locations
+                false
+        end,
+        Ranges
+    ),
+    case LocEntries of
+        [] ->
+            <<>>;
+        _ ->
+            Terminator = <<0:WSBits, 0:WSBits>>,
+            iolist_to_binary(LocEntries ++ [Terminator])
+    end.
+
+build_named_var_ranges([], _FuncEnd) ->
+    [];
+build_named_var_ranges([{Offset, Loc}], FuncEnd) ->
+    [{Offset, FuncEnd, Loc}];
+build_named_var_ranges([{Offset1, Loc1}, {Offset2, _} = Next | Rest], FuncEnd) ->
+    [{Offset1, Offset2, Loc1} | build_named_var_ranges([Next | Rest], FuncEnd)].
+
+%%-----------------------------------------------------------------------------
+%% @doc Generate DW_TAG_variable DIEs for named variables within a function range.
+%%      Uses abbreviation 12, same as x register variables.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_named_variable_dies(
+    [{binary(), non_neg_integer(), non_neg_integer()}],
+    non_neg_integer(),
+    non_neg_integer(),
+    non_neg_integer()
+) -> binary().
+generate_named_variable_dies(NamedVarLocOffsets, FuncStart, _FuncEnd, TermTypeOffset) ->
+    FuncVars = [
+        {VarName, LocOffset}
+     || {VarName, FStart, LocOffset} <- NamedVarLocOffsets, FStart =:= FuncStart
+    ],
+    iolist_to_binary([
+        begin
+            % Abbreviation 12: DW_TAG_variable {name, type, location(sec_offset)}
+            <<12, VarName/binary, 0, TermTypeOffset:32/little, LocOffset:32/little>>
+        end
+     || {VarName, LocOffset} <- FuncVars
+    ]).
+
+%%-----------------------------------------------------------------------------
+%% @doc Generate DW_TAG_variable DIEs for x registers with location list references.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_x_reg_variable_dies([{non_neg_integer(), non_neg_integer()}], non_neg_integer()) ->
+    binary().
 generate_x_reg_variable_dies(LocListOffsets, TermTypeOffset) ->
     iolist_to_binary([
         begin
@@ -964,9 +1128,14 @@ generate_x_reg_variable_dies(LocListOffsets, TermTypeOffset) ->
      || {XIdx, LocOffset} <- LocListOffsets
     ]).
 
-%% Generate .debug_loc section with location lists for x registers.
-%% Returns {SectionBinary, [{XRegIndex, OffsetInSection}]} for each x register
-%% that has at least one location list entry.
+%%-----------------------------------------------------------------------------
+%% @returns `{SectionBinary, [{XRegIndex, OffsetInSection}]}' for each x register
+%%          that has at least one location list entry.
+%% @doc     Generate the .debug_loc section with location lists for x registers.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_debug_loc_section(state()) ->
+    {binary(), [{non_neg_integer(), non_neg_integer()}]}.
 generate_debug_loc_section(#dwarf{reg_locations = RegLocs, backend = Backend}) ->
     WordSize = Backend:word_size(),
     WSBits = WordSize * 8,
@@ -980,7 +1149,6 @@ generate_debug_loc_section(#dwarf{reg_locations = RegLocs, backend = Backend}) -
     % Sort snapshots by offset (they're stored in reverse)
     Sorted = lists:sort(fun({A, _}, {B, _}) -> A =< B end, RegLocs),
 
-    % Build location lists for x registers 0..16
     MaxXReg = 16,
     {LocData, LocOffsets} = lists:foldl(
         fun(XIdx, {AccBin, AccOffsets}) ->
@@ -998,18 +1166,26 @@ generate_debug_loc_section(#dwarf{reg_locations = RegLocs, backend = Backend}) -
     ),
     {LocData, lists:reverse(LocOffsets)}.
 
-%% Build a DWARF location list for a single x register.
-%% Walks through opcode-boundary snapshots and emits ranges where the register
-%% is cached in a native CPU register.
+%%-----------------------------------------------------------------------------
+%% @doc Build a DWARF location list for a single x register.
+%%      Walks through opcode-boundary snapshots and emits ranges where the register
+%%      is cached in a native CPU register.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec build_x_reg_loc_list(
+    non_neg_integer(),
+    [{non_neg_integer(), [{non_neg_integer(), non_neg_integer()}]}],
+    4 | 8,
+    32 | 64,
+    non_neg_integer(),
+    non_neg_integer()
+) -> binary().
 build_x_reg_loc_list(XIdx, SortedSnapshots, WordSize, WSBits, CtxRegNum, XArrayOffset) ->
-    % Build list of {Offset, DwarfRegNum | none} for this x register
     Entries = [
         {Off, find_x_reg_in_snapshot(XIdx, XRegMap)}
      || {Off, XRegMap} <- SortedSnapshots
     ],
-    % Merge consecutive entries with the same state
     Merged = merge_loc_entries(Entries),
-    % Generate DWARF location list entries, skip zero-length ranges
     LocEntries = lists:filtermap(
         fun
             ({Start, End, _}) when Start =:= End -> false;
@@ -1051,9 +1227,14 @@ find_x_reg_in_snapshot(XIdx, XRegMap) ->
         false -> memory
     end.
 
-%% Merge consecutive entries with the same location into ranges.
-%% Input: [{Offset, Location}] sorted by offset
-%% Output: [{Start, End, Location}]
+%%-----------------------------------------------------------------------------
+%% @param   Entries `[{Offset, Location}]' sorted by offset.
+%% @returns `[{Start, End, Location}]'
+%% @doc     Merge consecutive entries with the same location into ranges.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec merge_loc_entries([{non_neg_integer(), term()}]) ->
+    [{non_neg_integer(), non_neg_integer(), term()}].
 merge_loc_entries([]) ->
     [];
 merge_loc_entries([{Off, Loc}]) ->
@@ -1063,7 +1244,6 @@ merge_loc_entries([{Off1, Loc1}, {_Off2, Loc2} | Rest]) when Loc1 =:= Loc2 ->
 merge_loc_entries([{Off1, Loc1}, {Off2, _} | _] = [_ | Tail]) ->
     [{Off1, Off2, Loc1} | merge_loc_entries(Tail)].
 
-%% Helper functions
 calculate_address_range(#dwarf{opcodes = []}) ->
     {0, 0};
 calculate_address_range(#dwarf{opcodes = Opcodes}) ->
@@ -1071,46 +1251,45 @@ calculate_address_range(#dwarf{opcodes = Opcodes}) ->
     MaxOffset = lists:max([Off + max(Size, 4) || {Off, _, Size} <- Opcodes]),
     {MinOffset, MaxOffset}.
 
-generate_line_program(Lines, FileMapping) ->
+generate_line_program(Lines, FileMapping, FuncStartOffsets) ->
     case Lines of
         [] ->
-            % No line data - generate simple program
             <<
-                % Set file to 1 using DW_LNS_set_file (opcode 4) with file index 1
+                % DW_LNS_set_file (opcode 4) with file index 1
                 4,
                 1,
-                % End sequence: extended opcode
-                % Extended opcode prefix
+                % DW_LNE_end_sequence: extended opcode prefix, length, opcode
                 0,
-                % Length of extended opcode
                 1,
-                % DW_LNE_end_sequence
                 1
             >>;
         _ ->
-            % Sort lines by offset
             SortedLines = lists:sort(
-                fun({OffsetA, _, _}, {OffsetB, _, _}) ->
-                    OffsetA =< OffsetB
+                fun({OffsetA, FileA, LineA}, {OffsetB, FileB, LineB}) ->
+                    {OffsetA, FileA, LineA} =< {OffsetB, FileB, LineB}
                 end,
                 Lines
             ),
-            generate_line_program_entries(SortedLines, FileMapping, 0, 1, 0)
+            DedupedLines = lists:usort(SortedLines),
+            generate_line_program_entries(DedupedLines, FileMapping, FuncStartOffsets, 0, 1, 0)
     end.
 
-generate_line_program_entries([], _FileMapping, _LastOffset, _LastLine, _LastFileIndex) ->
-    % End the sequence
+generate_line_program_entries(
+    [], _FileMapping, _FuncStartOffsets, _LastOffset, _LastLine, _LastFileIndex
+) ->
+    % DW_LNE_end_sequence: extended opcode prefix, length, opcode
     <<
-        % End sequence: extended opcode
-        % Extended opcode prefix
         0,
-        % Length of extended opcode
         1,
-        % DW_LNE_end_sequence
         1
     >>;
 generate_line_program_entries(
-    [{Offset, Filename, LineNumber} | Rest], FileMapping, LastOffset, LastLine, LastFileIndex
+    [{Offset, Filename, LineNumber} | Rest],
+    FileMapping,
+    FuncStartOffsets,
+    LastOffset,
+    LastLine,
+    LastFileIndex
 ) ->
     FileIndex =
         case lists:keyfind(Filename, 1, FileMapping) of
@@ -1125,16 +1304,26 @@ generate_line_program_entries(
             true -> <<>>
         end,
 
+    % Emit DW_LNS_set_prologue_end (opcode 10) at function entry points
+    PrologueEnd =
+        case sets:is_element(Offset, FuncStartOffsets) of
+            true -> <<10>>;
+            false -> <<>>
+        end,
+
     Opcodes = <<
         SetFile/binary,
         2,
         (encode_uleb128(Offset - LastOffset))/binary,
         3,
         (encode_sleb128(LineNumber - LastLine))/binary,
+        PrologueEnd/binary,
         1
     >>,
 
-    RestOpcodes = generate_line_program_entries(Rest, FileMapping, Offset, LineNumber, FileIndex),
+    RestOpcodes = generate_line_program_entries(
+        Rest, FileMapping, FuncStartOffsets, Offset, LineNumber, FileIndex
+    ),
     <<Opcodes/binary, RestOpcodes/binary>>.
 
 % Encode unsigned LEB128
@@ -1178,19 +1367,20 @@ encode_sleb128_negative(Value) ->
             <<ByteWithCont, Rest/binary>>
     end.
 
-%% Generate type DIEs for Context structure and return the Context* type offset
+%%-----------------------------------------------------------------------------
+%% @returns `{AllTypesBinary, ContextPtrTypeOffset}'
+%% @doc     Generate type DIEs for the Context structure.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_type_dies(state(), non_neg_integer()) -> {binary(), non_neg_integer()}.
 generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
-    % Get word size from backend
     WordSize = Backend:word_size(),
 
     % Abbrev 6: term base type (uintptr_t)
     TermTypeDIE = <<
-        % Abbreviation code
         6,
-        % Name
         "term",
         0,
-        % Byte size
         WordSize,
         % Encoding (unsigned)
         ?DW_ATE_unsigned
@@ -1198,13 +1388,11 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
     TermTypeOffset = BaseOffset,
 
     XArraySubrangeDIE = <<
-        % Abbreviation code
         11,
         % Upper bound (MAX_REG = 16, so array is [0..16])
         16
     >>,
     XArrayTypeDIE = <<
-        % Abbreviation code
         10,
         % Type (term)
         TermTypeOffset:32/little,
@@ -1225,9 +1413,7 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
             _ -> 16#18
         end,
     XMemberDIE = <<
-        % Abbreviation code
         9,
-        % Name
         "x",
         0,
         % Type (term array)
@@ -1238,12 +1424,9 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
     % Estimate Context size (actual size varies, but this is good enough)
     ContextSize = 512,
     ContextStructDIE = <<
-        % Abbreviation code
         8,
-        % Name
         "Context",
         0,
-        % Byte size
         ContextSize:32/little,
         XMemberDIE/binary,
         % End of children
@@ -1253,9 +1436,7 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
 
     % Abbrev 7: Context* pointer type
     ContextPtrTypeDIE = <<
-        % Abbreviation code
         7,
-        % Byte size
         WordSize,
         % Type (Context)
         ContextStructOffset:32/little
@@ -1264,14 +1445,27 @@ generate_type_dies(#dwarf{backend = Backend}, BaseOffset) ->
         BaseOffset + byte_size(TermTypeDIE) + byte_size(XArrayTypeDIE) +
             byte_size(ContextStructDIE),
 
-    % Combine all type DIEs
     AllTypes =
         <<TermTypeDIE/binary, XArrayTypeDIE/binary, ContextStructDIE/binary,
             ContextPtrTypeDIE/binary>>,
 
     {AllTypes, ContextPtrTypeOffset}.
 
-%% Generate DIEs for functions as DW_TAG_subprogram with module.func/arity naming
+%%-----------------------------------------------------------------------------
+%% @returns `{Binary, RelocOffsets}'
+%% @doc     Generate DW_TAG_subprogram DIEs for functions with module.func/arity naming.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_function_dies_with_module(
+    [{non_neg_integer(), atom(), non_neg_integer()}],
+    atom(),
+    state(),
+    non_neg_integer(),
+    non_neg_integer(),
+    [{non_neg_integer(), non_neg_integer()}],
+    non_neg_integer(),
+    [{binary(), non_neg_integer(), non_neg_integer()}]
+) -> {binary(), [non_neg_integer()]}.
 generate_function_dies_with_module(
     Functions,
     ModuleName,
@@ -1279,7 +1473,8 @@ generate_function_dies_with_module(
     ContextPtrTypeOffset,
     CodeSize,
     LocListOffsets,
-    TermTypeOffset
+    TermTypeOffset,
+    NamedVarLocOffsets
 ) ->
     WordSize = Backend:word_size(),
     WSBits = WordSize * 8,
@@ -1297,12 +1492,16 @@ generate_function_dies_with_module(
             NameBin = iolist_to_binary(
                 io_lib:format("~s:~s/~B", [ModuleName, FunctionName, Arity])
             ),
+            %% Generate named variable DIEs for this function's address range
+            NamedVarDIEs = generate_named_variable_dies(
+                NamedVarLocOffsets, Offset, EndAddr, TermTypeOffset
+            ),
             Prefix = <<4, NameBin/binary, 0>>,
             LowPCOff = byte_size(AccBin) + byte_size(Prefix),
             HighPCOff = LowPCOff + WordSize,
             DIE =
                 <<Prefix/binary, Offset:WSBits/little, EndAddr:WSBits/little, CtxParam/binary,
-                    XRegVarDIEs/binary, 0>>,
+                    XRegVarDIEs/binary, NamedVarDIEs/binary, 0>>,
             {<<AccBin/binary, DIE/binary>>, [LowPCOff, HighPCOff | AccRelocs]}
         end,
         {<<>>, []},
@@ -1314,8 +1513,13 @@ ctx_parameter_die(CtxRegNum, ContextPtrTypeOffset) ->
     RegOpcode = ?DW_OP_reg0 + CtxRegNum,
     <<5, "ctx", 0, ContextPtrTypeOffset:32/little, 1, RegOpcode>>.
 
-%% Generate DIEs for opcodes as DW_TAG_lexical_block
-%% Returns {Binary, RelocOffsets}
+%%-----------------------------------------------------------------------------
+%% @returns `{Binary, RelocOffsets}'
+%% @doc     Generate DW_TAG_lexical_block DIEs for opcodes.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_opcode_dies([{non_neg_integer(), binary(), non_neg_integer()}], module()) ->
+    {binary(), [non_neg_integer()]}.
 generate_opcode_dies(Opcodes, Backend) ->
     WordSize = Backend:word_size(),
     WSBits = WordSize * 8,
@@ -1324,7 +1528,13 @@ generate_opcode_dies(Opcodes, Backend) ->
         2, [{Off, io_lib:format("~s@~B", [Op, Off])} || {Off, Op} <- Sorted], WordSize, WSBits
     ).
 
-%% Returns {Binary, RelocOffsets}
+%%-----------------------------------------------------------------------------
+%% @returns `{Binary, RelocOffsets}'
+%% @doc     Generate DW_TAG_label DIEs for function labels.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_label_dies([{non_neg_integer(), non_neg_integer()}], module()) ->
+    {binary(), [non_neg_integer()]}.
 generate_label_dies(Labels, Backend) ->
     WordSize = Backend:word_size(),
     WSBits = WordSize * 8,
@@ -1347,15 +1557,18 @@ generate_named_dies_with_relocs(AbbrevCode, Items, _WordSize, WSBits) ->
     ),
     {Bin, lists:reverse(Relocs)}.
 
-%% Generate symbol table for function names and opcode symbols
+%%-----------------------------------------------------------------------------
+%% @returns `{SymtabBinary, StrtabBinary}'
+%% @doc     Generate the ELF symbol table for function names and opcode symbols.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec generate_symbol_table(state(), module()) -> {binary(), binary()}.
 generate_symbol_table(
     #dwarf{functions = Functions, opcodes = Opcodes, labels = Labels, module_name = ModuleName},
     Backend
 ) ->
     WordSize = Backend:word_size(),
 
-    % Build flat list of {Name, Address, Size, Info} for all symbols
-    % Calculate function sizes from sorted offsets
     CodeEnd = lists:max([Off + max(Sz, 4) || {Off, _, Sz} <- Opcodes] ++ [0]),
     SortedFuncs = lists:sort([{Off, FN, Ar} || {Off, FN, Ar} <- Functions, Off >= 0]),
     FuncEnds =
@@ -1386,10 +1599,8 @@ generate_symbol_table(
             _ -> []
         end,
 
-    % All symbols: mapping (local) first, then global
     AllSymbols = MappingSyms ++ FuncSymbols ++ OpcodeSyms ++ LabelSyms,
 
-    % Build string table and collect offsets
     {StrtabContent, StringOffsets} = lists:foldl(
         fun({Name, _, _, _}, {Strtab, Offsets}) ->
             NameBin = iolist_to_binary(Name),
@@ -1400,7 +1611,6 @@ generate_symbol_table(
         AllSymbols
     ),
 
-    % Generate symbol entries
     SymbolEntries = lists:zipwith(
         fun({_Name, Addr, Size, Info}, StrOff) ->
             elf_symbol(WordSize, StrOff, Addr, Size, Info)
@@ -1413,17 +1623,27 @@ generate_symbol_table(
     SymtabContent = iolist_to_binary([NullSymbol | SymbolEntries]),
     {SymtabContent, StrtabContent}.
 
-%% Encode a single ELF symbol table entry
+%%-----------------------------------------------------------------------------
+%% @doc Encode a single ELF symbol table entry (Elf32_Sym or Elf64_Sym).
+%% @end
+%%-----------------------------------------------------------------------------
+-spec elf_symbol(4 | 8, non_neg_integer(), non_neg_integer(), non_neg_integer(), non_neg_integer()) ->
+    binary().
 elf_symbol(8, NameOff, Value, Size, Info) ->
     <<NameOff:32/little, Info, 0, 1:16/little, Value:64/little, Size:64/little>>;
 elf_symbol(4, NameOff, Value, Size, Info) ->
     <<NameOff:32/little, Value:32/little, Size:32/little, Info, 0, 1:16/little>>.
 
-%% Create string table from list of binaries
 create_string_table(Binaries) ->
     <<<<Binary/binary, 0>> || Binary <- Binaries>>.
 
-%% Layout sections in memory and calculate offsets
+%%-----------------------------------------------------------------------------
+%% @returns `{ConcatenatedData, [ShStrTabOffset | SectionOffsets]}'
+%% @doc     Lay out sections in memory and calculate their file offsets.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec layout_sections([{binary(), binary()}], binary(), non_neg_integer()) ->
+    {binary(), [non_neg_integer()]}.
 layout_sections(Sections, ShStrTab, BaseOffset) ->
     {Data, Offsets} = lists:foldl(
         fun({_Name, SectionData}, {AccData, AccOffsets}) ->
@@ -1436,14 +1656,19 @@ layout_sections(Sections, ShStrTab, BaseOffset) ->
         Sections
     ),
 
-    % Add string table at the end
     ShStrTabOffset = BaseOffset + byte_size(Data),
     FinalData = <<Data/binary, ShStrTab/binary>>,
     FinalOffsets = [ShStrTabOffset | lists:reverse(Offsets)],
 
     {FinalData, FinalOffsets}.
 
-%% Create properly formatted section headers
+%%-----------------------------------------------------------------------------
+%% @doc Create all ELF section headers, including null header and shstrtab header.
+%% @end
+%%-----------------------------------------------------------------------------
+-spec create_section_headers_proper(
+    [binary()], [{binary(), binary()}], [non_neg_integer()], binary(), module(), 32 | 64
+) -> binary().
 create_section_headers_proper(
     SectionNames, Sections, SectionOffsets, ShStrTab, Backend, WordSizeInBits
 ) ->
@@ -1457,7 +1682,6 @@ create_section_headers_proper(
     % SectionOffsets: [ShStrTabOffset, ...SectionOffsets in order...]
     [ShStrTabOffset | SectionOffsetsInOrder] = SectionOffsets,
 
-    % All content sections
     ContentHeaders = [
         begin
             {SType, SFlags, Link, Info, EntSize} =
@@ -1474,7 +1698,6 @@ create_section_headers_proper(
      || {{SectionName, SectionData}, FileOffset} <- lists:zip(Sections, SectionOffsetsInOrder)
     ],
 
-    % shstrtab header
     ShStrTabHdr = section_header(
         <<".shstrtab">>,
         ShStrTab,
@@ -1514,7 +1737,12 @@ section_properties(<<".text">>, _, _, _) ->
 section_properties(_, _, _, _) ->
     {?SHT_PROGBITS, 0, 0, 0, 0}.
 
+%%-----------------------------------------------------------------------------
 %% @doc Create complete ELF with .text section and debug sections
+%% @end
+%%-----------------------------------------------------------------------------
+-spec create_elf_with_text_and_debug_sections(module(), [{binary(), binary()}], binary()) ->
+    {binary(), non_neg_integer(), [non_neg_integer()]}.
 create_elf_with_text_and_debug_sections(Backend, DebugSections, NativeCode) ->
     TextSection = {<<".text">>, NativeCode},
     AllSections = [TextSection | DebugSections],
@@ -1528,7 +1756,6 @@ create_elf_with_text_and_debug_sections(Backend, DebugSections, NativeCode) ->
 
     ElfBinary = create_elf_header_and_sections(Backend, AllSections),
 
-    % Compute section file offsets for reloc computation
     SectionNames =
         [<<>>] ++ [SN || {SN, _} <- AllSections] ++ [<<".shstrtab">>],
     ShStrTab = create_string_table(SectionNames),
