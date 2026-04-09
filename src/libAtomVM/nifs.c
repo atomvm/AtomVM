@@ -1841,10 +1841,122 @@ term nif_erlang_make_ref_0(Context *ctx, int argc, term argv[])
     return term_from_ref_ticks(ref_ticks, &ctx->heap);
 }
 
+static bool time_unit_to_parts_per_second(term unit, avm_int64_t *parts_per_second)
+{
+    if (unit == SECOND_ATOM) {
+        *parts_per_second = 1;
+    } else if (unit == MILLISECOND_ATOM) {
+        *parts_per_second = 1000;
+    } else if (unit == MICROSECOND_ATOM) {
+        *parts_per_second = INT64_C(1000000);
+    } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
+        *parts_per_second = INT64_C(1000000000);
+    } else if (term_is_int64(unit)) {
+        *parts_per_second = term_maybe_unbox_int64(unit);
+        if (UNLIKELY(*parts_per_second <= 0)) {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
+// Convert nanoseconds to parts using: parts = nanoseconds * pps / 1e9
+// Splits into high/low to avoid intermediate overflow.
+// Caller must ensure 0 <= nanoseconds < 1e9 and pps > 0.
+static bool nanoseconds_to_parts_per_second(
+    avm_int64_t nanoseconds, avm_int64_t parts_per_second, bool round_up, avm_int64_t *parts)
+{
+    avm_int64_t quotient = parts_per_second / INT64_C(1000000000);
+    avm_int64_t remainder = parts_per_second % INT64_C(1000000000);
+    avm_int64_t fractional_high = nanoseconds * quotient;
+    avm_int64_t remainder_product = nanoseconds * remainder;
+    avm_int64_t fractional_low = remainder_product / INT64_C(1000000000);
+
+    if (round_up && (remainder_product % INT64_C(1000000000)) != 0) {
+        fractional_low += 1;
+    }
+
+    if (UNLIKELY(fractional_high > INT64_MAX - fractional_low)) {
+        return false;
+    }
+
+    *parts = fractional_high + fractional_low;
+    return true;
+}
+
+// Convert a normalized timespec (0 <= tv_nsec < 1e9) to integer parts.
+// Uses floor semantics for negative timestamps with non-zero tv_nsec.
+static bool timespec_to_parts_per_second(
+    const struct timespec *ts, avm_int64_t parts_per_second, avm_int64_t *parts)
+{
+    avm_int64_t seconds = (avm_int64_t) ts->tv_sec;
+    avm_int64_t fractional_part;
+
+    if (ts->tv_nsec == 0 || seconds >= 0) {
+        if (UNLIKELY(
+                ((seconds > 0) && (seconds > INT64_MAX / parts_per_second))
+                || ((seconds < 0) && (seconds < INT64_MIN / parts_per_second)))) {
+            return false;
+        }
+
+        if (UNLIKELY(!nanoseconds_to_parts_per_second(
+                (avm_int64_t) ts->tv_nsec, parts_per_second, false, &fractional_part))) {
+            return false;
+        }
+
+        avm_int64_t second_part = seconds * parts_per_second;
+        if (UNLIKELY(second_part > INT64_MAX - fractional_part)) {
+            return false;
+        }
+
+        *parts = second_part + fractional_part;
+        return true;
+    }
+
+    // Preserve floor semantics for normalized negative timespecs such as {-2, 999999999}.
+    avm_int64_t adjusted_seconds = seconds + 1;
+    if (UNLIKELY(adjusted_seconds < INT64_MIN / parts_per_second)) {
+        return false;
+    }
+
+    if (UNLIKELY(!nanoseconds_to_parts_per_second(
+            INT64_C(1000000000) - (avm_int64_t) ts->tv_nsec, parts_per_second, true,
+            &fractional_part))) {
+        return false;
+    }
+
+    avm_int64_t second_part = adjusted_seconds * parts_per_second;
+    if (UNLIKELY(second_part < INT64_MIN + fractional_part)) {
+        return false;
+    }
+
+    *parts = second_part - fractional_part;
+    return true;
+}
+
+static term make_time_in_unit(Context *ctx, term unit, void (*time_fun)(struct timespec *))
+{
+    avm_int64_t parts_per_second;
+    if (UNLIKELY(!time_unit_to_parts_per_second(unit, &parts_per_second))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    struct timespec ts;
+    time_fun(&ts);
+
+    avm_int64_t value;
+    if (UNLIKELY(!timespec_to_parts_per_second(&ts, parts_per_second, &value))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    return make_maybe_boxed_int64(ctx, value);
+}
+
 term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
-
     term unit;
     if (argc == 0) {
         unit = NATIVE_ATOM;
@@ -1852,30 +1964,11 @@ term nif_erlang_monotonic_time_1(Context *ctx, int argc, term argv[])
         unit = argv[0];
     }
 
-    struct timespec ts;
-    sys_monotonic_time(&ts);
-
-    if (unit == SECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ts.tv_sec);
-
-    } else if (unit == MILLISECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
-
-    } else if (unit == MICROSECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
-
-    } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
-
-    } else {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    return make_time_in_unit(ctx, unit, sys_monotonic_time);
 }
 
 term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
-
     term unit;
     if (argc == 0) {
         unit = NATIVE_ATOM;
@@ -1883,24 +1976,7 @@ term nif_erlang_system_time_1(Context *ctx, int argc, term argv[])
         unit = argv[0];
     }
 
-    struct timespec ts;
-    sys_time(&ts);
-
-    if (unit == SECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ts.tv_sec);
-
-    } else if (unit == MILLISECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000UL + ts.tv_nsec / 1000000UL);
-
-    } else if (unit == MICROSECOND_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * 1000000UL + ts.tv_nsec / 1000UL);
-
-    } else if (unit == NANOSECOND_ATOM || unit == NATIVE_ATOM) {
-        return make_maybe_boxed_int64(ctx, ((int64_t) ts.tv_sec) * INT64_C(1000000000) + ts.tv_nsec);
-
-    } else {
-        RAISE_ERROR(BADARG_ATOM);
-    }
+    return make_time_in_unit(ctx, unit, sys_time);
 }
 
 static term build_datetime_from_tm(Context *ctx, struct tm *broken_down_time)
@@ -2007,32 +2083,25 @@ term nif_erlang_timestamp_0(Context *ctx, int argc, term argv[])
 
 term nif_calendar_system_time_to_universal_time_2(Context *ctx, int argc, term argv[])
 {
-    UNUSED(ctx);
     UNUSED(argc);
 
-    struct timespec ts;
-
-    avm_int64_t value = term_maybe_unbox_int64(argv[0]);
-
-    if (argv[1] == SECOND_ATOM) {
-        ts.tv_sec = (time_t) value;
-        ts.tv_nsec = 0;
-
-    } else if (argv[1] == MILLISECOND_ATOM) {
-        ts.tv_sec = (time_t) (value / 1000);
-        ts.tv_nsec = (value % 1000) * 1000000;
-
-    } else if (argv[1] == MICROSECOND_ATOM) {
-        ts.tv_sec = (time_t) (value / 1000000);
-        ts.tv_nsec = (value % 1000000) * 1000;
-
-    } else if (argv[1] == NANOSECOND_ATOM || argv[1] == NATIVE_ATOM) {
-        ts.tv_sec = (time_t) (value / INT64_C(1000000000));
-        ts.tv_nsec = value % INT64_C(1000000000);
-
-    } else {
+    if (UNLIKELY(!term_is_int64(argv[0]))) {
         RAISE_ERROR(BADARG_ATOM);
     }
+    avm_int64_t value = term_maybe_unbox_int64(argv[0]);
+
+    avm_int64_t parts_per_second;
+    if (UNLIKELY(!time_unit_to_parts_per_second(argv[1], &parts_per_second))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    // Floor division: round negative fractional seconds toward negative infinity
+    avm_int64_t quotient = value / parts_per_second;
+    avm_int64_t remainder = value % parts_per_second;
+    struct timespec ts = {
+        .tv_sec = (time_t) (quotient - (remainder < 0)),
+        .tv_nsec = 0
+    };
 
     struct tm broken_down_time;
     return build_datetime_from_tm(ctx, gmtime_r(&ts.tv_sec, &broken_down_time));
