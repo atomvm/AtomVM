@@ -55,9 +55,11 @@ jobs:
       run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
 
     - name: "Git config safe.directory for codeql"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM
 
     - name: "Initialize CodeQL"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/init@v4
       with:
         languages: ${{matrix.language}}
@@ -74,6 +76,7 @@ jobs:
         ninja AtomVM atomvmlib atomvmlib-emscripten erlang_test_modules test_etest test_alisp test_estdlib hello_world run_script call_cast html5_events wasm_webserver
 
     - name: "Perform CodeQL Analysis"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/analyze@v4
 
     - name: Upload AtomVM and test modules
@@ -162,8 +165,10 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        draft: true
+        draft: ${{ !endsWith(github.ref_name, '-latest') }}
+        prerelease: ${{ endsWith(github.ref_name, '-latest') }}
         fail_on_unmatched_files: true
+        overwrite_files: ${{ endsWith(github.ref_name, '-latest') }}
         files: |
           src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js
           src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js.sha256
@@ -191,6 +196,7 @@ jobs:
       run: sudo apt update -y && sudo apt install -y cmake gperf
 
     - name: "Initialize CodeQL"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/init@v3
       with:
         languages: ${{matrix.language}}
@@ -208,6 +214,7 @@ jobs:
         emmake make -j
 
     - name: "Perform CodeQL Analysis"
+      if: ${{ !(startsWith(github.ref, 'refs/tags/') && endsWith(github.ref_name, '-latest')) }}
       uses: github/codeql-action/analyze@v3
 
     - name: Upload wasm build for web
@@ -285,8 +292,10 @@ jobs:
       uses: softprops/action-gh-release@v1
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        draft: true
+        draft: ${{ !endsWith(github.ref_name, '-latest') }}
+        prerelease: ${{ endsWith(github.ref_name, '-latest') }}
         fail_on_unmatched_files: true
+        overwrite_files: ${{ endsWith(github.ref_name, '-latest') }}
         files: |
           src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js
           src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js.sha256

@@ -8,6 +8,8 @@ name: ESP32 Builds
 
 on:
   push:
+    tags-ignore:
+      - '*-latest'
     paths:
       - '.github/workflows/esp32-build.yaml'
       - 'CMakeLists.txt'
