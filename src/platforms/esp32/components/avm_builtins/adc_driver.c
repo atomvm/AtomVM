@@ -595,7 +595,7 @@ static term nif_adc_sample(Context *ctx, int argc, term argv[])
 
     term read_options = argv[2];
     VALIDATE_VALUE(read_options, term_is_list);
-    term samples = interop_kv_get_value_default(read_options, ATOM_STR("\x7", "samples"), term_from_int32(DEFAULT_SAMPLES), ctx->global);
+    term samples = interop_kv_get_value_default(read_options, ATOM_STR("\x7", "samples"), term_from_int28(DEFAULT_SAMPLES), ctx->global);
     if (UNLIKELY(!term_is_integer(samples))) {
         ESP_LOGE(TAG, "samples value must be an integer from 1 to 1024.");
         RAISE_ERROR(BADARG_ATOM);
@@ -625,20 +625,20 @@ static term nif_adc_sample(Context *ctx, int argc, term argv[])
     adc_raw /= samples_val;
     ESP_LOGD(TAG, "read adc raw reading: %i", adc_raw);
 
-    raw = raw == TRUE_ATOM ? term_from_int32(adc_raw) : UNDEFINED_ATOM;
+    raw = raw == TRUE_ATOM ? term_from_int28(adc_raw) : UNDEFINED_ATOM;
     if (voltage == TRUE_ATOM) {
         int millivolts = 0;
         if (chan_rsrc->calibration > ESTIMATED) {
             err = adc_cali_raw_to_voltage(chan_rsrc->cali_handle, adc_raw, &millivolts);
             if (UNLIKELY(err != ESP_OK)) {
                 ESP_LOGW(TAG, "Failed to get calibrated voltage, returning estimated voltage");
-                voltage = term_from_int32(approximate_millivolts(adc_raw, chan_rsrc->attenuation, chan_rsrc->width));
+                voltage = term_from_int28(approximate_millivolts(adc_raw, chan_rsrc->attenuation, chan_rsrc->width));
             } else {
-                voltage = term_from_int32(millivolts);
+                voltage = term_from_int28(millivolts);
             }
         } else {
             ESP_LOGD(TAG, "ADC channel not calibrated, using estimated voltage");
-            voltage = term_from_int32(approximate_millivolts(adc_raw, chan_rsrc->attenuation, chan_rsrc->width));
+            voltage = term_from_int28(approximate_millivolts(adc_raw, chan_rsrc->attenuation, chan_rsrc->width));
         }
     } else {
         voltage = UNDEFINED_ATOM;

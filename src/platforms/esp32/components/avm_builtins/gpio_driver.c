@@ -376,7 +376,7 @@ EventListener *gpio_interrupt_callback(GlobalContext *glb, EventListener *listen
 
     term int_msg = term_alloc_tuple(2, &heap);
     term_put_tuple_element(int_msg, 0, GPIO_INTERRUPT_ATOM);
-    term_put_tuple_element(int_msg, 1, term_from_int32(gpio_num));
+    term_put_tuple_element(int_msg, 1, term_from_int11(gpio_num));
 
     globalcontext_send_message(glb, listening_pid, int_msg);
 

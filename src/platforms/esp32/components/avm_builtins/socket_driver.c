@@ -672,7 +672,9 @@ static NativeHandlerResult do_receive_data(Context *ctx)
         if (socket_data->type == TCPClientSocket) {
             // Close socket in case of errors or finish closing if it's closed
             // on the other end.
+            #ifndef AVM_NO_SMP
             struct ESP32PlatformData *platform = ctx->global->platform_data;
+            #endif
             synclist_remove(&platform->sockets, &socket_data->sockets_head);
             if (UNLIKELY(netconn_close(socket_data->conn) != ERR_OK)) {
                 TRACE("do_receive_data: netconn_close failed\n");
@@ -746,7 +748,7 @@ static NativeHandlerResult do_receive_data(Context *ctx)
             do_send_socket_error(ctx, ERR_BUF);
             return NativeContinue;
         }
-        term port = term_from_int32(netbuf_fromport(buf));
+        term port = term_from_int28(netbuf_fromport(buf));
         recv_term = term_alloc_tuple(3, &ctx->heap);
         term_put_tuple_element(recv_term, 0, addr_term);
         term_put_tuple_element(recv_term, 1, port);
@@ -1261,7 +1263,9 @@ static void do_close(Context *ctx, const GenMessage *gen_message)
     err_t delete_res = netconn_delete(socket_data->conn);
 
     socket_data->conn = NULL;
+    #ifndef AVM_NO_SMP
     struct ESP32PlatformData *platform = ctx->global->platform_data;
+    #endif
     synclist_remove(&platform->sockets, &socket_data->sockets_head);
 
     if (UNLIKELY(close_disconnect_res != ERR_OK)) {
