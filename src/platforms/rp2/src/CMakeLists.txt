@@ -34,6 +34,8 @@ set(HAVE_PLATFORM_SMP_H ON)
 if(PICO_RP2040)
 set(HAVE_PLATFORM_ATOMIC_H ON)
 endif()
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR rp2 PLATFORM_OS none)
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
 # Also add lib where platform_smp.h and platform_atomic headers are

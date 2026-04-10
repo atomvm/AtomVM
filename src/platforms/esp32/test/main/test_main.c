@@ -502,6 +502,12 @@ TEST_CASE("test_time_and_processes", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 6);
 }
 
+TEST_CASE("test_system_architecture", "[test_run]")
+{
+    term ret_value = avm_test_case("test_system_architecture.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_tz", "[test_run]")
 {
     term ret_value = avm_test_case("test_tz.beam");
