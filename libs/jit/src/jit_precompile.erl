@@ -124,6 +124,7 @@ compile(Target, Dir, Dwarf, Path) ->
                 "riscv32" -> ?JIT_ARCH_RISCV32;
                 "riscv64" -> ?JIT_ARCH_RISCV64;
                 "arm32" -> ?JIT_ARCH_ARM32;
+                "wasm32" -> ?JIT_ARCH_WASM32;
                 _ -> error({unsupported_target, Target})
             end,
 

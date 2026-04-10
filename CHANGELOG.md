@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added Erlang distribution over serial (uart)
+- Added WASM32 JIT backend for Emscripten platform
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform

@@ -815,49 +815,66 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 #endif
 
 #ifndef AVM_NO_JIT
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+// A NativeCodeMmapHeader is prepended before the code copy in every mmap allocation.
+// entry_point = header + 1 (always), so recovery is trivial: header = entry_point - 1.
+struct NativeCodeMmapHeader
 {
+    size_t mmap_size; // total allocation size = sizeof(header) + code_size
+};
+
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
+{
+    size_t total = sizeof(struct NativeCodeMmapHeader) + code_size;
 #if defined(__arm__) || defined(__aarch64__)
 #if defined(__APPLE__)
-    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+    struct NativeCodeMmapHeader *header = mmap(0, total, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
 #else
-    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    struct NativeCodeMmapHeader *header = mmap(0, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 #endif
-    if (native_code_mmap == MAP_FAILED) {
-        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
+    if (header == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", total, errno);
         return NULL;
     }
 #if defined(__APPLE__)
     pthread_jit_write_protect_np(0);
 #endif
-    memcpy(native_code_mmap, native_code, size);
+    header->mmap_size = total;
+    memcpy(header + 1, code, code_size);
 #if defined(__APPLE__)
     pthread_jit_write_protect_np(1);
-    sys_icache_invalidate(native_code_mmap, size);
+    sys_icache_invalidate(header + 1, code_size);
 #else
-    if (mprotect(native_code_mmap, size, PROT_READ | PROT_EXEC) != 0) {
-        fprintf(stderr, "Could not make native code executable: size=%zu, errno=%d\n", size, errno);
-        munmap(native_code_mmap, size);
+    if (mprotect(header, total, PROT_READ | PROT_EXEC) != 0) {
+        fprintf(stderr, "Could not make native code executable: size=%zu, errno=%d\n", total, errno);
+        munmap(header, total);
         return NULL;
     }
-    __builtin___clear_cache((char *) native_code_mmap, (char *) (native_code_mmap + size));
+    __builtin___clear_cache((char *) (header + 1), (char *) (header + 1) + code_size);
 #endif
 #if JIT_ARCH_TARGET == JIT_ARCH_ARMV6M
     // Set thumb bit for armv6m
-    return (ModuleNativeEntryPoint) (native_code_mmap + offset + 1);
+    return (ModuleNativeEntryPoint) ((uintptr_t) (header + 1) | 1);
 #else
-    return (ModuleNativeEntryPoint) (native_code_mmap + offset);
+    return (ModuleNativeEntryPoint) (header + 1);
 #endif
 #else
     // x86_64: mmap RWX so debuggers can set software breakpoints
-    uint8_t *native_code_mmap = (uint8_t *) mmap(0, size, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (native_code_mmap == MAP_FAILED) {
-        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", size, errno);
+    struct NativeCodeMmapHeader *header = mmap(0, total, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (header == MAP_FAILED) {
+        fprintf(stderr, "Could not allocate mmap for native code: size=%zu, errno=%d\n", total, errno);
         return NULL;
     }
-    memcpy(native_code_mmap, native_code, size);
-    return (ModuleNativeEntryPoint) (native_code_mmap + offset);
+    header->mmap_size = total;
+    memcpy(header + 1, code, code_size);
+    return (ModuleNativeEntryPoint) (header + 1);
 #endif
+}
+
+void sys_release_native_code(ModuleNativeEntryPoint entry_point)
+{
+    // entry_point = header + 1; clear the armv6m thumb bit before the cast.
+    struct NativeCodeMmapHeader *header = (struct NativeCodeMmapHeader *) ((uintptr_t) entry_point & ~(uintptr_t) 1) - 1;
+    munmap(header, header->mmap_size);
 }
 
 bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *version, ModuleNativeEntryPoint *entry_point, uint32_t *labels)

@@ -1619,7 +1619,12 @@ static term nif_erlang_spawn_fun_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_module = fun_module;
 #ifndef AVM_NO_JIT
     if (fun_module->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: store (label + 1) encoding; schedule_in resolves per-thread func ptr
+        new_ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
         new_ctx->saved_function_ptr = module_get_native_entry_point(fun_module, label);
+#endif
     } else {
 #endif
 #ifndef AVM_NO_EMU
@@ -1671,7 +1676,12 @@ term nif_erlang_spawn_opt(Context *ctx, int argc, term argv[])
     new_ctx->saved_module = found_module;
 #ifndef AVM_NO_JIT
     if (found_module->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: store (label + 1) encoding; schedule_in resolves per-thread func ptr
+        new_ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
         new_ctx->saved_function_ptr = module_get_native_entry_point(found_module, label);
+#endif
     } else {
 #endif
 #ifndef AVM_NO_EMU
@@ -6539,6 +6549,8 @@ static term nif_jit_backend_module(Context *ctx, int argc, term argv[])
     return JIT_RISCV64_ATOM;
 #elif JIT_ARCH_TARGET == JIT_ARCH_ARM32
     return JIT_ARM32_ATOM;
+#elif JIT_ARCH_TARGET == JIT_ARCH_WASM32
+    return JIT_WASM32_ATOM;
 #else
 #error Unknown JIT target
 #endif

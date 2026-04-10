@@ -54,7 +54,7 @@ set(
 )
 target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-if(AVM_DISABLE_JIT)
+if(AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
 set(precompiled_suffix)
 else()
 set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")

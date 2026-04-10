@@ -37,6 +37,11 @@ set(SOURCE_FILES
     "../../../../libAtomVM/otp_crypto.c"
 )
 
+if (NOT AVM_DISABLE_JIT)
+    list(APPEND SOURCE_FILES jit_stream_wasm.c)
+    list(APPEND HEADER_FILES jit_stream_wasm.h)
+endif()
+
 set(
     PLATFORM_LIB_SUFFIX
     ${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}

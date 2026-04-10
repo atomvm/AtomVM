@@ -103,10 +103,51 @@ jobs:
             src/platforms/emscripten/build/**/*.beam
         retention-days: 1
 
+  compile_tests_jit:
+
+    runs-on: ubuntu-24.04
+    container: erlang:28
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Install required packages
+      run: apt update && apt install -y gperf zlib1g-dev cmake ninja-build
+
+    - name: Compile AtomVM and test modules with JIT for wasm32
+      run: |
+        set -e
+        mkdir build
+        cd build
+        cmake .. -G Ninja -DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=wasm32 -DAVM_PRECOMPILED_TARGETS=wasm32
+        # test_eavmlib does not work with wasm due to http + ssl test
+        ninja atomvmlib-emscripten erlang_test_modules test_etest test_alisp test_estdlib hello_world test_jit
+
+    - name: Run JIT eunit tests
+      run: |
+        cd build
+        erl -pa tests/libs/jit/beams/ libs/jit/src/beams/ libs/etest/src/beams \
+            -noshell -s tests -s init stop
+
+    - name: Upload JIT test modules
+      uses: actions/upload-artifact@v4
+      with:
+        name: atomvm-and-test-modules-jit
+        path: |
+            build/**/*.avm
+            build/**/*.beam
+        retention-days: 1
+
   wasm_build_and_test_node:
-    needs: compile_tests
+    needs: [compile_tests, compile_tests_jit]
     runs-on: ubuntu-24.04
     container: emscripten/emsdk
+
+    strategy:
+      fail-fast: false
+      matrix:
+        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
 
     steps:
     - name: Checkout repo
@@ -122,16 +163,25 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake ..
+        emcmake cmake .. ${{ matrix.jit }}
         emmake make -j
 
-    - name: Download AtomVM and test modules
+    - name: Download AtomVM and test modules (non-JIT)
+      if: matrix.jit == ''
       uses: actions/download-artifact@v4
       with:
         name: atomvm-and-test-modules
         path: build
 
-    - name: Test
+    - name: Download AtomVM and test modules (JIT)
+      if: matrix.jit != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: atomvm-and-test-modules-jit
+        path: build
+
+    - name: Test (non-JIT)
+      if: matrix.jit == ''
       shell: bash
       working-directory: ./src/platforms/emscripten/build
       run: |
@@ -146,8 +196,21 @@ jobs:
         node src/AtomVM.js ../../../../build/tests/libs/etest/test_etest.avm
         node src/AtomVM.js ../../../../build/tests/erlang_tests/test_crypto.beam
 
+    - name: Test (JIT)
+      if: matrix.jit != ''
+      shell: bash
+      working-directory: ./src/platforms/emscripten/build
+      run: |
+        set -euxo pipefail
+        # Test hello_world with JIT compiler (runtime JIT compilation)
+        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam ../../../../build/libs/atomvmlib-emscripten-wasm32.avm
+        # Library tests with JIT compiler (jit-wasm32.avm included in test avms via pack_test)
+        node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.js ../../../../build/tests/libs/estdlib/test_estdlib.avm
+        node src/AtomVM.js ../../../../build/tests/libs/etest/test_etest.avm
+
     - name: "Rename and write sha256sum (node)"
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -160,7 +223,7 @@ jobs:
 
     - name: "Release (node)"
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
       with:
         draft: true
         fail_on_unmatched_files: true
@@ -181,6 +244,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
         language: ["javascript-typescript"]
 
     steps:
@@ -191,6 +255,7 @@ jobs:
       run: sudo apt update -y && sudo apt install -y cmake gperf
 
     - name: "Initialize CodeQL"
+      if: matrix.jit == ''
       uses: github/codeql-action/init@v3
       with:
         languages: ${{matrix.language}}
@@ -204,13 +269,15 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web
+        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web ${{ matrix.jit }}
         emmake make -j
 
     - name: "Perform CodeQL Analysis"
+      if: matrix.jit == ''
       uses: github/codeql-action/analyze@v3
 
     - name: Upload wasm build for web
+      if: matrix.jit == ''
       uses: actions/upload-artifact@v4
       with:
         name: atomvm-js-web
