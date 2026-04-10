@@ -162,6 +162,10 @@ extern "C" {
 #error "Unsupported __BYTE_ORDER__ value."
 #endif
 
+// Some SDKs (stm32) define this macro
+#ifdef UNUSED
+#undef UNUSED
+#endif
 #define UNUSED(x) (void) (x);
 
 #ifdef __GNUC__

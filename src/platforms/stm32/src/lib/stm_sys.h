@@ -28,8 +28,7 @@
 
 #define STM32_ATOM globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "stm32"))
 
-/* Define macros for data and instruction barriers for sys_init_icache()
- * See: ARM V7-M Architecture Reference Manual :: https://static.docs.arm.com/ddi0403/eb/DDI0403E_B_armv7m_arm.pdf */
+/* Define macros for data and instruction barriers for sys_init_icache() */
 // Ensure write is visible
 #define __dsb asm __volatile__("dsb" :: \
                                    : "memory");
