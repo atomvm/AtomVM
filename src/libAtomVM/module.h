@@ -144,7 +144,7 @@ struct Module
 
     void *module_platform_data;
 
-    int end_instruction_ii;
+    unsigned int end_instruction_ii;
 
     unsigned int free_literals_data : 1;
 
@@ -457,7 +457,7 @@ void module_insert_line_ref_offset(Module *mod, struct ListHead *line_refs, uint
  * @param filename on output the filename or NULL if it's module.erl. Can be NULL.
  * @return \c true if the line was found
  */
-bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename);
+bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filename_len, const uint8_t **filename);
 
 /**
  * @return true if the module has line information, false, otherwise.
@@ -473,11 +473,11 @@ static inline bool module_has_line_chunk(Module *mod)
  * @param cp continuation pointer to parse
  * @param cp_mod if not null, set to found module
  * @param label if not null, set to found label
- * @param l_off if not null, set to offset of label from module start
+ * @param l_off if not null, set to offset of cp from resolved label
  * @param mod_offset if not null, set to offset of cp from module start
  * @param global the global context
  */
-void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *mod_offset, GlobalContext *global);
+void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, size_t *l_off, size_t *mod_offset, GlobalContext *global);
 
 /**
  * @brief Get the offset of a given label from the beginning of the code, emulated or native
