@@ -107,13 +107,21 @@ jobs:
     needs: compile_tests
     runs-on: ubuntu-24.04
     container: emscripten/emsdk
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: "Install deps"
-      run: sudo apt update -y && sudo apt install -y cmake gperf
+      run: sudo apt update -y && sudo apt install -y cmake gperf python3-jinja2 python3-jsonschema
 
     - name: Build
       shell: bash
@@ -122,7 +130,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake ..
+        emcmake cmake .. -DAVM_FETCH_MBEDTLS_GIT_TAG=${{ matrix.mbedtls_git_tag }}
         emmake make -j
 
     - name: Download AtomVM and test modules
@@ -147,7 +155,7 @@ jobs:
         node src/AtomVM.js ../../../../build/tests/erlang_tests/test_crypto.beam
 
     - name: "Rename and write sha256sum (node)"
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -160,7 +168,7 @@ jobs:
 
     - name: "Release (node)"
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       with:
         draft: true
         fail_on_unmatched_files: true
@@ -181,14 +189,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ["javascript-typescript"]
+        include:
+          - language: "javascript-typescript"
+            mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - language: "javascript-typescript"
+            mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: "Install deps"
-      run: sudo apt update -y && sudo apt install -y cmake gperf
+      run: sudo apt update -y && sudo apt install -y cmake gperf python3-jinja2 python3-jsonschema
 
     - name: "Initialize CodeQL"
       uses: github/codeql-action/init@v3
@@ -204,7 +218,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web
+        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web -DAVM_FETCH_MBEDTLS_GIT_TAG=${{ matrix.mbedtls_git_tag }}
         emmake make -j
 
     - name: "Perform CodeQL Analysis"
@@ -213,7 +227,7 @@ jobs:
     - name: Upload wasm build for web
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web-${{ matrix.mbedtls_label }}
         path: |
             src/platforms/emscripten/build/**/*.wasm
             src/platforms/emscripten/build/**/*.js
@@ -222,6 +236,12 @@ jobs:
   wasm_test_web:
     needs: [compile_tests, wasm_build_web]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mbedtls_label: "mbedtls3"
+          - mbedtls_label: "mbedtls4"
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -235,7 +255,7 @@ jobs:
     - name: Download wasm build for web
       uses: actions/download-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web-${{ matrix.mbedtls_label }}
         path: src/platforms/emscripten/build
 
     - name: Download emscripten test modules
@@ -270,7 +290,7 @@ jobs:
         retention-days: 7
 
     - name: "Rename and write sha256sum (web)"
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -283,7 +303,7 @@ jobs:
 
     - name: "Release (web)"
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       with:
         draft: true
         fail_on_unmatched_files: true

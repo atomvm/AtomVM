@@ -59,6 +59,7 @@ jobs:
         # We only test several OTP versions with default compilers for supported OSes (gcc 11, gcc 13, clang 14, clang 18)
         cc: ["gcc-11", "gcc-13", "clang-14", "clang-18"]
         otp: ["26", "27", "28"]
+        mbedtls: ["default"]
 
         include:
         ### gcc
@@ -158,6 +159,12 @@ jobs:
           cxx: "c++"
           otp: "master"
           elixir_version: "main"
+
+        # Additional mbedtls@4 coverage with the default Linux toolchain
+        - cc: "cc"
+          cxx: "c++"
+          otp: "28"
+          mbedtls: "mbedtls@4"
 
         # Additional latest & -Os compiler builds
         - cc: "gcc-14"
@@ -587,13 +594,26 @@ jobs:
       run: sudo apt update -y
 
     - name: "Install deps"
-      if: matrix.container != ''
-      run: sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev socat
+      if: matrix.container != '' && matrix.mbedtls != 'mbedtls@4'
+      run: |
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind libmbedtls-dev socat
+
+    - name: "Install deps (MbedTLS 4)"
+      if: matrix.container != '' && matrix.mbedtls == 'mbedtls@4'
+      run: |
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen valgrind socat
 
     - name: "Install deps"
-      if: matrix.container == ''
+      if: matrix.container == '' && matrix.mbedtls != 'mbedtls@4'
       run: |
-        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libmbedtls-dev libc6-dbg socat
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libc6-dbg libmbedtls-dev socat
+        # Get a more recent valgrind
+        sudo snap install valgrind --classic
+
+    - name: "Install deps (MbedTLS 4)"
+      if: matrix.container == '' && matrix.mbedtls == 'mbedtls@4'
+      run: |
+        sudo apt install -y ${{ matrix.compiler_pkgs}} cmake gperf zlib1g-dev doxygen libc6-dbg socat
         # Get a more recent valgrind
         sudo snap install valgrind --classic
 
@@ -628,6 +648,19 @@ jobs:
           https://builds.hex.pm
           https://repo.hex.pm
           https://cdn.jsdelivr.net/hex
+
+    - name: "Install specific MbedTLS version"
+      if: matrix.mbedtls == 'mbedtls@4'
+      run: |
+        git clone --depth 1 --branch mbedtls-4.0.0 --recurse-submodules https://github.com/Mbed-TLS/mbedtls
+        cd mbedtls
+        mkdir build
+        cd build
+        cmake -DENABLE_TESTING=OFF -DUSE_SHARED_MBEDTLS_LIBRARY=On -DCMAKE_INSTALL_PREFIX=/usr/local ..
+        make -j$(nproc)
+        sudo make install
+        sudo ldconfig
+        echo "MBEDTLS_ROOT_DIR=/usr/local" >> $GITHUB_ENV
 
     # Builder info
     - name: "System info"
@@ -666,9 +699,19 @@ jobs:
         key: ${{ matrix.otp || env.DEFAULT_OTP_VERSION }}-${{ hashFiles('**/build-and-test.yaml', 'tests/**/*.erl', 'tests/**/*.hrl', 'tests/**/*.ex') }}-${{ matrix.jit_target_arch || 'nojit' }}-${{ contains(matrix.cmake_opts_other, 'AVM_DISABLE_JIT_DWARF=OFF') && 'dwarf' || 'nodwarf' }}
 
     - name: "Build: run cmake"
+      if: matrix.mbedtls != 'mbedtls@4'
       working-directory: build
       run: |
         cmake ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other || env.DEFAULT_CMAKE_OPTS_OTHER }} ..
+        # git clone will use more recent timestamps than cached beam files
+        # touch them so we can benefit from the cache and avoid costly beam file rebuild.
+        find . -name '*.beam' -exec touch {} \;
+
+    - name: "Build: run cmake (MbedTLS 4)"
+      if: matrix.mbedtls == 'mbedtls@4'
+      working-directory: build
+      run: |
+        cmake -DMBEDTLS_ROOT_DIR=/usr/local ${{ matrix.cmake_opts_fp }} ${{ matrix.cmake_opts_smp }} ${{ matrix.cmake_opts_other || env.DEFAULT_CMAKE_OPTS_OTHER }} ..
         # git clone will use more recent timestamps than cached beam files
         # touch them so we can benefit from the cache and avoid costly beam file rebuild.
         find . -name '*.beam' -exec touch {} \;

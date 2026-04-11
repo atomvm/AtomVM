@@ -176,6 +176,14 @@ void sys_init_platform(GlobalContext *glb)
         AVM_ABORT();
     }
 
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
+    psa_status_t status = psa_crypto_init();
+    if (UNLIKELY(status != PSA_SUCCESS)) {
+        AVM_ABORT();
+    }
+#endif
+
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #ifndef AVM_NO_SMP
     platform->entropy_mutex = smp_mutex_create();
     if (IS_NULL_PTR(platform->entropy_mutex)) {
@@ -188,6 +196,7 @@ void sys_init_platform(GlobalContext *glb)
 #endif
     platform->entropy_is_initialized = false;
     platform->random_is_initialized = false;
+#endif
 
     glb->platform_data = platform;
 }
@@ -197,12 +206,14 @@ void sys_free_platform(GlobalContext *glb)
     struct EmscriptenPlatformData *platform = glb->platform_data;
     pthread_cond_destroy(&platform->poll_cond);
     pthread_mutex_destroy(&platform->poll_mutex);
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     if (platform->random_is_initialized) {
         mbedtls_ctr_drbg_free(&platform->random_ctx);
     }
     if (platform->entropy_is_initialized) {
         mbedtls_entropy_free(&platform->entropy_ctx);
     }
+#endif
     free(platform);
 }
 
@@ -760,6 +771,8 @@ term sys_get_info(Context *ctx, term key)
     return UNDEFINED_ATOM;
 }
 
+#ifdef ATOMVM_HAS_MBEDTLS
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 int sys_mbedtls_entropy_func(void *entropy, unsigned char *buf, size_t size)
 {
 #ifndef MBEDTLS_THREADING_C
@@ -826,3 +839,6 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
     struct EmscriptenPlatformData *platform = global->platform_data;
     SMP_MUTEX_UNLOCK(platform->random_mutex);
 }
+#endif
+
+#endif
