@@ -1914,7 +1914,7 @@ static bool module_find_line_ref(Module *mod, uint16_t line_ref, uint32_t *line,
     return module_get_location(mod, location_ix, filename_len, filename);
 }
 
-bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
+bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filename_len, const uint8_t **filename)
 {
     size_t i;
 #ifndef AVM_NO_JIT
@@ -1980,10 +1980,10 @@ bool module_find_line(Module *mod, unsigned int offset, uint32_t *line, size_t *
 #endif
 }
 
-COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, int *l_off, long *out_mod_offset, GlobalContext *global)
+COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, size_t *l_off, size_t *out_mod_offset, GlobalContext *global)
 {
     Module *mod = globalcontext_get_module_by_index(global, ((uintptr_t) cp) >> 24);
-    long mod_offset = (cp & 0xFFFFFF) >> 2;
+    size_t mod_offset = (cp & 0xFFFFFF) >> 2;
     if (out_mod_offset) {
         *out_mod_offset = mod_offset;
     }
@@ -2018,7 +2018,7 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
                     *label = new_label_id;
                 }
                 if (l_off) {
-                    *l_off = mod_offset - new_label_offset;
+                    *l_off = 0;
                 }
                 return;
             }
@@ -2042,7 +2042,7 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
 
         int i = 1;
         const uint8_t *l = mod->labels[1];
-        while (mod_offset > l - code) {
+        while (mod_offset > (size_t) (l - code)) {
             i++;
             if (i >= labels_count) {
                 // last label + 1 is reserved for end of module.
@@ -2061,7 +2061,7 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, i
             *label = i - 1;
         }
         if (l_off) {
-            *l_off = mod_offset - (mod->labels[*label] - code);
+            *l_off = mod_offset - (mod->labels[i - 1] - code);
         }
 #endif
 #ifndef AVM_NO_JIT

@@ -28,7 +28,7 @@
 
 #ifndef AVM_CREATE_STACKTRACES
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
+term stacktrace_create_raw(Context *ctx, Module *mod, size_t current_offset)
 {
     UNUSED(ctx);
     UNUSED(mod);
@@ -37,7 +37,7 @@ term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
     return context_exception_class(ctx);
 }
 
-term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term module_atom, term function_atom, int arity)
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset, term module_atom, term function_atom, int arity)
 {
     UNUSED(ctx);
     UNUSED(mod);
@@ -102,12 +102,12 @@ static bool location_sets_append(GlobalContext *global, Module *mod, const uint8
     return true;
 }
 
-term stacktrace_create_raw(Context *ctx, Module *mod, int current_offset)
+term stacktrace_create_raw(Context *ctx, Module *mod, size_t current_offset)
 {
     return stacktrace_create_raw_mfa(ctx, mod, current_offset, UNDEFINED_ATOM, UNDEFINED_ATOM, 0);
 }
 
-term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, term module_atom, term function_atom, int arity)
+term stacktrace_create_raw_mfa(Context *ctx, Module *mod, size_t current_offset, term module_atom, term function_atom, int arity)
 {
     term exception_class = context_exception_class(ctx);
 
@@ -150,7 +150,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
     unsigned int num_aux_terms = 0;
     size_t filename_lens = 0;
     Module *prev_mod = NULL;
-    long prev_mod_offset = -1;
+    size_t prev_mod_offset = (size_t) -1;
     term *ct = ctx->e;
     term *stack_base = context_stack_base(ctx);
 
@@ -161,7 +161,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
         if (term_is_cp(*ct)) {
 
             Module *cp_mod;
-            long mod_offset;
+            size_t mod_offset;
 
             module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
             // TODO: investigate
@@ -187,7 +187,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
             int label = term_to_catch_label_and_module(*ct, &module_index);
 
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
-            int mod_offset = module_label_code_offset(cl_mod, label);
+            size_t mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
                 ++num_frames;
@@ -214,7 +214,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
         uint32_t line;
         const uint8_t *filename;
         size_t filename_len;
-        if (LIKELY(module_find_line(mod, (unsigned int) current_offset, &line, &filename_len, &filename))) {
+        if (LIKELY(module_find_line(mod, current_offset, &line, &filename_len, &filename))) {
             if (!location_sets_append(ctx->global, mod, filename, filename_len, &filename_lens, &locations, &num_locations)) {
                 return UNDEFINED_ATOM;
             }
@@ -289,14 +289,14 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
     raw_stacktrace = term_list_prepend(frame_info, raw_stacktrace, &ctx->heap);
 
     prev_mod = NULL;
-    prev_mod_offset = -1;
+    prev_mod_offset = (size_t) -1;
     // GC may have moved stack
     ct = ctx->e;
     stack_base = context_stack_base(ctx);
     while (ct != stack_base) {
         if (term_is_cp(*ct)) {
             Module *cp_mod;
-            long mod_offset;
+            size_t mod_offset;
 
             module_cp_to_label_offset(*ct, &cp_mod, NULL, NULL, &mod_offset, ctx->global);
             if (mod_offset != cp_mod->end_instruction_ii && !(prev_mod == cp_mod && mod_offset == prev_mod_offset)) {
@@ -315,7 +315,7 @@ term stacktrace_create_raw_mfa(Context *ctx, Module *mod, int current_offset, te
             int module_index;
             int label = term_to_catch_label_and_module(*ct, &module_index);
             Module *cl_mod = globalcontext_get_module_by_index(ctx->global, module_index);
-            int mod_offset = module_label_code_offset(cl_mod, label);
+            size_t mod_offset = module_label_code_offset(cl_mod, label);
 
             if (!(prev_mod == cl_mod && mod_offset == prev_mod_offset)) {
 
@@ -434,7 +434,7 @@ term stacktrace_build(Context *ctx, term *stack_info, uint32_t live)
 
         Module *cp_mod;
         int label;
-        long mod_offset;
+        size_t mod_offset;
         module_cp_to_label_offset(cp, &cp_mod, &label, NULL, &mod_offset, ctx->global);
 
         term module_name = module_get_name(cp_mod);
