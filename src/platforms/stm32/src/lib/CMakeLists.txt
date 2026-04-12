@@ -35,6 +35,7 @@ set(SOURCE_FILES
     gpio_driver.c
     i2c_driver.c
     spi_driver.c
+    uart_driver.c
     jit_stream_flash.c
     platform_nifs.c
     sys.c

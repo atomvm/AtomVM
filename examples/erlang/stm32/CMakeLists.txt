@@ -70,3 +70,19 @@ add_custom_command(
     VERBATIM
 )
 add_custom_target(stm32_spi_flash ALL DEPENDS stm32_spi_flash.avm)
+
+set(SIM800L_BEAM ${CMAKE_BINARY_DIR}/examples/erlang/sim800l.beam)
+add_custom_command(
+    OUTPUT stm32_sim800l.avm
+    DEPENDS sim800l_main ${SIM800L_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm estdlib
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm avm_stm32
+        PackBEAM
+    COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} stm32_sim800l.avm
+        ${SIM800L_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm
+    COMMENT "Packing runnable stm32_sim800l.avm"
+    VERBATIM
+)
+add_custom_target(stm32_sim800l ALL DEPENDS stm32_sim800l.avm)
