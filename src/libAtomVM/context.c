@@ -1172,10 +1172,10 @@ COLD_FUNC void context_dump(Context *ctx)
     {
         Module *cp_mod;
         int label;
-        int offset;
+        size_t offset;
         module_cp_to_label_offset(ctx->cp, &cp_mod, &label, &offset, NULL, ctx->global);
-        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
-            cp_mod->module_index, label, offset);
+        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %u>\n\n",
+            cp_mod->module_index, label, (unsigned) offset);
     }
 
     fprintf(stderr, "x[0]: ");
@@ -1197,9 +1197,10 @@ COLD_FUNC void context_dump(Context *ctx)
         } else if (term_is_cp(*ct)) {
             Module *cp_mod;
             int label;
-            int offset;
+            size_t offset;
             module_cp_to_label_offset(*ct, &cp_mod, &label, &offset, NULL, ctx->global);
-            fprintf(stderr, "#CP<module: %i, label: %i, offset: %i>\n", cp_mod->module_index, label, offset);
+            // Cast offset to unsigned as some embedded libc implementations do not support %zu
+            fprintf(stderr, "#CP<module: %i, label: %i, offset: %u>\n", cp_mod->module_index, label, (unsigned) offset);
 
         } else {
             term_display(stderr, *ct, ctx);
