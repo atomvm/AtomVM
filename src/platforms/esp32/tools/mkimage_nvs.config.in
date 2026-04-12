@@ -19,6 +19,9 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
+%% It is important that segments are always kept in order by offset                                                                                                        
+%% so mkimage.erl can pad partitons to the correct size.
+
 #{
     segments => [
         #{
