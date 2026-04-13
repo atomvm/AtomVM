@@ -35,7 +35,9 @@ fail()
     exit 1
 }
 
-if [ "${@}" = "--help" ]; then
+opts="${@}"
+
+if [ "${opts}" = "--help" ]; then
     escript "@CMAKE_BINARY_DIR@/mkimage.erl" --help
     exit 0
 fi
