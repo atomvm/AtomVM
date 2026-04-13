@@ -986,6 +986,30 @@ void module_get_imported_function_module_and_name_atoms(
 
 bool module_get_function_from_label(Module *this_module, int label, atom_index_t *function_name, int *arity)
 {
+#if defined(JIT_JUMPTABLE_IS_DATA) && !defined(AVM_NO_JIT)
+    // WASM: resolve continuation labels to their parent BEAM label using the
+    // cont_label_map stored in the metadata block.
+    if (this_module->native_code) {
+        const uint8_t *metadata = jit_wasm_get_lines_metadata((const void *) this_module->native_code);
+        if (!IS_NULL_PTR(metadata)) {
+            // Skip past lines data to reach cont_label_map
+            uint16_t lines_count = metadata[0] | (metadata[1] << 8);
+            const uint8_t *cont_map_ptr = metadata + 2 + lines_count * 6;
+            uint16_t cont_map_count = cont_map_ptr[0] | (cont_map_ptr[1] << 8);
+            cont_map_ptr += 2;
+            for (uint16_t i = 0; i < cont_map_count; i++) {
+                uint16_t cont_label = cont_map_ptr[0] | (cont_map_ptr[1] << 8);
+                uint16_t beam_label = cont_map_ptr[2] | (cont_map_ptr[3] << 8);
+                cont_map_ptr += 4;
+                if (cont_label == label) {
+                    label = beam_label;
+                    break;
+                }
+            }
+        }
+    }
+#endif
+
     int best_label = -1;
     const uint8_t *export_table_data = (const uint8_t *) this_module->export_table;
     int exports_count = READ_32_UNALIGNED(export_table_data + 8);
@@ -1132,8 +1156,17 @@ Module *module_new_from_iff_binary(GlobalContext *global, const void *iff_binary
                 runtime_variant |= JIT_VARIANT_THUMB2;
 #endif
                 if (ENDIAN_SWAP_16(native_code->architectures[arch_index].architecture) == JIT_ARCH_TARGET && ENDIAN_SWAP_16(native_code->architectures[arch_index].variant) == runtime_variant) {
-                    size_t offset = ENDIAN_SWAP_32(native_code->info_size) + ENDIAN_SWAP_32(native_code->architectures[arch_index].offset) + sizeof(native_code->info_size);
-                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code((const uint8_t *) &native_code->info_size, ENDIAN_SWAP_32(native_code->size), offset);
+                    size_t arch_offset = ENDIAN_SWAP_32(native_code->architectures[arch_index].offset);
+                    size_t arch_code_size;
+                    if (arch_index + 1 < ENDIAN_SWAP_16(native_code->architectures_count)) {
+                        arch_code_size = ENDIAN_SWAP_32(native_code->architectures[arch_index + 1].offset) - arch_offset;
+                    } else {
+                        size_t code_section_size = ENDIAN_SWAP_32(native_code->size) - sizeof(native_code->info_size) - ENDIAN_SWAP_32(native_code->info_size);
+                        arch_code_size = code_section_size - arch_offset;
+                    }
+                    size_t header_offset = ENDIAN_SWAP_32(native_code->info_size) + arch_offset + sizeof(native_code->info_size);
+                    const uint8_t *arch_code = (const uint8_t *) &native_code->info_size + header_offset;
+                    ModuleNativeEntryPoint module_entry_point = sys_map_native_code(arch_code, arch_code_size);
                     module_set_native_code(mod, ENDIAN_SWAP_32(native_code->labels), module_entry_point);
 
 #ifndef AVM_NO_JIT_DWARF
@@ -1280,6 +1313,11 @@ COLD_FUNC void module_destroy(Module *module)
     if (module->free_literals_data) {
         free(module->literals_data);
     }
+#ifndef AVM_NO_JIT
+    if (module->native_code) {
+        sys_release_native_code(module->native_code);
+    }
+#endif
 #ifndef AVM_NO_SMP
     smp_mutex_destroy(module->mutex);
 #endif
@@ -1552,8 +1590,20 @@ term module_get_type_by_index(const Module *mod, int type_index, Context *ctx)
 #ifndef AVM_NO_JIT
 ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exported_label)
 {
+#ifdef JIT_JUMPTABLE_IS_DATA
+    // WASM: entry_point is not used by the dispatch loop (it uses
+    // JIT_CONTINUATION_FOR_LABEL which stores label+1 and resolves
+    // per-thread function pointers lazily). Return NULL if the module
+    // hasn't been JIT-compiled yet — the caller will store this but
+    // never dereference it.
+    if (!module->native_code) {
+        return NULL;
+    }
+    return jit_wasm_get_entry_point((const void *) module->native_code, exported_label);
+#else
     assert(module->native_code);
     return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+#endif
 }
 #endif
 
@@ -1568,7 +1618,15 @@ static const struct ExportedFunction *module_create_function(Module *found_modul
         }
         mfunc->base.type = ModuleNativeFunction;
         mfunc->target = found_module;
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: the dispatch loop uses label (via JIT_CONTINUATION_FOR_LABEL)
+        // to resolve per-thread function pointers lazily.
+        // label and entry_point share a union, so don't write entry_point.
+        mfunc->label = exported_label;
+#else
+        // entry_point overwrites label in the union
         mfunc->entry_point = module_get_native_entry_point(found_module, exported_label);
+#endif
 
         return &mfunc->base;
     } else {
@@ -1919,6 +1977,36 @@ bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filena
     size_t i;
 #ifndef AVM_NO_JIT
     if (mod->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: lines data is stored in the JITWasmHeader metadata.
+        // Both line offsets and query offsets use label * JTE_SIZE format.
+        {
+            const uint8_t *lines_data = jit_wasm_get_lines_metadata((const void *) mod->native_code);
+            if (IS_NULL_PTR(lines_data)) {
+                return false;
+            }
+            size_t lines_count = lines_data[0] | (lines_data[1] << 8);
+            if (lines_count == 0) {
+                return false;
+            }
+            const uint8_t *entry = lines_data + 2;
+            uint16_t prev_line_ref = 0;
+            for (i = 0; i < lines_count; i++) {
+                uint16_t line_ref = entry[0] | (entry[1] << 8);
+                uint32_t ref_offset = entry[2] | (entry[3] << 8) | (entry[4] << 16) | (entry[5] << 24);
+                entry += 6;
+                if (offset == ref_offset) {
+                    return module_find_line_ref(mod, line_ref, line, filename_len, filename);
+                } else if (i == 0 && offset < ref_offset) {
+                    return false;
+                } else if (offset < ref_offset) {
+                    return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+                }
+                prev_line_ref = line_ref;
+            }
+            return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+        }
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2 + labels_count * 6;
@@ -1943,6 +2031,7 @@ bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filena
             prev_line_ref = line_ref;
         }
         return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
+#endif /* !JIT_JUMPTABLE_IS_DATA */
     } else {
 #if defined(AVM_NO_EMU)
         return false;
@@ -1994,6 +2083,16 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, s
 
 #ifndef AVM_NO_JIT
     if (mod->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: label is directly encoded in the CP offset
+        // mod_offset = label * JIT_JUMPTABLE_ENTRY_SIZE
+        if (label) {
+            *label = (int) (mod_offset / JIT_JUMPTABLE_ENTRY_SIZE);
+        }
+        if (l_off) {
+            *l_off = 0;
+        }
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
@@ -2032,6 +2131,7 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, s
         if (l_off) {
             *l_off = 0;
         }
+#endif
 #endif
 #if !defined(AVM_NO_JIT) && !defined(AVM_NO_EMU)
     } else {
@@ -2073,6 +2173,9 @@ uint32_t module_label_code_offset(Module *mod, int label)
 {
 #ifndef AVM_NO_JIT
     if (mod->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        return (uint32_t) label * JIT_JUMPTABLE_ENTRY_SIZE;
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
@@ -2087,6 +2190,7 @@ uint32_t module_label_code_offset(Module *mod, int label)
             labels_count--;
         }
         return 0;
+#endif
     } else {
 #endif
         uint8_t *code = &mod->code->code[0];

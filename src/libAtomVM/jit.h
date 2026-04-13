@@ -70,18 +70,28 @@ typedef struct Module Module;
 // schedule_in.
 typedef Context *(*ModuleNativeEntryPoint)(Context *ctx, JITState *jit_state, const ModuleNativeInterface *p);
 
+// Type for storing a native continuation reference.
+// On WASM (JIT_JUMPTABLE_IS_DATA), this is a label encoding (label + 1).
+// On other architectures, this is the actual function pointer.
+#ifdef JIT_JUMPTABLE_IS_DATA
+typedef uintptr_t NativeContinuation;
+#else
+typedef ModuleNativeEntryPoint NativeContinuation;
+#endif
+
 struct JITState
 {
     Module *module;
     union
     {
-        ModuleNativeEntryPoint continuation;
+        NativeContinuation continuation;
         const void *continuation_pc;
     };
     int remaining_reductions;
 };
 
 // Remember to keep this struct in sync with libs/jit/src/primitives.hrl
+// Primitives must have at most 6 parameters, this is what several backends expect
 
 struct ModuleNativeInterface
 {
@@ -187,6 +197,7 @@ enum TrapAndLoadResult
 #define JIT_ARCH_RISCV32 4
 #define JIT_ARCH_RISCV64 5
 #define JIT_ARCH_ARM32 6
+#define JIT_ARCH_WASM32 7
 
 #define JIT_VARIANT_PIC 1
 #define JIT_VARIANT_FLOAT32 2
@@ -226,9 +237,31 @@ enum TrapAndLoadResult
 #define JIT_JUMPTABLE_ENTRY_SIZE 8
 #endif
 
+#ifdef __wasm__
+#define JIT_ARCH_TARGET JIT_ARCH_WASM32
+#define JIT_JUMPTABLE_ENTRY_SIZE 4
+#define JIT_JUMPTABLE_IS_DATA
+#endif
+
 #ifndef JIT_ARCH_TARGET
 #error Unknown JIT target
 #endif
+#endif
+
+#ifdef JIT_JUMPTABLE_IS_DATA
+/**
+ * @brief Get per-thread function pointer for a WASM JIT label.
+ *
+ * In Emscripten pthreads mode, each thread has its own wasmTable. This function
+ * lazily compiles the WASM module for the calling thread and returns a function
+ * pointer valid in that thread's table.
+ */
+ModuleNativeEntryPoint jit_wasm_get_entry_point(const void *native_code, int label);
+
+/**
+ * @brief Get the lines/cont_label_map metadata from a WASM JIT module.
+ */
+const uint8_t *jit_wasm_get_lines_metadata(const void *native_code);
 #endif
 
 /**

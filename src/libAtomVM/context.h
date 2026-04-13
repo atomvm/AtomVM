@@ -122,7 +122,7 @@ struct Context
         const void *saved_ip;
 #endif
 #ifndef AVM_NO_JIT
-        ModuleNativeEntryPoint saved_function_ptr;
+        NativeContinuation saved_function_ptr;
 #endif
     };
     // pointer to a trap or wait timeout handler

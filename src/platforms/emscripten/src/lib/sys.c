@@ -612,7 +612,7 @@ void sys_monotonic_time(struct timespec *t)
     }
 }
 
-uint64_t sys_monotonic_time_u64()
+uint64_t sys_monotonic_time_u64(void)
 {
     // 2^64/10^9/86400/365 around 585 years
     double now = emscripten_get_now() * 1000000.0;

@@ -865,10 +865,10 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 #ifndef AVM_NO_JIT
 #include <soc/soc.h>
 
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
 {
-    UNUSED(size);
-    uintptr_t addr = (uintptr_t) (native_code + offset);
+    UNUSED(code_size);
+    uintptr_t addr = (uintptr_t) code;
 
 #if defined(CONFIG_IDF_TARGET_ARCH_RISCV)
     // On RISC-V ESP32 targets, native code in flash needs to be accessed
@@ -884,5 +884,11 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t si
 #endif
 
     return (ModuleNativeEntryPoint) addr;
+}
+
+void sys_release_native_code(ModuleNativeEntryPoint entry_point)
+{
+    // Native code points into flash; nothing to free
+    UNUSED(entry_point);
 }
 #endif

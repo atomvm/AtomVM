@@ -94,7 +94,7 @@ Context *context_new(GlobalContext *glb)
 #ifndef AVM_NO_EMU
     ctx->saved_ip = NULL;
 #else
-    ctx->saved_function_ptr = NULL;
+    ctx->saved_function_ptr = (NativeContinuation) 0;
 #endif
 #ifndef AVM_NO_EMU
     ctx->waiting_with_timeout = false;
@@ -472,12 +472,21 @@ void context_process_code_server_resume_signal(Context *ctx)
     Module *module = ctx->saved_module;
 #ifndef AVM_NO_EMU
     if (module->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: store (label + 1) encoding; schedule_in resolves per-thread func ptr
+        ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
         ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+#endif
     } else {
         ctx->saved_ip = module->labels[label];
     }
 #else
+#ifdef JIT_JUMPTABLE_IS_DATA
+    ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
     ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+#endif
 #endif
     // Fix CP to OP_INT_CALL_END
     if (ctx->cp == module_address(module->module_index, 0)) {
