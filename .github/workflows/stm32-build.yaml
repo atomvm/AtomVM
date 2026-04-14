@@ -192,7 +192,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p renode-portable
-        wget -qO- https://builds.renode.io/renode-latest.linux-portable.tar.gz \
+        wget -qO- https://github.com/renode/renode/releases/download/v1.16.1/renode-1.16.1.linux-portable.tar.gz \
           | tar -xzf - -C renode-portable --strip-components=1
         echo "$PWD/renode-portable" >> $GITHUB_PATH
         pip install -r renode-portable/tests/requirements.txt
