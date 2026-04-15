@@ -24,7 +24,9 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
   </head>
   <body>
     <pre id="result">N/A</pre>
-    <script>
+    <script type="module">
+    import AtomVM from "/AtomVM.mjs";
+
     // Arguments are loaded using fetch API.
     // wasm_webserver serves under /tests/build/ files in src/platform/escripten/build/tests/src subdirectory
     // and under /build/ files in build/ subdirectory.
@@ -34,16 +36,15 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     const hashParams = new URLSearchParams(hash);
     const echoServer = hashParams.get('echo_server');
 
-    var Module = {
+    window.Module = await AtomVM({
         arguments: ['/tests/build/test_websockets.beam', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/avm_emscripten/src/avm_emscripten.avm', '/build/libs/estdlib/src/estdlib.avm'],
-        preRun: [function() {
+        preRun: [function(module) {
             if (echoServer) {
                 // Set environment variable for the Erlang code to read
-                ENV['ECHO_WEBSOCKET_URL'] = echoServer;
+                module.ENV['ECHO_WEBSOCKET_URL'] = echoServer;
             }
         }]
-    }
+    });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

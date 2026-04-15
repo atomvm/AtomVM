@@ -76,13 +76,14 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     <input type="text" name="text" id="send-text" disabled></input>
     <button id="send-button" disabled>Send</button>
 
-    <script>
+    <script type="module">
+      import AtomVM from "/AtomVM.mjs";
+
       // Arguments are loaded using fetch API.
       // wasm_webserver serves under /build/ files in build subdirectory.
-      var Module = {
+      window.Module = await AtomVM({
         arguments: ["/build/examples/emscripten/echo_websocket.avm"],
-      };
+      });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

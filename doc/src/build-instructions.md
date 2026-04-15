@@ -1137,7 +1137,7 @@ $ emmake make -j
 AtomVM can then be invoked as on Generic Unix with node:
 
 ```shell
-$ node ./src/AtomVM.js
+$ node ./src/AtomVM.mjs
 ```
 
 ### Running tests with NodeJS
@@ -1150,8 +1150,8 @@ Then execute the tests with:
 
 ```shell
 $ cd src/platforms/emscripten/build/
-$ node ./src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
-$ node ./src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
+$ node ./src/AtomVM.mjs ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
+$ node ./src/AtomVM.mjs ../../../../build/tests/libs/alisp/test_alisp.avm
 ```
 
 ### Building for the web

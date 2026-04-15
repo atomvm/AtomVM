@@ -187,14 +187,14 @@ jobs:
       run: |
         set -euxo pipefail
         # Test compressed beams
-        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/src/eavmlib.avm
+        node src/AtomVM.mjs ../../../../build/examples/erlang/hello_world.beam  ../../../../build/libs/eavmlib/src/eavmlib.avm
         # Run tests that pass
-        node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
-        node src/AtomVM.js ../../../../build/tests/libs/estdlib/test_estdlib.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/estdlib/test_estdlib.avm
         # test_eavmlib does not work with wasm due to http + ssl test
-        # node src/AtomVM.js ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
-        node src/AtomVM.js ../../../../build/tests/libs/etest/test_etest.avm
-        node src/AtomVM.js ../../../../build/tests/erlang_tests/test_crypto.beam
+        # node src/AtomVM.mjs ../../../../build/tests/libs/eavmlib/test_eavmlib.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/etest/test_etest.avm
+        node src/AtomVM.mjs ../../../../build/tests/erlang_tests/test_crypto.beam
 
     - name: Test (JIT)
       if: matrix.jit != ''
@@ -203,19 +203,19 @@ jobs:
       run: |
         set -euxo pipefail
         # Test hello_world with JIT compiler (runtime JIT compilation)
-        node src/AtomVM.js ../../../../build/examples/erlang/hello_world.beam ../../../../build/libs/atomvmlib-emscripten-wasm32.avm
+        node src/AtomVM.mjs ../../../../build/examples/erlang/hello_world.beam ../../../../build/libs/atomvmlib-emscripten-wasm32.avm
         # Library tests with JIT compiler (jit-wasm32.avm included in test avms via pack_test)
-        node src/AtomVM.js ../../../../build/tests/libs/alisp/test_alisp.avm
-        node src/AtomVM.js ../../../../build/tests/libs/estdlib/test_estdlib.avm
-        node src/AtomVM.js ../../../../build/tests/libs/etest/test_etest.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/alisp/test_alisp.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/estdlib/test_estdlib.avm
+        node src/AtomVM.mjs ../../../../build/tests/libs/etest/test_etest.avm
 
     - name: "Rename and write sha256sum (node)"
       if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
-        ATOMVM_JS=AtomVM-node-${{ github.ref_name }}.js
-        mv AtomVM.js "${ATOMVM_JS}"
+        ATOMVM_JS=AtomVM-node-${{ github.ref_name }}.mjs
+        mv AtomVM.mjs "${ATOMVM_JS}"
         sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
         ATOMVM_WASM=AtomVM-node-${{ github.ref_name }}.wasm
         mv AtomVM.wasm "${ATOMVM_WASM}"
@@ -228,8 +228,8 @@ jobs:
         draft: true
         fail_on_unmatched_files: true
         files: |
-          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js
-          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.mjs
+          src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.mjs.sha256
           src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.wasm
           src/platforms/emscripten/build/src/AtomVM-node-${{ github.ref_name }}.wasm.sha256
 
@@ -283,7 +283,7 @@ jobs:
         name: atomvm-js-web
         path: |
             src/platforms/emscripten/build/**/*.wasm
-            src/platforms/emscripten/build/**/*.js
+            src/platforms/emscripten/build/**/*.mjs
         retention-days: 1
 
   wasm_test_web:
@@ -341,8 +341,8 @@ jobs:
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
-        ATOMVM_JS=AtomVM-web-${{ github.ref_name }}.js
-        mv AtomVM.js "${ATOMVM_JS}"
+        ATOMVM_JS=AtomVM-web-${{ github.ref_name }}.mjs
+        mv AtomVM.mjs "${ATOMVM_JS}"
         sha256sum "${ATOMVM_JS}" > "${ATOMVM_JS}.sha256"
         ATOMVM_WASM=AtomVM-web-${{ github.ref_name }}.wasm
         mv AtomVM.wasm "${ATOMVM_WASM}"
@@ -355,7 +355,7 @@ jobs:
         draft: true
         fail_on_unmatched_files: true
         files: |
-          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js
-          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.js.sha256
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.mjs
+          src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.mjs.sha256
           src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.wasm
           src/platforms/emscripten/build/src/AtomVM-web-${{ github.ref_name }}.wasm.sha256

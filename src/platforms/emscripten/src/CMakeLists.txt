@@ -21,6 +21,7 @@
 cmake_minimum_required (VERSION 3.13)
 
 add_executable(AtomVM main.c)
+set_target_properties(AtomVM PROPERTIES SUFFIX ".mjs")
 
 target_compile_features(AtomVM PUBLIC c_std_11)
 
@@ -30,11 +31,14 @@ target_compile_options(libAtomVM PUBLIC -O3 -fno-exceptions -fno-rtti -pthread -
 target_compile_definitions(libAtomVM PRIVATE WITH_ZLIB)
 if (NOT AVM_DISABLE_JIT)
     # JIT requires addFunction to register dynamically compiled WASM functions
-    set(JIT_LINK_FLAGS -sALLOW_TABLE_GROWTH -sEXPORTED_RUNTIME_METHODS=ccall,addFunction)
+    set(JIT_LINK_FLAGS
+        -sALLOW_TABLE_GROWTH
+        "-sEXPORTED_RUNTIME_METHODS=['ccall','addFunction','ENV']"
+    )
 else()
-    set(JIT_LINK_FLAGS -sEXPORTED_RUNTIME_METHODS=ccall)
+    set(JIT_LINK_FLAGS "-sEXPORTED_RUNTIME_METHODS=['ccall','ENV']")
 endif()
-target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH)
+target_link_options(AtomVM PRIVATE ${JIT_LINK_FLAGS} -sEXPORT_ES6 -sUSE_ZLIB=1 -O3 -pthread -sFETCH -lwebsocket.js --pre-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.pre.js --extern-post-js ${CMAKE_CURRENT_SOURCE_DIR}/atomvm.extern-post.js -sINITIAL_MEMORY=67108864 -sALLOW_MEMORY_GROWTH)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_link_options(AtomVM PRIVATE -sASSERTIONS=2 -sSAFE_HEAP -sSTACK_OVERFLOW_CHECK)
