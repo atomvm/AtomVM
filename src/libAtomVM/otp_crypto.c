@@ -48,9 +48,6 @@
 #else
 #include <mbedtls/config.h>
 #endif
-#ifdef MBEDTLS_VERSION_C
-#include <mbedtls/version.h>
-#endif
 
 #ifdef HAVE_PSA_CRYPTO
 #include <mbedtls/psa_util.h>
@@ -81,7 +78,8 @@
 // #define ENABLE_TRACE
 #include "trace.h"
 
-#if MBEDTLS_VERSION_NUMBER > 0x03060100
+// mbedtls_ecdsa_{raw_to,der_to}_der are available in 3.6.1+ and 4.x.
+#if MBEDTLS_VERSION_NUMBER >= 0x03060100
 #define HAVE_MBEDTLS_ECDSA_RAW_TO_DER 1
 #define HAVE_MBEDTLS_ECDSA_DER_TO_RAW 1
 #endif
