@@ -55,7 +55,7 @@
 #ifdef HAVE_PSA_CRYPTO
 #include <mbedtls/psa_util.h>
 #endif
-#if defined(HAVE_PSA_CRYPTO) || defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+#if defined(HAVE_PSA_CRYPTO) || MBEDTLS_VERSION_NUMBER >= 0x04000000
 #include <psa/crypto.h>
 #endif
 
@@ -98,7 +98,7 @@
 
 #define MAX_MD_SIZE 64
 
-#if defined(HAVE_PSA_CRYPTO) || defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+#if defined(HAVE_PSA_CRYPTO) || MBEDTLS_VERSION_NUMBER >= 0x04000000
 static void do_psa_init(void)
 {
     if (UNLIKELY(psa_crypto_init() != PSA_SUCCESS)) {
@@ -293,38 +293,28 @@ DEFINE_DO_HASH_NORET_IS_OTHER(sha512, , false)
 #endif
 #endif
 
-#if MBEDTLS_VERSION_NUMBER >= 0x04000000
-static psa_algorithm_t atom_to_psa_hash_alg(term type, GlobalContext *global)
-{
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x3", "md5"))) {
-        return PSA_ALG_MD5;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x3", "sha"))) {
-        return PSA_ALG_SHA_1;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha224"))) {
-        return PSA_ALG_SHA_224;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha256"))) {
-        return PSA_ALG_SHA_256;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha384"))) {
-        return PSA_ALG_SHA_384;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x6", "sha512"))) {
-        return PSA_ALG_SHA_512;
-    }
-#ifdef PSA_ALG_RIPEMD160
-    if (type == globalcontext_make_atom(global, ATOM_STR("\x9", "ripemd160"))) {
-        return PSA_ALG_RIPEMD160;
-    }
-#endif
-    return PSA_ALG_NONE;
-}
+#if defined(HAVE_PSA_CRYPTO) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+static const AtomStringIntPair psa_hash_algorithm_table[] = {
+    { ATOM_STR("\x3", "sha"), PSA_ALG_SHA_1 },
+    { ATOM_STR("\x6", "sha224"), PSA_ALG_SHA_224 },
+    { ATOM_STR("\x6", "sha256"), PSA_ALG_SHA_256 },
+    { ATOM_STR("\x6", "sha384"), PSA_ALG_SHA_384 },
+    { ATOM_STR("\x6", "sha512"), PSA_ALG_SHA_512 },
+    { ATOM_STR("\x8", "sha3_224"), PSA_ALG_SHA3_224 },
+    { ATOM_STR("\x8", "sha3_256"), PSA_ALG_SHA3_256 },
+    { ATOM_STR("\x8", "sha3_384"), PSA_ALG_SHA3_384 },
+    { ATOM_STR("\x8", "sha3_512"), PSA_ALG_SHA3_512 },
+    { ATOM_STR("\x3", "md5"), PSA_ALG_MD5 },
+    { ATOM_STR("\x9", "ripemd160"), PSA_ALG_RIPEMD160 },
 
+    SELECT_INT_DEFAULT(PSA_ALG_NONE)
+};
+#endif
+
+#if MBEDTLS_VERSION_NUMBER >= 0x04000000
 static InteropFunctionResult psa_hash_fold_fun(term t, void *accum)
 {
-    psa_hash_operation_t *operation = (psa_hash_operation_t *) accum;
+    psa_hash_operation_t *operation = accum;
     if (term_is_integer(t)) {
         avm_int64_t tmp = term_maybe_unbox_int64(t);
         if (tmp < 0 || tmp > 255) {
@@ -335,7 +325,7 @@ static InteropFunctionResult psa_hash_fold_fun(term t, void *accum)
             return InteropBadArg;
         }
     } else /* term_is_binary(t) */ {
-        if (UNLIKELY(psa_hash_update(operation, (uint8_t *) term_binary_data(t), term_binary_size(t)) != PSA_SUCCESS)) {
+        if (UNLIKELY(psa_hash_update(operation, (const uint8_t *) term_binary_data(t), term_binary_size(t)) != PSA_SUCCESS)) {
             return InteropBadArg;
         }
     }
@@ -355,7 +345,7 @@ static term nif_crypto_hash(Context *ctx, int argc, term argv[])
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
     do_psa_init();
-    psa_algorithm_t alg = atom_to_psa_hash_alg(type, ctx->global);
+    psa_algorithm_t alg = interop_atom_term_select_int(psa_hash_algorithm_table, type, ctx->global);
     if (alg == PSA_ALG_NONE) {
         TRACE("crypto:hash unknown algorithm\n");
         RAISE_ERROR(BADARG_ATOM);
@@ -509,72 +499,7 @@ static term handle_iodata(term iodata, const void **data, size_t *len, void **al
     }
 }
 
-#if MBEDTLS_VERSION_NUMBER >= 0x04000000
-static psa_algorithm_t atom_to_psa_cipher_alg(term type, GlobalContext *global, psa_key_type_t *key_type, size_t *key_bits)
-{
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_ecb"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 128;
-        return PSA_ALG_ECB_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_ecb"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 192;
-        return PSA_ALG_ECB_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_ecb"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 256;
-        return PSA_ALG_ECB_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_cbc"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 128;
-        return PSA_ALG_CBC_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_cbc"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 192;
-        return PSA_ALG_CBC_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_cbc"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 256;
-        return PSA_ALG_CBC_NO_PADDING;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_128_cfb128"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 128;
-        return PSA_ALG_CFB;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_192_cfb128"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 192;
-        return PSA_ALG_CFB;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xE", "aes_256_cfb128"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 256;
-        return PSA_ALG_CFB;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_128_ctr"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 128;
-        return PSA_ALG_CTR;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_192_ctr"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 192;
-        return PSA_ALG_CTR;
-    }
-    if (type == globalcontext_make_atom(global, ATOM_STR("\xB", "aes_256_ctr"))) {
-        *key_type = PSA_KEY_TYPE_AES;
-        *key_bits = 256;
-        return PSA_ALG_CTR;
-    }
-    return PSA_ALG_NONE;
-}
-#else
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 static bool bool_to_mbedtls_operation(term encrypt_flag, mbedtls_operation_t *operation)
 {
     switch (encrypt_flag) {
@@ -587,6 +512,54 @@ static bool bool_to_mbedtls_operation(term encrypt_flag, mbedtls_operation_t *op
         default:
             return false;
     }
+}
+#endif
+
+#if defined(HAVE_PSA_CRYPTO) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+struct PsaCipherParams
+{
+    const char *atom_str;
+    psa_key_type_t key_type;
+    psa_algorithm_t algorithm;
+    uint16_t key_bits;
+    uint8_t block_size;
+    uint8_t iv_len;
+};
+
+static const struct PsaCipherParams psa_cipher_table[] = {
+    // ECB modes - block cipher, no IV
+    { ATOM_STR("\xB", "aes_128_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 128, 16, 0 },
+    { ATOM_STR("\xB", "aes_192_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 192, 16, 0 },
+    { ATOM_STR("\xB", "aes_256_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 256, 16, 0 },
+    // CBC modes - block cipher, with IV
+    { ATOM_STR("\xB", "aes_128_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 128, 16, 16 },
+    { ATOM_STR("\xB", "aes_192_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 192, 16, 16 },
+    { ATOM_STR("\xB", "aes_256_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 256, 16, 16 },
+    // CFB128 modes - stream-like, with IV
+    { ATOM_STR("\xE", "aes_128_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 128, 0, 16 },
+    { ATOM_STR("\xE", "aes_192_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 192, 0, 16 },
+    { ATOM_STR("\xE", "aes_256_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 256, 0, 16 },
+    // CTR modes - stream cipher, with IV
+    { ATOM_STR("\xB", "aes_128_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 128, 0, 16 },
+    { ATOM_STR("\xB", "aes_192_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 192, 0, 16 },
+    { ATOM_STR("\xB", "aes_256_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 256, 0, 16 },
+    // OFB modes - stream-like, with IV
+    { ATOM_STR("\xB", "aes_128_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 128, 0, 16 },
+    { ATOM_STR("\xB", "aes_192_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 192, 0, 16 },
+    { ATOM_STR("\xB", "aes_256_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 256, 0, 16 },
+};
+
+#define PSA_CIPHER_TABLE_LEN (sizeof(psa_cipher_table) / sizeof(psa_cipher_table[0]))
+
+static const struct PsaCipherParams *psa_cipher_table_lookup(GlobalContext *glb, term cipher_atom)
+{
+    for (size_t i = 0; i < PSA_CIPHER_TABLE_LEN; i++) {
+        AtomString atom_str = (AtomString) psa_cipher_table[i].atom_str;
+        if (globalcontext_is_term_equal_to_atom_string(glb, cipher_atom, atom_str)) {
+            return &psa_cipher_table[i];
+        }
+    }
+    return NULL;
 }
 #endif
 
@@ -642,12 +615,13 @@ static term nif_crypto_crypto_one_time(Context *ctx, int argc, term argv[])
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
     do_psa_init();
-    psa_key_type_t key_type;
-    size_t key_bits;
-    psa_algorithm_t alg = atom_to_psa_cipher_alg(cipher_term, ctx->global, &key_type, &key_bits);
-    if (UNLIKELY(alg == PSA_ALG_NONE)) {
+    const struct PsaCipherParams *cipher_params = psa_cipher_table_lookup(ctx->global, cipher_term);
+    if (IS_NULL_PTR(cipher_params)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown cipher", ctx));
     }
+    psa_key_type_t key_type = cipher_params->key_type;
+    size_t key_bits = cipher_params->key_bits;
+    psa_algorithm_t alg = cipher_params->algorithm;
 #else
     mbedtls_cipher_type_t cipher
         = interop_atom_term_select_int(cipher_table, cipher_term, ctx->global);
@@ -1601,22 +1575,6 @@ cleanup:
 
     return result;
 }
-
-static const AtomStringIntPair psa_hash_algorithm_table[] = {
-    { ATOM_STR("\x3", "sha"), PSA_ALG_SHA_1 },
-    { ATOM_STR("\x6", "sha224"), PSA_ALG_SHA_224 },
-    { ATOM_STR("\x6", "sha256"), PSA_ALG_SHA_256 },
-    { ATOM_STR("\x6", "sha384"), PSA_ALG_SHA_384 },
-    { ATOM_STR("\x6", "sha512"), PSA_ALG_SHA_512 },
-    { ATOM_STR("\x8", "sha3_224"), PSA_ALG_SHA3_224 },
-    { ATOM_STR("\x8", "sha3_256"), PSA_ALG_SHA3_256 },
-    { ATOM_STR("\x8", "sha3_384"), PSA_ALG_SHA3_384 },
-    { ATOM_STR("\x8", "sha3_512"), PSA_ALG_SHA3_512 },
-    { ATOM_STR("\x3", "md5"), PSA_ALG_MD5 },
-    { ATOM_STR("\x9", "ripemd160"), PSA_ALG_RIPEMD160 },
-
-    SELECT_INT_DEFAULT(PSA_ALG_NONE)
-};
 
 #ifdef CRYPTO_SIGN_AVAILABLE
 
@@ -2699,52 +2657,6 @@ const ErlNifResourceTypeInit psa_cipher_op_resource_type_init = {
     .dtor = psa_cipher_op_dtor
 };
 
-struct PsaCipherParams
-{
-    const char *atom_str;
-    psa_key_type_t key_type;
-    psa_algorithm_t algorithm;
-    uint16_t key_bits;
-    uint8_t block_size;
-    uint8_t iv_len;
-};
-
-static const struct PsaCipherParams psa_cipher_table[] = {
-    // ECB modes - block cipher, no IV
-    { ATOM_STR("\xB", "aes_128_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 128, 16, 0 },
-    { ATOM_STR("\xB", "aes_192_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 192, 16, 0 },
-    { ATOM_STR("\xB", "aes_256_ecb"), PSA_KEY_TYPE_AES, PSA_ALG_ECB_NO_PADDING, 256, 16, 0 },
-    // CBC modes - block cipher, with IV
-    { ATOM_STR("\xB", "aes_128_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 128, 16, 16 },
-    { ATOM_STR("\xB", "aes_192_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 192, 16, 16 },
-    { ATOM_STR("\xB", "aes_256_cbc"), PSA_KEY_TYPE_AES, PSA_ALG_CBC_NO_PADDING, 256, 16, 16 },
-    // CFB128 modes - stream-like, with IV
-    { ATOM_STR("\xE", "aes_128_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 128, 0, 16 },
-    { ATOM_STR("\xE", "aes_192_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 192, 0, 16 },
-    { ATOM_STR("\xE", "aes_256_cfb128"), PSA_KEY_TYPE_AES, PSA_ALG_CFB, 256, 0, 16 },
-    // CTR modes - stream cipher, with IV
-    { ATOM_STR("\xB", "aes_128_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 128, 0, 16 },
-    { ATOM_STR("\xB", "aes_192_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 192, 0, 16 },
-    { ATOM_STR("\xB", "aes_256_ctr"), PSA_KEY_TYPE_AES, PSA_ALG_CTR, 256, 0, 16 },
-    // OFB modes - stream-like, with IV
-    { ATOM_STR("\xB", "aes_128_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 128, 0, 16 },
-    { ATOM_STR("\xB", "aes_192_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 192, 0, 16 },
-    { ATOM_STR("\xB", "aes_256_ofb"), PSA_KEY_TYPE_AES, PSA_ALG_OFB, 256, 0, 16 },
-};
-
-#define PSA_CIPHER_TABLE_LEN (sizeof(psa_cipher_table) / sizeof(psa_cipher_table[0]))
-
-static const struct PsaCipherParams *psa_cipher_table_lookup(GlobalContext *glb, term cipher_atom)
-{
-    for (size_t i = 0; i < PSA_CIPHER_TABLE_LEN; i++) {
-        AtomString atom_str = (AtomString) psa_cipher_table[i].atom_str;
-        if (globalcontext_is_term_equal_to_atom_string(glb, cipher_atom, atom_str)) {
-            return &psa_cipher_table[i];
-        }
-    }
-    return NULL;
-}
-
 /*
  * Accepts:
  *   - true / false  (boolean shorthand for {encrypt, true/false})
@@ -3520,7 +3432,7 @@ static term nif_crypto_pbkdf2_hmac(Context *ctx, int argc, term argv[])
     avm_int_t derived_key_len = 0;
 
 #if MBEDTLS_VERSION_NUMBER >= 0x04000000
-    psa_algorithm_t hash_alg = atom_to_psa_hash_alg(digest_type_term, glb);
+    psa_algorithm_t hash_alg = interop_atom_term_select_int(psa_hash_algorithm_table, digest_type_term, glb);
     if (UNLIKELY(hash_alg == PSA_ALG_NONE)) {
         RAISE_ERROR(make_crypto_error(__FILE__, __LINE__, "Unknown digest type", ctx));
     }
