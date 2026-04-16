@@ -1,0 +1,39 @@
+#
+#  Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+#
+#  SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+#
+
+name: Renovate
+
+on:
+  push:
+    paths:
+      - 'renovate.json'
+    branches:
+      - main
+  schedule:
+    # Run every Monday at 06:00 UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (log only, no PRs created)'
+        type: boolean
+        default: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@v41
+        with:
+          configurationFile: renovate.json
+        env:
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}
+          LOG_LEVEL: ${{ inputs.dry_run == true && 'debug' || 'info' }}
+          RENOVATE_DRY_RUN: ${{ inputs.dry_run == true && 'full' || '' }}
