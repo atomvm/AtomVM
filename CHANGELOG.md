@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added named variable debugging support in DWARF when modules are compiled with `beam_debug_info`
 - Added more reset reasons and ensured `esp:reset_reason/0` doesn't return `undefined`
 - Added I2C and SPI APIs to stm32 platform
+- Added `Transfer-Encoding: chunked` response support to `ahttp_client`, including HTTP trailers
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type

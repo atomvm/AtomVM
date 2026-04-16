@@ -23,16 +23,26 @@
 
 -export_type([connection/0, error_tuple/0, backend/0]).
 
--define(DEFAULT_WANTED_HEADERS, [<<"Content-Length">>]).
+-define(DEFAULT_WANTED_HEADERS, [<<"Content-Length">>, <<"Transfer-Encoding">>]).
 
 -type maybe_binary() :: binary() | undefined.
 -type maybe_integer() :: integer() | undefined.
 -type maybe_ref() :: reference() | undefined.
--type maybe_parsing_state() :: headers | body | done | undefined.
+-type maybe_parsing_state() ::
+    headers
+    | body
+    | chunked_size
+    | chunked_body
+    | chunked_crlf
+    | chunked_trailers
+    | done
+    | undefined.
+-type body_encoding() :: chunked | undefined.
 
 -record(parser_state, {
     state :: maybe_parsing_state(),
     acc :: maybe_binary(),
+    body_encoding :: body_encoding(),
     remaining_body_bytes :: maybe_integer(),
     last_header :: maybe_binary() | ignore,
     wanted_headers :: [binary()]
@@ -65,6 +75,9 @@
 -type status_response() :: {status, reference(), 0..999}.
 -type header_response() :: {header, reference(), {binary(), binary()}}.
 -type header_continuation_response() :: {header_continuation, reference(), {binary(), binary()}}.
+-type trailer_header_response() :: {trailer_header, reference(), {binary(), binary()}}.
+-type trailer_header_continuation_response() ::
+    {trailer_header_continuation, reference(), {binary(), binary()}}.
 -type data_response() :: {data, reference(), binary()}.
 -type done_response() :: {done, reference()}.
 
@@ -72,10 +85,12 @@
     status_response()
     | header_response()
     | header_continuation_response()
+    | trailer_header_response()
+    | trailer_header_continuation_response()
     | data_response()
     | done_response().
 
--type error_tuple() :: {error, {backend(), term()}}.
+-type error_tuple() :: {error, {backend(), term()}} | {error, {parser, term()}}.
 
 %%-----------------------------------------------------------------------------
 %% @param   Protocol the protocol, either http or https
@@ -246,22 +261,25 @@ transform_headers([{Name, Value} | Tail]) ->
     {ok, connection(), [response()]} | {ok, connection(), closed} | unknown | error_tuple().
 
 stream(#http_client{socket = {gen_tcp, TSocket}, parser = Parser} = Conn, {tcp, TSocket, Chunk}) ->
-    {ok, UpdatedParser, Parsed} = feed_parser(Parser, Chunk),
-    Responses = make_responses(Parsed, Conn#http_client.ref, []),
-    {ok, Conn#http_client{parser = UpdatedParser}, Responses};
+    dispatch_feed(Conn, Parser, Chunk);
 stream(#http_client{socket = {gen_tcp, TSocket}} = Conn, {tcp_closed, TSocket}) ->
     {ok, Conn, closed};
 stream(#http_client{socket = {ssl, SSLSocket}, parser = Parser} = Conn, {ssl, SSLSocket, Chunk}) ->
-    {ok, UpdatedParser, Parsed} = feed_parser(Parser, Chunk),
-    Responses = make_responses(Parsed, Conn#http_client.ref, []),
-    {ok, Conn#http_client{parser = UpdatedParser}, Responses};
+    dispatch_feed(Conn, Parser, Chunk);
 stream(_Conn, _Other) ->
     unknown.
 
 stream_data(#http_client{parser = Parser} = Conn, Chunk) ->
-    {ok, UpdatedParser, Parsed} = feed_parser(Parser, Chunk),
-    Responses = make_responses(Parsed, Conn#http_client.ref, []),
-    {ok, Conn#http_client{parser = UpdatedParser}, Responses}.
+    dispatch_feed(Conn, Parser, Chunk).
+
+dispatch_feed(Conn, Parser, Chunk) ->
+    case feed_parser(Parser, Chunk) of
+        {ok, UpdatedParser, Parsed} ->
+            Responses = make_responses(Parsed, Conn#http_client.ref, []),
+            {ok, Conn#http_client{parser = UpdatedParser}, Responses};
+        {error, _} = Error ->
+            Error
+    end.
 
 make_responses([], _Ref, Acc) ->
     Acc;
@@ -272,6 +290,8 @@ make_responses([{Tag, Value} | Tail], Ref, Acc) ->
 
 feed_parser(#parser_state{state = body} = Parser, Chunk) ->
     consume_bytes(append_chunk(Parser, Chunk), []);
+feed_parser(#parser_state{state = chunked_body} = Parser, Chunk) ->
+    consume_chunk_data(append_chunk(Parser, Chunk), []);
 feed_parser(Parser, Chunk) ->
     consume_lines(append_chunk(Parser, Chunk), []).
 
@@ -289,6 +309,38 @@ consume_bytes(#parser_state{acc = Chunk} = Parser, ParsedAcc) when is_binary(Chu
     ),
     {ok, UpdatedParser, Parsed}.
 
+consume_chunk_data(#parser_state{acc = undefined} = Parser, ParsedAcc) ->
+    {ok, Parser, ParsedAcc};
+consume_chunk_data(
+    #parser_state{acc = Chunk, remaining_body_bytes = N} = Parser, ParsedAcc
+) when is_binary(Chunk) andalso byte_size(Chunk) < N ->
+    NewN = N - byte_size(Chunk),
+    UpdatedParser = Parser#parser_state{acc = undefined, remaining_body_bytes = NewN},
+    {ok, UpdatedParser, [{data, Chunk} | ParsedAcc]};
+consume_chunk_data(
+    #parser_state{acc = Chunk, remaining_body_bytes = N} = Parser, ParsedAcc
+) when is_binary(Chunk) ->
+    <<Data:N/binary, Rest/binary>> = Chunk,
+    Transitioned = Parser#parser_state{state = chunked_crlf, remaining_body_bytes = 0},
+    Replaced = replace_chunk(Transitioned, Rest),
+    consume_lines(Replaced, [{data, Data} | ParsedAcc]).
+
+parse_chunk_size(Line) ->
+    [HexBin | _Ext] = binary:split(Line, <<";">>),
+    LTrim = trim_left_spaces(HexBin, 0),
+    case LTrim of
+        <<>> ->
+            error;
+        _ ->
+            Trimmed = trim_right_spaces(LTrim, byte_size(LTrim)),
+            try binary_to_integer(Trimmed, 16) of
+                N when N >= 0 -> {ok, N};
+                _ -> error
+            catch
+                error:_ -> error
+            end
+    end.
+
 consume_lines(#parser_state{acc = undefined} = Parser, ParsedAcc) ->
     {ok, Parser, ParsedAcc};
 consume_lines(Parser, ParsedAcc) ->
@@ -300,12 +352,14 @@ consume_lines(Parser, ParsedAcc) ->
             case parse_line(ReplacedAccParser, Line) of
                 {consume_bytes, UpdatedParser} ->
                     consume_bytes(UpdatedParser, ParsedAcc);
+                {consume_chunk_data, UpdatedParser} ->
+                    consume_chunk_data(UpdatedParser, ParsedAcc);
                 {ok, UpdatedParser} ->
                     consume_lines(UpdatedParser, ParsedAcc);
                 {ok, UpdatedParser, Found} ->
                     consume_lines(UpdatedParser, [Found | ParsedAcc]);
-                {error, UpdatedParser, NotParsed} ->
-                    {error, UpdatedParser, ParsedAcc, NotParsed}
+                {error, _UpdatedParser, Reason} ->
+                    {error, {parser, Reason}}
             end
     end.
 
@@ -329,6 +383,13 @@ parse_line(
 ) ->
     StatusCode = binary_to_integer(C),
     {ok, Parser#parser_state{state = headers}, {status, StatusCode}};
+parse_line(
+    #parser_state{state = headers, body_encoding = chunked, remaining_body_bytes = N} = Parser,
+    <<>>
+) when is_integer(N) ->
+    {error, Parser, {content_length_with_transfer_encoding, N}};
+parse_line(#parser_state{state = headers, body_encoding = chunked} = Parser, <<>>) ->
+    {ok, Parser#parser_state{state = chunked_size, last_header = undefined}};
 parse_line(#parser_state{state = headers} = Parser, <<>>) ->
     {consume_bytes, Parser#parser_state{state = body}};
 parse_line(
@@ -346,23 +407,88 @@ parse_line(#parser_state{state = headers, wanted_headers = WantedHeaders} = Pars
         {ok, Name, Value} ->
             LTrimmedValue = trim_left_spaces(Value, 0),
             TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
-            UpdatedParser =
-                case Name of
-                    % this is safe since match_header uses same casing as in WantedHeaders
-                    <<"Content-Length">> ->
-                        RemainingLen = binary_to_integer(TrimmedValue),
-                        Parser#parser_state{remaining_body_bytes = RemainingLen};
-                    _ ->
-                        Parser
-                end,
-            {ok, UpdatedParser#parser_state{last_header = Name}, {header, {Name, TrimmedValue}}};
+            % this is safe since match_header uses same casing as in WantedHeaders
+            case apply_header_semantics(Name, TrimmedValue, Parser) of
+                {ok, UpdatedParser} ->
+                    {ok, UpdatedParser#parser_state{last_header = Name},
+                        {header, {Name, TrimmedValue}}};
+                {error, Reason} ->
+                    {error, Parser, Reason}
+            end;
         ignore ->
-            {ok, Parser#parser_state{last_header = ignore}};
+            {ok, Parser#parser_state{last_header = ignore}}
+    end;
+parse_line(#parser_state{state = chunked_size} = Parser, Line) ->
+    case parse_chunk_size(Line) of
+        {ok, 0} ->
+            {ok, Parser#parser_state{state = chunked_trailers, last_header = undefined}};
+        {ok, N} ->
+            {consume_chunk_data, Parser#parser_state{
+                state = chunked_body, remaining_body_bytes = N
+            }};
         error ->
-            {error, Parser, HeaderLine}
+            {error, Parser, {invalid_chunk_size, Line}}
+    end;
+parse_line(#parser_state{state = chunked_crlf} = Parser, <<>>) ->
+    {ok, Parser#parser_state{state = chunked_size}};
+parse_line(#parser_state{state = chunked_crlf} = Parser, Line) ->
+    {error, Parser, {expected_chunk_crlf, Line}};
+parse_line(#parser_state{state = chunked_trailers} = Parser, <<>>) ->
+    {ok, Parser#parser_state{state = done}, done};
+parse_line(
+    #parser_state{state = chunked_trailers, last_header = ignore} = Parser,
+    <<C, _MultiLine/binary>>
+) when C == $\s orelse C == $\t ->
+    {ok, Parser};
+parse_line(
+    #parser_state{state = chunked_trailers, last_header = LastH} = Parser,
+    <<C, MultiLine/binary>>
+) when is_binary(LastH) andalso (C == $\s orelse C == $\t) ->
+    LTrimmedValue = trim_left_spaces(MultiLine, 0),
+    TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
+    {ok, Parser, {trailer_header_continuation, {LastH, TrimmedValue}}};
+parse_line(
+    #parser_state{state = chunked_trailers, wanted_headers = WantedHeaders} = Parser, HeaderLine
+) ->
+    case match_header(WantedHeaders, HeaderLine) of
+        {ok, Name, Value} ->
+            case is_forbidden_trailer_field(Name) of
+                true ->
+                    {ok, Parser#parser_state{last_header = ignore}};
+                false ->
+                    LTrimmedValue = trim_left_spaces(Value, 0),
+                    TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
+                    {ok, Parser#parser_state{last_header = Name},
+                        {trailer_header, {Name, TrimmedValue}}}
+            end;
+        ignore ->
+            {ok, Parser#parser_state{last_header = ignore}}
     end;
 parse_line(Parser, Any) ->
-    {error, Parser, Any}.
+    {error, Parser, {invalid_line, Any}}.
+
+apply_header_semantics(<<"Content-Length">>, Value, Parser) ->
+    {ok, Parser#parser_state{remaining_body_bytes = binary_to_integer(Value)}};
+apply_header_semantics(<<"Transfer-Encoding">>, Value, Parser) ->
+    case te_is_chunked(Value) of
+        true -> {ok, Parser#parser_state{body_encoding = chunked}};
+        false -> {error, {unsupported_transfer_encoding, Value}}
+    end;
+apply_header_semantics(_Name, _Value, Parser) ->
+    {ok, Parser}.
+
+%% Only bare "chunked" is accepted; stacked codings like "gzip, chunked" (valid per RFC 9112 §6.1)
+%% would deliver undecoded bytes since this client has no gzip/compress/deflate decoder.
+te_is_chunked(Value) ->
+    case byte_size(Value) =:= byte_size(<<"chunked">>) of
+        true -> icmp(Value, <<"chunked">>);
+        false -> false
+    end.
+
+%% Framing-affecting fields filtered from trailers (subset of RFC 9110 §6.5.1).
+is_forbidden_trailer_field(<<"Content-Length">>) -> true;
+is_forbidden_trailer_field(<<"Transfer-Encoding">>) -> true;
+is_forbidden_trailer_field(_) -> false.
 
 trim_left_spaces(Bin, Count) ->
     case Bin of
