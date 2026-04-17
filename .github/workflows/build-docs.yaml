@@ -72,7 +72,7 @@ jobs:
           apt update -y
           DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
