@@ -71,7 +71,7 @@ jobs:
 
   mix-format-check:
     runs-on: ubuntu-24.04
-    container: elixir:1.17.1
+    container: elixir:1.19.5
     steps:
     - uses: actions/checkout@v4
 
