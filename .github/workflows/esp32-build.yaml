@@ -65,7 +65,7 @@ jobs:
 
     steps:
     - name: Checkout repo
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: "Git config safe.directory for codeql"
       run: git config --global --add safe.directory /__w/AtomVM/AtomVM

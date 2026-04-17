@@ -101,7 +101,7 @@ jobs:
               echo "AVM_DOCS_NAME=${{ github.ref_name }}" | tr '/' '-' >> "$GITHUB_ENV";
             fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0

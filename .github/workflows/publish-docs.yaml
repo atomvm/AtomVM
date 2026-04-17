@@ -87,12 +87,12 @@ jobs:
           ./rebar3 local install
           echo "/home/runner/.cache/rebar3/bin" >> ${GITHUB_PATH}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         id: checkout-production
         with:
           repository: atomvm/doc.atomvm.org
