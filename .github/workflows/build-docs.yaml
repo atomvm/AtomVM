@@ -62,7 +62,7 @@ jobs:
         os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
-    container: erlang:28.1
+    container: erlang:28.4
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
