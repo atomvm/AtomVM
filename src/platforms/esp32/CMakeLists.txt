@@ -57,14 +57,43 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
-# By default, JIT is disabled
-set(AVM_DISABLE_JIT ON)
+## Configure partition table based on boot flavor and JIT
+# Detect JIT from existing sdkconfig before project() where CONFIG_* is not yet available.
+set(_jit_partition NO)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig" _sdkconfig_lines)
+    if("CONFIG_JIT_ENABLED=y" IN_LIST _sdkconfig_lines)
+        set(_jit_partition YES)
+    endif()
+endif()
 
-## Configure partition table based on boot flavor
-if (ATOMVM_ELIXIR_SUPPORT)
+if (_jit_partition)
+    # JIT partition layout: fully AOT boot.avm (estdlib + esp32init, no JIT compiler)
+    set(AVM_PARTITION_TABLE_FILENAME "partitions-jit.csv")
+elseif (ATOMVM_ELIXIR_SUPPORT)
     set(AVM_PARTITION_TABLE_FILENAME "partitions-elixir.csv")
 else()
     set(AVM_PARTITION_TABLE_FILENAME "partitions.csv")
+endif()
+
+# Sync partition table in sdkconfig so that IDF uses the correct partition layout.
+# sdkconfig treats its settings as user values that override defaults, so writing
+# sdkconfig.defaults alone is not enough, we must patch sdkconfig directly.
+# Only write when the value actually differs to avoid spurious timestamp changes.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig" _sdkconfig_content)
+    if(NOT _sdkconfig_content MATCHES "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"${AVM_PARTITION_TABLE_FILENAME}\"")
+        string(REGEX REPLACE
+            "(CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=)[^\n]*"
+            "\\1\"${AVM_PARTITION_TABLE_FILENAME}\""
+            _sdkconfig_content "${_sdkconfig_content}")
+        string(REGEX REPLACE
+            "(CONFIG_PARTITION_TABLE_FILENAME=)[^\n]*"
+            "\\1\"${AVM_PARTITION_TABLE_FILENAME}\""
+            _sdkconfig_content "${_sdkconfig_content}")
+        file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig" "${_sdkconfig_content}")
+        message(STATUS "Updated sdkconfig partition table to ${AVM_PARTITION_TABLE_FILENAME}")
+    endif()
 endif()
 
 if (ATOMVM_RELEASE)
@@ -75,25 +104,8 @@ endif()
 
 project(atomvm-esp32)
 
-# JIT is only supported on RISC-V targets (ESP32-C2, ESP32-C3, ESP32-C6, ESP32-H2, ESP32-P4)
-# Configuration comes from idf.py menuconfig (KConfig), not CMake options
-if(CONFIG_JIT_ENABLED)
-    if (${IDF_TARGET} MATCHES "esp32c2|esp32c3|esp32c5|esp32c6|esp32c61|esp32h2|esp32p4")
-        set(AVM_DISABLE_JIT OFF)
-        set(AVM_JIT_TARGET_ARCH riscv32)
-        message(STATUS "JIT compilation enabled for ${IDF_TARGET} (RISC-V32)")
-    elseif(${IDF_TARGET} MATCHES "esp32|esp32s2|esp32s3")
-        set(AVM_DISABLE_JIT OFF)
-        set(AVM_JIT_TARGET_ARCH xtensa)
-        message(STATUS "JIT compilation enabled for ${IDF_TARGET} (Xtensa)")
-    else()
-        message(WARNING "JIT is not supported on ${IDF_TARGET}")
-        set(AVM_DISABLE_JIT ON)
-    endif()
-else()
-    set(AVM_DISABLE_JIT ON)
-    message(STATUS "JIT compilation disabled")
-endif()
+# JIT configuration is handled in components/libatomvm/CMakeLists.txt after
+# idf_component_register, where CONFIG_* variables are available.
 
 # esp-idf does not use compile_feature but instead sets version in
 # c_compile_options

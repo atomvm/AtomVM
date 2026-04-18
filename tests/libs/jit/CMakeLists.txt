@@ -26,7 +26,6 @@ set(ERLANG_MODULES
     tests
     jit_tests
     jit_tests_common
-    jit_dwarf_tests
     jit_regs_tests
     jit_aarch64_tests
     jit_aarch64_asm_tests
@@ -49,8 +48,25 @@ set(ERLANG_MODULES
 )
 
 if (NOT AVM_DISABLE_JIT_DWARF)
-    pack_archive(test_jit_lib ERLC_FLAGS -DTEST -DJIT_DWARF MODULES ${ERLANG_MODULES})
+    pack_archive(test_jit_lib ERLC_FLAGS -DTEST -DJIT_DWARF MODULES jit_dwarf_tests ${ERLANG_MODULES})
 else()
     pack_archive(test_jit_lib ERLC_FLAGS -DTEST MODULES ${ERLANG_MODULES})
+    # Compile jit_dwarf_tests.beam for BEAM tests even when DWARF is disabled (not packed in .avm)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf_tests.beam
+        COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams
+            && erlc +debug_info -DTEST
+                -o ${CMAKE_CURRENT_BINARY_DIR}/beams
+                -I ${CMAKE_SOURCE_DIR}/libs/include
+                -I ${CMAKE_SOURCE_DIR}/libs
+                -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf_tests.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf_tests.erl
+        COMMENT "Compiling jit_dwarf_tests.erl (BEAM tests only, not packed in .avm)"
+        VERBATIM
+    )
+    add_custom_target(jit_dwarf_tests_for_beam_tests ALL
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf_tests.beam
+    )
 endif()
 pack_eunit(test_jit estdlib eavmlib etest jit)

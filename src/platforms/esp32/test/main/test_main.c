@@ -180,6 +180,53 @@ term avm_test_case(const char *test_module)
     return ret_value;
 }
 
+#ifndef AVM_NO_JIT
+TEST_CASE("test_jit_compile", "[test_run]")
+{
+    esp32_sys_queue_init();
+
+    GlobalContext *glb = globalcontext_new();
+    TEST_ASSERT(glb != NULL);
+
+    port_driver_init_all(glb);
+    nif_collection_init_all(glb);
+
+    TEST_ASSERT(avmpack_is_valid(main_avm, size) != 0);
+
+    struct ConstAVMPack *avmpack_data = malloc(sizeof(struct ConstAVMPack));
+    TEST_ASSERT(avmpack_data != NULL);
+    avmpack_data_init(&avmpack_data->base, &const_avm_pack_info);
+    avmpack_data->base.in_use = true;
+    avmpack_data->base.data = main_avm;
+    synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
+
+    // Pre-load test_jit_simple as plain BEAM so code_server:code_chunk/1 can find it.
+    // code_server:load/1 will then JIT-compile it at runtime via jit_stream_flash.
+    Module *jit_simple_mod = globalcontext_load_module_from_avm(glb, "test_jit_simple.beam");
+    TEST_ASSERT(jit_simple_mod != NULL);
+    globalcontext_insert_module(glb, jit_simple_mod);
+
+    Module *mod = globalcontext_load_module_from_avm(glb, "test_jit_compile.beam");
+    TEST_ASSERT(mod != NULL);
+    globalcontext_insert_module(glb, mod);
+
+    Context *ctx = context_new(glb);
+    TEST_ASSERT(ctx != NULL);
+    ctx->leader = 1;
+
+    ESP_LOGI(TAG, "Running start/0 from test_jit_compile.beam...\n");
+    context_execute_loop(ctx, mod, "start", 0);
+    term ret_value = ctx->x[0];
+
+    context_destroy(ctx);
+    nif_collection_destroy_all(glb);
+    port_driver_destroy_all(glb);
+    globalcontext_destroy(glb);
+
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+#endif
+
 TEST_CASE("test_esp_partition", "[test_run]")
 {
     term ret_value = avm_test_case("test_esp_partition.beam");

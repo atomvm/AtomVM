@@ -23,9 +23,7 @@ project(jit)
 include(BuildErlang)
 
 set(ERLANG_MODULES
-    jit_dwarf_pt
     jit
-    jit_dwarf
     jit_precompile
     jit_regs
     jit_stream_binary
@@ -52,16 +50,61 @@ set(ERLANG_MODULES
 
 include(../../../version.cmake)
 
+set(JIT_PRECOMPILED_MODULES
+    jit
+    jit_regs
+    jit_stream_binary
+    jit_stream_flash
+    jit_stream_mmap
+    jit_@ARCH@
+    jit_@ARCH@_asm
+)
+
 if (NOT AVM_DISABLE_JIT_DWARF)
+    list(INSERT ERLANG_MODULES 1 jit_dwarf)
+    list(INSERT JIT_PRECOMPILED_MODULES 1 jit_dwarf)
     set(erlc_flags -DJIT_DWARF -DATOMVM_VERSION=\"${ATOMVM_BASE_VERSION}\" -pa ${CMAKE_CURRENT_BINARY_DIR}/beams)
 else()
     set(erlc_flags)
+    # Compile jit_dwarf.beam for BEAM tests even when DWARF is disabled (not packed in .avm)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf.beam
+        COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams
+            && erlc +debug_info
+                -o ${CMAKE_CURRENT_BINARY_DIR}/beams
+                -I ${CMAKE_SOURCE_DIR}/libs/include
+                -I ${CMAKE_SOURCE_DIR}/libs
+                -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf.erl
+        COMMENT "Compiling jit_dwarf.erl (BEAM tests only, not packed in .avm)"
+        VERBATIM
+    )
 endif()
 
-pack_precompiled_archive(jit ERLC_FLAGS ${erlc_flags} MODULES ${ERLANG_MODULES})
+pack_precompiled_archive(jit ERLC_FLAGS ${erlc_flags} MODULES ${ERLANG_MODULES} PRECOMPILED_MODULES ${JIT_PRECOMPILED_MODULES})
+
+if (AVM_DISABLE_JIT_DWARF)
+    add_custom_target(jit_dwarf_for_beam_tests ALL
+        DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf.beam
+    )
+endif()
 
 if (NOT AVM_DISABLE_JIT_DWARF)
-    # jit.beam needs jit_dwarf_pt.beam compiled first (parse transform dependency)
+    # jit_dwarf_pt is a parse transform needed to compile jit.beam; it is not packed
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf_pt.beam
+        COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beams
+            && erlc +debug_info
+                -o ${CMAKE_CURRENT_BINARY_DIR}/beams
+                -I ${CMAKE_SOURCE_DIR}/libs/include
+                -I ${CMAKE_SOURCE_DIR}/libs
+                -I ${CMAKE_CURRENT_SOURCE_DIR}/../include
+                ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf_pt.erl
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jit_dwarf_pt.erl
+        COMMENT "Compiling jit_dwarf_pt.erl"
+        VERBATIM
+    )
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/jit.beam
         DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beams/jit_dwarf_pt.beam

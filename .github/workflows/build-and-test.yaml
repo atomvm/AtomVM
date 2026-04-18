@@ -406,6 +406,47 @@ jobs:
           library-arch: riscv32-linux-gnu-ilp32
           jit_target_arch: "riscv32"
 
+        # xtensa build (esp32, lx6)
+        - os: "ubuntu-24.04"
+          cc: "xtensa-lx6-linux-gnu-gcc"
+          cxx: "xtensa-lx6-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_WARNINGS_ARE_ERRORS=ON -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/xtensa_toolchain.cmake"
+          compiler_pkgs: ""
+          arch: "xtensa"
+          library-arch: xtensa-lx6-linux-gnu
+
+        # xtensa build + jit (esp32, lx6)
+        - os: "ubuntu-24.04"
+          cc: "xtensa-lx6-linux-gnu-gcc"
+          cxx: "xtensa-lx6-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_JIT_TARGET_ARCH=xtensa -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/xtensa_toolchain.cmake"
+          compiler_pkgs: ""
+          arch: "xtensa"
+          library-arch: xtensa-lx6-linux-gnu
+          jit_target_arch: "xtensa"
+
+        # JIT + DWARF build (xtensa, esp32, lx6)
+        - os: "ubuntu-24.04"
+          cc: "xtensa-lx6-linux-gnu-gcc"
+          cxx: "xtensa-lx6-linux-gnu-g++"
+          cflags: "-O2"
+          otp: "28"
+          elixir_version: "1.17"
+          rebar3_version: "3.24.0"
+          cmake_opts_other: "-DAVM_DISABLE_JIT=OFF -DAVM_DISABLE_JIT_DWARF=OFF -DAVM_JIT_TARGET_ARCH=xtensa -DCMAKE_TOOLCHAIN_FILE=${RUNNER_TEMP}/xtensa_toolchain.cmake"
+          compiler_pkgs: ""
+          arch: "xtensa"
+          library-arch: xtensa-lx6-linux-gnu
+          jit_target_arch: "xtensa"
+
         # libsodium enabled build
         - os: "ubuntu-24.04"
           cc: "cc"
@@ -458,7 +499,7 @@ jobs:
       run: sudo dpkg --add-architecture i386
 
     - name: "Setup cross compilation architecture"
-      if: matrix.library-arch != '' && matrix.library-arch != 'riscv32-linux-gnu-ilp32'
+      if: matrix.library-arch != '' && matrix.library-arch != 'riscv32-linux-gnu-ilp32' && matrix.library-arch != 'xtensa-lx6-linux-gnu'
       run: |
         # Replace Azure mirrors with official Ubuntu repositories
         sudo sed -i 's|azure\.||g' /etc/apt/sources.list
@@ -579,6 +620,76 @@ jobs:
         sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedtls.so.14 /opt/riscv32-ilp32/sysroot/lib/
         sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedcrypto.so.7 /opt/riscv32-ilp32/sysroot/lib/
         sudo cp /usr/lib/${{ matrix.library-arch }}/libmbedx509.so.1 /opt/riscv32-ilp32/sysroot/lib/
+
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "Setup cross compilation architecture (xtensa)"
+      if: matrix.library-arch == 'xtensa-lx6-linux-gnu'
+      run: |
+        sudo dpkg --add-architecture ${{ matrix.arch }}
+
+        # Download packages from pguyot/crossbuild-essential-xtensa
+        gh release download xtensa-toolchain-14.2.0.20260515 \
+          -R pguyot/crossbuild-essential-xtensa \
+          --pattern 'qemu-xtensa-esp_*.deb' \
+          --pattern 'xtensa-lx6-linux-gnu-toolchain_*.deb' \
+          --pattern 'libc6-lx6_*.deb' \
+          --pattern 'libc6-dev-lx6_*.deb' \
+          --pattern 'libc6-dbg-lx6_*.deb' \
+          --pattern 'zlib1g-lx6_*.deb' \
+          --pattern 'zlib1g-dev-lx6_*.deb' \
+          --pattern 'libmbedcrypto7-lx6_*.deb' \
+          --pattern 'libmbedx509-1-lx6_*.deb' \
+          --pattern 'libmbedtls14-lx6_*.deb' \
+          --pattern 'libmbedtls-dev-lx6_*.deb'
+
+        # Install QEMU with binfmt support (activates automatically on systemd)
+        sudo dpkg -i qemu-xtensa-esp_*.deb
+
+        # Install toolchain and add to PATH
+        sudo dpkg -i xtensa-lx6-linux-gnu-toolchain_*.deb
+        echo "/opt/xtensa-lx6/bin" >> $GITHUB_PATH
+
+        # Install runtime libraries
+        sudo dpkg -i libc6-lx6_*.deb
+        sudo dpkg -i libc6-dev-lx6_*.deb
+        sudo dpkg -i libc6-dbg-lx6_*.deb
+        sudo dpkg -i zlib1g-lx6_*.deb
+        sudo dpkg -i zlib1g-dev-lx6_*.deb
+        sudo dpkg -i libmbedcrypto7-lx6_*.deb
+        sudo dpkg -i libmbedx509-1-lx6_*.deb
+        sudo dpkg -i libmbedtls14-lx6_*.deb
+        sudo dpkg -i libmbedtls-dev-lx6_*.deb
+
+        # Create CMake toolchain file
+        cat > ${RUNNER_TEMP}/xtensa_toolchain.cmake <<'EOF'
+        set(CMAKE_SYSTEM_NAME Linux)
+        set(CMAKE_SYSTEM_PROCESSOR xtensa)
+
+        set(CMAKE_C_COMPILER /opt/xtensa-lx6/bin/xtensa-lx6-linux-gnu-gcc)
+        set(CMAKE_CXX_COMPILER /opt/xtensa-lx6/bin/xtensa-lx6-linux-gnu-g++)
+
+        set(CMAKE_SYSROOT /opt/xtensa-lx6/xtensa-lx6-linux-gnu/sysroot)
+        list(APPEND CMAKE_FIND_ROOT_PATH /usr)
+        set(CMAKE_C_LIBRARY_ARCHITECTURE xtensa-lx6-linux-gnu)
+
+        include_directories(SYSTEM /usr/xtensa-lx6-linux-gnu/include)
+
+        set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+        set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+        set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+        set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+        set(ZLIB_LIBRARY /usr/xtensa-lx6-linux-gnu/lib/libz.so)
+        set(MBEDTLS_ROOT_DIR /usr)
+        set(MBEDTLS_LIBRARIES_DIR /usr/xtensa-lx6-linux-gnu/lib)
+        EOF
+
+        # Register binfmt if not activated automatically
+        if [ ! -f /proc/sys/fs/binfmt_misc/qemu-xtensa-esp32 ]; then
+          echo ':qemu-xtensa-esp32:M::\x7fELF\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x5e\x00:\xff\xff\xff\xff\xff\xff\xff\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/usr/local/bin/qemu-xtensa:' | sudo tee /proc/sys/fs/binfmt_misc/register || true
+        fi
 
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

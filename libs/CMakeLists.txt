@@ -55,14 +55,16 @@ else()
     message(WARNING "Unable to find gleam -- skipping Gleam libs")
 endif()
 
-# Base (generic_unix): common + network + unix
-pack_lib(atomvmlib ${ATOMVM_COMMON_LIBS} avm_network avm_unix)
+# Base (generic_unix): common + network + unix — wasm32 is emscripten-only
+set(AVM_NATIVE_PRECOMPILED_TARGETS ${AVM_PRECOMPILED_TARGETS})
+list(REMOVE_ITEM AVM_NATIVE_PRECOMPILED_TARGETS wasm32 armv6m+thumb2+float32 xtensa+float32)
+pack_lib(atomvmlib ${ATOMVM_COMMON_LIBS} avm_network avm_unix TARGETS ${AVM_NATIVE_PRECOMPILED_TARGETS})
 
 # Platform-specific variants
-pack_lib(atomvmlib-esp32 ${ATOMVM_COMMON_LIBS} avm_network avm_esp32)
-pack_lib(atomvmlib-rp2 UF2 ${ATOMVM_COMMON_LIBS} avm_network avm_rp2)
-pack_lib(atomvmlib-stm32 ${ATOMVM_COMMON_LIBS} avm_stm32)
-pack_lib(atomvmlib-emscripten ${ATOMVM_COMMON_LIBS} avm_network avm_emscripten)
+pack_lib(atomvmlib-esp32 ${ATOMVM_COMMON_LIBS} avm_network avm_esp32 TARGETS xtensa xtensa+float32 riscv32)
+pack_lib(atomvmlib-rp2 UF2 ${ATOMVM_COMMON_LIBS} avm_network avm_rp2 TARGETS armv6m armv6m+thumb2 armv6m+thumb2+float32 riscv32)
+pack_lib(atomvmlib-stm32 ${ATOMVM_COMMON_LIBS} avm_stm32 TARGETS armv6m armv6m+thumb2 armv6m+thumb2+float32)
+pack_lib(atomvmlib-emscripten ${ATOMVM_COMMON_LIBS} avm_network avm_emscripten TARGETS wasm32)
 
 if (Dialyzer_FOUND)
     # Helper macro to generate a beams list file from an archive

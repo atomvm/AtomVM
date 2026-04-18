@@ -24,6 +24,7 @@
 
 start() ->
     console:print(<<"AtomVM init.\n">>),
+    {ok, _} = kernel:start(boot, []),
     boot().
 
 is_dev_mode_enabled(SystemStatus) ->

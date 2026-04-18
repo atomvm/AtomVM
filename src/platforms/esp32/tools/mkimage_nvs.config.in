@@ -43,7 +43,7 @@
         },
         #{
             name => "AtomVM Boot and Core BEAM Library",
-            offset =>  "0x1D0000",
+            offset =>  "@AVM_LIB_OFFSET@",
             path => ["@ROOT_DIR@/build/libs/esp32boot/@BOOT_LIBS@"]
         }
     ]

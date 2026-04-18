@@ -58,6 +58,21 @@ function(compile_erlang module_name)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
 endfunction()
 
+# Compile an Erlang module WITHOUT JIT precompilation.
+# Used to include plain BEAM modules that will be compiled at runtime by jit_stream_flash.
+function(compile_erlang_no_jit module_name)
+    add_custom_command(
+        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam"
+        COMMAND erlc ${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${module_name}.erl"
+        COMMENT "Compiling ${module_name}.erl (no JIT precompilation)"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" APPEND PROPERTY ADDITIONAL_MAKE_CLEAN_FILES "${CMAKE_CURRENT_BINARY_DIR}/${module_name}.beam")
+endfunction()
+
+compile_erlang(test_jit_compile)
+compile_erlang_no_jit(test_jit_simple)
 compile_erlang(test_esp_partition)
 compile_erlang(test_esp_timer_get_time)
 compile_erlang(test_file)
@@ -82,6 +97,7 @@ compile_erlang(test_deep_sleep_hold)
 compile_erlang(test_wifi_scan)
 
 set(erlang_test_beams
+    test_jit_compile.beam
     test_esp_partition.beam
     test_esp_timer_get_time.beam
     test_file.beam
@@ -109,17 +125,27 @@ set(erlang_test_beams
 if(NOT AVM_DISABLE_JIT)
     set(erlang_test_beams_${AVM_JIT_TARGET_ARCH} ${erlang_test_beams})
     list(TRANSFORM erlang_test_beams_${AVM_JIT_TARGET_ARCH} PREPEND ${AVM_JIT_TARGET_ARCH}/)
-    set(erlang_test_beams_to_package ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
-    set(erlang_test_beams_depends ${erlang_test_beams} ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}})
+    # test_jit_simple is always plain BEAM (no JIT precompile) so the code_server
+    # can compile it at runtime via jit_stream_flash, testing the full JIT pipeline.
+    set(erlang_test_beams_to_package
+        ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}}
+        test_jit_simple.beam)
+    set(erlang_test_beams_depends
+        ${erlang_test_beams}
+        ${erlang_test_beams_${AVM_JIT_TARGET_ARCH}}
+        test_jit_simple.beam)
+    set(jit_avm_arg HostAtomVM-prefix/src/HostAtomVM-build/libs/jit/src/jit.avm)
 else()
-    set(erlang_test_beams_to_package ${erlang_test_beams})
-    set(erlang_test_beams_depends ${erlang_test_beams})
+    set(erlang_test_beams_to_package ${erlang_test_beams} test_jit_simple.beam)
+    set(erlang_test_beams_depends ${erlang_test_beams} test_jit_simple.beam)
+    set(jit_avm_arg "")
 endif()
 
 add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/esp32_test_modules.avm"
     COMMAND HostAtomVM-prefix/src/HostAtomVM-build/tools/packbeam/packbeam create esp32_test_modules.avm
         HostAtomVM-prefix/src/HostAtomVM-build/libs/atomvmlib-esp32.avm
+        ${jit_avm_arg}
         ${erlang_test_beams_to_package}
     DEPENDS
         HostAtomVM
