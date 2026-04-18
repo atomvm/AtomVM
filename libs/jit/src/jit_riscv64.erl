@@ -83,6 +83,7 @@
     dwarf_label/2,
     dwarf_function/3,
     dwarf_line/2,
+    dwarf_variables/2,
     dwarf_ctx_register/0
 ]).
 -endif.

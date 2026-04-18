@@ -34,6 +34,7 @@
 -define(OP_LABEL, 1).
 -define(OP_FUNC_INFO, 2).
 -define(OP_LINE, 153).
+-define(OP_DEBUG_LINE, 184).
 
 parse_transform(Forms, _Options) ->
     [transform_form(Form) || Form <- Forms].
@@ -45,7 +46,12 @@ transform_form(Other) ->
 
 transform_clause({clause, Line, [Arg1, Arg2, Arg3, Arg4], Guards, Body} = Clause) ->
     case extract_opcode(Arg1) of
-        {ok, Opcode} when Opcode =/= ?OP_LABEL, Opcode =/= ?OP_FUNC_INFO, Opcode =/= ?OP_LINE ->
+        {ok, Opcode} when
+            Opcode =/= ?OP_LABEL,
+            Opcode =/= ?OP_FUNC_INFO,
+            Opcode =/= ?OP_LINE,
+            Opcode =/= ?OP_DEBUG_LINE
+        ->
             case Arg3 of
                 {var, VarLine, VarName} ->
                     PtName = list_to_atom(atom_to_list(VarName) ++ "__pt"),

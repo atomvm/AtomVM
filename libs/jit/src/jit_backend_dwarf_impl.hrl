@@ -37,4 +37,8 @@ dwarf_function(#state{stream = Stream0} = State, FunctionName, Arity) ->
     Stream1 = jit_dwarf:function(Stream0, FunctionName, Arity),
     State#state{stream = Stream1}.
 
+dwarf_variables(#state{stream = Stream0} = State, VarMappings) ->
+    Stream1 = jit_dwarf:variables(Stream0, VarMappings),
+    State#state{stream = Stream1}.
+
 -endif.
