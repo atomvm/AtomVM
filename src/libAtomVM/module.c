@@ -1602,7 +1602,7 @@ ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exporte
     return jit_wasm_get_entry_point((const void *) module->native_code, exported_label);
 #else
     assert(module->native_code);
-    return (ModuleNativeEntryPoint) ((uintptr_t) module->native_code + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+    return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_OFFSET + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
 #endif
 }
 #endif
@@ -2006,8 +2006,15 @@ bool module_find_line(Module *mod, size_t offset, uint32_t *line, size_t *filena
             }
             return module_find_line_ref(mod, prev_line_ref, line, filename_len, filename);
         }
+
+#else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
 #else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2 + labels_count * 6;
         size_t lines_count = READ_16_UNALIGNED(labels_and_lines);
@@ -2093,7 +2100,14 @@ COLD_FUNC void module_cp_to_label_offset(term cp, Module **cp_mod, int *label, s
             *l_off = 0;
         }
 #else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        // C11 6.7.9 §21 : this is safe
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
         uint32_t label_offset = 0;
@@ -2176,7 +2190,13 @@ uint32_t module_label_code_offset(Module *mod, int label)
 #ifdef JIT_JUMPTABLE_IS_DATA
         return (uint32_t) label * JIT_JUMPTABLE_ENTRY_SIZE;
 #else
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+        struct JITState temp_jit_state = { .code_base = (const void *) mod->native_code };
+        ModuleNativeEntryPoint label0_entry = module_get_native_entry_point(mod, 0);
+        const uint8_t *labels_and_lines = (const uint8_t *) label0_entry(NULL, &temp_jit_state, NULL);
+#else
         const uint8_t *labels_and_lines = (const uint8_t *) mod->native_code(NULL, NULL, NULL);
+#endif
         int labels_count = READ_16_UNALIGNED(labels_and_lines);
         labels_and_lines += 2;
         while (labels_count > 0) {
@@ -2205,6 +2225,6 @@ void module_set_native_code(Module *mod, uint32_t labels_count, ModuleNativeEntr
 {
     mod->native_code = entry_point;
     // Extra function is OP_INT_CALL_END
-    mod->end_instruction_ii = JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
+    mod->end_instruction_ii = JIT_JUMPTABLE_OFFSET + JIT_JUMPTABLE_ENTRY_SIZE * labels_count;
 }
 #endif

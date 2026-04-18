@@ -61,12 +61,14 @@ if (NOT AVM_DISABLE_JIT AND NOT DEFINED AVM_JIT_TARGET_ARCH)
         set(AVM_JIT_TARGET_ARCH "arm32")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^riscv64$")
         set(AVM_JIT_TARGET_ARCH "riscv64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^xtensa")
+        set(AVM_JIT_TARGET_ARCH "xtensa")
     else()
         message(FATAL_ERROR "JIT is not supported on ${CMAKE_SYSTEM_PROCESSOR}")
     endif()
 endif()
 
-set(AVM_PRECOMPILED_TARGETS "x86_64;aarch64;arm32;armv6m;armv6m+float32;armv6m+thumb2;riscv32;riscv64;wasm32" CACHE STRING "Targets to precompile code to if AVM_DISABLE_JIT is OFF or AVM_ENABLE_PRECOMPILED is ON")
+set(AVM_PRECOMPILED_TARGETS "x86_64;aarch64;arm32;armv6m;armv6m+float32;armv6m+thumb2;riscv32;riscv64;wasm32;xtensa" CACHE STRING "Targets to precompile code to if AVM_DISABLE_JIT is OFF or AVM_ENABLE_PRECOMPILED is ON")
 
 # DWARF is not supported on wasm32
 if (NOT AVM_DISABLE_JIT_DWARF)

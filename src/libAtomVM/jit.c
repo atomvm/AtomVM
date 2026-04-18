@@ -158,7 +158,7 @@ _Static_assert(offsetof(Context, bs_offset) == 0xD0, "ctx->bs_offset is 0xD0 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, continuation) == 0x8, "jit_state->continuation is 0x8 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x10, "jit_state->remaining_reductions is 0x10 in jit/src/jit_{aarch64,x86_64,riscv64}.erl");
-#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32 || JIT_ARCH_TARGET == JIT_ARCH_WASM32
+#elif JIT_ARCH_TARGET == JIT_ARCH_ARMV6M || JIT_ARCH_TARGET == JIT_ARCH_ARM32 || JIT_ARCH_TARGET == JIT_ARCH_RISCV32 || JIT_ARCH_TARGET == JIT_ARCH_WASM32 || JIT_ARCH_TARGET == JIT_ARCH_XTENSA
 _Static_assert(offsetof(Context, e) == 0x14, "ctx->e is 0x14 in 32-bit backends");
 _Static_assert(offsetof(Context, x) == 0x18, "ctx->x is 0x18 in 32-bit backends");
 _Static_assert(offsetof(Context, cp) == 0x5C, "ctx->cp is 0x5C in 32-bit backends");
@@ -169,6 +169,9 @@ _Static_assert(offsetof(Context, bs_offset) == 0x68, "ctx->bs_offset is 0x68 in 
 _Static_assert(offsetof(JITState, module) == 0x0, "jit_state->module is 0x0 in 32-bit backends");
 _Static_assert(offsetof(JITState, continuation) == 0x4, "jit_state->continuation is 0x4 in 32-bit backends");
 _Static_assert(offsetof(JITState, remaining_reductions) == 0x8, "jit_state->remaining_reductions is 0x8 in 32-bit backends");
+#if JIT_ARCH_TARGET == JIT_ARCH_XTENSA
+_Static_assert(offsetof(JITState, code_base) == 0xC, "jit_state->code_base is 0xC in jit/src/jit_xtensa.erl");
+#endif
 
 #else
 #error Unknown jit target
@@ -2127,9 +2130,11 @@ void jit_debug_register_code(Module *mod, const void *native_code, size_t native
         return;
     }
 
-    // Compute ELF size from its headers
-    const Elf_Ehdr *ehdr = (const Elf_Ehdr *) elf_start;
-    size_t elf_size = ehdr->e_shoff + (size_t) ehdr->e_shnum * ehdr->e_shentsize;
+    // Compute ELF size from its headers using memcpy to avoid unaligned access
+    // (elf_start may not be properly aligned for struct access on Xtensa)
+    Elf_Ehdr ehdr_copy;
+    memcpy(&ehdr_copy, elf_start, sizeof(Elf_Ehdr));
+    size_t elf_size = ehdr_copy.e_shoff + (size_t) ehdr_copy.e_shnum * ehdr_copy.e_shentsize;
     if (elf_size > remaining) {
         return;
     }
@@ -2152,7 +2157,8 @@ void jit_debug_register_code(Module *mod, const void *native_code, size_t native
         }
     }
 
-    // Make a writable copy of the ELF for patching
+    // Make a writable copy of the ELF for patching.
+    // malloc returns aligned memory, so struct access on patched_elf is safe.
     uint8_t *patched_elf = (uint8_t *) malloc(elf_size);
     if (!patched_elf) {
         return;
@@ -2163,10 +2169,14 @@ void jit_debug_register_code(Module *mod, const void *native_code, size_t native
 
     // Patch .text section header: set sh_addr to load_address.
     // LLDB uses this to auto-relocate symbol table addresses.
-    Elf_Shdr *shdrs = (Elf_Shdr *) (patched_elf + ehdr->e_shoff);
-    for (int i = 0; i < ehdr->e_shnum; i++) {
-        if (shdrs[i].sh_type == 1 && (shdrs[i].sh_flags & 6) == 6) {
-            shdrs[i].sh_addr = load_address;
+    // Use memcpy to handle potentially unaligned section headers on Xtensa.
+    uint8_t *shdrs_base = patched_elf + ehdr_copy.e_shoff;
+    for (int i = 0; i < ehdr_copy.e_shnum; i++) {
+        Elf_Shdr shdr;
+        memcpy(&shdr, shdrs_base + (size_t) i * ehdr_copy.e_shentsize, sizeof(Elf_Shdr));
+        if (shdr.sh_type == 1 && (shdr.sh_flags & 6) == 6) {
+            shdr.sh_addr = load_address;
+            memcpy(shdrs_base + (size_t) i * ehdr_copy.e_shentsize, &shdr, sizeof(Elf_Shdr));
             break;
         }
     }

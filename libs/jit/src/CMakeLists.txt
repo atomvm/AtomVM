@@ -46,6 +46,7 @@ set(ERLANG_MODULES
     jit_wasm32_asm
     jit_x86_64
     jit_x86_64_asm
+    jit_xtensa
     jit_xtensa_asm
 )
 
