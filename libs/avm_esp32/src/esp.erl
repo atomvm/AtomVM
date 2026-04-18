@@ -88,7 +88,12 @@
     | esp_rst_wdt
     | esp_rst_deepsleep
     | esp_rst_brownout
-    | esp_rst_sdio.
+    | esp_rst_sdio
+    | esp_rst_usb
+    | esp_rst_jtag
+    | esp_rst_efuse
+    | esp_rst_pwr_glitch
+    | esp_rst_cpu_lockup.
 
 -type esp_wakeup_cause() ::
     sleep_wakeup_ext0

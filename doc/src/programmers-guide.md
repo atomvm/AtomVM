@@ -1378,6 +1378,11 @@ Use the [`esp:reset_reason/0`](./apidocs/erlang/eavmlib/esp.md#reset_reason0) fu
 * `esp_rst_deepsleep`
 * `esp_rst_brownout`
 * `esp_rst_sdio`
+* `esp_rst_usb`
+* `esp_rst_jtag`
+* `esp_rst_efuse`
+* `esp_rst_pwr_glitch`
+* `esp_rst_cpu_lockup`
 
 #### Sleep Mode - Deep Sleep and Light Sleep
 
