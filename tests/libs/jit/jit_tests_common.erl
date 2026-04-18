@@ -148,6 +148,14 @@ find_binutils_beam(Arch) ->
 -spec toolchain_prefixes(atom()) -> [string()].
 toolchain_prefixes(arm32) ->
     toolchain_prefixes(arm);
+toolchain_prefixes(xtensa) ->
+    %% Prefer the ESP32-specific LE toolchain over the generic BE one.
+    %% The generic xtensa-esp-elf toolchain defaults to big-endian ELF,
+    %% whose objdump displays raw bytes rather than instruction words,
+    %% breaking hex_to_bin/3's little-endian conversion.
+    ["xtensa-esp32-elf", "xtensa-esp32s2-elf", "xtensa-esp32s3-elf"] ++
+        ["xtensa" ++ V || V <- ["-unknown-elf", "-elf", "-linux-gnu"]] ++
+        ["xtensa-lx6-linux-gnu"];
 toolchain_prefixes(Arch) ->
     ArchStr = atom_to_list(Arch),
     Variants = [
@@ -249,7 +257,9 @@ get_asm_header(riscv64) ->
     ".text\n";
 get_asm_header(wasm32) ->
     %% Include a memory so that memory instruction tests don't need extra module context.
-    "(module\n  (memory 1)\n  (func\n".
+    "(module\n  (memory 1)\n  (func\n";
+get_asm_header(xtensa) ->
+    ".text\n".
 
 -spec get_asm_footer(atom()) -> string().
 get_asm_footer(wasm32) ->
@@ -272,7 +282,9 @@ get_as_flags(x86_64) ->
 get_as_flags(riscv32) ->
     "-march=rv32imac";
 get_as_flags(riscv64) ->
-    "-march=rv64imac -mabi=lp64".
+    "-march=rv64imac -mabi=lp64";
+get_as_flags(xtensa) ->
+    "--no-transform".
 
 %% File extensions for assembler input/output
 -spec asm_file_exts(atom(), string()) -> {string(), string()}.
@@ -551,7 +563,9 @@ get_objdump_flags(arm_thumb2) ->
 get_objdump_flags(riscv64) ->
     "-m riscv:rv64";
 get_objdump_flags(wasm32) ->
-    "".
+    "";
+get_objdump_flags(xtensa) ->
+    "-m xtensa -EL".
 
 %% Write binary data to a file suitable for disassembly.
 %% For wasm32, wraps raw bytes in a WASM module; for others, writes raw bytes.
