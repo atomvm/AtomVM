@@ -1,0 +1,15 @@
+## This file is part of AtomVM.
+##
+## Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+##
+## SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+##
+menu "AtomVM configuration"
+
+    config JIT_ENABLED
+        bool "Enable just in time compilation"
+        default n
+        help
+            Enable Just in time compilation, or just execution of precompiled native code
+
+endmenu
