@@ -78,6 +78,11 @@ static const char *const esp_rst_wdt            = "\xB"  "esp_rst_wdt";
 static const char *const esp_rst_deepsleep      = "\x11" "esp_rst_deepsleep";
 static const char *const esp_rst_brownout       = "\x10" "esp_rst_brownout";
 static const char *const esp_rst_sdio           = "\xC"  "esp_rst_sdio";
+static const char *const esp_rst_usb            = "\xB"  "esp_rst_usb";
+static const char *const esp_rst_jtag           = "\xC"  "esp_rst_jtag";
+static const char *const esp_rst_efuse          = "\xD"  "esp_rst_efuse";
+static const char *const esp_rst_pwr_glitch     = "\x12" "esp_rst_pwr_glitch";
+static const char *const esp_rst_cpu_lockup     = "\x12" "esp_rst_cpu_lockup";
 #if ESP_TASK_WDT_API
 static const char *const already_started        = "\xF"  "already_started";
 #endif
@@ -190,8 +195,18 @@ static term nif_esp_reset_reason(Context *ctx, int argc, term argv[])
             return globalcontext_make_atom(ctx->global, esp_rst_brownout);
         case ESP_RST_SDIO:
             return globalcontext_make_atom(ctx->global, esp_rst_sdio);
+        case ESP_RST_USB:
+            return globalcontext_make_atom(ctx->global, esp_rst_usb);
+        case ESP_RST_JTAG:
+            return globalcontext_make_atom(ctx->global, esp_rst_jtag);
+        case ESP_RST_EFUSE:
+            return globalcontext_make_atom(ctx->global, esp_rst_efuse);
+        case ESP_RST_PWR_GLITCH:
+            return globalcontext_make_atom(ctx->global, esp_rst_pwr_glitch);
+        case ESP_RST_CPU_LOCKUP:
+            return globalcontext_make_atom(ctx->global, esp_rst_cpu_lockup);
         default:
-            return UNDEFINED_ATOM;
+            return globalcontext_make_atom(ctx->global, esp_rst_unknown_atom);
     }
 }
 
