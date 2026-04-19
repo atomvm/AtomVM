@@ -62,7 +62,7 @@ jobs:
         os: [ ubuntu-24.04 ]
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
-    container: erlang:28.1
+    container: erlang:28.4
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -72,7 +72,7 @@ jobs:
           apt update -y
           DEBIAN_FRONTEND=noninteractive apt install -y git cmake doxygen graphviz python3-pip python3-virtualenv python3-setuptools python3-stemmer wget
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         id: sphinx-cache
         with:
           path: /home/runner/python-env/sphinx
@@ -101,7 +101,7 @@ jobs:
               echo "AVM_DOCS_NAME=${{ github.ref_name }}" | tr '/' '-' >> "$GITHUB_ENV";
             fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           repository: ${{ vars.GITHUB_REPOSITORY }}
           fetch-depth: 0

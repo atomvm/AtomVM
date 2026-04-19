@@ -32,7 +32,7 @@ jobs:
   clang-format-prettier-check:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: "Install run-clang-format"
       run: |
@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: erlang:28
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: "Check formatting with Erlang fmt"
       run: |
@@ -71,9 +71,9 @@ jobs:
 
   mix-format-check:
     runs-on: ubuntu-24.04
-    container: elixir:1.17.1
+    container: elixir:1.19.5
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: "Check formatting with Elixir mix format"
       run: |
