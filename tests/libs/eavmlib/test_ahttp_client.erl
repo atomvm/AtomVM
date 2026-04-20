@@ -37,6 +37,8 @@ test() ->
     ok = test_content_length_and_transfer_encoding(),
     ok = test_transfer_encoding_before_content_length(),
     ok = test_chunked_trailer_framing_filtered(),
+    ok = test_bad_content_length_non_numeric(),
+    ok = test_bad_content_length_negative(),
     ok.
 
 test_passive() ->
@@ -353,6 +355,40 @@ test_chunked_trailer_framing_filtered() ->
     Acc = loop_collect_passive(Conn2, #{}),
     #{status := 200, body := <<"Hello">>, done := true} = Acc,
     [] = maps:get(trailers, Acc, []),
+    wait_server(ServerPid),
+    ok.
+
+test_bad_content_length_non_numeric() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: abc\r\n\r\n"
+            "whatever"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, {invalid_content_length, <<"abc">>}}} =
+        ahttp_client:recv(Conn2, 0),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+test_bad_content_length_negative() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: -1\r\n\r\n"
+            "whatever"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, {invalid_content_length, <<"-1">>}}} =
+        ahttp_client:recv(Conn2, 0),
+    ahttp_client:close(Conn2),
     wait_server(ServerPid),
     ok.
 

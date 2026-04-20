@@ -468,7 +468,14 @@ parse_line(Parser, Any) ->
     {error, Parser, {invalid_line, Any}}.
 
 apply_header_semantics(<<"Content-Length">>, Value, Parser) ->
-    {ok, Parser#parser_state{remaining_body_bytes = binary_to_integer(Value)}};
+    try binary_to_integer(Value) of
+        N when N >= 0 ->
+            {ok, Parser#parser_state{remaining_body_bytes = N}};
+        _ ->
+            {error, {invalid_content_length, Value}}
+    catch
+        error:badarg -> {error, {invalid_content_length, Value}}
+    end;
 apply_header_semantics(<<"Transfer-Encoding">>, Value, Parser) ->
     case te_is_chunked(Value) of
         true -> {ok, Parser#parser_state{body_encoding = chunked}};
