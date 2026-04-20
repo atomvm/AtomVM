@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed improper cast of ESP32 `event_data` for `WIFI_EVENT_AP_STA(DIS)CONNECTED` events
 - `erlang:system_info(system_architecture)` now reports normalized `arch-vendor-os` strings
 - Fixed `ahttp_client` crash on non-numeric or negative `Content-Length` values
+- Fixed `ahttp_client` crash on headers with empty or all-whitespace values
 
 ## [0.7.0-alpha.1] - 2026-04-06
 

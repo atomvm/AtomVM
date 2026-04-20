@@ -505,6 +505,8 @@ trim_left_spaces(Bin, Count) ->
             NoLeftSpaces
     end.
 
+trim_right_spaces(_Bin, 0) ->
+    <<>>;
 trim_right_spaces(Bin, Count) ->
     Len = Count - 1,
     case Bin of
