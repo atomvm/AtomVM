@@ -89,7 +89,11 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         apt update -y
-        apt install -y cmake gperf zlib1g-dev ninja-build
+        apt install -y cmake gperf zlib1g-dev ninja-build \
+          binutils-aarch64-linux-gnu \
+          binutils-arm-linux-gnueabihf \
+          binutils-riscv64-linux-gnu \
+          wabt
 
     - name: "Normalize ImageOS for setup-beam"
       if: matrix.os == 'macos-26'
@@ -107,7 +111,7 @@ jobs:
 
     - name: "Install deps (macOS)"
       if: runner.os == 'macOS'
-      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf mbedtls@3
+      run: brew update && HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 brew install gperf mbedtls@3 aarch64-elf-binutils arm-none-eabi-binutils riscv64-elf-binutils wabt
 
     - name: "macOS setup mbedtls@3 environment"
       if: runner.os == 'macOS'

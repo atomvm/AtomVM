@@ -141,7 +141,7 @@ find_binutils_beam(Arch) ->
             _ ->
                 Prefixes0
         end,
-    find_binutils_from_list([{P ++ "-as", P ++ "-objdump"} || P <- Prefixes]).
+    find_binutils_from_list(Arch, [{P ++ "-as", P ++ "-objdump"} || P <- Prefixes]).
 
 %% Private functions
 
@@ -171,15 +171,64 @@ find_wat2wasm() ->
     end.
 
 %% Generic helper function to find binutils from a list
--spec find_binutils_from_list([{string(), string()}]) -> {ok, string(), string()} | false.
-find_binutils_from_list([]) ->
+-spec find_binutils_from_list(atom(), [{string(), string()}]) -> {ok, string(), string()} | false.
+find_binutils_from_list(_Arch, []) ->
     false;
-find_binutils_from_list([{AsCmd, ObjdumpCmd} | Rest]) ->
+find_binutils_from_list(Arch, [{AsCmd, ObjdumpCmd} | Rest]) ->
     case os:cmd("which " ++ AsCmd) of
         [] ->
-            find_binutils_from_list(Rest);
+            find_binutils_from_list(Arch, Rest);
         _ ->
-            {ok, AsCmd, ObjdumpCmd}
+            case is_as_version_buggy(Arch, AsCmd) of
+                false -> {ok, AsCmd, ObjdumpCmd};
+                true -> find_binutils_from_list(Arch, Rest)
+            end
+    end.
+
+%% Check if assembler has a buggy version that doesn't encode certain instructions correctly.
+%% For riscv32-as: binutils version 2.40 and lower have a bug encoding jal instruction.
+-spec is_as_version_buggy(atom(), string()) -> boolean().
+is_as_version_buggy(riscv32, AsCmd) ->
+    VersionOutput = os:cmd(AsCmd ++ " --version"),
+    case parse_binutils_version(VersionOutput) of
+        Version when Version =< {2, 40} ->
+            io:format("Skipping ~s version ~p (buggy for riscv32 jal encoding)~n", [
+                AsCmd, Version
+            ]),
+            true;
+        _ ->
+            false
+    end;
+is_as_version_buggy(_, _AsCmd) ->
+    false.
+
+%% Parse binutils version from the first line of --version output.
+%% Expected format: "GNU assembler (GNU Binutils) 2.40.0"
+%% Returns a {Major, Minor} tuple for comparison.
+-spec parse_binutils_version(string()) -> {non_neg_integer(), non_neg_integer()}.
+parse_binutils_version(VersionOutput) ->
+    case binary:split(list_to_binary(VersionOutput), <<"\n">>) of
+        [FirstLine | _] ->
+            %% Look for version pattern like "2.40" in "GNU assembler (GNU Binutils) 2.40.0"
+            %% Match digits.digits after a space
+            case
+                re:run(
+                    FirstLine,
+                    <<" ([0-9]+)\\.([0-9]+)">>,
+                    [{capture, all_but_first, binary}]
+                )
+            of
+                {match, [Major, Minor]} ->
+                    {
+                        binary_to_integer(Major),
+                        binary_to_integer(Minor)
+                    };
+                _ ->
+                    %% If we can't parse, assume a high version (not buggy)
+                    {infinity, infinity}
+            end;
+        _ ->
+            {infinity, infinity}
     end.
 
 %% Get architecture-specific assembly file header
