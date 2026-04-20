@@ -1733,7 +1733,7 @@ schedule_in:
         assert(native_pc);
 #endif
             struct JITState jit_state;
-            jit_state.continuation = NULL;
+            jit_state.continuation = (NativeContinuation) 0;
             jit_state.module = mod;
             jit_state.remaining_reductions = remaining_reductions;
             // __asm__ volatile("int $0x03");
