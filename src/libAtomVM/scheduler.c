@@ -393,7 +393,7 @@ static void scheduler_make_ready(Context *ctx)
 static void scheduler_make_ready_from_task(Context *ctx)
 {
     GlobalContext *global = ctx->global;
-    if (context_get_flags(ctx, Killed)) {
+    if (context_get_flags(ctx, Killed | Spawning)) {
         return;
     }
     list_remove(&ctx->processes_list_head);
