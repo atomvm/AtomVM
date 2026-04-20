@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use ES6 modules for emscripten port, using .mjs suffix
 - `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
   (previously silently reported `closed`); `ssl_closed` messages are also handled
+- `ahttp_client` now returns `{error, {parser, {conflicting_content_length, V}}}` when a response
+  carries differing `Content-Length` values (previously silently accepted the last one),
+  per RFC 9112 §6.3
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform

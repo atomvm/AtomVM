@@ -484,7 +484,14 @@ parse_line(Parser, Any) ->
 apply_header_semantics(<<"Content-Length">>, Value, Parser) ->
     try binary_to_integer(Value) of
         N when N >= 0 ->
-            {ok, Parser#parser_state{remaining_body_bytes = N}};
+            case Parser#parser_state.remaining_body_bytes of
+                undefined ->
+                    {ok, Parser#parser_state{remaining_body_bytes = N}};
+                N ->
+                    {ok, Parser};
+                _Other ->
+                    {error, {conflicting_content_length, Value}}
+            end;
         _ ->
             {error, {invalid_content_length, Value}}
     catch

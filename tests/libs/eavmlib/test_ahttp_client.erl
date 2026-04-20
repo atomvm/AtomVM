@@ -39,6 +39,8 @@ test() ->
     ok = test_chunked_trailer_framing_filtered(),
     ok = test_bad_content_length_non_numeric(),
     ok = test_bad_content_length_negative(),
+    ok = test_duplicate_content_length_same_value(),
+    ok = test_conflicting_content_length(),
     ok = test_empty_header_value(),
     ok = test_chunked_truncated(),
     ok.
@@ -389,6 +391,41 @@ test_bad_content_length_negative() ->
     {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
     {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
     {error, {parser, {invalid_content_length, <<"-1">>}}} =
+        ahttp_client:recv(Conn2, 0),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+test_duplicate_content_length_same_value() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 5\r\n"
+            "Content-Length: 5\r\n\r\n"
+            "Hello"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    Acc = loop_collect_passive(Conn2, #{}),
+    #{status := 200, body := <<"Hello">>, done := true} = Acc,
+    wait_server(ServerPid),
+    ok.
+
+test_conflicting_content_length() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 5\r\n"
+            "Content-Length: 10\r\n\r\n"
+            "Hello"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, {conflicting_content_length, <<"10">>}}} =
         ahttp_client:recv(Conn2, 0),
     ahttp_client:close(Conn2),
     wait_server(ServerPid),
