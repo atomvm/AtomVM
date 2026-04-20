@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ahttp_client` now returns `{error, {parser, {conflicting_content_length, V}}}` when a response
   carries differing `Content-Length` values (previously silently accepted the last one),
   per RFC 9112 §6.3
+- `ahttp_client` now emits a `done` event for responses with `Content-Length: 0` (previously
+  the parser stayed in `body` state forever, hanging passive callers and misflagging legitimate
+  close as `incomplete_response`)
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform

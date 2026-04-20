@@ -404,6 +404,8 @@ parse_line(
     {error, Parser, {content_length_with_transfer_encoding, N}};
 parse_line(#parser_state{state = headers, body_encoding = chunked} = Parser, <<>>) ->
     {ok, Parser#parser_state{state = chunked_size, last_header = undefined}};
+parse_line(#parser_state{state = headers, remaining_body_bytes = 0} = Parser, <<>>) ->
+    {ok, Parser#parser_state{state = done, last_header = undefined}, done};
 parse_line(#parser_state{state = headers} = Parser, <<>>) ->
     {consume_bytes, Parser#parser_state{state = body}};
 parse_line(

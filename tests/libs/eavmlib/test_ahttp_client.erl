@@ -41,6 +41,7 @@ test() ->
     ok = test_bad_content_length_negative(),
     ok = test_duplicate_content_length_same_value(),
     ok = test_conflicting_content_length(),
+    ok = test_content_length_zero(),
     ok = test_empty_header_value(),
     ok = test_chunked_truncated(),
     ok.
@@ -428,6 +429,22 @@ test_conflicting_content_length() ->
     {error, {parser, {conflicting_content_length, <<"10">>}}} =
         ahttp_client:recv(Conn2, 0),
     ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+test_content_length_zero() ->
+    Segments = [
+        <<
+            "HTTP/1.1 204 No Content\r\n"
+            "Content-Length: 0\r\n\r\n"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    Acc = loop_collect_passive(Conn2, #{}),
+    #{status := 204, done := true} = Acc,
+    <<>> = maps:get(body, Acc, <<>>),
     wait_server(ServerPid),
     ok.
 
