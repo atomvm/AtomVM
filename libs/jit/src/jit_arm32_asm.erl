@@ -506,6 +506,16 @@ blx(Cond, Rm) ->
 %% PUSH {reglist} = STMDB SP!, {reglist}
 %% Encoding: cond[31:28] 100 1 0 0 1 0 1101 reglist[15:0]
 -spec push([arm_gpr_register()]) -> binary().
+push([sp]) ->
+    %% GNU as uses STMDB for push {sp} (STR SP,[SP,#-4]! has undefined behavior)
+    RegMask = 1 bsl 13,
+    Instr = (14 bsl 28) bor (2#100100101101 bsl 16) bor RegMask,
+    <<Instr:32/little>>;
+push([Reg]) ->
+    %% STR Rd, [SP, #-4]!: single-register push (matches GNU as encoding)
+    RegNum = reg_to_num(Reg),
+    Instr = 16#E52D0004 bor (RegNum bsl 12),
+    <<Instr:32/little>>;
 push(RegList) ->
     RegMask = reglist_to_mask(RegList),
     %% STMDB SP!: cond=AL 1001 0010 1101 reglist
@@ -515,6 +525,16 @@ push(RegList) ->
 %% POP {reglist} = LDMIA SP!, {reglist}
 %% Encoding: cond[31:28] 100 0 1 0 1 1 1101 reglist[15:0]
 -spec pop([arm_gpr_register()]) -> binary().
+pop([sp]) ->
+    %% GNU as uses LDMIA for pop {sp} (LDR SP,[SP],#4 has undefined behavior)
+    RegMask = 1 bsl 13,
+    Instr = (14 bsl 28) bor (2#100010111101 bsl 16) bor RegMask,
+    <<Instr:32/little>>;
+pop([Reg]) ->
+    %% LDR Rd, [SP], #4: single-register pop (matches GNU as encoding)
+    RegNum = reg_to_num(Reg),
+    Instr = 16#E49D0004 bor (RegNum bsl 12),
+    <<Instr:32/little>>;
 pop(RegList) ->
     RegMask = reglist_to_mask(RegList),
     %% LDMIA SP!: cond=AL 1000 1011 1101 reglist

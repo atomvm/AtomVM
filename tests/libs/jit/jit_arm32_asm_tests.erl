@@ -280,12 +280,15 @@ blx_test_() ->
 
 push_test_() ->
     [
-        %% PUSH (STMDB SP!)
-        ?_assertAsmEqual(<<16#E92D0001:32/little>>, "push {r0}", jit_arm32_asm:push([r0])),
+        %% single-register PUSH = STR Rd, [SP, #-4]!
+        ?_assertAsmEqual(<<16#E52D0004:32/little>>, "push {r0}", jit_arm32_asm:push([r0])),
+        %% gcc as accepts to encode this, even if behavior is undefined
+        ?_assertAsmEqual(<<16#E92D2000:32/little>>, "push {sp}", jit_arm32_asm:push([sp])),
+        %% multi-register PUSH = STMDB SP!
         ?_assertAsmEqual(
             <<16#E92D0007:32/little>>, "push {r0, r1, r2}", jit_arm32_asm:push([r0, r1, r2])
         ),
-        ?_assertAsmEqual(<<16#E92D4000:32/little>>, "push {lr}", jit_arm32_asm:push([lr])),
+        ?_assertAsmEqual(<<16#E52DE004:32/little>>, "push {lr}", jit_arm32_asm:push([lr])),
         ?_assertAsmEqual(
             <<16#E92D4007:32/little>>, "push {r0, r1, r2, lr}", jit_arm32_asm:push([r0, r1, r2, lr])
         ),
@@ -298,12 +301,15 @@ push_test_() ->
 
 pop_test_() ->
     [
-        %% POP (LDMIA SP!)
-        ?_assertAsmEqual(<<16#E8BD0001:32/little>>, "pop {r0}", jit_arm32_asm:pop([r0])),
+        %% single-register POP = LDR Rd, [SP], #4
+        ?_assertAsmEqual(<<16#E49D0004:32/little>>, "pop {r0}", jit_arm32_asm:pop([r0])),
+        %% gcc as accepts to encode this, even if behavior is undefined
+        ?_assertAsmEqual(<<16#E8BD2000:32/little>>, "pop {sp}", jit_arm32_asm:pop([sp])),
+        %% multi-register POP = LDMIA SP!
         ?_assertAsmEqual(
             <<16#E8BD0007:32/little>>, "pop {r0, r1, r2}", jit_arm32_asm:pop([r0, r1, r2])
         ),
-        ?_assertAsmEqual(<<16#E8BD8000:32/little>>, "pop {pc}", jit_arm32_asm:pop([pc])),
+        ?_assertAsmEqual(<<16#E49DF004:32/little>>, "pop {pc}", jit_arm32_asm:pop([pc])),
         ?_assertAsmEqual(
             <<16#E8BD8007:32/little>>, "pop {r0, r1, r2, pc}", jit_arm32_asm:pop([r0, r1, r2, pc])
         ),
