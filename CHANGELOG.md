@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
+- `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
+  (previously silently reported `closed`); `ssl_closed` messages are also handled
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform

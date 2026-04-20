@@ -262,12 +262,26 @@ transform_headers([{Name, Value} | Tail]) ->
 
 stream(#http_client{socket = {gen_tcp, TSocket}, parser = Parser} = Conn, {tcp, TSocket, Chunk}) ->
     dispatch_feed(Conn, Parser, Chunk);
-stream(#http_client{socket = {gen_tcp, TSocket}} = Conn, {tcp_closed, TSocket}) ->
-    {ok, Conn, closed};
+stream(#http_client{socket = {gen_tcp, TSocket}, parser = Parser} = Conn, {tcp_closed, TSocket}) ->
+    case is_parser_truncated(Parser) of
+        false -> {ok, Conn, closed};
+        true -> {error, {parser, incomplete_response}}
+    end;
 stream(#http_client{socket = {ssl, SSLSocket}, parser = Parser} = Conn, {ssl, SSLSocket, Chunk}) ->
     dispatch_feed(Conn, Parser, Chunk);
+stream(#http_client{socket = {ssl, SSLSocket}, parser = Parser} = Conn, {ssl_closed, SSLSocket}) ->
+    case is_parser_truncated(Parser) of
+        false -> {ok, Conn, closed};
+        true -> {error, {parser, incomplete_response}}
+    end;
 stream(_Conn, _Other) ->
     unknown.
+
+is_parser_truncated(undefined) -> false;
+is_parser_truncated(#parser_state{state = done}) -> false;
+is_parser_truncated(#parser_state{state = undefined}) -> false;
+is_parser_truncated(#parser_state{state = body, remaining_body_bytes = undefined}) -> false;
+is_parser_truncated(_) -> true.
 
 stream_data(#http_client{parser = Parser} = Conn, Chunk) ->
     dispatch_feed(Conn, Parser, Chunk).
@@ -597,10 +611,17 @@ stream_request_body(#http_client{socket = Socket, ref = Ref} = Conn, Ref, BodyCh
 -spec recv(Conn :: connection(), Len :: non_neg_integer()) ->
     {ok, connection(), [response()]} | error_tuple().
 
-recv(#http_client{socket = {SocketType, _}} = Conn, Len) ->
+recv(#http_client{socket = {SocketType, _}, parser = Parser} = Conn, Len) ->
     case socket_recv(Conn, Len) of
-        {ok, Data} -> stream_data(Conn, Data);
-        {error, Reason} -> {error, {SocketType, Reason}}
+        {ok, Data} ->
+            stream_data(Conn, Data);
+        {error, closed} ->
+            case is_parser_truncated(Parser) of
+                false -> {error, {SocketType, closed}};
+                true -> {error, {parser, incomplete_response}}
+            end;
+        {error, Reason} ->
+            {error, {SocketType, Reason}}
     end.
 
 socket_recv(#http_client{socket = {gen_tcp, TCPSocket}}, Len) ->

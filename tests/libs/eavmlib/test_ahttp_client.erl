@@ -40,6 +40,7 @@ test() ->
     ok = test_bad_content_length_non_numeric(),
     ok = test_bad_content_length_negative(),
     ok = test_empty_header_value(),
+    ok = test_chunked_truncated(),
     ok.
 
 test_passive() ->
@@ -413,6 +414,28 @@ test_empty_header_value() ->
     #{status := 200, body := <<"Hello">>, done := true} = Acc,
     wait_server(ServerPid),
     ok.
+
+test_chunked_truncated() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n"
+            "a\r\n12345"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, incomplete_response}} = drain_until_error(Conn2),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+drain_until_error(Conn) ->
+    case ahttp_client:recv(Conn, 0) of
+        {ok, UpdatedConn, _Responses} -> drain_until_error(UpdatedConn);
+        {error, _} = Error -> Error
+    end.
 
 build_chunked_response(ExtraHeaders, Chunks, Trailers) ->
     HeaderLines = [[N, <<": ">>, V, <<"\r\n">>] || {N, V} <- ExtraHeaders],
