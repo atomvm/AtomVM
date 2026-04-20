@@ -150,7 +150,16 @@ toolchain_prefixes(arm32) ->
     toolchain_prefixes(arm);
 toolchain_prefixes(Arch) ->
     ArchStr = atom_to_list(Arch),
-    Variants = ["-esp-elf", "-unknown-elf", "-elf", "-none-eabi", "-linux-gnu", "-linux-gnueabihf"],
+    Variants = [
+        "-esp-elf",
+        "-unknown-elf",
+        "-elf",
+        "-none-eabi",
+        "-linux",
+        "-linux-gnu",
+        "-linux-gnueabihf",
+        "-buildroot-linux-uclibc"
+    ],
     [ArchStr ++ V || V <- Variants].
 
 %% Find wat2wasm for wasm32 asm() cross-validation (does not need wasm-objdump).

@@ -812,20 +812,20 @@ xorq_test_() ->
             "xor $0x12345678,%rcx",
             jit_x86_64_asm:xorq(16#12345678, rcx)
         ),
-        % xorq uint32 immediates (0x80000000-0xFFFFFFFF, previously rejected by IS_SINT32_T)
+        % xorq uint32 immediates (0x80000000-0xFFFFFFFF, normalized to signed before encoding)
         ?_assertAsmEqual(
             <<16#48, 16#35, 16#00, 16#00, 16#00, 16#80>>,
-            "xor $0x80000000,%rax",
+            "xor $-0x80000000,%rax",
             jit_x86_64_asm:xorq(16#80000000, rax)
         ),
         ?_assertAsmEqual(
-            <<16#48, 16#81, 16#F1, 16#FF, 16#FF, 16#FF, 16#FF>>,
-            "xor $0xffffffff,%rcx",
+            <<16#48, 16#83, 16#F1, 16#FF>>,
+            "xor $-1,%rcx",
             jit_x86_64_asm:xorq(16#FFFFFFFF, rcx)
         ),
         ?_assertAsmEqual(
             <<16#49, 16#81, 16#F3, 16#00, 16#00, 16#00, 16#80>>,
-            "xor $0x80000000,%r11",
+            "xor $-0x80000000,%r11",
             jit_x86_64_asm:xorq(16#80000000, r11)
         ),
         % xorq reg, reg

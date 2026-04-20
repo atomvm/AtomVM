@@ -570,12 +570,14 @@ xorl(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
         _ -> <<(16#40 bor (REX_R bsl 2) bor REX_B), 16#31, 3:2, MODRM_REG:3, MODRM_RM:3>>
     end).
 
+xorq(Imm, DestReg) when is_integer(Imm), Imm >= 16#80000000, Imm < 16#100000000, is_atom(DestReg) ->
+    xorq(Imm - 16#100000000, DestReg);
 xorq(Imm, DestReg) when ?IS_SINT8_T(Imm) andalso is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#83, 3:2, 6:3, MODRM_RM:3, Imm>>;
-xorq(Imm, rax) when ?IS_UINT32_T(Imm) ->
+xorq(Imm, rax) when ?IS_SINT32_T(Imm) ->
     <<?X86_64_REX(1, 0, 0, 0), 16#35, Imm:32/little>>;
-xorq(Imm, DestReg) when ?IS_UINT32_T(Imm) andalso is_atom(DestReg) ->
+xorq(Imm, DestReg) when ?IS_SINT32_T(Imm) andalso is_atom(DestReg) ->
     {REX_B, MODRM_RM} = x86_64_x_reg(DestReg),
     <<?X86_64_REX(1, 0, 0, REX_B), 16#81, 3:2, 6:3, MODRM_RM:3, Imm:32/little>>;
 xorq(SrcReg, DestReg) when is_atom(SrcReg), is_atom(DestReg) ->
