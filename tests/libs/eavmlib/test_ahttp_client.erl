@@ -42,6 +42,7 @@ test() ->
     ok = test_duplicate_content_length_same_value(),
     ok = test_conflicting_content_length(),
     ok = test_content_length_zero(),
+    ok = test_content_length_overrun(),
     ok = test_empty_header_value(),
     ok = test_chunked_truncated(),
     ok.
@@ -445,6 +446,22 @@ test_content_length_zero() ->
     Acc = loop_collect_passive(Conn2, #{}),
     #{status := 204, done := true} = Acc,
     <<>> = maps:get(body, Acc, <<>>),
+    wait_server(ServerPid),
+    ok.
+
+test_content_length_overrun() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Length: 5\r\n\r\n"
+            "HelloExtra"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    Acc = loop_collect_passive(Conn2, #{}),
+    #{status := 200, body := <<"Hello">>, done := true} = Acc,
     wait_server(ServerPid),
     ok.
 

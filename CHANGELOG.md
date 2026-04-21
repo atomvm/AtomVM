@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ahttp_client` now emits a `done` event for responses with `Content-Length: 0` (previously
   the parser stayed in `body` state forever, hanging passive callers and misflagging legitimate
   close as `incomplete_response`)
+- `ahttp_client` now discards bytes past `Content-Length` and transitions to `done` (previously
+  emitted the excess as body data and stalled the parser when the socket delivered more than
+  the promised byte count)
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform

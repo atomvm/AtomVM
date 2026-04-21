@@ -311,6 +311,12 @@ feed_parser(Parser, Chunk) ->
 
 consume_bytes(#parser_state{acc = undefined} = Parser, ParsedAcc) ->
     {ok, Parser, ParsedAcc};
+consume_bytes(
+    #parser_state{acc = Chunk, remaining_body_bytes = N} = Parser, ParsedAcc
+) when is_binary(Chunk) andalso is_integer(N) andalso N > 0 andalso byte_size(Chunk) >= N ->
+    <<Data:N/binary, _Rest/binary>> = Chunk,
+    UpdatedParser = Parser#parser_state{state = done, acc = undefined, remaining_body_bytes = 0},
+    {ok, UpdatedParser, [done, {data, Data} | ParsedAcc]};
 consume_bytes(#parser_state{acc = Chunk} = Parser, ParsedAcc) when is_binary(Chunk) ->
     ReplacedAccParser = replace_chunk(Parser, undefined),
     NewRemBodyBytes = maybe_decrement(
