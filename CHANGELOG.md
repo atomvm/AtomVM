@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   emitted the excess as body data and stalled the parser when the socket delivered more than
   the promised byte count)
 
+### Removed
+- Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
+  trailer lines now return `{error, {parser, deprecated_obs_fold}}`, and the
+  `header_continuation` / `trailer_header_continuation` response events are no longer emitted
+
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform
 - Stop using deprecated `term_from_int32` on RP2 platform

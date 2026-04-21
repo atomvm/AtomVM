@@ -74,19 +74,14 @@
 
 -type status_response() :: {status, reference(), 0..999}.
 -type header_response() :: {header, reference(), {binary(), binary()}}.
--type header_continuation_response() :: {header_continuation, reference(), {binary(), binary()}}.
 -type trailer_header_response() :: {trailer_header, reference(), {binary(), binary()}}.
--type trailer_header_continuation_response() ::
-    {trailer_header_continuation, reference(), {binary(), binary()}}.
 -type data_response() :: {data, reference(), binary()}.
 -type done_response() :: {done, reference()}.
 
 -type response() ::
     status_response()
     | header_response()
-    | header_continuation_response()
     | trailer_header_response()
-    | trailer_header_continuation_response()
     | data_response()
     | done_response().
 
@@ -421,16 +416,10 @@ parse_line(#parser_state{state = headers, remaining_body_bytes = 0} = Parser, <<
     {ok, Parser#parser_state{state = done, last_header = undefined}, done};
 parse_line(#parser_state{state = headers} = Parser, <<>>) ->
     {consume_bytes, Parser#parser_state{state = body}};
-parse_line(
-    #parser_state{state = headers, last_header = ignore} = Parser, <<C, _MultiLine/binary>>
-) when C == $\s orelse C == $\t ->
-    {ok, Parser};
-parse_line(
-    #parser_state{state = headers, last_header = LastH} = Parser, <<C, MultiLine/binary>>
-) when is_binary(LastH) andalso (C == $\s orelse C == $\t) ->
-    LTrimmedValue = trim_left_spaces(MultiLine, 0),
-    TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
-    {ok, Parser, {header_continuation, {LastH, TrimmedValue}}};
+parse_line(#parser_state{state = headers} = Parser, <<C, _Rest/binary>> = Line) when
+    C == $\s orelse C == $\t
+->
+    {error, Parser, {deprecated_obs_fold, Line}};
 parse_line(#parser_state{state = headers, wanted_headers = WantedHeaders} = Parser, HeaderLine) ->
     case match_header(WantedHeaders, HeaderLine) of
         {ok, Name, Value} ->
@@ -464,18 +453,10 @@ parse_line(#parser_state{state = chunked_crlf} = Parser, Line) ->
     {error, Parser, {expected_chunk_crlf, Line}};
 parse_line(#parser_state{state = chunked_trailers} = Parser, <<>>) ->
     {ok, Parser#parser_state{state = done}, done};
-parse_line(
-    #parser_state{state = chunked_trailers, last_header = ignore} = Parser,
-    <<C, _MultiLine/binary>>
-) when C == $\s orelse C == $\t ->
-    {ok, Parser};
-parse_line(
-    #parser_state{state = chunked_trailers, last_header = LastH} = Parser,
-    <<C, MultiLine/binary>>
-) when is_binary(LastH) andalso (C == $\s orelse C == $\t) ->
-    LTrimmedValue = trim_left_spaces(MultiLine, 0),
-    TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
-    {ok, Parser, {trailer_header_continuation, {LastH, TrimmedValue}}};
+parse_line(#parser_state{state = chunked_trailers} = Parser, <<C, _Rest/binary>> = Line) when
+    C == $\s orelse C == $\t
+->
+    {error, Parser, {deprecated_obs_fold, Line}};
 parse_line(
     #parser_state{state = chunked_trailers, wanted_headers = WantedHeaders} = Parser, HeaderLine
 ) ->

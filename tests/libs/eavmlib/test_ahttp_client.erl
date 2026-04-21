@@ -37,6 +37,8 @@ test() ->
     ok = test_content_length_and_transfer_encoding(),
     ok = test_transfer_encoding_before_content_length(),
     ok = test_chunked_trailer_framing_filtered(),
+    ok = test_obs_fold_rejected(),
+    ok = test_obs_fold_rejected_trailer(),
     ok = test_bad_content_length_non_numeric(),
     ok = test_bad_content_length_negative(),
     ok = test_duplicate_content_length_same_value(),
@@ -343,6 +345,45 @@ test_transfer_encoding_before_content_length() ->
     wait_server(ServerPid),
     ok.
 
+test_obs_fold_rejected() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "X-Folded: first-part\r\n"
+            " continuation\r\n"
+            "Content-Length: 5\r\n\r\n"
+            "Hello"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, {deprecated_obs_fold, <<" continuation">>}}} = ahttp_client:recv(Conn2, 0),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+test_obs_fold_rejected_trailer() ->
+    Segments = [
+        <<
+            "HTTP/1.1 200 OK\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n"
+            "5\r\nHello\r\n"
+            "0\r\n"
+            "X-Trailer: value\r\n"
+            "\t continuation\r\n"
+            "\r\n"
+        >>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {parser, {deprecated_obs_fold, <<"\t continuation">>}}} =
+        drain_until_error(Conn2),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
 test_chunked_trailer_framing_filtered() ->
     Segments = [
         <<
@@ -624,13 +665,9 @@ accumulate([{status, _, Code} | T], Acc) ->
     accumulate(T, Acc#{status => Code});
 accumulate([{header, _, _KV} | T], Acc) ->
     accumulate(T, Acc#{has_headers => true});
-accumulate([{header_continuation, _, _KV} | T], Acc) ->
-    accumulate(T, Acc);
 accumulate([{trailer_header, _, KV} | T], Acc) ->
     Ts = maps:get(trailers, Acc, []),
     accumulate(T, Acc#{trailers => [KV | Ts]});
-accumulate([{trailer_header_continuation, _, _KV} | T], Acc) ->
-    accumulate(T, Acc);
 accumulate([{data, _, Data} | T], Acc) ->
     Body = maps:get(body, Acc, <<>>),
     accumulate(T, Acc#{body => <<Body/binary, Data/binary>>});
