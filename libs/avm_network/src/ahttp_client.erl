@@ -255,6 +255,13 @@ transform_headers([{Name, Value} | Tail]) ->
 %%
 %%          Since the response might span multiple socket messages, `stream/2' may be called
 %%          multiple times. Each time the latest `UpdatedConn' must be used.
+%%
+%%          Binaries in `{data, Ref, Binary}' responses are sub-binaries of the socket
+%%          receive buffer; the client never copies. This is the right default for the
+%%          common case of piping chunks straight into another parser (e.g. a JSON
+%%          decoder) that consumes and drops them before the next call. Callers who
+%%          retain a chunk beyond the current processing step should call
+%%          `binary:copy/1' on it first so the underlying receive buffer can be released.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec stream(Conn :: connection(), Msg :: socket_message()) ->
