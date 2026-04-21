@@ -559,23 +559,23 @@ Download the latest [release image](https://github.com/atomvm/AtomVM/releases) f
 
 This image will generally take the form:
 
->`Atomvm-node-<atomvm-version>.js`
+>`Atomvm-node-<atomvm-version>.mjs`
 
 For example:
 
->`Atomvm-node-v0.6.0.js`
+>`Atomvm-node-v0.6.0.mjs`
 
 You will also find the sha256 hash for this file, which you should verify using the `sha256sum` command on your local operating system.
 
-AtomVM's WebAssembly port for NodeJS may be run using `node` command and AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
+AtomVM's WebAssembly port for NodeJS may be run using `node` command and AtomVM.mjs and AtomVM.wasm files.
 
 ```shell
-$ node /path/to/Atomvm-node-v0.6.0.js /path/to/myapp.avm
+$ node /path/to/Atomvm-node-v0.6.0.mjs /path/to/myapp.avm
 ```
 
 ### Getting Started with AtomVM WebAssembly port for browsers
 
-AtomVM may also be run in modern browsers (Safari, Chrome and Chrome-based, Firefox) using AtomVM.js, AtomVM.worker.js and AtomVM.wasm files.
+AtomVM may also be run in modern browsers (Safari, Chrome and Chrome-based, Firefox) using AtomVM.mjs and AtomVM.wasm files.
 
 Please note that these files are different from the NodeJS ones.
 

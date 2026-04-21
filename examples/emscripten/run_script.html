@@ -50,13 +50,14 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
       the main thread) using JS function.
     </p>
 
-    <script>
+    <script type="module">
+      import AtomVM from "/AtomVM.mjs";
+
       // Arguments are loaded using fetch API.
       // wasm_webserver serves under /build/ files in build subdirectory.
-      var Module = {
+      window.Module = await AtomVM({
         arguments: ["/build/examples/emscripten/run_script.avm"],
-      };
+      });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

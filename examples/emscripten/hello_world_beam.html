@@ -30,16 +30,17 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
       in arguments, typically loading AtomVM library as a packed avm file.
     </p>
     <p>Please check the console for hello_world output.</p>
-    <script>
+    <script type="module">
+      import AtomVM from "/AtomVM.mjs";
+
       // Arguments are loaded using fetch API.
       // wasm_webserver serves under /build/ files in build subdirectory.
-      var Module = {
+      window.Module = await AtomVM({
         arguments: [
           "/build/examples/erlang/hello_world.beam",
           "/build/libs/atomvmlib.avm",
         ],
-      };
+      });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

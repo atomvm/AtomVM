@@ -40,12 +40,10 @@ handle_req(Method, Path, Conn) when Method =:= "GET" orelse Method =:= "HEAD" ->
         case Path of
             [] ->
                 "../examples/emscripten/index.html";
-            ["AtomVM.js"] ->
-                "../src/platforms/emscripten/build/src/AtomVM.js";
+            ["AtomVM.mjs"] ->
+                "../src/platforms/emscripten/build/src/AtomVM.mjs";
             ["AtomVM.wasm"] ->
                 "../src/platforms/emscripten/build/src/AtomVM.wasm";
-            ["AtomVM.worker.js"] ->
-                "../src/platforms/emscripten/build/src/AtomVM.worker.js";
             ["tests", "build" | Tail] ->
                 lists:flatten([
                     "../src/platforms/emscripten/build/tests/src/" | lists:join($/, Tail)
@@ -60,6 +58,7 @@ handle_req(Method, Path, Conn) when Method =:= "GET" orelse Method =:= "HEAD" ->
     MimeType =
         case lists:reverse(Filename) of
             "sj." ++ _ -> "text/javascript";
+            "sjm." ++ _ -> "text/javascript";
             "lmth." ++ _ -> "text/html";
             "msaw." ++ _ -> "application/wasm";
             "mva." ++ _ -> "application/binary";
