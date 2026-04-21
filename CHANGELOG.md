@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ahttp_client` now discards bytes past `Content-Length` and transitions to `done` (previously
   emitted the excess as body data and stalled the parser when the socket delivered more than
   the promised byte count)
+- `ahttp_client` now caps parsed status, header and chunk-size lines at 16 KiB (`?MAX_LINE_SIZE`);
+  longer lines return `{error, {parser, {line_too_long, Prefix}}}` with the first 128 bytes of
+  the offending line. Callers whose upstream servers emit unusually large headers must account
+  for this limit
 
 ### Removed
 - Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and

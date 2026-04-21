@@ -39,6 +39,7 @@ test() ->
     ok = test_chunked_trailer_framing_filtered(),
     ok = test_obs_fold_rejected(),
     ok = test_obs_fold_rejected_trailer(),
+    ok = test_header_line_too_long(),
     ok = test_bad_content_length_non_numeric(),
     ok = test_bad_content_length_negative(),
     ok = test_duplicate_content_length_same_value(),
@@ -341,6 +342,22 @@ test_transfer_encoding_before_content_length() ->
     {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
     {error, {parser, {content_length_with_transfer_encoding, 5}}} =
         ahttp_client:recv(Conn2, 0),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+test_header_line_too_long() ->
+    %% One header line well over the 16 KiB cap; CRLF never arrives inside the limit.
+    LongValue = binary:copy(<<$A>>, 20000),
+    Segments = [
+        <<"HTTP/1.1 200 OK\r\n">>,
+        <<"X-Huge: ", LongValue/binary, "\r\n">>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    ExpectedPrefix = <<"X-Huge: ", (binary:copy(<<$A>>, 120))/binary>>,
+    {error, {parser, {line_too_long, ExpectedPrefix}}} = drain_until_error(Conn2),
     ahttp_client:close(Conn2),
     wait_server(ServerPid),
     ok.

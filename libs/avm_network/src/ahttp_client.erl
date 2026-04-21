@@ -24,6 +24,7 @@
 -export_type([connection/0, error_tuple/0, backend/0]).
 
 -define(DEFAULT_WANTED_HEADERS, [<<"Content-Length">>, <<"Transfer-Encoding">>]).
+-define(MAX_LINE_SIZE, 16384).
 
 -type maybe_binary() :: binary() | undefined.
 -type maybe_integer() :: integer() | undefined.
@@ -257,6 +258,11 @@ transform_headers([{Name, Value} | Tail]) ->
 %%          decoder) that consumes and drops them before the next call. Callers who
 %%          retain a chunk beyond the current processing step should call
 %%          `binary:copy/1' on it first so the underlying receive buffer can be released.
+%%
+%%          Individual response headers are limited to 16 KiB. A response whose
+%%          header exceeds this size returns `{error, {parser, line_too_long}}'.
+%%          The same size limit also applies to the HTTP status line and, for
+%%          chunked transfer-encoded responses, to each chunk-size line.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec stream(Conn :: connection(), Msg :: socket_message()) ->
@@ -363,12 +369,20 @@ parse_chunk_size(Line) ->
             end
     end.
 
+%% TODO: pair MAX_LINE_SIZE with a recv/stream timeout — slow-drip peers can
+%% still tie up a connection under the memory cap.
 consume_lines(#parser_state{acc = undefined} = Parser, ParsedAcc) ->
     {ok, Parser, ParsedAcc};
 consume_lines(Parser, ParsedAcc) ->
     case binary:split(Parser#parser_state.acc, <<"\r\n">>) of
+        [NotTerminatedLine] when byte_size(NotTerminatedLine) > ?MAX_LINE_SIZE ->
+            <<Prefix:128/binary, _/binary>> = NotTerminatedLine,
+            {error, {parser, {line_too_long, Prefix}}};
         [_NotTerminatedLine] ->
             {ok, Parser, ParsedAcc};
+        [Line, _Rest] when byte_size(Line) > ?MAX_LINE_SIZE ->
+            <<Prefix:128/binary, _/binary>> = Line,
+            {error, {parser, {line_too_long, Prefix}}};
         [Line, Rest] ->
             ReplacedAccParser = replace_chunk(Parser, Rest),
             case parse_line(ReplacedAccParser, Line) of
