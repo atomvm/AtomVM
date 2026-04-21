@@ -48,6 +48,8 @@ test() ->
     ok = test_content_length_overrun(),
     ok = test_empty_header_value(),
     ok = test_chunked_truncated(),
+    ok = test_active_close(),
+    ok = test_passive_close(),
     ok.
 
 test_passive() ->
@@ -565,6 +567,43 @@ drain_until_error(Conn) ->
         {ok, UpdatedConn, _Responses} -> drain_until_error(UpdatedConn);
         {error, _} = Error -> Error
     end.
+
+test_active_close() ->
+    %% Active mode surfaces a normal peer close as {ok, Conn, closed}.
+    Segments = [
+        <<"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello">>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, true}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {ok, _Conn3, closed} = active_wait_for_close(Conn2),
+    wait_server(ServerPid),
+    ok.
+
+active_wait_for_close(Conn) ->
+    receive
+        Msg ->
+            case ahttp_client:stream(Conn, Msg) of
+                {ok, _, closed} = R -> R;
+                {ok, UpdatedConn, _Responses} -> active_wait_for_close(UpdatedConn);
+                unknown -> active_wait_for_close(Conn)
+            end
+    after 5000 ->
+        error(no_close_within_timeout)
+    end.
+
+test_passive_close() ->
+    %% Passive mode surfaces a normal peer close as {error, {SocketType, closed}}.
+    Segments = [
+        <<"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nHello">>
+    ],
+    {ServerPid, Port} = start_chunked_server(Segments),
+    {ok, Conn} = ahttp_client:connect(http, "localhost", Port, [{active, false}]),
+    {ok, Conn2, _Ref} = ahttp_client:request(Conn, <<"GET">>, <<"/">>, [], undefined),
+    {error, {gen_tcp, closed}} = drain_until_error(Conn2),
+    ahttp_client:close(Conn2),
+    wait_server(ServerPid),
+    ok.
 
 build_chunked_response(ExtraHeaders, Chunks, Trailers) ->
     HeaderLines = [[N, <<": ">>, V, <<"\r\n">>] || {N, V} <- ExtraHeaders],

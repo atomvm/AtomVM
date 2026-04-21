@@ -263,6 +263,15 @@ transform_headers([{Name, Value} | Tail]) ->
 %%          header exceeds this size returns `{error, {parser, line_too_long}}'.
 %%          The same size limit also applies to the HTTP status line and, for
 %%          chunked transfer-encoded responses, to each chunk-size line.
+%%
+%%          When the peer closes the connection after a complete response (or
+%%          before any request was sent), `stream/2' returns
+%%          `{ok, Conn, closed}' — a distinct ok marker that callers can use
+%%          to stop their receive loop. A close that arrives while the parser
+%%          is still mid-response returns `{error, {parser, incomplete_response}}'.
+%%          The passive-mode `recv/2' uses a different shape on close
+%%          (`{error, {SocketType, closed}}') because it inherits the native
+%%          `gen_tcp:recv/2' / `ssl:recv/2' contract; see `recv/2'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec stream(Conn :: connection(), Msg :: socket_message()) ->
@@ -621,6 +630,15 @@ stream_request_body(#http_client{socket = Socket, ref = Ref} = Conn, Ref, BodyCh
 %%          `{active, false}'.
 %%
 %%          See also `stream/2' for more information about the responses list.
+%%
+%%          A peer close after a complete response returns
+%%          `{error, {SocketType, closed}}', matching the native
+%%          `gen_tcp:recv/2' / `ssl:recv/2' contract unchanged. A close
+%%          mid-response returns `{error, {parser, incomplete_response}}'. This
+%%          differs from active-mode `stream/2', which uses
+%%          `{ok, Conn, closed}' for a normal close — passive mode surfaces
+%%          close as an error so a straightforward `case recv/2' in the
+%%          caller stays a single match on `{ok, _, _}'.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec recv(Conn :: connection(), Len :: non_neg_integer()) ->
