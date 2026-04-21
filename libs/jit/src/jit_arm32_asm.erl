@@ -525,11 +525,6 @@ push(RegList) ->
 %% POP {reglist} = LDMIA SP!, {reglist}
 %% Encoding: cond[31:28] 100 0 1 0 1 1 1101 reglist[15:0]
 -spec pop([arm_gpr_register()]) -> binary().
-pop([sp]) ->
-    %% GNU as uses LDMIA for pop {sp} (LDR SP,[SP],#4 has undefined behavior)
-    RegMask = 1 bsl 13,
-    Instr = (14 bsl 28) bor (2#100010111101 bsl 16) bor RegMask,
-    <<Instr:32/little>>;
 pop([Reg]) ->
     %% LDR Rd, [SP], #4: single-register pop (matches GNU as encoding)
     RegNum = reg_to_num(Reg),
