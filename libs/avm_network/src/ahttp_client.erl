@@ -355,12 +355,12 @@ consume_chunk_data(
 
 parse_chunk_size(Line) ->
     [HexBin | _Ext] = binary:split(Line, <<";">>),
-    LTrim = trim_left_spaces(HexBin, 0),
+    LTrim = trim_ows_left(HexBin),
     case LTrim of
         <<>> ->
             error;
         _ ->
-            Trimmed = trim_right_spaces(LTrim, byte_size(LTrim)),
+            Trimmed = trim_ows_right(LTrim),
             try binary_to_integer(Trimmed, 16) of
                 N when N >= 0 -> {ok, N};
                 _ -> error
@@ -437,8 +437,8 @@ parse_line(#parser_state{state = headers} = Parser, <<C, _Rest/binary>> = Line) 
 parse_line(#parser_state{state = headers, wanted_headers = WantedHeaders} = Parser, HeaderLine) ->
     case match_header(WantedHeaders, HeaderLine) of
         {ok, Name, Value} ->
-            LTrimmedValue = trim_left_spaces(Value, 0),
-            TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
+            LTrimmedValue = trim_ows_left(Value),
+            TrimmedValue = trim_ows_right(LTrimmedValue),
             % this is safe since match_header uses same casing as in WantedHeaders
             case apply_header_semantics(Name, TrimmedValue, Parser) of
                 {ok, UpdatedParser} ->
@@ -480,8 +480,8 @@ parse_line(
                 true ->
                     {ok, Parser#parser_state{last_header = ignore}};
                 false ->
-                    LTrimmedValue = trim_left_spaces(Value, 0),
-                    TrimmedValue = trim_right_spaces(LTrimmedValue, byte_size(LTrimmedValue)),
+                    LTrimmedValue = trim_ows_left(Value),
+                    TrimmedValue = trim_ows_right(LTrimmedValue),
                     {ok, Parser#parser_state{last_header = Name},
                         {trailer_header, {Name, TrimmedValue}}}
             end;
@@ -528,23 +528,21 @@ is_forbidden_trailer_field(<<"Content-Length">>) -> true;
 is_forbidden_trailer_field(<<"Transfer-Encoding">>) -> true;
 is_forbidden_trailer_field(_) -> false.
 
-trim_left_spaces(Bin, Count) ->
-    case Bin of
-        <<_Bin:Count/binary, C, _Rest/binary>> when C == $\s orelse C == $\t ->
-            trim_left_spaces(Bin, Count + 1);
-        <<_Bin:Count/binary, NoLeftSpaces/binary>> ->
-            NoLeftSpaces
-    end.
+%% Trim HTTP OWS (RFC 9110 §5.6.3: OWS = *( SP / HTAB )) from the left.
+trim_ows_left(<<$\s, Rest/binary>>) -> trim_ows_left(Rest);
+trim_ows_left(<<$\t, Rest/binary>>) -> trim_ows_left(Rest);
+trim_ows_left(Bin) -> Bin.
 
-trim_right_spaces(_Bin, 0) ->
+trim_ows_right(Bin) ->
+    trim_ows_right(Bin, byte_size(Bin)).
+trim_ows_right(_Bin, 0) ->
     <<>>;
-trim_right_spaces(Bin, Count) ->
-    Len = Count - 1,
-    case Bin of
-        <<_LBin:Len/binary, C, _TrimmedSpaces/binary>> when C == $\s orelse C == $\t ->
-            trim_right_spaces(Bin, Count - 1);
-        <<LBin:Count/binary, _TrimmedSpaces/binary>> ->
-            LBin
+trim_ows_right(Bin, Len) ->
+    case binary:at(Bin, Len - 1) of
+        C when C =:= $\s orelse C =:= $\t ->
+            trim_ows_right(Bin, Len - 1);
+        _ ->
+            binary:part(Bin, 0, Len)
     end.
 
 maybe_decrement(undefined, _B) ->
