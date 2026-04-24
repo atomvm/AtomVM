@@ -363,6 +363,10 @@ process_info(_Pid, _Key) ->
 %%      <li><b>esp32_minimum_free_size</b> the smallest number of free bytes in the ESP32 heap since boot (integer)</li>
 %%      <li><b>esp32_chip_info</b> Details about the model and capabilities of the ESP32 device (map)</li>
 %% </ul>
+%% The following keys are supported on the STM32 platform:
+%% <ul>
+%%      <li><b>stm32_chip_info</b> Details about the model and capabilities of the STM32 device (map)</li>
+%% </ul>
 %%
 %% Additional keys may be supported on some platforms that are not documented here.
 %%

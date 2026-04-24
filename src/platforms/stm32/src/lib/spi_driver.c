@@ -1,0 +1,700 @@
+/*
+ * This file is part of AtomVM.
+ *
+ * Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+ */
+
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "stm32_hal_platform.h"
+
+#include <context.h>
+#include <defaultatoms.h>
+#include <erl_nif.h>
+#include <erl_nif_priv.h>
+#include <globalcontext.h>
+#include <memory.h>
+#include <nifs.h>
+#include <term.h>
+
+// #define ENABLE_TRACE
+#include <trace.h>
+
+#include "avm_log.h"
+#include "stm_sys.h"
+
+#define TAG "spi_driver"
+
+static ErlNifResourceType *spi_resource_type;
+
+struct SPIResource
+{
+    SPI_HandleTypeDef handle;
+};
+
+static term create_pair(Context *ctx, term term1, term term2)
+{
+    term ret = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(ret, 0, term1);
+    term_put_tuple_element(ret, 1, term2);
+    return ret;
+}
+
+static bool get_spi_resource(Context *ctx, term resource_term, struct SPIResource **rsrc_obj)
+{
+    void *rsrc_obj_ptr;
+    if (UNLIKELY(!enif_get_resource(erl_nif_env_from_context(ctx), resource_term, spi_resource_type, &rsrc_obj_ptr))) {
+        return false;
+    }
+    struct SPIResource *rsrc = (struct SPIResource *) rsrc_obj_ptr;
+    *rsrc_obj = rsrc;
+    return true;
+}
+
+static bool get_timeout_ms(term timeout_term, uint32_t *out)
+{
+    if (term_is_atom(timeout_term)) {
+        if (timeout_term == INFINITY_ATOM) {
+            *out = HAL_MAX_DELAY;
+            return true;
+        }
+        return false;
+    }
+    if (!term_is_integer(timeout_term)) {
+        return false;
+    }
+    avm_int_t val = term_to_int(timeout_term);
+    if (val < 0) {
+        return false;
+    }
+    *out = (uint32_t) val;
+    return true;
+}
+
+static term hal_status_to_error(Context *ctx, HAL_StatusTypeDef status)
+{
+    switch (status) {
+        case HAL_TIMEOUT:
+            return create_pair(ctx, ERROR_ATOM, TIMEOUT_ATOM);
+        case HAL_BUSY:
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "busy")));
+        default:
+            return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "eio")));
+    }
+}
+
+static SPI_TypeDef *peripheral_to_instance(int peripheral)
+{
+    switch (peripheral) {
+#ifdef SPI1
+        case 1:
+            return SPI1;
+#endif
+#ifdef SPI2
+        case 2:
+            return SPI2;
+#endif
+#ifdef SPI3
+        case 3:
+            return SPI3;
+#endif
+#ifdef SPI4
+        case 4:
+            return SPI4;
+#endif
+#ifdef SPI5
+        case 5:
+            return SPI5;
+#endif
+#ifdef SPI6
+        case 6:
+            return SPI6;
+#endif
+        default:
+            return NULL;
+    }
+}
+
+static void enable_spi_clock(int peripheral)
+{
+    switch (peripheral) {
+#ifdef SPI1
+        case 1:
+            __HAL_RCC_SPI1_CLK_ENABLE();
+            break;
+#endif
+#ifdef SPI2
+        case 2:
+            __HAL_RCC_SPI2_CLK_ENABLE();
+            break;
+#endif
+#ifdef SPI3
+        case 3:
+            __HAL_RCC_SPI3_CLK_ENABLE();
+            break;
+#endif
+#ifdef SPI4
+        case 4:
+            __HAL_RCC_SPI4_CLK_ENABLE();
+            break;
+#endif
+#ifdef SPI5
+        case 5:
+            __HAL_RCC_SPI5_CLK_ENABLE();
+            break;
+#endif
+#ifdef SPI6
+        case 6:
+            __HAL_RCC_SPI6_CLK_ENABLE();
+            break;
+#endif
+        default:
+            break;
+    }
+}
+
+static uint32_t get_spi_apb_freq(const SPI_TypeDef *instance)
+{
+#if defined(STM32G0XX)
+    (void) instance;
+    return HAL_RCC_GetPCLK1Freq();
+#else
+#ifdef SPI2
+    if (instance == SPI2) {
+        return HAL_RCC_GetPCLK1Freq();
+    }
+#endif
+#ifdef SPI3
+    if (instance == SPI3) {
+        return HAL_RCC_GetPCLK1Freq();
+    }
+#endif
+    return HAL_RCC_GetPCLK2Freq();
+#endif
+}
+
+static const uint32_t spi_prescaler_table[] = {
+    SPI_BAUDRATEPRESCALER_2,
+    SPI_BAUDRATEPRESCALER_4,
+    SPI_BAUDRATEPRESCALER_8,
+    SPI_BAUDRATEPRESCALER_16,
+    SPI_BAUDRATEPRESCALER_32,
+    SPI_BAUDRATEPRESCALER_64,
+    SPI_BAUDRATEPRESCALER_128,
+    SPI_BAUDRATEPRESCALER_256
+};
+
+static int compute_spi_prescaler_index(uint32_t apb_freq, uint32_t target_baudrate)
+{
+    for (int i = 0; i < 8; i++) {
+        uint32_t divider = 2U << i;
+        if (apb_freq / divider <= target_baudrate) {
+            return i;
+        }
+    }
+    return 7;
+}
+
+static term nif_spi_init(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    VALIDATE_VALUE(argv[0], term_is_integer);
+    VALIDATE_VALUE(argv[1], term_is_map);
+
+    int peripheral = term_to_int(argv[0]);
+    term config = argv[1];
+
+    SPI_TypeDef *instance = peripheral_to_instance(peripheral);
+    if (IS_NULL_PTR(instance)) {
+        AVM_LOGE(TAG, "Invalid SPI peripheral: %d", peripheral);
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    enable_spi_clock(peripheral);
+
+    struct SPIResource *rsrc_obj = enif_alloc_resource(spi_resource_type, sizeof(struct SPIResource));
+    if (IS_NULL_PTR(rsrc_obj)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    memset(&rsrc_obj->handle, 0, sizeof(SPI_HandleTypeDef));
+    rsrc_obj->handle.Instance = instance;
+
+    term mode = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "mode")), term_from_int(0), ctx->global);
+    term direction = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "direction")), term_from_int(0), ctx->global);
+    term data_size = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "data_size")), term_from_int(0), ctx->global);
+    term cpol = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "cpol")), term_from_int(0), ctx->global);
+    term cpha = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "cpha")), term_from_int(0), ctx->global);
+    term nss = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x3", "nss")), term_from_int(0), ctx->global);
+    term baudrate = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "baudrate")), term_from_int(0), ctx->global);
+    term first_bit = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "first_bit")), term_from_int(0), ctx->global);
+    term ti_mode = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x7", "ti_mode")), term_from_int(0), ctx->global);
+    term crc_enable = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\xa", "crc_enable")), term_from_int(0), ctx->global);
+    term crc_poly = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "crc_poly")), term_from_int(0), ctx->global);
+#if !defined(STM32F2XX) && !defined(STM32F4XX)
+    term nss_pulse = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\x9", "nss_pulse")), term_from_int(0), ctx->global);
+    term crc_length = term_get_map_assoc_default(config, globalcontext_make_atom(ctx->global, ATOM_STR("\xa", "crc_length")), term_from_int(0), ctx->global);
+#endif
+
+    if (term_to_int(mode) != 0) {
+        rsrc_obj->handle.Init.Mode = term_to_int(mode);
+    } else {
+        rsrc_obj->handle.Init.Mode = SPI_MODE_MASTER;
+    }
+
+    if (term_is_integer(direction)) {
+        rsrc_obj->handle.Init.Direction = term_to_int(direction);
+    } else {
+        rsrc_obj->handle.Init.Direction = SPI_DIRECTION_2LINES;
+    }
+
+    if (term_is_integer(data_size)) {
+        rsrc_obj->handle.Init.DataSize = term_to_int(data_size);
+    } else {
+        rsrc_obj->handle.Init.DataSize = SPI_DATASIZE_8BIT;
+    }
+
+    if (term_is_integer(cpol)) {
+        rsrc_obj->handle.Init.CLKPolarity = term_to_int(cpol);
+    } else {
+        rsrc_obj->handle.Init.CLKPolarity = SPI_POLARITY_LOW;
+    }
+
+    if (term_is_integer(cpha)) {
+        rsrc_obj->handle.Init.CLKPhase = term_to_int(cpha);
+    } else {
+        rsrc_obj->handle.Init.CLKPhase = SPI_PHASE_1EDGE;
+    }
+
+    if (term_is_integer(nss)) {
+        rsrc_obj->handle.Init.NSS = term_to_int(nss);
+    } else {
+        rsrc_obj->handle.Init.NSS = SPI_NSS_SOFT;
+    }
+
+    if (term_to_int(baudrate) != 0) {
+        uint32_t target_baudrate = (uint32_t) term_to_int(baudrate);
+        uint32_t apb_freq = get_spi_apb_freq(instance);
+        int presc_idx = compute_spi_prescaler_index(apb_freq, target_baudrate);
+        rsrc_obj->handle.Init.BaudRatePrescaler = spi_prescaler_table[presc_idx];
+    } else {
+        rsrc_obj->handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+    }
+
+    if (term_to_int(first_bit) != 0) {
+        rsrc_obj->handle.Init.FirstBit = term_to_int(first_bit);
+    } else {
+        rsrc_obj->handle.Init.FirstBit = SPI_FIRSTBIT_MSB;
+    }
+
+    if (term_to_int(ti_mode) != 0) {
+        rsrc_obj->handle.Init.TIMode = term_to_int(ti_mode);
+    } else {
+        rsrc_obj->handle.Init.TIMode = SPI_TIMODE_DISABLE;
+    }
+
+    if (term_to_int(crc_enable) != 0) {
+        rsrc_obj->handle.Init.CRCCalculation = term_to_int(crc_enable);
+    } else {
+        rsrc_obj->handle.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+    }
+
+    if (term_to_int(crc_poly) != 0) {
+        rsrc_obj->handle.Init.CRCPolynomial = term_to_int(crc_poly);
+    } else {
+        rsrc_obj->handle.Init.CRCPolynomial = 7;
+    }
+
+#if !defined(STM32F2XX) && !defined(STM32F4XX)
+    if (term_to_int(nss_pulse) != 0) {
+        rsrc_obj->handle.Init.NSSPMode = term_to_int(nss_pulse);
+    } else {
+        rsrc_obj->handle.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+    }
+
+    if (term_to_int(crc_length) != 0) {
+        rsrc_obj->handle.Init.CRCLength = term_to_int(crc_length);
+    } else {
+        rsrc_obj->handle.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+    }
+#endif
+
+    HAL_StatusTypeDef status = HAL_SPI_Init(&rsrc_obj->handle);
+    if (status != HAL_OK) {
+        enif_release_resource(rsrc_obj);
+        AVM_LOGE(TAG, "HAL_SPI_Init failed: %d", (int) status);
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return create_pair(ctx, ERROR_ATOM, globalcontext_make_atom(ctx->global, ATOM_STR("\x8", "spi_init")));
+    }
+
+    uint32_t actual_baudrate = 0;
+    {
+        uint32_t apb_freq = get_spi_apb_freq(instance);
+        int presc_idx = 0;
+        for (int i = 0; i < 8; i++) {
+            if (spi_prescaler_table[i] == rsrc_obj->handle.Init.BaudRatePrescaler) {
+                presc_idx = i;
+                break;
+            }
+        }
+        actual_baudrate = apb_freq / (2U << presc_idx);
+    }
+
+    if (UNLIKELY(memory_ensure_free(ctx, TERM_BOXED_RESOURCE_SIZE) != MEMORY_GC_OK)) {
+        HAL_SPI_DeInit(&rsrc_obj->handle);
+        enif_release_resource(rsrc_obj);
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term obj = term_from_resource(rsrc_obj, &ctx->heap);
+    enif_release_resource(rsrc_obj);
+
+    size_t requested_size = TUPLE_SIZE(2) + TUPLE_SIZE(2);
+    if (UNLIKELY(memory_ensure_free_with_roots(ctx, requested_size, 1, &obj, MEMORY_CAN_SHRINK) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+
+    term inner = term_alloc_tuple(2, &ctx->heap);
+    term_put_tuple_element(inner, 0, term_from_int(actual_baudrate));
+    term_put_tuple_element(inner, 1, obj);
+
+    return create_pair(ctx, OK_ATOM, inner);
+}
+
+static term nif_spi_deinit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        return OK_ATOM;
+    }
+    HAL_SPI_DeInit(&rsrc_obj->handle);
+    rsrc_obj->handle.Instance = NULL;
+
+    return OK_ATOM;
+}
+
+static term nif_spi_transmit(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_binary);
+
+    const uint8_t *data = (const uint8_t *) term_binary_data(argv[1]);
+    size_t len = term_binary_size(argv[1]);
+    uint32_t timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(len > UINT16_MAX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    HAL_StatusTypeDef status = HAL_SPI_Transmit(&rsrc_obj->handle, (uint8_t *) data, (uint16_t) len, timeout_ms);
+    if (UNLIKELY(status != HAL_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return hal_status_to_error(ctx, status);
+    }
+
+    return term_from_int((int) len);
+}
+
+static term nif_spi_receive(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_integer);
+
+    avm_int_t count = term_to_int(argv[1]);
+    uint32_t timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(count < 0 || count > UINT16_MAX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + term_binary_heap_size(count), MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term data = term_create_uninitialized_binary(count, &ctx->heap, ctx->global);
+    uint8_t *buf = (uint8_t *) term_binary_data(data);
+
+    HAL_StatusTypeDef status = HAL_SPI_Receive(&rsrc_obj->handle, buf, (uint16_t) count, timeout_ms);
+    if (UNLIKELY(status != HAL_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return hal_status_to_error(ctx, status);
+    }
+
+    return create_pair(ctx, OK_ATOM, data);
+}
+
+static term nif_spi_transmit_receive(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    VALIDATE_VALUE(argv[1], term_is_binary);
+
+    const uint8_t *src = (const uint8_t *) term_binary_data(argv[1]);
+    size_t len = term_binary_size(argv[1]);
+    uint32_t timeout_ms;
+    if (UNLIKELY(!get_timeout_ms(argv[2], &timeout_ms))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (UNLIKELY(len > UINT16_MAX)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+
+    if (UNLIKELY(memory_ensure_free_opt(ctx, TUPLE_SIZE(2) + term_binary_heap_size(len), MEMORY_NO_GC) != MEMORY_GC_OK)) {
+        RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+    }
+    term data = term_create_uninitialized_binary(len, &ctx->heap, ctx->global);
+    uint8_t *dst = (uint8_t *) term_binary_data(data);
+
+    HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(&rsrc_obj->handle, (uint8_t *) src, dst, (uint16_t) len, timeout_ms);
+    if (UNLIKELY(status != HAL_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return hal_status_to_error(ctx, status);
+    }
+
+    return create_pair(ctx, OK_ATOM, data);
+}
+
+static term nif_spi_abort(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    HAL_StatusTypeDef status = HAL_SPI_Abort(&rsrc_obj->handle);
+    if (UNLIKELY(status != HAL_OK)) {
+        if (UNLIKELY(memory_ensure_free(ctx, TUPLE_SIZE(2)) != MEMORY_GC_OK)) {
+            RAISE_ERROR(OUT_OF_MEMORY_ATOM);
+        }
+        return hal_status_to_error(ctx, status);
+    }
+
+    return OK_ATOM;
+}
+
+static term nif_spi_get_state(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    HAL_SPI_StateTypeDef state = HAL_SPI_GetState(&rsrc_obj->handle);
+
+    static const char *const ready_str = ATOM_STR("\x5", "ready");
+    static const char *const busy_str = ATOM_STR("\x4", "busy");
+    static const char *const busy_tx_str = ATOM_STR("\x7", "busy_tx");
+    static const char *const busy_rx_str = ATOM_STR("\x7", "busy_rx");
+    static const char *const busy_tx_rx_str = ATOM_STR("\xA", "busy_tx_rx");
+    static const char *const reset_str = ATOM_STR("\x5", "reset");
+
+    const char *state_str;
+    switch (state) {
+        case HAL_SPI_STATE_READY:
+            state_str = ready_str;
+            break;
+        case HAL_SPI_STATE_BUSY:
+            state_str = busy_str;
+            break;
+        case HAL_SPI_STATE_BUSY_TX:
+            state_str = busy_tx_str;
+            break;
+        case HAL_SPI_STATE_BUSY_RX:
+            state_str = busy_rx_str;
+            break;
+        case HAL_SPI_STATE_BUSY_TX_RX:
+            state_str = busy_tx_rx_str;
+            break;
+        case HAL_SPI_STATE_ERROR:
+            return ERROR_ATOM;
+        case HAL_SPI_STATE_ABORT:
+            return globalcontext_make_atom(ctx->global, ATOM_STR("\x5", "abort"));
+        default:
+            state_str = reset_str;
+            break;
+    }
+
+    return globalcontext_make_atom(ctx->global, state_str);
+}
+
+static term nif_spi_get_error(Context *ctx, int argc, term argv[])
+{
+    UNUSED(argc);
+
+    struct SPIResource *rsrc_obj;
+    if (UNLIKELY(!get_spi_resource(ctx, argv[0], &rsrc_obj))) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    if (IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        RAISE_ERROR(BADARG_ATOM);
+    }
+    uint32_t err = HAL_SPI_GetError(&rsrc_obj->handle);
+
+    return term_from_int((int) err);
+}
+
+static void spi_resource_dtor(ErlNifEnv *caller_env, void *obj)
+{
+    UNUSED(caller_env);
+    struct SPIResource *rsrc_obj = (struct SPIResource *) obj;
+    if (!IS_NULL_PTR(rsrc_obj->handle.Instance)) {
+        HAL_SPI_DeInit(&rsrc_obj->handle);
+        rsrc_obj->handle.Instance = NULL;
+    }
+}
+
+static const ErlNifResourceTypeInit SPIResourceTypeInit = {
+    .members = 1,
+    .dtor = spi_resource_dtor,
+};
+
+//
+// NIF structs
+//
+static const struct Nif spi_init_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_init
+};
+static const struct Nif spi_deinit_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_deinit
+};
+static const struct Nif spi_transmit_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_transmit
+};
+static const struct Nif spi_receive_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_receive
+};
+static const struct Nif spi_transmit_receive_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_transmit_receive
+};
+static const struct Nif spi_abort_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_abort
+};
+static const struct Nif spi_get_state_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_get_state
+};
+static const struct Nif spi_get_error_nif = {
+    .base.type = NIFFunctionType,
+    .nif_ptr = nif_spi_get_error
+};
+
+static void spi_nif_init(GlobalContext *global)
+{
+    ErlNifEnv env;
+    erl_nif_env_partial_init_from_globalcontext(&env, global);
+    spi_resource_type = enif_init_resource_type(&env, "spi_resource", &SPIResourceTypeInit, ERL_NIF_RT_CREATE, NULL);
+}
+
+static const struct Nif *spi_nif_get_nif(const char *nifname)
+{
+    if (strncmp("spi:", nifname, 4) != 0) {
+        return NULL;
+    }
+    const char *rest = nifname + 4;
+    if (strcmp("init/2", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_init_nif;
+    }
+    if (strcmp("deinit/1", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_deinit_nif;
+    }
+    if (strcmp("transmit/3", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_transmit_nif;
+    }
+    if (strcmp("receive_/3", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_receive_nif;
+    }
+    if (strcmp("transmit_receive/3", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_transmit_receive_nif;
+    }
+    if (strcmp("abort/1", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_abort_nif;
+    }
+    if (strcmp("get_state/1", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_get_state_nif;
+    }
+    if (strcmp("get_error/1", rest) == 0) {
+        TRACE("Resolved spi nif %s ...\n", nifname);
+        return &spi_get_error_nif;
+    }
+    return NULL;
+}
+
+REGISTER_NIF_COLLECTION(spi, spi_nif_init, NULL, spi_nif_get_nif)
