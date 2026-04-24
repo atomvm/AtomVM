@@ -270,6 +270,111 @@ call_primitive_last_test() ->
         >>,
     ?assertStream(x86_64, Dump, Stream).
 
+unreachable_test_state() ->
+    ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	b8 01 00 00 00       	mov    $0x1,%eax\n"
+        "   5:	4c 8b 5f 30          	mov    0x30(%rdi),%r11\n"
+        "   9:	48 85 c0             	test   %rax,%rax\n"
+        "   c:	75 05                	jne    0x13\n"
+        "   e:	48 8b 02             	mov    (%rdx),%rax\n"
+        "  11:	ff                   	.byte 0xff\n"
+        "  12:	e0                   	.byte 0xe0"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	b8 01 00 00 00       	mov    $0x1,%eax\n"
+        "   5:	4c 8b 5f 30          	mov    0x30(%rdi),%r11\n"
+        "   9:	48 85 c0             	test   %rax,%rax\n"
+        "   c:	75 05                	jne    0x13\n"
+        "   e:	e9 fc ff ff ff       	jmp    0xf"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	b8 01 00 00 00       	mov    $0x1,%eax\n"
+        "   5:	4c 8b 5f 30          	mov    0x30(%rdi),%r11\n"
+        "   9:	48 85 c0             	test   %rax,%rax\n"
+        "   c:	75 05                	jne    0x13\n"
+        "   e:	e9 ed 00 00 00       	jmp    0x100"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    Offset2 = ?BACKEND:offset(State2),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual(CachedReg, Reg),
+    Offset3 = ?BACKEND:offset(State3),
+    ?assertEqual(Offset2, Offset3),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	b8 00 01 00 00       	mov    $0x100,%eax\n"
+        "   5:	41 bb 01 00 00 00    	mov    $0x1,%r11d\n"
+        "   b:	4c 8b 57 30          	mov    0x30(%rdi),%r10\n"
+        "   f:	4d 85 db             	test   %r11,%r11\n"
+        "  12:	75 0d                	jne    0x21\n"
+        "  14:	4c 8d 1d e5 ff ff ff 	lea    -0x1b(%rip),%r11\n"
+        "  1b:	49 01 c3             	add    %rax,%r11\n"
+        "  1e:	41                   	rex.B\n"
+        "  1f:	ff                   	.byte 0xff\n"
+        "  20:	e3                   	.byte 0xe3"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
+    {State2, r11} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:move_array_element(State2, r11, 0, {x_reg, 5}),
+    {State4, _Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 5}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	48 8b 47 58          	mov    0x58(%rdi),%rax\n"
+        "   4:	4c 8b 5f 30          	mov    0x30(%rdi),%r11\n"
+        "   8:	4d 8b 13             	mov    (%r11),%r10\n"
+        "   b:	4c 89 57 58          	mov    %r10,0x58(%rdi)"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
 return_if_not_equal_to_ctx_test_() ->
     {setup,
         fun() ->
@@ -1409,6 +1514,25 @@ call_fun_test() ->
     >>,
     ?assertStream(x86_64, Dump, Stream).
 
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [Reg]),
+    State3 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State2),
+    {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   4:	ff 4e 10             	decl   0x10(%rsi)\n"
+        "   7:	75 11                	jne    0x1a\n"
+        "   9:	48 8d 05 0a 00 00 00 	lea    0xa(%rip),%rax        # 0x1a\n"
+        "  10:	48 89 46 08          	mov    %rax,0x8(%rsi)\n"
+        "  14:	48 8b 42 10          	mov    0x10(%rdx),%rax\n"
+        "  18:	ff e0                	jmp    *%rax\n"
+        "  1a:	48 8b 47 30          	mov    0x30(%rdi),%rax"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     Stream = ?BACKEND:stream(State1),
@@ -1902,4 +2026,78 @@ cached_load_after_free_test() ->
         <<
             "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax"
         >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+%% After storing a large immediate to an x_reg, the temp register holding the
+%% immediate is cached so a subsequent load of the same value skips the movabsq
+cached_move_to_vm_large_imm_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, 16#100000000, {x_reg, 0}),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, 16#100000000),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	48 b8 00 00 00 00 01 	movabs $0x100000000,%rax\n"
+        "   7:	00 00 00 \n"
+        "   a:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+%% After copying an x_reg to another vm location, the temp register holding the
+%% x_reg value is cached so a subsequent load of the same x_reg skips the mov
+cached_move_to_vm_x_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, 1}, {x_reg, 0}),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	48 8b 47 38          	mov    0x38(%rdi),%rax\n"
+        "   4:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+%% After copying a y_reg to an x_reg, the temp register holding the y_reg value
+%% is cached so a subsequent load of the same y_reg skips the movs
+cached_move_to_vm_y_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {y_reg, 0}, {x_reg, 0}),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, {y_reg, 0}),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	48 8b 47 28          	mov    0x28(%rdi),%rax\n"
+        "   4:	48 8b 00             	mov    (%rax),%rax\n"
+        "   7:	48 89 47 30          	mov    %rax,0x30(%rdi)"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+%% After storing an x_reg value to an array element, the temp register holding
+%% the x_reg value is cached so a subsequent load of that x_reg skips the mov
+cached_move_to_array_element_x_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_array_element(State0, {x_reg, 0}, r11, 2),
+    {State2, rax} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   4:	49 89 43 10          	mov    %rax,0x10(%r11)"
+    >>,
+    ?assertStream(x86_64, Dump, Stream).
+
+%% After an if_block with a large-immediate condition, the temp register loaded
+%% with that immediate is cached, so the block body can reuse it without emitting
+%% a redundant movabsq
+if_block_large_cond_reuse_imm_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, rax} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:if_block(State1, {rax, '<', 16#100000000}, fun(BSt0) ->
+        {BSt1, _Reg} = ?BACKEND:move_to_native_register(BSt0, 16#100000000),
+        BSt1
+    end),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	48 8b 47 30          	mov    0x30(%rdi),%rax\n"
+        "   4:	49 bb 00 00 00 00 01 	movabs $0x100000000,%r11\n"
+        "   b:	00 00 00 \n"
+        "   e:	4c 39 d8             	cmp    %r11,%rax\n"
+        "  11:	7d 00                	jge    0x13"
+    >>,
     ?assertStream(x86_64, Dump, Stream).

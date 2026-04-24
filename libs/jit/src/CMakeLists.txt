@@ -67,6 +67,16 @@ if (NOT AVM_DISABLE_JIT_DWARF)
     )
 endif()
 
+# jit_riscv32.erl and jit_riscv64.erl include the shared implementation in
+# jit_riscv_impl.hrl, so changes to that header must force recompilation.
+foreach(riscv_module jit_riscv32 jit_riscv64)
+    add_custom_command(
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beams/${riscv_module}.beam
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/jit_riscv_impl.hrl
+        APPEND
+    )
+endforeach()
+
 set(JIT_VERSION ${ATOMVM_BASE_VERSION})
 
 install(

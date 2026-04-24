@@ -365,7 +365,7 @@ call_primitive_last(State0, Primitive, Args) ->
     State1#state{
         available_regs = AllFree,
         used_regs = 0,
-        regs = jit_regs:invalidate_all(State1#state.regs)
+        regs = jit_regs:unreachable(State1#state.regs)
     }.
 
 call_primitive_with_cp(State0, Primitive, Args) ->
@@ -439,7 +439,7 @@ jump_to_label(State0, Label) ->
         (jit_wasm32_asm:return())/binary
     >>),
     %% After unconditional jump, register tracking is dead until next label
-    State2#state{regs = jit_regs:invalidate_all(State2#state.regs)}.
+    State2#state{regs = jit_regs:unreachable(State2#state.regs)}.
 
 jump_to_offset(State0, TargetOffset) ->
     %% The tail cache in jit.erl stores offsets from offset(). Since we return
@@ -457,7 +457,7 @@ jump_to_offset(State0, TargetOffset) ->
                 (jit_wasm32_asm:local_get(?CTX_LOCAL))/binary,
                 (jit_wasm32_asm:return())/binary
             >>),
-            State1#state{regs = jit_regs:invalidate_all(State1#state.regs)}
+            State1#state{regs = jit_regs:unreachable(State1#state.regs)}
     end.
 
 cond_jump_to_label(State, Cond, Label) ->
@@ -479,7 +479,11 @@ jump_to_continuation(State0, {free, OffsetLocal}) ->
     >>,
     State1 = emit(State0, Code),
     AllFree = (1 bsl State1#state.max_scratch) - 1,
-    State1#state{available_regs = AllFree, used_regs = 0}.
+    State1#state{
+        available_regs = AllFree,
+        used_regs = 0,
+        regs = jit_regs:unreachable(State1#state.regs)
+    }.
 
 %%=============================================================================
 %% Conditional blocks

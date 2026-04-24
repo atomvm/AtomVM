@@ -2140,6 +2140,31 @@ call_fun_test() ->
         >>,
     ?assertStream(riscv64, Dump, Stream).
 
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [Reg]),
+    State3 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State2),
+    {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	03053f83          	ld	t6,48(a0)\n"
+        "   4:	0105af83          	lw	t6,16(a1)\n"
+        "   8:	1ffd                	addi	t6,t6,-1\n"
+        "   a:	01f5a823          	sw	t6,16(a1)\n"
+        "   e:	000f9d63          	bnez	t6,0x28\n"
+        "  12:	00000f97          	auipc	t6,0x0\n"
+        "  16:	0fd9                	addi	t6,t6,22 # 0x28\n"
+        "  18:	0001                	nop\n"
+        "  1a:	01f5b423          	sd	t6,8(a1)\n"
+        "  1e:	4fc1                	li	t6,16\n"
+        "  20:	9fb2                	add	t6,t6,a2\n"
+        "  22:	000fbf83          	ld	t6,0(t6)\n"
+        "  26:	8f82                	jr	t6\n"
+        "  28:	03053f83          	ld	t6,48(a0)"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     State2 = ?BACKEND:jump_to_offset(State1, 16#100),
@@ -3657,6 +3682,33 @@ and_positive_imm_invalidates_temp_cache_test() ->
         >>,
     ?assertStream(riscv64, Dump, Stream).
 
+fixed_dst_x_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, t6),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 2}),
+    ?assertEqual(t6, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	04053f83          	ld	t6,64(a0)"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+fixed_dst_y_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, t5),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {y_reg, 2}),
+    ?assertEqual(t5, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	02853f83          	ld	t6,40(a0)\n"
+        "   4:	010fbf03          	ld	t5,16(t6)"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
 if_block_cond_free_reg_invalidates_cache_test() ->
     State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
     {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
@@ -3696,6 +3748,108 @@ jump_to_label_invalidates_cache_test() ->
             "   a:	ffff                	.insn	2, 0xffff\n"
             "   c:	03053f83          	ld	t6,48(a0)"
         >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+unreachable_test_state() ->
+    ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	4f85                	li	t6,1\n"
+        "   2:	03053f03          	ld	t5,48(a0)\n"
+        "   6:	000f9563          	bnez	t6,0x10\n"
+        "   a:	00063f83          	ld	t6,0(a2)\n"
+        "   e:	8f82                	jr	t6"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	4f85                	li	t6,1\n"
+        "   2:	03053f03          	ld	t5,48(a0)\n"
+        "   6:	000f9663          	bnez	t6,0x12\n"
+        "   a:	ffff                	.insn	2, 0xffff\n"
+        "   c:	ffff                	.insn	2, 0xffff\n"
+        "   e:	ffff                	.insn	2, 0xffff\n"
+        "  10:	ffff                	.insn	2, 0xffff"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	4f85                	li	t6,1\n"
+        "   2:	03053f03          	ld	t5,48(a0)\n"
+        "   6:	000f9363          	bnez	t6,0xc\n"
+        "   a:	a8dd                	j	0x100"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    Offset2 = ?BACKEND:offset(State2),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual(CachedReg, Reg),
+    Offset3 = ?BACKEND:offset(State3),
+    ?assertEqual(Offset2, Offset3),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	10000f93          	li	t6,256\n"
+        "   4:	4f05                	li	t5,1\n"
+        "   6:	03053e83          	ld	t4,48(a0)\n"
+        "   a:	000f1763          	bnez	t5,0x18\n"
+        "   e:	00000f17          	auipc	t5,0x0\n"
+        "  12:	1f49                	addi	t5,t5,-14 # 0x0\n"
+        "  14:	9f7e                	add	t5,t5,t6\n"
+        "  16:	8f02                	jr	t5"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, t6} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
+    {State2, t5} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:move_array_element(State2, t5, 0, {x_reg, 5}),
+    {State4, _Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 5}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	05853f83          	ld	t6,88(a0)\n"
+        "   4:	03053f03          	ld	t5,48(a0)\n"
+        "   8:	000f3e83          	ld	t4,0(t5)\n"
+        "   c:	05d53c23          	sd	t4,88(a0)"
+    >>,
     ?assertStream(riscv64, Dump, Stream).
 
 ldr_y_reg_invalidates_hidden_temp_cache_test() ->
@@ -3752,4 +3906,44 @@ cached_load_after_free_test() ->
         <<
             "   0:	03053f83          	ld	t6,48(a0)"
         >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+cached_move_to_vm_x_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, 1}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, t6} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	03853f83          	ld	t6,56(a0)\n"
+        "   4:	03f53823          	sd	t6,48(a0)"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+cached_move_to_vm_y_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {y_reg, 0}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, t6} = ?BACKEND:move_to_native_register(State1, {y_reg, 0}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	02853f03          	ld	t5,40(a0)\n"
+        "   4:	000f3f83          	ld	t6,0(t5)\n"
+        "   8:	03f53823          	sd	t6,48(a0)"
+    >>,
+    ?assertStream(riscv64, Dump, Stream).
+
+cached_move_to_vm_imm_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, 42, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, t6} = ?BACKEND:move_to_native_register(State1, 42),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	02a00f93          	li	t6,42\n"
+        "   4:	03f53823          	sd	t6,48(a0)"
+    >>,
     ?assertStream(riscv64, Dump, Stream).

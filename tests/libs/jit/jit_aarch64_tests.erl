@@ -301,6 +301,104 @@ call_primitive_last_test() ->
         >>,
     ?assertStream(aarch64, Dump, Stream).
 
+unreachable_test_state() ->
+    ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)).
+
+setup_cached_x_reg0(State0) ->
+    {State1, CondReg} = ?BACKEND:move_to_native_register(State0, 1),
+    {State2, CachedReg} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State2, [CachedReg]), CondReg}.
+
+setup_cached_x_reg0_with_offset(State0) ->
+    {State1, OffsetReg} = ?BACKEND:move_to_native_register(State0, 16#100),
+    {State2, CondReg} = ?BACKEND:move_to_native_register(State1, 1),
+    {State3, CachedReg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    {?BACKEND:free_native_registers(State3, [CachedReg]), CondReg, OffsetReg, CachedReg}.
+
+terminal_if_preserves_cached_x_reg0(State0, TerminalFun) ->
+    {State1, CondReg} = setup_cached_x_reg0(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, TerminalFun),
+    {State3, _} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    State3.
+
+call_primitive_last_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:call_primitive_last(BSt0, 0, [ctx, jit_state])
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	d2800027 	mov	x7, #0x1\n"
+        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   8:	b5000067 	cbnz	x7, 0x14\n"
+        "   c:	f9400047 	ldr	x7, [x2]\n"
+        "  10:	d61f00e0 	br	x7"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+jump_to_label_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_label(BSt0, 42)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	d2800027 	mov	x7, #0x1\n"
+        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   8:	b5000047 	cbnz	x7, 0x10\n"
+        "   c:	14000000 	b	0xc"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+jump_to_offset_if_block_preserves_cache_test() ->
+    State0 = terminal_if_preserves_cached_x_reg0(unreachable_test_state(), fun(BSt0) ->
+        ?BACKEND:jump_to_offset(BSt0, 16#100)
+    end),
+    Stream = ?BACKEND:stream(State0),
+    Dump = <<
+        "   0:	d2800027 	mov	x7, #0x1\n"
+        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   8:	b5000047 	cbnz	x7, 0x10\n"
+        "   c:	1400003d 	b	0x100"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+jump_to_continuation_if_block_preserves_cache_test() ->
+    State0 = unreachable_test_state(),
+    {State1, CondReg, OffsetReg, CachedReg} = setup_cached_x_reg0_with_offset(State0),
+    State2 = ?BACKEND:if_block(State1, {{free, CondReg}, '==', 0}, fun(BSt0) ->
+        ?BACKEND:jump_to_continuation(BSt0, {free, OffsetReg})
+    end),
+    Offset2 = ?BACKEND:offset(State2),
+    {State3, Reg} = ?BACKEND:move_to_native_register(State2, {x_reg, 0}),
+    ?assertEqual(CachedReg, Reg),
+    Offset3 = ?BACKEND:offset(State3),
+    ?assertEqual(Offset2, Offset3),
+    Stream = ?BACKEND:stream(State3),
+    Dump = <<
+        "   0:	d2802007 	mov	x7, #0x100\n"
+        "   4:	d2800028 	mov	x8, #0x1\n"
+        "   8:	f9401809 	ldr	x9, [x0, #48]\n"
+        "   c:	b5000088 	cbnz	x8, 0x1c\n"
+        "  10:	10ffff88 	adr	x8, 0x0\n"
+        "  14:	8b070108 	add	x8, x8, x7\n"
+        "  18:	d61f0100 	br	x8"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+move_array_element_x_reg_invalidates_vm_loc_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, r7} = ?BACKEND:move_to_native_register(State0, {x_reg, 5}),
+    {State2, r8} = ?BACKEND:move_to_native_register(State1, {x_reg, 0}),
+    State3 = ?BACKEND:move_array_element(State2, r8, 0, {x_reg, 5}),
+    {State4, _Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 5}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	f9402c07 	ldr	x7, [x0, #88]\n"
+        "   4:	f9401808 	ldr	x8, [x0, #48]\n"
+        "   8:	f9400109 	ldr	x9, [x8]\n"
+        "   c:	f9002c09 	str	x9, [x0, #88]"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
 return_if_not_equal_to_ctx_test_() ->
     {setup,
         fun() ->
@@ -1563,6 +1661,27 @@ call_fun_test() ->
     >>,
     ?assertStream(aarch64, Dump, Stream).
 
+decrement_reductions_invalidates_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    {State1, Reg} = ?BACKEND:move_to_native_register(State0, {x_reg, 0}),
+    State2 = ?BACKEND:free_native_registers(State1, [Reg]),
+    State3 = ?BACKEND:decrement_reductions_and_maybe_schedule_next(State2),
+    {State4, Reg} = ?BACKEND:move_to_native_register(State3, {x_reg, 0}),
+    Stream = ?BACKEND:stream(State4),
+    Dump = <<
+        "   0:	f9401807 	ldr	x7, [x0, #48]\n"
+        "   4:	b9401027 	ldr	w7, [x1, #16]\n"
+        "   8:	f10004e7 	subs	x7, x7, #0x1\n"
+        "   c:	b9001027 	str	w7, [x1, #16]\n"
+        "  10:	540000a1 	b.ne	0x24\n"
+        "  14:	10000087 	adr	x7, 0x24\n"
+        "  18:	f9000427 	str	x7, [x1, #8]\n"
+        "  1c:	f9400847 	ldr	x7, [x2, #16]\n"
+        "  20:	d61f00e0 	br	x7\n"
+        "  24:	f9401807 	ldr	x7, [x0, #48]"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
 move_to_vm_register_test0(State, Source, Dest, Dump) ->
     State1 = ?BACKEND:move_to_vm_register(State, Source, Dest),
     Stream = ?BACKEND:stream(State1),
@@ -2251,4 +2370,62 @@ cached_load_after_free_test() ->
         <<
             "   0:	f9401807 	ldr	x7, [x0, #48]"
         >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+fixed_dst_x_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {x_reg, 2}, r8),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {x_reg, 2}),
+    ?assertEqual(r8, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9402008 	ldr	x8, [x0, #64]"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+fixed_dst_y_reg_load_preserves_cache_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_native_register(State0, {y_reg, 2}, r8),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, Reg} = ?BACKEND:move_to_native_register(State1, {y_reg, 2}),
+    ?assertEqual(r8, Reg),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9401408 	ldr	x8, [x0, #40]\n"
+        "   4:	f9400908 	ldr	x8, [x8, #16]"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+%% After copying an x_reg to another vm location, the temp register holding the
+%% x_reg value is cached so a subsequent load of the same x_reg skips the ldr
+cached_move_to_vm_x_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {x_reg, 1}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, r7} = ?BACKEND:move_to_native_register(State1, {x_reg, 1}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9401c07 	ldr	x7, [x0, #56]\n"
+        "   4:	f9001807 	str	x7, [x0, #48]"
+    >>,
+    ?assertStream(aarch64, Dump, Stream).
+
+%% After copying a y_reg to an x_reg, the temp register holding the y_reg value
+%% is cached so a subsequent load of the same y_reg skips the ldrs
+cached_move_to_vm_y_reg_reuse_test() ->
+    State0 = ?BACKEND:new(?JIT_VARIANT_PIC, jit_stream_binary, jit_stream_binary:new(0)),
+    State1 = ?BACKEND:move_to_vm_register(State0, {y_reg, 0}, {x_reg, 0}),
+    Offset1 = ?BACKEND:offset(State1),
+    {State2, r7} = ?BACKEND:move_to_native_register(State1, {y_reg, 0}),
+    ?assertEqual(Offset1, ?BACKEND:offset(State2)),
+    Stream = ?BACKEND:stream(State2),
+    Dump = <<
+        "   0:	f9401407 	ldr	x7, [x0, #40]\n"
+        "   4:	f94000e7 	ldr	x7, [x7]\n"
+        "   8:	f9001807 	str	x7, [x0, #48]"
+    >>,
     ?assertStream(aarch64, Dump, Stream).
