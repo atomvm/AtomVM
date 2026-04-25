@@ -30,8 +30,15 @@
 #include <spi_flash_mmap.h>
 #endif
 
+// Include version.h to get MBEDTLS_VERSION_NUMBER (available in all versions)
+#include <mbedtls/version.h>
+#if defined(MBEDTLS_PSA_CRYPTO_C) || MBEDTLS_VERSION_NUMBER >= 0x04000000
+#include <psa/crypto.h>
+#endif
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
+#endif
 
 #include <sys/poll.h>
 #include <stdbool.h>
@@ -72,13 +79,17 @@ struct ESP32PlatformData
 #ifndef AVM_NO_SMP
     Mutex *entropy_mutex;
 #endif
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_entropy_context entropy_ctx;
+#endif
     bool entropy_is_initialized;
 
 #ifndef AVM_NO_SMP
     Mutex *random_mutex;
 #endif
+#if MBEDTLS_VERSION_NUMBER < 0x04000000
     mbedtls_ctr_drbg_context random_ctx;
+#endif
     bool random_is_initialized;
 
 #ifdef CONFIG_AVM_ENABLE_STORAGE_NIFS

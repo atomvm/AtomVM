@@ -143,18 +143,29 @@ jobs:
     needs: [compile_tests, compile_tests_jit]
     runs-on: ubuntu-24.04
     container: emscripten/emsdk
-
     strategy:
       fail-fast: false
       matrix:
-        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
+        include:
+          - jit: ""
+            mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - jit: ""
+            mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
+          - jit: "-DAVM_DISABLE_JIT=OFF"
+            mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - jit: "-DAVM_DISABLE_JIT=OFF"
+            mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: "Install deps"
-      run: sudo apt update -y && sudo apt install -y cmake gperf
+      run: sudo apt update -y && sudo apt install -y cmake gperf python3-jinja2 python3-jsonschema
 
     - name: Build
       shell: bash
@@ -163,7 +174,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. ${{ matrix.jit }}
+        emcmake cmake .. ${{ matrix.jit }} -DAVM_FETCH_MBEDTLS_GIT_TAG=${{ matrix.mbedtls_git_tag }}
         emmake make -j
 
     - name: Download AtomVM and test modules (non-JIT)
@@ -210,7 +221,7 @@ jobs:
         node src/AtomVM.mjs ../../../../build/tests/libs/etest/test_etest.avm
 
     - name: "Rename and write sha256sum (node)"
-      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
+      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == '' && matrix.mbedtls_label == 'mbedtls3'
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -223,7 +234,7 @@ jobs:
 
     - name: "Release (node)"
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == ''
+      if: startsWith(github.ref, 'refs/tags/') && matrix.jit == '' && matrix.mbedtls_label == 'mbedtls3'
       with:
         draft: true
         fail_on_unmatched_files: true
@@ -244,15 +255,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jit: ["", "-DAVM_DISABLE_JIT=OFF"]
-        language: ["javascript-typescript"]
+        include:
+          - jit: ""
+            language: "javascript-typescript"
+            mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - jit: ""
+            language: "javascript-typescript"
+            mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
+          - jit: "-DAVM_DISABLE_JIT=OFF"
+            language: "javascript-typescript"
+            mbedtls_label: "mbedtls3"
+            mbedtls_git_tag: "v3.6.3.1"
+          - jit: "-DAVM_DISABLE_JIT=OFF"
+            language: "javascript-typescript"
+            mbedtls_label: "mbedtls4"
+            mbedtls_git_tag: "v4.0.0"
 
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
 
     - name: "Install deps"
-      run: sudo apt update -y && sudo apt install -y cmake gperf
+      run: sudo apt update -y && sudo apt install -y cmake gperf python3-jinja2 python3-jsonschema
 
     - name: "Initialize CodeQL"
       if: matrix.jit == ''
@@ -269,7 +295,7 @@ jobs:
         set -euo pipefail
         mkdir build
         cd build
-        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web ${{ matrix.jit }}
+        emcmake cmake .. -DAVM_EMSCRIPTEN_ENV=web ${{ matrix.jit }} -DAVM_FETCH_MBEDTLS_GIT_TAG=${{ matrix.mbedtls_git_tag }}
         emmake make -j
 
     - name: "Perform CodeQL Analysis"
@@ -280,7 +306,7 @@ jobs:
       if: matrix.jit == ''
       uses: actions/upload-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web-${{ matrix.mbedtls_label }}
         path: |
             src/platforms/emscripten/build/**/*.wasm
             src/platforms/emscripten/build/**/*.mjs
@@ -289,6 +315,12 @@ jobs:
   wasm_test_web:
     needs: [compile_tests, wasm_build_web]
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mbedtls_label: "mbedtls3"
+          - mbedtls_label: "mbedtls4"
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
@@ -302,7 +334,7 @@ jobs:
     - name: Download wasm build for web
       uses: actions/download-artifact@v4
       with:
-        name: atomvm-js-web
+        name: atomvm-js-web-${{ matrix.mbedtls_label }}
         path: src/platforms/emscripten/build
 
     - name: Download emscripten test modules
@@ -337,7 +369,7 @@ jobs:
         retention-days: 7
 
     - name: "Rename and write sha256sum (web)"
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       shell: bash
       working-directory: src/platforms/emscripten/build/src
       run: |
@@ -350,7 +382,7 @@ jobs:
 
     - name: "Release (web)"
       uses: softprops/action-gh-release@v1
-      if: startsWith(github.ref, 'refs/tags/')
+      if: startsWith(github.ref, 'refs/tags/') && matrix.mbedtls_label == 'mbedtls3'
       with:
         draft: true
         fail_on_unmatched_files: true
