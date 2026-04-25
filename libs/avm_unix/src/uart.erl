@@ -56,50 +56,45 @@
 %%-----------------------------------------------------------------------------
 %% @param Name device path, e.g. `"/dev/ttyUSB0"'
 %% @param Opts UART configuration options
-%% @returns UART handle or error
+%% @returns UART handle
 %% @doc Open a UART device with the given name and options.
 %% @end
 %%-----------------------------------------------------------------------------
 -spec open(Name :: string() | binary(), Opts :: uart_opts()) ->
-    {pid(), atomvm:posix_fd()} | {error, term()}.
+    {pid(), atomvm:posix_fd()}.
 open(Name, Opts) ->
     open([{peripheral, Name} | Opts]).
 
 %%-----------------------------------------------------------------------------
 %% @param Opts UART configuration options including `{peripheral, Path}'
-%% @returns UART handle or error
+%% @returns UART handle
 %% @doc Open a UART device.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Opts :: uart_opts()) -> {pid(), atomvm:posix_fd()} | {error, term()}.
+-spec open(Opts :: uart_opts()) -> {pid(), atomvm:posix_fd()}.
 open(Opts) ->
     Device =
         case proplists:get_value(peripheral, Opts) of
-            undefined -> {error, {missing, peripheral}};
+            undefined -> error({missing, peripheral});
             D when is_binary(D) -> D;
             D when is_list(D) -> D
         end,
-    case Device of
-        {error, _} = Err ->
-            Err;
-        _ ->
-            case atomvm:posix_open(Device, [o_rdwr, o_noctty]) of
-                {ok, Fd} ->
-                    case configure(Fd, Opts) of
-                        ok ->
-                            atomvm:posix_tcflush(Fd, tcioflush),
-                            Pid = spawn_link(fun() ->
-                                process_flag(trap_exit, true),
-                                loop(Fd)
-                            end),
-                            {Pid, Fd};
-                        {error, _} = CfgErr ->
-                            atomvm:posix_close(Fd),
-                            CfgErr
-                    end;
-                {error, _} = OpenErr ->
-                    OpenErr
-            end
+    case atomvm:posix_open(Device, [o_rdwr, o_noctty]) of
+        {ok, Fd} ->
+            case configure(Fd, Opts) of
+                ok ->
+                    atomvm:posix_tcflush(Fd, tcioflush),
+                    Pid = spawn_link(fun() ->
+                        process_flag(trap_exit, true),
+                        loop(Fd)
+                    end),
+                    {Pid, Fd};
+                {error, _} = CfgErr ->
+                    atomvm:posix_close(Fd),
+                    CfgErr
+            end;
+        {error, Reason} ->
+            error(Reason)
     end.
 
 %%-----------------------------------------------------------------------------

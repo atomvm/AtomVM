@@ -51,8 +51,7 @@
 %%          This function will open a connection to the UART driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Name :: peripheral(), Opts :: uart_opts()) ->
-    Port :: port() | {error, _Reason :: term()}.
+-spec open(Name :: peripheral(), Opts :: uart_opts()) -> Port :: port().
 open(Name, Opts) ->
     open([{peripheral, Name} | Opts]).
 
@@ -64,7 +63,7 @@ open(Name, Opts) ->
 %%          This function will open a connection to the UART driver.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open(Opts :: uart_opts()) -> Port :: port() | {error, _Reason :: term()}.
+-spec open(Opts :: uart_opts()) -> Port :: port().
 open(Opts) ->
     open_port({spawn, "uart"}, migrate_config(Opts)).
 

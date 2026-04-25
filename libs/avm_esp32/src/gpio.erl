@@ -72,7 +72,7 @@
 %% Event type that will trigger a `gpio_interrupt'.
 
 %%-----------------------------------------------------------------------------
-%% @returns Port | error | {error, Reason}
+%% @returns Port
 %% @doc     Start the GPIO driver port
 %%
 %%          Returns the port of the active GPIO port driver, otherwise the GPIO
@@ -81,7 +81,7 @@
 %%          that require a GPIO port as a parameter.
 %% @end
 %%-----------------------------------------------------------------------------
--spec start() -> gpio() | {error, Reason :: atom()} | error.
+-spec start() -> gpio().
 start() ->
     case whereis(gpio) of
         undefined ->
@@ -91,7 +91,7 @@ start() ->
     end.
 
 %%-----------------------------------------------------------------------------
-%% @returns Port | error | {error, Reason}
+%% @returns Port
 %% @doc     Start the GPIO driver port
 %%
 %%          The GPIO port driver will be stared and registered as `gpio'. If the
@@ -101,7 +101,7 @@ start() ->
 %%          GPIO port as a parameter.
 %% @end
 %%-----------------------------------------------------------------------------
--spec open() -> gpio() | {error, Reason :: atom()} | error.
+-spec open() -> gpio().
 open() ->
     open_port({spawn, "gpio"}, []).
 

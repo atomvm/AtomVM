@@ -200,14 +200,14 @@
 % Returns the handle of an existing GPIO driver if one is already
 % registered, or starts a new one. The returned handle is required
 % for all port-based API functions.
--callback start() -> gpio() | {error, Reason :: atom()} | error.
+-callback start() -> gpio().
 
 % Open a new GPIO driver instance.
 %
 % Always starts a new GPIO driver instance and registers it. Fails
 % if a driver is already registered. Use `start/0' to get an existing
 % instance or start a new one.
--callback open() -> gpio() | {error, Reason :: atom()} | error.
+-callback open() -> gpio().
 
 % Close a GPIO driver and release its resources.
 %
