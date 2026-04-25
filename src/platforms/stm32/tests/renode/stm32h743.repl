@@ -40,6 +40,11 @@ usart1: UART.STM32F7_USART @ sysbus <0x40011000, +0x100>
     frequency: 120000000
     IRQ -> nvic@37
 
+// USART2 for loopback testing (PA2/PA3)
+usart2: UART.STM32F7_USART @ sysbus <0x40004400, +0x100>
+    frequency: 120000000
+    IRQ -> nvic@38
+
 // RCC Python peripheral at 0x58024400.
 // H7 RCC register layout:
 //   CR (0x00):   HSION[0], HSIRDY[2], CSION[7], CSIRDY[8],
