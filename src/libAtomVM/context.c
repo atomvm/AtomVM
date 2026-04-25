@@ -136,6 +136,9 @@ Context *context_new(GlobalContext *glb)
 
 void context_destroy(Context *ctx)
 {
+    // Hold and release the spin lock for timers and cancel any timer
+    scheduler_cancel_timeout(ctx);
+
     // Another process can get an access to our mailbox until this point.
     struct ListHead *processes_table_list = synclist_wrlock(&ctx->global->processes_table);
     UNUSED(processes_table_list);
@@ -278,10 +281,6 @@ void context_destroy(Context *ctx)
     memory_destroy_heap(&ctx->heap, ctx->global);
 
     dictionary_destroy(&ctx->dictionary);
-
-    if (ctx->timer_list_head.head.next != &ctx->timer_list_head.head) {
-        scheduler_cancel_timeout(ctx);
-    }
 
     // Platform data is freed here to allow drivers to use the
     // globalcontext_get_process_lock lock to protect this pointer
