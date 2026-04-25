@@ -25,6 +25,9 @@ set_target_properties(AtomVM PROPERTIES SUFFIX ".mjs")
 
 target_compile_features(AtomVM PUBLIC c_std_11)
 
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING)
+
 add_subdirectory(../../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PUBLIC libAtomVM)
 target_compile_options(libAtomVM PUBLIC -O3 -fno-exceptions -fno-rtti -pthread -sINLINING_LIMIT -sUSE_ZLIB=1)

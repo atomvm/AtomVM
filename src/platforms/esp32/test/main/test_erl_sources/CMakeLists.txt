@@ -74,6 +74,7 @@ compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
 compile_erlang(test_socket)
 compile_erlang(test_ssl)
+compile_erlang(test_system_architecture)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
 compile_erlang(test_tz)
@@ -97,6 +98,7 @@ set(erlang_test_beams
     test_select.beam
     test_socket.beam
     test_ssl.beam
+    test_system_architecture.beam
     test_time_and_processes.beam
     test_twdt.beam
     test_tz.beam

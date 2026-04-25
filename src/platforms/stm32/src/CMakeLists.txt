@@ -113,6 +113,8 @@ target_include_directories(${PROJECT_EXECUTABLE} PUBLIC
 add_dependencies(${PROJECT_EXECUTABLE} picolibc)
 
 # Link libAtomVM
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR stm32 PLATFORM_OS none)
 add_subdirectory(../../../libAtomVM libAtomVM)
 add_dependencies(libAtomVM picolibc)
 target_link_libraries(${PROJECT_EXECUTABLE} PUBLIC libAtomVM)

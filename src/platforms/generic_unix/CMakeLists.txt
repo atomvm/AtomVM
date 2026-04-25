@@ -45,6 +45,11 @@ endif()
 add_subdirectory(lib)
 target_include_directories(AtomVM PUBLIC lib/)
 
+include(SystemArchitecture)
+if (NOT DEFINED AVM_SYSTEM_ARCHITECTURE_STRING OR "${AVM_SYSTEM_ARCHITECTURE_STRING}" STREQUAL "")
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING)
+endif()
+
 add_subdirectory(../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PRIVATE libAtomVM)
 
