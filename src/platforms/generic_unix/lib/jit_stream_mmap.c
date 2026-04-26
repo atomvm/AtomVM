@@ -287,7 +287,7 @@ ModuleNativeEntryPoint jit_stream_entry_point(Context *ctx, term jit_stream)
     // Set thumb bit for armv6m
     ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) ((uintptr_t) js_obj->stream_base | 1);
 #else
-    ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) js_obj->stream_base;
+    ModuleNativeEntryPoint result = (ModuleNativeEntryPoint) (uintptr_t) js_obj->stream_base;
 #endif
 
     // Prevent module from being unmapped by dtor — ownership transfers to Module

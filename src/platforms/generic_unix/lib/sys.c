@@ -855,7 +855,7 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
     // Set thumb bit for armv6m
     return (ModuleNativeEntryPoint) ((uintptr_t) (header + 1) | 1);
 #else
-    return (ModuleNativeEntryPoint) (header + 1);
+    return (ModuleNativeEntryPoint) (uintptr_t) (header + 1);
 #endif
 #else
     // x86_64: mmap RWX so debuggers can set software breakpoints
@@ -866,7 +866,7 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
     }
     header->mmap_size = total;
     memcpy(header + 1, code, code_size);
-    return (ModuleNativeEntryPoint) (header + 1);
+    return (ModuleNativeEntryPoint) (uintptr_t) (header + 1);
 #endif
 }
 

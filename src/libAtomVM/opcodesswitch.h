@@ -101,14 +101,14 @@ extern "C" {
 #define SET_ERROR(error_type_atom)                \
     context_set_exception_class(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;      \
-    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);
+    ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, (uintptr_t) native_pc - (uintptr_t) mod->native_code);
 #else
 #define SET_ERROR(error_type_atom)                                                          \
     context_set_exception_class(ctx, ERROR_ATOM);                                           \
     ctx->exception_reason = error_type_atom;                                                \
     if (mod->native_code) {                                                                 \
         ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod,                         \
-            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code);  \
+            (uintptr_t) native_pc - (uintptr_t) mod->native_code);  \
     } else {                                                                                \
         ctx->exception_stacktrace = stacktrace_create_raw(ctx, mod, pc - code); \
     }
@@ -123,14 +123,14 @@ extern "C" {
 #define SET_ERROR_MFA(error_type_atom, m, f, a)                 \
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM); \
     ctx->exception_reason = error_type_atom;                    \
-    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);
+    ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, (uintptr_t) native_pc - (uintptr_t) mod->native_code, m, f, a);
 #else
 #define SET_ERROR_MFA(error_type_atom, m, f, a)                                                          \
     context_set_exception_class_use_live_flag(ctx, ERROR_ATOM);                                          \
     ctx->exception_reason = error_type_atom;                                                             \
     if (mod->native_code) {                                                                              \
         ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod,                                  \
-            (const uint8_t *) native_pc - (const uint8_t *) mod->native_code, m, f, a);                  \
+            (uintptr_t) native_pc - (uintptr_t) mod->native_code, m, f, a);                  \
     } else {                                                                                             \
         ctx->exception_stacktrace = stacktrace_create_raw_mfa(ctx, mod, pc - code, m, f, a);             \
     }

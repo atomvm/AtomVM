@@ -1602,7 +1602,7 @@ ModuleNativeEntryPoint module_get_native_entry_point(Module *module, int exporte
     return jit_wasm_get_entry_point((const void *) module->native_code, exported_label);
 #else
     assert(module->native_code);
-    return (ModuleNativeEntryPoint) (((const uint8_t *) module->native_code) + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
+    return (ModuleNativeEntryPoint) ((uintptr_t) module->native_code + JIT_JUMPTABLE_ENTRY_SIZE * exported_label);
 #endif
 }
 #endif

@@ -276,8 +276,7 @@ static Context *jit_return(Context *ctx, JITState *jit_state)
         TRACE("jit_return: cp=0x%x mod=%d label=%d\n", (unsigned) ctx->cp, module_index, label);
         jit_state->continuation = (NativeContinuation) (label + 1);
 #else
-    // return to native using pointer arithmetics on function pointers
-    const void *native_pc = ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2);
+    uintptr_t native_pc = (uintptr_t) mod->native_code + ((ctx->cp & 0xFFFFFF) >> 2);
     jit_state->continuation = (NativeContinuation) native_pc;
 #endif
 #ifndef AVM_NO_EMU
