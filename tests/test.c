@@ -736,19 +736,6 @@ int test_module_execution(bool beam, struct Test *test)
 
 int test_modules_execution(bool beam, bool skip, int count, char **item)
 {
-    if (chdir("erlang_tests") != 0) {
-        perror("Error: ");
-        return EXIT_FAILURE;
-    }
-#ifndef AVM_NO_JIT
-    if (!beam) {
-        if (chdir(AVM_JIT_TARGET_ARCH_DIR) != 0) {
-            perror("Error: cannot find " AVM_JIT_TARGET_ARCH_DIR " directory");
-            return EXIT_FAILURE;
-        }
-    }
-#endif
-
     int failed_tests = 0;
 
     if (count) {
@@ -793,9 +780,10 @@ int test_modules_execution(bool beam, bool skip, int count, char **item)
 static void usage(const char *name)
 {
     fprintf(stdout, "%s: run AtomVM tests\n", name);
-    fprintf(stdout, "%s [-h] [-s test1,test2] [-b] [test1 test2...]\n", name);
+    fprintf(stdout, "%s [-h] [-s test1,test2] [-c N] [-b] [test1 test2...]\n", name);
     fprintf(stdout, "  -h: display this message\n");
     fprintf(stdout, "  -s test1,test2: skip these tests\n");
+    fprintf(stdout, "  -c N: repeat tests N times or until a failure occurs\n");
     fprintf(stdout, "  -b: run tests against BEAM instead of AtomVM (erl in the PATH)\n");
     fprintf(stdout, "  test1 .. test2: specify tests to run (default to all)\n");
 }
@@ -821,10 +809,17 @@ int main(int argc, char **argv)
     bool beam = false;
     bool skip = false;
     char *skip_list = NULL;
-    while ((opt = getopt(argc, argv, "hbs:")) != -1) {
+    int repeat_count = 1;
+    while ((opt = getopt(argc, argv, "hbc:s:")) != -1) {
         switch (opt) {
             case 'b':
                 beam = true;
+                break;
+            case 'c':
+                repeat_count = atoi(optarg);
+                if (repeat_count <= 0) {
+                    repeat_count = 1;
+                }
                 break;
             case 's':
                 skip_list = optarg;
@@ -865,7 +860,39 @@ int main(int argc, char **argv)
         list = allocated_skip_list;
     }
 
-    int result = test_modules_execution(beam, skip, count, list);
+    if (chdir("erlang_tests") != 0) {
+        perror("Error: ");
+        if (allocated_skip_list) {
+            free(allocated_skip_list);
+        }
+        return EXIT_FAILURE;
+    }
+#ifndef AVM_NO_JIT
+    if (!beam) {
+        if (chdir(AVM_JIT_TARGET_ARCH_DIR) != 0) {
+            perror("Error: cannot find " AVM_JIT_TARGET_ARCH_DIR " directory");
+            if (allocated_skip_list) {
+                free(allocated_skip_list);
+            }
+            return EXIT_FAILURE;
+        }
+    }
+#endif
+
+    int result = 0;
+
+    for (int rep = 1; rep <= repeat_count; rep++) {
+        if (repeat_count > 1) {
+            fprintf(stderr, "=== Run %d of %d ===\n", rep, repeat_count);
+        }
+        result = test_modules_execution(beam, skip, count, list);
+        if (result != EXIT_SUCCESS) {
+            if (allocated_skip_list) {
+                free(allocated_skip_list);
+            }
+            return result;
+        }
+    }
     if (allocated_skip_list) {
         free(allocated_skip_list);
     }
