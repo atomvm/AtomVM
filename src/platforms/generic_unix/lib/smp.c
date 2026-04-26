@@ -44,6 +44,17 @@ struct RWLock
     pthread_rwlock_t lock;
 };
 
+/* Track scheduler thread handles so smp_scheduler_join_all can join them.
+ * A sub-thread may still execute JIT epilogue code after decrementing
+ * running_schedulers; joining prevents munmap races on JIT code pages. */
+struct SchedulerThreadList
+{
+    pthread_t thread;
+    struct SchedulerThreadList *next;
+};
+static pthread_mutex_t scheduler_threads_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct SchedulerThreadList *scheduler_threads = NULL;
+
 // Thread local storage with _Thread_local C11 keyword crashes on i386 with
 // valgrind (Ubutun 18 & 20, gcc 6-10). Use POSIX API instead.
 #ifdef __i386__
@@ -81,8 +92,29 @@ void smp_scheduler_start(GlobalContext *ctx)
     if (UNLIKELY(pthread_create(&thread, NULL, scheduler_thread_entry_point, ctx))) {
         AVM_ABORT();
     }
-    if (UNLIKELY(pthread_detach(thread))) {
+    struct SchedulerThreadList *node = malloc(sizeof(*node));
+    if (IS_NULL_PTR(node)) {
         AVM_ABORT();
+    }
+    node->thread = thread;
+    pthread_mutex_lock(&scheduler_threads_lock);
+    node->next = scheduler_threads;
+    scheduler_threads = node;
+    pthread_mutex_unlock(&scheduler_threads_lock);
+}
+
+void smp_scheduler_join_all(void)
+{
+    struct SchedulerThreadList *list;
+    pthread_mutex_lock(&scheduler_threads_lock);
+    list = scheduler_threads;
+    scheduler_threads = NULL;
+    pthread_mutex_unlock(&scheduler_threads_lock);
+    while (list) {
+        struct SchedulerThreadList *next = list->next;
+        (void) pthread_join(list->thread, NULL);
+        free(list);
+        list = next;
     }
 }
 

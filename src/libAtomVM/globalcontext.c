@@ -245,6 +245,13 @@ GlobalContext *globalcontext_new(void)
 
 COLD_FUNC void globalcontext_destroy(GlobalContext *glb)
 {
+#ifndef AVM_NO_SMP
+    /* Join sub-threads: a thread may still execute JIT epilogue code after
+     * decrementing running_schedulers, so we must join before munmapping
+     * native code pages. */
+    smp_scheduler_join_all();
+#endif
+
     sys_free_platform(glb);
 
     struct ListHead *item;

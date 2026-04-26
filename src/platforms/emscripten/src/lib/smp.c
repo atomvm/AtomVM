@@ -65,6 +65,11 @@ void smp_scheduler_start(GlobalContext *ctx)
     }
 }
 
+void smp_scheduler_join_all(void)
+{
+    /* Threads are detached on this platform. */
+}
+
 bool smp_is_main_thread(GlobalContext *glb)
 {
     UNUSED(glb);
