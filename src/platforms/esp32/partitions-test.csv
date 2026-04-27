@@ -1,0 +1,31 @@
+#
+# This file is part of AtomVM.
+#
+# Copyright 2026 Paul Guyot <pguyot@kallisys.net>
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
+
+# Test partition layout (8MB flash): the factory partition is large enough to
+# embed all Erlang test modules together with the AOT-compiled atomvmlib needed
+# to resolve estdlib calls when JIT is enabled (AVM_NO_EMU mode). The main.avm
+# partition is unused by the host firmware but kept so the test_esp_partition
+# enumeration test has a stable layout.
+# Name,   Type, SubType, Offset,  Size, Flags
+nvs,      data, nvs,       0x9000,     0x6000,
+phy_init, data, phy,       0xf000,     0x1000,
+factory,  app,  factory,  0x10000,   0x500000,
+lib.avm,  data, phy,     0x510000,    0x80000,
+main.avm, data, phy,     0x590000,    0x40000,
+data,     data, phy,     0x5d0000,    0x10000

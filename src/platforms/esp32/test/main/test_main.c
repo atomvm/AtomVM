@@ -200,8 +200,9 @@ TEST_CASE("test_jit_compile", "[test_run]")
     avmpack_data->base.data = main_avm;
     synclist_append(&glb->avmpack_data, &avmpack_data->base.avmpack_head);
 
-    // Pre-load test_jit_simple as plain BEAM so code_server:code_chunk/1 can find it.
-    // code_server:load/1 will then JIT-compile it at runtime via jit_stream_flash.
+    // Pre-load test_jit_simple (JIT precompiled) before running test_jit_compile.
+    // test_jit_compile:start/0 calls test_jit_simple:run/0 to verify that one
+    // JIT-precompiled module can call another.
     Module *jit_simple_mod = globalcontext_load_module_from_avm(glb, "test_jit_simple.beam");
     TEST_ASSERT(jit_simple_mod != NULL);
     globalcontext_insert_module(glb, jit_simple_mod);

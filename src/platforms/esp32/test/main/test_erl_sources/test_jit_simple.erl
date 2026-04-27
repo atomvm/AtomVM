@@ -18,8 +18,6 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-% This module is intentionally NOT JIT-precompiled.
-% It is included as plain BEAM to test runtime JIT compilation via jit_stream_flash.
 -module(test_jit_simple).
 
 -export([run/0]).

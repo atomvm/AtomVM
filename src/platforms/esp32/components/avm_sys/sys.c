@@ -918,10 +918,10 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 
 ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
 {
-    UNUSED(code_size);
     uintptr_t addr = (uintptr_t) code;
 
 #if defined(CONFIG_IDF_TARGET_ARCH_RISCV)
+    UNUSED(code_size);
     // On RISC-V ESP32 targets, native code in flash needs to be accessed
     // through the instruction cache (IROM) not data cache (DROM)
 #if defined(CONFIG_IDF_TARGET_ESP32C3) || defined(CONFIG_IDF_TARGET_ESP32C2)
@@ -947,6 +947,46 @@ ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size
         }
     }
     pthread_mutex_unlock(&s_xtensa_part_mutex);
+    // If addr is still in DROM, no partition mapping was found. Fall back to
+    // on-demand spi_flash_mmap(INST) for native code embedded in the app ELF
+    // binary (e.g. via _binary_xxx_start / ConstAVMPack in the test harness).
+    // Failure to install an IBUS mapping returns NULL so the caller falls back
+    // to interpreted mode rather than jumping to a non-executable DROM address.
+    if (addr >= SOC_DROM_LOW && addr < SOC_DROM_HIGH) {
+        size_t phys_addr = spi_flash_cache2phys((void *) addr);
+        if (phys_addr == SPI_FLASH_CACHE2PHYS_FAIL) {
+            ESP_LOGE(TAG, "spi_flash_cache2phys failed for 0x%" PRIx32, (uint32_t) addr);
+            return NULL;
+        }
+        size_t page_size = SPI_FLASH_MMU_PAGE_SIZE;
+        size_t phys_page_base = phys_addr & ~(page_size - 1);
+        size_t offset_in_page = phys_addr - phys_page_base;
+        size_t map_size = (offset_in_page + code_size + page_size - 1) & ~(page_size - 1);
+        const void *ibus_ptr;
+        spi_flash_mmap_handle_t ibus_handle;
+        if (spi_flash_mmap(phys_page_base, map_size, SPI_FLASH_MMAP_INST, &ibus_ptr, &ibus_handle) != ESP_OK) {
+            ESP_LOGE(TAG, "spi_flash_mmap(INST) failed for 0x%" PRIx32, (uint32_t) addr);
+            return NULL;
+        }
+        pthread_mutex_lock(&s_xtensa_part_mutex);
+        struct xtensa_part_mapping *new_mappings = realloc(s_xtensa_part_mappings,
+            (s_xtensa_part_count + 1) * sizeof(struct xtensa_part_mapping));
+        if (IS_NULL_PTR(new_mappings)) {
+            pthread_mutex_unlock(&s_xtensa_part_mutex);
+            spi_flash_munmap(ibus_handle);
+            ESP_LOGE(TAG, "Failed to alloc IBUS mapping for embedded native code");
+            return NULL;
+        }
+        uintptr_t dbus_page_base = addr & ~((uintptr_t) (page_size - 1));
+        s_xtensa_part_mappings = new_mappings;
+        s_xtensa_part_mappings[s_xtensa_part_count].dbus_base = dbus_page_base;
+        s_xtensa_part_mappings[s_xtensa_part_count].ibus_base = (uintptr_t) ibus_ptr;
+        s_xtensa_part_mappings[s_xtensa_part_count].size = map_size;
+        s_xtensa_part_mappings[s_xtensa_part_count].ibus_handle = ibus_handle;
+        s_xtensa_part_count++;
+        pthread_mutex_unlock(&s_xtensa_part_mutex);
+        addr = (uintptr_t) ibus_ptr + offset_in_page;
+    }
 #endif
 
     return (ModuleNativeEntryPoint) addr;

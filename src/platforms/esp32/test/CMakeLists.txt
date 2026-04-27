@@ -57,21 +57,10 @@ endif()
 # On Esp32, select is run in a loop in a dedicated task
 set(AVM_SELECT_IN_TASK ON)
 
-## Configure partition table based on JIT
-# Detect JIT from existing sdkconfig before project() where CONFIG_* is not yet available.
-set(_jit_partition NO)
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig")
-    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig" _sdkconfig_lines)
-    if("CONFIG_JIT_ENABLED=y" IN_LIST _sdkconfig_lines)
-        set(_jit_partition YES)
-    endif()
-endif()
-
-if (_jit_partition)
-    set(AVM_PARTITION_TABLE_FILENAME "../partitions-jit.csv")
-else()
-    set(AVM_PARTITION_TABLE_FILENAME "../partitions.csv")
-endif()
+# The test uses partitions-test.csv which provides a large factory partition
+# (2.8MB) for the test binary that embeds all Erlang test modules, plus a
+# main.avm partition used as JIT flash cache when JIT is enabled.
+set(AVM_PARTITION_TABLE_FILENAME "../partitions-test.csv")
 
 # Sync partition table in sdkconfig so that IDF uses the correct partition layout.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/sdkconfig")

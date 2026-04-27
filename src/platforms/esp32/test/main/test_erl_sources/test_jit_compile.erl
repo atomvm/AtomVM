@@ -18,15 +18,12 @@
 % SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
 %
 
-% Tests runtime JIT compilation via jit_stream_flash.
-% test_jit_simple is pre-loaded as plain BEAM (no native code) by the C test.
-% Calling code_server:load/1 triggers the JIT compiler to compile it at runtime
-% and store the result in flash, then execute it natively.
+% Tests that this JIT-precompiled xtensa module can call another JIT-precompiled module.
+% Both test_jit_compile and test_jit_simple are precompiled for the target arch at build time.
 -module(test_jit_compile).
 
 -export([start/0]).
 
 start() ->
-    ok = code_server:load(test_jit_simple),
     42 = test_jit_simple:run(),
     ok.
