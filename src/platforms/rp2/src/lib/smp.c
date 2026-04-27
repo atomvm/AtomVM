@@ -70,6 +70,11 @@ void smp_scheduler_start(GlobalContext *ctx)
     multicore_lockout_victim_init();
 }
 
+void smp_scheduler_join_all(void)
+{
+    /* Core 1 is launched directly, no pthread to join. */
+}
+
 bool smp_is_main_thread(GlobalContext *glb)
 {
     UNUSED(glb);

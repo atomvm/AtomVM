@@ -502,6 +502,12 @@ TEST_CASE("test_time_and_processes", "[test_run]")
     TEST_ASSERT(term_to_int(ret_value) == 6);
 }
 
+TEST_CASE("test_system_architecture", "[test_run]")
+{
+    term ret_value = avm_test_case("test_system_architecture.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
 TEST_CASE("test_tz", "[test_run]")
 {
     term ret_value = avm_test_case("test_tz.beam");
@@ -616,6 +622,12 @@ TEST_CASE("test_wifi_example", "[test_run]")
 TEST_CASE("test_wifi_managed", "[test_run]")
 {
     term ret_value = avm_test_case("test_wifi_managed.beam");
+    TEST_ASSERT(ret_value == OK_ATOM);
+}
+
+TEST_CASE("test_wifi_scan", "[test_run]")
+{
+    term ret_value = avm_test_case("test_wifi_scan.beam");
     TEST_ASSERT(ret_value == OK_ATOM);
 }
 #endif

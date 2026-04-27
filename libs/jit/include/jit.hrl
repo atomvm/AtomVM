@@ -30,6 +30,7 @@
 -define(JIT_ARCH_RISCV32, 4).
 -define(JIT_ARCH_RISCV64, 5).
 -define(JIT_ARCH_ARM32, 6).
+-define(JIT_ARCH_WASM32, 7).
 
 -define(JIT_VARIANT_PIC, 1).
 -define(JIT_VARIANT_FLOAT32, 2).

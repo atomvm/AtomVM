@@ -174,6 +174,13 @@ configure_file(
     @ONLY
 )
 
+# Generate device atom literals header from template
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/stm32_device_atoms.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/stm32_device_atoms.h
+    @ONLY
+)
+
 # Set linker flags
 string(REPLACE ";" " " _arch_flags_str "${STM32_ARCH_FLAGS}")
 set(LINKER_FLAGS "${LINKER_FLAGS} -nostdlib -nostartfiles -Wl,--gc-sections -T${LINKER_SCRIPT} ${_arch_flags_str}")

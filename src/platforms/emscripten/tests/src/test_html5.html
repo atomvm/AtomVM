@@ -29,14 +29,15 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     <div id="register-once-and-exit" hidden>register once and exit</div>
     <div id="result"></div>
     <div id="error"></div>
-    <script>
+    <script type="module">
+    import AtomVM from "/AtomVM.mjs";
+
     // Arguments are loaded using fetch API.
     // wasm_webserver serves under /tests/build/ files in src/platform/escripten/build/tests/src subdirectory
     // and under /build/ files in build/ subdirectory.
-    var Module = {
+    window.Module = await AtomVM({
         arguments: ['/tests/build/test_html5.beam', '/build/libs/estdlib/src/estdlib.avm', '/build/libs/eavmlib/src/eavmlib.avm', '/build/libs/avm_emscripten/src/avm_emscripten.avm']
-    }
+    });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

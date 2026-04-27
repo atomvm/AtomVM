@@ -32,3 +32,41 @@ pack_runnable(blink_weact_studio_u585 blink_weact_studio_u585 eavmlib avm_stm32)
 pack_runnable(blink_weact_studio_wb55 blink_weact_studio_wb55 eavmlib avm_stm32)
 pack_runnable(blink_nucleo64 blink_nucleo64 eavmlib avm_stm32)
 pack_runnable(blink_nucleo144 blink_nucleo144 eavmlib avm_stm32)
+
+if(AVM_RELEASE)
+    set(INCLUDE_LINES "--remove_lines")
+else()
+    set(INCLUDE_LINES "")
+endif()
+
+set(SPI_LIS3DH_BEAM ${CMAKE_BINARY_DIR}/examples/erlang/spi_lis3dh.beam)
+add_custom_command(
+    OUTPUT stm32_spi_lis3dh.avm
+    DEPENDS spi_lis3dh_main ${SPI_LIS3DH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm estdlib
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm avm_stm32
+        PackBEAM
+    COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} stm32_spi_lis3dh.avm
+        ${SPI_LIS3DH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm
+    COMMENT "Packing runnable stm32_spi_lis3dh.avm"
+    VERBATIM
+)
+add_custom_target(stm32_spi_lis3dh ALL DEPENDS stm32_spi_lis3dh.avm)
+
+set(SPI_FLASH_BEAM ${CMAKE_BINARY_DIR}/examples/erlang/spi_flash.beam)
+add_custom_command(
+    OUTPUT stm32_spi_flash.avm
+    DEPENDS spi_flash_main ${SPI_FLASH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm estdlib
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm avm_stm32
+        PackBEAM
+    COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create ${INCLUDE_LINES} stm32_spi_flash.avm
+        ${SPI_FLASH_BEAM}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib.avm
+        ${CMAKE_BINARY_DIR}/libs/avm_stm32/src/avm_stm32.avm
+    COMMENT "Packing runnable stm32_spi_flash.avm"
+    VERBATIM
+)
+add_custom_target(stm32_spi_flash ALL DEPENDS stm32_spi_flash.avm)

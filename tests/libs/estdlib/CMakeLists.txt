@@ -41,7 +41,13 @@ set(ERLANG_MODULES
     test_net
     test_net_kernel
     test_os
+    test_serial_dist
+    test_serial_dist_socat
+    test_serial_dist_socat_peer
+    test_serial_dist_beam_peer
     test_uart
+    mock_uart_hal
+    file_uart_hal
     test_proc_lib
     test_sets
     test_spawn
@@ -61,5 +67,68 @@ set(ERLANG_MODULES
     ping_pong_server
 )
 
-pack_archive(test_estdlib_lib ${ERLANG_MODULES})
+pack_archive(test_estdlib_lib DEPENDS_ON eavmlib MODULES ${ERLANG_MODULES})
 pack_test(test_estdlib estdlib eavmlib avm_network avm_unix etest)
+
+# Build .beam files for the BEAM peer used in BEAM<->AtomVM serial
+# distribution tests.  Only modules that AtomVM provides and OTP does
+# not are placed here; OTP's own gen_server, dist_util, etc. are used
+# as-is.  serial_dist_controller is compiled with -DBEAM_INTERFACE so
+# that recv returns lists (as OTP's dist_util expects).
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/beam_beams/serial_dist_controller.beam
+           ${CMAKE_CURRENT_BINARY_DIR}/beam_beams/serial_dist.beam
+    COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/beam_beams
+        && erlc +debug_info -DBEAM_INTERFACE
+            -I ${CMAKE_SOURCE_DIR}/libs/include
+            -o ${CMAKE_CURRENT_BINARY_DIR}/beam_beams
+            ${CMAKE_SOURCE_DIR}/libs/estdlib/src/serial_dist_controller.erl
+        && ${CMAKE_COMMAND} -E copy
+            ${CMAKE_BINARY_DIR}/libs/estdlib/src/beams/serial_dist.beam
+            ${CMAKE_CURRENT_BINARY_DIR}/beam_beams/serial_dist.beam
+    DEPENDS ${CMAKE_SOURCE_DIR}/libs/estdlib/src/serial_dist_controller.erl
+            estdlib
+    COMMENT "Building BEAM peer modules for serial distribution tests"
+    VERBATIM
+)
+add_custom_target(
+    serial_dist_controller_beam ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/beam_beams/serial_dist_controller.beam
+            ${CMAKE_CURRENT_BINARY_DIR}/beam_beams/serial_dist.beam
+)
+
+# Build a separate AVM for the serial distribution peer node
+if(AVM_DISABLE_JIT)
+    set(peer_precompiled_suffix "")
+    set(peer_jit_archives "")
+    set(peer_jit_targets "")
+else()
+    set(peer_precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
+    set(peer_jit_archives ${CMAKE_BINARY_DIR}/libs/jit/src/jit${peer_precompiled_suffix}.avm)
+    set(peer_jit_targets jit)
+endif()
+
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/test_serial_dist_socat_peer.avm
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/test_estdlib_lib.avm
+            ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib${peer_precompiled_suffix}.avm
+            ${CMAKE_BINARY_DIR}/libs/eavmlib/src/eavmlib.avm
+            ${CMAKE_BINARY_DIR}/libs/avm_unix/src/avm_unix.avm
+            ${peer_jit_archives}
+            test_estdlib_lib estdlib eavmlib avm_unix ${peer_jit_targets} PackBEAM
+    COMMAND ${CMAKE_BINARY_DIR}/tools/packbeam/packbeam create
+        -s test_serial_dist_socat_peer
+        ${CMAKE_CURRENT_BINARY_DIR}/test_serial_dist_socat_peer.avm
+        ${CMAKE_CURRENT_BINARY_DIR}/test_estdlib_lib.avm
+        ${peer_jit_archives}
+        ${CMAKE_BINARY_DIR}/libs/estdlib/src/estdlib${peer_precompiled_suffix}.avm
+        ${CMAKE_BINARY_DIR}/libs/eavmlib/src/eavmlib.avm
+        ${CMAKE_BINARY_DIR}/libs/avm_unix/src/avm_unix.avm
+    COMMENT "Packing peer AVM for serial distribution tests"
+    VERBATIM
+)
+add_custom_target(
+    test_serial_dist_socat_peer ALL
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/test_serial_dist_socat_peer.avm
+)
+

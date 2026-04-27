@@ -33,10 +33,23 @@
 #include "stm32_hal_platform.h"
 
 #include "avm_log.h"
+#include "stm32_device_atoms.h"
 #include "stm_sys.h"
 
 #define TAG "sys"
 #define RESERVE_STACK_SIZE 4096U
+
+// clang-format off
+static const char *const cpu_atom = "\x3" "cpu";
+static const char *const device_atom = "\x6" "device";
+static const char *const fpu_atom = "\x3" "fpu";
+static const char *const series_atom = "\x6" "series";
+static const char *const stm32_chip_info_atom = "\xF" "stm32_chip_info";
+static const char *const stm32_cpu_atom = STM32_CPU_ATOM_LITERAL;
+static const char *const stm32_device_atom = STM32_DEVICE_ATOM_LITERAL;
+static const char *const stm32_fpu_atom = STM32_FPU_ATOM_LITERAL;
+static const char *const stm32_series_atom = STM32_SERIES_ATOM_LITERAL;
+// clang-format on
 
 /* These functions are needed to fix a hard fault when using malloc in devices with sram spanning
  * multiple chips
@@ -288,8 +301,18 @@ Context *sys_create_port(GlobalContext *glb, const char *driver_name, term opts)
 
 term sys_get_info(Context *ctx, term key)
 {
-    UNUSED(ctx);
-    UNUSED(key);
+    GlobalContext *glb = ctx->global;
+    if (key == globalcontext_make_atom(glb, stm32_chip_info_atom)) {
+        if (memory_ensure_free(ctx, term_map_size_in_terms(4)) != MEMORY_GC_OK) {
+            return OUT_OF_MEMORY_ATOM;
+        }
+        term ret = term_alloc_map(4, &ctx->heap);
+        term_set_map_assoc(ret, 0, globalcontext_make_atom(glb, cpu_atom), globalcontext_make_atom(glb, stm32_cpu_atom));
+        term_set_map_assoc(ret, 1, globalcontext_make_atom(glb, device_atom), globalcontext_make_atom(glb, stm32_device_atom));
+        term_set_map_assoc(ret, 2, globalcontext_make_atom(glb, fpu_atom), globalcontext_make_atom(glb, stm32_fpu_atom));
+        term_set_map_assoc(ret, 3, globalcontext_make_atom(glb, series_atom), globalcontext_make_atom(glb, stm32_series_atom));
+        return ret;
+    }
     return UNDEFINED_ATOM;
 }
 
@@ -310,7 +333,7 @@ void sys_enable_flash_cache(void)
 #endif
 }
 
-/* See: ARM V7-M Architecture Reference Manual :: https://static.docs.arm.com/ddi0403/eb/DDI0403E_B_armv7m_arm.pdf */
+/* See: ARM V7-M Architecture Reference Manual */
 void sys_init_icache(void)
 {
     __DSB();
@@ -342,10 +365,16 @@ void _fini(void)
 }
 
 #ifndef AVM_NO_JIT
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
 {
-    UNUSED(size);
+    UNUSED(code_size);
     // We need to set the Thumb bit
-    return (ModuleNativeEntryPoint) ((uintptr_t) (native_code + offset) | 1);
+    return (ModuleNativeEntryPoint) ((uintptr_t) code | 1);
+}
+
+void sys_release_native_code(ModuleNativeEntryPoint entry_point)
+{
+    // Native code points into flash; nothing to free
+    UNUSED(entry_point);
 }
 #endif

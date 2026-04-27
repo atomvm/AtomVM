@@ -177,6 +177,7 @@ load(Module) ->
                         ImportResolver = fun(Index) ->
                             code_server:import_resolver(Module, Index)
                         end,
+                        DebugInfoResolver = fun(_Index) -> false end,
                         {StreamModule, Stream0} = jit:stream(jit_mmap_size(byte_size(Code))),
                         {BackendModule, BackendState0} = jit:backend(StreamModule, Stream0),
                         {LabelsCount, BackendState1} = jit:compile(
@@ -185,6 +186,7 @@ load(Module) ->
                             LiteralResolver,
                             TypeResolver,
                             ImportResolver,
+                            DebugInfoResolver,
                             BackendModule,
                             BackendState0
                         ),

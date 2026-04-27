@@ -128,10 +128,10 @@ static void network_driver_do_cyw43_assoc(GlobalContext *glb);
 static term tuple_from_addr(Heap *heap, uint32_t addr)
 {
     term terms[4];
-    terms[0] = term_from_int32((addr >> 24) & 0xFF);
-    terms[1] = term_from_int32((addr >> 16) & 0xFF);
-    terms[2] = term_from_int32((addr >> 8) & 0xFF);
-    terms[3] = term_from_int32(addr & 0xFF);
+    terms[0] = term_from_int11((addr >> 24) & 0xFF);
+    terms[1] = term_from_int11((addr >> 16) & 0xFF);
+    terms[2] = term_from_int11((addr >> 8) & 0xFF);
+    terms[3] = term_from_int11(addr & 0xFF);
 
     return port_heap_create_tuple_n(heap, 4, terms);
 }
@@ -715,7 +715,7 @@ static void get_sta_rssi(Context *ctx, term pid, term ref)
         return;
     }
 
-    term rssi = term_from_int32(sta_rssi);
+    term rssi = term_from_int11(sta_rssi);
     // Reply: {Ref, {rssi, Value}}
     port_ensure_available(ctx, tuple_reply_size);
     term reply = port_create_tuple2(ctx, globalcontext_make_atom(ctx->global, ATOM_STR("\x4", "rssi")), rssi);

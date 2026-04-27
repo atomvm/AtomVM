@@ -46,5 +46,5 @@ system_time() ->
 %% @end
 %%-----------------------------------------------------------------------------
 -spec system_time(TimeUnit :: erlang:time_unit()) -> integer().
-system_time(TimeUnit) ->
+system_time(_TimeUnit) ->
     erlang:nif_error(undefined).

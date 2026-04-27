@@ -35,6 +35,13 @@ standard Erlang/OTP API, that takes maps instead of proplists.
 The `main.avm` offset is now `0x250000` for all images (previously `0x210000` for Erlang-only).
 Update flashing offsets in your tooling, build scripts, and `mix.exs` or `rebar.config` if you
 were using the `0x210000` offset.
+- The emscripten port now uses ES6 modules (`.mjs` suffix). This is a breaking change for
+  existing web integrations:
+  * Replace `<script async src="AtomVM.js"></script>` with a module script
+  * Use `<script type="module">` and `import AtomVM from "AtomVM.mjs"`
+  * Instantiate with `const module = await AtomVM({ arguments: [...] })`
+  * The old implicit global-script pattern is no longer supported
+  * `AtomVM.worker.js` is no longer emitted; only `AtomVM.mjs` and `AtomVM.wasm` are needed
 
 ## v0.6.4 -> v0.6.5
 

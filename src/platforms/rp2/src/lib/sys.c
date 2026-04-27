@@ -476,10 +476,16 @@ void sys_mbedtls_ctr_drbg_context_unlock(GlobalContext *global)
 }
 
 #ifndef AVM_NO_JIT
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset)
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size)
 {
-    UNUSED(size);
+    UNUSED(code_size);
     // We need to set the Thumb bit
-    return (ModuleNativeEntryPoint) ((uintptr_t) (native_code + offset) | 1);
+    return (ModuleNativeEntryPoint) ((uintptr_t) code | 1);
+}
+
+void sys_release_native_code(ModuleNativeEntryPoint entry_point)
+{
+    // Native code points into flash; nothing to free
+    UNUSED(entry_point);
 }
 #endif

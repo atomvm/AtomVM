@@ -74,10 +74,12 @@ compile_erlang(test_rtc_slow)
 compile_erlang(test_select)
 compile_erlang(test_socket)
 compile_erlang(test_ssl)
+compile_erlang(test_system_architecture)
 compile_erlang(test_time_and_processes)
 compile_erlang(test_twdt)
 compile_erlang(test_tz)
 compile_erlang(test_deep_sleep_hold)
+compile_erlang(test_wifi_scan)
 
 set(erlang_test_beams
     test_esp_partition.beam
@@ -96,10 +98,12 @@ set(erlang_test_beams
     test_select.beam
     test_socket.beam
     test_ssl.beam
+    test_system_architecture.beam
     test_time_and_processes.beam
     test_twdt.beam
     test_tz.beam
     test_deep_sleep_hold.beam
+    test_wifi_scan.beam
 )
 
 if(NOT AVM_DISABLE_JIT)

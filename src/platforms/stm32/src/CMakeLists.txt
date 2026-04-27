@@ -52,6 +52,14 @@ if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_i2c_ex.c")
     list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_i2c_ex.c)
 endif()
 
+# SPI HAL
+list(APPEND HAL_SOURCES
+    ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi.c
+)
+if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi_ex.c")
+    list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_spi_ex.c)
+endif()
+
 # ICACHE HAL for families that have it (U5, H5)
 if (EXISTS "${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_icache.c")
     list(APPEND HAL_SOURCES ${HAL_DRIVER_SRC_DIR}/${STM32_FAMILY}_hal_icache.c)
@@ -105,6 +113,8 @@ target_include_directories(${PROJECT_EXECUTABLE} PUBLIC
 add_dependencies(${PROJECT_EXECUTABLE} picolibc)
 
 # Link libAtomVM
+include(SystemArchitecture)
+avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING PLATFORM_VENDOR stm32 PLATFORM_OS none)
 add_subdirectory(../../../libAtomVM libAtomVM)
 add_dependencies(libAtomVM picolibc)
 target_link_libraries(${PROJECT_EXECUTABLE} PUBLIC libAtomVM)

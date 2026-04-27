@@ -42,6 +42,8 @@ set(ERLANG_MODULES
     jit_riscv32_asm
     jit_riscv64
     jit_riscv64_asm
+    jit_wasm32
+    jit_wasm32_asm
     jit_x86_64
     jit_x86_64_asm
 )

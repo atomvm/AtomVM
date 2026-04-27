@@ -257,6 +257,15 @@ int smp_get_online_processors(void);
 void smp_scheduler_start(GlobalContext *glb);
 
 /**
+ * @brief Wait for all scheduler sub-threads to fully exit.
+ *
+ * Must be called before destroying resources (e.g. JIT code pages) that
+ * scheduler threads may still access after leaving the scheduler loop.
+ * May be a no-op on platforms without joinable scheduler threads.
+ */
+void smp_scheduler_join_all(void);
+
+/**
  * @brief Determine if caller is in the main thread, i.e. thread that was not
  * started with acmsmp_scheduler_start.
  */

@@ -35,13 +35,14 @@ SPDX-License-Identifier: Apache-2.0 OR LGPL-2.1-or-later
     <p>Call button was clicked <span id="call-counter">0</span> time(s).</p>
     <p>Cast button was clicked <span id="cast-counter">0</span> time(s).</p>
 
-    <script>
+    <script type="module">
+      import AtomVM from "/AtomVM.mjs";
+
       // Arguments are loaded using fetch API.
       // wasm_webserver serves under /build/ files in build subdirectory.
-      var Module = {
+      window.Module = await AtomVM({
         arguments: ["/build/examples/emscripten/call_cast.avm"],
-      };
+      });
     </script>
-    <script async src="/AtomVM.js"></script>
   </body>
 </html>

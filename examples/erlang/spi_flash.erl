@@ -27,6 +27,7 @@
 %% Default pins are auto-detected from the platform and chip model:
 %%
 %% Pico (SPI0):          SCK=GP2, MOSI=GP3, MISO=GP4, CS=GP5
+%% STM32 (SPI1):         SCK=PA5, MOSI=PA7, MISO=PA6, CS=PA4
 %% ESP32/S2/S3 (SPI2):   SCK=18,  MOSI=23,  MISO=19,  CS=5
 %% ESP32-C2/C3/C5 (SPI2): SCK=6,  MOSI=7,   MISO=2,   CS=10
 %% ESP32-C6/C61 (SPI2):  SCK=6,   MOSI=7,   MISO=2,   CS=16
@@ -108,6 +109,7 @@ default_pins() ->
 
 %%         {SCK, MOSI, MISO, CS}
 default_pins(pico) -> {2, 3, 4, 5};
+default_pins(stm32) -> {{a, 5}, {a, 7}, {a, 6}, {a, 4}};
 default_pins(esp32) -> esp32_default_pins().
 
 esp32_default_pins() ->

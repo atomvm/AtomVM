@@ -290,11 +290,10 @@ void sys_free_platform(GlobalContext *global);
  * @details If mmap module is executable, returns native_code + offset.
  * Otherwise (Apple Silicon) copy it to an executable buffer. Only implemented
  * on platforms with JIT.
- * @param native_code pointer to native code chunk
- * @param size size of native code chunk
- * @param offset offset to the module entry point
+ * @param code pointer to the target architecture's code block within the chunk
+ * @param code_size size of that architecture's code block only
  */
-ModuleNativeEntryPoint sys_map_native_code(const uint8_t *native_code, size_t size, size_t offset);
+ModuleNativeEntryPoint sys_map_native_code(const uint8_t *code, size_t code_size);
 
 /**
  * @brief Get the cache (typically on flash) of native code for a given module
@@ -322,6 +321,19 @@ bool sys_get_cache_native_code(GlobalContext *global, Module *mod, uint16_t *ver
  * @param labels number of labels
  */
 void sys_set_cache_native_code(GlobalContext *global, Module *mod, uint16_t version, ModuleNativeEntryPoint entry_point, uint32_t labels);
+
+/**
+ * @brief Release native code resources allocated by sys_map_native_code or
+ * jit_stream_entry_point.
+ *
+ * @details Called from module_destroy() when native_code is not NULL.
+ * Platforms that allocate heap or mmap memory for native code must free it
+ * here. Platforms that point directly into flash/ROM implement a no-op.
+ * Recovery of the allocation base and size is done by each platform from
+ * the entry_point alone, using metadata embedded at fixed offsets.
+ * @param entry_point the native_code pointer stored in the Module
+ */
+void sys_release_native_code(ModuleNativeEntryPoint entry_point);
 
 #ifdef __cplusplus
 }

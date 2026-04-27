@@ -65,13 +65,18 @@ void smp_scheduler_start(GlobalContext *ctx)
     }
 }
 
+void smp_scheduler_join_all(void)
+{
+    /* Threads are detached on this platform. */
+}
+
 bool smp_is_main_thread(GlobalContext *glb)
 {
     UNUSED(glb);
     return !g_sub_main_thread;
 }
 
-Mutex *smp_mutex_create()
+Mutex *smp_mutex_create(void)
 {
     Mutex *result = malloc(sizeof(Mutex));
     if (UNLIKELY(result == NULL && sizeof(Mutex) > 0)) {
@@ -111,7 +116,7 @@ void smp_mutex_unlock(Mutex *mtx)
     }
 }
 
-CondVar *smp_condvar_create()
+CondVar *smp_condvar_create(void)
 {
     CondVar *result = malloc(sizeof(CondVar));
     if (UNLIKELY(result == NULL && sizeof(CondVar) > 0)) {
@@ -145,7 +150,7 @@ void smp_condvar_signal(CondVar *cv)
     }
 }
 
-RWLock *smp_rwlock_create()
+RWLock *smp_rwlock_create(void)
 {
     RWLock *result = malloc(sizeof(RWLock));
     if (UNLIKELY(result == NULL && sizeof(RWLock) > 0)) {
@@ -198,7 +203,7 @@ void smp_rwlock_unlock(RWLock *lock)
     }
 }
 
-int smp_get_online_processors()
+int smp_get_online_processors(void)
 {
     return emscripten_num_logical_cores();
 }

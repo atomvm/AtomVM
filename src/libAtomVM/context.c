@@ -94,7 +94,7 @@ Context *context_new(GlobalContext *glb)
 #ifndef AVM_NO_EMU
     ctx->saved_ip = NULL;
 #else
-    ctx->saved_function_ptr = NULL;
+    ctx->saved_function_ptr = (NativeContinuation) 0;
 #endif
 #ifndef AVM_NO_EMU
     ctx->waiting_with_timeout = false;
@@ -136,6 +136,9 @@ Context *context_new(GlobalContext *glb)
 
 void context_destroy(Context *ctx)
 {
+    // Hold and release the spin lock for timers and cancel any timer
+    scheduler_cancel_timeout(ctx);
+
     // Another process can get an access to our mailbox until this point.
     struct ListHead *processes_table_list = synclist_wrlock(&ctx->global->processes_table);
     UNUSED(processes_table_list);
@@ -278,10 +281,6 @@ void context_destroy(Context *ctx)
     memory_destroy_heap(&ctx->heap, ctx->global);
 
     dictionary_destroy(&ctx->dictionary);
-
-    if (ctx->timer_list_head.head.next != &ctx->timer_list_head.head) {
-        scheduler_cancel_timeout(ctx);
-    }
 
     // Platform data is freed here to allow drivers to use the
     // globalcontext_get_process_lock lock to protect this pointer
@@ -472,12 +471,21 @@ void context_process_code_server_resume_signal(Context *ctx)
     Module *module = ctx->saved_module;
 #ifndef AVM_NO_EMU
     if (module->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: store (label + 1) encoding; schedule_in resolves per-thread func ptr
+        ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
         ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+#endif
     } else {
         ctx->saved_ip = module->labels[label];
     }
 #else
+#ifdef JIT_JUMPTABLE_IS_DATA
+    ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
     ctx->saved_function_ptr = module_get_native_entry_point(module, label);
+#endif
 #endif
     // Fix CP to OP_INT_CALL_END
     if (ctx->cp == module_address(module->module_index, 0)) {
@@ -1172,10 +1180,10 @@ COLD_FUNC void context_dump(Context *ctx)
     {
         Module *cp_mod;
         int label;
-        int offset;
+        size_t offset;
         module_cp_to_label_offset(ctx->cp, &cp_mod, &label, &offset, NULL, ctx->global);
-        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %i>\n\n",
-            cp_mod->module_index, label, offset);
+        fprintf(stderr, "cp: #CP<module: %i, label: %i, offset: %u>\n\n",
+            cp_mod->module_index, label, (unsigned) offset);
     }
 
     fprintf(stderr, "x[0]: ");
@@ -1197,9 +1205,10 @@ COLD_FUNC void context_dump(Context *ctx)
         } else if (term_is_cp(*ct)) {
             Module *cp_mod;
             int label;
-            int offset;
+            size_t offset;
             module_cp_to_label_offset(*ct, &cp_mod, &label, &offset, NULL, ctx->global);
-            fprintf(stderr, "#CP<module: %i, label: %i, offset: %i>\n", cp_mod->module_index, label, offset);
+            // Cast offset to unsigned as some embedded libc implementations do not support %zu
+            fprintf(stderr, "#CP<module: %i, label: %i, offset: %u>\n", cp_mod->module_index, label, (unsigned) offset);
 
         } else {
             term_display(stderr, *ct, ctx);

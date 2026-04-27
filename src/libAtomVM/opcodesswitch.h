@@ -668,6 +668,22 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         goto loop
 #endif
 
+// Helper to resolve saved_function_ptr to a per-thread function pointer.
+// For WASM, saved_function_ptr stores (label + 1) encoding (thread-independent).
+// For other JIT archs, it stores the actual function pointer.
+#ifndef AVM_NO_JIT
+#ifdef JIT_JUMPTABLE_IS_DATA
+#define DO_RESOLVE_SAVED_FUNC_PTR()                             \
+    {                                                           \
+        int _label = (int) ctx->saved_function_ptr - 1; \
+        native_pc = module_get_native_entry_point(mod, _label); \
+    }
+#else
+#define DO_RESOLVE_SAVED_FUNC_PTR()                             \
+    native_pc = ctx->saved_function_ptr
+#endif
+#endif
+
 #if AVM_NO_JIT
 
 #define SCHEDULE_NEXT(restore_mod, restore_to) \
@@ -696,6 +712,15 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #elif AVM_NO_EMU
 
+#ifdef JIT_JUMPTABLE_IS_DATA
+// WASM: saved_function_ptr already has (label + 1) encoding, don't overwrite
+#define SCHEDULE_WAIT_ANY(restore_mod) \
+    {                                                                                             \
+        ctx->saved_module = restore_mod;                                                          \
+        ctx = scheduler_wait(ctx);                                                                \
+        goto schedule_in;                                                                         \
+    }
+#else
 #define SCHEDULE_WAIT_ANY(restore_mod) \
     {                                                                                             \
         ctx->saved_function_ptr = native_pc;                                                      \
@@ -703,6 +728,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         ctx = scheduler_wait(ctx);                                                                \
         goto schedule_in;                                                                         \
     }
+#endif
 
 #else
 
@@ -719,9 +745,8 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
     {                                                                                             \
         if (restore_mod->native_code == NULL) {                                                   \
             ctx->saved_ip = pc;                                                                   \
-        } else {                                                                                  \
-            ctx->saved_ip = native_pc;                                                            \
         }                                                                                         \
+        /* For JIT: saved_function_ptr already has correct encoding */                            \
         ctx->saved_module = restore_mod;                                                          \
         ctx = scheduler_wait(ctx);                                                                \
         goto schedule_in;                                                                         \
@@ -747,7 +772,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 #elif AVM_NO_EMU
     #define RESUME()                                            \
     {                                                           \
-        native_pc = ctx->saved_function_ptr;                    \
+        DO_RESOLVE_SAVED_FUNC_PTR();                            \
     }
 #else
     #define RESUME()                                            \
@@ -755,7 +780,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
         pc = (ctx->saved_ip);                                   \
         native_pc = NULL;                                       \
     } else {                                                    \
-        native_pc = ctx->saved_ip;                              \
+        DO_RESOLVE_SAVED_FUNC_PTR();                            \
     }
 #endif
 
@@ -974,6 +999,20 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
 
 #else
 
+#ifdef JIT_JUMPTABLE_IS_DATA
+static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
+{
+    int label = (int) ((ctx->cp & 0xFFFFFF) >> 2) / JIT_JUMPTABLE_ENTRY_SIZE;
+    return module_get_native_entry_point(mod, label);
+}
+#else
+static inline ModuleNativeEntryPoint do_return_native(Module *mod, Context *ctx)
+{
+    return (ModuleNativeEntryPoint) ((const uint8_t *) mod->native_code)
+        + ((ctx->cp & 0xFFFFFF) >> 2);
+}
+#endif
+
 #define DO_RETURN()                                                     \
     {                                                                   \
         int module_index = ((uintptr_t) ctx->cp) >> 24;                 \
@@ -988,7 +1027,7 @@ static void destroy_extended_registers(Context *ctx, unsigned int live)
             code = mod->code->code;                                     \
         }                                                               \
         if (mod->native_code) {                                         \
-            native_pc = (ModuleNativeEntryPoint) ((const uint8_t *) mod->native_code) + ((ctx->cp & 0xFFFFFF) >> 2); \
+            native_pc = do_return_native(mod, ctx);                     \
         } else {                                                        \
             native_pc = NULL;                                           \
             pc = code + ((((uintptr_t) ctx->cp) & 0xFFFFFF) >> 2);      \
@@ -1588,10 +1627,18 @@ int context_execute_loop(Context *ctx, Module *mod, const char *function_name, i
     ctx->saved_ip = mod->labels[label];
 #elif AVM_NO_EMU
     assert(mod->native_code);
+#ifdef JIT_JUMPTABLE_IS_DATA
+    ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
     ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
+#endif
 #else
     if (mod->native_code) {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        ctx->saved_function_ptr = (NativeContinuation) (label + 1);
+#else
         ctx->saved_function_ptr = module_get_native_entry_point(mod, label);
+#endif
     } else {
         ctx->saved_ip = mod->labels[label];
     }
@@ -1638,7 +1685,15 @@ schedule_in:
     // set PC
     pc = (ctx->saved_ip);
 #elif AVM_NO_EMU
+#ifdef JIT_JUMPTABLE_IS_DATA
+    // WASM: saved_function_ptr stores (label + 1) encoding; resolve per-thread
+    {
+        int label = (int) ctx->saved_function_ptr - 1;
+        native_pc = module_get_native_entry_point(mod, label);
+    }
+#else
     native_pc = ctx->saved_function_ptr;
+#endif
 #else
     if (mod->native_code == NULL) {
         code = mod->code->code;
@@ -1646,7 +1701,15 @@ schedule_in:
         pc = (ctx->saved_ip);
         native_pc = NULL;
     } else {
+#ifdef JIT_JUMPTABLE_IS_DATA
+        // WASM: saved_function_ptr stores (label + 1) encoding; resolve per-thread
+        {
+            int label = (int) ctx->saved_function_ptr - 1;
+            native_pc = module_get_native_entry_point(mod, label);
+        }
+#else
         native_pc = ctx->saved_function_ptr;
+#endif
     }
 #endif
 
@@ -1682,7 +1745,7 @@ schedule_in:
                 ctx = new_ctx;
                 goto schedule_in;
             }
-            if (IS_NULL_PTR(jit_state.continuation)) {
+            if (UNLIKELY(jit_state.continuation == (NativeContinuation) 0)) {
                 goto schedule_in;
             }
             if (UNLIKELY(remaining_reductions == 0)) {
@@ -1701,10 +1764,18 @@ schedule_in:
             if (mod->native_code == NULL) {
                 // set PC
                 native_pc = NULL;
-                JUMP_TO_ADDRESS(jit_state.continuation);
+                JUMP_TO_ADDRESS(jit_state.continuation_pc);
             } else {
 #endif
+#ifdef JIT_JUMPTABLE_IS_DATA
+                // WASM: continuation stores (label + 1); convert to function pointer
+                {
+                    int label = (int) jit_state.continuation - 1;
+                    native_pc = module_get_native_entry_point(mod, label);
+                }
+#else
                 native_pc = jit_state.continuation;
+#endif
 #ifndef AVM_NO_EMU
             }
 #endif
@@ -6203,6 +6274,43 @@ schedule_in:
 
                     WRITE_REGISTER(dreg, ret);
 
+                    break;
+                }
+#endif
+
+                case OP_NIF_START: {
+                    TRACE("nif_start/0\n");
+                    break;
+                }
+
+#if MAXIMUM_OTP_COMPILER_VERSION >= 27
+                case OP_EXECUTABLE_LINE: {
+                    term location;
+                    DECODE_COMPACT_TERM(location, pc);
+                    uint32_t line_number;
+                    DECODE_LITERAL(line_number, pc);
+
+                    TRACE("executable_line/2 location=0x%" TERM_X_FMT ", line=%u\n", location, line_number);
+
+                    USED_BY_TRACE(location);
+                    break;
+                }
+#endif
+
+#if MAXIMUM_OTP_COMPILER_VERSION >= 28
+                case OP_DEBUG_LINE: {
+                    term kind;
+                    DECODE_COMPACT_TERM(kind, pc);
+                    uint32_t location_index;
+                    DECODE_LITERAL(location_index, pc);
+                    uint32_t index;
+                    DECODE_LITERAL(index, pc);
+                    uint32_t live;
+                    DECODE_LITERAL(live, pc);
+
+                    TRACE("debug_line/4 kind=0x%" TERM_X_FMT ", location=%u, index=%u, live=%u\n", kind, location_index, index, live);
+
+                    USED_BY_TRACE(kind);
                     break;
                 }
 #endif

@@ -4,7 +4,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0-alpha.1] - Unreleased
+## [0.7.0-beta.0] - Unreleased
+
+### Added
+- Added Erlang distribution over serial (uart)
+- Added WASM32 JIT backend for Emscripten platform
+- Added `network:wifi_scan/0,1` to ESP32 network driver to scan available APs when in sta or sta+ap mode.
+- Added support for `nif_start`, `executable_line` and `debug_line` opcodes
+- Added named variable debugging support in DWARF when modules are compiled with `beam_debug_info`
+- Added more reset reasons and ensured `esp:reset_reason/0` doesn't return `undefined`
+- Added I2C and SPI APIs to stm32 platform
+
+### Changed
+- Updated network type db() to dbm() to reflect the actual representation of the type
+- Use ES6 modules for emscripten port, using .mjs suffix
+
+### Fixed
+- Stop using deprecated `term_from_int32` on STM32 platform
+- Stop using deprecated `term_from_int32` on RP2 platform
+- Stop using deprecated `term_from_int32` on ESP32 platform
+- Fixed improper cast of ESP32 `event_data` for `WIFI_EVENT_AP_STA(DIS)CONNECTED` events
+- `erlang:system_info(system_architecture)` now reports normalized `arch-vendor-os` strings
+
+## [0.7.0-alpha.1] - 2026-04-06
 
 ### Added
 - Added `json` module to estdlib, compatible with Erlang/OTP `json` API
@@ -44,6 +66,7 @@ of raising `badarg`
 exception passes through a non-matching catch clause
 
 ### Removed
+- Removed support for OTP versions < 26
 - Removed old `json_encoder` module (now standard Erlang/OTP `json` module is available)
 
 ## [0.7.0-alpha.0] - 2026-03-20
@@ -177,10 +200,6 @@ table.
 - ESP32 ports now flash a complete working image using the `idf.py flash` task.
 - ESP32 platform now uses reproducible builds.
 - C API: `externalterm` module was renamed to `external_term` and it has a completely new API
-
-### Removed
-
-- Removed support for OTP versions < 26
 
 ### Fixed
 
@@ -712,6 +731,7 @@ functions that default to `?ATOMVM_NVS_NS` are deprecated now).
 - Fixed numerous bugs in memory allocations that could crash the VM
 - Fixed SNTP support that had been broken in IDF 4.x builds
 - Fixed `erlang:send/2` not sending to registered name
+- Fixed sign of `binary:at/2`, `binary:first/1` and `binary:last/1` results
 
 ### Breaking Changes
 

@@ -45,6 +45,11 @@ endif()
 add_subdirectory(lib)
 target_include_directories(AtomVM PUBLIC lib/)
 
+include(SystemArchitecture)
+if (NOT DEFINED AVM_SYSTEM_ARCHITECTURE_STRING OR "${AVM_SYSTEM_ARCHITECTURE_STRING}" STREQUAL "")
+    avm_get_system_architecture_string(AVM_SYSTEM_ARCHITECTURE_STRING)
+endif()
+
 add_subdirectory(../../libAtomVM libAtomVM)
 target_link_libraries(AtomVM PRIVATE libAtomVM)
 
@@ -54,7 +59,7 @@ set(
 )
 target_link_libraries(AtomVM PRIVATE libAtomVM${PLATFORM_LIB_SUFFIX})
 
-if(AVM_DISABLE_JIT)
+if(AVM_DISABLE_JIT AND NOT AVM_ENABLE_PRECOMPILED)
 set(precompiled_suffix)
 else()
 set(precompiled_suffix "-${AVM_JIT_TARGET_ARCH}")
