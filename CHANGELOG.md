@@ -14,10 +14,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added named variable debugging support in DWARF when modules are compiled with `beam_debug_info`
 - Added more reset reasons and ensured `esp:reset_reason/0` doesn't return `undefined`
 - Added I2C and SPI APIs to stm32 platform
+- Added `Transfer-Encoding: chunked` response support to `ahttp_client`, including HTTP trailers
 
 ### Changed
 - Updated network type db() to dbm() to reflect the actual representation of the type
 - Use ES6 modules for emscripten port, using .mjs suffix
+- `ahttp_client` now returns `{error, {parser, incomplete_response}}` when a socket closes mid-response
+  (previously silently reported `closed`); `ssl_closed` messages are also handled
+- `ahttp_client` now returns `{error, {parser, {conflicting_content_length, V}}}` when a response
+  carries differing `Content-Length` values (previously silently accepted the last one),
+  per RFC 9112 §6.3
+- `ahttp_client` now emits a `done` event for responses with `Content-Length: 0` (previously
+  the parser stayed in `body` state forever, hanging passive callers and misflagging legitimate
+  close as `incomplete_response`)
+- `ahttp_client` now discards bytes past `Content-Length` and transitions to `done` (previously
+  emitted the excess as body data and stalled the parser when the socket delivered more than
+  the promised byte count)
+- `ahttp_client` now caps parsed status, header and chunk-size lines at 16 KiB (`?MAX_LINE_SIZE`);
+  longer lines return `{error, {parser, {line_too_long, Prefix}}}` with the first 128 bytes of
+  the offending line. Callers whose upstream servers emit unusually large headers must account
+  for this limit
+
+### Removed
+- Removed `ahttp_client` support for obsolete line folding (RFC 9112 §5.2); folded header and
+  trailer lines now return `{error, {parser, deprecated_obs_fold}}`, and the
+  `header_continuation` / `trailer_header_continuation` response events are no longer emitted
 
 ### Fixed
 - Stop using deprecated `term_from_int32` on STM32 platform
@@ -25,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop using deprecated `term_from_int32` on ESP32 platform
 - Fixed improper cast of ESP32 `event_data` for `WIFI_EVENT_AP_STA(DIS)CONNECTED` events
 - `erlang:system_info(system_architecture)` now reports normalized `arch-vendor-os` strings
+- Fixed `ahttp_client` crash on non-numeric or negative `Content-Length` values
+- Fixed `ahttp_client` crash on headers with empty or all-whitespace values
 
 ## [0.7.0-alpha.1] - 2026-04-06
 
